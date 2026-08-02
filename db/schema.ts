@@ -114,3 +114,44 @@ export const tornBrowserEvents = sqliteTable(
   },
   (table) => [index("idx_torn_browser_events_created").on(table.createdAt)],
 );
+
+export const treasuryLeaders = sqliteTable("treasury_leaders", {
+  email: text("email").primaryKey(),
+  displayName: text("display_name").notNull().default(""),
+  addedBy: text("added_by").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const memberBalances = sqliteTable("member_balances", {
+  memberName: text("member_name").primaryKey(),
+  memberId: integer("member_id"),
+  balance: integer("balance").notNull().default(0),
+  earnedTotal: integer("earned_total").notNull().default(0),
+  paidTotal: integer("paid_total").notNull().default(0),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const memberBalanceEntries = sqliteTable("member_balance_entries", {
+  eventKey: text("event_key").primaryKey(),
+  memberId: integer("member_id"),
+  memberName: text("member_name").notNull(),
+  amount: integer("amount").notNull(),
+  kind: text("kind").notNull(),
+  source: text("source").notNull(),
+  summary: text("summary").notNull().default(""),
+  occurredAt: text("occurred_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const payoutRequests = sqliteTable("payout_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id").notNull(),
+  memberName: text("member_name").notNull(),
+  amount: integer("amount").notNull(),
+  status: text("status").notNull().default("pending"),
+  note: text("note").notNull().default(""),
+  requestedByUserId: text("requested_by_user_id").notNull(),
+  requestedByEmail: text("requested_by_email").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

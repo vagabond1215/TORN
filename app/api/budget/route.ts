@@ -1,5 +1,6 @@
 import { getD1 } from "../../../db";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { ensureMemberBalanceSchema, recordBalanceEvent } from "../../../db/member-balances";
+import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
 type AccountRow = {
   id: number;
@@ -49,13 +50,6 @@ const defaultPolicies = [
   { sourceKey: "oc", label: "Organized crime", taxBps: 500 },
   { sourceKey: "other", label: "Other faction income", taxBps: 10000 },
 ];
-
-async function currentActor(): Promise<Actor> {
-  const user = await getChatGPTUser();
-  return user
-    ? { userId: user.userId, email: user.email, name: user.displayName }
-    : { userId: "local-admin", email: "local@blood-coven", name: "Local administrator" };
-}
 
 function actorValues(actor: Actor) {
   return [actor.userId, actor.email, actor.name] as const;
@@ -215,11 +209,11 @@ async function snapshot(db: D1Database, actor: Actor) {
 export async function GET() {
   try {
     const db = getD1();
-    const actor = await currentActor();
     await ensureSchema(db);
+    const actor = await requireTreasuryLeader(db);
     return Response.json(await snapshot(db, actor));
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Unable to load the budget." }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load the budget." }, { status: error instanceof TreasuryAccessError ? 403 : 500 });
   }
 }
 
@@ -228,15 +222,15 @@ export async function POST(request: Request) {
     const payload = (await request.json()) as Record<string, unknown>;
     const action = String(payload.action ?? "");
     const db = getD1();
-    const actor = await currentActor();
     await ensureSchema(db);
+    const actor = await requireTreasuryLeader(db);
     const actorParams = actorValues(actor);
 
     if (action === "deposit") {
       const grossAmount = asPositiveInteger(payload.amount, "Gross proceeds");
       const pendingWarId = payload.pendingWarId ? asPositiveInteger(payload.pendingWarId, "War") : null;
       const pendingWar = pendingWarId
-        ? await db.prepare("SELECT war_id, opponent_name FROM pending_wars WHERE war_id = ? AND status = 'pending'").bind(pendingWarId).first<{ war_id: number; opponent_name: string }>()
+        ? await db.prepare("SELECT war_id, opponent_name, members_json FROM pending_wars WHERE war_id = ? AND status = 'pending'").bind(pendingWarId).first<{ war_id: number; opponent_name: string; members_json: string }>()
         : null;
       if (pendingWarId && !pendingWar) throw new Error("This war review is no longer pending.");
       const sourceKey = String(payload.sourceKey ?? "war").trim().slice(0, 30);
@@ -267,6 +261,43 @@ export async function POST(request: Request) {
         .bind(factionShare, note, JSON.stringify({ sourceKey, source: policy.label, grossAmount, taxBps: policy.tax_bps, playerPayout, factionShare, pendingWarId, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
       if (pendingWarId) statements.push(db.prepare("UPDATE pending_wars SET status = 'recorded', reviewed_value = ?, updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(grossAmount, pendingWarId));
       await db.batch(statements);
+      if (pendingWar) {
+        await ensureMemberBalanceSchema(db);
+        let members: Array<{ id: number; name: string; attacks: number }> = [];
+        try { members = JSON.parse(pendingWar.members_json) as typeof members; } catch { members = []; }
+        const eligible = members.filter((member) => member.id > 0 && member.name && member.attacks > 0);
+        const totalAttacks = eligible.reduce((sum, member) => sum + member.attacks, 0);
+        const payouts = eligible.map((member) => {
+          const exact = playerPayout * member.attacks;
+          return { member, amount: Math.floor(exact / totalAttacks), remainder: exact % totalAttacks };
+        });
+        let payoutRemainder = playerPayout - payouts.reduce((sum, item) => sum + item.amount, 0);
+        for (const item of [...payouts].sort((a, b) => b.remainder - a.remainder || a.member.id - b.member.id)) {
+          if (payoutRemainder-- <= 0) break;
+          item.amount += 1;
+        }
+        for (const item of payouts.filter((entry) => entry.amount > 0)) {
+          await recordBalanceEvent(db, {
+            eventKey: `war:${pendingWar.war_id}:${item.member.id}`,
+            memberId: item.member.id,
+            memberName: item.member.name,
+            amount: item.amount,
+            kind: "credit",
+            source: "war",
+            summary: `Ranked war vs ${pendingWar.opponent_name}`,
+          });
+        }
+      }
+    } else if (action === "directDeposit") {
+      const amount = asPositiveInteger(payload.amount, "Deposit amount");
+      const account = await accountById(db, asAccountId(payload.accountId));
+      const note = String(payload.note ?? "Direct account deposit").trim().slice(0, 160) || "Direct account deposit";
+      await db.batch([
+        db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(amount, account.id),
+        db.prepare(`INSERT INTO transactions (type, amount, to_account_id, to_account_name, note, actor_user_id, actor_email, actor_name)
+          VALUES ('direct_deposit', ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(amount, account.id, account.name, note, ...actorParams),
+      ]);
     } else if (action === "spend") {
       const amount = asPositiveInteger(payload.amount, "Spend amount");
       const account = await accountById(db, asAccountId(payload.accountId));
@@ -354,6 +385,6 @@ export async function POST(request: Request) {
     return Response.json(await snapshot(db, actor));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update the budget.";
-    return Response.json({ error: message }, { status: /must|required|choose|enough|not found|keep|before|enter/i.test(message) ? 400 : 500 });
+    return Response.json({ error: message }, { status: error instanceof TreasuryAccessError ? 403 : /must|required|choose|enough|not found|keep|before|enter/i.test(message) ? 400 : 500 });
   }
 }

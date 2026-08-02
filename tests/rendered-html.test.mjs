@@ -16,6 +16,9 @@ test("defines the Blood Coven treasury product shell", async () => {
   assert.match(tracker, /Torn API/);
   assert.match(tracker, /Install script/);
   assert.match(tracker, /Browser script not detected/);
+  for (const tab of ["accounts", "history", "wars", "ocs"]) assert.match(tracker, new RegExp(`"${tab}"`));
+  assert.match(tracker, /Direct deposit/);
+  assert.match(tracker, /Payout requests/);
   assert.match(tracker, /blood-coven-treasury\.user\.js/);
   assert.match(tracker, /stored only in this browser/);
   assert.match(layout, /title: "Blood Coven Treasury"/);
@@ -30,7 +33,7 @@ test("declares durable budget storage and attributed transaction actions", async
     readFile(new URL("../app/api/torn/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(hosting, /"d1": "DB"/);
-  for (const action of ["deposit", "spend", "transfer", "setAllocations", "setPolicies"]) assert.match(route, new RegExp(`action === "${action}"`));
+  for (const action of ["deposit", "directDeposit", "spend", "transfer", "setAllocations", "setPolicies"]) assert.match(route, new RegExp(`action === "${action}"`));
   assert.match(route, /actor_user_id/);
   assert.match(route, /playerPayout/);
   assert.match(route, /pendingWarId/);
@@ -50,6 +53,10 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(script, /@match\s+https:\/\/www\.torn\.com\/\*/);
   assert.match(script, /blood-coven-treasury-bridge-v1/);
   assert.match(script, /GM_getValue/);
+  assert.match(script, /xanax_use/);
+  assert.match(script, /faction_payout/);
+  assert.match(script, /oc_credit/);
+  assert.match(script, /Request faction balance/);
   assert.match(route, /INSERT OR IGNORE INTO torn_browser_events/);
   assert.match(route, /ranked_war_report/);
   assert.match(schema, /torn_browser_events/);

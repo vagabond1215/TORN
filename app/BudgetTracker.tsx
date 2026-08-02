@@ -27,7 +27,8 @@ type ActiveWar = {
   members: Array<{ id: number; name: string; hits: number; xanax: number; refills: number; energyEstimate: number }>;
 };
 type WarStatus = { pendingWars: PendingWar[]; activeWar: ActiveWar | null };
-type Modal = "deposit" | "spend" | "transfer" | "settings" | null;
+type Modal = "deposit" | "directDeposit" | "spend" | "transfer" | "settings" | null;
+type MainTab = "accounts" | "history" | "wars" | "ocs";
 type SettingsSection = "accounts" | "policies" | "torn" | "script" | "access" | "appearance";
 type Theme = "light" | "dark" | "system";
 type BridgeStatus = "checking" | "connected" | "missing";
@@ -36,6 +37,11 @@ type BrowserEvent = {
   sourceUrl: string; payload: Record<string, unknown>; createdAt: string;
 };
 type BrowserBridgeInfo = { totalEvents: number; lastImportedAt: string | null; recentEvents: BrowserEvent[] };
+type AccessData = { leaders: Array<{ email: string; name: string; addedBy: string; createdAt: string }> };
+type MemberAdminData = {
+  balances: Array<{ memberId: number | null; memberName: string; balance: number; earnedTotal: number; paidTotal: number; updatedAt: string }>;
+  requests: Array<{ id: number; memberId: number; memberName: string; amount: number; status: string; note: string; createdAt: string; updatedAt: string }>;
+};
 
 const emptyData: BudgetData = { currentUser: null, accounts: [], policies: [], transactions: [] };
 const emptyWars: WarStatus = { pendingWars: [], activeWar: null };
@@ -54,6 +60,7 @@ function formatUnix(value: number) {
 }
 function transactionLabel(item: Transaction) {
   if (item.type === "deposit") return `${item.details.source ?? "Faction income"} settled`;
+  if (item.type === "direct_deposit") return `Deposited to ${item.toAccountName}`;
   if (item.type === "spend") return `Spent from ${item.fromAccountName}`;
   if (item.type === "transfer") return `${item.fromAccountName} to ${item.toAccountName}`;
   if (item.type === "allocation_update") return "Account allocations updated";
@@ -74,6 +81,7 @@ export default function BudgetTracker() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [modal, setModal] = useState<Modal>(null);
+  const [mainTab, setMainTab] = useState<MainTab>("accounts");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("accounts");
   const [theme, setTheme] = useState<Theme>("system");
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
@@ -94,6 +102,9 @@ export default function BudgetTracker() {
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>("checking");
   const [bridgePendingCount, setBridgePendingCount] = useState(0);
   const [bridgeInfo, setBridgeInfo] = useState<BrowserBridgeInfo>(emptyBridge);
+  const [accessData, setAccessData] = useState<AccessData>({ leaders: [] });
+  const [memberAdmin, setMemberAdmin] = useState<MemberAdminData>({ balances: [], requests: [] });
+  const [leaderEmail, setLeaderEmail] = useState("");
   const bridgeImportingRef = useRef(false);
 
   function flash(message: string) {
@@ -104,6 +115,7 @@ export default function BudgetTracker() {
   async function loadBudget() {
     const response = await fetch("/api/budget", { cache: "no-store" });
     const result = (await response.json()) as BudgetData & { error?: string };
+    if (response.status === 403) { window.location.replace("/balance"); return; }
     if (!response.ok) throw new Error(result.error || "Unable to load the treasury.");
     setData(result);
   }
@@ -131,6 +143,20 @@ export default function BudgetTracker() {
     setBridgeInfo(result);
   }
 
+  async function loadAccess() {
+    const response = await fetch("/api/access", { cache: "no-store" });
+    const result = await response.json() as AccessData & { error?: string };
+    if (!response.ok) throw new Error(result.error || "Unable to load leadership access.");
+    setAccessData(result);
+  }
+
+  async function loadMemberAdmin() {
+    const response = await fetch("/api/member-balance", { cache: "no-store" });
+    const result = await response.json() as MemberAdminData & { error?: string };
+    if (!response.ok) throw new Error(result.error || "Unable to load member balances.");
+    setMemberAdmin(result);
+  }
+
   async function importBridgeEvents(events: unknown[]) {
     if (bridgeImportingRef.current || events.length === 0) return;
     bridgeImportingRef.current = true;
@@ -145,6 +171,7 @@ export default function BudgetTracker() {
       setBridgeInfo(result);
       window.postMessage({ channel: BRIDGE_CHANNEL, kind: "ack", eventKeys: result.acceptedKeys ?? [] }, window.location.origin);
       await loadWars();
+      await loadMemberAdmin();
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "Unable to import Torn browser activity.");
     } finally {
@@ -165,7 +192,7 @@ export default function BudgetTracker() {
       const savedKey = window.localStorage.getItem("blood-coven-torn-key") ?? "";
       setTornKey(savedKey);
       setTornKeyDraft(savedKey);
-      Promise.all([loadBudget(), loadWars()]).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load the treasury."))
+      Promise.all([loadBudget(), loadWars(), loadMemberAdmin()]).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load the treasury."))
         .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(task);
@@ -186,8 +213,8 @@ export default function BudgetTracker() {
     };
     window.addEventListener("message", onBridgeMessage);
     const initialCheck = window.setTimeout(checkBridge, 0);
-    void loadBridgeInfo().catch(() => undefined);
-    return () => { window.removeEventListener("message", onBridgeMessage); window.clearTimeout(initialCheck); };
+    const initialLoad = window.setTimeout(() => void loadBridgeInfo().catch(() => undefined), 0);
+    return () => { window.removeEventListener("message", onBridgeMessage); window.clearTimeout(initialCheck); window.clearTimeout(initialLoad); };
   // The userscript handshake is device-local and begins once per page load.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -226,10 +253,10 @@ export default function BudgetTracker() {
   const totalBalance = useMemo(() => data.accounts.reduce((sum, account) => sum + account.balance, 0), [data.accounts]);
   const filteredTransactions = useMemo(() => {
     if (activityFilter === "all") return data.transactions;
-    if (activityFilter === "income") return data.transactions.filter((item) => item.type === "deposit");
+    if (activityFilter === "income") return data.transactions.filter((item) => ["deposit", "direct_deposit"].includes(item.type));
     if (activityFilter === "spend") return data.transactions.filter((item) => item.type === "spend");
     if (activityFilter === "transfer") return data.transactions.filter((item) => item.type === "transfer");
-    return data.transactions.filter((item) => !["deposit", "spend", "transfer"].includes(item.type));
+    return data.transactions.filter((item) => !["deposit", "direct_deposit", "spend", "transfer"].includes(item.type));
   }, [activityFilter, data.transactions]);
   const activeTotals = useMemo(() => (wars.activeWar?.members ?? []).reduce((totals, member) => ({
     hits: totals.hits + member.hits, xanax: totals.xanax + member.xanax, refills: totals.refills + member.refills,
@@ -253,6 +280,7 @@ export default function BudgetTracker() {
       setDraftAccounts(data.accounts.map((account) => ({ ...account })));
       setDraftPolicies(data.policies.map((policy) => ({ ...policy })));
       setTornKeyDraft(tornKey);
+      void loadAccess().catch(() => undefined);
     }
     setModal(next);
   }
@@ -280,7 +308,8 @@ export default function BudgetTracker() {
     if (modal === "deposit") {
       const result = await act({ action: "deposit", amount: numericAmount, sourceKey, note, pendingWarId }, pendingWarId ? "War proceeds reviewed and distributed." : "Proceeds settled and distributed.");
       if (result && pendingWarId) { setPendingWarId(null); await loadWars(); }
-    } else if (modal === "spend") await act({ action: "spend", accountId: selectedAccountId, amount: numericAmount, note }, "Expense recorded.");
+    } else if (modal === "directDeposit") await act({ action: "directDeposit", accountId: selectedAccountId, amount: numericAmount, note }, "Direct deposit recorded.");
+    else if (modal === "spend") await act({ action: "spend", accountId: selectedAccountId, amount: numericAmount, note }, "Expense recorded.");
     else if (modal === "transfer") await act({ action: "transfer", fromAccountId, toAccountId, amount: numericAmount, note }, "Funds transferred.");
   }
 
@@ -324,17 +353,32 @@ export default function BudgetTracker() {
     window.localStorage.removeItem("blood-coven-torn-key"); setTornKey(""); setTornKeyDraft(""); setLastSyncAt(""); flash("Torn key removed from this device.");
   }
   function copySiteLink() { void navigator.clipboard.writeText(window.location.href); flash("Site link copied."); }
+  function copyBalanceLink() { void navigator.clipboard.writeText(`${window.location.origin}/balance`); flash("Member balance link copied."); }
+  async function updateLeader(action: "add" | "remove", email: string) {
+    setSaving(true); setError("");
+    try {
+      const response = await fetch("/api/access", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, email }) });
+      const result = await response.json() as AccessData & { error?: string };
+      if (!response.ok) throw new Error(result.error || "Unable to update access.");
+      setAccessData(result); setLeaderEmail(""); flash(action === "add" ? "Leadership access added." : "Leadership access removed.");
+    } catch (accessError) { setError(accessError instanceof Error ? accessError.message : "Unable to update access."); }
+    finally { setSaving(false); }
+  }
 
   const draftTotalBps = draftAccounts.reduce((sum, account) => sum + account.allocationBps, 0);
+  const warEvents = bridgeInfo.recentEvents.filter((event) => ["ranked_war_report", "faction_news", "xanax_use"].includes(event.eventType));
+  const ocEvents = bridgeInfo.recentEvents.filter((event) => event.eventType === "oc_credit" || event.category === "crimes");
+  const openRequests = memberAdmin.requests.filter((request) => ["pending", "approved"].includes(request.status));
 
   return (
     <main className="app-shell">
       <header className="topbar"><h1>Blood Coven Treasury</h1><div className="topbar-actions"><button className="button button-secondary" onClick={() => openModal("settings")}>Settings</button><button className="button button-primary" onClick={() => openModal("deposit")} disabled={loading}>+ Add proceeds</button></div></header>
       <section className="balance-panel" aria-label="Treasury balance"><span>Total faction funds</span><strong>{loading ? "--" : money.format(totalBalance)}</strong></section>
+      <nav className="main-tabs" aria-label="Treasury sections">{(["accounts", "history", "wars", "ocs"] as MainTab[]).map((tab) => <button key={tab} className={mainTab === tab ? "active" : ""} onClick={() => setMainTab(tab)}>{tab === "ocs" ? "OC" : tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
       {notice && <div className="notice" role="status">{notice}</div>}
       {error && !modal && <div className="page-error" role="alert">{error}<button onClick={() => { setError(""); void Promise.all([loadBudget(), loadWars()]); }}>Try again</button></div>}
 
-      <section className="war-center" aria-labelledby="war-center-title">
+      {mainTab === "wars" && <section className="war-center tab-panel" aria-labelledby="war-center-title">
         <div className="section-heading"><div><h2 id="war-center-title">Wars</h2>{lastSyncAt && <small>Updated {formatDate(lastSyncAt)}</small>}</div><button className="text-button" onClick={() => tornKey ? void syncTorn() : openModal("settings", undefined, "torn")} disabled={syncing}>{syncing ? "Syncing..." : tornKey ? "Sync Torn" : "Connect Torn"}</button></div>
         {!tornKey && !wars.activeWar && wars.pendingWars.length === 0 && <div className="war-empty"><span>No Torn key connected on this device.</span><button onClick={() => openModal("settings", undefined, "torn")}>Connect a public key</button></div>}
         {wars.activeWar && <article className="active-war-card">
@@ -351,22 +395,36 @@ export default function BudgetTracker() {
           <div className="review-row"><label><span>Reviewed gross value</span><div className="compact-money"><b>$</b><input inputMode="numeric" value={reviewValues[war.warId] ?? ""} onChange={(event) => setReviewValues((current) => ({ ...current, [war.warId]: event.target.value }))} onBlur={() => { const value = parseMoney(reviewValues[war.warId] ?? ""); if (value > 0) void warAction({ action: "updateEstimate", warId: war.warId, amount: value }); }} /></div></label><button className="button button-primary" onClick={() => openWarReview(war)}>Review and record</button><button className="button button-secondary" onClick={() => void warAction({ action: "dismiss", warId: war.warId }, "War review dismissed.")}>Dismiss</button></div>
           <details><summary>War payout detail</summary><div className="member-table"><div className="member-row payout-head"><span>Member</span><span>Attacks</span><span>Score</span></div>{war.members.map((member) => <div className="member-row payout-row" key={member.id}><strong>{member.name}</strong><span>{member.attacks}</span><span>{member.score.toFixed(2)}</span></div>)}</div></details>
         </article>)}</div>}
-      </section>
+        {warEvents.length > 0 && <section className="event-history"><div className="section-heading"><h2>War activity</h2></div>{warEvents.map((event) => <article className="event-row" key={event.eventKey}><div><strong>{event.eventType === "xanax_use" ? "Xanax used" : event.eventType.replace(/_/g, " ")}</strong><p>{event.summary}</p></div><time>{formatDate(event.occurredAt ?? event.createdAt)}</time></article>)}</section>}
+      </section>}
 
-      <div className="content-grid">
-        <section className="accounts-section"><div className="section-heading"><h2>Accounts</h2><button className="text-button" onClick={() => openModal("transfer")}>Transfer funds</button></div>{loading ? <div className="loading-card">Loading...</div> : <div className="account-list">{data.accounts.map((account) => <article className="account-card" key={account.id}><div className="account-title"><h3>{account.name}</h3><span>{account.allocationBps / 100}%</span></div><strong className="account-balance">{money.format(account.balance)}</strong><div className="account-actions"><button onClick={() => openModal("transfer", account.id)}>Transfer</button><button onClick={() => openModal("spend", account.id)}>Spend</button></div></article>)}</div>}</section>
-        <aside className="activity-section"><div className="section-heading"><h2>History</h2></div><div className="activity-filters" role="group" aria-label="Filter ledger">{["all", "income", "spend", "transfer", "changes"].map((filter) => <button key={filter} className={activityFilter === filter ? "active" : ""} onClick={() => setActivityFilter(filter)}>{filter === "transfer" ? "Moves" : filter.charAt(0).toUpperCase() + filter.slice(1)}</button>)}</div><div className="activity-list">{filteredTransactions.length === 0 ? <div className="empty-state">No matching history.</div> : filteredTransactions.slice(0, 24).map((item) => <article className="activity-item" key={item.id}><div><strong>{transactionLabel(item)}</strong><p>{item.note}</p><time>{formatDate(item.createdAt)} · {item.actorName ?? "Legacy entry"}</time>{item.type === "deposit" && item.details.allocations && <details><summary>View settlement</summary><span>Gross proceeds<b>{money.format(item.details.grossAmount ?? item.amount)}</b></span><span>Player payout<b>{money.format(item.details.playerPayout ?? 0)}</b></span><span>Faction share ({(item.details.taxBps ?? 10000) / 100}%)<b>{money.format(item.details.factionShare ?? item.amount)}</b></span>{item.details.allocations.map((split) => <span className="account-split" key={split.name}>{split.name}<b>{money.format(split.amount)}</b></span>)}</details>}</div>{item.amount > 0 && <b className={`activity-amount ${item.type}`}>{item.type === "deposit" ? "+" : item.type === "spend" ? "-" : ""}{money.format(item.amount)}</b>}</article>)}</div></aside>
-      </div>
+      {mainTab === "accounts" && <section className="accounts-section tab-panel"><div className="section-heading"><h2>Accounts</h2></div>{loading ? <div className="loading-card">Loading...</div> : <div className="account-list">{data.accounts.map((account) => <article className="account-row" key={account.id}><div className="account-title"><h3>{account.name}</h3><span>{account.allocationBps / 100}%</span></div><strong className="account-balance">{money.format(account.balance)}</strong><div className="account-actions"><button className="account-action deposit-action" onClick={() => openModal("directDeposit", account.id)} aria-label={`Deposit directly to ${account.name}`} title="Direct deposit"><span aria-hidden="true">↘$</span></button><button className="account-action transfer-action" onClick={() => openModal("transfer", account.id)} aria-label={`Transfer from ${account.name}`} title="Transfer"><span aria-hidden="true">⇄</span></button><button className="account-action spend-action" onClick={() => openModal("spend", account.id)} aria-label={`Spend from ${account.name}`} title="Spend"><span aria-hidden="true">$↗</span></button></div></article>)}</div>}</section>}
+
+      {mainTab === "history" && <section className="activity-section tab-panel">
+        {openRequests.length > 0 && <div className="request-queue"><div className="section-heading"><h2>Payout requests</h2><span>{openRequests.length} open</span></div>{openRequests.map((request) => <article className="request-row" key={request.id}><div><strong>{request.memberName}</strong><p>{request.note || "Member balance request"}</p><time>{formatDate(request.createdAt)}</time></div><div><b>{money.format(request.amount)}</b><span>{request.status}</span></div></article>)}</div>}
+        <div className="section-heading"><h2>Transaction history</h2></div><div className="activity-filters" role="group" aria-label="Filter ledger">{["all", "income", "spend", "transfer", "changes"].map((filter) => <button key={filter} className={activityFilter === filter ? "active" : ""} onClick={() => setActivityFilter(filter)}>{filter === "transfer" ? "Moves" : filter.charAt(0).toUpperCase() + filter.slice(1)}</button>)}</div><div className="activity-list">{filteredTransactions.length === 0 ? <div className="empty-state">No matching history.</div> : filteredTransactions.slice(0, 80).map((item) => <article className="activity-item" key={item.id}><div><strong>{transactionLabel(item)}</strong><p>{item.note}</p><time>{formatDate(item.createdAt)} · {item.actorName ?? "Legacy entry"}</time>{item.type === "deposit" && item.details.allocations && <details><summary>View settlement</summary><span>Gross proceeds<b>{money.format(item.details.grossAmount ?? item.amount)}</b></span><span>Player payout<b>{money.format(item.details.playerPayout ?? 0)}</b></span><span>Faction share ({(item.details.taxBps ?? 10000) / 100}%)<b>{money.format(item.details.factionShare ?? item.amount)}</b></span>{item.details.allocations.map((split) => <span className="account-split" key={split.name}>{split.name}<b>{money.format(split.amount)}</b></span>)}</details>}</div>{item.amount > 0 && <b className={`activity-amount ${item.type}`}>{["deposit", "direct_deposit"].includes(item.type) ? "+" : item.type === "spend" ? "-" : ""}{money.format(item.amount)}</b>}</article>)}</div>
+      </section>}
+
+      {mainTab === "ocs" && <section className="oc-section tab-panel"><div className="section-heading"><div><h2>Organized crimes</h2><small>Balance credits imported from Torn&apos;s Funds log</small></div></div>{ocEvents.length === 0 ? <div className="empty-state event-empty">Visit the faction Funds log with the browser script running to import OC payouts.</div> : <div className="event-history">{ocEvents.map((event) => <article className="event-row" key={event.eventKey}><div><strong>{String(event.payload.memberName ?? "Member credit")}</strong><p>{event.summary}</p></div><b>{money.format(Number(event.payload.amount) || 0)}</b></article>)}</div>}{memberAdmin.balances.length > 0 && <div className="balance-register"><div className="section-heading"><h2>Member balances</h2></div>{memberAdmin.balances.map((member) => <div className="balance-register-row" key={member.memberName}><strong>{member.memberName}</strong><span>{money.format(member.balance)}</span></div>)}</div>}</section>}
 
       {modal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeModal()}><section className={`modal ${modal === "settings" ? "modal-settings" : ""}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><button className="modal-close" onClick={closeModal} aria-label="Close">×</button>
         {modal === "settings" ? <div className="settings-layout"><nav className="settings-nav" aria-label="Settings sections">{(["accounts", "policies", "torn", "script", "access", "appearance"] as SettingsSection[]).map((section) => <button key={section} className={settingsSection === section ? "active" : ""} onClick={() => { setError(""); setSettingsSection(section); }}>{section === "torn" ? "Torn API" : section === "script" ? "Browser script" : section.charAt(0).toUpperCase() + section.slice(1)}</button>)}</nav><div className="settings-content">
           {settingsSection === "accounts" && <form onSubmit={saveAllocations}><h2 id="modal-title">Accounts</h2><p className="modal-intro">Divide the faction share between treasury accounts.</p>{draftTotalBps !== 10000 && <p className="allocation-warning">Allocations must total 100%. Currently {draftTotalBps / 100}%.</p>}<div className="allocation-editor">{draftAccounts.map((account) => <div className="allocation-row" key={account.id}><label><span>Account</span><input value={account.name} maxLength={50} onChange={(event) => setDraftAccounts((current) => current.map((item) => item.id === account.id ? { ...item, name: event.target.value } : item))} /></label><label className="percent-field"><span>Share</span><div><input type="number" min="0" max="100" step="0.01" value={account.allocationBps / 100} onChange={(event) => setDraftAccounts((current) => current.map((item) => item.id === account.id ? { ...item, allocationBps: Math.round(Number(event.target.value) * 100) } : item))} /><b>%</b></div></label><button type="button" className="delete-button" onClick={() => void deleteAccount(account)} disabled={account.balance !== 0 || saving}>×</button></div>)}</div><div className="add-account-row"><input value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} placeholder="New account name" maxLength={50} /><button type="button" onClick={() => void addAccount()} disabled={!newAccountName.trim() || saving}>Add</button></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-primary" disabled={saving || draftTotalBps !== 10000}>{saving ? "Saving..." : "Save accounts"}</button></div></form>}
           {settingsSection === "policies" && <form onSubmit={savePolicies}><h2 id="modal-title">Tax policies</h2><p className="modal-intro">These percentages determine the faction share before account allocation.</p><div className="policy-editor">{draftPolicies.map((policy) => <label key={policy.sourceKey}><span>{policy.label}</span><div><input type="number" min="0" max="100" step="0.01" value={policy.taxBps / 100} onChange={(event) => setDraftPolicies((current) => current.map((item) => item.sourceKey === policy.sourceKey ? { ...item, taxBps: Math.round(Number(event.target.value) * 100) } : item))} /><b>%</b></div></label>)}</div>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-primary" disabled={saving}>{saving ? "Saving..." : "Save policies"}</button></div></form>}
           {settingsSection === "torn" && <form onSubmit={saveTornKey}><h2 id="modal-title">Torn API</h2><p className="modal-intro">A Public-level key is enough. It verifies Blood Coven membership, detects ranked wars, values cache rewards, and reads public member statistics.</p><label className="field"><span>Personal API key</span><input type="password" autoComplete="off" value={tornKeyDraft} onChange={(event) => setTornKeyDraft(event.target.value)} placeholder="Paste a Public Torn key" /></label><p className="settings-note api-note">The key is stored only in this browser. It is sent transiently for Torn requests and is never written to the treasury database. Automatic updates run every two minutes while this page is open.</p>{error && <p className="form-error" role="alert">{error}</p>}<div className="api-actions"><button className="button button-primary">{tornKey ? "Update key" : "Save and connect"}</button>{tornKey && <><button type="button" className="button button-secondary" onClick={() => void syncTorn()} disabled={syncing}>{syncing ? "Syncing..." : "Sync now"}</button><button type="button" className="text-button danger-text" onClick={removeTornKey}>Remove from device</button></>}</div>{lastSyncAt && <small className="sync-status">Last synced {formatDate(lastSyncAt)}</small>}</form>}
-          {settingsSection === "script" && <section><h2 id="modal-title">Torn browser script</h2><p className="modal-intro">The userscript watches the Blood Coven faction and ranked-war pages you visit, then imports useful activity when this treasury is open.</p><div className={`bridge-status ${bridgeStatus}`}><span className="bridge-dot" /><div><strong>{bridgeStatus === "connected" ? "Browser script connected" : bridgeStatus === "checking" ? "Checking for browser script..." : "Browser script not detected"}</strong><small>{bridgeStatus === "connected" ? `${bridgePendingCount} event${bridgePendingCount === 1 ? "" : "s"} waiting to import` : bridgeStatus === "missing" ? "No compatible userscript responded on this page." : "Waiting for a Tampermonkey-compatible bridge response."}</small></div></div><p className="settings-note">Browsers do not reveal whether Tampermonkey or another extension is installed. The treasury detects the installed script itself. If it is not detected, install Tampermonkey, Violentmonkey, or a comparable userscript manager first.</p><div className="api-actions"><a className="button button-primary" href="/blood-coven-treasury.user.js" target="_blank" rel="noreferrer">Install script</a><button type="button" className="button button-secondary" onClick={checkBridge}>Check again</button></div>{bridgeInfo.lastImportedAt && <p className="bridge-import-summary">Last import {formatDate(bridgeInfo.lastImportedAt)} · {integer.format(bridgeInfo.totalEvents)} saved events</p>}{bridgeInfo.recentEvents.length > 0 && <div className="bridge-events" aria-label="Recent browser imports">{bridgeInfo.recentEvents.slice(0, 5).map((event) => <div key={event.eventKey}><span>{event.category.replace(/_/g, " ")}</span><strong>{event.summary}</strong><small>{formatDate(event.createdAt)}</small></div>)}</div>}</section>}
-          {settingsSection === "access" && <section><h2 id="modal-title">Access</h2><p className="modal-intro">The treasury uses a private email allowlist. Visitors must sign in with an approved ChatGPT account.</p><div className="access-card"><span>Signed in as</span><strong>{data.currentUser?.name ?? "Authorized member"}</strong><small>{data.currentUser?.email}</small></div><p className="settings-note">The site owner controls the leadership allowlist through the site sharing controls.</p><button className="button button-secondary" onClick={copySiteLink}>Copy site link</button></section>}
+          {settingsSection === "script" && <section><h2 id="modal-title">Torn browser script</h2><p className="modal-intro">The userscript watches the Blood Coven Funds and Armory logs plus ranked-war pages you visit. It imports payouts, OC credits, Xanax use, and war activity whenever this treasury is open.</p><div className={`bridge-status ${bridgeStatus}`}><span className="bridge-dot" /><div><strong>{bridgeStatus === "connected" ? "Browser script connected" : bridgeStatus === "checking" ? "Checking for browser script..." : "Browser script not detected"}</strong><small>{bridgeStatus === "connected" ? `${bridgePendingCount} event${bridgePendingCount === 1 ? "" : "s"} waiting to import` : bridgeStatus === "missing" ? "No compatible userscript responded on this page." : "Waiting for a Tampermonkey-compatible bridge response."}</small></div></div><p className="settings-note">Browsers do not reveal whether Tampermonkey or another extension is installed. The treasury detects the installed script itself. If it is not detected, install Tampermonkey, Violentmonkey, or a comparable userscript manager first.</p><div className="api-actions"><a className="button button-primary" href="/blood-coven-treasury.user.js" target="_blank" rel="noreferrer">Install script</a><button type="button" className="button button-secondary" onClick={checkBridge}>Check again</button></div>{bridgeInfo.lastImportedAt && <p className="bridge-import-summary">Last import {formatDate(bridgeInfo.lastImportedAt)} · {integer.format(bridgeInfo.totalEvents)} saved events</p>}{bridgeInfo.recentEvents.length > 0 && <div className="bridge-events" aria-label="Recent browser imports">{bridgeInfo.recentEvents.slice(0, 5).map((event) => <div key={event.eventKey}><span>{event.category.replace(/_/g, " ")}</span><strong>{event.summary}</strong><small>{formatDate(event.createdAt)}</small></div>)}</div>}</section>}
+          {settingsSection === "access" && <section><h2 id="modal-title">Access</h2><p className="modal-intro">Site sharing controls who may open the app. Treasury roles below control who can see financial data.</p><div className="access-card"><span>Signed in as</span><strong>{data.currentUser?.name ?? "Authorized member"}</strong><small>{data.currentUser?.email}</small></div><div className="leader-editor"><h3>Leadership</h3>{accessData.leaders.map((leader) => <div className="leader-row" key={leader.email}><div><strong>{leader.name || leader.email}</strong><small>{leader.email}</small></div><button type="button" className="text-button danger-text" onClick={() => void updateLeader("remove", leader.email)} disabled={leader.email === data.currentUser?.email || saving}>Remove</button></div>)}<div className="add-leader"><input type="email" value={leaderEmail} onChange={(event) => setLeaderEmail(event.target.value)} placeholder="leader@example.com" /><button type="button" className="button button-secondary" onClick={() => void updateLeader("add", leaderEmail)} disabled={!leaderEmail.trim() || saving}>Add leader</button></div></div>{error && <p className="form-error" role="alert">{error}</p>}<p className="settings-note">Add the same email in the site sharing controls. Members without a leadership role are sent to the balance-only page.</p><div className="api-actions"><button type="button" className="button button-secondary" onClick={copySiteLink}>Copy treasury link</button><button type="button" className="button button-secondary" onClick={copyBalanceLink}>Copy member balance link</button></div></section>}
           {settingsSection === "appearance" && <section><h2 id="modal-title">Appearance</h2><p className="modal-intro">Theme preference is saved on this device.</p><div className="theme-options">{(["light", "dark", "system"] as Theme[]).map((option) => <button key={option} className={theme === option ? "active" : ""} onClick={() => chooseTheme(option)}><strong>{option.charAt(0).toUpperCase() + option.slice(1)}</strong><small>{option === "system" ? "Match this device" : `Always use ${option} mode`}</small></button>)}</div></section>}
-        </div></div> : <form onSubmit={submitFinancial}><h2 id="modal-title">{modal === "deposit" ? pendingWarId ? "Review war proceeds" : "Record proceeds" : modal === "spend" ? `Spend from ${selectedAccount?.name ?? "account"}` : "Transfer funds"}</h2><p className="modal-intro">{modal === "deposit" ? pendingWarId ? "Confirm the actual gross value after cache sales. Only the faction share is distributed to accounts." : "Enter the full gross value. The policy calculates the player payout and deposits only the faction share." : modal === "spend" ? `Available: ${money.format(selectedAccount?.balance ?? 0)}` : "Move money between treasury accounts."}</p>{modal === "deposit" && <label className="field"><span>Proceeds type</span><select value={sourceKey} onChange={(event) => setSourceKey(event.target.value)}>{data.policies.map((policy) => <option key={policy.sourceKey} value={policy.sourceKey}>{policy.label} — {policy.taxBps / 100}% faction</option>)}</select></label>}{modal === "transfer" && <div className="transfer-grid"><label><span>From</span><select value={fromAccountId ?? ""} onChange={(event) => setFromAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name} — {money.format(account.balance)}</option>)}</select></label><span>→</span><label><span>To</span><select value={toAccountId ?? ""} onChange={(event) => setToAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label></div>}<label className="field"><span>{modal === "deposit" ? "Gross amount" : "Amount"}</span><div className="money-input"><b>$</b><input autoFocus inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0" required /></div></label><label className="field"><span>{modal === "deposit" ? "Description" : "Note"}</span><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={160} placeholder={modal === "deposit" ? "e.g. Silver ranked war" : modal === "spend" ? "e.g. Xanax restock" : "Optional transfer note"} required={modal === "spend"} /></label>{modal === "deposit" && <div className="settlement-preview"><div><span>Gross</span><b>{money.format(grossPreview)}</b></div><div><span>Player payout</span><b>{money.format(playerPreview)}</b></div><div className="faction-row"><span>Faction share ({(selectedPolicy?.taxBps ?? 0) / 100}%)</span><b>{money.format(factionPreview)}</b></div><hr />{data.accounts.map((account) => <div className="account-split" key={account.id}><span>{account.name} <small>{account.allocationBps / 100}%</small></span><b>{money.format(Math.floor(factionPreview * account.allocationBps / 10000))}</b></div>)}</div>}{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={closeModal}>Cancel</button><button className="button button-primary" disabled={saving || !amount}>{saving ? "Saving..." : modal === "deposit" ? pendingWarId ? "Record reviewed proceeds" : "Record and distribute" : modal === "spend" ? "Record expense" : "Transfer"}</button></div></form>}
+        </div></div> : <form onSubmit={submitFinancial}>
+          <h2 id="modal-title">{modal === "deposit" ? pendingWarId ? "Review war proceeds" : "Record proceeds" : modal === "directDeposit" ? `Deposit to ${selectedAccount?.name ?? "account"}` : modal === "spend" ? `Spend from ${selectedAccount?.name ?? "account"}` : "Transfer funds"}</h2>
+          <p className="modal-intro">{modal === "deposit" ? pendingWarId ? "Confirm the actual gross value after cache sales. Only the faction share is distributed to accounts." : "Enter the full gross value. The policy calculates the player payout and deposits only the faction share." : modal === "directDeposit" ? "Add money directly to this account without applying a proceeds policy." : modal === "spend" ? `Available: ${money.format(selectedAccount?.balance ?? 0)}` : "Move money between treasury accounts."}</p>
+          {modal === "deposit" && <label className="field"><span>Proceeds type</span><select value={sourceKey} onChange={(event) => setSourceKey(event.target.value)}>{data.policies.map((policy) => <option key={policy.sourceKey} value={policy.sourceKey}>{policy.label} — {policy.taxBps / 100}% faction</option>)}</select></label>}
+          {modal === "transfer" && <div className="transfer-grid"><label><span>From</span><select value={fromAccountId ?? ""} onChange={(event) => setFromAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name} — {money.format(account.balance)}</option>)}</select></label><span>→</span><label><span>To</span><select value={toAccountId ?? ""} onChange={(event) => setToAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label></div>}
+          <label className="field"><span>{modal === "deposit" ? "Gross amount" : "Amount"}</span><div className="money-input"><b>$</b><input autoFocus inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0" required /></div></label>
+          <label className="field"><span>{modal === "deposit" ? "Description" : "Note"}</span><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={160} placeholder={modal === "deposit" ? "e.g. Silver ranked war" : modal === "spend" ? "e.g. Xanax restock" : modal === "directDeposit" ? "e.g. opening balance adjustment" : "Optional transfer note"} required={modal === "spend"} /></label>
+          {modal === "deposit" && <div className="settlement-preview"><div><span>Gross</span><b>{money.format(grossPreview)}</b></div><div><span>Player payout</span><b>{money.format(playerPreview)}</b></div><div className="faction-row"><span>Faction share ({(selectedPolicy?.taxBps ?? 0) / 100}%)</span><b>{money.format(factionPreview)}</b></div><hr />{data.accounts.map((account) => <div className="account-split" key={account.id}><span>{account.name} <small>{account.allocationBps / 100}%</small></span><b>{money.format(Math.floor(factionPreview * account.allocationBps / 10000))}</b></div>)}</div>}
+          {error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={closeModal}>Cancel</button><button className="button button-primary" disabled={saving || !amount}>{saving ? "Saving..." : modal === "deposit" ? pendingWarId ? "Record reviewed proceeds" : "Record and distribute" : modal === "directDeposit" ? "Record deposit" : modal === "spend" ? "Record expense" : "Transfer"}</button></div>
+        </form>}
       </section></div>}
     </main>
   );

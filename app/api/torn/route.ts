@@ -1,4 +1,5 @@
 import { getD1 } from "../../../db";
+import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
 type JsonObject = Record<string, unknown>;
 type PendingWarRow = {
@@ -249,8 +250,13 @@ async function sync(db: D1Database, apiKey: string) {
 }
 
 export async function GET() {
-  try { return Response.json(await status(getD1())); }
-  catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Unable to load war tracking." }, { status: 500 }); }
+  try {
+    const db = getD1();
+    await ensureWarSchema(db);
+    await requireTreasuryLeader(db);
+    return Response.json(await status(db));
+  }
+  catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Unable to load war tracking." }, { status: error instanceof TreasuryAccessError ? 403 : 500 }); }
 }
 
 export async function POST(request: Request) {
@@ -259,6 +265,7 @@ export async function POST(request: Request) {
     const action = String(payload.action ?? "");
     const db = getD1();
     await ensureWarSchema(db);
+    await requireTreasuryLeader(db);
     if (action === "sync") return Response.json(await sync(db, String(payload.apiKey ?? "").trim()));
     const warId = asNumber(payload.warId);
     if (!warId) throw new Error("Choose a valid war.");
@@ -272,6 +279,6 @@ export async function POST(request: Request) {
     return Response.json(await status(db));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update war tracking.";
-    return Response.json({ error: message }, { status: /valid|choose|greater|belong|API key/i.test(message) ? 400 : 500 });
+    return Response.json({ error: message }, { status: error instanceof TreasuryAccessError ? 403 : /valid|choose|greater|belong|API key/i.test(message) ? 400 : 500 });
   }
 }

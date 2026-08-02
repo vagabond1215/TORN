@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.0.0
-// @description  Sends Blood Coven faction news, armory activity, and ranked-war values to the private treasury when it is open.
+// @version      1.1.0
+// @description  Sends Blood Coven faction funds, Xanax use, and ranked-war activity to the private treasury when it is open.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
 // @match        https://faction-ledger-torn.vagabond1215.chatgpt.site/*
@@ -72,6 +72,44 @@
     return ({ "1": "main_news", "2": "attacking", "3": "funds", "4": "armory", "5": "crimes", "6": "membership" })[type] ?? "faction";
   }
 
+  function moneyValue(value) {
+    return Number(String(value ?? "0").replace(/,/g, ""));
+  }
+
+  function scanFundsRow(text) {
+    let match = text.match(/^(.+?) was given \$([\d,]+) by (.+?)(\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{2})$/i);
+    if (match) {
+      addEvent("faction_payout", "funds", text, {
+        recipientName: normalize(match[1]), amount: moneyValue(match[2]), actorName: normalize(match[3]), direction: "payout",
+      });
+      return;
+    }
+
+    match = text.match(/^(.+?) increased (.+?)'s Blood Coven money balance by \$([\d,]+) from \$([\d,]+) to \$([\d,]+) as (.+?)(\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{2})$/i);
+    if (match) {
+      addEvent("oc_credit", "funds", text, {
+        actorName: normalize(match[1]), memberName: normalize(match[2]), amount: moneyValue(match[3]),
+        oldBalance: moneyValue(match[4]), newBalance: moneyValue(match[5]), detail: normalize(match[6]), direction: "credit", source: "oc",
+      });
+      return;
+    }
+
+    match = text.match(/^(.+?) deposited \$([\d,]+)(.*?)(\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{2})$/i);
+    if (match) addEvent("faction_deposit", "funds", text, { memberName: normalize(match[1]), amount: moneyValue(match[2]), detail: normalize(match[3]) });
+  }
+
+  function scanArmoryRow(text) {
+    const used = text.match(/^(.+?) used one of the faction's (.+?) items(\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{2})$/i);
+    if (used) {
+      const item = normalize(used[2]);
+      addEvent(/^Xanax$/i.test(item) ? "xanax_use" : "armory", "armory", text, {
+        memberName: normalize(used[1]), item, quantity: 1, action: "used",
+      });
+      return;
+    }
+    if (/(deposited \d+x|loaned \d+x|returned \d+x|filled one of the faction's)/i.test(text)) addEvent("armory", "armory", text);
+  }
+
   function scanFactionPage() {
     if (location.pathname.toLowerCase() !== "/factions.php") return;
     const category = factionCategory();
@@ -79,8 +117,10 @@
     for (const row of rows) {
       const text = normalize(row.textContent);
       if (text.length < 12 || text.length > 500 || !/\d{2}:\d{2}:\d{2}/.test(text)) continue;
-      if (category === "armory" && /(used one of the faction's|deposited \d+x|loaned \d+x|returned \d+x|filled one of the faction's)/i.test(text)) {
-        addEvent("armory", category, text);
+      if (category === "armory") {
+        scanArmoryRow(text);
+      } else if (category === "funds") {
+        scanFundsRow(text);
       } else if (category === "main_news" && /(ranked war|ranked up|ranked down|war mode)/i.test(text)) {
         addEvent("faction_news", category, text);
       }
@@ -116,10 +156,28 @@
   function scanTorn() {
     scanFactionPage();
     scanRankedWarReport();
+    addBalanceLink();
+  }
+
+  function addBalanceLink() {
+    if (document.getElementById("blood-coven-balance-link")) return;
+    const link = document.createElement("a");
+    link.id = "blood-coven-balance-link";
+    link.href = `${TREASURY_ORIGIN}/balance`;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.textContent = "Request faction balance";
+    link.title = "Verify your Blood Coven membership and request a payout";
+    Object.assign(link.style, {
+      position: "fixed", right: "18px", bottom: "18px", zIndex: "99999", padding: "9px 12px",
+      border: "1px solid #6f1424", borderRadius: "4px", background: "#9f162b", color: "#fff",
+      font: "700 12px Arial, sans-serif", textDecoration: "none", boxShadow: "0 3px 12px rgba(0,0,0,.32)",
+    });
+    document.body.appendChild(link);
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.0.0", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.1.0", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {
