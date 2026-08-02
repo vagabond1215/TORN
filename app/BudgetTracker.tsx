@@ -3,14 +3,17 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Account = { id: number; name: string; allocationBps: number; balance: number; color: string };
+type Actor = { userId: string; email: string; name: string };
 type Transaction = {
   id: number; type: string; amount: number; fromAccountId: number | null; fromAccountName: string | null;
   toAccountId: number | null; toAccountName: string | null; note: string;
-  details: { allocations?: Array<{ name: string; amount: number; allocationBps: number }> }; createdAt: string;
+  details: { source?: string; allocations?: Array<{ name: string; amount: number; allocationBps: number }> };
+  actorName: string | null; actorEmail: string | null; createdAt: string;
 };
-type BudgetData = { accounts: Account[]; transactions: Transaction[] };
+type BudgetData = { currentUser: Actor | null; accounts: Account[]; transactions: Transaction[] };
 type Modal = "deposit" | "spend" | "transfer" | "accounts" | null;
 
+const emptyData: BudgetData = { currentUser: null, accounts: [], transactions: [] };
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const parseMoney = (value: string) => Number(value.replace(/[$,\s]/g, ""));
 
@@ -20,17 +23,18 @@ function formatDate(value: string) {
 }
 
 function transactionLabel(item: Transaction) {
-  if (item.type === "deposit") return "Proceeds distributed";
+  if (item.type === "deposit") return `${item.details.source ?? "Faction"} proceeds distributed`;
   if (item.type === "spend") return `Spent from ${item.fromAccountName}`;
   if (item.type === "transfer") return `${item.fromAccountName} → ${item.toAccountName}`;
   if (item.type === "allocation_update") return "Allocation plan updated";
   if (item.type === "account_created") return "Account created";
   if (item.type === "account_deleted") return "Account deleted";
-  return "Budget updated";
+  if (item.type === "policy_bootstrap") return "Blood Coven policy applied";
+  return "Treasury updated";
 }
 
 export default function BudgetTracker() {
-  const [data, setData] = useState<BudgetData>({ accounts: [], transactions: [] });
+  const [data, setData] = useState<BudgetData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -40,6 +44,7 @@ export default function BudgetTracker() {
   const [activityFilter, setActivityFilter] = useState("all");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [proceedsSource, setProceedsSource] = useState("War tax");
   const [fromAccountId, setFromAccountId] = useState<number | null>(null);
   const [toAccountId, setToAccountId] = useState<number | null>(null);
   const [draftAccounts, setDraftAccounts] = useState<Account[]>([]);
@@ -50,14 +55,17 @@ export default function BudgetTracker() {
       setError("");
       const response = await fetch("/api/budget", { cache: "no-store" });
       const result = (await response.json()) as BudgetData & { error?: string };
-      if (!response.ok) throw new Error(result.error || "Unable to load the budget.");
+      if (!response.ok) throw new Error(result.error || "Unable to load the treasury.");
       setData(result);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load the budget.");
+      setError(loadError instanceof Error ? loadError.message : "Unable to load the treasury.");
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const task = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(task);
+  }, []);
 
   const totalBalance = useMemo(() => data.accounts.reduce((sum, account) => sum + account.balance, 0), [data.accounts]);
   const totalAllocatedBps = useMemo(() => data.accounts.reduce((sum, account) => sum + account.allocationBps, 0), [data.accounts]);
@@ -65,7 +73,8 @@ export default function BudgetTracker() {
     if (activityFilter === "all") return data.transactions;
     if (activityFilter === "income") return data.transactions.filter((item) => item.type === "deposit");
     if (activityFilter === "spend") return data.transactions.filter((item) => item.type === "spend");
-    return data.transactions.filter((item) => item.type === "transfer");
+    if (activityFilter === "transfer") return data.transactions.filter((item) => item.type === "transfer");
+    return data.transactions.filter((item) => !["deposit", "spend", "transfer"].includes(item.type));
   }, [activityFilter, data.transactions]);
   const latestDeposit = data.transactions.find((item) => item.type === "deposit");
   const selectedAccount = data.accounts.find((account) => account.id === selectedAccountId);
@@ -100,8 +109,9 @@ export default function BudgetTracker() {
   }
 
   async function submitFinancial(event: FormEvent) {
-    event.preventDefault(); const numericAmount = parseMoney(amount);
-    if (modal === "deposit") await act({ action: "deposit", amount: numericAmount, note }, "Proceeds distributed across your accounts.");
+    event.preventDefault();
+    const numericAmount = parseMoney(amount);
+    if (modal === "deposit") await act({ action: "deposit", amount: numericAmount, source: proceedsSource, note }, "Proceeds distributed across Blood Coven accounts.");
     else if (modal === "spend") await act({ action: "spend", accountId: selectedAccountId, amount: numericAmount, note }, "Expense recorded in the ledger.");
     else if (modal === "transfer") await act({ action: "transfer", fromAccountId, toAccountId, amount: numericAmount, note }, "Funds transferred between accounts.");
   }
@@ -126,12 +136,13 @@ export default function BudgetTracker() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">FL</span><div><span className="eyebrow">Torn City finance</span><strong>Faction Ledger</strong></div></div>
+        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">BC</span><div><span className="eyebrow">Blood Coven finance</span><strong>Coven Treasury</strong></div></div>
+        <div className="leadership-chip"><span className="status-dot ready" /><div><b>Leadership only</b><small>{data.currentUser?.name ?? "Authorized member"}</small></div></div>
         <div className="topbar-actions"><button className="button button-secondary" onClick={() => openModal("accounts")}>Manage accounts</button><button className="button button-primary" onClick={() => openModal("deposit")} disabled={loading}>+ Add proceeds</button></div>
       </header>
 
       <section className="hero-panel">
-        <div className="hero-copy"><span className="eyebrow light">Faction treasury</span><h1>Put every dollar<br />to work.</h1><p>Record one deposit. Your allocation plan handles the rest.</p></div>
+        <div className="hero-copy"><span className="eyebrow light">Blood Coven treasury</span><h1>Guard the reserve.<br />Fund the war.</h1><p>Record proceeds once. The current allocation plan divides every dollar and preserves the trail.</p></div>
         <div className="hero-balance"><span>Total faction funds</span><strong>{loading ? "—" : money.format(totalBalance)}</strong><div className="hero-meta"><span><i className={totalAllocatedBps === 10000 ? "status-dot ready" : "status-dot"} /> {totalAllocatedBps / 100}% allocated</span><span>{data.accounts.length} active accounts</span></div></div>
         <div className="hero-grid" aria-hidden="true" />
       </section>
@@ -139,16 +150,23 @@ export default function BudgetTracker() {
       {notice && <div className="notice" role="status"><span>✓</span>{notice}</div>}
       {error && !modal && <div className="page-error" role="alert">{error}<button onClick={() => void load()}>Try again</button></div>}
 
+      <section className="policy-strip" aria-label="Blood Coven treasury policy">
+        <div><span>War tax</span><strong>20%</strong><small>Ranked war proceeds</small></div>
+        <div><span>OC starting tax</span><strong>5%</strong><small>Earmarked for war supply</small></div>
+        <div><span>Reserve floor</span><strong>$1B</strong><small>Strategic minimum</small></div>
+        <div><span>Reserve target</span><strong>$1.5B</strong><small>Preferred treasury depth</small></div>
+      </section>
+
       <section className="summary-strip" aria-label="Budget summary">
-        <div><span>Last proceeds</span><strong>{latestDeposit ? money.format(latestDeposit.amount) : "No deposits yet"}</strong><small>{latestDeposit ? formatDate(latestDeposit.createdAt) : "Add your first war income"}</small></div>
+        <div><span>Last proceeds</span><strong>{latestDeposit ? money.format(latestDeposit.amount) : "No deposits yet"}</strong><small>{latestDeposit ? formatDate(latestDeposit.createdAt) : "Add your first income entry"}</small></div>
         <div><span>Allocation status</span><strong>{totalAllocatedBps === 10000 ? "Ready to distribute" : `${(10000 - totalAllocatedBps) / 100}% unassigned`}</strong><small>{data.accounts.length} earmarks configured</small></div>
-        <div><span>Ledger entries</span><strong>{data.transactions.length}</strong><small>Every movement recorded</small></div>
+        <div><span>Latest Silver war</span><strong>$354M tax</strong><small>2,683 hits · workbook reference</small></div>
       </section>
 
       <div className="content-grid">
         <section className="accounts-section">
-          <div className="section-heading"><div><span className="eyebrow">Earmarked funds</span><h2>Your accounts</h2></div><button className="text-button" onClick={() => openModal("transfer")}>Transfer funds <span>→</span></button></div>
-          {loading ? <div className="loading-card"><span className="spinner" /> Loading your treasury…</div> : (
+          <div className="section-heading"><div><span className="eyebrow">Earmarked funds</span><h2>Treasury accounts</h2></div><button className="text-button" onClick={() => openModal("transfer")}>Transfer funds <span>→</span></button></div>
+          {loading ? <div className="loading-card"><span className="spinner" /> Opening the treasury…</div> : (
             <div className="account-list">{data.accounts.map((account) => {
               const share = totalBalance > 0 ? (account.balance / totalBalance) * 100 : account.allocationBps / 100;
               return <article className="account-card" key={account.id}><div className={`account-accent ${account.color}`} /><div className="account-main">
@@ -161,26 +179,27 @@ export default function BudgetTracker() {
         </section>
 
         <aside className="activity-section">
-          <div className="section-heading compact"><div><span className="eyebrow">Audit trail</span><h2>Activity</h2></div></div>
-          <div className="activity-filters" role="group" aria-label="Filter ledger">{["all", "income", "spend", "transfer"].map((filter) => <button key={filter} className={activityFilter === filter ? "active" : ""} onClick={() => setActivityFilter(filter)}>{filter === "transfer" ? "Transfers" : filter.charAt(0).toUpperCase() + filter.slice(1)}</button>)}</div>
-          <div className="activity-list">{filteredTransactions.length === 0 ? <div className="empty-state"><span>◎</span><strong>No activity yet</strong><p>Your deposits, spending, and transfers will appear here.</p></div> : filteredTransactions.slice(0, 12).map((item) => <article className="activity-item" key={item.id}>
-            <span className={`activity-icon ${item.type}`}>{item.type === "deposit" ? "↓" : item.type === "spend" ? "↑" : item.type === "transfer" ? "↔" : "•"}</span><div><strong>{transactionLabel(item)}</strong><p>{item.note}</p><time>{formatDate(item.createdAt)}</time>{item.type === "deposit" && item.details.allocations && <details><summary>View split</summary>{item.details.allocations.map((split) => <span key={split.name}>{split.name}<b>{money.format(split.amount)}</b></span>)}</details>}</div>
+          <div className="section-heading compact"><div><span className="eyebrow">Persistent audit trail</span><h2>History</h2></div></div>
+          <div className="activity-filters" role="group" aria-label="Filter ledger">{["all", "income", "spend", "transfer", "changes"].map((filter) => <button key={filter} className={activityFilter === filter ? "active" : ""} onClick={() => setActivityFilter(filter)}>{filter === "transfer" ? "Moves" : filter.charAt(0).toUpperCase() + filter.slice(1)}</button>)}</div>
+          <div className="activity-list">{filteredTransactions.length === 0 ? <div className="empty-state"><span>◇</span><strong>No matching history</strong><p>Income, spending, transfers, and configuration changes appear here.</p></div> : filteredTransactions.slice(0, 20).map((item) => <article className="activity-item" key={item.id}>
+            <span className={`activity-icon ${item.type}`}>{item.type === "deposit" ? "↓" : item.type === "spend" ? "↑" : item.type === "transfer" ? "↔" : "•"}</span><div><strong>{transactionLabel(item)}</strong><p>{item.note}</p><time>{formatDate(item.createdAt)} · {item.actorName ?? "Legacy entry"}</time>{item.type === "deposit" && item.details.allocations && <details><summary>View split</summary>{item.details.allocations.map((split) => <span key={split.name}>{split.name}<b>{money.format(split.amount)}</b></span>)}</details>}</div>
             {item.amount > 0 && <b className={`activity-amount ${item.type}`}>{item.type === "deposit" ? "+" : item.type === "spend" ? "−" : ""}{money.format(item.amount)}</b>}
           </article>)}</div>
         </aside>
       </div>
 
-      <footer><span>Faction Ledger</span><p>Independent fan tool for Torn City faction finances.</p></footer>
+      <footer><span>Blood Coven Treasury</span><p>Private leadership ledger · Independent Torn City fan tool</p></footer>
 
       {modal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeModal()}><section className={`modal ${modal === "accounts" ? "modal-wide" : ""}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><button className="modal-close" onClick={closeModal} aria-label="Close">×</button>
-        {modal === "accounts" ? <form onSubmit={saveAllocations}><span className="eyebrow">Distribution rules</span><h2 id="modal-title">Manage accounts</h2><p className="modal-intro">Set the percentage each account receives whenever you add faction proceeds.</p>
+        {modal === "accounts" ? <form onSubmit={saveAllocations}><span className="eyebrow">Distribution rules</span><h2 id="modal-title">Manage accounts</h2><p className="modal-intro">Set the percentage each account receives whenever leadership records faction proceeds. Every saved change is logged.</p>
           <div className={`allocation-total ${draftTotalBps === 10000 ? "valid" : ""}`}><div><span>Allocated</span><strong>{draftTotalBps / 100}%</strong></div><div className="allocation-track"><span style={{ width: `${Math.min(100, draftTotalBps / 100)}%` }} /></div><small>{draftTotalBps === 10000 ? "Ready to save" : `${Math.abs(10000 - draftTotalBps) / 100}% ${draftTotalBps < 10000 ? "left to assign" : "over the limit"}`}</small></div>
           <div className="allocation-editor">{draftAccounts.map((account) => <div className="allocation-row" key={account.id}><span className={`account-icon ${account.color}`}>{account.name.slice(0, 1).toUpperCase()}</span><label><span>Account name</span><input value={account.name} maxLength={50} onChange={(event) => setDraftAccounts((current) => current.map((item) => item.id === account.id ? { ...item, name: event.target.value } : item))} /></label><label className="percent-field"><span>Allocation</span><div><input type="number" min="0" max="100" step="0.01" value={account.allocationBps / 100} onChange={(event) => setDraftAccounts((current) => current.map((item) => item.id === account.id ? { ...item, allocationBps: Math.round(Number(event.target.value) * 100) } : item))} /><b>%</b></div></label><button type="button" className="delete-button" onClick={() => void deleteAccount(account)} disabled={account.balance !== 0 || saving} title={account.balance !== 0 ? "Empty this account before deleting" : "Delete account"}>×</button></div>)}</div>
           <div className="add-account-row"><input value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} placeholder="New account name" maxLength={50} /><button type="button" onClick={() => void addAccount()} disabled={!newAccountName.trim() || saving}>+ Add account</button></div>
           {error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={closeModal}>Cancel</button><button className="button button-primary" disabled={saving || draftTotalBps !== 10000}>{saving ? "Saving…" : "Save allocation plan"}</button></div>
-        </form> : <form onSubmit={submitFinancial}><span className="eyebrow">{modal === "deposit" ? "New income" : modal === "spend" ? "Account expense" : "Move funds"}</span><h2 id="modal-title">{modal === "deposit" ? "Add faction proceeds" : modal === "spend" ? `Spend from ${selectedAccount?.name ?? "account"}` : "Transfer funds"}</h2><p className="modal-intro">{modal === "deposit" ? "The full amount will be split using your current allocation plan." : modal === "spend" ? `Available: ${money.format(selectedAccount?.balance ?? 0)}` : "Move money without changing your distribution percentages."}</p>
+        </form> : <form onSubmit={submitFinancial}><span className="eyebrow">{modal === "deposit" ? "New income" : modal === "spend" ? "Account expense" : "Move funds"}</span><h2 id="modal-title">{modal === "deposit" ? "Add faction proceeds" : modal === "spend" ? `Spend from ${selectedAccount?.name ?? "account"}` : "Transfer funds"}</h2><p className="modal-intro">{modal === "deposit" ? "The full amount will be split using the current allocation plan." : modal === "spend" ? `Available: ${money.format(selectedAccount?.balance ?? 0)}` : "Move money without changing distribution percentages."}</p>
+          {modal === "deposit" && <label className="field"><span>Income source</span><select value={proceedsSource} onChange={(event) => setProceedsSource(event.target.value)}><option>War tax</option><option>OC tax</option><option>Donations</option><option>Other income</option></select></label>}
           {modal === "transfer" && <div className="transfer-grid"><label><span>From</span><select value={fromAccountId ?? ""} onChange={(event) => setFromAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name} — {money.format(account.balance)}</option>)}</select></label><span className="transfer-arrow">→</span><label><span>To</span><select value={toAccountId ?? ""} onChange={(event) => setToAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label></div>}
-          <label className="field"><span>Amount</span><div className="money-input"><b>$</b><input autoFocus inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0" required /></div></label><label className="field"><span>{modal === "deposit" ? "Source or note" : "Description"}</span><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={160} placeholder={modal === "deposit" ? "e.g. Ranked war — August 2" : modal === "spend" ? "e.g. Xanax restock" : "Optional transfer note"} required={modal === "spend"} /></label>
+          <label className="field"><span>Amount</span><div className="money-input"><b>$</b><input autoFocus inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0" required /></div></label><label className="field"><span>{modal === "deposit" ? "Source detail or note" : "Description"}</span><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={160} placeholder={modal === "deposit" ? "e.g. Silver ranked war — August 2" : modal === "spend" ? "e.g. Xanax restock" : "Optional transfer note"} required={modal === "spend"} /></label>
           {modal === "deposit" && <div className="split-preview"><span>Estimated split</span>{data.accounts.map((account) => <div key={account.id}><span><i className={account.color} />{account.name} <small>{account.allocationBps / 100}%</small></span><b>{money.format(Math.floor((parseMoney(amount) || 0) * account.allocationBps / 10000))}</b></div>)}</div>}
           {error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={closeModal}>Cancel</button><button className="button button-primary" disabled={saving || !amount}>{saving ? "Saving…" : modal === "deposit" ? "Distribute proceeds" : modal === "spend" ? "Record expense" : "Transfer funds"}</button></div>
         </form>}

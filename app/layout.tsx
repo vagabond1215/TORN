@@ -11,18 +11,19 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(origin),
-    title: "Faction Ledger — Torn City Budget Tracker",
-    description: "Distribute faction proceeds, manage earmarked accounts, and keep a clean audit trail.",
+    title: "Blood Coven Treasury — Leadership Ledger",
+    description: "Private Blood Coven treasury allocations, spending, transfers, and persistent leadership history.",
+    robots: { index: false, follow: false, nocache: true },
     openGraph: {
-      title: "Faction Ledger",
-      description: "Put every dollar to work.",
+      title: "Blood Coven Treasury",
+      description: "Guard the reserve. Fund the war.",
       type: "website",
-      images: [{ url: image, width: 1200, height: 630, alt: "Faction Ledger allocation dashboard" }],
+      images: [{ url: image, width: 1200, height: 630, alt: "Blood Coven Treasury leadership ledger" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Faction Ledger",
-      description: "Put every dollar to work.",
+      title: "Blood Coven Treasury",
+      description: "Guard the reserve. Fund the war.",
       images: [image],
     },
   };

@@ -15,6 +15,13 @@
       "when": 1785694317300,
       "tag": "0001_complex_thor_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785696077624,
+      "tag": "0002_simple_drax",
+      "breakpoints": true
     }
   ]
 }

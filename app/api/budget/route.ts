@@ -1,4 +1,5 @@
 import { getD1 } from "../../../db";
+import { getChatGPTUser } from "../../chatgpt-auth";
 
 type AccountRow = {
   id: number;
@@ -20,10 +21,32 @@ type TransactionRow = {
   to_account_name: string | null;
   note: string;
   details: string;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  actor_name: string | null;
   created_at: string;
 };
 
-const colors = ["lime", "amber", "blue", "violet", "rose", "cyan"];
+type Actor = { userId: string; email: string; name: string };
+
+const colors = ["crimson", "gold", "silver", "wine", "ember", "bone"];
+const defaultAccounts = [
+  { name: "War Supply Reserve", allocationBps: 4500, color: "crimson" },
+  { name: "Strategic Reserve", allocationBps: 3000, color: "gold" },
+  { name: "Chain Extensions", allocationBps: 1500, color: "silver" },
+  { name: "Faction Operations", allocationBps: 1000, color: "wine" },
+];
+
+async function currentActor(): Promise<Actor> {
+  const user = await getChatGPTUser();
+  return user
+    ? { userId: user.userId, email: user.email, name: user.displayName }
+    : { userId: "local-admin", email: "local@blood-coven", name: "Local administrator" };
+}
+
+function actorValues(actor: Actor) {
+  return [actor.userId, actor.email, actor.name] as const;
+}
 
 async function ensureSchema(db: D1Database) {
   await db.batch([
@@ -32,7 +55,7 @@ async function ensureSchema(db: D1Database) {
       name TEXT NOT NULL,
       allocation_bps INTEGER NOT NULL DEFAULT 0 CHECK (allocation_bps BETWEEN 0 AND 10000),
       balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
-      color TEXT NOT NULL DEFAULT 'lime',
+      color TEXT NOT NULL DEFAULT 'crimson',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
@@ -46,28 +69,54 @@ async function ensureSchema(db: D1Database) {
       to_account_name TEXT,
       note TEXT NOT NULL DEFAULT '',
       details TEXT NOT NULL DEFAULT '{}',
+      actor_user_id TEXT,
+      actor_email TEXT,
+      actor_name TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC, id DESC)"),
-    db.prepare("PRAGMA optimize"),
   ]);
+
+  const columns = await db.prepare("PRAGMA table_info(transactions)").all<{ name: string }>();
+  const columnNames = new Set(columns.results.map((column) => column.name));
+  for (const column of ["actor_user_id", "actor_email", "actor_name"]) {
+    if (!columnNames.has(column)) await db.prepare(`ALTER TABLE transactions ADD COLUMN ${column} TEXT`).run();
+  }
 
   const count = await db.prepare("SELECT COUNT(*) AS count FROM accounts").first<{ count: number }>();
   if (!count?.count) {
-    await db.batch([
-      db.prepare("INSERT INTO accounts (name, allocation_bps, color) VALUES (?, ?, ?)").bind("War Chest", 4000, "lime"),
-      db.prepare("INSERT INTO accounts (name, allocation_bps, color) VALUES (?, ?, ?)").bind("Member Payouts", 3000, "amber"),
-      db.prepare("INSERT INTO accounts (name, allocation_bps, color) VALUES (?, ?, ?)").bind("Armory", 2000, "blue"),
-      db.prepare("INSERT INTO accounts (name, allocation_bps, color) VALUES (?, ?, ?)").bind("Emergency Reserve", 1000, "violet"),
-    ]);
+    await db.batch(defaultAccounts.map((account) =>
+      db.prepare("INSERT INTO accounts (name, allocation_bps, color) VALUES (?, ?, ?)")
+        .bind(account.name, account.allocationBps, account.color),
+    ));
+  } else {
+    await upgradeUntouchedDefaults(db);
   }
+
+  await db.prepare("PRAGMA optimize").run();
+}
+
+async function upgradeUntouchedDefaults(db: D1Database) {
+  const accounts = (await db.prepare("SELECT * FROM accounts ORDER BY id ASC").all<AccountRow>()).results;
+  const financialEntries = await db.prepare("SELECT COUNT(*) AS count FROM transactions WHERE type IN ('deposit', 'spend', 'transfer')").first<{ count: number }>();
+  const legacyNames = ["War Chest", "Member Payouts", "Armory", "Emergency Reserve"];
+  const untouched = accounts.length === 4 && accounts.every((account, index) => account.balance === 0 && account.name === legacyNames[index]) && !financialEntries?.count;
+  if (!untouched) return;
+
+  const statements = accounts.map((account, index) => {
+    const replacement = defaultAccounts[index];
+    return db.prepare("UPDATE accounts SET name = ?, allocation_bps = ?, color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(replacement.name, replacement.allocationBps, replacement.color, account.id);
+  });
+  statements.push(db.prepare(`INSERT INTO transactions (type, note, details, actor_user_id, actor_email, actor_name)
+    VALUES ('policy_bootstrap', 'Blood Coven policy defaults applied', ?, 'system', 'system@blood-coven', 'Blood Coven setup')`)
+    .bind(JSON.stringify({ accounts: defaultAccounts, warTaxPercent: 20, ocTaxPercent: 5, reserveFloor: 1_000_000_000, reserveTarget: 1_500_000_000 })));
+  await db.batch(statements);
 }
 
 function asPositiveInteger(value: unknown, label: string) {
   const amount = typeof value === "number" ? value : Number(value);
-  if (!Number.isSafeInteger(amount) || amount <= 0) {
-    throw new Error(`${label} must be a positive whole number.`);
-  }
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error(`${label} must be a positive whole number.`);
   return amount;
 }
 
@@ -81,13 +130,14 @@ async function accountById(db: D1Database, id: number) {
   return account;
 }
 
-async function snapshot(db: D1Database) {
+async function snapshot(db: D1Database, actor: Actor) {
   const [accountsResult, transactionsResult] = await Promise.all([
     db.prepare("SELECT * FROM accounts ORDER BY id ASC").all<AccountRow>(),
     db.prepare("SELECT * FROM transactions ORDER BY created_at DESC, id DESC LIMIT 150").all<TransactionRow>(),
   ]);
 
   return {
+    currentUser: actor,
     accounts: accountsResult.results.map((account) => ({
       id: account.id,
       name: account.name,
@@ -107,6 +157,9 @@ async function snapshot(db: D1Database) {
       toAccountName: transaction.to_account_name,
       note: transaction.note,
       details: JSON.parse(transaction.details || "{}"),
+      actorUserId: transaction.actor_user_id,
+      actorEmail: transaction.actor_email,
+      actorName: transaction.actor_name,
       createdAt: transaction.created_at,
     })),
   };
@@ -115,8 +168,9 @@ async function snapshot(db: D1Database) {
 export async function GET() {
   try {
     const db = getD1();
+    const actor = await currentActor();
     await ensureSchema(db);
-    return Response.json(await snapshot(db));
+    return Response.json(await snapshot(db, actor));
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to load the budget." }, { status: 500 });
   }
@@ -127,13 +181,15 @@ export async function POST(request: Request) {
     const payload = (await request.json()) as Record<string, unknown>;
     const action = String(payload.action ?? "");
     const db = getD1();
+    const actor = await currentActor();
     await ensureSchema(db);
+    const actorParams = actorValues(actor);
 
     if (action === "deposit") {
       const amount = asPositiveInteger(payload.amount, "Proceeds");
-      const note = String(payload.note ?? "War proceeds").trim().slice(0, 160) || "War proceeds";
-      const result = await db.prepare("SELECT * FROM accounts ORDER BY id ASC").all<AccountRow>();
-      const accounts = result.results;
+      const source = String(payload.source ?? "War tax").trim().slice(0, 40) || "War tax";
+      const note = String(payload.note ?? `${source} proceeds`).trim().slice(0, 160) || `${source} proceeds`;
+      const accounts = (await db.prepare("SELECT * FROM accounts ORDER BY id ASC").all<AccountRow>()).results;
       const totalBps = accounts.reduce((sum, account) => sum + account.allocation_bps, 0);
       if (totalBps !== 10000) throw new Error("Allocations must total 100% before recording proceeds.");
 
@@ -143,21 +199,15 @@ export async function POST(request: Request) {
       });
       let remainder = amount - allocations.reduce((sum, item) => sum + item.amount, 0);
       for (const item of [...allocations].sort((a, b) => b.remainder - a.remainder || a.account.id - b.account.id)) {
-        if (remainder <= 0) break;
+        if (remainder-- <= 0) break;
         item.amount += 1;
-        remainder -= 1;
       }
 
-      const statements = allocations
-        .filter((item) => item.amount > 0)
+      const statements = allocations.filter((item) => item.amount > 0)
         .map((item) => db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(item.amount, item.account.id));
-      statements.push(
-        db.prepare("INSERT INTO transactions (type, amount, note, details) VALUES ('deposit', ?, ?, ?)").bind(
-          amount,
-          note,
-          JSON.stringify({ allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }),
-        ),
-      );
+      statements.push(db.prepare(`INSERT INTO transactions (type, amount, note, details, actor_user_id, actor_email, actor_name)
+        VALUES ('deposit', ?, ?, ?, ?, ?, ?)`)
+        .bind(amount, note, JSON.stringify({ source, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
       await db.batch(statements);
     } else if (action === "spend") {
       const amount = asPositiveInteger(payload.amount, "Spend amount");
@@ -167,7 +217,9 @@ export async function POST(request: Request) {
       if (!note) throw new Error("Add a note describing the expense.");
       await db.batch([
         db.prepare("UPDATE accounts SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(amount, account.id),
-        db.prepare("INSERT INTO transactions (type, amount, from_account_id, from_account_name, note) VALUES ('spend', ?, ?, ?, ?)").bind(amount, account.id, account.name, note),
+        db.prepare(`INSERT INTO transactions (type, amount, from_account_id, from_account_name, note, actor_user_id, actor_email, actor_name)
+          VALUES ('spend', ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(amount, account.id, account.name, note, ...actorParams),
       ]);
     } else if (action === "transfer") {
       const amount = asPositiveInteger(payload.amount, "Transfer amount");
@@ -179,7 +231,9 @@ export async function POST(request: Request) {
       await db.batch([
         db.prepare("UPDATE accounts SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(amount, from.id),
         db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(amount, to.id),
-        db.prepare("INSERT INTO transactions (type, amount, from_account_id, from_account_name, to_account_id, to_account_name, note) VALUES ('transfer', ?, ?, ?, ?, ?, ?)").bind(amount, from.id, from.name, to.id, to.name, note),
+        db.prepare(`INSERT INTO transactions (type, amount, from_account_id, from_account_name, to_account_id, to_account_name, note, actor_user_id, actor_email, actor_name)
+          VALUES ('transfer', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(amount, from.id, from.name, to.id, to.name, note, ...actorParams),
       ]);
     } else if (action === "setAllocations") {
       if (!Array.isArray(payload.accounts) || payload.accounts.length < 1) throw new Error("At least one account is required.");
@@ -194,7 +248,9 @@ export async function POST(request: Request) {
       });
       if (updates.reduce((sum, item) => sum + item.allocationBps, 0) !== 10000) throw new Error("Allocations must total exactly 100%.");
       const statements = updates.map((item) => db.prepare("UPDATE accounts SET name = ?, allocation_bps = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(item.name, item.allocationBps, item.id));
-      statements.push(db.prepare("INSERT INTO transactions (type, note, details) VALUES ('allocation_update', 'Allocation plan updated', ?)").bind(JSON.stringify({ accounts: updates })));
+      statements.push(db.prepare(`INSERT INTO transactions (type, note, details, actor_user_id, actor_email, actor_name)
+        VALUES ('allocation_update', 'Allocation plan updated', ?, ?, ?, ?)`)
+        .bind(JSON.stringify({ accounts: updates }), ...actorParams));
       await db.batch(statements);
     } else if (action === "addAccount") {
       const name = String(payload.name ?? "").trim().slice(0, 50);
@@ -203,7 +259,9 @@ export async function POST(request: Request) {
       const color = colors[(count?.count ?? 0) % colors.length];
       await db.batch([
         db.prepare("INSERT INTO accounts (name, allocation_bps, color) VALUES (?, 0, ?)").bind(name, color),
-        db.prepare("INSERT INTO transactions (type, note, details) VALUES ('account_created', ?, ?)").bind(`${name} created`, JSON.stringify({ name })),
+        db.prepare(`INSERT INTO transactions (type, note, details, actor_user_id, actor_email, actor_name)
+          VALUES ('account_created', ?, ?, ?, ?, ?)`)
+          .bind(`${name} created`, JSON.stringify({ name }), ...actorParams),
       ]);
     } else if (action === "deleteAccount") {
       const account = await accountById(db, asAccountId(payload.accountId));
@@ -212,15 +270,17 @@ export async function POST(request: Request) {
       if ((count?.count ?? 0) <= 1) throw new Error("Keep at least one account.");
       await db.batch([
         db.prepare("DELETE FROM accounts WHERE id = ?").bind(account.id),
-        db.prepare("INSERT INTO transactions (type, note, details) VALUES ('account_deleted', ?, ?)").bind(`${account.name} deleted`, JSON.stringify({ name: account.name })),
+        db.prepare(`INSERT INTO transactions (type, note, details, actor_user_id, actor_email, actor_name)
+          VALUES ('account_deleted', ?, ?, ?, ?, ?)`)
+          .bind(`${account.name} deleted`, JSON.stringify({ name: account.name }), ...actorParams),
       ]);
     } else {
       return Response.json({ error: "Unknown action." }, { status: 400 });
     }
 
-    return Response.json(await snapshot(db));
+    return Response.json(await snapshot(db, actor));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update the budget.";
-    return Response.json({ error: message }, { status: /must|required|choose|enough|not found|keep|before/i.test(message) ? 400 : 500 });
+    return Response.json({ error: message }, { status: /must|required|choose|enough|not found|keep|before|enter/i.test(message) ? 400 : 500 });
   }
 }
