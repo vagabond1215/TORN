@@ -99,3 +99,18 @@ export const warMemberBaselines = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.warId, table.userId] })],
 );
+
+export const tornBrowserEvents = sqliteTable(
+  "torn_browser_events",
+  {
+    eventKey: text("event_key").primaryKey(),
+    eventType: text("event_type").notNull(),
+    category: text("category").notNull(),
+    occurredAt: text("occurred_at"),
+    summary: text("summary").notNull(),
+    sourceUrl: text("source_url").notNull().default(""),
+    payloadJson: text("payload_json").notNull().default("{}"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_torn_browser_events_created").on(table.createdAt)],
+);

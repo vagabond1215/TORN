@@ -201,6 +201,20 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .theme-options small { color: var(--muted); font-size: 9px; }
 .api-note { margin-top: 12px; }
 .api-actions { margin-top: 18px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.api-actions a.button { text-decoration: none; }
+.bridge-status { margin-bottom: 14px; padding: 14px 15px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-soft); }
+.bridge-status > div { display: grid; gap: 3px; }
+.bridge-status strong { font-size: 11px; }
+.bridge-status small { color: var(--muted); font-size: 9px; }
+.bridge-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--muted) 16%, transparent); }
+.bridge-status.connected .bridge-dot { background: #2f9e62; box-shadow: 0 0 0 4px color-mix(in srgb, #2f9e62 16%, transparent); }
+.bridge-status.missing .bridge-dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.bridge-import-summary { margin: 16px 0 10px; color: var(--muted); font-size: 9px; }
+.bridge-events { display: grid; border-top: 1px solid var(--line); }
+.bridge-events > div { padding: 10px 0; display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; gap: 10px; align-items: start; border-bottom: 1px solid var(--line); }
+.bridge-events span { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.bridge-events strong { overflow: hidden; font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.bridge-events small { color: var(--muted); font-size: 8px; white-space: nowrap; }
 .danger-text { color: var(--danger); }
 .sync-status { margin-top: 12px; display: block; color: var(--muted); font-size: 9px; }
 

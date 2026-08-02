@@ -28,11 +28,19 @@ type ActiveWar = {
 };
 type WarStatus = { pendingWars: PendingWar[]; activeWar: ActiveWar | null };
 type Modal = "deposit" | "spend" | "transfer" | "settings" | null;
-type SettingsSection = "accounts" | "policies" | "torn" | "access" | "appearance";
+type SettingsSection = "accounts" | "policies" | "torn" | "script" | "access" | "appearance";
 type Theme = "light" | "dark" | "system";
+type BridgeStatus = "checking" | "connected" | "missing";
+type BrowserEvent = {
+  eventKey: string; eventType: string; category: string; occurredAt: string | null; summary: string;
+  sourceUrl: string; payload: Record<string, unknown>; createdAt: string;
+};
+type BrowserBridgeInfo = { totalEvents: number; lastImportedAt: string | null; recentEvents: BrowserEvent[] };
 
 const emptyData: BudgetData = { currentUser: null, accounts: [], policies: [], transactions: [] };
 const emptyWars: WarStatus = { pendingWars: [], activeWar: null };
+const emptyBridge: BrowserBridgeInfo = { totalEvents: 0, lastImportedAt: null, recentEvents: [] };
+const BRIDGE_CHANNEL = "blood-coven-treasury-bridge-v1";
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const integer = new Intl.NumberFormat("en-US");
 const parseMoney = (value: string) => Number(value.replace(/[$,\s]/g, ""));
@@ -83,6 +91,10 @@ export default function BudgetTracker() {
   const [tornKeyDraft, setTornKeyDraft] = useState("");
   const [reviewValues, setReviewValues] = useState<Record<number, string>>({});
   const [lastSyncAt, setLastSyncAt] = useState("");
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>("checking");
+  const [bridgePendingCount, setBridgePendingCount] = useState(0);
+  const [bridgeInfo, setBridgeInfo] = useState<BrowserBridgeInfo>(emptyBridge);
+  const bridgeImportingRef = useRef(false);
 
   function flash(message: string) {
     setNotice(message);
@@ -112,6 +124,40 @@ export default function BudgetTracker() {
     applyWarStatus(result);
   }
 
+  async function loadBridgeInfo() {
+    const response = await fetch("/api/torn-browser", { cache: "no-store" });
+    const result = (await response.json()) as BrowserBridgeInfo & { error?: string };
+    if (!response.ok) throw new Error(result.error || "Unable to load browser imports.");
+    setBridgeInfo(result);
+  }
+
+  async function importBridgeEvents(events: unknown[]) {
+    if (bridgeImportingRef.current || events.length === 0) return;
+    bridgeImportingRef.current = true;
+    try {
+      const response = await fetch("/api/torn-browser", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ events }),
+      });
+      const result = (await response.json()) as BrowserBridgeInfo & { acceptedKeys?: string[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "Unable to import Torn browser activity.");
+      setBridgeInfo(result);
+      window.postMessage({ channel: BRIDGE_CHANNEL, kind: "ack", eventKeys: result.acceptedKeys ?? [] }, window.location.origin);
+      await loadWars();
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Unable to import Torn browser activity.");
+    } finally {
+      bridgeImportingRef.current = false;
+    }
+  }
+
+  function checkBridge() {
+    setBridgeStatus("checking");
+    window.postMessage({ channel: BRIDGE_CHANNEL, kind: "ping" }, window.location.origin);
+    window.setTimeout(() => setBridgeStatus((current) => current === "checking" ? "missing" : current), 1800);
+  }
+
   useEffect(() => {
     const task = window.setTimeout(() => {
       const savedTheme = window.localStorage.getItem("blood-coven-theme");
@@ -124,6 +170,25 @@ export default function BudgetTracker() {
     }, 0);
     return () => window.clearTimeout(task);
   // Initial device settings and first data load should run once per page load.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const onBridgeMessage = (event: MessageEvent) => {
+      if (event.source !== window || event.origin !== window.location.origin || event.data?.channel !== BRIDGE_CHANNEL) return;
+      if (event.data.kind === "ready") {
+        setBridgeStatus("connected");
+        setBridgePendingCount(Number(event.data.pendingCount) || 0);
+      } else if (event.data.kind === "events" && Array.isArray(event.data.events)) {
+        setBridgeStatus("connected");
+        void importBridgeEvents(event.data.events);
+      }
+    };
+    window.addEventListener("message", onBridgeMessage);
+    const initialCheck = window.setTimeout(checkBridge, 0);
+    void loadBridgeInfo().catch(() => undefined);
+    return () => { window.removeEventListener("message", onBridgeMessage); window.clearTimeout(initialCheck); };
+  // The userscript handshake is device-local and begins once per page load.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -294,10 +359,11 @@ export default function BudgetTracker() {
       </div>
 
       {modal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeModal()}><section className={`modal ${modal === "settings" ? "modal-settings" : ""}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><button className="modal-close" onClick={closeModal} aria-label="Close">×</button>
-        {modal === "settings" ? <div className="settings-layout"><nav className="settings-nav" aria-label="Settings sections">{(["accounts", "policies", "torn", "access", "appearance"] as SettingsSection[]).map((section) => <button key={section} className={settingsSection === section ? "active" : ""} onClick={() => { setError(""); setSettingsSection(section); }}>{section === "torn" ? "Torn API" : section.charAt(0).toUpperCase() + section.slice(1)}</button>)}</nav><div className="settings-content">
+        {modal === "settings" ? <div className="settings-layout"><nav className="settings-nav" aria-label="Settings sections">{(["accounts", "policies", "torn", "script", "access", "appearance"] as SettingsSection[]).map((section) => <button key={section} className={settingsSection === section ? "active" : ""} onClick={() => { setError(""); setSettingsSection(section); }}>{section === "torn" ? "Torn API" : section === "script" ? "Browser script" : section.charAt(0).toUpperCase() + section.slice(1)}</button>)}</nav><div className="settings-content">
           {settingsSection === "accounts" && <form onSubmit={saveAllocations}><h2 id="modal-title">Accounts</h2><p className="modal-intro">Divide the faction share between treasury accounts.</p>{draftTotalBps !== 10000 && <p className="allocation-warning">Allocations must total 100%. Currently {draftTotalBps / 100}%.</p>}<div className="allocation-editor">{draftAccounts.map((account) => <div className="allocation-row" key={account.id}><label><span>Account</span><input value={account.name} maxLength={50} onChange={(event) => setDraftAccounts((current) => current.map((item) => item.id === account.id ? { ...item, name: event.target.value } : item))} /></label><label className="percent-field"><span>Share</span><div><input type="number" min="0" max="100" step="0.01" value={account.allocationBps / 100} onChange={(event) => setDraftAccounts((current) => current.map((item) => item.id === account.id ? { ...item, allocationBps: Math.round(Number(event.target.value) * 100) } : item))} /><b>%</b></div></label><button type="button" className="delete-button" onClick={() => void deleteAccount(account)} disabled={account.balance !== 0 || saving}>×</button></div>)}</div><div className="add-account-row"><input value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} placeholder="New account name" maxLength={50} /><button type="button" onClick={() => void addAccount()} disabled={!newAccountName.trim() || saving}>Add</button></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-primary" disabled={saving || draftTotalBps !== 10000}>{saving ? "Saving..." : "Save accounts"}</button></div></form>}
           {settingsSection === "policies" && <form onSubmit={savePolicies}><h2 id="modal-title">Tax policies</h2><p className="modal-intro">These percentages determine the faction share before account allocation.</p><div className="policy-editor">{draftPolicies.map((policy) => <label key={policy.sourceKey}><span>{policy.label}</span><div><input type="number" min="0" max="100" step="0.01" value={policy.taxBps / 100} onChange={(event) => setDraftPolicies((current) => current.map((item) => item.sourceKey === policy.sourceKey ? { ...item, taxBps: Math.round(Number(event.target.value) * 100) } : item))} /><b>%</b></div></label>)}</div>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-primary" disabled={saving}>{saving ? "Saving..." : "Save policies"}</button></div></form>}
           {settingsSection === "torn" && <form onSubmit={saveTornKey}><h2 id="modal-title">Torn API</h2><p className="modal-intro">A Public-level key is enough. It verifies Blood Coven membership, detects ranked wars, values cache rewards, and reads public member statistics.</p><label className="field"><span>Personal API key</span><input type="password" autoComplete="off" value={tornKeyDraft} onChange={(event) => setTornKeyDraft(event.target.value)} placeholder="Paste a Public Torn key" /></label><p className="settings-note api-note">The key is stored only in this browser. It is sent transiently for Torn requests and is never written to the treasury database. Automatic updates run every two minutes while this page is open.</p>{error && <p className="form-error" role="alert">{error}</p>}<div className="api-actions"><button className="button button-primary">{tornKey ? "Update key" : "Save and connect"}</button>{tornKey && <><button type="button" className="button button-secondary" onClick={() => void syncTorn()} disabled={syncing}>{syncing ? "Syncing..." : "Sync now"}</button><button type="button" className="text-button danger-text" onClick={removeTornKey}>Remove from device</button></>}</div>{lastSyncAt && <small className="sync-status">Last synced {formatDate(lastSyncAt)}</small>}</form>}
+          {settingsSection === "script" && <section><h2 id="modal-title">Torn browser script</h2><p className="modal-intro">The userscript watches the Blood Coven faction and ranked-war pages you visit, then imports useful activity when this treasury is open.</p><div className={`bridge-status ${bridgeStatus}`}><span className="bridge-dot" /><div><strong>{bridgeStatus === "connected" ? "Browser script connected" : bridgeStatus === "checking" ? "Checking for browser script..." : "Browser script not detected"}</strong><small>{bridgeStatus === "connected" ? `${bridgePendingCount} event${bridgePendingCount === 1 ? "" : "s"} waiting to import` : bridgeStatus === "missing" ? "No compatible userscript responded on this page." : "Waiting for a Tampermonkey-compatible bridge response."}</small></div></div><p className="settings-note">Browsers do not reveal whether Tampermonkey or another extension is installed. The treasury detects the installed script itself. If it is not detected, install Tampermonkey, Violentmonkey, or a comparable userscript manager first.</p><div className="api-actions"><a className="button button-primary" href="/blood-coven-treasury.user.js" target="_blank" rel="noreferrer">Install script</a><button type="button" className="button button-secondary" onClick={checkBridge}>Check again</button></div>{bridgeInfo.lastImportedAt && <p className="bridge-import-summary">Last import {formatDate(bridgeInfo.lastImportedAt)} · {integer.format(bridgeInfo.totalEvents)} saved events</p>}{bridgeInfo.recentEvents.length > 0 && <div className="bridge-events" aria-label="Recent browser imports">{bridgeInfo.recentEvents.slice(0, 5).map((event) => <div key={event.eventKey}><span>{event.category.replace(/_/g, " ")}</span><strong>{event.summary}</strong><small>{formatDate(event.createdAt)}</small></div>)}</div>}</section>}
           {settingsSection === "access" && <section><h2 id="modal-title">Access</h2><p className="modal-intro">The treasury uses a private email allowlist. Visitors must sign in with an approved ChatGPT account.</p><div className="access-card"><span>Signed in as</span><strong>{data.currentUser?.name ?? "Authorized member"}</strong><small>{data.currentUser?.email}</small></div><p className="settings-note">The site owner controls the leadership allowlist through the site sharing controls.</p><button className="button button-secondary" onClick={copySiteLink}>Copy site link</button></section>}
           {settingsSection === "appearance" && <section><h2 id="modal-title">Appearance</h2><p className="modal-intro">Theme preference is saved on this device.</p><div className="theme-options">{(["light", "dark", "system"] as Theme[]).map((option) => <button key={option} className={theme === option ? "active" : ""} onClick={() => chooseTheme(option)}><strong>{option.charAt(0).toUpperCase() + option.slice(1)}</strong><small>{option === "system" ? "Match this device" : `Always use ${option} mode`}</small></button>)}</div></section>}
         </div></div> : <form onSubmit={submitFinancial}><h2 id="modal-title">{modal === "deposit" ? pendingWarId ? "Review war proceeds" : "Record proceeds" : modal === "spend" ? `Spend from ${selectedAccount?.name ?? "account"}` : "Transfer funds"}</h2><p className="modal-intro">{modal === "deposit" ? pendingWarId ? "Confirm the actual gross value after cache sales. Only the faction share is distributed to accounts." : "Enter the full gross value. The policy calculates the player payout and deposits only the faction share." : modal === "spend" ? `Available: ${money.format(selectedAccount?.balance ?? 0)}` : "Move money between treasury accounts."}</p>{modal === "deposit" && <label className="field"><span>Proceeds type</span><select value={sourceKey} onChange={(event) => setSourceKey(event.target.value)}>{data.policies.map((policy) => <option key={policy.sourceKey} value={policy.sourceKey}>{policy.label} — {policy.taxBps / 100}% faction</option>)}</select></label>}{modal === "transfer" && <div className="transfer-grid"><label><span>From</span><select value={fromAccountId ?? ""} onChange={(event) => setFromAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name} — {money.format(account.balance)}</option>)}</select></label><span>→</span><label><span>To</span><select value={toAccountId ?? ""} onChange={(event) => setToAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label></div>}<label className="field"><span>{modal === "deposit" ? "Gross amount" : "Amount"}</span><div className="money-input"><b>$</b><input autoFocus inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0" required /></div></label><label className="field"><span>{modal === "deposit" ? "Description" : "Note"}</span><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={160} placeholder={modal === "deposit" ? "e.g. Silver ranked war" : modal === "spend" ? "e.g. Xanax restock" : "Optional transfer note"} required={modal === "spend"} /></label>{modal === "deposit" && <div className="settlement-preview"><div><span>Gross</span><b>{money.format(grossPreview)}</b></div><div><span>Player payout</span><b>{money.format(playerPreview)}</b></div><div className="faction-row"><span>Faction share ({(selectedPolicy?.taxBps ?? 0) / 100}%)</span><b>{money.format(factionPreview)}</b></div><hr />{data.accounts.map((account) => <div className="account-split" key={account.id}><span>{account.name} <small>{account.allocationBps / 100}%</small></span><b>{money.format(Math.floor(factionPreview * account.allocationBps / 10000))}</b></div>)}</div>}{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={closeModal}>Cancel</button><button className="button button-primary" disabled={saving || !amount}>{saving ? "Saving..." : modal === "deposit" ? pendingWarId ? "Record reviewed proceeds" : "Record and distribute" : modal === "spend" ? "Record expense" : "Transfer"}</button></div></form>}
