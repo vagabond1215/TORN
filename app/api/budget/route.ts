@@ -27,6 +27,14 @@ type TransactionRow = {
   created_at: string;
 };
 
+type PolicyRow = {
+  source_key: string;
+  label: string;
+  tax_bps: number;
+  created_at: string;
+  updated_at: string;
+};
+
 type Actor = { userId: string; email: string; name: string };
 
 const colors = ["crimson", "gold", "silver", "wine", "ember", "bone"];
@@ -35,6 +43,11 @@ const defaultAccounts = [
   { name: "Strategic Reserve", allocationBps: 3000, color: "gold" },
   { name: "Chain Extensions", allocationBps: 1500, color: "silver" },
   { name: "Faction Operations", allocationBps: 1000, color: "wine" },
+];
+const defaultPolicies = [
+  { sourceKey: "war", label: "Ranked war", taxBps: 2000 },
+  { sourceKey: "oc", label: "Organized crime", taxBps: 500 },
+  { sourceKey: "other", label: "Other faction income", taxBps: 10000 },
 ];
 
 async function currentActor(): Promise<Actor> {
@@ -74,6 +87,13 @@ async function ensureSchema(db: D1Database) {
       actor_name TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS policies (
+      source_key TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      tax_bps INTEGER NOT NULL DEFAULT 0 CHECK (tax_bps BETWEEN 0 AND 10000),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC, id DESC)"),
   ]);
 
@@ -92,6 +112,11 @@ async function ensureSchema(db: D1Database) {
   } else {
     await upgradeUntouchedDefaults(db);
   }
+
+  await db.batch(defaultPolicies.map((policy) =>
+    db.prepare("INSERT OR IGNORE INTO policies (source_key, label, tax_bps) VALUES (?, ?, ?)")
+      .bind(policy.sourceKey, policy.label, policy.taxBps),
+  ));
 
   await db.prepare("PRAGMA optimize").run();
 }
@@ -131,13 +156,20 @@ async function accountById(db: D1Database, id: number) {
 }
 
 async function snapshot(db: D1Database, actor: Actor) {
-  const [accountsResult, transactionsResult] = await Promise.all([
+  const [accountsResult, policiesResult, transactionsResult] = await Promise.all([
     db.prepare("SELECT * FROM accounts ORDER BY id ASC").all<AccountRow>(),
+    db.prepare("SELECT * FROM policies ORDER BY CASE source_key WHEN 'war' THEN 1 WHEN 'oc' THEN 2 ELSE 3 END").all<PolicyRow>(),
     db.prepare("SELECT * FROM transactions ORDER BY created_at DESC, id DESC LIMIT 150").all<TransactionRow>(),
   ]);
 
   return {
     currentUser: actor,
+    policies: policiesResult.results.map((policy) => ({
+      sourceKey: policy.source_key,
+      label: policy.label,
+      taxBps: policy.tax_bps,
+      updatedAt: policy.updated_at,
+    })),
     accounts: accountsResult.results.map((account) => ({
       id: account.id,
       name: account.name,
@@ -186,18 +218,23 @@ export async function POST(request: Request) {
     const actorParams = actorValues(actor);
 
     if (action === "deposit") {
-      const amount = asPositiveInteger(payload.amount, "Proceeds");
-      const source = String(payload.source ?? "War tax").trim().slice(0, 40) || "War tax";
-      const note = String(payload.note ?? `${source} proceeds`).trim().slice(0, 160) || `${source} proceeds`;
+      const grossAmount = asPositiveInteger(payload.amount, "Gross proceeds");
+      const sourceKey = String(payload.sourceKey ?? "war").trim().slice(0, 30);
+      const policy = await db.prepare("SELECT * FROM policies WHERE source_key = ?").bind(sourceKey).first<PolicyRow>();
+      if (!policy) throw new Error("Choose a valid proceeds source.");
+      const factionShare = Math.floor(grossAmount * policy.tax_bps / 10000);
+      const playerPayout = grossAmount - factionShare;
+      if (factionShare <= 0) throw new Error("This policy does not allocate any proceeds to the faction.");
+      const note = String(payload.note ?? `${policy.label} proceeds`).trim().slice(0, 160) || `${policy.label} proceeds`;
       const accounts = (await db.prepare("SELECT * FROM accounts ORDER BY id ASC").all<AccountRow>()).results;
       const totalBps = accounts.reduce((sum, account) => sum + account.allocation_bps, 0);
       if (totalBps !== 10000) throw new Error("Allocations must total 100% before recording proceeds.");
 
       const allocations = accounts.map((account) => {
-        const exact = amount * account.allocation_bps;
+        const exact = factionShare * account.allocation_bps;
         return { account, amount: Math.floor(exact / 10000), remainder: exact % 10000 };
       });
-      let remainder = amount - allocations.reduce((sum, item) => sum + item.amount, 0);
+      let remainder = factionShare - allocations.reduce((sum, item) => sum + item.amount, 0);
       for (const item of [...allocations].sort((a, b) => b.remainder - a.remainder || a.account.id - b.account.id)) {
         if (remainder-- <= 0) break;
         item.amount += 1;
@@ -207,7 +244,7 @@ export async function POST(request: Request) {
         .map((item) => db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(item.amount, item.account.id));
       statements.push(db.prepare(`INSERT INTO transactions (type, amount, note, details, actor_user_id, actor_email, actor_name)
         VALUES ('deposit', ?, ?, ?, ?, ?, ?)`)
-        .bind(amount, note, JSON.stringify({ source, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
+        .bind(factionShare, note, JSON.stringify({ sourceKey, source: policy.label, grossAmount, taxBps: policy.tax_bps, playerPayout, factionShare, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
       await db.batch(statements);
     } else if (action === "spend") {
       const amount = asPositiveInteger(payload.amount, "Spend amount");
@@ -251,6 +288,21 @@ export async function POST(request: Request) {
       statements.push(db.prepare(`INSERT INTO transactions (type, note, details, actor_user_id, actor_email, actor_name)
         VALUES ('allocation_update', 'Allocation plan updated', ?, ?, ?, ?)`)
         .bind(JSON.stringify({ accounts: updates }), ...actorParams));
+      await db.batch(statements);
+    } else if (action === "setPolicies") {
+      if (!Array.isArray(payload.policies)) throw new Error("Policy values are required.");
+      const updates = payload.policies.map((value) => {
+        const item = value as Record<string, unknown>;
+        const sourceKey = String(item.sourceKey ?? "");
+        const taxBps = Number(item.taxBps);
+        if (!defaultPolicies.some((policy) => policy.sourceKey === sourceKey)) throw new Error("Choose a valid policy.");
+        if (!Number.isInteger(taxBps) || taxBps < 0 || taxBps > 10000) throw new Error("Tax percentages must be between 0% and 100%.");
+        return { sourceKey, taxBps };
+      });
+      const statements = updates.map((item) => db.prepare("UPDATE policies SET tax_bps = ?, updated_at = CURRENT_TIMESTAMP WHERE source_key = ?").bind(item.taxBps, item.sourceKey));
+      statements.push(db.prepare(`INSERT INTO transactions (type, note, details, actor_user_id, actor_email, actor_name)
+        VALUES ('policy_update', 'Proceeds policies updated', ?, ?, ?, ?)`)
+        .bind(JSON.stringify({ policies: updates }), ...actorParams));
       await db.batch(statements);
     } else if (action === "addAccount") {
       const name = String(payload.name ?? "").trim().slice(0, 50);

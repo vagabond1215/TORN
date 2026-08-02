@@ -11,19 +11,19 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(origin),
-    title: "Blood Coven Treasury — Leadership Ledger",
-    description: "Private Blood Coven treasury allocations, spending, transfers, and persistent leadership history.",
+    title: "Blood Coven Treasury",
+    description: "Private Blood Coven faction treasury with tax settlement, account balances, and persistent history.",
     robots: { index: false, follow: false, nocache: true },
     openGraph: {
       title: "Blood Coven Treasury",
-      description: "Guard the reserve. Fund the war.",
+      description: "Settle proceeds. Track the faction share.",
       type: "website",
       images: [{ url: image, width: 1200, height: 630, alt: "Blood Coven Treasury leadership ledger" }],
     },
     twitter: {
       card: "summary_large_image",
       title: "Blood Coven Treasury",
-      description: "Guard the reserve. Fund the war.",
+      description: "Settle proceeds. Track the faction share.",
       images: [image],
     },
   };

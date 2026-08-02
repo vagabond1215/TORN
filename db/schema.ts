@@ -18,6 +18,14 @@ export const accounts = sqliteTable(
   ],
 );
 
+export const policies = sqliteTable("policies", {
+  sourceKey: text("source_key").primaryKey(),
+  label: text("label").notNull(),
+  taxBps: integer("tax_bps").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [check("policies_tax_range", sql`${table.taxBps} BETWEEN 0 AND 10000`)]);
+
 export const transactions = sqliteTable(
   "transactions",
   {

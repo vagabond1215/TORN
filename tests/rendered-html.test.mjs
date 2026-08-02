@@ -8,9 +8,11 @@ test("defines the Blood Coven treasury product shell", async () => {
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(tracker, /Blood Coven Treasury/);
-  assert.match(tracker, /Guard the reserve/);
   assert.match(tracker, /Add proceeds/);
-  assert.match(layout, /Blood Coven Treasury — Leadership Ledger/);
+  assert.match(tracker, /Gross amount/);
+  assert.match(tracker, /Player payout/);
+  assert.match(tracker, /Settings/);
+  assert.match(layout, /title: "Blood Coven Treasury"/);
   assert.match(layout, /index: false/);
   assert.doesNotMatch(`${tracker}\n${layout}`, /codex-preview|react-loading-skeleton/);
 });
@@ -21,7 +23,7 @@ test("declares durable budget storage and attributed transaction actions", async
     readFile(new URL("../app/api/budget/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(hosting, /"d1": "DB"/);
-  for (const action of ["deposit", "spend", "transfer", "setAllocations"]) assert.match(route, new RegExp(`action === "${action}"`));
+  for (const action of ["deposit", "spend", "transfer", "setAllocations", "setPolicies"]) assert.match(route, new RegExp(`action === "${action}"`));
   assert.match(route, /actor_user_id/);
-  assert.match(route, /policy_bootstrap/);
+  assert.match(route, /playerPayout/);
 });
