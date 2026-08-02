@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const accounts = sqliteTable(
   "accounts",
@@ -44,4 +44,58 @@ export const transactions = sqliteTable(
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("idx_transactions_created_at").on(table.createdAt, table.id)],
+);
+
+export const pendingWars = sqliteTable(
+  "pending_wars",
+  {
+    warId: integer("war_id").primaryKey(),
+    factionId: integer("faction_id").notNull(),
+    opponentName: text("opponent_name").notNull(),
+    startedAt: integer("started_at").notNull(),
+    endedAt: integer("ended_at").notNull(),
+    won: integer("won").notNull().default(0),
+    grossEstimate: integer("gross_estimate").notNull().default(0),
+    reviewedValue: integer("reviewed_value"),
+    status: text("status").notNull().default("pending"),
+    rewardsJson: text("rewards_json").notNull().default("[]"),
+    membersJson: text("members_json").notNull().default("[]"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    check("pending_wars_status", sql`${table.status} IN ('pending', 'recorded', 'dismissed')`),
+    index("idx_pending_wars_status_end").on(table.status, table.endedAt),
+  ],
+);
+
+export const activeWar = sqliteTable("active_war", {
+  warId: integer("war_id").primaryKey(),
+  factionId: integer("faction_id").notNull(),
+  opponentName: text("opponent_name").notNull(),
+  startedAt: integer("started_at").notNull(),
+  target: integer("target").notNull().default(0),
+  ourScore: integer("our_score").notNull().default(0),
+  theirScore: integer("their_score").notNull().default(0),
+  ourChain: integer("our_chain").notNull().default(0),
+  theirChain: integer("their_chain").notNull().default(0),
+  membersJson: text("members_json").notNull().default("[]"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const warMemberBaselines = sqliteTable(
+  "war_member_baselines",
+  {
+    warId: integer("war_id").notNull(),
+    userId: integer("user_id").notNull(),
+    name: text("name").notNull(),
+    baseHits: integer("base_hits").notNull().default(0),
+    baseXanax: integer("base_xanax").notNull().default(0),
+    baseRefills: integer("base_refills").notNull().default(0),
+    currentHits: integer("current_hits").notNull().default(0),
+    currentXanax: integer("current_xanax").notNull().default(0),
+    currentRefills: integer("current_refills").notNull().default(0),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [primaryKey({ columns: [table.warId, table.userId] })],
 );

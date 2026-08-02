@@ -94,6 +94,21 @@ async function ensureSchema(db: D1Database) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS pending_wars (
+      war_id INTEGER PRIMARY KEY,
+      faction_id INTEGER NOT NULL,
+      opponent_name TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER NOT NULL,
+      won INTEGER NOT NULL DEFAULT 0,
+      gross_estimate INTEGER NOT NULL DEFAULT 0,
+      reviewed_value INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'recorded', 'dismissed')),
+      rewards_json TEXT NOT NULL DEFAULT '[]',
+      members_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC, id DESC)"),
   ]);
 
@@ -219,13 +234,18 @@ export async function POST(request: Request) {
 
     if (action === "deposit") {
       const grossAmount = asPositiveInteger(payload.amount, "Gross proceeds");
+      const pendingWarId = payload.pendingWarId ? asPositiveInteger(payload.pendingWarId, "War") : null;
+      const pendingWar = pendingWarId
+        ? await db.prepare("SELECT war_id, opponent_name FROM pending_wars WHERE war_id = ? AND status = 'pending'").bind(pendingWarId).first<{ war_id: number; opponent_name: string }>()
+        : null;
+      if (pendingWarId && !pendingWar) throw new Error("This war review is no longer pending.");
       const sourceKey = String(payload.sourceKey ?? "war").trim().slice(0, 30);
       const policy = await db.prepare("SELECT * FROM policies WHERE source_key = ?").bind(sourceKey).first<PolicyRow>();
       if (!policy) throw new Error("Choose a valid proceeds source.");
       const factionShare = Math.floor(grossAmount * policy.tax_bps / 10000);
       const playerPayout = grossAmount - factionShare;
       if (factionShare <= 0) throw new Error("This policy does not allocate any proceeds to the faction.");
-      const note = String(payload.note ?? `${policy.label} proceeds`).trim().slice(0, 160) || `${policy.label} proceeds`;
+      const note = String(payload.note ?? (pendingWar ? `Ranked war vs ${pendingWar.opponent_name}` : `${policy.label} proceeds`)).trim().slice(0, 160) || `${policy.label} proceeds`;
       const accounts = (await db.prepare("SELECT * FROM accounts ORDER BY id ASC").all<AccountRow>()).results;
       const totalBps = accounts.reduce((sum, account) => sum + account.allocation_bps, 0);
       if (totalBps !== 10000) throw new Error("Allocations must total 100% before recording proceeds.");
@@ -244,7 +264,8 @@ export async function POST(request: Request) {
         .map((item) => db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(item.amount, item.account.id));
       statements.push(db.prepare(`INSERT INTO transactions (type, amount, note, details, actor_user_id, actor_email, actor_name)
         VALUES ('deposit', ?, ?, ?, ?, ?, ?)`)
-        .bind(factionShare, note, JSON.stringify({ sourceKey, source: policy.label, grossAmount, taxBps: policy.tax_bps, playerPayout, factionShare, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
+        .bind(factionShare, note, JSON.stringify({ sourceKey, source: policy.label, grossAmount, taxBps: policy.tax_bps, playerPayout, factionShare, pendingWarId, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
+      if (pendingWarId) statements.push(db.prepare("UPDATE pending_wars SET status = 'recorded', reviewed_value = ?, updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(grossAmount, pendingWarId));
       await db.batch(statements);
     } else if (action === "spend") {
       const amount = asPositiveInteger(payload.amount, "Spend amount");
