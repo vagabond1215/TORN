@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.1.3
+// @version      1.1.4
 // @description  Sends Blood Coven faction funds, Xanax use, and ranked-war activity to the private treasury when it is open.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -9,8 +9,6 @@
 // @icon         https://www.torn.com/favicon.ico
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @grant        GM_xmlhttpRequest
-// @connect      faction-ledger-torn.vagabond1215.chatgpt.site
 // @run-at       document-idle
 // @downloadURL  https://faction-ledger-torn.vagabond1215.chatgpt.site/blood-coven-treasury.user.js
 // @updateURL    https://faction-ledger-torn.vagabond1215.chatgpt.site/blood-coven-treasury.user.js
@@ -22,10 +20,7 @@
   const TREASURY_ORIGIN = "https://faction-ledger-torn.vagabond1215.chatgpt.site";
   const CHANNEL = "blood-coven-treasury-bridge-v1";
   const QUEUE_KEY = "blood-coven-treasury-events-v1";
-  const API_KEY_STORE = "blood-coven-member-api-key-v1";
-  const BALANCE_STORE = "blood-coven-member-balance-v1";
-  const BALANCE_SYNC_STORE = "blood-coven-member-balance-sync-v1";
-  const BALANCE_REFRESH_MS = 5 * 60 * 1000;
+  const BALANCE_STORE = "blood-coven-armory-balance-v1";
   const MAX_QUEUE = 300;
 
   function normalize(value) {
@@ -119,6 +114,7 @@
 
   function scanFactionPage() {
     if (location.pathname.toLowerCase() !== "/factions.php") return;
+    scanArmoryBalance();
     const category = factionCategory();
     const rows = document.querySelectorAll("#react-root li, #factions li");
     for (const row of rows) {
@@ -132,6 +128,17 @@
         addEvent("faction_news", category, text);
       }
     }
+  }
+
+  function scanArmoryBalance() {
+    const pageText = normalize(document.body.innerText);
+    const match = pageText.match(/You have \$[\d,]+(?:\.\d{1,2})? and a balance of \$([\d,]+(?:\.\d{1,2})?)/i);
+    if (!match) return;
+    GM_setValue(BALANCE_STORE, {
+      balance: moneyValue(match[1]),
+      source: "armory",
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   function scanRankedWarReport() {
@@ -166,24 +173,17 @@
     addFactionBalance();
   }
 
-  function syncTreasuryApiKey() {
-    const apiKey = window.localStorage.getItem("blood-coven-member-key")
-      || window.localStorage.getItem("blood-coven-torn-key")
-      || "";
-    if (apiKey) GM_setValue(API_KEY_STORE, apiKey);
-  }
-
   function balanceCache() {
     const value = GM_getValue(BALANCE_STORE, null);
-    return value && typeof value === "object" ? value : null;
+    return value && typeof value === "object" && value.source === "armory" ? value : null;
   }
 
   function formatBalance(value, compact) {
-    if (!Number.isFinite(Number(value))) return GM_getValue(API_KEY_STORE, "") ? "…" : "Connect";
+    if (!Number.isFinite(Number(value))) return "—";
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-      maximumFractionDigits: 0,
+      maximumFractionDigits: compact ? 2 : 0,
       notation: compact ? "compact" : "standard",
     }).format(Number(value));
   }
@@ -194,32 +194,6 @@
       "blood-coven-balance-request",
       "popup=yes,width=520,height=740,resizable=yes,scrollbars=yes,noopener,noreferrer",
     );
-  }
-
-  function requestBalanceSync(force = false) {
-    const apiKey = GM_getValue(API_KEY_STORE, "");
-    const lastSync = Number(GM_getValue(BALANCE_SYNC_STORE, 0));
-    if (!apiKey || (!force && Date.now() - lastSync < BALANCE_REFRESH_MS)) return;
-    GM_setValue(BALANCE_SYNC_STORE, Date.now());
-    GM_xmlhttpRequest({
-      method: "POST",
-      url: `${TREASURY_ORIGIN}/api/member-balance`,
-      headers: { "Content-Type": "application/json" },
-      data: JSON.stringify({ action: "verify", apiKey }),
-      onload(response) {
-        if (response.status < 200 || response.status >= 300) return;
-        try {
-          const data = JSON.parse(response.responseText);
-          if (!Number.isFinite(Number(data.balance))) return;
-          GM_setValue(BALANCE_STORE, {
-            balance: Number(data.balance),
-            memberName: normalize(data.member?.name),
-            updatedAt: new Date().toISOString(),
-          });
-          addFactionBalance();
-        } catch { /* Keep the last known balance if the response is malformed. */ }
-      },
-    });
   }
 
   function ensureBalanceStyles() {
@@ -237,6 +211,11 @@
       #blood-coven-faction-balance.bc-wide .bc-faction-icon { display: none; }
       #blood-coven-faction-balance.bc-wide .bc-balance-label { font-weight: 700; }
       #blood-coven-faction-balance.bc-wide .bc-request-button { padding: 1px 5px; border: 1px solid #741524; border-radius: 3px; background: #971b31; color: #fff; cursor: pointer; font-size: 9px; font-weight: 700; line-height: 1.5; text-transform: lowercase; }
+      #blood-coven-faction-balance.bc-wide-classic { width: 100%; min-height: 19px; display: flex !important; align-items: center; gap: 5px; padding: 0; color: inherit; font-size: 11px; line-height: 19px; }
+      #blood-coven-faction-balance.bc-wide-classic .bc-faction-icon { display: none; }
+      #blood-coven-faction-balance.bc-wide-classic .bc-balance-label { flex: 0 0 auto; font-weight: 700; }
+      #blood-coven-faction-balance.bc-wide-classic .bc-balance-value { min-width: 0; flex: 1 1 auto; color: #7dcc26; }
+      #blood-coven-faction-balance.bc-wide-classic .bc-request-button { flex: 0 0 auto; padding: 0 4px; border: 1px solid #555; border-radius: 2px; background: #333; color: #bbb; cursor: pointer; font-size: 9px; font-weight: 700; line-height: 15px; text-transform: lowercase; }
       #blood-coven-faction-balance:focus-visible,
       #blood-coven-faction-balance .bc-request-button:focus-visible { outline: 2px solid #d34b61; outline-offset: 2px; }
     `;
@@ -247,10 +226,10 @@
     return Array.from(document.querySelectorAll("a")).find((link) => normalize(link.textContent).startsWith(`${label}:`));
   }
 
-  function addFactionBalance() {
+  function addModernFactionBalance() {
     const moneyLink = resourceLink("Money");
     const pointsLink = resourceLink("Points");
-    if (!moneyLink || !pointsLink || !moneyLink.parentNode || !pointsLink.parentNode) return;
+    if (!moneyLink || !pointsLink || !moneyLink.parentNode || !pointsLink.parentNode) return false;
     ensureBalanceStyles();
 
     let entry = document.getElementById("blood-coven-faction-balance");
@@ -283,16 +262,68 @@
     entry.querySelector(".bc-balance-value").textContent = amount;
     entry.title = cached?.memberName
       ? `${cached.memberName}'s Blood Coven balance — click to request a payout`
-      : "Verify your Blood Coven membership and request a payout";
+      : "Visit the Blood Coven Armory once to load your faction balance";
     entry.setAttribute("aria-label", `Faction balance ${amount}. Request faction balance.`);
 
     if (narrow) pointsLink.parentNode.insertBefore(entry, pointsLink);
     else moneyLink.parentNode.insertBefore(entry, moneyLink.nextSibling);
-    requestBalanceSync();
+    return true;
+  }
+
+  function findClassicMoneyRow() {
+    const scope = document.querySelector("#sidebarroot, #sidebar, [class*='sidebar']") ?? document.body;
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      if (/^Money:\s*$/i.test(normalize(node.nodeValue))) {
+        const listRow = node.parentElement?.closest("li");
+        if (listRow && normalize(listRow.textContent).length < 60) return listRow;
+        let candidate = node.parentElement;
+        let completeRow = null;
+        while (candidate && candidate !== scope) {
+          const text = normalize(candidate.textContent);
+          if (/^Money:\s*\$[\d,]+/i.test(text) && text.length < 60) completeRow = candidate;
+          if (text.length >= 60) break;
+          candidate = candidate.parentElement;
+        }
+        if (completeRow) return completeRow;
+      }
+      node = walker.nextNode();
+    }
+    return null;
+  }
+
+  function addClassicFactionBalance() {
+    const moneyRow = findClassicMoneyRow();
+    if (!moneyRow?.parentNode) return;
+    const tagName = moneyRow.tagName === "LI" ? "li" : "div";
+    let entry = document.getElementById("blood-coven-faction-balance");
+    if (!entry || entry.tagName.toLowerCase() !== tagName) {
+      entry?.remove();
+      entry = document.createElement(tagName);
+      entry.id = "blood-coven-faction-balance";
+      entry.innerHTML = '<span class="bc-faction-icon" aria-hidden="true">F</span><span class="bc-balance-label">Faction:</span><span class="bc-balance-value"></span><button class="bc-request-button" type="button">request</button>';
+      entry.querySelector(".bc-request-button").addEventListener("click", openBalancePopup);
+    }
+    if (moneyRow.className && typeof moneyRow.className === "string") entry.className = moneyRow.className;
+    entry.classList.add("bc-wide-classic");
+    entry.setAttribute("role", "group");
+    const cached = balanceCache();
+    const amount = formatBalance(cached?.balance, false);
+    entry.querySelector(".bc-balance-value").textContent = amount;
+    entry.title = cached ? "Blood Coven Armory balance" : "Visit the Blood Coven Armory once to load your faction balance";
+    entry.setAttribute("aria-label", `Faction balance ${amount}. Request faction balance.`);
+    moneyRow.parentNode.insertBefore(entry, moneyRow.nextSibling);
+  }
+
+  function addFactionBalance() {
+    ensureBalanceStyles();
+    if (addModernFactionBalance()) return;
+    addClassicFactionBalance();
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.1.3", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.1.4", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {
@@ -315,8 +346,6 @@
   }
 
   if (location.origin === TREASURY_ORIGIN) {
-    syncTreasuryApiKey();
-    window.setInterval(syncTreasuryApiKey, 3_000);
     runTreasuryBridge();
     return;
   }
