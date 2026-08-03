@@ -59,6 +59,12 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(script, /faction_payout/);
   assert.match(script, /oc_credit/);
   assert.match(script, /Request faction balance/);
+  assert.match(script, /@grant\s+GM_xmlhttpRequest/);
+  assert.match(script, /bc-balance-label\">Faction:/);
+  assert.match(script, /insertBefore\(entry, pointsLink\)/);
+  assert.match(script, /classList\.contains\("bc-narrow"\)/);
+  assert.match(script, /bc-request-button/);
+  assert.match(script, /requestBalanceSync/);
   assert.match(route, /INSERT OR IGNORE INTO torn_browser_events/);
   assert.match(route, /ranked_war_report/);
   assert.match(route, /normalizedOccurredAt/);

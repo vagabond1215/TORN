@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.1.2
+// @version      1.1.3
 // @description  Sends Blood Coven faction funds, Xanax use, and ranked-war activity to the private treasury when it is open.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -9,6 +9,8 @@
 // @icon         https://www.torn.com/favicon.ico
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_xmlhttpRequest
+// @connect      faction-ledger-torn.vagabond1215.chatgpt.site
 // @run-at       document-idle
 // @downloadURL  https://faction-ledger-torn.vagabond1215.chatgpt.site/blood-coven-treasury.user.js
 // @updateURL    https://faction-ledger-torn.vagabond1215.chatgpt.site/blood-coven-treasury.user.js
@@ -20,6 +22,10 @@
   const TREASURY_ORIGIN = "https://faction-ledger-torn.vagabond1215.chatgpt.site";
   const CHANNEL = "blood-coven-treasury-bridge-v1";
   const QUEUE_KEY = "blood-coven-treasury-events-v1";
+  const API_KEY_STORE = "blood-coven-member-api-key-v1";
+  const BALANCE_STORE = "blood-coven-member-balance-v1";
+  const BALANCE_SYNC_STORE = "blood-coven-member-balance-sync-v1";
+  const BALANCE_REFRESH_MS = 5 * 60 * 1000;
   const MAX_QUEUE = 300;
 
   function normalize(value) {
@@ -157,28 +163,136 @@
   function scanTorn() {
     scanFactionPage();
     scanRankedWarReport();
-    addBalanceLink();
+    addFactionBalance();
   }
 
-  function addBalanceLink() {
-    if (document.getElementById("blood-coven-balance-link")) return;
-    const link = document.createElement("a");
-    link.id = "blood-coven-balance-link";
-    link.href = `${TREASURY_ORIGIN}/balance`;
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    link.textContent = "Request faction balance";
-    link.title = "Verify your Blood Coven membership and request a payout";
-    Object.assign(link.style, {
-      position: "fixed", right: "18px", bottom: "18px", zIndex: "99999", padding: "9px 12px",
-      border: "1px solid #6f1424", borderRadius: "4px", background: "#9f162b", color: "#fff",
-      font: "700 12px Arial, sans-serif", textDecoration: "none", boxShadow: "0 3px 12px rgba(0,0,0,.32)",
+  function syncTreasuryApiKey() {
+    const apiKey = window.localStorage.getItem("blood-coven-member-key")
+      || window.localStorage.getItem("blood-coven-torn-key")
+      || "";
+    if (apiKey) GM_setValue(API_KEY_STORE, apiKey);
+  }
+
+  function balanceCache() {
+    const value = GM_getValue(BALANCE_STORE, null);
+    return value && typeof value === "object" ? value : null;
+  }
+
+  function formatBalance(value, compact) {
+    if (!Number.isFinite(Number(value))) return GM_getValue(API_KEY_STORE, "") ? "…" : "Connect";
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+      notation: compact ? "compact" : "standard",
+    }).format(Number(value));
+  }
+
+  function openBalancePopup() {
+    window.open(
+      `${TREASURY_ORIGIN}/balance`,
+      "blood-coven-balance-request",
+      "popup=yes,width=520,height=740,resizable=yes,scrollbars=yes,noopener,noreferrer",
+    );
+  }
+
+  function requestBalanceSync(force = false) {
+    const apiKey = GM_getValue(API_KEY_STORE, "");
+    const lastSync = Number(GM_getValue(BALANCE_SYNC_STORE, 0));
+    if (!apiKey || (!force && Date.now() - lastSync < BALANCE_REFRESH_MS)) return;
+    GM_setValue(BALANCE_SYNC_STORE, Date.now());
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: `${TREASURY_ORIGIN}/api/member-balance`,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({ action: "verify", apiKey }),
+      onload(response) {
+        if (response.status < 200 || response.status >= 300) return;
+        try {
+          const data = JSON.parse(response.responseText);
+          if (!Number.isFinite(Number(data.balance))) return;
+          GM_setValue(BALANCE_STORE, {
+            balance: Number(data.balance),
+            memberName: normalize(data.member?.name),
+            updatedAt: new Date().toISOString(),
+          });
+          addFactionBalance();
+        } catch { /* Keep the last known balance if the response is malformed. */ }
+      },
     });
-    document.body.appendChild(link);
+  }
+
+  function ensureBalanceStyles() {
+    if (document.getElementById("blood-coven-balance-styles")) return;
+    const styles = document.createElement("style");
+    styles.id = "blood-coven-balance-styles";
+    styles.textContent = `
+      #blood-coven-faction-balance { box-sizing: border-box; font-family: Arial, sans-serif; }
+      #blood-coven-faction-balance .bc-faction-icon { width: 18px; height: 18px; flex: 0 0 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #8e1b2d; color: #fff; font-size: 10px; font-weight: 900; line-height: 1; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+      #blood-coven-faction-balance .bc-balance-value { white-space: nowrap; font-weight: 700; }
+      #blood-coven-faction-balance.bc-narrow { min-width: 0; display: inline-flex; align-items: center; gap: 4px; padding: 0 5px; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 12px; }
+      #blood-coven-faction-balance.bc-narrow .bc-balance-label,
+      #blood-coven-faction-balance.bc-narrow .bc-request-button { display: none; }
+      #blood-coven-faction-balance.bc-wide { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 5px; padding: 2px 0; color: inherit; font-size: 12px; }
+      #blood-coven-faction-balance.bc-wide .bc-faction-icon { display: none; }
+      #blood-coven-faction-balance.bc-wide .bc-balance-label { font-weight: 700; }
+      #blood-coven-faction-balance.bc-wide .bc-request-button { padding: 1px 5px; border: 1px solid #741524; border-radius: 3px; background: #971b31; color: #fff; cursor: pointer; font-size: 9px; font-weight: 700; line-height: 1.5; text-transform: lowercase; }
+      #blood-coven-faction-balance:focus-visible,
+      #blood-coven-faction-balance .bc-request-button:focus-visible { outline: 2px solid #d34b61; outline-offset: 2px; }
+    `;
+    document.head.appendChild(styles);
+  }
+
+  function resourceLink(label) {
+    return Array.from(document.querySelectorAll("a")).find((link) => normalize(link.textContent).startsWith(`${label}:`));
+  }
+
+  function addFactionBalance() {
+    const moneyLink = resourceLink("Money");
+    const pointsLink = resourceLink("Points");
+    if (!moneyLink || !pointsLink || !moneyLink.parentNode || !pointsLink.parentNode) return;
+    ensureBalanceStyles();
+
+    let entry = document.getElementById("blood-coven-faction-balance");
+    if (!entry) {
+      entry = document.createElement("div");
+      entry.id = "blood-coven-faction-balance";
+      entry.innerHTML = '<span class="bc-faction-icon" aria-hidden="true">F</span><span class="bc-balance-label">Faction:</span><span class="bc-balance-value"></span><button class="bc-request-button" type="button">request</button>';
+      entry.querySelector(".bc-request-button").addEventListener("click", openBalancePopup);
+      entry.addEventListener("click", () => {
+        if (entry.classList.contains("bc-narrow")) openBalancePopup();
+      });
+      entry.addEventListener("keydown", (event) => {
+        if (entry.classList.contains("bc-narrow") && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          openBalancePopup();
+        }
+      });
+    }
+
+    const moneyBox = moneyLink.getBoundingClientRect();
+    const pointsBox = pointsLink.getBoundingClientRect();
+    const narrow = Math.abs(moneyBox.top - pointsBox.top) < 12;
+    entry.classList.toggle("bc-narrow", narrow);
+    entry.classList.toggle("bc-wide", !narrow);
+    entry.tabIndex = narrow ? 0 : -1;
+    entry.setAttribute("role", narrow ? "button" : "group");
+
+    const cached = balanceCache();
+    const amount = formatBalance(cached?.balance, narrow);
+    entry.querySelector(".bc-balance-value").textContent = amount;
+    entry.title = cached?.memberName
+      ? `${cached.memberName}'s Blood Coven balance — click to request a payout`
+      : "Verify your Blood Coven membership and request a payout";
+    entry.setAttribute("aria-label", `Faction balance ${amount}. Request faction balance.`);
+
+    if (narrow) pointsLink.parentNode.insertBefore(entry, pointsLink);
+    else moneyLink.parentNode.insertBefore(entry, moneyLink.nextSibling);
+    requestBalanceSync();
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.1.2", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.1.3", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {
@@ -201,6 +315,8 @@
   }
 
   if (location.origin === TREASURY_ORIGIN) {
+    syncTreasuryApiKey();
+    window.setInterval(syncTreasuryApiKey, 3_000);
     runTreasuryBridge();
     return;
   }
