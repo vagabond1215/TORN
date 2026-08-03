@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.1.0
+// @version      1.1.1
 // @description  Sends Blood Coven faction funds, Xanax use, and ranked-war activity to the private treasury when it is open.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -177,7 +177,7 @@
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.1.0", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.1.1", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {
@@ -187,7 +187,7 @@
       if (events.length) postToTreasury("events", { events });
     }
     window.addEventListener("message", (event) => {
-      if (event.source !== window || event.origin !== TREASURY_ORIGIN || event.data?.channel !== CHANNEL) return;
+      if (event.origin !== TREASURY_ORIGIN || event.data?.channel !== CHANNEL) return;
       if (event.data.kind === "ping") sendReady();
       if (event.data.kind === "ack" && Array.isArray(event.data.eventKeys)) {
         const accepted = new Set(event.data.eventKeys.map(String));
