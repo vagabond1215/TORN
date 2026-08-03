@@ -14,6 +14,10 @@ test("defines the Blood Coven treasury product shell", async () => {
   assert.match(tracker, /Player payout/);
   assert.match(tracker, /Settings/);
   assert.match(tracker, /Pending review/);
+  assert.match(tracker, /Tax Rate/);
+  assert.match(tracker, /Custom tax rate/);
+  assert.match(tracker, /Estimated Pay/);
+  assert.match(tracker, /Respect/);
   assert.match(tracker, /Torn API/);
   assert.match(tracker, /Install script/);
   assert.match(tracker, /Browser script not detected/);
@@ -47,6 +51,8 @@ test("declares durable budget storage and attributed transaction actions", async
   assert.match(route, /actor_user_id/);
   assert.match(route, /playerPayout/);
   assert.match(route, /pendingWarId/);
+  assert.match(route, /taxBpsOverride/);
+  assert.match(route, /reviewed_tax_bps/);
   assert.match(tornRoute, /rankedwarreport/);
   assert.match(tornRoute, /market_price/);
   assert.match(tornRoute, /rankedwarhits,xantaken,refills/);
@@ -75,7 +81,10 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(script, /and a balance of/);
   assert.match(script, /source: "armory"/);
   assert.match(script, /findClassicMoneyRow/);
+  assert.match(script, /\^Money:\?\$/);
   assert.match(script, /bc-wide-classic/);
+  assert.match(script, /entryText/);
+  assert.match(script, /completed and was distributed/);
   assert.match(script, /member_balance_snapshot/);
   assert.match(script, /oc_completion/);
   assert.match(script, /armory_movement/);
@@ -90,4 +99,5 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(schema, /torn_browser_events/);
   assert.match(schema, /ocHoldings/);
   assert.match(schema, /armoryItems/);
+  assert.match(schema, /reviewedTaxBps/);
 });

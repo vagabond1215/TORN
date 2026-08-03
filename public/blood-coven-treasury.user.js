@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.1.5
+// @version      1.1.6
 // @description  Sends Blood Coven faction funds, Xanax use, and ranked-war activity to the private treasury when it is open.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -70,12 +70,25 @@
   }
 
   function factionCategory() {
+    const hash = location.hash.toLowerCase();
+    if (hash.includes("tab=crimes")) return "crimes";
+    if (hash.includes("tab=armory")) return "armory";
     const type = new URLSearchParams(location.search).get("type") ?? "1";
     return ({ "1": "main_news", "2": "attacking", "3": "funds", "4": "armory", "5": "crimes", "6": "membership" })[type] ?? "faction";
   }
 
   function moneyValue(value) {
     return Number(String(value ?? "0").replace(/,/g, ""));
+  }
+
+  function entryText(row) {
+    const timedControl = Array.from(row.querySelectorAll("button, [role='button']"))
+      .map((control) => normalize(control.textContent))
+      .filter((text) => /\d{2}:\d{2}:\d{2}\s+\d{2}\/\d{2}\/\d{2}/.test(text))
+      .sort((a, b) => a.length - b.length)[0];
+    return normalize(timedControl || row.textContent)
+      .replace(/\s+(?:Copy info|CopySave|Save news).*$/i, "")
+      .trim();
   }
 
   function scanFundsRow(text) {
@@ -89,10 +102,21 @@
 
     match = text.match(/^(.+?) increased (.+?)'s Blood Coven money balance by \$([\d,]+) from \$([\d,]+) to \$([\d,]+) as (.+?)(\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{2})$/i);
     if (match) {
+      const detail = normalize(match[6]);
       addEvent("oc_credit", "funds", text, {
         actorName: normalize(match[1]), memberName: normalize(match[2]), amount: moneyValue(match[3]),
-        oldBalance: moneyValue(match[4]), newBalance: moneyValue(match[5]), detail: normalize(match[6]), direction: "credit", source: "oc",
+        oldBalance: moneyValue(match[4]), newBalance: moneyValue(match[5]), detail, direction: "credit", source: "oc",
       });
+      const oc = detail.match(/their ([\d.]+)% cut .*? in the faction's (.+?) scenario/i);
+      if (oc) {
+        const percent = Number(oc[1]);
+        const crimeName = normalize(oc[2]);
+        const cashAmount = percent > 0 ? Math.round(moneyValue(match[3]) * 100 / percent) : 0;
+        const completedAt = `${match[7]} ${match[8]}`;
+        addEvent("oc_completion", "funds", `${crimeName} completed and was distributed for approximately $${cashAmount.toLocaleString("en-US")} ${completedAt}`, {
+          crimeName, success: true, status: "distributed", cashAmount, items: [], source: "funds",
+        }, hash(`${crimeName}|${completedAt}`));
+      }
       return;
     }
 
@@ -139,14 +163,32 @@
   }
 
   function scanCrimeRow(row, text) {
-    if (text.length < 20 || text.length > 1200 || !/(success|completed|reward|received|earned|failed)/i.test(text)) return;
-    const heading = row.querySelector("h2, h3, h4, strong, [class*='title']");
+    if (text.length < 20 || text.length > 2500 || !/(success|successful|completed|reward|received|earned|failed)/i.test(text)) return;
+    const heading = row.querySelector("h2, h3, h4, strong, [class*='title'], [class*='name']");
     const crimeName = normalize(heading?.textContent || text.split(/(?:success|completed|failed)/i)[0]).slice(0, 100) || "Organized crime";
     const cashValues = Array.from(text.matchAll(/\$([\d,]+)/g)).map((match) => moneyValue(match[1]));
-    const items = Array.from(text.matchAll(/(\d+)x\s+([A-Za-z][A-Za-z '-]{2,50}?)(?=,|\.|\$|\d{2}:|$)/g)).map((match) => ({ quantity: Number(match[1]), name: normalize(match[2]) }));
+    const itemMatches = [
+      ...Array.from(text.matchAll(/(\d+)\s*x\s+([A-Za-z][A-Za-z '-]{2,50}?)(?=,|\.|\$|\d{2}:|$)/gi)).map((match) => ({ quantity: Number(match[1]), name: normalize(match[2]) })),
+      ...Array.from(text.matchAll(/([A-Za-z][A-Za-z '-]{2,50}?)\s*x\s*(\d+)(?=,|\.|\$|\d{2}:|$)/gi)).map((match) => ({ quantity: Number(match[2]), name: normalize(match[1]) })),
+    ];
+    const items = Array.from(new Map(itemMatches.filter((item) => item.quantity > 0).map((item) => [item.name.toLowerCase(), item])).values());
     addEvent("oc_completion", "crimes", text, {
-      crimeName, success: !/fail/i.test(text), cashAmount: cashValues.length ? Math.max(...cashValues) : 0, items,
+      crimeName, success: !/fail/i.test(text), status: "held", cashAmount: cashValues.length ? Math.max(...cashValues) : 0, items,
     });
+  }
+
+  function scanCrimeCards() {
+    const scope = document.querySelector("#react-root, #factions") ?? document.body;
+    const candidates = Array.from(scope.querySelectorAll("article, li, [class*='crime'], [class*='result']"))
+      .map((row) => ({ row, text: normalize(row.textContent) }))
+      .filter(({ text }) => text.length >= 20 && text.length <= 2500 && /(success|successful|completed|failed)/i.test(text) && /(reward|received|earned|\$[\d,]+|\d+\s*x\s+[A-Za-z])/i.test(text))
+      .sort((a, b) => a.text.length - b.text.length);
+    const cards = [];
+    for (const candidate of candidates) {
+      if (cards.some((card) => candidate.row.contains(card.row))) continue;
+      cards.push(candidate);
+    }
+    for (const card of cards) scanCrimeRow(card.row, card.text);
   }
 
   function scanFactionPage() {
@@ -154,19 +196,16 @@
     scanArmoryBalance();
     const category = factionCategory();
     if (category === "funds") scanFundBalances();
-    const rowSelector = category === "crimes"
-      ? "#react-root li, #factions li, #react-root article, #factions article, #react-root [class*='crime-result'], #factions [class*='crime-result']"
-      : "#react-root li, #factions li";
+    if (category === "crimes") scanCrimeCards();
+    const rowSelector = "#react-root li, #factions li";
     const rows = document.querySelectorAll(rowSelector);
     for (const row of rows) {
-      const text = normalize(row.textContent);
+      const text = entryText(row);
       if (text.length < 12 || text.length > 500 || !/\d{2}:\d{2}:\d{2}/.test(text)) continue;
       if (category === "armory") {
         scanArmoryRow(text);
       } else if (category === "funds") {
         scanFundsRow(text);
-      } else if (category === "crimes") {
-        scanCrimeRow(row, text);
       } else if (category === "main_news" && /(ranked war|ranked up|ranked down|war mode)/i.test(text)) {
         addEvent("faction_news", category, text);
       }
@@ -318,9 +357,9 @@
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
     let node = walker.nextNode();
     while (node) {
-      if (/^Money:\s*$/i.test(normalize(node.nodeValue))) {
+      if (/^Money:?$/i.test(normalize(node.nodeValue))) {
         const listRow = node.parentElement?.closest("li");
-        if (listRow && normalize(listRow.textContent).length < 60) return listRow;
+        if (listRow && /^Money:\s*\$[\d,]+/i.test(normalize(listRow.textContent)) && normalize(listRow.textContent).length < 60) return listRow;
         let candidate = node.parentElement;
         let completeRow = null;
         while (candidate && candidate !== scope) {
@@ -366,7 +405,7 @@
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.1.5", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.1.6", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {

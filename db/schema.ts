@@ -57,6 +57,7 @@ export const pendingWars = sqliteTable(
     won: integer("won").notNull().default(0),
     grossEstimate: integer("gross_estimate").notNull().default(0),
     reviewedValue: integer("reviewed_value"),
+    reviewedTaxBps: integer("reviewed_tax_bps").notNull().default(2000),
     status: text("status").notNull().default("pending"),
     rewardsJson: text("rewards_json").notNull().default("[]"),
     membersJson: text("members_json").notNull().default("[]"),
@@ -65,6 +66,7 @@ export const pendingWars = sqliteTable(
   },
   (table) => [
     check("pending_wars_status", sql`${table.status} IN ('pending', 'recorded', 'dismissed')`),
+    check("pending_wars_tax_range", sql`${table.reviewedTaxBps} BETWEEN 0 AND 10000`),
     index("idx_pending_wars_status_end").on(table.status, table.endedAt),
   ],
 );

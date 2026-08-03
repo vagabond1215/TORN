@@ -97,6 +97,7 @@ async function ensureSchema(db: D1Database) {
       won INTEGER NOT NULL DEFAULT 0,
       gross_estimate INTEGER NOT NULL DEFAULT 0,
       reviewed_value INTEGER,
+      reviewed_tax_bps INTEGER NOT NULL DEFAULT 2000 CHECK (reviewed_tax_bps BETWEEN 0 AND 10000),
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'recorded', 'dismissed')),
       rewards_json TEXT NOT NULL DEFAULT '[]',
       members_json TEXT NOT NULL DEFAULT '[]',
@@ -230,15 +231,18 @@ export async function POST(request: Request) {
       const grossAmount = asPositiveInteger(payload.amount, "Gross proceeds");
       const pendingWarId = payload.pendingWarId ? asPositiveInteger(payload.pendingWarId, "War") : null;
       const pendingWar = pendingWarId
-        ? await db.prepare("SELECT war_id, opponent_name, members_json FROM pending_wars WHERE war_id = ? AND status = 'pending'").bind(pendingWarId).first<{ war_id: number; opponent_name: string; members_json: string }>()
+        ? await db.prepare("SELECT war_id, opponent_name, members_json, reviewed_tax_bps FROM pending_wars WHERE war_id = ? AND status = 'pending'").bind(pendingWarId).first<{ war_id: number; opponent_name: string; members_json: string; reviewed_tax_bps: number }>()
         : null;
       if (pendingWarId && !pendingWar) throw new Error("This war review is no longer pending.");
-      const sourceKey = String(payload.sourceKey ?? "war").trim().slice(0, 30);
+      const sourceKey = pendingWar ? "war" : String(payload.sourceKey ?? "war").trim().slice(0, 30);
       const policy = await db.prepare("SELECT * FROM policies WHERE source_key = ?").bind(sourceKey).first<PolicyRow>();
       if (!policy) throw new Error("Choose a valid proceeds source.");
-      const factionShare = Math.floor(grossAmount * policy.tax_bps / 10000);
+      const requestedTaxBps = pendingWar ? Number(payload.taxBpsOverride ?? pendingWar.reviewed_tax_bps) : policy.tax_bps;
+      if (!Number.isInteger(requestedTaxBps) || requestedTaxBps < 0 || requestedTaxBps > 10000) throw new Error("Tax rate must be between 0% and 100%.");
+      const taxBps = requestedTaxBps;
+      const factionShare = Math.floor(grossAmount * taxBps / 10000);
       const playerPayout = grossAmount - factionShare;
-      if (factionShare <= 0) throw new Error("This policy does not allocate any proceeds to the faction.");
+      if (factionShare <= 0 && !pendingWar) throw new Error("This policy does not allocate any proceeds to the faction.");
       const note = String(payload.note ?? (pendingWar ? `Ranked war vs ${pendingWar.opponent_name}` : `${policy.label} proceeds`)).trim().slice(0, 160) || `${policy.label} proceeds`;
       const accounts = (await db.prepare("SELECT * FROM accounts ORDER BY id ASC").all<AccountRow>()).results;
       const totalBps = accounts.reduce((sum, account) => sum + account.allocation_bps, 0);
@@ -258,8 +262,8 @@ export async function POST(request: Request) {
         .map((item) => db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(item.amount, item.account.id));
       statements.push(db.prepare(`INSERT INTO transactions (type, amount, note, details, actor_user_id, actor_email, actor_name)
         VALUES ('deposit', ?, ?, ?, ?, ?, ?)`)
-        .bind(factionShare, note, JSON.stringify({ sourceKey, source: policy.label, grossAmount, taxBps: policy.tax_bps, playerPayout, factionShare, pendingWarId, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
-      if (pendingWarId) statements.push(db.prepare("UPDATE pending_wars SET status = 'recorded', reviewed_value = ?, updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(grossAmount, pendingWarId));
+        .bind(factionShare, note, JSON.stringify({ sourceKey, source: policy.label, grossAmount, taxBps, playerPayout, factionShare, pendingWarId, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
+      if (pendingWarId) statements.push(db.prepare("UPDATE pending_wars SET status = 'recorded', reviewed_value = ?, reviewed_tax_bps = ?, updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(grossAmount, taxBps, pendingWarId));
       await db.batch(statements);
       if (pendingWar) {
         await ensureMemberBalanceSchema(db);

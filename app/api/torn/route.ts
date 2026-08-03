@@ -4,7 +4,7 @@ import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-acces
 type JsonObject = Record<string, unknown>;
 type PendingWarRow = {
   war_id: number; faction_id: number; opponent_name: string; started_at: number; ended_at: number; won: number;
-  gross_estimate: number; reviewed_value: number | null; status: string; rewards_json: string; members_json: string;
+  gross_estimate: number; reviewed_value: number | null; reviewed_tax_bps: number; status: string; rewards_json: string; members_json: string;
   created_at: string; updated_at: string;
 };
 type ActiveWarRow = {
@@ -29,6 +29,7 @@ async function ensureWarSchema(db: D1Database) {
       won INTEGER NOT NULL DEFAULT 0,
       gross_estimate INTEGER NOT NULL DEFAULT 0,
       reviewed_value INTEGER,
+      reviewed_tax_bps INTEGER NOT NULL DEFAULT 2000 CHECK (reviewed_tax_bps BETWEEN 0 AND 10000),
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'recorded', 'dismissed')),
       rewards_json TEXT NOT NULL DEFAULT '[]',
       members_json TEXT NOT NULL DEFAULT '[]',
@@ -113,7 +114,7 @@ function pendingWar(row: PendingWarRow) {
   return {
     warId: row.war_id, factionId: row.faction_id, opponentName: row.opponent_name, startedAt: row.started_at,
     endedAt: row.ended_at, won: Boolean(row.won), grossEstimate: row.gross_estimate, reviewedValue: row.reviewed_value,
-    status: row.status,
+    reviewedTaxBps: row.reviewed_tax_bps, status: row.status,
     rewards: safeJson<Array<{ id: number; name: string; quantity: number; marketPrice: number; value: number }>>(row.rewards_json, []),
     members: safeJson<Array<{ id: number; name: string; attacks: number; score: number }>>(row.members_json, []),
     createdAt: row.created_at, updatedAt: row.updated_at,
@@ -269,10 +270,12 @@ export async function POST(request: Request) {
     if (action === "sync") return Response.json(await sync(db, String(payload.apiKey ?? "").trim()));
     const warId = asNumber(payload.warId);
     if (!warId) throw new Error("Choose a valid war.");
-    if (action === "updateEstimate") {
+    if (action === "updateReview") {
       const amount = asNumber(payload.amount);
+      const taxBps = asNumber(payload.taxBps);
       if (amount <= 0) throw new Error("Reviewed value must be greater than zero.");
-      await db.prepare("UPDATE pending_wars SET reviewed_value = ?, updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(amount, warId).run();
+      if (taxBps < 0 || taxBps > 10000) throw new Error("Tax rate must be between 0% and 100%.");
+      await db.prepare("UPDATE pending_wars SET reviewed_value = ?, reviewed_tax_bps = ?, updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(amount, taxBps, warId).run();
     } else if (action === "dismiss") {
       await db.prepare("UPDATE pending_wars SET status = 'dismissed', updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(warId).run();
     } else return Response.json({ error: "Unknown action." }, { status: 400 });

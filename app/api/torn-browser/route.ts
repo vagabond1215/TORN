@@ -48,6 +48,7 @@ async function ensureSchema(db: D1Database) {
       won INTEGER NOT NULL DEFAULT 0,
       gross_estimate INTEGER NOT NULL DEFAULT 0,
       reviewed_value INTEGER,
+      reviewed_tax_bps INTEGER NOT NULL DEFAULT 2000 CHECK (reviewed_tax_bps BETWEEN 0 AND 10000),
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'recorded', 'dismissed')),
       rewards_json TEXT NOT NULL DEFAULT '[]',
       members_json TEXT NOT NULL DEFAULT '[]',
@@ -232,13 +233,14 @@ async function importOcHolding(db: D1Database, event: ReturnType<typeof cleanEve
   if (event.eventType !== "oc_completion" || event.payload.success === false) return;
   const crimeName = String(event.payload.crimeName ?? "Organized crime").trim().slice(0, 100) || "Organized crime";
   const cashAmount = Math.max(0, asInteger(event.payload.cashAmount));
+  const status = event.payload.status === "distributed" ? "distributed" : "held";
   const items = (Array.isArray(event.payload.items) ? event.payload.items : []).slice(0, 30).map((rawItem) => {
     const item = asObject(rawItem);
     return { name: String(item.name ?? "").trim().slice(0, 80), quantity: Math.max(0, asInteger(item.quantity)) };
   }).filter((item) => item.name && item.quantity > 0);
   await db.prepare(`INSERT OR IGNORE INTO oc_holdings
-    (event_key, crime_name, cash_amount, items_json, summary, occurred_at) VALUES (?, ?, ?, ?, ?, ?)`)
-    .bind(event.eventKey, crimeName, cashAmount, JSON.stringify(items), event.summary, event.occurredAt).run();
+    (event_key, crime_name, status, cash_amount, items_json, summary, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .bind(event.eventKey, crimeName, status, cashAmount, JSON.stringify(items), event.summary, event.occurredAt).run();
   for (const item of items) {
     await db.prepare(`INSERT INTO armory_items (item_name, category, quantity, source) VALUES (?, ?, ?, 'oc')
       ON CONFLICT(item_name) DO UPDATE SET quantity = armory_items.quantity + excluded.quantity,

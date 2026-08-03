@@ -18,7 +18,7 @@ type BudgetData = { currentUser: Actor | null; accounts: Account[]; policies: Po
 type WarReward = { id: number; name: string; quantity: number; marketPrice: number; value: number };
 type PendingWar = {
   warId: number; factionId: number; opponentName: string; startedAt: number; endedAt: number; won: boolean;
-  grossEstimate: number; reviewedValue: number | null; status: string; rewards: WarReward[];
+  grossEstimate: number; reviewedValue: number | null; reviewedTaxBps: number; status: string; rewards: WarReward[];
   members: Array<{ id: number; name: string; attacks: number; score: number }>;
 };
 type ActiveWar = {
@@ -95,6 +95,25 @@ function transactionLabel(item: Transaction) {
   return "Treasury updated";
 }
 
+function warPayoutEstimates(war: PendingWar, grossAmount: number, taxBps: number) {
+  const payouts = new Map<number, number>();
+  const eligible = war.members.filter((member) => member.id > 0 && member.attacks > 0);
+  const totalAttacks = eligible.reduce((sum, member) => sum + member.attacks, 0);
+  if (!totalAttacks) return payouts;
+  const playerPool = grossAmount - Math.floor(grossAmount * taxBps / 10000);
+  const portions = eligible.map((member) => {
+    const exact = playerPool * member.attacks;
+    return { member, amount: Math.floor(exact / totalAttacks), remainder: exact % totalAttacks };
+  });
+  let remainder = playerPool - portions.reduce((sum, item) => sum + item.amount, 0);
+  for (const item of [...portions].sort((a, b) => b.remainder - a.remainder || a.member.id - b.member.id)) {
+    if (remainder-- <= 0) break;
+    item.amount += 1;
+  }
+  for (const item of portions) payouts.set(item.member.id, item.amount);
+  return payouts;
+}
+
 export default function BudgetTracker() {
   const [data, setData] = useState<BudgetData>(emptyData);
   const [wars, setWars] = useState<WarStatus>(emptyWars);
@@ -122,6 +141,9 @@ export default function BudgetTracker() {
   const [tornKey, setTornKey] = useState("");
   const [tornKeyDraft, setTornKeyDraft] = useState("");
   const [reviewValues, setReviewValues] = useState<Record<number, string>>({});
+  const [reviewTaxBps, setReviewTaxBps] = useState<Record<number, number>>({});
+  const [warTaxMode, setWarTaxMode] = useState<"standard" | "custom">("standard");
+  const [customWarTax, setCustomWarTax] = useState("20");
   const [lastSyncAt, setLastSyncAt] = useState("");
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>("checking");
   const [bridgePendingCount, setBridgePendingCount] = useState(0);
@@ -149,6 +171,11 @@ export default function BudgetTracker() {
     setReviewValues((current) => {
       const next = { ...current };
       for (const war of result.pendingWars) if (!next[war.warId]) next[war.warId] = String(war.reviewedValue ?? war.grossEstimate);
+      return next;
+    });
+    setReviewTaxBps((current) => {
+      const next = { ...current };
+      for (const war of result.pendingWars) if (next[war.warId] === undefined) next[war.warId] = war.reviewedTaxBps ?? 2000;
       return next;
     });
   }
@@ -289,8 +316,16 @@ export default function BudgetTracker() {
   const selectedAccount = data.accounts.find((account) => account.id === selectedAccountId);
   const selectedPolicy = data.policies.find((policy) => policy.sourceKey === sourceKey) ?? data.policies[0];
   const grossPreview = parseMoney(amount) || 0;
-  const factionPreview = Math.floor(grossPreview * (selectedPolicy?.taxBps ?? 0) / 10000);
+  const customWarTaxBps = customWarTax.trim() ? Math.round(Number(customWarTax) * 100) : Number.NaN;
+  const modalTaxBps = pendingWarId ? (warTaxMode === "standard" ? 2000 : customWarTaxBps) : (selectedPolicy?.taxBps ?? 0);
+  const validModalTaxBps = Number.isInteger(modalTaxBps) && modalTaxBps >= 0 && modalTaxBps <= 10000 ? modalTaxBps : 0;
+  const factionPreview = Math.floor(grossPreview * validModalTaxBps / 10000);
   const playerPreview = grossPreview - factionPreview;
+  const pendingWarPayouts = useMemo(() => new Map(wars.pendingWars.map((war) => {
+    const gross = Math.max(0, parseMoney(reviewValues[war.warId] ?? "") || war.reviewedValue || war.grossEstimate);
+    const taxBps = reviewTaxBps[war.warId] ?? war.reviewedTaxBps ?? 2000;
+    return [war.warId, warPayoutEstimates(war, gross, taxBps)] as const;
+  })), [reviewTaxBps, reviewValues, wars.pendingWars]);
 
   function openModal(next: Modal, accountId?: number, section?: SettingsSection) {
     setError(""); setAmount(""); setNote(""); setPendingWarId(null);
@@ -310,7 +345,9 @@ export default function BudgetTracker() {
   }
 
   function openWarReview(war: PendingWar) {
+    const taxBps = reviewTaxBps[war.warId] ?? war.reviewedTaxBps ?? 2000;
     setPendingWarId(war.warId); setSourceKey("war"); setAmount(reviewValues[war.warId] ?? String(war.reviewedValue ?? war.grossEstimate));
+    setWarTaxMode(taxBps === 2000 ? "standard" : "custom"); setCustomWarTax(String(taxBps / 100));
     setNote(`Ranked war vs ${war.opponentName}`); setError(""); setModal("deposit");
   }
   const closeModal = () => { if (!saving) setModal(null); };
@@ -330,7 +367,8 @@ export default function BudgetTracker() {
     event.preventDefault();
     const numericAmount = parseMoney(amount);
     if (modal === "deposit") {
-      const result = await act({ action: "deposit", amount: numericAmount, sourceKey, note, pendingWarId }, pendingWarId ? "War proceeds reviewed and distributed." : "Proceeds settled and distributed.");
+      if (pendingWarId && (!Number.isInteger(modalTaxBps) || modalTaxBps < 0 || modalTaxBps > 10000)) { setError("Enter a tax rate between 0% and 100%."); return; }
+      const result = await act({ action: "deposit", amount: numericAmount, sourceKey, note, pendingWarId, taxBpsOverride: pendingWarId ? modalTaxBps : undefined }, pendingWarId ? "War proceeds reviewed and distributed." : "Proceeds settled and distributed.");
       if (result && pendingWarId) { setPendingWarId(null); await loadWars(); }
     } else if (modal === "directDeposit") await act({ action: "directDeposit", accountId: selectedAccountId, amount: numericAmount, note }, "Direct deposit recorded.");
     else if (modal === "spend") await act({ action: "spend", accountId: selectedAccountId, amount: numericAmount, note }, "Expense recorded.");
@@ -419,8 +457,8 @@ export default function BudgetTracker() {
         {wars.pendingWars.length > 0 && <div className="pending-war-list"><h3>Pending review</h3>{wars.pendingWars.map((war) => <article className="pending-war" key={war.warId}>
           <div className="pending-war-main"><div><span className={`result-tag ${war.won ? "won" : "lost"}`}>{war.won ? "Won" : "Lost"}</span><strong>vs {war.opponentName}</strong><small>Finished {formatUnix(war.endedAt)} · War #{war.warId}</small></div><div className="reward-total"><span>Cache market estimate</span><b>{money.format(war.grossEstimate)}</b></div></div>
           <div className="reward-lines">{war.rewards.map((reward) => <span key={reward.id}>{reward.quantity}x {reward.name}<b>{money.format(reward.value)}</b></span>)}</div>
-          <div className="review-row"><label><span>Reviewed gross value</span><div className="compact-money"><b>$</b><input inputMode="numeric" value={reviewValues[war.warId] ?? ""} onChange={(event) => setReviewValues((current) => ({ ...current, [war.warId]: event.target.value }))} onBlur={() => { const value = parseMoney(reviewValues[war.warId] ?? ""); if (value > 0) void warAction({ action: "updateEstimate", warId: war.warId, amount: value }); }} /></div></label><button className="button button-primary" onClick={() => openWarReview(war)}>Review and record</button><button className="button button-secondary" onClick={() => void warAction({ action: "dismiss", warId: war.warId }, "War review dismissed.")}>Dismiss</button></div>
-          <details><summary>War payout detail</summary><div className="member-table"><div className="member-row payout-head"><span>Member</span><span>Attacks</span><span>Score</span></div>{war.members.map((member) => <div className="member-row payout-row" key={member.id}><strong>{member.name}</strong><span>{member.attacks}</span><span>{member.score.toFixed(2)}</span></div>)}</div></details>
+          <div className="review-row"><label><span>Reviewed gross value</span><div className="compact-money"><b>$</b><input inputMode="numeric" value={reviewValues[war.warId] ?? ""} onChange={(event) => setReviewValues((current) => ({ ...current, [war.warId]: event.target.value }))} onBlur={() => { const value = parseMoney(reviewValues[war.warId] ?? ""); if (value > 0) void warAction({ action: "updateReview", warId: war.warId, amount: value, taxBps: reviewTaxBps[war.warId] ?? war.reviewedTaxBps ?? 2000 }); }} /></div></label><button className="button button-primary" onClick={() => openWarReview(war)}>Review and record</button><button className="button button-secondary" onClick={() => void warAction({ action: "dismiss", warId: war.warId }, "War review dismissed.")}>Dismiss</button></div>
+          <details><summary>War payout detail</summary><div className="member-table"><div className="member-row payout-head"><span>Member</span><span>Attacks</span><span>Estimated Pay</span><span>Respect</span></div>{war.members.map((member) => <div className="member-row payout-row" key={member.id}><strong>{member.name}</strong><span>{member.attacks}</span><span>{money.format(pendingWarPayouts.get(war.warId)?.get(member.id) ?? 0)}</span><span>{member.score.toFixed(2)}</span></div>)}</div></details>
         </article>)}</div>}
         {warEvents.length > 0 && <section className="event-history"><div className="section-heading"><h2>War activity</h2></div>{warEvents.map((event) => <article className="event-row" key={event.eventKey}><p>{cleanTornActivitySummary(event.summary)}</p><time dateTime={new Date(browserEventTime(event)).toISOString()}>{formatTornEventDate(event)}</time></article>)}</section>}
       </section>}
@@ -451,11 +489,11 @@ export default function BudgetTracker() {
         </div></div> : <form onSubmit={submitFinancial}>
           <h2 id="modal-title">{modal === "deposit" ? pendingWarId ? "Review war proceeds" : "Record proceeds" : modal === "directDeposit" ? `Deposit to ${selectedAccount?.name ?? "account"}` : modal === "spend" ? `Spend from ${selectedAccount?.name ?? "account"}` : "Transfer funds"}</h2>
           <p className="modal-intro">{modal === "deposit" ? pendingWarId ? "Confirm the actual gross value after cache sales. Only the faction share is distributed to accounts." : "Enter the full gross value. The policy calculates the player payout and deposits only the faction share." : modal === "directDeposit" ? "Add money directly to this account without applying a proceeds policy." : modal === "spend" ? `Available: ${money.format(selectedAccount?.balance ?? 0)}` : "Move money between treasury accounts."}</p>
-          {modal === "deposit" && <label className="field"><span>Proceeds type</span><select value={sourceKey} onChange={(event) => setSourceKey(event.target.value)}>{data.policies.map((policy) => <option key={policy.sourceKey} value={policy.sourceKey}>{policy.label} — {policy.taxBps / 100}% faction</option>)}</select></label>}
+          {modal === "deposit" && (pendingWarId ? <><label className="field"><span>Tax Rate</span><select value={warTaxMode} onChange={(event) => { const mode = event.target.value === "custom" ? "custom" : "standard"; setWarTaxMode(mode); const nextTaxBps = mode === "standard" ? 2000 : (Number.isInteger(customWarTaxBps) ? customWarTaxBps : 2000); setReviewTaxBps((current) => ({ ...current, [pendingWarId]: nextTaxBps })); }}><option value="standard">20% (default)</option><option value="custom">Custom</option></select></label>{warTaxMode === "custom" && <label className="field"><span>Custom tax rate</span><div className="percent-input"><input type="number" min="0" max="100" step="0.01" value={customWarTax} onChange={(event) => { const value = event.target.value; setCustomWarTax(value); const nextTaxBps = value.trim() ? Math.round(Number(value) * 100) : Number.NaN; if (Number.isInteger(nextTaxBps) && nextTaxBps >= 0 && nextTaxBps <= 10000) setReviewTaxBps((current) => ({ ...current, [pendingWarId]: nextTaxBps })); }} /><b>%</b></div></label>}</> : <label className="field"><span>Proceeds type</span><select value={sourceKey} onChange={(event) => setSourceKey(event.target.value)}>{data.policies.map((policy) => <option key={policy.sourceKey} value={policy.sourceKey}>{policy.label} — {policy.taxBps / 100}% faction</option>)}</select></label>)}
           {modal === "transfer" && <div className="transfer-grid"><label><span>From</span><select value={fromAccountId ?? ""} onChange={(event) => setFromAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name} — {money.format(account.balance)}</option>)}</select></label><span>→</span><label><span>To</span><select value={toAccountId ?? ""} onChange={(event) => setToAccountId(Number(event.target.value))}>{data.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label></div>}
           <label className="field"><span>{modal === "deposit" ? "Gross amount" : "Amount"}</span><div className="money-input"><b>$</b><input autoFocus inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0" required /></div></label>
           <label className="field"><span>{modal === "deposit" ? "Description" : "Note"}</span><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={160} placeholder={modal === "deposit" ? "e.g. Silver ranked war" : modal === "spend" ? "e.g. Xanax restock" : modal === "directDeposit" ? "e.g. opening balance adjustment" : "Optional transfer note"} required={modal === "spend"} /></label>
-          {modal === "deposit" && <div className="settlement-preview"><div><span>Gross</span><b>{money.format(grossPreview)}</b></div><div><span>Player payout</span><b>{money.format(playerPreview)}</b></div><div className="faction-row"><span>Faction share ({(selectedPolicy?.taxBps ?? 0) / 100}%)</span><b>{money.format(factionPreview)}</b></div><hr />{data.accounts.map((account) => <div className="account-split" key={account.id}><span>{account.name} <small>{account.allocationBps / 100}%</small></span><b>{money.format(Math.floor(factionPreview * account.allocationBps / 10000))}</b></div>)}</div>}
+          {modal === "deposit" && <div className="settlement-preview"><div><span>Gross</span><b>{money.format(grossPreview)}</b></div><div><span>Player payout</span><b>{money.format(playerPreview)}</b></div><div className="faction-row"><span>Faction share ({validModalTaxBps / 100}%)</span><b>{money.format(factionPreview)}</b></div><hr />{data.accounts.map((account) => <div className="account-split" key={account.id}><span>{account.name} <small>{account.allocationBps / 100}%</small></span><b>{money.format(Math.floor(factionPreview * account.allocationBps / 10000))}</b></div>)}</div>}
           {error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={closeModal}>Cancel</button><button className="button button-primary" disabled={saving || !amount}>{saving ? "Saving..." : modal === "deposit" ? pendingWarId ? "Record reviewed proceeds" : "Record and distribute" : modal === "directDeposit" ? "Record deposit" : modal === "spend" ? "Record expense" : "Transfer"}</button></div>
         </form>}
       </section></div>}

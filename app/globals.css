@@ -112,7 +112,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .compact-money:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .pending-war details { margin-top: 12px; }
 .pending-war summary { color: var(--accent); font-size: 9px; cursor: pointer; }
-.payout-head, .payout-row { grid-template-columns: minmax(140px, 1fr) 80px 80px; }
+.payout-head, .payout-row { grid-template-columns: minmax(140px, 1fr) 70px 110px 80px; }
 
 .content-grid { padding: 35px 4vw 58px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(340px, .8fr); gap: 30px; }
 .section-heading { min-height: 35px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
