@@ -19,6 +19,8 @@ test("defines the Blood Coven treasury product shell", async () => {
   for (const tab of ["accounts", "history", "wars", "ocs"]) assert.match(tracker, new RegExp(`"${tab}"`));
   assert.match(tracker, /Direct deposit/);
   assert.match(tracker, /Payout requests/);
+  assert.match(tracker, /cleanTornActivitySummary/);
+  assert.match(tracker, /formatTornEventDate/);
   assert.match(tracker, /blood-coven-treasury\.user\.js/);
   assert.match(tracker, /stored only in this browser/);
   assert.match(layout, /title: "Blood Coven Treasury"/);
@@ -59,5 +61,7 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(script, /Request faction balance/);
   assert.match(route, /INSERT OR IGNORE INTO torn_browser_events/);
   assert.match(route, /ranked_war_report/);
+  assert.match(route, /normalizedOccurredAt/);
+  assert.match(route, /Date\.parse\(b\.occurredAt/);
   assert.match(schema, /torn_browser_events/);
 });

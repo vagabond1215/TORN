@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.1.1
+// @version      1.1.2
 // @description  Sends Blood Coven faction funds, Xanax use, and ranked-war activity to the private treasury when it is open.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -56,8 +56,9 @@
   }
 
   function extractTimestamp(text) {
-    const match = text.match(/(\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{2})/);
-    return match ? `${match[2]} ${match[1]}` : new Date().toISOString();
+    const matches = Array.from(text.matchAll(/(\d{2}:\d{2}:\d{2})\s*(\d{2}\/\d{2}\/\d{2})/g));
+    const match = matches.at(-1);
+    return match ? new Date(tornUnix(match[1], match[2]) * 1000).toISOString() : new Date().toISOString();
   }
 
   function tornUnix(time, date) {
@@ -177,7 +178,7 @@
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.1.1", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.1.2", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {

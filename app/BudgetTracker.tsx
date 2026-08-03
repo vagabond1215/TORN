@@ -58,6 +58,28 @@ function formatDate(value: string) {
 function formatUnix(value: number) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value * 1000));
 }
+function tornTimestampFromText(value: string) {
+  const matches = Array.from(value.matchAll(/(\d{2}):(\d{2}):(\d{2})\s*(\d{2})\/(\d{2})\/(\d{2})/g));
+  const match = matches.at(-1);
+  if (!match) return 0;
+  return Date.UTC(2000 + Number(match[6]), Number(match[5]) - 1, Number(match[4]), Number(match[1]), Number(match[2]), Number(match[3]));
+}
+function browserEventTime(event: BrowserEvent) {
+  const endedAt = Number(event.payload.endedAt);
+  if (Number.isFinite(endedAt) && endedAt > 0) return endedAt * 1000;
+  return tornTimestampFromText(event.summary) || tornTimestampFromText(event.occurredAt ?? "") || Date.parse(event.occurredAt ?? event.createdAt) || Date.parse(event.createdAt);
+}
+function formatTornEventDate(event: BrowserEvent) {
+  return `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", timeZone: "UTC" }).format(new Date(browserEventTime(event)))} TC`;
+}
+function cleanTornActivitySummary(value: string) {
+  return value
+    .replace(/\s*(?:Copy\s*)?(?:Save\s*)+$/i, "")
+    .replace(/\s*Copy\s*$/i, "")
+    .replace(/\s*\d{2}:\d{2}:\d{2}\s*\d{2}\/\d{2}\/\d{2}\s*$/i, "")
+    .replace(/\s*\[view\]\s*$/i, "")
+    .trim();
+}
 function transactionLabel(item: Transaction) {
   if (item.type === "deposit") return `${item.details.source ?? "Faction income"} settled`;
   if (item.type === "direct_deposit") return `Deposited to ${item.toAccountName}`;
@@ -366,7 +388,9 @@ export default function BudgetTracker() {
   }
 
   const draftTotalBps = draftAccounts.reduce((sum, account) => sum + account.allocationBps, 0);
-  const warEvents = bridgeInfo.recentEvents.filter((event) => ["ranked_war_report", "faction_news", "xanax_use"].includes(event.eventType));
+  const warEvents = bridgeInfo.recentEvents
+    .filter((event) => ["ranked_war_report", "faction_news", "xanax_use"].includes(event.eventType))
+    .sort((a, b) => browserEventTime(b) - browserEventTime(a));
   const ocEvents = bridgeInfo.recentEvents.filter((event) => event.eventType === "oc_credit" || event.category === "crimes");
   const openRequests = memberAdmin.requests.filter((request) => ["pending", "approved"].includes(request.status));
 
@@ -395,7 +419,7 @@ export default function BudgetTracker() {
           <div className="review-row"><label><span>Reviewed gross value</span><div className="compact-money"><b>$</b><input inputMode="numeric" value={reviewValues[war.warId] ?? ""} onChange={(event) => setReviewValues((current) => ({ ...current, [war.warId]: event.target.value }))} onBlur={() => { const value = parseMoney(reviewValues[war.warId] ?? ""); if (value > 0) void warAction({ action: "updateEstimate", warId: war.warId, amount: value }); }} /></div></label><button className="button button-primary" onClick={() => openWarReview(war)}>Review and record</button><button className="button button-secondary" onClick={() => void warAction({ action: "dismiss", warId: war.warId }, "War review dismissed.")}>Dismiss</button></div>
           <details><summary>War payout detail</summary><div className="member-table"><div className="member-row payout-head"><span>Member</span><span>Attacks</span><span>Score</span></div>{war.members.map((member) => <div className="member-row payout-row" key={member.id}><strong>{member.name}</strong><span>{member.attacks}</span><span>{member.score.toFixed(2)}</span></div>)}</div></details>
         </article>)}</div>}
-        {warEvents.length > 0 && <section className="event-history"><div className="section-heading"><h2>War activity</h2></div>{warEvents.map((event) => <article className="event-row" key={event.eventKey}><div><strong>{event.eventType === "xanax_use" ? "Xanax used" : event.eventType.replace(/_/g, " ")}</strong><p>{event.summary}</p></div><time>{formatDate(event.occurredAt ?? event.createdAt)}</time></article>)}</section>}
+        {warEvents.length > 0 && <section className="event-history"><div className="section-heading"><h2>War activity</h2></div>{warEvents.map((event) => <article className="event-row" key={event.eventKey}><p>{cleanTornActivitySummary(event.summary)}</p><time dateTime={new Date(browserEventTime(event)).toISOString()}>{formatTornEventDate(event)}</time></article>)}</section>}
       </section>}
 
       {mainTab === "accounts" && <section className="accounts-section tab-panel"><div className="section-heading"><h2>Accounts</h2></div>{loading ? <div className="loading-card">Loading...</div> : <div className="account-list">{data.accounts.map((account) => <article className="account-row" key={account.id}><div className="account-title"><h3>{account.name}</h3><span>{account.allocationBps / 100}%</span></div><strong className="account-balance">{money.format(account.balance)}</strong><div className="account-actions"><button className="account-action deposit-action" onClick={() => openModal("directDeposit", account.id)} aria-label={`Deposit directly to ${account.name}`} title="Direct deposit"><span aria-hidden="true">↘$</span></button><button className="account-action transfer-action" onClick={() => openModal("transfer", account.id)} aria-label={`Transfer from ${account.name}`} title="Transfer"><span aria-hidden="true">⇄</span></button><button className="account-action spend-action" onClick={() => openModal("spend", account.id)} aria-label={`Spend from ${account.name}`} title="Spend"><span aria-hidden="true">$↗</span></button></div></article>)}</div>}</section>}

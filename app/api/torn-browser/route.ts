@@ -66,14 +66,30 @@ function asInteger(value: unknown) {
   return Number.isSafeInteger(number) ? number : 0;
 }
 
+function normalizedOccurredAt(summary: string, occurredAt: string | null, payload: JsonObject) {
+  const endedAt = asInteger(payload.endedAt);
+  if (endedAt > 0) return new Date(endedAt * 1000).toISOString();
+  const matches = Array.from(summary.matchAll(/(\d{2}):(\d{2}):(\d{2})\s*(\d{2})\/(\d{2})\/(\d{2})/g));
+  const match = matches.at(-1);
+  if (match) return new Date(Date.UTC(2000 + Number(match[6]), Number(match[5]) - 1, Number(match[4]), Number(match[1]), Number(match[2]), Number(match[3]))).toISOString();
+  if (occurredAt) {
+    const legacy = occurredAt.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (legacy) return new Date(Date.UTC(2000 + Number(legacy[3]), Number(legacy[2]) - 1, Number(legacy[1]), Number(legacy[4]), Number(legacy[5]), Number(legacy[6]))).toISOString();
+    const parsed = Date.parse(occurredAt);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+  return null;
+}
+
 function cleanEvent(input: BrowserEventInput) {
   const eventKey = String(input.eventKey ?? "").trim();
   const eventType = String(input.eventType ?? "").trim();
   const category = String(input.category ?? "").trim().slice(0, 40);
-  const occurredAt = String(input.occurredAt ?? "").trim().slice(0, 40) || null;
+  const rawOccurredAt = String(input.occurredAt ?? "").trim().slice(0, 40) || null;
   const summary = String(input.summary ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
   const sourceUrl = String(input.sourceUrl ?? "").trim().slice(0, 500);
   const payload = asObject(input.payload);
+  const occurredAt = normalizedOccurredAt(summary, rawOccurredAt, payload);
 
   if (!/^[a-z0-9:_-]{8,120}$/i.test(eventKey)) throw new Error("A browser event has an invalid key.");
   if (!allowedTypes.has(eventType)) throw new Error("A browser event has an invalid type.");
@@ -93,21 +109,25 @@ async function snapshot(db: D1Database) {
   const [count, latest, rows] = await Promise.all([
     db.prepare("SELECT COUNT(*) AS count FROM torn_browser_events").first<{ count: number }>(),
     db.prepare("SELECT created_at FROM torn_browser_events ORDER BY created_at DESC LIMIT 1").first<{ created_at: string }>(),
-    db.prepare("SELECT * FROM torn_browser_events ORDER BY created_at DESC LIMIT 120").all<BrowserEventRow>(),
+    db.prepare("SELECT * FROM torn_browser_events ORDER BY created_at DESC LIMIT 500").all<BrowserEventRow>(),
   ]);
-  return {
-    totalEvents: count?.count ?? 0,
-    lastImportedAt: latest?.created_at ?? null,
-    recentEvents: rows.results.map((row) => ({
+  const recentEvents = rows.results.map((row) => {
+    const payload = JSON.parse(row.payload_json || "{}") as JsonObject;
+    return {
       eventKey: row.event_key,
       eventType: row.event_type,
       category: row.category,
-      occurredAt: row.occurred_at,
+      occurredAt: normalizedOccurredAt(row.summary, row.occurred_at, payload),
       summary: row.summary,
       sourceUrl: row.source_url,
-      payload: JSON.parse(row.payload_json || "{}") as JsonObject,
+      payload,
       createdAt: row.created_at,
-    })),
+    };
+  }).sort((a, b) => Date.parse(b.occurredAt ?? b.createdAt) - Date.parse(a.occurredAt ?? a.createdAt)).slice(0, 120);
+  return {
+    totalEvents: count?.count ?? 0,
+    lastImportedAt: latest?.created_at ?? null,
+    recentEvents,
   };
 }
 
