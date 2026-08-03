@@ -37,6 +37,7 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
       member_name TEXT NOT NULL COLLATE NOCASE,
       amount INTEGER NOT NULL CHECK (amount > 0),
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'paid', 'declined')),
+      delivery_preference TEXT NOT NULL DEFAULT 'offline' CHECK (delivery_preference IN ('offline', 'online', 'online_or_travel')),
       note TEXT NOT NULL DEFAULT '',
       requested_by_user_id TEXT NOT NULL,
       requested_by_email TEXT NOT NULL,

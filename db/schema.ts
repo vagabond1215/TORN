@@ -149,9 +149,30 @@ export const payoutRequests = sqliteTable("payout_requests", {
   memberName: text("member_name").notNull(),
   amount: integer("amount").notNull(),
   status: text("status").notNull().default("pending"),
+  deliveryPreference: text("delivery_preference").notNull().default("offline"),
   note: text("note").notNull().default(""),
   requestedByUserId: text("requested_by_user_id").notNull(),
   requestedByEmail: text("requested_by_email").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const ocHoldings = sqliteTable("oc_holdings", {
+  eventKey: text("event_key").primaryKey(),
+  crimeName: text("crime_name").notNull(),
+  status: text("status").notNull().default("held"),
+  cashAmount: integer("cash_amount").notNull().default(0),
+  itemsJson: text("items_json").notNull().default("[]"),
+  summary: text("summary").notNull().default(""),
+  occurredAt: text("occurred_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_oc_holdings_status_created").on(table.status, table.createdAt)]);
+
+export const armoryItems = sqliteTable("armory_items", {
+  itemName: text("item_name").primaryKey(),
+  category: text("category").notNull().default("other"),
+  quantity: integer("quantity").notNull().default(0),
+  source: text("source").notNull().default("activity"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_armory_items_category_name").on(table.category, table.itemName)]);

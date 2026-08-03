@@ -191,19 +191,38 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .add-leader { padding: 10px; display: grid; grid-template-columns: 1fr auto; gap: 7px; }
 .add-leader input { min-width: 0; padding: 0 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--ink); }
 
-.member-shell { min-height: 100vh; max-width: 620px; margin: 0 auto; padding: 28px 18px 60px; }
-.member-header { min-height: 54px; display: flex; align-items: center; justify-content: space-between; }
-.member-header h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 21px; }
-.member-card, .member-balance { margin-top: 12px; padding: 22px; border: 1px solid var(--line); background: var(--surface); }
-.member-card h2 { margin: 4px 0 8px; font-size: 20px; }
+.member-shell { min-height: 100vh; max-width: 480px; margin: 0 auto; padding: 14px 12px 30px; }
+.member-header { min-height: 42px; display: flex; align-items: center; justify-content: space-between; }
+.member-header h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 18px; }
+.member-card, .member-balance { margin-top: 8px; padding: 14px; border: 1px solid var(--line); background: var(--surface); }
+.member-card h2 { margin: 0 0 10px; font-size: 17px; }
 .member-card > p { color: var(--muted); font-size: 11px; line-height: 1.55; }
 .member-card > .button { margin-top: 18px; width: 100%; }
 .eyebrow { color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.member-balance { display: grid; gap: 5px; }
-.member-balance span, .member-balance small { color: var(--muted); font-size: 10px; }
-.member-balance strong { font-size: clamp(35px, 10vw, 50px); letter-spacing: -.05em; }
+.member-balance { display: flex; align-items: center; min-height: 62px; }
+.member-balance strong { font-size: clamp(30px, 9vw, 40px); letter-spacing: -.04em; }
+.member-loading { color: var(--muted); font-size: 11px; }
+.balance-request-card .field { margin-top: 11px; }
+.full-balance-button, .partial-request-button { width: 100%; margin-top: 12px; }
+.request-separator { margin: 16px 0 2px; display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.request-separator::before, .request-separator::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+.request-note { margin-top: 15px !important; }
 .member-notice { padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--positive) 40%, var(--line)); color: var(--positive) !important; }
 .member-history > div { min-height: 38px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); font-size: 10px; text-transform: capitalize; }
+.vault-grid, .oc-holdings { border: 1px solid var(--line); background: var(--surface); }
+.vault-row { min-height: 52px; padding: 8px 13px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
+.vault-row:last-child { border-bottom: 0; }
+.vault-row div { display: grid; gap: 3px; }
+.vault-row strong, .vault-row b { font-size: 12px; }
+.vault-row small { color: var(--muted); font-size: 8px; text-transform: capitalize; }
+.armory-history, .oc-history { margin-top: 22px; }
+.oc-holding { min-height: 68px; padding: 11px 13px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--line); }
+.oc-holding:last-child { border-bottom: 0; }
+.oc-holding > div:first-child, .oc-assets { display: grid; gap: 4px; }
+.oc-holding strong { font-size: 12px; }
+.oc-holding small, .oc-assets span { color: var(--muted); font-size: 8px; }
+.oc-assets { text-align: right; }
+.oc-assets b { font-size: 13px; }
 
 .modal-backdrop { position: fixed; z-index: 50; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(8, 6, 7, .7); overflow: auto; }
 .modal { width: min(100%, 510px); max-height: calc(100vh - 40px); overflow: auto; position: relative; padding: 32px; border: 1px solid var(--line); border-top: 3px solid var(--accent); background: var(--surface); box-shadow: 0 22px 70px rgba(0,0,0,.3); }

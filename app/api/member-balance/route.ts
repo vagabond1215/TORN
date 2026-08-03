@@ -46,7 +46,7 @@ async function memberSnapshot(db: D1Database, memberId: number, memberName: stri
   await db.prepare("UPDATE member_balances SET member_id = ?, updated_at = CURRENT_TIMESTAMP WHERE member_name = ? COLLATE NOCASE")
     .bind(memberId, memberName).run();
   const balance = await db.prepare("SELECT * FROM member_balances WHERE member_name = ? COLLATE NOCASE").bind(memberName).first<BalanceRow>();
-  const requests = await db.prepare(`SELECT id, amount, status, note, created_at AS createdAt, updated_at AS updatedAt
+  const requests = await db.prepare(`SELECT id, amount, status, note, delivery_preference AS deliveryPreference, created_at AS createdAt, updated_at AS updatedAt
     FROM payout_requests WHERE member_id = ? ORDER BY created_at DESC LIMIT 10`).bind(memberId).all();
   const entries = await db.prepare(`SELECT amount, kind, source, summary, occurred_at AS occurredAt, created_at AS createdAt
     FROM member_balance_entries WHERE member_name = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 20`).bind(memberName).all();
@@ -68,7 +68,7 @@ export async function GET() {
     await requireTreasuryLeader(db);
     const [balances, requests] = await Promise.all([
       db.prepare("SELECT member_id AS memberId, member_name AS memberName, balance, earned_total AS earnedTotal, paid_total AS paidTotal, updated_at AS updatedAt FROM member_balances ORDER BY balance DESC, member_name ASC").all(),
-      db.prepare("SELECT id, member_id AS memberId, member_name AS memberName, amount, status, note, created_at AS createdAt, updated_at AS updatedAt FROM payout_requests ORDER BY created_at DESC LIMIT 100").all(),
+      db.prepare("SELECT id, member_id AS memberId, member_name AS memberName, amount, status, note, delivery_preference AS deliveryPreference, created_at AS createdAt, updated_at AS updatedAt FROM payout_requests ORDER BY created_at DESC LIMIT 100").all(),
     ]);
     return Response.json({ balances: balances.results, requests: requests.results });
   } catch (error) {
@@ -84,7 +84,41 @@ export async function POST(request: Request) {
     const member = await verifyMember(apiKey);
     const db = getD1();
     await ensureMemberBalanceSchema(db);
+    const observedBalance = Number(payload.observedBalance);
+    const observedAt = Date.parse(String(payload.observedAt ?? ""));
+    if (payload.balanceSource === "armory" && Number.isSafeInteger(observedBalance) && observedBalance >= 0 && observedBalance <= 1_000_000_000_000
+      && Number.isFinite(observedAt) && Math.abs(Date.now() - observedAt) <= 7 * 24 * 60 * 60 * 1000) {
+      await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance)
+        VALUES (?, ?, ?) ON CONFLICT(member_name) DO UPDATE SET member_id = excluded.member_id,
+        balance = excluded.balance, updated_at = CURRENT_TIMESTAMP`)
+        .bind(member.memberName, member.memberId, observedBalance).run();
+    }
     const action = String(payload.action ?? "verify");
+    if (action === "importSnapshots") {
+      const events = Array.isArray(payload.events) ? payload.events.slice(0, 20) : [];
+      const acceptedKeys: string[] = [];
+      for (const rawEvent of events) {
+        const event = asObject(rawEvent);
+        const eventKey = String(event.eventKey ?? "").trim();
+        const sourceUrl = String(event.sourceUrl ?? "");
+        let source: URL;
+        try { source = new URL(sourceUrl); } catch { continue; }
+        if (!/^[a-z0-9:_-]{8,120}$/i.test(eventKey) || event.eventType !== "member_balance_snapshot" || source.protocol !== "https:" || source.hostname !== "www.torn.com") continue;
+        const eventPayload = asObject(event.payload);
+        const members = Array.isArray(eventPayload.members) ? eventPayload.members.slice(0, 250) : [];
+        for (const rawBalance of members) {
+          const balanceRow = asObject(rawBalance);
+          const name = String(balanceRow.name ?? "").trim().slice(0, 80);
+          const balance = Number(balanceRow.balance);
+          if (!name || !Number.isSafeInteger(balance) || balance < 0 || balance > 1_000_000_000_000) continue;
+          await db.prepare(`INSERT INTO member_balances (member_name, balance) VALUES (?, ?)
+            ON CONFLICT(member_name) DO UPDATE SET balance = excluded.balance, updated_at = CURRENT_TIMESTAMP`)
+            .bind(name, balance).run();
+        }
+        acceptedKeys.push(eventKey);
+      }
+      return Response.json({ acceptedKeys, ...(await memberSnapshot(db, member.memberId, member.memberName)) });
+    }
     if (action === "request") {
       const current = await memberSnapshot(db, member.memberId, member.memberName);
       const amount = asNumber(payload.amount);
@@ -92,16 +126,18 @@ export async function POST(request: Request) {
       const pending = await db.prepare("SELECT id FROM payout_requests WHERE member_id = ? AND status IN ('pending', 'approved') LIMIT 1").bind(member.memberId).first();
       if (pending) throw new Error("You already have an open payout request.");
       const note = String(payload.note ?? "").trim().slice(0, 160);
+      const deliveryPreference = String(payload.deliveryPreference ?? "offline");
+      if (!new Set(["offline", "online", "online_or_travel"]).has(deliveryPreference)) throw new Error("Choose a valid delivery preference.");
       await db.prepare(`INSERT INTO payout_requests
-        (member_id, member_name, amount, note, requested_by_user_id, requested_by_email)
-        VALUES (?, ?, ?, ?, ?, ?)`)
-        .bind(member.memberId, member.memberName, amount, note, user?.userId ?? "local-member", user?.email ?? "local@blood-coven").run();
+        (member_id, member_name, amount, delivery_preference, note, requested_by_user_id, requested_by_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .bind(member.memberId, member.memberName, amount, deliveryPreference, note, user?.userId ?? "local-member", user?.email ?? "local@blood-coven").run();
     } else if (action !== "verify") {
       return Response.json({ error: "Unknown action." }, { status: 400 });
     }
     return Response.json(await memberSnapshot(db, member.memberId, member.memberName));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to verify this balance.";
-    return Response.json({ error: message }, { status: /valid|belong|identity|amount|already|Torn/i.test(message) ? 400 : 500 });
+    return Response.json({ error: message }, { status: /valid|belong|identity|amount|already|preference|Torn/i.test(message) ? 400 : 500 });
   }
 }

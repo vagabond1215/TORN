@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.1.4
+// @version      1.1.5
 // @description  Sends Blood Coven faction funds, Xanax use, and ranked-war activity to the private treasury when it is open.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -109,14 +109,55 @@
       });
       return;
     }
-    if (/(deposited \d+x|loaned \d+x|returned \d+x|filled one of the faction's)/i.test(text)) addEvent("armory", "armory", text);
+    const movement = text.match(/^(.+?) (deposited|loaned|returned) (\d+)x (.+?)(?=\d{2}:\d{2}:\d{2})/i);
+    if (movement) {
+      const action = movement[2].toLowerCase();
+      const item = normalize(movement[4].replace(/\s+(?:to|into|from)\s+the faction.*$/i, ""));
+      addEvent("armory_movement", "armory", text, {
+        memberName: normalize(movement[1]), action, quantity: Number(movement[3]), item,
+      });
+      return;
+    }
+    if (/filled one of the faction's/i.test(text)) addEvent("armory", "armory", text);
+  }
+
+  function scanFundBalances() {
+    const members = new Map();
+    const rows = document.querySelectorAll("#react-root tr, #factions tr, #react-root li, #factions li");
+    for (const row of rows) {
+      const text = normalize(row.textContent);
+      if (!text || /\d{2}:\d{2}:\d{2}/.test(text)) continue;
+      const profile = row.querySelector('a[href*="profiles.php"]');
+      const name = normalize(profile?.textContent);
+      const amounts = Array.from(text.matchAll(/\$([\d,]+)/g));
+      if (!name || amounts.length === 0 || name.length > 80) continue;
+      members.set(name, moneyValue(amounts.at(-1)[1]));
+    }
+    if (members.size === 0) return;
+    const snapshot = Array.from(members, ([name, balance]) => ({ name, balance })).sort((a, b) => a.name.localeCompare(b.name));
+    addEvent("member_balance_snapshot", "funds", `Faction balance snapshot (${snapshot.length} members)`, { members: snapshot }, hash(JSON.stringify(snapshot)));
+  }
+
+  function scanCrimeRow(row, text) {
+    if (text.length < 20 || text.length > 1200 || !/(success|completed|reward|received|earned|failed)/i.test(text)) return;
+    const heading = row.querySelector("h2, h3, h4, strong, [class*='title']");
+    const crimeName = normalize(heading?.textContent || text.split(/(?:success|completed|failed)/i)[0]).slice(0, 100) || "Organized crime";
+    const cashValues = Array.from(text.matchAll(/\$([\d,]+)/g)).map((match) => moneyValue(match[1]));
+    const items = Array.from(text.matchAll(/(\d+)x\s+([A-Za-z][A-Za-z '-]{2,50}?)(?=,|\.|\$|\d{2}:|$)/g)).map((match) => ({ quantity: Number(match[1]), name: normalize(match[2]) }));
+    addEvent("oc_completion", "crimes", text, {
+      crimeName, success: !/fail/i.test(text), cashAmount: cashValues.length ? Math.max(...cashValues) : 0, items,
+    });
   }
 
   function scanFactionPage() {
     if (location.pathname.toLowerCase() !== "/factions.php") return;
     scanArmoryBalance();
     const category = factionCategory();
-    const rows = document.querySelectorAll("#react-root li, #factions li");
+    if (category === "funds") scanFundBalances();
+    const rowSelector = category === "crimes"
+      ? "#react-root li, #factions li, #react-root article, #factions article, #react-root [class*='crime-result'], #factions [class*='crime-result']"
+      : "#react-root li, #factions li";
+    const rows = document.querySelectorAll(rowSelector);
     for (const row of rows) {
       const text = normalize(row.textContent);
       if (text.length < 12 || text.length > 500 || !/\d{2}:\d{2}:\d{2}/.test(text)) continue;
@@ -124,6 +165,8 @@
         scanArmoryRow(text);
       } else if (category === "funds") {
         scanFundsRow(text);
+      } else if (category === "crimes") {
+        scanCrimeRow(row, text);
       } else if (category === "main_news" && /(ranked war|ranked up|ranked down|war mode)/i.test(text)) {
         addEvent("faction_news", category, text);
       }
@@ -323,12 +366,13 @@
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.1.4", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.1.5", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {
     function sendReady() {
       postToTreasury("ready", { pendingCount: queue().length });
+      postToTreasury("armoryBalance", { balance: balanceCache() });
       const events = queue().slice(0, 100);
       if (events.length) postToTreasury("events", { events });
     }

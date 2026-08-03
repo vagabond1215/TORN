@@ -3,9 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("defines the Blood Coven treasury product shell", async () => {
-  const [tracker, layout] = await Promise.all([
+  const [tracker, layout, memberBalance] = await Promise.all([
     readFile(new URL("../app/BudgetTracker.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/MemberBalance.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(tracker, /Blood Coven Treasury/);
   assert.match(tracker, /Add proceeds/);
@@ -16,15 +17,22 @@ test("defines the Blood Coven treasury product shell", async () => {
   assert.match(tracker, /Torn API/);
   assert.match(tracker, /Install script/);
   assert.match(tracker, /Browser script not detected/);
-  for (const tab of ["accounts", "history", "wars", "ocs"]) assert.match(tracker, new RegExp(`"${tab}"`));
+  for (const tab of ["accounts", "balances", "armory", "wars", "ocs", "history"]) assert.match(tracker, new RegExp(`"${tab}"`));
   assert.match(tracker, /Direct deposit/);
-  assert.match(tracker, /Payout requests/);
+  assert.match(tracker, /Balance requests/);
   assert.match(tracker, /cleanTornActivitySummary/);
   assert.match(tracker, /formatTornEventDate/);
   assert.match(tracker, /blood-coven-treasury\.user\.js/);
   assert.match(tracker, /stored only in this browser/);
   assert.match(layout, /title: "Blood Coven Treasury"/);
   assert.match(layout, /index: false/);
+  assert.match(memberBalance, /Balance Request/);
+  assert.match(memberBalance, /Request Full Balance/);
+  assert.match(memberBalance, /Send if offline/);
+  assert.match(memberBalance, /Send only if Online/);
+  assert.match(memberBalance, /Send if Online or Travelling/);
+  assert.match(memberBalance, /blood-coven-member-key/);
+  assert.doesNotMatch(memberBalance, /Available faction balance/);
   assert.doesNotMatch(`${tracker}\n${layout}`, /codex-preview|react-loading-skeleton/);
 });
 
@@ -68,9 +76,18 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(script, /source: "armory"/);
   assert.match(script, /findClassicMoneyRow/);
   assert.match(script, /bc-wide-classic/);
+  assert.match(script, /member_balance_snapshot/);
+  assert.match(script, /oc_completion/);
+  assert.match(script, /armory_movement/);
+  assert.match(script, /armoryBalance/);
   assert.match(route, /INSERT OR IGNORE INTO torn_browser_events/);
   assert.match(route, /ranked_war_report/);
   assert.match(route, /normalizedOccurredAt/);
   assert.match(route, /Date\.parse\(b\.occurredAt/);
+  assert.match(route, /oc_holdings/);
+  assert.match(route, /armory_items/);
+  assert.match(route, /member_balance_snapshot/);
   assert.match(schema, /torn_browser_events/);
+  assert.match(schema, /ocHoldings/);
+  assert.match(schema, /armoryItems/);
 });
