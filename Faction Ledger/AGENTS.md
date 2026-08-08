@@ -4,7 +4,9 @@ These instructions apply to the entire `Faction Ledger/` subtree.
 
 ## Working branch and safety
 
-- Start from `agent/fix-faction-ledger-sync-safety`. Do not commit directly to `main` and do not merge or deploy from Codex.
+- Integration baseline: `agent/fix-faction-ledger-sync-safety`.
+- Codex implementation branch: `codex/faction-ledger-multitenancy`, created from the prepared integration baseline. Do all large tenancy-refactor commits there.
+- Do not commit directly to `main`. Do not merge, deploy, force-push, or retarget production from Codex.
 - Production Cloudflare D1 is canonical. Local `.wrangler` / Miniflare state is disposable development data.
 - Never point local tests or migrations at production D1. Never use destructive resets, `DROP`-and-recreate production tables, or force-push history.
 - Prefer additive, idempotent migrations with explicit backfills and validation queries. Preserve existing Blood Coven data (faction ID `52984`).
@@ -27,9 +29,10 @@ From `Faction Ledger/`:
 
 ```bash
 npm ci
-npm run lint
-npm test
+npm run check
 ```
+
+`npm run check` executes lint plus the production build/rendered-HTML test path.
 
 After Drizzle schema changes:
 
@@ -55,10 +58,9 @@ Follow `docs/CODEX_MULTI_TENANCY_RUN.md`. Do not skip directly to arbitrary-fact
 
 ## Definition of done for a Codex pass
 
-- `npm run lint` passes.
-- `npm test` passes.
+- `npm run check` passes.
 - Schema/migration changes preserve Blood Coven data and have a local migration test.
 - Two synthetic factions can hold the same member name, item name, event key, policy key, and similar records without collision or cross-read.
 - Duplicate multi-observer submissions change durable financial/inventory state once.
 - Membership/faction change clears local stale state and cannot upload observations to the previous tenant.
-- Update `docs/CODEX_MULTI_TENANCY_RUN.md` with completed items, deviations, and any remaining risks before handing control back.
+- Update `docs/CODEX_MULTI_TENANCY_RUN.md` with completed items, deviations, commands/results, generated migrations, and remaining risks before handing control back.
