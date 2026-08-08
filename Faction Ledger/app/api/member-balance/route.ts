@@ -17,6 +17,11 @@ type BalanceRow = {
 
 const TORN_API = "https://api.torn.com/v2";
 const BLOOD_COVEN_ID = 52984;
+const EXPLICIT_OBSERVATION_PRIORITY = 2;
+const explicitObservationWins = `(member_balances.observed_at IS NULL
+  OR datetime(excluded.observed_at) > datetime(member_balances.observed_at)
+  OR (datetime(excluded.observed_at) = datetime(member_balances.observed_at)
+    AND excluded.observed_priority >= member_balances.observed_priority))`;
 
 function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
@@ -71,6 +76,18 @@ async function memberSnapshot(db: D1Database, memberId: number, memberName: stri
   };
 }
 
+async function applyExplicitBalance(db: D1Database, memberName: string, balance: number, observedAt: string, memberId?: number) {
+  await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, observed_at, observed_priority)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(member_name) DO UPDATE SET
+      member_id = COALESCE(excluded.member_id, member_balances.member_id),
+      balance = CASE WHEN ${explicitObservationWins} THEN excluded.balance ELSE member_balances.balance END,
+      observed_at = CASE WHEN ${explicitObservationWins} THEN excluded.observed_at ELSE member_balances.observed_at END,
+      observed_priority = CASE WHEN ${explicitObservationWins} THEN excluded.observed_priority ELSE member_balances.observed_priority END,
+      updated_at = CASE WHEN ${explicitObservationWins} THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
+    .bind(memberName, memberId ?? null, balance, observedAt, EXPLICIT_OBSERVATION_PRIORITY).run();
+}
+
 export async function GET() {
   try {
     const db = getD1();
@@ -98,16 +115,7 @@ export async function POST(request: Request) {
     const observedAt = Date.parse(String(payload.observedAt ?? ""));
     if (payload.balanceSource === "armory" && Number.isSafeInteger(observedBalance) && observedBalance >= 0 && observedBalance <= 1_000_000_000_000
       && Number.isFinite(observedAt) && Math.abs(Date.now() - observedAt) <= 7 * 24 * 60 * 60 * 1000) {
-      const observedAtIso = new Date(observedAt).toISOString();
-      await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, observed_at)
-        VALUES (?, ?, ?, ?) ON CONFLICT(member_name) DO UPDATE SET member_id = excluded.member_id,
-        balance = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-          THEN excluded.balance ELSE member_balances.balance END,
-        observed_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-          THEN excluded.observed_at ELSE member_balances.observed_at END,
-        updated_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-          THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
-        .bind(member.memberName, member.memberId, observedBalance, observedAtIso).run();
+      await applyExplicitBalance(db, member.memberName, observedBalance, new Date(observedAt).toISOString(), member.memberId);
     }
     const action = String(payload.action ?? "verify");
     if (action === "importSnapshots") {
@@ -133,15 +141,7 @@ export async function POST(request: Request) {
           const name = String(balanceRow.name ?? "").trim().slice(0, 80);
           const balance = Number(balanceRow.balance);
           if (!name || !Number.isSafeInteger(balance) || balance < 0 || balance > 1_000_000_000_000) continue;
-          await db.prepare(`INSERT INTO member_balances (member_name, balance, observed_at) VALUES (?, ?, ?)
-            ON CONFLICT(member_name) DO UPDATE SET
-              balance = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-                THEN excluded.balance ELSE member_balances.balance END,
-              observed_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-                THEN excluded.observed_at ELSE member_balances.observed_at END,
-              updated_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-                THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
-            .bind(name, balance, snapshotObservedAtIso).run();
+          await applyExplicitBalance(db, name, balance, snapshotObservedAtIso);
         }
         acceptedKeys.push(eventKey);
       }
