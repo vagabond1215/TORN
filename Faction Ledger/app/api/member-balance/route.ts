@@ -1,5 +1,6 @@
 import { getD1 } from "../../../db";
 import { ensureMemberBalanceSchema } from "../../../db/member-balances";
+import { issueScriptSyncToken } from "../../../db/script-sync";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
@@ -162,7 +163,11 @@ export async function POST(request: Request) {
     } else if (action !== "verify") {
       return Response.json({ error: "Unknown action." }, { status: 400 });
     }
-    return Response.json(await memberSnapshot(db, member.memberId, member.memberName));
+    const result = await memberSnapshot(db, member.memberId, member.memberName);
+    if (action === "verify" && payload.issueSyncToken === true) {
+      return Response.json({ ...result, syncToken: await issueScriptSyncToken(db, member.memberId, member.memberName) });
+    }
+    return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to verify this balance.";
     return Response.json({ error: message }, { status: /valid|belong|identity|amount|already|preference|Torn/i.test(message) ? 400 : 500 });
