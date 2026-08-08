@@ -14,9 +14,12 @@ type ActiveWarRow = {
 type BaselineRow = { user_id: number; name: string; base_hits: number; base_xanax: number; base_refills: number };
 type WarParticipant = { id: number; name: string; score: number; chain: number };
 type RankedWar = { war_id: number; start: number; end: number | null; target: number; winner: number | null; factions: WarParticipant[] };
+type SyncCursorRow = { next_offset: number; complete: number };
 
 const TORN_API = "https://api.torn.com/v2";
 const BLOOD_COVEN = "blood coven";
+const HISTORICAL_WAR_PAGE = 5;
+const HISTORICAL_OC_PAGE = 20;
 
 async function ensureWarSchema(db: D1Database) {
   await db.batch([
@@ -62,7 +65,25 @@ async function ensureWarSchema(db: D1Database) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (war_id, user_id)
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS oc_holdings (
+      event_key TEXT PRIMARY KEY,
+      crime_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'held' CHECK (status IN ('held', 'distributed', 'dismissed')),
+      cash_amount INTEGER NOT NULL DEFAULT 0 CHECK (cash_amount >= 0),
+      items_json TEXT NOT NULL DEFAULT '[]',
+      summary TEXT NOT NULL DEFAULT '',
+      occurred_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS torn_sync_cursors (
+      source_key TEXT PRIMARY KEY,
+      next_offset INTEGER NOT NULL DEFAULT 0 CHECK (next_offset >= 0),
+      complete INTEGER NOT NULL DEFAULT 0 CHECK (complete IN (0, 1)),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_pending_wars_status_end ON pending_wars(status, ended_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_oc_holdings_status_created ON oc_holdings(status, created_at DESC)"),
   ]);
 }
 
@@ -140,15 +161,28 @@ async function status(db: D1Database) {
   return { pendingWars: pendingResult.results.map(pendingWar), activeWar: activeWar(active ?? null) };
 }
 
+function parseRankedWars(payload: JsonObject): RankedWar[] {
+  return (Array.isArray(payload.rankedwars) ? payload.rankedwars.map(asObject) : []).map((war): RankedWar => ({
+    war_id: asNumber(war.war_id), start: asNumber(war.start), end: war.end === null ? null : asNumber(war.end),
+    target: asNumber(war.target), winner: war.winner === null ? null : asNumber(war.winner),
+    factions: (Array.isArray(war.factions) ? war.factions.map(asObject) : []).map((participant) => ({
+      id: asNumber(participant.id), name: String(participant.name ?? "Unknown"), score: asNumber(participant.score), chain: asNumber(participant.chain),
+    })),
+  })).filter((war) => war.war_id > 0);
+}
+
 async function importCompletedWar(db: D1Database, apiKey: string, factionId: number, war: RankedWar) {
-  if (!war.end || Date.now() / 1000 - war.end > 30 * 86400) return;
-  const exists = await db.prepare("SELECT war_id FROM pending_wars WHERE war_id = ?").bind(war.war_id).first();
-  if (exists) return;
+  if (!war.end) return false;
+  const existing = await db.prepare("SELECT status, gross_estimate, rewards_json, members_json FROM pending_wars WHERE war_id = ?")
+    .bind(war.war_id).first<{ status: string; gross_estimate: number; rewards_json: string; members_json: string }>();
+  if (existing && existing.status !== "pending") return false;
+  if (existing && existing.gross_estimate > 0 && existing.rewards_json !== "[]" && existing.members_json !== "[]") return false;
+
   const reportResponse = await tornFetch(`/faction/${war.war_id}/rankedwarreport`, apiKey);
   const report = asObject(reportResponse.rankedwarreport);
   const factions = Array.isArray(report.factions) ? report.factions.map(asObject) : [];
   const ours = factions.find((faction) => asNumber(faction.id) === factionId);
-  if (!ours) return;
+  if (!ours) return false;
   const opponent = factions.find((faction) => asNumber(faction.id) !== factionId);
   const rewardItems = Array.isArray(asObject(ours.rewards).items) ? (asObject(ours.rewards).items as unknown[]).map(asObject) : [];
   const itemIds = rewardItems.map((item) => asNumber(item.id)).filter(Boolean);
@@ -162,18 +196,29 @@ async function importCompletedWar(db: D1Database, apiKey: string, factionId: num
     const id = asNumber(item.id);
     const quantity = asNumber(item.quantity);
     const marketPrice = itemPrices.get(id) ?? 0;
-    return { id, name: String(item.name ?? "Reward item"), quantity, marketPrice, value: quantity * marketPrice };
+    return { id, name: String(item.name ?? `Item #${id}`), quantity, marketPrice, value: quantity * marketPrice };
   });
   const grossEstimate = rewards.reduce((sum, item) => sum + item.value, 0);
   const members = (Array.isArray(ours.members) ? ours.members.map(asObject) : []).map((member) => ({
     id: asNumber(member.id), name: String(member.name ?? "Unknown"), attacks: asNumber(member.attacks), score: Number(member.score ?? 0),
   })).sort((a, b) => b.attacks - a.attacks || b.score - a.score);
-  await db.prepare(`INSERT OR IGNORE INTO pending_wars
+  await db.prepare(`INSERT INTO pending_wars
     (war_id, faction_id, opponent_name, started_at, ended_at, won, gross_estimate, rewards_json, members_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(war_id) DO UPDATE SET
+      opponent_name = excluded.opponent_name,
+      started_at = excluded.started_at,
+      ended_at = excluded.ended_at,
+      won = excluded.won,
+      gross_estimate = excluded.gross_estimate,
+      rewards_json = excluded.rewards_json,
+      members_json = excluded.members_json,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE pending_wars.status = 'pending'`)
     .bind(war.war_id, factionId, String(opponent?.name ?? "Unknown faction"), asNumber(report.start) || war.start,
       asNumber(report.end) || war.end, asNumber(report.winner) === factionId ? 1 : 0, grossEstimate,
       JSON.stringify(rewards), JSON.stringify(members)).run();
+  return true;
 }
 
 async function memberStats(apiKey: string, userId: number) {
@@ -228,6 +273,96 @@ async function trackActiveWar(db: D1Database, apiKey: string, factionId: number,
   await db.prepare("DELETE FROM active_war WHERE war_id != ?").bind(war.war_id).run();
 }
 
+async function cursor(db: D1Database, sourceKey: string, defaultOffset = 0) {
+  const row = await db.prepare("SELECT next_offset, complete FROM torn_sync_cursors WHERE source_key = ?").bind(sourceKey).first<SyncCursorRow>();
+  return row ?? { next_offset: defaultOffset, complete: 0 };
+}
+
+async function saveCursor(db: D1Database, sourceKey: string, nextOffset: number, complete: boolean) {
+  await db.prepare(`INSERT INTO torn_sync_cursors (source_key, next_offset, complete) VALUES (?, ?, ?)
+    ON CONFLICT(source_key) DO UPDATE SET next_offset = excluded.next_offset, complete = excluded.complete, updated_at = CURRENT_TIMESTAMP`)
+    .bind(sourceKey, nextOffset, complete ? 1 : 0).run();
+}
+
+async function backfillWars(db: D1Database, apiKey: string, factionId: number) {
+  const state = await cursor(db, "ranked_wars", 0);
+  if (state.complete) return { imported: 0, offset: state.next_offset, complete: true };
+  const response = await tornFetch(`/faction/${factionId}/rankedwars?limit=${HISTORICAL_WAR_PAGE}&offset=${state.next_offset}`, apiKey);
+  const wars = parseRankedWars(response);
+  let imported = 0;
+  for (const war of wars.filter((item) => item.end)) if (await importCompletedWar(db, apiKey, factionId, war)) imported += 1;
+  const nextOffset = state.next_offset + wars.length;
+  const complete = wars.length < HISTORICAL_WAR_PAGE;
+  await saveCursor(db, "ranked_wars", nextOffset, complete);
+  return { imported, offset: nextOffset, complete };
+}
+
+async function itemNames(apiKey: string, ids: number[]) {
+  const uniqueIds = Array.from(new Set(ids.filter((id) => id > 0)));
+  if (!uniqueIds.length) return new Map<number, string>();
+  const response = await tornFetch(`/torn/${uniqueIds.join(",")}/items`, apiKey);
+  const items = Array.isArray(response.items) ? response.items.map(asObject) : [];
+  return new Map(items.map((item) => [asNumber(item.id), String(item.name ?? `Item #${asNumber(item.id)}`)]));
+}
+
+async function importCrimeBatch(db: D1Database, apiKey: string, crimes: JsonObject[]) {
+  const rewardIds: number[] = [];
+  for (const crime of crimes) {
+    const rewards = asObject(crime.rewards);
+    for (const rawItem of Array.isArray(rewards.items) ? rewards.items : []) rewardIds.push(asNumber(asObject(rawItem).id));
+  }
+  let names = new Map<number, string>();
+  try { names = await itemNames(apiKey, rewardIds); } catch { names = new Map(); }
+
+  let imported = 0;
+  for (const crime of crimes) {
+    const crimeId = asNumber(crime.id);
+    if (!crimeId) continue;
+    const statusName = String(crime.status ?? "completed").trim();
+    const successful = statusName.toLowerCase() === "successful";
+    const rewards = asObject(crime.rewards);
+    const payout = asObject(rewards.payout);
+    const items = (Array.isArray(rewards.items) ? rewards.items : []).map((rawItem) => {
+      const item = asObject(rawItem);
+      const id = asNumber(item.id);
+      return { id, name: names.get(id) ?? `Item #${id}`, quantity: Math.max(0, asNumber(item.quantity)) };
+    }).filter((item) => item.id > 0 && item.quantity > 0);
+    const holdingStatus = successful ? (Object.keys(payout).length ? "distributed" : "held") : "dismissed";
+    const occurred = asNumber(crime.executed_at);
+    const occurredAt = occurred > 0 ? new Date(occurred * 1000).toISOString() : null;
+    const crimeName = String(crime.name ?? "Organized crime").trim().slice(0, 100) || "Organized crime";
+    const summary = `${crimeName} — ${statusName}`;
+    const result = await db.prepare(`INSERT INTO oc_holdings
+      (event_key, crime_name, status, cash_amount, items_json, summary, occurred_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(event_key) DO UPDATE SET crime_name = excluded.crime_name, status = excluded.status,
+        cash_amount = excluded.cash_amount, items_json = excluded.items_json, summary = excluded.summary,
+        occurred_at = COALESCE(excluded.occurred_at, oc_holdings.occurred_at), updated_at = CURRENT_TIMESTAMP`)
+      .bind(`api-oc:${crimeId}`, crimeName, holdingStatus, successful ? Math.max(0, asNumber(rewards.money)) : 0,
+        JSON.stringify(items.map(({ name, quantity }) => ({ name, quantity }))), summary, occurredAt).run();
+    if (result.meta.changes) imported += 1;
+  }
+  return imported;
+}
+
+async function syncRecentCrimes(db: D1Database, apiKey: string) {
+  const response = await tornFetch(`/faction/crimes?cat=completed&limit=${HISTORICAL_OC_PAGE}&offset=0&sort=DESC`, apiKey);
+  const crimes = Array.isArray(response.crimes) ? response.crimes.map(asObject) : [];
+  return { imported: await importCrimeBatch(db, apiKey, crimes), count: crimes.length };
+}
+
+async function backfillCrimes(db: D1Database, apiKey: string) {
+  const state = await cursor(db, "organized_crimes", HISTORICAL_OC_PAGE);
+  if (state.complete) return { imported: 0, offset: state.next_offset, complete: true };
+  const response = await tornFetch(`/faction/crimes?cat=completed&limit=${HISTORICAL_OC_PAGE}&offset=${state.next_offset}&sort=DESC`, apiKey);
+  const crimes = Array.isArray(response.crimes) ? response.crimes.map(asObject) : [];
+  const imported = await importCrimeBatch(db, apiKey, crimes);
+  const nextOffset = state.next_offset + crimes.length;
+  const complete = crimes.length < HISTORICAL_OC_PAGE;
+  await saveCursor(db, "organized_crimes", nextOffset, complete);
+  return { imported, offset: nextOffset, complete };
+}
+
 async function sync(db: D1Database, apiKey: string) {
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(apiKey)) throw new Error("Enter a valid Torn API key.");
   const factionResponse = await tornFetch("/user/faction", apiKey);
@@ -235,19 +370,35 @@ async function sync(db: D1Database, apiKey: string) {
   const factionId = asNumber(faction.id);
   const factionName = String(faction.name ?? "").trim();
   if (!factionId || factionName.toLowerCase() !== BLOOD_COVEN) throw new Error("This API key does not belong to a Blood Coven member.");
-  const warsResponse = await tornFetch(`/faction/${factionId}/rankedwars?limit=5`, apiKey);
-  const wars = (Array.isArray(warsResponse.rankedwars) ? warsResponse.rankedwars.map(asObject) : []).map((war): RankedWar => ({
-    war_id: asNumber(war.war_id), start: asNumber(war.start), end: war.end === null ? null : asNumber(war.end),
-    target: asNumber(war.target), winner: war.winner === null ? null : asNumber(war.winner),
-    factions: (Array.isArray(war.factions) ? war.factions.map(asObject) : []).map((participant) => ({
-      id: asNumber(participant.id), name: String(participant.name ?? "Unknown"), score: asNumber(participant.score), chain: asNumber(participant.chain),
-    })),
-  })).filter((war) => war.war_id > 0);
-  for (const war of wars.filter((item) => item.end).slice(0, 3)) await importCompletedWar(db, apiKey, factionId, war);
-  const current = wars.find((war) => war.end === null);
+
+  const recentResponse = await tornFetch(`/faction/${factionId}/rankedwars?limit=20&offset=0`, apiKey);
+  const recentWars = parseRankedWars(recentResponse);
+  for (const war of recentWars.filter((item) => item.end).slice(0, 3)) await importCompletedWar(db, apiKey, factionId, war);
+  const current = recentWars.find((war) => war.end === null);
   if (current) await trackActiveWar(db, apiKey, factionId, current);
   else await db.prepare("DELETE FROM active_war").run();
-  return { ...(await status(db)), faction: { id: factionId, name: factionName }, syncedAt: new Date().toISOString() };
+
+  const warnings: string[] = [];
+  let warBackfill = { imported: 0, offset: 0, complete: false };
+  try { warBackfill = await backfillWars(db, apiKey, factionId); }
+  catch (error) { warnings.push(`Historical war backfill: ${error instanceof Error ? error.message : "unavailable"}`); }
+
+  let ocRecent = { imported: 0, count: 0 };
+  let ocBackfill = { imported: 0, offset: HISTORICAL_OC_PAGE, complete: false };
+  try {
+    ocRecent = await syncRecentCrimes(db, apiKey);
+    ocBackfill = await backfillCrimes(db, apiKey);
+  } catch (error) {
+    warnings.push(`OC history requires a Minimal-or-higher key with faction API access: ${error instanceof Error ? error.message : "unavailable"}`);
+  }
+
+  return {
+    ...(await status(db)),
+    faction: { id: factionId, name: factionName },
+    syncedAt: new Date().toISOString(),
+    history: { warBackfill, ocRecent, ocBackfill },
+    warnings,
+  };
 }
 
 export async function GET() {
