@@ -27,6 +27,11 @@ type ArmorySnapshotItem = { name: string; quantity: number; category: string };
 
 const BLOOD_COVEN_ID = 52984;
 const EVENT_JOURNAL_LIMIT = 5000;
+const EXPLICIT_OBSERVATION_PRIORITY = 2;
+const explicitObservationWins = `(member_balances.observed_at IS NULL
+  OR datetime(excluded.observed_at) > datetime(member_balances.observed_at)
+  OR (datetime(excluded.observed_at) = datetime(member_balances.observed_at)
+    AND excluded.observed_priority >= member_balances.observed_priority))`;
 const allowedTypes = new Set([
   "faction_news", "armory", "armory_movement", "armory_snapshot", "xanax_use", "faction_payout", "faction_deposit",
   "oc_credit", "oc_completion", "member_balance_change", "member_balance_snapshot", "ranked_war_report", "active_war",
@@ -255,15 +260,14 @@ async function importMemberBalance(db: D1Database, event: ReturnType<typeof clea
       const memberName = String(member.name ?? "").trim().slice(0, 80);
       const balance = asInteger(member.balance);
       if (!memberName || balance < 0) continue;
-      await db.prepare(`INSERT INTO member_balances (member_name, balance, observed_at) VALUES (?, ?, ?)
+      await db.prepare(`INSERT INTO member_balances (member_name, balance, observed_at, observed_priority)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(member_name) DO UPDATE SET
-          balance = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-            THEN excluded.balance ELSE member_balances.balance END,
-          observed_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-            THEN excluded.observed_at ELSE member_balances.observed_at END,
-          updated_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-            THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
-        .bind(memberName, balance, observedAtIso).run();
+          balance = CASE WHEN ${explicitObservationWins} THEN excluded.balance ELSE member_balances.balance END,
+          observed_at = CASE WHEN ${explicitObservationWins} THEN excluded.observed_at ELSE member_balances.observed_at END,
+          observed_priority = CASE WHEN ${explicitObservationWins} THEN excluded.observed_priority ELSE member_balances.observed_priority END,
+          updated_at = CASE WHEN ${explicitObservationWins} THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
+        .bind(memberName, balance, observedAtIso, EXPLICIT_OBSERVATION_PRIORITY).run();
     }
     return;
   }
