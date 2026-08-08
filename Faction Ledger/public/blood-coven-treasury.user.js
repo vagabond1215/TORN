@@ -1,14 +1,16 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.2.0
-// @description  Syncs Blood Coven balances, Armory inventory, OC history, and ranked-war activity to the private treasury.
+// @version      1.3.0
+// @description  Shares Blood Coven balance, Armory, OC, and ranked-war observations between verified faction users and the private treasury.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
 // @match        https://faction-ledger-torn.vagabond1215.chatgpt.site/*
 // @icon         https://www.torn.com/favicon.ico
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_xmlhttpRequest
+// @connect      faction-ledger-torn.vagabond1215.chatgpt.site
 // @run-at       document-idle
 // @downloadURL  https://faction-ledger-torn.vagabond1215.chatgpt.site/blood-coven-treasury.user.js
 // @updateURL    https://faction-ledger-torn.vagabond1215.chatgpt.site/blood-coven-treasury.user.js
@@ -21,8 +23,13 @@
   const CHANNEL = "blood-coven-treasury-bridge-v1";
   const QUEUE_KEY = "blood-coven-treasury-events-v1";
   const BALANCE_STORE = "blood-coven-armory-balance-v1";
+  const SERVER_BALANCE_STORE = "blood-coven-server-balance-v1";
+  const SYNC_TOKEN_KEY = "blood-coven-script-sync-token-v1";
   const SCANNER_POSITION = "blood-coven-scanner-position-v1";
   const MAX_QUEUE = 2000;
+  let directSyncTimer = 0;
+  let directSyncInFlight = false;
+  let lastSyncAuthNotice = 0;
 
   function normalize(value) {
     return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -55,6 +62,17 @@
     GM_setValue(QUEUE_KEY, unique.reverse());
   }
 
+  function syncToken() {
+    const value = String(GM_getValue(SYNC_TOKEN_KEY, "") ?? "");
+    return /^bc1\.[a-f0-9]{32}\.[a-f0-9]{64}$/i.test(value) ? value : "";
+  }
+
+  function scheduleDirectSync(delay = 350) {
+    if (location.origin !== "https://www.torn.com" || !syncToken()) return;
+    window.clearTimeout(directSyncTimer);
+    directSyncTimer = window.setTimeout(() => { void directSync(); }, delay);
+  }
+
   function addEvent(eventType, category, summary, payload = {}, stableKey = "", occurredAtOverride = "") {
     const cleanSummary = normalize(summary).slice(0, 500);
     if (!cleanSummary) return false;
@@ -64,6 +82,7 @@
     if (current.some((event) => event.eventKey === eventKey)) return false;
     current.push({ eventKey, eventType, category, occurredAt, summary: cleanSummary, sourceUrl: location.href, payload });
     saveQueue(current);
+    scheduleDirectSync();
     return true;
   }
 
@@ -140,19 +159,20 @@
       return;
     }
 
-    match = text.match(/^(.+?) increased (.+?)'s Blood Coven money balance by \$([\d,]+) from \$([\d,]+) to \$([\d,]+) as (.+?)(\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{2})$/i);
+    match = text.match(/^(.+?) (increased|decreased) (.+?)'s Blood Coven money balance by \$([\d,]+) from \$([\d,]+) to \$([\d,]+) as (.+?)(\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{2})$/i);
     if (match) {
-      const detail = normalize(match[6]);
-      addEvent("oc_credit", "funds", text, {
-        actorName: normalize(match[1]), memberName: normalize(match[2]), amount: moneyValue(match[3]),
-        oldBalance: moneyValue(match[4]), newBalance: moneyValue(match[5]), detail, direction: "credit", source: "oc",
+      const direction = match[2].toLowerCase() === "decreased" ? "decrease" : "increase";
+      const detail = normalize(match[7]);
+      addEvent("member_balance_change", "funds", text, {
+        actorName: normalize(match[1]), memberName: normalize(match[3]), amount: moneyValue(match[4]),
+        oldBalance: moneyValue(match[5]), newBalance: moneyValue(match[6]), detail, direction,
       });
-      const oc = detail.match(/their ([\d.]+)% cut .*? in the faction's (.+?) scenario/i);
+      const oc = direction === "increase" ? detail.match(/their ([\d.]+)% cut .*? in the faction's (.+?) scenario/i) : null;
       if (oc) {
         const percent = Number(oc[1]);
         const crimeName = normalize(oc[2]);
-        const cashAmount = percent > 0 ? Math.round(moneyValue(match[3]) * 100 / percent) : 0;
-        const completedAt = `${match[7]} ${match[8]}`;
+        const cashAmount = percent > 0 ? Math.round(moneyValue(match[4]) * 100 / percent) : 0;
+        const completedAt = `${match[8]} ${match[9]}`;
         addEvent("oc_completion", "funds", `${crimeName} completed and was distributed for approximately $${cashAmount.toLocaleString("en-US")} ${completedAt}`, {
           crimeName, success: true, status: "distributed", cashAmount, items: [], source: "funds",
         }, hash(`${crimeName}|${completedAt}`));
@@ -200,8 +220,8 @@
     }
     if (members.size === 0) return 0;
     const snapshot = Array.from(members, ([name, balance]) => ({ name, balance })).sort((a, b) => a.name.localeCompare(b.name));
-    const minute = Math.floor(Date.now() / 60_000);
-    addEvent("member_balance_snapshot", "funds", `Faction balance snapshot (${snapshot.length} members)`, { members: snapshot }, `${hash(JSON.stringify(snapshot))}:${minute}`);
+    const bucket = Math.floor(Date.now() / 300_000);
+    addEvent("member_balance_snapshot", "funds", `Faction balance snapshot (${snapshot.length} members)`, { members: snapshot }, `${hash(JSON.stringify(snapshot))}:${bucket}`);
     return snapshot.length;
   }
 
@@ -220,10 +240,10 @@
     if (text.length < 12 || text.length > 5000 || !/(success|successful|completed|reward|received|earned|failed|failure)/i.test(text)) return false;
     const heading = row.querySelector("h2, h3, h4, strong, [class*='title'], [class*='name'], [class*='scenario']");
     const crimeName = normalize(heading?.textContent || text.split(/(?:success|successful|completed|failed|failure)/i)[0]).slice(0, 100) || "Organized crime";
-    const cashValues = Array.from(text.matchAll(/\$([\d,]+)/g)).map((match) => moneyValue(match[1]));
+    const cashValues = Array.from(text.matchAll(/\$([\d,]+)/g)).map((item) => moneyValue(item[1]));
     const itemMatches = [
-      ...Array.from(text.matchAll(/(\d+)\s*x\s+([A-Za-z][A-Za-z0-9 '&-]{2,70}?)(?=,|\.|\$|\d{2}:|$)/gi)).map((match) => ({ quantity: Number(match[1]), name: normalize(match[2]) })),
-      ...Array.from(text.matchAll(/([A-Za-z][A-Za-z0-9 '&-]{2,70}?)\s*x\s*(\d+)(?=,|\.|\$|\d{2}:|$)/gi)).map((match) => ({ quantity: Number(match[2]), name: normalize(match[1]) })),
+      ...Array.from(text.matchAll(/(\d+)\s*x\s+([A-Za-z][A-Za-z0-9 '&-]{2,70}?)(?=,|\.|\$|\d{2}:|$)/gi)).map((item) => ({ quantity: Number(item[1]), name: normalize(item[2]) })),
+      ...Array.from(text.matchAll(/([A-Za-z][A-Za-z0-9 '&-]{2,70}?)\s*x\s*(\d+)(?=,|\.|\$|\d{2}:|$)/gi)).map((item) => ({ quantity: Number(item[2]), name: normalize(item[1]) })),
     ];
     const items = Array.from(new Map(itemMatches.filter((item) => item.quantity > 0).map((item) => [item.name.toLowerCase(), item])).values());
     const crimeId = crimeIdFromRow(row);
@@ -306,7 +326,8 @@
     const items = Array.from(found.values()).sort((a, b) => a.name.localeCompare(b.name));
     if (!items.length) return { category, items: 0 };
     const observedAt = new Date().toISOString();
-    addEvent("armory_snapshot", "armory", `Armory ${category} snapshot (${items.length} item types)`, { category, items }, `snapshot:${category}:${Date.now()}`, observedAt);
+    const bucket = Math.floor(Date.now() / 300_000);
+    addEvent("armory_snapshot", "armory", `Armory ${category} snapshot (${items.length} item types)`, { category, items }, `snapshot:${category}:${hash(JSON.stringify(items))}:${bucket}`, observedAt);
     return { category, items: items.length };
   }
 
@@ -340,6 +361,7 @@
       source: "armory",
       updatedAt: new Date().toISOString(),
     });
+    scheduleDirectSync();
     return true;
   }
 
@@ -371,9 +393,24 @@
     addFactionBalance();
   }
 
-  function balanceCache() {
+  function armoryBalanceCache() {
     const value = GM_getValue(BALANCE_STORE, null);
     return value && typeof value === "object" && value.source === "armory" ? value : null;
+  }
+
+  function serverBalanceCache() {
+    const value = GM_getValue(SERVER_BALANCE_STORE, null);
+    return value && typeof value === "object" && value.source === "server" ? value : null;
+  }
+
+  function balanceCache() {
+    const local = armoryBalanceCache();
+    const server = serverBalanceCache();
+    if (!local) return server;
+    if (!server) return local;
+    const localTime = Date.parse(local.updatedAt ?? "") || 0;
+    const serverTime = Date.parse(server.updatedAt ?? "") || 0;
+    return serverTime >= localTime ? server : local;
   }
 
   function formatBalance(value, compact) {
@@ -441,7 +478,7 @@
     const cached = balanceCache();
     const amount = formatBalance(cached?.balance, narrow);
     entry.querySelector(".bc-balance-value").textContent = amount;
-    entry.title = cached?.memberName ? `${cached.memberName}'s Blood Coven balance — click to request a payout` : "Visit the Blood Coven Armory once to load your faction balance";
+    entry.title = cached?.memberName ? `${cached.memberName}'s Blood Coven balance — click to request a payout` : cached?.source === "server" ? "Blood Coven balance synchronized from the faction ledger" : "Visit the Blood Coven Armory once or verify the balance page to load your faction balance";
     entry.setAttribute("aria-label", `Faction balance ${amount}. Request faction balance.`);
     if (narrow) pointsLink.parentNode.insertBefore(entry, pointsLink);
     else moneyLink.parentNode.insertBefore(entry, moneyLink.nextSibling);
@@ -489,7 +526,7 @@
     const cached = balanceCache();
     const amount = formatBalance(cached?.balance, false);
     entry.querySelector(".bc-balance-value").textContent = amount;
-    entry.title = cached ? "Blood Coven Armory balance" : "Visit the Blood Coven Armory once to load your faction balance";
+    entry.title = cached?.source === "server" ? "Blood Coven balance synchronized from the faction ledger" : cached ? "Blood Coven Armory balance" : "Open the Blood Coven balance page to connect live sync";
     entry.setAttribute("aria-label", `Faction balance ${amount}. Request faction balance.`);
     moneyRow.parentNode.insertBefore(entry, moneyRow.nextSibling);
   }
@@ -500,20 +537,91 @@
     addClassicFactionBalance();
   }
 
+  function directRequest(method, path, body) {
+    return new Promise((resolve, reject) => {
+      const token = syncToken();
+      if (!token) { reject(new Error("Userscript sync is not connected.")); return; }
+      GM_xmlhttpRequest({
+        method,
+        url: `${TREASURY_ORIGIN}${path}`,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        data: body ? JSON.stringify(body) : undefined,
+        timeout: 12_000,
+        onload(response) {
+          let payload = {};
+          try { payload = response.responseText ? JSON.parse(response.responseText) : {}; } catch { payload = {}; }
+          if (response.status >= 200 && response.status < 300) { resolve(payload); return; }
+          const error = new Error(payload.error || `Treasury sync failed (${response.status}).`);
+          error.status = response.status;
+          reject(error);
+        },
+        ontimeout() { reject(new Error("Treasury sync timed out.")); },
+        onerror() { reject(new Error("Treasury sync could not reach the server.")); },
+      });
+    });
+  }
+
+  function applyServerBalance(payload) {
+    const balance = Number(payload?.balance);
+    const memberName = normalize(payload?.member?.name);
+    if (!Number.isSafeInteger(balance) || balance < 0 || balance > 1_000_000_000_000 || !memberName) return;
+    const updatedAt = String(payload.observedAt || payload.updatedAt || payload.serverTime || new Date().toISOString());
+    GM_setValue(SERVER_BALANCE_STORE, { balance, memberName, source: "server", updatedAt });
+    addFactionBalance();
+  }
+
+  async function directSync() {
+    if (location.origin !== "https://www.torn.com" || directSyncInFlight || !syncToken()) return false;
+    directSyncInFlight = true;
+    try {
+      const pending = queue().slice(0, 100);
+      if (pending.length) {
+        const imported = await directRequest("POST", "/api/torn-browser", { events: pending });
+        const accepted = new Set(Array.isArray(imported.acceptedKeys) ? imported.acceptedKeys.map(String) : []);
+        if (accepted.size) saveQueue(queue().filter((item) => !accepted.has(item.eventKey)));
+      }
+      const state = await directRequest("GET", "/api/script-sync");
+      applyServerBalance(state);
+      if (queue().length) scheduleDirectSync(900);
+      return true;
+    } catch (error) {
+      if (Number(error?.status) === 401) {
+        GM_setValue(SYNC_TOKEN_KEY, "");
+        const now = Date.now();
+        if (now - lastSyncAuthNotice > 60_000) {
+          lastSyncAuthNotice = now;
+          scannerToast("Blood Coven live sync needs to be reconnected. Open the balance page and verify membership.", true);
+        }
+      }
+      return false;
+    } finally {
+      directSyncInFlight = false;
+    }
+  }
+
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.2.0", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.3.0", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {
     function sendReady() {
-      postToTreasury("ready", { pendingCount: queue().length });
-      postToTreasury("armoryBalance", { balance: balanceCache() });
+      postToTreasury("ready", { pendingCount: queue().length, syncTokenReady: Boolean(syncToken()) });
+      postToTreasury("armoryBalance", { balance: armoryBalanceCache() });
       const events = queue().slice(0, 100);
       if (events.length) postToTreasury("events", { events });
     }
     window.addEventListener("message", (event) => {
       if (event.origin !== TREASURY_ORIGIN || event.data?.channel !== CHANNEL) return;
       if (event.data.kind === "ping") sendReady();
+      if (event.data.kind === "installSyncToken" && /^bc1\.[a-f0-9]{32}\.[a-f0-9]{64}$/i.test(String(event.data.token ?? ""))) {
+        GM_setValue(SYNC_TOKEN_KEY, String(event.data.token));
+        postToTreasury("syncTokenInstalled");
+        sendReady();
+      }
       if (event.data.kind === "ack" && Array.isArray(event.data.eventKeys)) {
         const accepted = new Set(event.data.eventKeys.map(String));
         saveQueue(queue().filter((item) => !accepted.has(item.eventKey)));
@@ -558,12 +666,13 @@
     if (armory.items) details.push(`${armory.items} ${armory.category} item types`);
     if (ocs) details.push(`${ocs} OC record${ocs === 1 ? "" : "s"}`);
     if (war) details.push("war report");
-    if (!added) {
-      scannerToast(`Scan complete: no new parsable records found. Queue: ${after}.`, true);
+    if (syncToken()) {
+      scheduleDirectSync(0);
+      scannerToast(`Scan complete: ${details.join(" · ")}. Queue: ${after}. Live sync is sending and refreshing your balance.`);
       return;
     }
-    const bridge = window.open(TREASURY_ORIGIN, "blood-coven-treasury-sync", "popup=yes,width=620,height=760,resizable=yes,scrollbars=yes");
-    scannerToast(`Scan complete: ${details.join(" · ")}. Queue: ${after}.${bridge ? " Treasury bridge opened to upload." : " Open the Treasury to upload."}`, !bridge);
+    const bridge = window.open(`${TREASURY_ORIGIN}/balance`, "blood-coven-balance-request", "popup=yes,width=520,height=740,resizable=yes,scrollbars=yes");
+    scannerToast(`Scan complete: ${details.join(" · ")}. Queue: ${after}. ${bridge ? "Verify membership in the balance window once to enable background faction sync." : "Open the Blood Coven balance page and verify membership to enable background faction sync."}`, !bridge);
   }
 
   function ensureScannerButton() {
@@ -572,7 +681,7 @@
     button.id = "blood-coven-manual-scan";
     button.type = "button";
     button.textContent = "BC ↻";
-    button.title = "Drag to move. Click to scan this Torn page and upload usable Treasury data.";
+    button.title = "Drag to move. Click to scan this Torn page and synchronize usable faction data.";
     button.setAttribute("aria-label", "Scan Torn page for Blood Coven Treasury data");
     Object.assign(button.style, {
       position: "fixed", zIndex: "2147483646", width: "48px", height: "48px", borderRadius: "50%",
@@ -628,5 +737,7 @@
   };
   new MutationObserver(scheduleScan).observe(document.documentElement, { childList: true, subtree: true });
   scheduleScan();
+  scheduleDirectSync(1200);
   window.setInterval(scanTorn, 30_000);
+  window.setInterval(() => { void directSync(); }, 15_000);
 })();
