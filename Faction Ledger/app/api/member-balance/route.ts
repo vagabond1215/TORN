@@ -15,6 +15,13 @@ type BalanceRow = {
   updated_at: string;
 };
 
+type VerifiedMember = {
+  memberId: number;
+  memberName: string;
+  factionId: number;
+  factionName: string;
+};
+
 const TORN_API = "https://api.torn.com/v2";
 const BLOOD_COVEN_ID = 52984;
 const EXPLICIT_OBSERVATION_PRIORITY = 2;
@@ -42,30 +49,35 @@ async function tornFetch(path: string, apiKey: string) {
   return payload;
 }
 
-async function verifyMember(apiKey: string) {
+async function verifyMember(apiKey: string): Promise<VerifiedMember> {
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(apiKey)) throw new Error("Enter a valid Torn Public API key.");
   const [basicPayload, factionPayload] = await Promise.all([tornFetch("/user/basic", apiKey), tornFetch("/user/faction", apiKey)]);
   const profile = asObject(basicPayload.profile);
   const faction = asObject(factionPayload.faction);
   const memberId = asNumber(profile.id ?? basicPayload.id);
   const memberName = String(profile.name ?? basicPayload.name ?? "").trim().slice(0, 80);
+  const factionId = asNumber(faction.id);
+  const factionName = String(faction.name ?? "").trim().slice(0, 100);
   if (!memberId || !memberName) throw new Error("Torn did not return a usable player identity.");
-  if (asNumber(faction.id) !== BLOOD_COVEN_ID || String(faction.name ?? "").trim().toLowerCase() !== "blood coven") {
-    throw new Error("This key does not belong to a current Blood Coven member.");
+  if (factionId !== BLOOD_COVEN_ID || factionName.toLowerCase() !== "blood coven") {
+    throw new Error(factionId
+      ? `This key currently belongs to ${factionName || `faction #${factionId}`}, not Blood Coven.`
+      : "This key does not currently belong to a faction.");
   }
-  return { memberId, memberName };
+  return { memberId, memberName, factionId, factionName };
 }
 
-async function memberSnapshot(db: D1Database, memberId: number, memberName: string) {
+async function memberSnapshot(db: D1Database, member: VerifiedMember) {
   await db.prepare("UPDATE member_balances SET member_id = ? WHERE member_name = ? COLLATE NOCASE")
-    .bind(memberId, memberName).run();
-  const balance = await db.prepare("SELECT * FROM member_balances WHERE member_name = ? COLLATE NOCASE").bind(memberName).first<BalanceRow>();
+    .bind(member.memberId, member.memberName).run();
+  const balance = await db.prepare("SELECT * FROM member_balances WHERE member_name = ? COLLATE NOCASE").bind(member.memberName).first<BalanceRow>();
   const requests = await db.prepare(`SELECT id, amount, status, note, delivery_preference AS deliveryPreference, created_at AS createdAt, updated_at AS updatedAt
-    FROM payout_requests WHERE member_id = ? ORDER BY created_at DESC LIMIT 10`).bind(memberId).all();
+    FROM payout_requests WHERE member_id = ? ORDER BY created_at DESC LIMIT 10`).bind(member.memberId).all();
   const entries = await db.prepare(`SELECT amount, kind, source, summary, occurred_at AS occurredAt, created_at AS createdAt
-    FROM member_balance_entries WHERE member_name = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 20`).bind(memberName).all();
+    FROM member_balance_entries WHERE member_name = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 20`).bind(member.memberName).all();
   return {
-    member: { id: memberId, name: memberName },
+    member: { id: member.memberId, name: member.memberName },
+    faction: { id: member.factionId, name: member.factionName },
     balance: balance?.balance ?? 0,
     earnedTotal: balance?.earned_total ?? 0,
     paidTotal: balance?.paid_total ?? 0,
@@ -145,10 +157,10 @@ export async function POST(request: Request) {
         }
         acceptedKeys.push(eventKey);
       }
-      return Response.json({ acceptedKeys, ...(await memberSnapshot(db, member.memberId, member.memberName)) });
+      return Response.json({ acceptedKeys, ...(await memberSnapshot(db, member)) });
     }
     if (action === "request") {
-      const current = await memberSnapshot(db, member.memberId, member.memberName);
+      const current = await memberSnapshot(db, member);
       const amount = asNumber(payload.amount);
       if (amount <= 0 || amount > current.balance) throw new Error("Request an amount up to your available balance.");
       const pending = await db.prepare("SELECT id FROM payout_requests WHERE member_id = ? AND status IN ('pending', 'approved') LIMIT 1").bind(member.memberId).first();
@@ -163,13 +175,16 @@ export async function POST(request: Request) {
     } else if (action !== "verify") {
       return Response.json({ error: "Unknown action." }, { status: 400 });
     }
-    const result = await memberSnapshot(db, member.memberId, member.memberName);
+    const result = await memberSnapshot(db, member);
     if (action === "verify" && payload.issueSyncToken === true) {
-      return Response.json({ ...result, syncToken: await issueScriptSyncToken(db, member.memberId, member.memberName) });
+      return Response.json({
+        ...result,
+        syncToken: await issueScriptSyncToken(db, member.memberId, member.memberName, member.factionId, member.factionName),
+      });
     }
     return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to verify this balance.";
-    return Response.json({ error: message }, { status: /valid|belong|identity|amount|already|preference|Torn/i.test(message) ? 400 : 500 });
+    return Response.json({ error: message }, { status: /valid|belong|identity|amount|already|preference|Torn|faction/i.test(message) ? 400 : 500 });
   }
 }
