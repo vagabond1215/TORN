@@ -23,6 +23,8 @@ export async function GET(request: Request) {
       .bind(actor.memberId, actor.memberName, actor.memberId).first<BalanceRow>();
     return Response.json({
       member: { id: actor.memberId, name: actor.memberName },
+      faction: { id: actor.factionId, name: actor.factionName },
+      membershipVerifiedAt: actor.lastVerifiedAt,
       balance: row?.balance ?? 0,
       observedAt: row?.observed_at ?? null,
       updatedAt: row?.updated_at ?? null,
@@ -30,6 +32,13 @@ export async function GET(request: Request) {
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to synchronize the userscript.";
-    return Response.json({ error: message }, { status: error instanceof ScriptSyncAccessError ? 401 : 500 });
+    if (error instanceof ScriptSyncAccessError) {
+      return Response.json({
+        error: message,
+        code: error.code,
+        currentFaction: error.currentFaction,
+      }, { status: error.status });
+    }
+    return Response.json({ error: message }, { status: 500 });
   }
 }
