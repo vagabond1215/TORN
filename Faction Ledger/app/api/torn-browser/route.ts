@@ -75,6 +75,40 @@ async function ensureSchema(db: D1Database) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_armory_items_category_name ON armory_items(category, item_name)"),
+    db.prepare(`CREATE TABLE IF NOT EXISTS armory_item_effects (
+      event_key TEXT NOT NULL,
+      item_name TEXT NOT NULL COLLATE NOCASE,
+      delta INTEGER NOT NULL DEFAULT 0,
+      category TEXT NOT NULL DEFAULT 'other',
+      source TEXT NOT NULL DEFAULT 'activity',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (event_key, item_name)
+    )`),
+    db.prepare(`INSERT OR IGNORE INTO armory_item_effects (event_key, item_name, delta, category, source)
+      SELECT event_key,
+        CASE WHEN event_type = 'xanax_use' THEN COALESCE(NULLIF(TRIM(json_extract(payload_json, '$.item')), ''), 'Xanax')
+          ELSE TRIM(json_extract(payload_json, '$.item')) END,
+        0, 'legacy', 'legacy'
+      FROM torn_browser_events
+      WHERE event_type IN ('armory_movement', 'xanax_use')
+        AND (event_type = 'xanax_use' OR NULLIF(TRIM(json_extract(payload_json, '$.item')), '') IS NOT NULL)`),
+    db.prepare(`INSERT OR IGNORE INTO armory_item_effects (event_key, item_name, delta, category, source)
+      SELECT events.event_key, TRIM(json_extract(item.value, '$.name')), 0, 'legacy', 'legacy'
+      FROM torn_browser_events AS events, json_each(json_extract(events.payload_json, '$.items')) AS item
+      WHERE events.event_type = 'oc_completion'
+        AND NULLIF(TRIM(json_extract(item.value, '$.name')), '') IS NOT NULL`),
+    db.prepare(`CREATE TRIGGER IF NOT EXISTS apply_armory_item_effect
+      AFTER INSERT ON armory_item_effects
+      WHEN NEW.delta != 0
+      BEGIN
+        INSERT INTO armory_items (item_name, category, quantity, source)
+        VALUES (NEW.item_name, NEW.category, MAX(0, NEW.delta), NEW.source)
+        ON CONFLICT(item_name) DO UPDATE SET
+          quantity = MAX(0, armory_items.quantity + NEW.delta),
+          category = NEW.category,
+          source = NEW.source,
+          updated_at = CURRENT_TIMESTAMP;
+      END`),
   ]);
 }
 
@@ -183,15 +217,24 @@ async function importWarReport(db: D1Database, event: ReturnType<typeof cleanEve
 async function importMemberBalance(db: D1Database, event: ReturnType<typeof cleanEvent>) {
   if (event.eventType === "member_balance_snapshot") {
     await ensureMemberBalanceSchema(db);
+    const observedAt = Date.parse(event.occurredAt ?? "");
+    if (!Number.isFinite(observedAt) || observedAt > Date.now() + 5 * 60 * 1000) return;
+    const observedAtIso = new Date(observedAt).toISOString();
     const members = Array.isArray(event.payload.members) ? event.payload.members.slice(0, 250) : [];
     for (const rawMember of members) {
       const member = asObject(rawMember);
       const memberName = String(member.name ?? "").trim().slice(0, 80);
       const balance = asInteger(member.balance);
       if (!memberName || balance < 0) continue;
-      await db.prepare(`INSERT INTO member_balances (member_name, balance) VALUES (?, ?)
-        ON CONFLICT(member_name) DO UPDATE SET balance = excluded.balance, updated_at = CURRENT_TIMESTAMP`)
-        .bind(memberName, balance).run();
+      await db.prepare(`INSERT INTO member_balances (member_name, balance, observed_at) VALUES (?, ?, ?)
+        ON CONFLICT(member_name) DO UPDATE SET
+          balance = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+            THEN excluded.balance ELSE member_balances.balance END,
+          observed_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+            THEN excluded.observed_at ELSE member_balances.observed_at END,
+          updated_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+            THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
+        .bind(memberName, balance, observedAtIso).run();
     }
     return;
   }
@@ -242,10 +285,9 @@ async function importOcHolding(db: D1Database, event: ReturnType<typeof cleanEve
     (event_key, crime_name, status, cash_amount, items_json, summary, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .bind(event.eventKey, crimeName, status, cashAmount, JSON.stringify(items), event.summary, event.occurredAt).run();
   for (const item of items) {
-    await db.prepare(`INSERT INTO armory_items (item_name, category, quantity, source) VALUES (?, ?, ?, 'oc')
-      ON CONFLICT(item_name) DO UPDATE SET quantity = armory_items.quantity + excluded.quantity,
-      category = excluded.category, source = 'oc', updated_at = CURRENT_TIMESTAMP`)
-      .bind(item.name, armoryCategory(item.name), item.quantity).run();
+    await db.prepare(`INSERT OR IGNORE INTO armory_item_effects (event_key, item_name, delta, category, source)
+      VALUES (?, ?, ?, ?, 'oc')`)
+      .bind(event.eventKey, item.name, item.quantity, armoryCategory(item.name)).run();
   }
 }
 
@@ -256,10 +298,9 @@ async function importArmoryMovement(db: D1Database, event: ReturnType<typeof cle
   const action = String(event.payload.action ?? "used").toLowerCase();
   if (!itemName) return;
   const delta = ["deposited", "returned"].includes(action) ? quantity : -quantity;
-  await db.prepare(`INSERT INTO armory_items (item_name, category, quantity, source) VALUES (?, ?, MAX(0, ?), 'activity')
-    ON CONFLICT(item_name) DO UPDATE SET quantity = MAX(0, armory_items.quantity + ?),
-    category = excluded.category, updated_at = CURRENT_TIMESTAMP`)
-    .bind(itemName, armoryCategory(itemName), delta, delta).run();
+  await db.prepare(`INSERT OR IGNORE INTO armory_item_effects (event_key, item_name, delta, category, source)
+    VALUES (?, ?, ?, ?, 'activity')`)
+    .bind(event.eventKey, itemName, delta, armoryCategory(itemName)).run();
 }
 
 export async function GET() {
