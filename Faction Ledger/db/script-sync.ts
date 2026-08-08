@@ -26,7 +26,7 @@ export async function ensureScriptSyncSchema(db: D1Database) {
       token_hash TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       last_used_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      expires_at TEXT NOT NULL DEFAULT (datetime(CURRENT_TIMESTAMP, '+30 days')),
+      expires_at TEXT,
       revoked_at TEXT
     )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_script_sync_member ON script_sync_tokens(member_id, revoked_at, last_used_at DESC)"),
