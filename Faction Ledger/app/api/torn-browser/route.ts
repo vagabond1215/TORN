@@ -104,11 +104,6 @@ async function ensureSchema(db: D1Database) {
       FROM torn_browser_events
       WHERE event_type IN ('armory_movement', 'xanax_use')
         AND (event_type = 'xanax_use' OR NULLIF(TRIM(json_extract(payload_json, '$.item')), '') IS NOT NULL)`),
-    db.prepare(`INSERT OR IGNORE INTO armory_item_effects (event_key, item_name, delta, category, source)
-      SELECT events.event_key, TRIM(json_extract(item.value, '$.name')), 0, 'legacy', 'legacy'
-      FROM torn_browser_events AS events, json_each(json_extract(events.payload_json, '$.items')) AS item
-      WHERE events.event_type = 'oc_completion'
-        AND NULLIF(TRIM(json_extract(item.value, '$.name')), '') IS NOT NULL`),
     db.prepare("DROP TRIGGER IF EXISTS apply_armory_item_effect"),
     db.prepare(`CREATE TRIGGER apply_armory_item_effect
       AFTER INSERT ON armory_item_effects
@@ -161,7 +156,7 @@ function normalizeArmoryCategory(value: unknown, itemName = "") {
   if (/secondary/.test(category)) return "secondary";
   if (/melee/.test(category)) return "melee";
   if (/temp|temporary/.test(category)) return "temporary";
-  if (/armou?r/.test(category)) return "armor";
+  if (/\barmou?r\b/.test(category)) return "armor";
   if (/cloth/.test(category)) return "clothing";
   if (/medical|meds/.test(category)) return "medical";
   if (/drug/.test(category)) return "drugs";
@@ -307,6 +302,8 @@ async function importMemberBalance(db: D1Database, event: ReturnType<typeof clea
 
 async function importOcHolding(db: D1Database, event: ReturnType<typeof cleanEvent>) {
   if (event.eventType !== "oc_completion" || event.payload.success === false) return;
+  const crimeId = asInteger(event.payload.crimeId);
+  const holdingKey = crimeId > 0 ? `oc:${crimeId}` : event.eventKey;
   const crimeName = String(event.payload.crimeName ?? "Organized crime").trim().slice(0, 100) || "Organized crime";
   const cashAmount = Math.max(0, asInteger(event.payload.cashAmount));
   const status = event.payload.status === "distributed" ? "distributed" : "held";
@@ -319,12 +316,7 @@ async function importOcHolding(db: D1Database, event: ReturnType<typeof cleanEve
     ON CONFLICT(event_key) DO UPDATE SET crime_name = excluded.crime_name, status = excluded.status,
       cash_amount = excluded.cash_amount, items_json = excluded.items_json, summary = excluded.summary,
       occurred_at = COALESCE(excluded.occurred_at, oc_holdings.occurred_at), updated_at = CURRENT_TIMESTAMP`)
-    .bind(event.eventKey, crimeName, status, cashAmount, JSON.stringify(items), event.summary, event.occurredAt).run();
-  for (const item of items) {
-    await db.prepare(`INSERT OR IGNORE INTO armory_item_effects (event_key, item_name, delta, category, source)
-      VALUES (?, ?, ?, ?, 'oc')`)
-      .bind(event.eventKey, item.name, item.quantity, normalizeArmoryCategory(event.payload.itemCategory, item.name)).run();
-  }
+    .bind(holdingKey, crimeName, status, cashAmount, JSON.stringify(items), event.summary, event.occurredAt).run();
 }
 
 async function importArmoryMovement(db: D1Database, event: ReturnType<typeof cleanEvent>) {
