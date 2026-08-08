@@ -135,6 +135,10 @@ export default function MemberBalance() {
     setApiKey(""); setData(null); setAmount(""); setError(""); setNotice(""); setRestoring(false);
   }
 
+  const serverObservedAt = Date.parse(data?.observedAt ?? data?.updatedAt ?? "") || 0;
+  const localObservedAt = Date.parse(observedBalance?.updatedAt ?? "") || 0;
+  const displayBalance = data && observedBalance && localObservedAt > serverObservedAt ? observedBalance.balance : (data?.balance ?? observedBalance?.balance ?? 0);
+
   return <main className="member-shell">
     <header className="member-header"><h1>Blood Coven balance</h1>{data && <button className="text-button" onClick={disconnect}>Use another key</button>}</header>
     {restoring ? <section className="member-card member-loading">Loading balance...</section> : !data ? <form className="member-card" onSubmit={verify}>
@@ -144,11 +148,11 @@ export default function MemberBalance() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="button button-primary" disabled={saving || !apiKey}>{saving ? "Verifying..." : "Verify membership"}</button>
     </form> : <>
-      <section className="member-balance"><strong>{money.format(observedBalance?.balance ?? data.balance)}</strong></section>
+      <section className="member-balance"><strong>{money.format(displayBalance)}</strong></section>
       <section className="member-card balance-request-card">
         <h2>Balance Request</h2>
         <label className="field"><span>Delivery preference</span><select value={deliveryPreference} onChange={(event) => setDeliveryPreference(event.target.value as DeliveryPreference)}><option value="offline">Send if offline</option><option value="online">Send only if Online</option><option value="online_or_travel">Send if Online or Travelling</option></select></label>
-        <button type="button" className="button button-primary full-balance-button" disabled={saving || data.balance <= 0} onClick={() => void send("request", observedBalance?.balance ?? data.balance)}>{saving ? "Sending..." : "Request Full Balance"}</button>
+        <button type="button" className="button button-primary full-balance-button" disabled={saving || displayBalance <= 0} onClick={() => void send("request", displayBalance)}>{saving ? "Sending..." : "Request Full Balance"}</button>
         <div className="request-separator"><span>or request an amount</span></div>
         <form onSubmit={requestPartial}>
           <label className="field"><span>Amount</span><div className="money-input"><b>$</b><input inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} onBlur={() => { const value = parseMoney(amount); if (value > 0) setAmount(integer.format(value)); }} placeholder="0" required /></div></label>
