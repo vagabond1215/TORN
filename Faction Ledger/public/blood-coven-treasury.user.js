@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.3.0
+// @version      1.4.0
 // @description  Shares Blood Coven balance, Armory, OC, and ranked-war observations between verified faction users and the private treasury.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -25,7 +25,11 @@
   const BALANCE_STORE = "blood-coven-armory-balance-v1";
   const SERVER_BALANCE_STORE = "blood-coven-server-balance-v1";
   const SYNC_TOKEN_KEY = "blood-coven-script-sync-token-v1";
+  const SYNC_API_KEY_KEY = "blood-coven-script-sync-api-key-v1";
+  const SYNC_FACTION_KEY = "blood-coven-script-sync-faction-v1";
+  const SYNC_SIGNOUT_KEY = "blood-coven-script-sync-signout-v1";
   const SCANNER_POSITION = "blood-coven-scanner-position-v1";
+  const BLOOD_COVEN_ID = 52984;
   const MAX_QUEUE = 2000;
   let directSyncTimer = 0;
   let directSyncInFlight = false;
@@ -67,13 +71,71 @@
     return /^bc1\.[a-f0-9]{32}\.[a-f0-9]{64}$/i.test(value) ? value : "";
   }
 
+  function syncApiKey() {
+    const value = String(GM_getValue(SYNC_API_KEY_KEY, "") ?? "").trim();
+    return /^[A-Za-z0-9_-]{8,128}$/.test(value) ? value : "";
+  }
+
+  function syncFaction() {
+    const value = GM_getValue(SYNC_FACTION_KEY, null);
+    if (!value || typeof value !== "object") return null;
+    const id = Number(value.id);
+    const name = normalize(value.name);
+    return Number.isSafeInteger(id) && id > 0 && name ? { id, name } : null;
+  }
+
+  function syncSignout() {
+    const value = GM_getValue(SYNC_SIGNOUT_KEY, null);
+    return value && typeof value === "object" ? value : null;
+  }
+
+  function clearFactionState(message, currentFaction = null, code = "signed_out") {
+    saveQueue([]);
+    GM_setValue(BALANCE_STORE, null);
+    GM_setValue(SERVER_BALANCE_STORE, null);
+    GM_setValue(SYNC_TOKEN_KEY, "");
+    GM_setValue(SYNC_API_KEY_KEY, "");
+    GM_setValue(SYNC_FACTION_KEY, null);
+    GM_setValue(SYNC_SIGNOUT_KEY, {
+      code,
+      message: normalize(message) || "Faction sync was signed out.",
+      currentFaction: currentFaction && typeof currentFaction === "object" ? currentFaction : null,
+      at: new Date().toISOString(),
+    });
+    document.getElementById("blood-coven-faction-balance")?.remove();
+  }
+
+  function installSyncIdentity(token, apiKey, faction) {
+    const cleanToken = String(token ?? "");
+    const cleanApiKey = String(apiKey ?? "").trim();
+    const factionId = Number(faction?.id);
+    const factionName = normalize(faction?.name);
+    if (!/^bc1\.[a-f0-9]{32}\.[a-f0-9]{64}$/i.test(cleanToken)) return false;
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(cleanApiKey)) return false;
+    if (factionId !== BLOOD_COVEN_ID || factionName.toLowerCase() !== "blood coven") return false;
+
+    saveQueue([]);
+    GM_setValue(BALANCE_STORE, null);
+    GM_setValue(SERVER_BALANCE_STORE, null);
+    GM_setValue(SYNC_TOKEN_KEY, cleanToken);
+    GM_setValue(SYNC_API_KEY_KEY, cleanApiKey);
+    GM_setValue(SYNC_FACTION_KEY, { id: factionId, name: factionName });
+    GM_setValue(SYNC_SIGNOUT_KEY, null);
+    return true;
+  }
+
+  function syncBlocked() {
+    return Boolean(syncSignout() && !syncToken());
+  }
+
   function scheduleDirectSync(delay = 350) {
-    if (location.origin !== "https://www.torn.com" || !syncToken()) return;
+    if (location.origin !== "https://www.torn.com" || !syncToken() || !syncApiKey()) return;
     window.clearTimeout(directSyncTimer);
     directSyncTimer = window.setTimeout(() => { void directSync(); }, delay);
   }
 
   function addEvent(eventType, category, summary, payload = {}, stableKey = "", occurredAtOverride = "") {
+    if (syncBlocked()) return false;
     const cleanSummary = normalize(summary).slice(0, 500);
     if (!cleanSummary) return false;
     const occurredAt = occurredAtOverride || extractTimestamp(cleanSummary);
@@ -353,6 +415,7 @@
   }
 
   function scanArmoryBalance() {
+    if (syncBlocked()) return false;
     const pageText = normalize(document.body.innerText);
     const match = pageText.match(/You have \$[\d,]+(?:\.\d{1,2})? and a balance of \$([\d,]+(?:\.\d{1,2})?)/i);
     if (!match) return false;
@@ -388,6 +451,10 @@
   }
 
   function scanTorn() {
+    if (syncBlocked()) {
+      document.getElementById("blood-coven-faction-balance")?.remove();
+      return;
+    }
     scanFactionPage();
     scanRankedWarReport();
     addFactionBalance();
@@ -453,6 +520,7 @@
   }
 
   function addModernFactionBalance() {
+    if (syncBlocked()) return false;
     const moneyLink = resourceLink("Money");
     const pointsLink = resourceLink("Points");
     if (!moneyLink || !pointsLink || !moneyLink.parentNode || !pointsLink.parentNode) return false;
@@ -509,6 +577,7 @@
   }
 
   function addClassicFactionBalance() {
+    if (syncBlocked()) return;
     const moneyRow = findClassicMoneyRow();
     if (!moneyRow?.parentNode) return;
     const tagName = moneyRow.tagName === "LI" ? "li" : "div";
@@ -532,6 +601,10 @@
   }
 
   function addFactionBalance() {
+    if (syncBlocked()) {
+      document.getElementById("blood-coven-faction-balance")?.remove();
+      return;
+    }
     ensureBalanceStyles();
     if (addModernFactionBalance()) return;
     addClassicFactionBalance();
@@ -540,12 +613,14 @@
   function directRequest(method, path, body) {
     return new Promise((resolve, reject) => {
       const token = syncToken();
-      if (!token) { reject(new Error("Userscript sync is not connected.")); return; }
+      const apiKey = syncApiKey();
+      if (!token || !apiKey) { reject(new Error("Userscript sync is not connected.")); return; }
       GM_xmlhttpRequest({
         method,
         url: `${TREASURY_ORIGIN}${path}`,
         headers: {
           Authorization: `Bearer ${token}`,
+          "X-Torn-Api-Key": apiKey,
           Accept: "application/json",
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
@@ -557,6 +632,8 @@
           if (response.status >= 200 && response.status < 300) { resolve(payload); return; }
           const error = new Error(payload.error || `Treasury sync failed (${response.status}).`);
           error.status = response.status;
+          error.code = payload.code || "";
+          error.currentFaction = payload.currentFaction || null;
           reject(error);
         },
         ontimeout() { reject(new Error("Treasury sync timed out.")); },
@@ -566,6 +643,12 @@
   }
 
   function applyServerBalance(payload) {
+    const storedFaction = syncFaction();
+    const responseFactionId = Number(payload?.faction?.id);
+    if (storedFaction && responseFactionId && responseFactionId !== storedFaction.id) {
+      clearFactionState("The server returned a different faction identity, so the local Blood Coven cache was cleared.", payload?.faction ?? null, "faction_changed");
+      return;
+    }
     const balance = Number(payload?.balance);
     const memberName = normalize(payload?.member?.name);
     if (!Number.isSafeInteger(balance) || balance < 0 || balance > 1_000_000_000_000 || !memberName) return;
@@ -575,26 +658,42 @@
   }
 
   async function directSync() {
-    if (location.origin !== "https://www.torn.com" || directSyncInFlight || !syncToken()) return false;
+    if (location.origin !== "https://www.torn.com" || directSyncInFlight || !syncToken() || !syncApiKey()) return false;
     directSyncInFlight = true;
     try {
+      const state = await directRequest("GET", "/api/script-sync");
+      applyServerBalance(state);
+      if (!syncToken()) return false;
+
       const pending = queue().slice(0, 100);
       if (pending.length) {
         const imported = await directRequest("POST", "/api/torn-browser", { events: pending });
         const accepted = new Set(Array.isArray(imported.acceptedKeys) ? imported.acceptedKeys.map(String) : []);
         if (accepted.size) saveQueue(queue().filter((item) => !accepted.has(item.eventKey)));
       }
-      const state = await directRequest("GET", "/api/script-sync");
-      applyServerBalance(state);
       if (queue().length) scheduleDirectSync(900);
       return true;
     } catch (error) {
-      if (Number(error?.status) === 401) {
-        GM_setValue(SYNC_TOKEN_KEY, "");
+      const status = Number(error?.status);
+      if (status === 401) {
+        const currentFaction = error?.currentFaction && typeof error.currentFaction === "object" ? error.currentFaction : null;
+        clearFactionState(
+          error instanceof Error ? error.message : "Blood Coven membership changed; live sync was signed out.",
+          currentFaction,
+          String(error?.code || "invalid_session"),
+        );
         const now = Date.now();
         if (now - lastSyncAuthNotice > 60_000) {
           lastSyncAuthNotice = now;
-          scannerToast("Blood Coven live sync needs to be reconnected. Open the balance page and verify membership.", true);
+          scannerToast(currentFaction?.name
+            ? `Blood Coven sync signed out: Torn now reports ${normalize(currentFaction.name)}. Old faction cache and queued observations were cleared.`
+            : "Blood Coven sync signed out because membership could not be confirmed. Old faction cache and queued observations were cleared.", true);
+        }
+      } else if (status === 503) {
+        const now = Date.now();
+        if (now - lastSyncAuthNotice > 60_000) {
+          lastSyncAuthNotice = now;
+          scannerToast("Torn membership verification is temporarily unavailable. Existing local state was retained and sync will retry automatically.", true);
         }
       }
       return false;
@@ -604,22 +703,32 @@
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.3.0", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.4.0", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {
     function sendReady() {
-      postToTreasury("ready", { pendingCount: queue().length, syncTokenReady: Boolean(syncToken()) });
+      postToTreasury("ready", {
+        pendingCount: queue().length,
+        syncTokenReady: Boolean(syncToken() && syncApiKey()),
+        syncIdentityCleared: syncSignout(),
+      });
       postToTreasury("armoryBalance", { balance: armoryBalanceCache() });
-      const events = queue().slice(0, 100);
+      const events = syncBlocked() ? [] : queue().slice(0, 100);
       if (events.length) postToTreasury("events", { events });
     }
     window.addEventListener("message", (event) => {
       if (event.origin !== TREASURY_ORIGIN || event.data?.channel !== CHANNEL) return;
       if (event.data.kind === "ping") sendReady();
-      if (event.data.kind === "installSyncToken" && /^bc1\.[a-f0-9]{32}\.[a-f0-9]{64}$/i.test(String(event.data.token ?? ""))) {
-        GM_setValue(SYNC_TOKEN_KEY, String(event.data.token));
-        postToTreasury("syncTokenInstalled");
+      if (event.data.kind === "installSyncToken") {
+        if (installSyncIdentity(event.data.token, event.data.apiKey, event.data.faction)) {
+          postToTreasury("syncTokenInstalled");
+          sendReady();
+        }
+      }
+      if (event.data.kind === "clearSyncIdentity") {
+        clearFactionState(String(event.data.message ?? "Signed out from the Blood Coven balance page."), null, "manual_signout");
+        postToTreasury("syncIdentityCleared", { message: String(event.data.message ?? "Signed out.") });
         sendReady();
       }
       if (event.data.kind === "ack" && Array.isArray(event.data.eventKeys)) {
@@ -653,6 +762,12 @@
   }
 
   function manualScan() {
+    if (syncBlocked()) {
+      const signout = syncSignout();
+      const bridge = window.open(`${TREASURY_ORIGIN}/balance`, "blood-coven-balance-request", "popup=yes,width=520,height=740,resizable=yes,scrollbars=yes");
+      scannerToast(`${normalize(signout?.message) || "Faction sync is signed out."} ${bridge ? "Verify current Blood Coven membership in the balance window to start with a clean cache." : "Open the Blood Coven balance page to verify current membership."}`, true);
+      return;
+    }
     const before = queue().length;
     const ocs = scanCrimeCards(true);
     const armory = scanArmoryInventory(true);
@@ -666,7 +781,7 @@
     if (armory.items) details.push(`${armory.items} ${armory.category} item types`);
     if (ocs) details.push(`${ocs} OC record${ocs === 1 ? "" : "s"}`);
     if (war) details.push("war report");
-    if (syncToken()) {
+    if (syncToken() && syncApiKey()) {
       scheduleDirectSync(0);
       scannerToast(`Scan complete: ${details.join(" · ")}. Queue: ${after}. Live sync is sending and refreshing your balance.`);
       return;
