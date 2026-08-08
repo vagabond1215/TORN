@@ -1,5 +1,6 @@
 import { getD1 } from "../../../db";
-import { ensureMemberBalanceSchema, recordBalanceEvent } from "../../../db/member-balances";
+import { ensureMemberBalanceSchema, recordBalanceEvent, recordBalanceObservation } from "../../../db/member-balances";
+import { requireScriptSyncActor, ScriptSyncAccessError } from "../../../db/script-sync";
 import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
 type JsonObject = Record<string, unknown>;
@@ -28,7 +29,7 @@ const BLOOD_COVEN_ID = 52984;
 const EVENT_JOURNAL_LIMIT = 5000;
 const allowedTypes = new Set([
   "faction_news", "armory", "armory_movement", "armory_snapshot", "xanax_use", "faction_payout", "faction_deposit",
-  "oc_credit", "oc_completion", "member_balance_snapshot", "ranked_war_report", "active_war",
+  "oc_credit", "oc_completion", "member_balance_change", "member_balance_snapshot", "ranked_war_report", "active_war",
 ]);
 
 async function ensureSchema(db: D1Database) {
@@ -266,6 +267,24 @@ async function importMemberBalance(db: D1Database, event: ReturnType<typeof clea
     }
     return;
   }
+  if (event.eventType === "member_balance_change") {
+    await ensureMemberBalanceSchema(db);
+    const memberName = String(event.payload.memberName ?? "").trim().slice(0, 80);
+    const oldBalance = asInteger(event.payload.oldBalance);
+    const newBalance = asInteger(event.payload.newBalance);
+    const direction = String(event.payload.direction ?? (newBalance >= oldBalance ? "increase" : "decrease"));
+    if (!memberName || oldBalance < 0 || newBalance < 0 || !new Set(["increase", "decrease"]).has(direction)) return;
+    await recordBalanceObservation(db, {
+      eventKey: event.eventKey,
+      memberName,
+      oldBalance,
+      newBalance,
+      direction: direction as "increase" | "decrease",
+      summary: event.summary,
+      occurredAt: event.occurredAt,
+    });
+    return;
+  }
   if (event.eventType !== "oc_credit" && event.eventType !== "faction_payout") return;
   await ensureMemberBalanceSchema(db);
   const memberName = String(event.payload.memberName ?? event.payload.recipientName ?? "").trim().slice(0, 80);
@@ -284,7 +303,7 @@ async function importMemberBalance(db: D1Database, event: ReturnType<typeof clea
       explicitBalance: newBalance > 0 ? newBalance : undefined,
     });
   } else {
-    await recordBalanceEvent(db, {
+    const applied = await recordBalanceEvent(db, {
       eventKey: event.eventKey,
       memberName,
       amount,
@@ -293,10 +312,12 @@ async function importMemberBalance(db: D1Database, event: ReturnType<typeof clea
       summary: event.summary,
       occurredAt: event.occurredAt,
     });
-    await db.prepare(`UPDATE payout_requests SET status = 'paid', updated_at = CURRENT_TIMESTAMP
-      WHERE id = (SELECT id FROM payout_requests WHERE member_name = ? COLLATE NOCASE
-        AND status IN ('pending', 'approved') AND amount <= ? ORDER BY created_at ASC LIMIT 1)`)
-      .bind(memberName, amount).run();
+    if (applied) {
+      await db.prepare(`UPDATE payout_requests SET status = 'paid', updated_at = CURRENT_TIMESTAMP
+        WHERE id = (SELECT id FROM payout_requests WHERE member_name = ? COLLATE NOCASE
+          AND status IN ('pending', 'approved') AND amount <= ? ORDER BY created_at ASC LIMIT 1)`)
+        .bind(memberName, amount).run();
+    }
   }
 }
 
@@ -381,6 +402,14 @@ async function pruneEventJournal(db: D1Database) {
   )`).bind(EVENT_JOURNAL_LIMIT).run();
 }
 
+async function requireImporter(request: Request, db: D1Database) {
+  if ((request.headers.get("authorization") ?? "").startsWith("Bearer ")) {
+    const actor = await requireScriptSyncActor(request, db);
+    return { mode: "script" as const, actor };
+  }
+  return { mode: "leader" as const, actor: await requireTreasuryLeader(db) };
+}
+
 export async function GET() {
   try {
     const db = getD1();
@@ -400,12 +429,16 @@ export async function POST(request: Request) {
     const events = body.events.map(cleanEvent);
     const db = getD1();
     await ensureSchema(db);
-    await requireTreasuryLeader(db);
-    await db.batch(events.map((event) => db.prepare(`INSERT OR IGNORE INTO torn_browser_events
-      (event_key, event_type, category, occurred_at, summary, source_url, payload_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .bind(event.eventKey, event.eventType, event.category, event.occurredAt, event.summary, event.sourceUrl, event.payloadJson)));
+    const access = await requireImporter(request, db);
+    const newEvents: typeof events = [];
     for (const event of events) {
+      const inserted = await db.prepare(`INSERT OR IGNORE INTO torn_browser_events
+        (event_key, event_type, category, occurred_at, summary, source_url, payload_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .bind(event.eventKey, event.eventType, event.category, event.occurredAt, event.summary, event.sourceUrl, event.payloadJson).run();
+      if (inserted.meta.changes) newEvents.push(event);
+    }
+    for (const event of newEvents) {
       await importWarReport(db, event);
       await importMemberBalance(db, event);
       await importOcHolding(db, event);
@@ -413,9 +446,14 @@ export async function POST(request: Request) {
       await importArmorySnapshot(db, event);
     }
     await pruneEventJournal(db);
-    return Response.json({ acceptedKeys: events.map((event) => event.eventKey), ...(await snapshot(db)) });
+    const acceptedKeys = events.map((event) => event.eventKey);
+    if (access.mode === "script") return Response.json({ acceptedKeys, newEventCount: newEvents.length });
+    return Response.json({ acceptedKeys, newEventCount: newEvents.length, ...(await snapshot(db)) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to import browser events.";
-    return Response.json({ error: message }, { status: error instanceof TreasuryAccessError ? 403 : /invalid|incomplete|only|large|no browser|too many/i.test(message) ? 400 : 500 });
+    const status = error instanceof ScriptSyncAccessError ? 401
+      : error instanceof TreasuryAccessError ? 403
+        : /invalid|incomplete|only|large|no browser|too many/i.test(message) ? 400 : 500;
+    return Response.json({ error: message }, { status });
   }
 }
