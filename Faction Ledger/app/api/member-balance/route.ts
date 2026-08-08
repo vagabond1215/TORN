@@ -4,7 +4,15 @@ import { getChatGPTUser } from "../../chatgpt-auth";
 import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
 type JsonObject = Record<string, unknown>;
-type BalanceRow = { member_name: string; member_id: number | null; balance: number; earned_total: number; paid_total: number; updated_at: string };
+type BalanceRow = {
+  member_name: string;
+  member_id: number | null;
+  balance: number;
+  earned_total: number;
+  paid_total: number;
+  observed_at: string | null;
+  updated_at: string;
+};
 
 const TORN_API = "https://api.torn.com/v2";
 const BLOOD_COVEN_ID = 52984;
@@ -43,7 +51,7 @@ async function verifyMember(apiKey: string) {
 }
 
 async function memberSnapshot(db: D1Database, memberId: number, memberName: string) {
-  await db.prepare("UPDATE member_balances SET member_id = ?, updated_at = CURRENT_TIMESTAMP WHERE member_name = ? COLLATE NOCASE")
+  await db.prepare("UPDATE member_balances SET member_id = ? WHERE member_name = ? COLLATE NOCASE")
     .bind(memberId, memberName).run();
   const balance = await db.prepare("SELECT * FROM member_balances WHERE member_name = ? COLLATE NOCASE").bind(memberName).first<BalanceRow>();
   const requests = await db.prepare(`SELECT id, amount, status, note, delivery_preference AS deliveryPreference, created_at AS createdAt, updated_at AS updatedAt
@@ -55,6 +63,7 @@ async function memberSnapshot(db: D1Database, memberId: number, memberName: stri
     balance: balance?.balance ?? 0,
     earnedTotal: balance?.earned_total ?? 0,
     paidTotal: balance?.paid_total ?? 0,
+    observedAt: balance?.observed_at ?? null,
     updatedAt: balance?.updated_at ?? null,
     requests: requests.results,
     entries: entries.results,
@@ -67,7 +76,7 @@ export async function GET() {
     await ensureMemberBalanceSchema(db);
     await requireTreasuryLeader(db);
     const [balances, requests] = await Promise.all([
-      db.prepare("SELECT member_id AS memberId, member_name AS memberName, balance, earned_total AS earnedTotal, paid_total AS paidTotal, updated_at AS updatedAt FROM member_balances ORDER BY balance DESC, member_name ASC").all(),
+      db.prepare("SELECT member_id AS memberId, member_name AS memberName, balance, earned_total AS earnedTotal, paid_total AS paidTotal, observed_at AS observedAt, updated_at AS updatedAt FROM member_balances ORDER BY balance DESC, member_name ASC").all(),
       db.prepare("SELECT id, member_id AS memberId, member_name AS memberName, amount, status, note, delivery_preference AS deliveryPreference, created_at AS createdAt, updated_at AS updatedAt FROM payout_requests ORDER BY created_at DESC LIMIT 100").all(),
     ]);
     return Response.json({ balances: balances.results, requests: requests.results });
@@ -88,10 +97,16 @@ export async function POST(request: Request) {
     const observedAt = Date.parse(String(payload.observedAt ?? ""));
     if (payload.balanceSource === "armory" && Number.isSafeInteger(observedBalance) && observedBalance >= 0 && observedBalance <= 1_000_000_000_000
       && Number.isFinite(observedAt) && Math.abs(Date.now() - observedAt) <= 7 * 24 * 60 * 60 * 1000) {
-      await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance)
-        VALUES (?, ?, ?) ON CONFLICT(member_name) DO UPDATE SET member_id = excluded.member_id,
-        balance = excluded.balance, updated_at = CURRENT_TIMESTAMP`)
-        .bind(member.memberName, member.memberId, observedBalance).run();
+      const observedAtIso = new Date(observedAt).toISOString();
+      await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, observed_at)
+        VALUES (?, ?, ?, ?) ON CONFLICT(member_name) DO UPDATE SET member_id = excluded.member_id,
+        balance = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+          THEN excluded.balance ELSE member_balances.balance END,
+        observed_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+          THEN excluded.observed_at ELSE member_balances.observed_at END,
+        updated_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+          THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
+        .bind(member.memberName, member.memberId, observedBalance, observedAtIso).run();
     }
     const action = String(payload.action ?? "verify");
     if (action === "importSnapshots") {
@@ -104,6 +119,12 @@ export async function POST(request: Request) {
         let source: URL;
         try { source = new URL(sourceUrl); } catch { continue; }
         if (!/^[a-z0-9:_-]{8,120}$/i.test(eventKey) || event.eventType !== "member_balance_snapshot" || source.protocol !== "https:" || source.hostname !== "www.torn.com") continue;
+        const snapshotObservedAt = Date.parse(String(event.occurredAt ?? ""));
+        if (!Number.isFinite(snapshotObservedAt) || snapshotObservedAt > Date.now() + 5 * 60 * 1000) {
+          acceptedKeys.push(eventKey);
+          continue;
+        }
+        const snapshotObservedAtIso = new Date(snapshotObservedAt).toISOString();
         const eventPayload = asObject(event.payload);
         const members = Array.isArray(eventPayload.members) ? eventPayload.members.slice(0, 250) : [];
         for (const rawBalance of members) {
@@ -111,9 +132,15 @@ export async function POST(request: Request) {
           const name = String(balanceRow.name ?? "").trim().slice(0, 80);
           const balance = Number(balanceRow.balance);
           if (!name || !Number.isSafeInteger(balance) || balance < 0 || balance > 1_000_000_000_000) continue;
-          await db.prepare(`INSERT INTO member_balances (member_name, balance) VALUES (?, ?)
-            ON CONFLICT(member_name) DO UPDATE SET balance = excluded.balance, updated_at = CURRENT_TIMESTAMP`)
-            .bind(name, balance).run();
+          await db.prepare(`INSERT INTO member_balances (member_name, balance, observed_at) VALUES (?, ?, ?)
+            ON CONFLICT(member_name) DO UPDATE SET
+              balance = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+                THEN excluded.balance ELSE member_balances.balance END,
+              observed_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+                THEN excluded.observed_at ELSE member_balances.observed_at END,
+              updated_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+                THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
+            .bind(name, balance, snapshotObservedAtIso).run();
         }
         acceptedKeys.push(eventKey);
       }
