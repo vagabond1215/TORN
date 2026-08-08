@@ -35,6 +35,7 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
       earned_total INTEGER NOT NULL DEFAULT 0 CHECK (earned_total >= 0),
       paid_total INTEGER NOT NULL DEFAULT 0 CHECK (paid_total >= 0),
       observed_at TEXT,
+      observed_priority INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS member_balance_entries (
@@ -80,13 +81,21 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
 
   const columns = await db.prepare("PRAGMA table_info(member_balances)").all<{ name: string }>();
   if (!columns.results.some((column) => column.name === "observed_at")) {
-    try {
-      await db.prepare("ALTER TABLE member_balances ADD COLUMN observed_at TEXT").run();
-    } catch (error) {
-      if (!/duplicate column/i.test(error instanceof Error ? error.message : String(error))) throw error;
-    }
+    try { await db.prepare("ALTER TABLE member_balances ADD COLUMN observed_at TEXT").run(); }
+    catch (error) { if (!/duplicate column/i.test(error instanceof Error ? error.message : String(error))) throw error; }
+  }
+  if (!columns.results.some((column) => column.name === "observed_priority")) {
+    try { await db.prepare("ALTER TABLE member_balances ADD COLUMN observed_priority INTEGER NOT NULL DEFAULT 0").run(); }
+    catch (error) { if (!/duplicate column/i.test(error instanceof Error ? error.message : String(error))) throw error; }
   }
   await db.prepare("UPDATE member_balances SET observed_at = updated_at WHERE observed_at IS NULL").run();
+}
+
+function newerObservationSql() {
+  return `(member_balances.observed_at IS NULL
+    OR datetime(excluded.observed_at) > datetime(member_balances.observed_at)
+    OR (datetime(excluded.observed_at) = datetime(member_balances.observed_at)
+      AND excluded.observed_priority >= member_balances.observed_priority))`;
 }
 
 export async function recordBalanceObservation(db: D1Database, event: BalanceObservation) {
@@ -100,16 +109,15 @@ export async function recordBalanceObservation(db: D1Database, event: BalanceObs
   if (!inserted.meta.changes) return false;
 
   const observedAt = normalizedObservedAt(event.occurredAt);
-  await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, observed_at)
-    VALUES (?, ?, ?, ?)
+  const isNewer = newerObservationSql();
+  await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, observed_at, observed_priority)
+    VALUES (?, ?, ?, ?, 2)
     ON CONFLICT(member_name) DO UPDATE SET
       member_id = COALESCE(excluded.member_id, member_balances.member_id),
-      balance = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-        THEN excluded.balance ELSE member_balances.balance END,
-      observed_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-        THEN excluded.observed_at ELSE member_balances.observed_at END,
-      updated_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
-        THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
+      balance = CASE WHEN ${isNewer} THEN excluded.balance ELSE member_balances.balance END,
+      observed_at = CASE WHEN ${isNewer} THEN excluded.observed_at ELSE member_balances.observed_at END,
+      observed_priority = CASE WHEN ${isNewer} THEN excluded.observed_priority ELSE member_balances.observed_priority END,
+      updated_at = CASE WHEN ${isNewer} THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
     .bind(event.memberName, event.memberId ?? null, newBalance, observedAt).run();
   return true;
 }
@@ -122,40 +130,44 @@ export async function recordBalanceEvent(db: D1Database, event: BalanceEvent) {
   if (!inserted.meta.changes) return false;
 
   const observedAt = normalizedObservedAt(event.occurredAt);
-  const isNewer = "member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)";
+  const priority = event.explicitBalance !== undefined ? 2 : 1;
+  const isNewer = newerObservationSql();
 
   if (event.kind === "credit") {
     if (event.explicitBalance !== undefined) {
-      await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, earned_total, observed_at)
-        VALUES (?, ?, ?, ?, ?)
+      await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, earned_total, observed_at, observed_priority)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(member_name) DO UPDATE SET
           member_id = COALESCE(excluded.member_id, member_balances.member_id),
           balance = CASE WHEN ${isNewer} THEN excluded.balance ELSE member_balances.balance END,
           earned_total = member_balances.earned_total + excluded.earned_total,
           observed_at = CASE WHEN ${isNewer} THEN excluded.observed_at ELSE member_balances.observed_at END,
+          observed_priority = CASE WHEN ${isNewer} THEN excluded.observed_priority ELSE member_balances.observed_priority END,
           updated_at = CURRENT_TIMESTAMP`)
-        .bind(event.memberName, event.memberId ?? null, event.explicitBalance, event.amount, observedAt).run();
+        .bind(event.memberName, event.memberId ?? null, event.explicitBalance, event.amount, observedAt, priority).run();
     } else {
-      await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, earned_total, observed_at)
-        VALUES (?, ?, ?, ?, ?)
+      await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, earned_total, observed_at, observed_priority)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(member_name) DO UPDATE SET
           member_id = COALESCE(excluded.member_id, member_balances.member_id),
           balance = CASE WHEN ${isNewer} THEN member_balances.balance + excluded.earned_total ELSE member_balances.balance END,
           earned_total = member_balances.earned_total + excluded.earned_total,
           observed_at = CASE WHEN ${isNewer} THEN excluded.observed_at ELSE member_balances.observed_at END,
+          observed_priority = CASE WHEN ${isNewer} THEN excluded.observed_priority ELSE member_balances.observed_priority END,
           updated_at = CURRENT_TIMESTAMP`)
-        .bind(event.memberName, event.memberId ?? null, event.amount, event.amount, observedAt).run();
+        .bind(event.memberName, event.memberId ?? null, event.amount, event.amount, observedAt, priority).run();
     }
   } else {
-    await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, paid_total, observed_at)
-      VALUES (?, ?, 0, ?, ?)
+    await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, paid_total, observed_at, observed_priority)
+      VALUES (?, ?, 0, ?, ?, ?)
       ON CONFLICT(member_name) DO UPDATE SET
         member_id = COALESCE(excluded.member_id, member_balances.member_id),
         balance = CASE WHEN ${isNewer} THEN MAX(0, member_balances.balance - excluded.paid_total) ELSE member_balances.balance END,
         paid_total = member_balances.paid_total + excluded.paid_total,
         observed_at = CASE WHEN ${isNewer} THEN excluded.observed_at ELSE member_balances.observed_at END,
+        observed_priority = CASE WHEN ${isNewer} THEN excluded.observed_priority ELSE member_balances.observed_priority END,
         updated_at = CURRENT_TIMESTAMP`)
-      .bind(event.memberName, event.memberId ?? null, event.amount, observedAt).run();
+      .bind(event.memberName, event.memberId ?? null, event.amount, observedAt, priority).run();
   }
   return true;
 }
