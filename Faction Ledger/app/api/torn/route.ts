@@ -18,8 +18,12 @@ type SyncCursorRow = { next_offset: number; complete: number };
 
 const TORN_API = "https://api.torn.com/v2";
 const BLOOD_COVEN = "blood coven";
+const RECENT_WAR_LIMIT = 100;
+const RECENT_WAR_IMPORT_LIMIT = 5;
 const HISTORICAL_WAR_PAGE = 5;
-const HISTORICAL_OC_PAGE = 20;
+const HISTORICAL_WAR_OVERLAP = 1;
+const HISTORICAL_OC_PAGE = 100;
+const HISTORICAL_OC_OVERLAP = 10;
 
 async function ensureWarSchema(db: D1Database) {
   await db.batch([
@@ -291,8 +295,9 @@ async function backfillWars(db: D1Database, apiKey: string, factionId: number) {
   const wars = parseRankedWars(response);
   let imported = 0;
   for (const war of wars.filter((item) => item.end)) if (await importCompletedWar(db, apiKey, factionId, war)) imported += 1;
-  const nextOffset = state.next_offset + wars.length;
   const complete = wars.length < HISTORICAL_WAR_PAGE;
+  const advance = complete ? wars.length : Math.max(1, wars.length - HISTORICAL_WAR_OVERLAP);
+  const nextOffset = state.next_offset + advance;
   await saveCursor(db, "ranked_wars", nextOffset, complete);
   return { imported, offset: nextOffset, complete };
 }
@@ -338,7 +343,7 @@ async function importCrimeBatch(db: D1Database, apiKey: string, crimes: JsonObje
       ON CONFLICT(event_key) DO UPDATE SET crime_name = excluded.crime_name, status = excluded.status,
         cash_amount = excluded.cash_amount, items_json = excluded.items_json, summary = excluded.summary,
         occurred_at = COALESCE(excluded.occurred_at, oc_holdings.occurred_at), updated_at = CURRENT_TIMESTAMP`)
-      .bind(`api-oc:${crimeId}`, crimeName, holdingStatus, successful ? Math.max(0, asNumber(rewards.money)) : 0,
+      .bind(`oc:${crimeId}`, crimeName, holdingStatus, successful ? Math.max(0, asNumber(rewards.money)) : 0,
         JSON.stringify(items.map(({ name, quantity }) => ({ name, quantity }))), summary, occurredAt).run();
     if (result.meta.changes) imported += 1;
   }
@@ -357,10 +362,20 @@ async function backfillCrimes(db: D1Database, apiKey: string) {
   const response = await tornFetch(`/faction/crimes?cat=completed&limit=${HISTORICAL_OC_PAGE}&offset=${state.next_offset}&sort=DESC`, apiKey);
   const crimes = Array.isArray(response.crimes) ? response.crimes.map(asObject) : [];
   const imported = await importCrimeBatch(db, apiKey, crimes);
-  const nextOffset = state.next_offset + crimes.length;
   const complete = crimes.length < HISTORICAL_OC_PAGE;
+  const advance = complete ? crimes.length : Math.max(1, crimes.length - HISTORICAL_OC_OVERLAP);
+  const nextOffset = state.next_offset + advance;
   await saveCursor(db, "organized_crimes", nextOffset, complete);
   return { imported, offset: nextOffset, complete };
+}
+
+async function refreshRecentWars(db: D1Database, apiKey: string, factionId: number, recentWars: RankedWar[]) {
+  let imported = 0;
+  for (const war of recentWars.filter((item) => item.end)) {
+    if (await importCompletedWar(db, apiKey, factionId, war)) imported += 1;
+    if (imported >= RECENT_WAR_IMPORT_LIMIT) break;
+  }
+  return imported;
 }
 
 async function sync(db: D1Database, apiKey: string) {
@@ -371,9 +386,9 @@ async function sync(db: D1Database, apiKey: string) {
   const factionName = String(faction.name ?? "").trim();
   if (!factionId || factionName.toLowerCase() !== BLOOD_COVEN) throw new Error("This API key does not belong to a Blood Coven member.");
 
-  const recentResponse = await tornFetch(`/faction/${factionId}/rankedwars?limit=20&offset=0`, apiKey);
+  const recentResponse = await tornFetch(`/faction/${factionId}/rankedwars?limit=${RECENT_WAR_LIMIT}&offset=0`, apiKey);
   const recentWars = parseRankedWars(recentResponse);
-  for (const war of recentWars.filter((item) => item.end).slice(0, 3)) await importCompletedWar(db, apiKey, factionId, war);
+  const recentWarsImported = await refreshRecentWars(db, apiKey, factionId, recentWars);
   const current = recentWars.find((war) => war.end === null);
   if (current) await trackActiveWar(db, apiKey, factionId, current);
   else await db.prepare("DELETE FROM active_war").run();
@@ -396,7 +411,7 @@ async function sync(db: D1Database, apiKey: string) {
     ...(await status(db)),
     faction: { id: factionId, name: factionName },
     syncedAt: new Date().toISOString(),
-    history: { warBackfill, ocRecent, ocBackfill },
+    history: { recentWarsImported, warBackfill, ocRecent, ocBackfill },
     warnings,
   };
 }
