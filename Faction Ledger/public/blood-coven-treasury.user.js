@@ -94,7 +94,7 @@
     if (/secondary/.test(text)) return "secondary";
     if (/melee/.test(text)) return "melee";
     if (/temporary|\btemp\b/.test(text)) return "temporary";
-    if (/armou?r/.test(text)) return "armor";
+    if (/\barmou?r\b/.test(text)) return "armor";
     if (/cloth/.test(text)) return "clothing";
     if (/medical|meds/.test(text)) return "medical";
     if (/drug/.test(text)) return "drugs";
@@ -546,10 +546,10 @@
 
   function manualScan() {
     const before = queue().length;
-    scanFactionPage(true);
-    const armory = scanArmoryInventory(true);
     const ocs = scanCrimeCards(true);
+    const armory = scanArmoryInventory(true);
     const war = scanRankedWarReport();
+    scanFactionPage(true);
     scanArmoryBalance();
     addFactionBalance();
     const after = queue().length;
