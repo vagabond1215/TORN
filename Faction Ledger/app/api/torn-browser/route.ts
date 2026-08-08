@@ -109,7 +109,8 @@ async function ensureSchema(db: D1Database) {
       FROM torn_browser_events AS events, json_each(json_extract(events.payload_json, '$.items')) AS item
       WHERE events.event_type = 'oc_completion'
         AND NULLIF(TRIM(json_extract(item.value, '$.name')), '') IS NOT NULL`),
-    db.prepare(`CREATE TRIGGER IF NOT EXISTS apply_armory_item_effect
+    db.prepare("DROP TRIGGER IF EXISTS apply_armory_item_effect"),
+    db.prepare(`CREATE TRIGGER apply_armory_item_effect
       AFTER INSERT ON armory_item_effects
       WHEN NEW.delta != 0
       BEGIN
@@ -370,7 +371,9 @@ async function importArmorySnapshot(db: D1Database, event: ReturnType<typeof cle
     const statements = [
       db.prepare("DELETE FROM armory_items WHERE category = ?").bind(category),
       ...items.filter((item) => item.quantity > 0).map((item) => db.prepare(`INSERT INTO armory_items
-        (item_name, category, quantity, source, observed_at, updated_at) VALUES (?, ?, ?, 'snapshot', ?, CURRENT_TIMESTAMP)`)
+        (item_name, category, quantity, source, observed_at, updated_at) VALUES (?, ?, ?, 'snapshot', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(item_name) DO UPDATE SET category = excluded.category, quantity = excluded.quantity,
+          source = 'snapshot', observed_at = excluded.observed_at, updated_at = CURRENT_TIMESTAMP`)
         .bind(item.name, category, item.quantity, observedAt)),
       db.prepare(`INSERT INTO armory_snapshot_state (category, event_key, observed_at) VALUES (?, ?, ?)
         ON CONFLICT(category) DO UPDATE SET event_key = excluded.event_key, observed_at = excluded.observed_at, updated_at = CURRENT_TIMESTAMP`)
