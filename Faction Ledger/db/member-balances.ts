@@ -10,6 +10,17 @@ export type BalanceEvent = {
   explicitBalance?: number;
 };
 
+export type BalanceObservation = {
+  eventKey: string;
+  memberId?: number;
+  memberName: string;
+  oldBalance: number;
+  newBalance: number;
+  direction: "increase" | "decrease";
+  summary: string;
+  occurredAt?: string | null;
+};
+
 function normalizedObservedAt(value?: string | null) {
   const parsed = Date.parse(value ?? "");
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
@@ -37,6 +48,18 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
       occurred_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS member_balance_observations (
+      event_key TEXT PRIMARY KEY,
+      member_id INTEGER,
+      member_name TEXT NOT NULL COLLATE NOCASE,
+      old_balance INTEGER NOT NULL CHECK (old_balance >= 0),
+      new_balance INTEGER NOT NULL CHECK (new_balance >= 0),
+      delta INTEGER NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('increase', 'decrease')),
+      summary TEXT NOT NULL DEFAULT '',
+      occurred_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS payout_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       member_id INTEGER NOT NULL,
@@ -51,6 +74,7 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_member_entries_created ON member_balance_entries(created_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_member_observations_created ON member_balance_observations(created_at DESC)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_payout_requests_status ON payout_requests(status, created_at DESC)"),
   ]);
 
@@ -65,12 +89,37 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
   await db.prepare("UPDATE member_balances SET observed_at = updated_at WHERE observed_at IS NULL").run();
 }
 
+export async function recordBalanceObservation(db: D1Database, event: BalanceObservation) {
+  const oldBalance = Math.max(0, Math.trunc(event.oldBalance));
+  const newBalance = Math.max(0, Math.trunc(event.newBalance));
+  const delta = newBalance - oldBalance;
+  const inserted = await db.prepare(`INSERT OR IGNORE INTO member_balance_observations
+    (event_key, member_id, member_name, old_balance, new_balance, delta, direction, summary, occurred_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(event.eventKey, event.memberId ?? null, event.memberName, oldBalance, newBalance, delta, event.direction, event.summary, event.occurredAt ?? null).run();
+  if (!inserted.meta.changes) return false;
+
+  const observedAt = normalizedObservedAt(event.occurredAt);
+  await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, observed_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(member_name) DO UPDATE SET
+      member_id = COALESCE(excluded.member_id, member_balances.member_id),
+      balance = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+        THEN excluded.balance ELSE member_balances.balance END,
+      observed_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+        THEN excluded.observed_at ELSE member_balances.observed_at END,
+      updated_at = CASE WHEN member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)
+        THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
+    .bind(event.memberName, event.memberId ?? null, newBalance, observedAt).run();
+  return true;
+}
+
 export async function recordBalanceEvent(db: D1Database, event: BalanceEvent) {
   const inserted = await db.prepare(`INSERT OR IGNORE INTO member_balance_entries
     (event_key, member_id, member_name, amount, kind, source, summary, occurred_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(event.eventKey, event.memberId ?? null, event.memberName, event.amount, event.kind, event.source, event.summary, event.occurredAt ?? null).run();
-  if (!inserted.meta.changes) return;
+  if (!inserted.meta.changes) return false;
 
   const observedAt = normalizedObservedAt(event.occurredAt);
   const isNewer = "member_balances.observed_at IS NULL OR datetime(excluded.observed_at) >= datetime(member_balances.observed_at)";
@@ -108,4 +157,5 @@ export async function recordBalanceEvent(db: D1Database, event: BalanceEvent) {
         updated_at = CURRENT_TIMESTAMP`)
       .bind(event.memberName, event.memberId ?? null, event.amount, observedAt).run();
   }
+  return true;
 }
