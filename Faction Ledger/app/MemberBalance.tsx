@@ -10,7 +10,9 @@ type MemberData = {
   balance: number;
   earnedTotal: number;
   paidTotal: number;
+  observedAt?: string | null;
   updatedAt: string | null;
+  syncToken?: string;
   requests: Array<{ id: number; amount: number; status: string; note: string; deliveryPreference: DeliveryPreference; createdAt: string }>;
   entries: Array<{ amount: number; kind: string; source: string; summary: string; occurredAt: string | null; createdAt: string }>;
 };
@@ -25,6 +27,7 @@ export default function MemberBalance() {
   const [data, setData] = useState<MemberData | null>(null);
   const [observedBalance, setObservedBalance] = useState<ArmoryBalance | null>(null);
   const observedRef = useRef<ArmoryBalance | null>(null);
+  const syncBootstrapRef = useRef(false);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [deliveryPreference, setDeliveryPreference] = useState<DeliveryPreference>("offline");
@@ -33,7 +36,13 @@ export default function MemberBalance() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  async function send(action: "verify" | "request", requestedAmount = 0, keyOverride = apiKey, observation = observedRef.current) {
+  async function send(
+    action: "verify" | "request",
+    requestedAmount = 0,
+    keyOverride = apiKey,
+    observation = observedRef.current,
+    issueSyncToken = false,
+  ) {
     setSaving(true); setError(""); setNotice("");
     try {
       const response = await fetch("/api/member-balance", {
@@ -47,12 +56,16 @@ export default function MemberBalance() {
           observedBalance: observation?.balance,
           observedAt: observation?.updatedAt,
           balanceSource: observation?.source,
+          issueSyncToken,
         }),
       });
       const result = await response.json() as MemberData & { error?: string };
       if (!response.ok) throw new Error(result.error || "Unable to load your balance.");
       window.localStorage.setItem("blood-coven-member-key", keyOverride);
       setApiKey(keyOverride); setData(result);
+      if (result.syncToken) {
+        window.postMessage({ channel: BRIDGE_CHANNEL, kind: "installSyncToken", token: result.syncToken }, window.location.origin);
+      }
       if (action === "request") { setAmount(""); setNotice("Your balance request is queued for leadership review."); }
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Unable to load your balance."); }
     finally { setSaving(false); setRestoring(false); }
@@ -76,6 +89,18 @@ export default function MemberBalance() {
   useEffect(() => {
     const onBridgeMessage = (event: MessageEvent) => {
       if (event.source !== window || event.origin !== window.location.origin || event.data?.channel !== BRIDGE_CHANNEL) return;
+      if (event.data?.kind === "ready") {
+        const savedKey = window.localStorage.getItem("blood-coven-member-key") ?? "";
+        if (event.data.syncTokenReady === false && savedKey && !syncBootstrapRef.current) {
+          syncBootstrapRef.current = true;
+          void send("verify", 0, savedKey, observedRef.current, true);
+        }
+        return;
+      }
+      if (event.data?.kind === "syncTokenInstalled") {
+        syncBootstrapRef.current = true;
+        return;
+      }
       if (event.data?.kind === "events" && Array.isArray(event.data.events)) {
         const savedKey = window.localStorage.getItem("blood-coven-member-key") ?? "";
         if (savedKey) void importBalanceSnapshots(event.data.events as BridgeEvent[], savedKey);
@@ -103,7 +128,7 @@ export default function MemberBalance() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function verify(event: FormEvent) { event.preventDefault(); void send("verify"); }
+  function verify(event: FormEvent) { event.preventDefault(); syncBootstrapRef.current = true; void send("verify", 0, apiKey, observedRef.current, true); }
   function requestPartial(event: FormEvent) { event.preventDefault(); void send("request", parseMoney(amount)); }
   function disconnect() {
     window.localStorage.removeItem("blood-coven-member-key");
@@ -114,7 +139,7 @@ export default function MemberBalance() {
     <header className="member-header"><h1>Blood Coven balance</h1>{data && <button className="text-button" onClick={disconnect}>Use another key</button>}</header>
     {restoring ? <section className="member-card member-loading">Loading balance...</section> : !data ? <form className="member-card" onSubmit={verify}>
       <h2>Verify membership</h2>
-      <p>Enter your Torn Public API key once. It remains stored only in this browser and will be reused automatically.</p>
+      <p>Enter your Torn Public API key once. It remains stored only in this browser and will be reused automatically. If the Blood Coven userscript is installed, verification also authorizes that installation to contribute and receive live balance updates.</p>
       <label className="field"><span>Public API key</span><input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} required /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="button button-primary" disabled={saving || !apiKey}>{saving ? "Verifying..." : "Verify membership"}</button>
