@@ -332,8 +332,10 @@ async function importMemberBalance(db: D1Database, context: FactionContext, even
       explicitBalance: newBalance > 0 ? newBalance : undefined,
     });
   } else {
-    const applied = await recordBalanceEvent(db, context, {
+    const memberId = asInteger(event.payload.memberId ?? event.payload.recipientId);
+    await recordBalanceEvent(db, context, {
       eventKey: event.eventKey,
+      memberId: memberId > 0 ? memberId : undefined,
       memberName,
       amount,
       kind: "payout",
@@ -341,12 +343,6 @@ async function importMemberBalance(db: D1Database, context: FactionContext, even
       summary: event.summary,
       occurredAt: event.occurredAt,
     });
-    if (applied) {
-      await db.prepare(`UPDATE payout_requests SET status = 'paid', updated_at = CURRENT_TIMESTAMP
-        WHERE faction_id = ? AND id = (SELECT id FROM payout_requests WHERE faction_id = ? AND member_name = ? COLLATE NOCASE
-          AND status IN ('pending', 'approved') AND amount <= ? ORDER BY created_at ASC LIMIT 1)`)
-        .bind(context.factionId, context.factionId, memberName, amount).run();
-    }
   }
 }
 

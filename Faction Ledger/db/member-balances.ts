@@ -113,6 +113,24 @@ const applyMemberBalanceEntryTrigger = `CREATE TRIGGER IF NOT EXISTS apply_membe
       (NEW.member_id IS NOT NULL AND member_id = NEW.member_id)
       OR (NEW.member_id IS NULL AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE)
     );
+
+    SELECT CASE WHEN NEW.payout_request_id IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM payout_requests
+      WHERE faction_id = NEW.faction_id
+        AND id = NEW.payout_request_id
+        AND member_id = NEW.member_id
+        AND status IN ('pending', 'approved')
+    ) THEN RAISE(ABORT, 'payout request settlement failed') END;
+
+    UPDATE payout_requests SET
+      status = 'paid',
+      updated_at = CURRENT_TIMESTAMP
+    WHERE NEW.kind = 'payout'
+      AND NEW.payout_request_id IS NOT NULL
+      AND faction_id = NEW.faction_id
+      AND id = NEW.payout_request_id
+      AND member_id = NEW.member_id
+      AND status IN ('pending', 'approved');
   END`;
 
 const applyMemberBalanceObservationTrigger = `CREATE TRIGGER IF NOT EXISTS apply_member_balance_observation
@@ -195,6 +213,20 @@ function normalizedObservedAt(value?: string | null) {
 }
 
 export async function ensureMemberBalanceSchema(db: D1Database) {
+  const existingEntries = await db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'member_balance_entries'",
+  ).first<{ name: string }>();
+  if (existingEntries) {
+    const existingColumns = await db.prepare("PRAGMA table_info(member_balance_entries)").all<{ name: string }>();
+    const columnNames = new Set(existingColumns.results.map((column) => column.name));
+    const missingColumns = ["explicit_balance", "payout_request_id"].filter((column) => !columnNames.has(column));
+    if (missingColumns.length) {
+      throw new Error(
+        `Member balance schema migration required; member_balance_entries is missing: ${missingColumns.join(", ")}.`,
+      );
+    }
+  }
+
   await ensureFactionFoundation(db);
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS member_balances (
@@ -223,6 +255,7 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
       summary TEXT NOT NULL DEFAULT '',
       occurred_at TEXT,
       explicit_balance INTEGER,
+      payout_request_id INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (faction_id, event_key)
     )`),
@@ -260,9 +293,12 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
   ]);
 
   const entryColumns = await db.prepare("PRAGMA table_info(member_balance_entries)").all<{ name: string }>();
-  if (!entryColumns.results.some((column) => column.name === "explicit_balance")) {
-    try { await db.prepare("ALTER TABLE member_balance_entries ADD COLUMN explicit_balance INTEGER").run(); }
-    catch (error) { if (!/duplicate column/i.test(error instanceof Error ? error.message : String(error))) throw error; }
+  const entryColumnNames = new Set(entryColumns.results.map((column) => column.name));
+  const missingColumns = ["explicit_balance", "payout_request_id"].filter((column) => !entryColumnNames.has(column));
+  if (missingColumns.length) {
+    throw new Error(
+      `Member balance schema migration required; member_balance_entries is missing: ${missingColumns.join(", ")}.`,
+    );
   }
   await db.batch([
     db.prepare(applyMemberBalanceEntryTrigger),
@@ -375,8 +411,13 @@ export async function prepareBalanceEventInsert(db: D1Database, context: Faction
   const resolvedId = event.memberId ?? await resolveMemberIdByName(db, context, event.memberName) ?? undefined;
   const occurredAt = normalizedObservedAt(event.occurredAt);
   return db.prepare(`INSERT OR IGNORE INTO member_balance_entries
-    (faction_id, event_key, member_id, member_name, amount, kind, source, summary, occurred_at, explicit_balance)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (faction_id, event_key, member_id, member_name, amount, kind, source, summary, occurred_at, explicit_balance, payout_request_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'payout' AND ? IS NOT NULL THEN (
+      SELECT id FROM payout_requests
+      WHERE faction_id = ? AND member_id = ? AND status IN ('pending', 'approved') AND amount <= ?
+      ORDER BY created_at ASC, id ASC LIMIT 1
+    ) ELSE NULL END)`)
     .bind(context.factionId, event.eventKey, resolvedId ?? null, event.memberName, event.amount, event.kind,
-      event.source, event.summary, occurredAt, event.explicitBalance ?? null);
+      event.source, event.summary, occurredAt, event.explicitBalance ?? null, event.kind, resolvedId ?? null,
+      context.factionId, resolvedId ?? null, event.amount);
 }
