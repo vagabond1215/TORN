@@ -465,3 +465,81 @@ The merge-base comparison against `origin/agent/fix-faction-ledger-sync-safety` 
 - Before production D1 work: export/backup D1, inspect the exact production `sqlite_master` and `PRAGMA table_info` state, rehearse `0008` against a copy, compare pre/post counts and financial totals, review unresolved member mappings, and rehearse backup restoration. Concurrent writes require a maintenance window.
 - Rollback remains restore from the verified D1 backup/export or use of a separately reviewed reverse migration. Do not use a destructive reset.
 - This reconciliation did not connect to production D1, run Wrangler migration/deploy commands, deploy the application, merge a branch/PR, enable arbitrary-faction writes, or touch `main`.
+
+---
+
+## Balance atomicity handoff — 2026-08-08 23:13:11 -04:00
+
+### Git state and scope
+
+- Starting branch/SHA: `codex/faction-ledger-multitenancy` at `9183452362285d87b6efcd529b58de60fbee4c5e`.
+- Local and `origin/codex/faction-ledger-multitenancy` matched, the worktree was clean, and no pull or fast-forward was required.
+- Implementation commit: `357b1ff` (`Make balance event application atomic and retry-safe`).
+- Regression/preflight commit: `9bff35e` (`Add balance failure-recovery regression tests`).
+- Final implementation/test SHA before this documentation-only commit: `9bff35e746f45c3f6f319e29d9da2ff247643e36`. The exact pushed branch-tip SHA is reported in the task handoff after this documentation commit is created and verified remotely.
+
+Changed paths in this targeted run:
+
+- `app/api/budget/route.ts`
+- `app/api/torn-browser/route.ts`
+- `db/member-balances.ts`
+- `db/schema.ts`
+- `docs/CODEX_MULTI_TENANCY_RUN.md`
+- `drizzle/0009_lyrical_morlocks.sql`
+- `drizzle/meta/0009_snapshot.json`
+- `drizzle/meta/_journal.json`
+- `drizzle/preflight/0008_tenant_conflicts.sql`
+- `package.json`
+- `tests/member-balance-atomicity.test.mjs`
+- `tests/multitenancy-isolation.test.mjs`
+
+### Atomic and retry-safe design
+
+- New inserts into faction-scoped `member_balance_entries` and `member_balance_observations` now invoke faction-aware SQLite/D1 `AFTER INSERT` triggers. The trigger adopts one unambiguous unresolved row or upserts the canonical `(faction_id, member_id)` row, then applies current balance, observation priority, and lifetime earned/paid totals inside the same database transaction as the unique event marker.
+- A duplicate `(faction_id, event_key)` insert changes no row, so the `AFTER INSERT` trigger does not run and cannot double-apply the effect.
+- If identity adoption, canonical-row creation, or balance/totals mutation fails, SQLite aborts the outer marker insert and rolls back every trigger-side change. The marker is therefore not permanently consumed and the same event can be retried safely.
+- Ambiguous name-only legacy rows raise an atomic error before effect application; the marker rolls back and the rows remain unresolved for manual review. Verified Torn member ID remains canonical and member names remain mutable metadata.
+- `explicit_balance` was added to `member_balance_entries` so an explicit credit observation can carry priority 2 through the database trigger. Inferred deltas remain priority 1. The trigger applies current-balance changes only when the timestamp is newer, or when an equal timestamp has equal/higher priority; unique stale credits/payouts still increment lifetime totals exactly once.
+- Browser journal duplicates now retry their derived idempotent imports. This makes the bounded `torn_browser_events` journal transport-only: a previous derived-effect failure can recover even when the journal row already exists.
+- Ranked-war account allocation, treasury transaction, member credit markers, and pending-war status now execute in one D1 batch. A failed member credit trigger rolls back the whole war settlement instead of leaving a recorded war with a partial payout ledger.
+- Torn-browser payout requests are marked paid only when `recordBalanceEvent` reports a genuinely new inserted/applied payout marker; duplicate events continue to return `false`.
+
+### Behavioral regression evidence
+
+`tests/member-balance-atomicity.test.mjs` installs migration `0009` into local in-memory SQLite and forces trigger-side canonical updates to fail with `RAISE(ABORT)`. It then retries the same durable key:
+
+| Scenario | Failed attempt | Final successful/repeated retry state |
+| --- | --- | --- |
+| Credit 25 from balance/earned 100 | marker 0; balance 100; earned 100 | marker 1; balance 125; earned 125 |
+| Payout 30 from balance 100 | marker 0; balance 100; paid 0 | marker 1; balance 70; paid 30 |
+| Explicit observation 100 → 175 | marker 0; balance 100 | marker 1; balance 175; priority 2 |
+| Duplicate observers, credit 15 | second insert ignored | marker 1; balance/earned 115 |
+| Same key in factions 52984/999999 | independent inserts | balances 110/220; two markers |
+| Same timestamp, inferred +10 and explicit 175 | tested in both arrival orders | balance 175; earned 110; priority 2 |
+| Newer explicit 200 then stale credit 25 | stale current effect rejected | balance 200; earned 125 |
+| Newly seen member, distinct credits 10/20 | tested in both serial arrival orders | one canonical row; balance/earned 30; two markers |
+
+The test also proves ambiguous unresolved names abort without consuming a marker. True simultaneous network-request scheduling is not reproduced by Node's synchronous in-memory SQLite driver; the database uniqueness/trigger transaction is exercised in both serial orders, but local Miniflare/D1 concurrency remains a pre-production rehearsal item.
+
+### Schema, migration, and preflight
+
+- Added generated migration `drizzle/0009_lyrical_morlocks.sql`, then manually inspected and extended it with the two required triggers. It is additive: one nullable `member_balance_entries.explicit_balance` column plus `apply_member_balance_entry` and `apply_member_balance_observation` triggers. Historical `0008` was not rewritten.
+- Added generated snapshot `drizzle/meta/0009_snapshot.json` and journal entry. A second `npm.cmd run db:generate` reported `No schema changes, nothing to migrate`.
+- Existing migration tests now apply both `0008` and `0009`; legacy Blood Coven counts and financial totals remain unchanged because trigger creation does not replay historical markers.
+- Added read-only local preflight `drizzle/preflight/0008_tenant_conflicts.sql`. It reports duplicate legacy account names that would conflict with `accounts_faction_name_unique` and duplicate non-null member IDs that require canonical-identity review. It never deletes or merges rows.
+
+### Fresh commands and results
+
+- `npm.cmd ci` — exit 0; 506 packages installed. NPM again reported 21 dependency vulnerabilities (1 low, 4 moderate, 16 high); dependency upgrades were outside this integrity fix.
+- `npm.cmd run check` — exit 0; lint/build passed and 16/16 tests passed.
+- `npx.cmd tsc --noEmit -p tsconfig.json` — exit 0.
+- `node --test tests\\multitenancy-isolation.test.mjs` — exit 0; 3/3 tests passed.
+- `node --test tests\\member-balance-atomicity.test.mjs` — exit 0; 10/10 tests passed.
+- `npm.cmd run db:generate` — exit 0; no further schema changes after `0009`.
+- `git diff --check` — exit 0.
+
+### Remaining production blockers and safety
+
+- Before any production D1 migration: export/backup D1; inspect actual `sqlite_master` and `PRAGMA table_info` for every static/runtime table; run the read-only unique-key preflight; rehearse `0008` and `0009` against an exact production copy; compare row counts and financial totals; review unresolved member identities; exercise concurrent ingestion through local Miniflare; rehearse restore; and schedule a maintenance window.
+- Rollback remains restoration from a verified D1 export/backup or a separately reviewed reverse migration. Do not use a destructive reset.
+- This run did not contact production D1, run remote Wrangler/D1 commands, deploy, merge PR #3 or PR #1, mark PR #3 ready, enable arbitrary-faction writes, rewrite reviewed history, or touch `main`.
