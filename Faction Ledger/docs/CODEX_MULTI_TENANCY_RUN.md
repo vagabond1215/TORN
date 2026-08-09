@@ -298,25 +298,25 @@ Keep migration boundaries reviewable; do not squash them away before human revie
 
 Mark only after local verification:
 
-- [ ] Baseline `npm run check` recorded/passing
-- [ ] `factions` tenant model added and Blood Coven seeded
-- [ ] All Drizzle/static tables tenant-audited
-- [ ] All runtime-created tables tenant-audited
-- [ ] Existing Blood Coven rows backfilled to `52984`
-- [ ] Torn member ID canonical for member-facing durable records
-- [ ] Treasury authorization faction-scoped
-- [ ] All API reads/writes tenant-scoped
-- [ ] Dedupe/idempotency keys tenant-scoped
-- [ ] Armory snapshots/history cursors tenant-scoped
-- [ ] Userscript state/UI tenant-safe
-- [ ] Confirmed faction/account switch cannot upload/show old tenant state
-- [ ] Observer/sync telemetry added or explicitly deferred with reason
-- [ ] Two-faction collision/isolation tests pass
-- [ ] Existing sync regression tests pass
-- [ ] Generated migrations inspected
-- [ ] Local migration preserves Blood Coven counts/totals
-- [ ] Final `npm run check` passes
-- [ ] No production deploy/merge performed by Codex
+- [x] Baseline `npm run check` recorded (one pre-existing stale userscript assertion failed; details below)
+- [x] `factions` tenant model added and Blood Coven seeded
+- [x] All Drizzle/static tables tenant-audited
+- [x] All runtime-created tables tenant-audited
+- [x] Existing Blood Coven rows backfilled to `52984`
+- [x] Torn member ID canonical for member-facing durable records
+- [x] Treasury authorization faction-scoped
+- [x] All API reads/writes tenant-scoped
+- [x] Dedupe/idempotency keys tenant-scoped
+- [x] Armory snapshots/history cursors tenant-scoped
+- [x] Userscript state/UI tenant-safe
+- [x] Confirmed faction/account switch cannot upload/show old tenant state
+- [x] Observer/sync telemetry added
+- [x] Two-faction collision/isolation tests pass
+- [x] Existing sync regression tests pass
+- [x] Generated migrations inspected
+- [x] Local migration preserves Blood Coven counts/totals
+- [x] Final `npm run check` passes
+- [x] No production deploy/merge performed by Codex
 
 ## Handoff notes
 
@@ -329,3 +329,72 @@ When finished, append a dated section containing:
 - remaining Blood-Coven-specific constants/strings;
 - production D1 migration blockers;
 - rollback notes.
+
+---
+
+## Handoff â€” 2026-08-08
+
+### Commit range and migration artifacts
+
+- Starting commit: `38a9dbabf270447e854716e0c0101c6ceb9593b7`.
+- Review range: `38a9dba..codex/faction-ledger-multitenancy` (the branch is intentionally unmerged and undeployed).
+- Implementation commits: `e8c650f` (tenant-scoped durable paths and migration) and `b484cf3` (tenant-safe client state and isolation tests). This handoff note is committed separately after those reviewable boundaries.
+- Generated and inspected migration: `drizzle/0008_sparkling_scream.sql`.
+- Generated Drizzle metadata: `drizzle/meta/0008_snapshot.json` and the `drizzle/meta/_journal.json` entry.
+- The generated SQL was not accepted blindly. Drizzle initially referenced columns absent from legacy tables and attempted to create runtime-owned tables that may already exist. The migration body was replaced with explicit SQLite rebuild/backfill statements while retaining the generated schema snapshot.
+
+### Commands and results
+
+- `npm ci` â€” exit 0; 506 packages installed. NPM reported 21 dependency vulnerabilities (1 low, 4 moderate, 16 high); no dependency upgrades were made in this scoped pass.
+- Baseline `npm run check` â€” exit 1 after lint and production build passed. The sole failure was the existing rendered-userscript assertion for the obsolete literal `oc_credit`; the current userscript records the underlying balance transition as `member_balance_change`. The assertion was updated to the actual durable event model rather than weakening ingestion coverage.
+- `npx tsc --noEmit -p tsconfig.json` â€” exit 0.
+- `npm run db:generate` â€” generated `0008_sparkling_scream.sql`; a second run after inspection reported `No schema changes, nothing to migrate`.
+- `node --test tests/multitenancy-isolation.test.mjs` â€” exit 0; 3/3 tests passed.
+- Final `npm run check` â€” exit 0; lint, production build, rendered HTML/userscript checks, migration preservation, and two-faction isolation all passed (6/6 tests).
+
+### Local migration preservation evidence
+
+The migration test constructs the prepared legacy static/runtime schema, seeds representative Blood Coven data, applies `0008`, and compares before/after values scoped to faction `52984`:
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Transactions | 1 | 1 |
+| Account balance total | 1,000 | 1,000 |
+| Member balance total | 1,000 | 1,000 |
+| Member earned total | 1,200 | 1,200 |
+| Member paid total | 200 | 200 |
+| Member balance entries | 1 | 1 |
+| Organized-crime holdings | 1 | 1 |
+| Armory item rows | 1 | 1 |
+
+The test also preserves the seeded pending war, active war, war baseline, payout request, balance observation, treasury leader, Armory snapshot/effect, browser journal event, history cursor, and script token. Every migrated faction-owned row is asserted to have `faction_id=52984`.
+
+The synthetic second-faction tests prove that the two tenants can independently hold the same member name, account name, item name, event key, OC key, war ID, policy key, Armory snapshot category, and history cursor. Duplicate application inside one faction is rejected, distinct observers do not multiply effects, and replay after browser-journal pruning does not reapply the durable Armory effect.
+
+### Canonical identity and manual-resolution cases
+
+- Verified Torn member ID is the canonical lookup/update key. A Torn rename updates display metadata on the same `(faction_id, member_id)` balance instead of creating another balance.
+- Legacy name-only balance rows are retained with `resolution_status='unresolved'` until a unique verified faction-member mapping is available.
+- If multiple legacy names contain the same non-null member ID, the migration preserves every row but clears that duplicated canonical ID and marks those rows unresolved. It does not silently merge balances or history. Those cases require manual review against current Torn membership.
+- Historical entry/request names remain display snapshots; durable request and current-balance lookup use member ID plus faction.
+
+### Remaining Blood-Coven-specific assumptions
+
+- `requireEnabledFaction` intentionally permits only faction `52984`. Arbitrary-faction creation/login/writes remain disabled even though the schema and tests now support isolated synthetic tenants.
+- Treasury ChatGPT access currently selects the Blood Coven context; there is no user-facing authorized-faction selector yet.
+- Product name, balance-page copy, userscript name/channel/file, notification text, default treasury policy labels, and several Torn DOM/news parsers remain Blood Coven branded.
+- The userscript still validates faction `52984` before installing a sync identity. Its queue, token, API key, balance caches, server cache, and scanner position are now namespaced by verified faction/member and the previous scope is scrubbed before switching.
+- Existing `system@blood-coven` / `local@blood-coven` attribution values remain historical/system metadata.
+
+### Production D1 blockers and rollback notes
+
+- No production D1 connection, migration, deploy, merge, or arbitrary-faction write was performed. All migration testing used an in-memory local SQLite database.
+- Before production use, export/backup D1, capture the actual production `sqlite_master`/`PRAGMA table_info` output for every static and runtime table, and run the migration against a copy of that exact schema/data. The repository's earlier runtime-created tables mean historical environments may not be byte-for-byte identical.
+- Re-run the documented production pre/post counts and financial totals on the copied database, including per-table unresolved member-ID reports, before scheduling the real migration.
+- `armory_items.observed_at` is reset to `NULL` during the compatibility rebuild because that column was runtime-added and is not guaranteed to exist in every legacy environment. Item names, categories, quantities, source, and update timestamps are preserved. A production preflight can use an environment-specific migration variant if retaining that optional timestamp is required.
+- The migration rebuilds primary-key tables. Production rollout needs a maintenance window that prevents concurrent writes between the preflight snapshot and migration completion.
+- Rollback is restore-from-D1-backup/export (or a separately reviewed reverse migration). Do not use a destructive reset. Do not run `0008` against production until the schema preflight and backup restore rehearsal succeed.
+
+### Readiness
+
+The branch is ready for human code/migration review and exact-production-copy rehearsal. It is not yet approved for production D1, deployment, merge, or enabling non-Blood-Coven tenants.
