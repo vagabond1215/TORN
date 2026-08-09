@@ -169,6 +169,7 @@ export const memberBalanceEntries = sqliteTable("member_balance_entries", {
   source: text("source").notNull(),
   summary: text("summary").notNull().default(""),
   occurredAt: text("occurred_at"),
+  explicitBalance: integer("explicit_balance"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   primaryKey({ columns: [table.factionId, table.eventKey] }),

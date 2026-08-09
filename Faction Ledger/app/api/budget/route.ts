@@ -1,5 +1,5 @@
 import { getD1 } from "../../../db";
-import { ensureMemberBalanceSchema, recordBalanceEvent } from "../../../db/member-balances";
+import { ensureMemberBalanceSchema, prepareBalanceEventInsert } from "../../../db/member-balances";
 import { bloodCovenContext, rejectFactionOverride } from "../../../db/tenant";
 import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
@@ -271,8 +271,6 @@ export async function POST(request: Request) {
       statements.push(db.prepare(`INSERT INTO transactions (faction_id, type, amount, note, details, actor_user_id, actor_email, actor_name)
         VALUES (?, 'deposit', ?, ?, ?, ?, ?, ?)`)
         .bind(actor.factionId, factionShare, note, JSON.stringify({ sourceKey, source: policy.label, grossAmount, taxBps, playerPayout, factionShare, pendingWarId, allocations: allocations.map((item) => ({ accountId: item.account.id, name: item.account.name, amount: item.amount, allocationBps: item.account.allocation_bps })) }), ...actorParams));
-      if (pendingWarId) statements.push(db.prepare("UPDATE pending_wars SET status = 'recorded', reviewed_value = ?, reviewed_tax_bps = ?, updated_at = CURRENT_TIMESTAMP WHERE faction_id = ? AND war_id = ? AND status = 'pending'").bind(grossAmount, taxBps, actor.factionId, pendingWarId));
-      await db.batch(statements);
       if (pendingWar) {
         await ensureMemberBalanceSchema(db);
         let members: Array<{ id: number; name: string; attacks: number }> = [];
@@ -289,7 +287,7 @@ export async function POST(request: Request) {
           item.amount += 1;
         }
         for (const item of payouts.filter((entry) => entry.amount > 0)) {
-          await recordBalanceEvent(db, actor, {
+          statements.push(await prepareBalanceEventInsert(db, actor, {
             eventKey: `war:${pendingWar.war_id}:${item.member.id}`,
             memberId: item.member.id,
             memberName: item.member.name,
@@ -297,9 +295,11 @@ export async function POST(request: Request) {
             kind: "credit",
             source: "war",
             summary: `Ranked war vs ${pendingWar.opponent_name}`,
-          });
+          }));
         }
       }
+      if (pendingWarId) statements.push(db.prepare("UPDATE pending_wars SET status = 'recorded', reviewed_value = ?, reviewed_tax_bps = ?, updated_at = CURRENT_TIMESTAMP WHERE faction_id = ? AND war_id = ? AND status = 'pending'").bind(grossAmount, taxBps, actor.factionId, pendingWarId));
+      await db.batch(statements);
     } else if (action === "directDeposit") {
       const amount = asPositiveInteger(payload.amount, "Deposit amount");
       const account = await accountById(db, actor.factionId, asAccountId(payload.accountId));

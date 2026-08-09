@@ -35,6 +35,160 @@ type BalanceRow = {
   observed_priority: number;
 };
 
+const applyMemberBalanceEntryTrigger = `CREATE TRIGGER IF NOT EXISTS apply_member_balance_entry
+  AFTER INSERT ON member_balance_entries
+  BEGIN
+    SELECT CASE WHEN NEW.member_id IS NULL AND (
+      SELECT COUNT(*) FROM member_balances
+      WHERE faction_id = NEW.faction_id AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE
+    ) > 1 THEN RAISE(ABORT, 'ambiguous member balance identity') END;
+
+    UPDATE member_balances SET
+      member_id = NEW.member_id,
+      member_name = NEW.member_name,
+      resolution_status = 'verified',
+      updated_at = CURRENT_TIMESTAMP
+    WHERE NEW.member_id IS NOT NULL
+      AND id = (
+        SELECT MIN(id) FROM member_balances
+        WHERE faction_id = NEW.faction_id AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE
+        HAVING COUNT(*) = 1
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM member_balances WHERE faction_id = NEW.faction_id AND member_id = NEW.member_id
+      );
+
+    INSERT INTO member_balances
+      (faction_id, member_id, member_name, balance, earned_total, paid_total, resolution_status)
+    SELECT NEW.faction_id, NEW.member_id, NEW.member_name, 0, 0, 0, 'verified'
+    WHERE NEW.member_id IS NOT NULL
+    ON CONFLICT(faction_id, member_id) WHERE member_id IS NOT NULL DO UPDATE SET
+      member_name = excluded.member_name,
+      resolution_status = 'verified',
+      updated_at = CURRENT_TIMESTAMP;
+
+    INSERT INTO member_balances
+      (faction_id, member_id, member_name, balance, earned_total, paid_total, resolution_status)
+    SELECT NEW.faction_id, NULL, NEW.member_name, 0, 0, 0, 'unresolved'
+    WHERE NEW.member_id IS NULL AND NOT EXISTS (
+      SELECT 1 FROM member_balances
+      WHERE faction_id = NEW.faction_id AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE
+    );
+
+    UPDATE member_balances SET
+      member_name = NEW.member_name,
+      balance = CASE WHEN
+        observed_at IS NULL
+        OR julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) > julianday(observed_at)
+        OR (
+          julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) = julianday(observed_at)
+          AND CASE WHEN NEW.explicit_balance IS NULL THEN 1 ELSE 2 END >= observed_priority
+        )
+      THEN CASE
+        WHEN NEW.kind = 'credit' AND NEW.explicit_balance IS NOT NULL THEN MAX(0, NEW.explicit_balance)
+        WHEN NEW.kind = 'credit' THEN MAX(0, balance + NEW.amount)
+        ELSE MAX(0, balance - NEW.amount)
+      END ELSE balance END,
+      earned_total = earned_total + CASE WHEN NEW.kind = 'credit' THEN NEW.amount ELSE 0 END,
+      paid_total = paid_total + CASE WHEN NEW.kind = 'payout' THEN NEW.amount ELSE 0 END,
+      observed_at = CASE WHEN
+        observed_at IS NULL
+        OR julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) > julianday(observed_at)
+        OR (
+          julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) = julianday(observed_at)
+          AND CASE WHEN NEW.explicit_balance IS NULL THEN 1 ELSE 2 END >= observed_priority
+        )
+      THEN COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP) ELSE observed_at END,
+      observed_priority = CASE WHEN
+        observed_at IS NULL
+        OR julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) > julianday(observed_at)
+        OR (
+          julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) = julianday(observed_at)
+          AND CASE WHEN NEW.explicit_balance IS NULL THEN 1 ELSE 2 END >= observed_priority
+        )
+      THEN CASE WHEN NEW.explicit_balance IS NULL THEN 1 ELSE 2 END ELSE observed_priority END,
+      resolution_status = CASE WHEN NEW.member_id IS NULL THEN resolution_status ELSE 'verified' END,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE faction_id = NEW.faction_id AND (
+      (NEW.member_id IS NOT NULL AND member_id = NEW.member_id)
+      OR (NEW.member_id IS NULL AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE)
+    );
+  END`;
+
+const applyMemberBalanceObservationTrigger = `CREATE TRIGGER IF NOT EXISTS apply_member_balance_observation
+  AFTER INSERT ON member_balance_observations
+  BEGIN
+    SELECT CASE WHEN NEW.member_id IS NULL AND (
+      SELECT COUNT(*) FROM member_balances
+      WHERE faction_id = NEW.faction_id AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE
+    ) > 1 THEN RAISE(ABORT, 'ambiguous member balance identity') END;
+
+    UPDATE member_balances SET
+      member_id = NEW.member_id,
+      member_name = NEW.member_name,
+      resolution_status = 'verified',
+      updated_at = CURRENT_TIMESTAMP
+    WHERE NEW.member_id IS NOT NULL
+      AND id = (
+        SELECT MIN(id) FROM member_balances
+        WHERE faction_id = NEW.faction_id AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE
+        HAVING COUNT(*) = 1
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM member_balances WHERE faction_id = NEW.faction_id AND member_id = NEW.member_id
+      );
+
+    INSERT INTO member_balances
+      (faction_id, member_id, member_name, balance, earned_total, paid_total, resolution_status)
+    SELECT NEW.faction_id, NEW.member_id, NEW.member_name, 0, 0, 0, 'verified'
+    WHERE NEW.member_id IS NOT NULL
+    ON CONFLICT(faction_id, member_id) WHERE member_id IS NOT NULL DO UPDATE SET
+      member_name = excluded.member_name,
+      resolution_status = 'verified',
+      updated_at = CURRENT_TIMESTAMP;
+
+    INSERT INTO member_balances
+      (faction_id, member_id, member_name, balance, earned_total, paid_total, resolution_status)
+    SELECT NEW.faction_id, NULL, NEW.member_name, 0, 0, 0, 'unresolved'
+    WHERE NEW.member_id IS NULL AND NOT EXISTS (
+      SELECT 1 FROM member_balances
+      WHERE faction_id = NEW.faction_id AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE
+    );
+
+    UPDATE member_balances SET
+      member_name = NEW.member_name,
+      balance = CASE WHEN
+        observed_at IS NULL
+        OR julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) > julianday(observed_at)
+        OR (
+          julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) = julianday(observed_at)
+          AND 2 >= observed_priority
+        )
+      THEN NEW.new_balance ELSE balance END,
+      observed_at = CASE WHEN
+        observed_at IS NULL
+        OR julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) > julianday(observed_at)
+        OR (
+          julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) = julianday(observed_at)
+          AND 2 >= observed_priority
+        )
+      THEN COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP) ELSE observed_at END,
+      observed_priority = CASE WHEN
+        observed_at IS NULL
+        OR julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) > julianday(observed_at)
+        OR (
+          julianday(COALESCE(NEW.occurred_at, CURRENT_TIMESTAMP)) = julianday(observed_at)
+          AND 2 >= observed_priority
+        )
+      THEN 2 ELSE observed_priority END,
+      resolution_status = CASE WHEN NEW.member_id IS NULL THEN resolution_status ELSE 'verified' END,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE faction_id = NEW.faction_id AND (
+      (NEW.member_id IS NOT NULL AND member_id = NEW.member_id)
+      OR (NEW.member_id IS NULL AND member_id IS NULL AND member_name = NEW.member_name COLLATE NOCASE)
+    );
+  END`;
+
 function normalizedObservedAt(value?: string | null) {
   const parsed = Date.parse(value ?? "");
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
@@ -68,6 +222,7 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
       source TEXT NOT NULL CHECK (source IN ('war', 'oc', 'funds')),
       summary TEXT NOT NULL DEFAULT '',
       occurred_at TEXT,
+      explicit_balance INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (faction_id, event_key)
     )`),
@@ -103,6 +258,16 @@ export async function ensureMemberBalanceSchema(db: D1Database) {
     db.prepare("CREATE INDEX IF NOT EXISTS idx_member_observations_faction_created ON member_balance_observations(faction_id, created_at DESC)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_payout_requests_faction_status ON payout_requests(faction_id, status, created_at DESC)"),
   ]);
+
+  const entryColumns = await db.prepare("PRAGMA table_info(member_balance_entries)").all<{ name: string }>();
+  if (!entryColumns.results.some((column) => column.name === "explicit_balance")) {
+    try { await db.prepare("ALTER TABLE member_balance_entries ADD COLUMN explicit_balance INTEGER").run(); }
+    catch (error) { if (!/duplicate column/i.test(error instanceof Error ? error.message : String(error))) throw error; }
+  }
+  await db.batch([
+    db.prepare(applyMemberBalanceEntryTrigger),
+    db.prepare(applyMemberBalanceObservationTrigger),
+  ]);
 }
 
 function observationIsNewer(row: BalanceRow, observedAt: string, priority: number) {
@@ -131,8 +296,11 @@ async function memberIdentity(db: D1Database, context: FactionContext, memberId:
   }
   const unresolved = await db.prepare(`SELECT * FROM member_balances
     WHERE faction_id = ? AND member_id IS NULL AND member_name = ? COLLATE NOCASE
-    ORDER BY id ASC LIMIT 1`).bind(context.factionId, memberName).first<BalanceRow>();
-  return { memberId: undefined, row: unresolved ?? null };
+    ORDER BY id ASC LIMIT 2`).bind(context.factionId, memberName).all<BalanceRow>();
+  if (unresolved.results.length > 1) {
+    throw new Error(`Ambiguous legacy balance rows for ${memberName}; manual resolution is required.`);
+  }
+  return { memberId: undefined, row: unresolved.results[0] ?? null };
 }
 
 async function writeBalance(
@@ -188,34 +356,27 @@ export async function recordBalanceObservation(db: D1Database, context: FactionC
   const newBalance = Math.max(0, Math.trunc(event.newBalance));
   const delta = newBalance - oldBalance;
   const resolvedId = event.memberId ?? await resolveMemberIdByName(db, context, event.memberName) ?? undefined;
+  const occurredAt = normalizedObservedAt(event.occurredAt);
   const inserted = await db.prepare(`INSERT OR IGNORE INTO member_balance_observations
     (faction_id, event_key, member_id, member_name, old_balance, new_balance, delta, direction, summary, occurred_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(context.factionId, event.eventKey, resolvedId ?? null, event.memberName, oldBalance, newBalance, delta,
-      event.direction, event.summary, event.occurredAt ?? null).run();
-  if (!inserted.meta.changes) return false;
-  await writeBalance(db, context, resolvedId, event.memberName, normalizedObservedAt(event.occurredAt), 2, { explicitBalance: newBalance });
-  return true;
+      event.direction, event.summary, occurredAt).run();
+  return Boolean(inserted.meta.changes);
 }
 
 export async function recordBalanceEvent(db: D1Database, context: FactionContext, event: BalanceEvent) {
-  const resolvedId = event.memberId ?? await resolveMemberIdByName(db, context, event.memberName) ?? undefined;
-  const inserted = await db.prepare(`INSERT OR IGNORE INTO member_balance_entries
-    (faction_id, event_key, member_id, member_name, amount, kind, source, summary, occurred_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(context.factionId, event.eventKey, resolvedId ?? null, event.memberName, event.amount, event.kind,
-      event.source, event.summary, event.occurredAt ?? null).run();
-  if (!inserted.meta.changes) return false;
+  const statement = await prepareBalanceEventInsert(db, context, event);
+  const inserted = await statement.run();
+  return Boolean(inserted.meta.changes);
+}
 
+export async function prepareBalanceEventInsert(db: D1Database, context: FactionContext, event: BalanceEvent) {
+  const resolvedId = event.memberId ?? await resolveMemberIdByName(db, context, event.memberName) ?? undefined;
   const occurredAt = normalizedObservedAt(event.occurredAt);
-  if (event.kind === "credit") {
-    await writeBalance(db, context, resolvedId, event.memberName, occurredAt, event.explicitBalance !== undefined ? 2 : 1, {
-      explicitBalance: event.explicitBalance,
-      inferredDelta: event.explicitBalance === undefined ? event.amount : undefined,
-      earned: event.amount,
-    });
-  } else {
-    await writeBalance(db, context, resolvedId, event.memberName, occurredAt, 1, { inferredDelta: -event.amount, paid: event.amount });
-  }
-  return true;
+  return db.prepare(`INSERT OR IGNORE INTO member_balance_entries
+    (faction_id, event_key, member_id, member_name, amount, kind, source, summary, occurred_at, explicit_balance)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(context.factionId, event.eventKey, resolvedId ?? null, event.memberName, event.amount, event.kind,
+      event.source, event.summary, occurredAt, event.explicitBalance ?? null);
 }

@@ -477,7 +477,9 @@ export async function POST(request: Request) {
           .bind(context.factionId, event.eventKey, access.actor.tokenId, access.actor.memberId).run();
       }
     }
-    for (const event of newEvents) {
+    // Derived imports own their durable idempotency. Re-run them for journal duplicates so a
+    // prior failure after journal insertion can recover instead of permanently consuming work.
+    for (const event of events) {
       await importWarReport(db, context, event);
       await importMemberBalance(db, context, event);
       await importOcHolding(db, context, event);
@@ -497,7 +499,7 @@ export async function POST(request: Request) {
         queue_depth = excluded.queue_depth,
         details_json = excluded.details_json,
         updated_at = CURRENT_TIMESTAMP`)
-      .bind(context.factionId, latestObservation, queueDepth, JSON.stringify({ accepted: acceptedKeys.length, applied: newEvents.length })).run();
+      .bind(context.factionId, latestObservation, queueDepth, JSON.stringify({ accepted: acceptedKeys.length, newJournalEvents: newEvents.length })).run();
     if (access.mode === "script") {
       await recordScriptSyncPush(db, access.actor, queueDepth);
       return Response.json({ acceptedKeys, newEventCount: newEvents.length });
