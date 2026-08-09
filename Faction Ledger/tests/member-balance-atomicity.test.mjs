@@ -9,7 +9,10 @@ const T0 = "2026-08-08T00:00:00.000Z";
 const T1 = "2026-08-08T01:00:00.000Z";
 const T2 = "2026-08-08T02:00:00.000Z";
 
-const migrationPromise = readFile(new URL("../drizzle/0009_lyrical_morlocks.sql", import.meta.url), "utf8");
+const migrationPromise = Promise.all([
+  readFile(new URL("../drizzle/0009_lyrical_morlocks.sql", import.meta.url), "utf8"),
+  readFile(new URL("../drizzle/0010_fluffy_luckman.sql", import.meta.url), "utf8"),
+]);
 
 async function atomicDatabase() {
   const db = new DatabaseSync(":memory:");
@@ -57,10 +60,26 @@ async function atomicDatabase() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (faction_id, event_key)
     );
+    CREATE TABLE payout_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      faction_id INTEGER NOT NULL,
+      member_id INTEGER NOT NULL,
+      member_name TEXT NOT NULL COLLATE NOCASE,
+      amount INTEGER NOT NULL CHECK (amount > 0),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'paid', 'declined')),
+      delivery_preference TEXT NOT NULL DEFAULT 'offline',
+      note TEXT NOT NULL DEFAULT '',
+      requested_by_user_id TEXT NOT NULL,
+      requested_by_email TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
-  const migration = await migrationPromise;
-  for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
-    db.exec(statement);
+  const migrations = await migrationPromise;
+  for (const migration of migrations) {
+    for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
+      db.exec(statement);
+    }
   }
   db.exec(`
     CREATE TABLE test_balance_failure (enabled INTEGER NOT NULL);
@@ -90,9 +109,32 @@ function insertEntry(db, {
   kind = "credit", source = "war", occurredAt = T1, explicitBalance = null,
 }) {
   return db.prepare(`INSERT OR IGNORE INTO member_balance_entries
-    (faction_id, event_key, member_id, member_name, amount, kind, source, summary, occurred_at, explicit_balance)
-    VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)`)
-    .run(factionId, eventKey, memberId, memberName, amount, kind, source, occurredAt, explicitBalance);
+    (faction_id, event_key, member_id, member_name, amount, kind, source, summary, occurred_at, explicit_balance, payout_request_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?, CASE WHEN ? = 'payout' AND ? IS NOT NULL THEN (
+      SELECT id FROM payout_requests
+      WHERE faction_id = ? AND member_id = ? AND status IN ('pending', 'approved') AND amount <= ?
+      ORDER BY created_at ASC, id ASC LIMIT 1
+    ) ELSE NULL END)`)
+    .run(factionId, eventKey, memberId, memberName, amount, kind, source, occurredAt, explicitBalance,
+      kind, memberId, factionId, memberId, amount);
+}
+
+function seedRequest(db, {
+  factionId = BLOOD_COVEN, memberId = 101, memberName = "Alice", amount = 30, status = "pending",
+} = {}) {
+  return Number(db.prepare(`INSERT INTO payout_requests
+    (faction_id, member_id, member_name, amount, status, requested_by_user_id, requested_by_email)
+    VALUES (?, ?, ?, ?, ?, 'user', 'member@example.com')`)
+    .run(factionId, memberId, memberName, amount, status).lastInsertRowid);
+}
+
+function request(db, id) {
+  return { ...db.prepare("SELECT id, faction_id AS factionId, member_id AS memberId, member_name AS memberName, amount, status FROM payout_requests WHERE id = ?").get(id) };
+}
+
+function entryRequestId(db, factionId, eventKey) {
+  return db.prepare("SELECT payout_request_id AS payoutRequestId FROM member_balance_entries WHERE faction_id = ? AND event_key = ?")
+    .get(factionId, eventKey)?.payoutRequestId ?? null;
 }
 
 function insertObservation(db, {
@@ -144,6 +186,95 @@ test("payout marker and effect roll back together, then retry applies exactly on
   assert.equal(insertEntry(db, { eventKey: "atomic:payout:1", amount: 30, kind: "payout", source: "funds" }).changes, 0);
   assert.deepEqual(member(db), { balance: 70, earned: 100, paid: 30, observedAt: T1, observedPriority: 1 });
   assert.equal(markerCount(db, "member_balance_entries", BLOOD_COVEN, "atomic:payout:1"), 1);
+  db.close();
+});
+
+test("payout event, balance effect, and the selected request commit exactly once", async () => {
+  const db = await atomicDatabase();
+  seedMember(db);
+  const requestId = seedRequest(db);
+  assert.equal(insertEntry(db, { eventKey: "settlement:atomic", amount: 30, kind: "payout", source: "funds" }).changes, 1);
+  assert.equal(insertEntry(db, { eventKey: "settlement:atomic", amount: 30, kind: "payout", source: "funds" }).changes, 0);
+  assert.equal(entryRequestId(db, BLOOD_COVEN, "settlement:atomic"), requestId);
+  assert.deepEqual(member(db), { balance: 70, earned: 100, paid: 30, observedAt: T1, observedPriority: 1 });
+  assert.equal(request(db, requestId).status, "paid");
+  db.close();
+});
+
+test("forced request settlement failure rolls back the marker and balance effect before a safe retry", async () => {
+  const db = await atomicDatabase();
+  seedMember(db);
+  const requestId = seedRequest(db);
+  db.exec(`CREATE TRIGGER force_request_settlement_failure
+    BEFORE UPDATE OF status ON payout_requests WHEN NEW.status = 'paid'
+    BEGIN SELECT RAISE(ABORT, 'forced request settlement failure'); END;`);
+  assert.throws(
+    () => insertEntry(db, { eventKey: "settlement:retry", amount: 30, kind: "payout", source: "funds" }),
+    /forced request settlement failure/,
+  );
+  assert.equal(markerCount(db, "member_balance_entries", BLOOD_COVEN, "settlement:retry"), 0);
+  assert.deepEqual(member(db), { balance: 100, earned: 100, paid: 0, observedAt: T0, observedPriority: 2 });
+  assert.equal(request(db, requestId).status, "pending");
+  db.exec("DROP TRIGGER force_request_settlement_failure");
+  assert.equal(insertEntry(db, { eventKey: "settlement:retry", amount: 30, kind: "payout", source: "funds" }).changes, 1);
+  assert.equal(insertEntry(db, { eventKey: "settlement:retry", amount: 30, kind: "payout", source: "funds" }).changes, 0);
+  assert.equal(entryRequestId(db, BLOOD_COVEN, "settlement:retry"), requestId);
+  assert.deepEqual(member(db), { balance: 70, earned: 100, paid: 30, observedAt: T1, observedPriority: 1 });
+  assert.equal(request(db, requestId).status, "paid");
+  db.close();
+});
+
+test("payout settlement uses canonical member ID across a Torn rename", async () => {
+  const db = await atomicDatabase();
+  seedMember(db, BLOOD_COVEN, 101, "Old Name");
+  const requestId = seedRequest(db, { memberName: "Old Name" });
+  insertEntry(db, { eventKey: "settlement:rename", memberId: 101, memberName: "New Name", amount: 30, kind: "payout", source: "funds" });
+  assert.equal(entryRequestId(db, BLOOD_COVEN, "settlement:rename"), requestId);
+  assert.equal(request(db, requestId).status, "paid");
+  assert.equal(db.prepare("SELECT member_name AS name FROM member_balances WHERE faction_id = ? AND member_id = ?").get(BLOOD_COVEN, 101).name, "New Name");
+  db.close();
+});
+
+test("replaying an old payout event cannot settle a later request", async () => {
+  const db = await atomicDatabase();
+  seedMember(db);
+  const firstRequestId = seedRequest(db);
+  insertEntry(db, { eventKey: "settlement:old", amount: 30, kind: "payout", source: "funds" });
+  const secondRequestId = seedRequest(db, { amount: 20 });
+  assert.equal(insertEntry(db, { eventKey: "settlement:old", amount: 30, kind: "payout", source: "funds" }).changes, 0);
+  assert.equal(entryRequestId(db, BLOOD_COVEN, "settlement:old"), firstRequestId);
+  assert.equal(request(db, firstRequestId).status, "paid");
+  assert.equal(request(db, secondRequestId).status, "pending");
+  assert.deepEqual(member(db), { balance: 70, earned: 100, paid: 30, observedAt: T1, observedPriority: 1 });
+  db.close();
+});
+
+test("a payout event accepted without a request cannot settle a future request", async () => {
+  const db = await atomicDatabase();
+  seedMember(db);
+  insertEntry(db, { eventKey: "settlement:none", amount: 30, kind: "payout", source: "funds" });
+  const laterRequestId = seedRequest(db);
+  assert.equal(insertEntry(db, { eventKey: "settlement:none", amount: 30, kind: "payout", source: "funds" }).changes, 0);
+  assert.equal(entryRequestId(db, BLOOD_COVEN, "settlement:none"), null);
+  assert.equal(request(db, laterRequestId).status, "pending");
+  assert.deepEqual(member(db), { balance: 70, earned: 100, paid: 30, observedAt: T1, observedPriority: 1 });
+  db.close();
+});
+
+test("identical payout names and event keys settle only faction-local requests", async () => {
+  const db = await atomicDatabase();
+  seedMember(db);
+  seedMember(db, OTHER_FACTION, 202, "Alice", 200, 200);
+  const bloodCovenRequest = seedRequest(db);
+  const otherRequest = seedRequest(db, { factionId: OTHER_FACTION, memberId: 202, memberName: "Alice", amount: 40 });
+  insertEntry(db, { eventKey: "settlement:shared", amount: 30, kind: "payout", source: "funds" });
+  insertEntry(db, { factionId: OTHER_FACTION, eventKey: "settlement:shared", memberId: 202, memberName: "Alice", amount: 40, kind: "payout", source: "funds" });
+  assert.equal(entryRequestId(db, BLOOD_COVEN, "settlement:shared"), bloodCovenRequest);
+  assert.equal(entryRequestId(db, OTHER_FACTION, "settlement:shared"), otherRequest);
+  assert.equal(request(db, bloodCovenRequest).status, "paid");
+  assert.equal(request(db, otherRequest).status, "paid");
+  assert.deepEqual(member(db), { balance: 70, earned: 100, paid: 30, observedAt: T1, observedPriority: 1 });
+  assert.deepEqual(member(db, OTHER_FACTION, 202), { balance: 160, earned: 200, paid: 40, observedAt: T1, observedPriority: 1 });
   db.close();
 });
 
