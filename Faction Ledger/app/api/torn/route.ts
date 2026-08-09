@@ -1,4 +1,5 @@
 import { getD1 } from "../../../db";
+import { rejectFactionOverride, requireEnabledFaction, type FactionContext } from "../../../db/tenant";
 import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
 type JsonObject = Record<string, unknown>;
@@ -28,8 +29,8 @@ const HISTORICAL_OC_OVERLAP = 10;
 async function ensureWarSchema(db: D1Database) {
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS pending_wars (
-      war_id INTEGER PRIMARY KEY,
       faction_id INTEGER NOT NULL,
+      war_id INTEGER NOT NULL,
       opponent_name TEXT NOT NULL,
       started_at INTEGER NOT NULL,
       ended_at INTEGER NOT NULL,
@@ -41,11 +42,12 @@ async function ensureWarSchema(db: D1Database) {
       rewards_json TEXT NOT NULL DEFAULT '[]',
       members_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (faction_id, war_id)
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS active_war (
-      war_id INTEGER PRIMARY KEY,
       faction_id INTEGER NOT NULL,
+      war_id INTEGER NOT NULL,
       opponent_name TEXT NOT NULL,
       started_at INTEGER NOT NULL,
       target INTEGER NOT NULL DEFAULT 0,
@@ -54,9 +56,11 @@ async function ensureWarSchema(db: D1Database) {
       our_chain INTEGER NOT NULL DEFAULT 0,
       their_chain INTEGER NOT NULL DEFAULT 0,
       members_json TEXT NOT NULL DEFAULT '[]',
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (faction_id, war_id)
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS war_member_baselines (
+      faction_id INTEGER NOT NULL,
       war_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
       name TEXT NOT NULL,
@@ -67,10 +71,11 @@ async function ensureWarSchema(db: D1Database) {
       current_xanax INTEGER NOT NULL DEFAULT 0,
       current_refills INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (war_id, user_id)
+      PRIMARY KEY (faction_id, war_id, user_id)
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS oc_holdings (
-      event_key TEXT PRIMARY KEY,
+      faction_id INTEGER NOT NULL,
+      event_key TEXT NOT NULL,
       crime_name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'held' CHECK (status IN ('held', 'distributed', 'dismissed')),
       cash_amount INTEGER NOT NULL DEFAULT 0 CHECK (cash_amount >= 0),
@@ -78,16 +83,19 @@ async function ensureWarSchema(db: D1Database) {
       summary TEXT NOT NULL DEFAULT '',
       occurred_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (faction_id, event_key)
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS torn_sync_cursors (
-      source_key TEXT PRIMARY KEY,
+      faction_id INTEGER NOT NULL,
+      source_key TEXT NOT NULL,
       next_offset INTEGER NOT NULL DEFAULT 0 CHECK (next_offset >= 0),
       complete INTEGER NOT NULL DEFAULT 0 CHECK (complete IN (0, 1)),
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (faction_id, source_key)
     )`),
-    db.prepare("CREATE INDEX IF NOT EXISTS idx_pending_wars_status_end ON pending_wars(status, ended_at DESC)"),
-    db.prepare("CREATE INDEX IF NOT EXISTS idx_oc_holdings_status_created ON oc_holdings(status, created_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_pending_wars_faction_status_end ON pending_wars(faction_id, status, ended_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_oc_holdings_faction_status_created ON oc_holdings(faction_id, status, created_at DESC)"),
   ]);
 }
 
@@ -156,11 +164,11 @@ function activeWar(row: ActiveWarRow | null) {
   };
 }
 
-async function status(db: D1Database) {
+async function status(db: D1Database, context: FactionContext) {
   await ensureWarSchema(db);
   const [pendingResult, active] = await Promise.all([
-    db.prepare("SELECT * FROM pending_wars WHERE status = 'pending' ORDER BY ended_at DESC").all<PendingWarRow>(),
-    db.prepare("SELECT * FROM active_war ORDER BY updated_at DESC LIMIT 1").first<ActiveWarRow>(),
+    db.prepare("SELECT * FROM pending_wars WHERE faction_id = ? AND status = 'pending' ORDER BY ended_at DESC").bind(context.factionId).all<PendingWarRow>(),
+    db.prepare("SELECT * FROM active_war WHERE faction_id = ? ORDER BY updated_at DESC LIMIT 1").bind(context.factionId).first<ActiveWarRow>(),
   ]);
   return { pendingWars: pendingResult.results.map(pendingWar), activeWar: activeWar(active ?? null) };
 }
@@ -177,8 +185,8 @@ function parseRankedWars(payload: JsonObject): RankedWar[] {
 
 async function importCompletedWar(db: D1Database, apiKey: string, factionId: number, war: RankedWar) {
   if (!war.end) return false;
-  const existing = await db.prepare("SELECT status, gross_estimate, rewards_json, members_json FROM pending_wars WHERE war_id = ?")
-    .bind(war.war_id).first<{ status: string; gross_estimate: number; rewards_json: string; members_json: string }>();
+  const existing = await db.prepare("SELECT status, gross_estimate, rewards_json, members_json FROM pending_wars WHERE faction_id = ? AND war_id = ?")
+    .bind(factionId, war.war_id).first<{ status: string; gross_estimate: number; rewards_json: string; members_json: string }>();
   if (existing && existing.status !== "pending") return false;
   if (existing && existing.gross_estimate > 0 && existing.rewards_json !== "[]" && existing.members_json !== "[]") return false;
 
@@ -209,7 +217,7 @@ async function importCompletedWar(db: D1Database, apiKey: string, factionId: num
   await db.prepare(`INSERT INTO pending_wars
     (war_id, faction_id, opponent_name, started_at, ended_at, won, gross_estimate, rewards_json, members_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(war_id) DO UPDATE SET
+    ON CONFLICT(faction_id, war_id) DO UPDATE SET
       opponent_name = excluded.opponent_name,
       started_at = excluded.started_at,
       ended_at = excluded.ended_at,
@@ -243,7 +251,7 @@ async function trackActiveWar(db: D1Database, apiKey: string, factionId: number,
     const object = asObject(member);
     return { id: asNumber(object.id), name: String(object.name ?? "Unknown") };
   }).filter((member) => member.id > 0);
-  const existing = await db.prepare("SELECT * FROM war_member_baselines WHERE war_id = ?").bind(war.war_id).all<BaselineRow>();
+  const existing = await db.prepare("SELECT * FROM war_member_baselines WHERE faction_id = ? AND war_id = ?").bind(factionId, war.war_id).all<BaselineRow>();
   const baselineById = new Map(existing.results.map((row) => [row.user_id, row]));
   const tracked: Array<{ id: number; name: string; hits: number; xanax: number; refills: number; energyEstimate: number }> = [];
   for (let index = 0; index < members.length; index += 8) {
@@ -254,11 +262,11 @@ async function trackActiveWar(db: D1Database, apiKey: string, factionId: number,
       const baseXanax = baseline?.base_xanax ?? stats.xanax;
       const baseRefills = baseline?.base_refills ?? stats.refills;
       await db.prepare(`INSERT INTO war_member_baselines
-        (war_id, user_id, name, base_hits, base_xanax, base_refills, current_hits, current_xanax, current_refills)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(war_id, user_id) DO UPDATE SET name = excluded.name, current_hits = excluded.current_hits,
+        (faction_id, war_id, user_id, name, base_hits, base_xanax, base_refills, current_hits, current_xanax, current_refills)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(faction_id, war_id, user_id) DO UPDATE SET name = excluded.name, current_hits = excluded.current_hits,
           current_xanax = excluded.current_xanax, current_refills = excluded.current_refills, updated_at = CURRENT_TIMESTAMP`)
-        .bind(war.war_id, member.id, member.name, baseHits, baseXanax, baseRefills, stats.hits, stats.xanax, stats.refills).run();
+        .bind(factionId, war.war_id, member.id, member.name, baseHits, baseXanax, baseRefills, stats.hits, stats.xanax, stats.refills).run();
       const hits = Math.max(0, stats.hits - baseHits);
       const xanax = Math.max(0, stats.xanax - baseXanax);
       const refills = Math.max(0, stats.refills - baseRefills);
@@ -269,27 +277,28 @@ async function trackActiveWar(db: D1Database, apiKey: string, factionId: number,
   await db.prepare(`INSERT INTO active_war
     (war_id, faction_id, opponent_name, started_at, target, our_score, their_score, our_chain, their_chain, members_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(war_id) DO UPDATE SET opponent_name = excluded.opponent_name, target = excluded.target,
+    ON CONFLICT(faction_id, war_id) DO UPDATE SET opponent_name = excluded.opponent_name, target = excluded.target,
       our_score = excluded.our_score, their_score = excluded.their_score, our_chain = excluded.our_chain,
       their_chain = excluded.their_chain, members_json = excluded.members_json, updated_at = CURRENT_TIMESTAMP`)
     .bind(war.war_id, factionId, String(opponent?.name ?? "Unknown faction"), war.start, war.target, ours.score,
       opponent?.score ?? 0, ours.chain, opponent?.chain ?? 0, JSON.stringify(tracked)).run();
-  await db.prepare("DELETE FROM active_war WHERE war_id != ?").bind(war.war_id).run();
+  await db.prepare("DELETE FROM active_war WHERE faction_id = ? AND war_id != ?").bind(factionId, war.war_id).run();
 }
 
-async function cursor(db: D1Database, sourceKey: string, defaultOffset = 0) {
-  const row = await db.prepare("SELECT next_offset, complete FROM torn_sync_cursors WHERE source_key = ?").bind(sourceKey).first<SyncCursorRow>();
+async function cursor(db: D1Database, context: FactionContext, sourceKey: string, defaultOffset = 0) {
+  const row = await db.prepare("SELECT next_offset, complete FROM torn_sync_cursors WHERE faction_id = ? AND source_key = ?").bind(context.factionId, sourceKey).first<SyncCursorRow>();
   return row ?? { next_offset: defaultOffset, complete: 0 };
 }
 
-async function saveCursor(db: D1Database, sourceKey: string, nextOffset: number, complete: boolean) {
-  await db.prepare(`INSERT INTO torn_sync_cursors (source_key, next_offset, complete) VALUES (?, ?, ?)
-    ON CONFLICT(source_key) DO UPDATE SET next_offset = excluded.next_offset, complete = excluded.complete, updated_at = CURRENT_TIMESTAMP`)
-    .bind(sourceKey, nextOffset, complete ? 1 : 0).run();
+async function saveCursor(db: D1Database, context: FactionContext, sourceKey: string, nextOffset: number, complete: boolean) {
+  await db.prepare(`INSERT INTO torn_sync_cursors (faction_id, source_key, next_offset, complete) VALUES (?, ?, ?, ?)
+    ON CONFLICT(faction_id, source_key) DO UPDATE SET next_offset = excluded.next_offset, complete = excluded.complete, updated_at = CURRENT_TIMESTAMP`)
+    .bind(context.factionId, sourceKey, nextOffset, complete ? 1 : 0).run();
 }
 
 async function backfillWars(db: D1Database, apiKey: string, factionId: number) {
-  const state = await cursor(db, "ranked_wars", 0);
+  const context = requireEnabledFaction(factionId, BLOOD_COVEN);
+  const state = await cursor(db, context, "ranked_wars", 0);
   if (state.complete) return { imported: 0, offset: state.next_offset, complete: true };
   const response = await tornFetch(`/faction/${factionId}/rankedwars?limit=${HISTORICAL_WAR_PAGE}&offset=${state.next_offset}`, apiKey);
   const wars = parseRankedWars(response);
@@ -298,7 +307,7 @@ async function backfillWars(db: D1Database, apiKey: string, factionId: number) {
   const complete = wars.length < HISTORICAL_WAR_PAGE;
   const advance = complete ? wars.length : Math.max(1, wars.length - HISTORICAL_WAR_OVERLAP);
   const nextOffset = state.next_offset + advance;
-  await saveCursor(db, "ranked_wars", nextOffset, complete);
+  await saveCursor(db, context, "ranked_wars", nextOffset, complete);
   return { imported, offset: nextOffset, complete };
 }
 
@@ -310,7 +319,7 @@ async function itemNames(apiKey: string, ids: number[]) {
   return new Map(items.map((item) => [asNumber(item.id), String(item.name ?? `Item #${asNumber(item.id)}`)]));
 }
 
-async function importCrimeBatch(db: D1Database, apiKey: string, crimes: JsonObject[]) {
+async function importCrimeBatch(db: D1Database, context: FactionContext, apiKey: string, crimes: JsonObject[]) {
   const rewardIds: number[] = [];
   for (const crime of crimes) {
     const rewards = asObject(crime.rewards);
@@ -338,34 +347,34 @@ async function importCrimeBatch(db: D1Database, apiKey: string, crimes: JsonObje
     const crimeName = String(crime.name ?? "Organized crime").trim().slice(0, 100) || "Organized crime";
     const summary = `${crimeName} — ${statusName}`;
     const result = await db.prepare(`INSERT INTO oc_holdings
-      (event_key, crime_name, status, cash_amount, items_json, summary, occurred_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(event_key) DO UPDATE SET crime_name = excluded.crime_name, status = excluded.status,
+      (faction_id, event_key, crime_name, status, cash_amount, items_json, summary, occurred_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(faction_id, event_key) DO UPDATE SET crime_name = excluded.crime_name, status = excluded.status,
         cash_amount = excluded.cash_amount, items_json = excluded.items_json, summary = excluded.summary,
         occurred_at = COALESCE(excluded.occurred_at, oc_holdings.occurred_at), updated_at = CURRENT_TIMESTAMP`)
-      .bind(`oc:${crimeId}`, crimeName, holdingStatus, successful ? Math.max(0, asNumber(rewards.money)) : 0,
+      .bind(context.factionId, `oc:${crimeId}`, crimeName, holdingStatus, successful ? Math.max(0, asNumber(rewards.money)) : 0,
         JSON.stringify(items.map(({ name, quantity }) => ({ name, quantity }))), summary, occurredAt).run();
     if (result.meta.changes) imported += 1;
   }
   return imported;
 }
 
-async function syncRecentCrimes(db: D1Database, apiKey: string) {
+async function syncRecentCrimes(db: D1Database, context: FactionContext, apiKey: string) {
   const response = await tornFetch(`/faction/crimes?cat=completed&limit=${HISTORICAL_OC_PAGE}&offset=0&sort=DESC`, apiKey);
   const crimes = Array.isArray(response.crimes) ? response.crimes.map(asObject) : [];
-  return { imported: await importCrimeBatch(db, apiKey, crimes), count: crimes.length };
+  return { imported: await importCrimeBatch(db, context, apiKey, crimes), count: crimes.length };
 }
 
-async function backfillCrimes(db: D1Database, apiKey: string) {
-  const state = await cursor(db, "organized_crimes", HISTORICAL_OC_PAGE);
+async function backfillCrimes(db: D1Database, context: FactionContext, apiKey: string) {
+  const state = await cursor(db, context, "organized_crimes", HISTORICAL_OC_PAGE);
   if (state.complete) return { imported: 0, offset: state.next_offset, complete: true };
   const response = await tornFetch(`/faction/crimes?cat=completed&limit=${HISTORICAL_OC_PAGE}&offset=${state.next_offset}&sort=DESC`, apiKey);
   const crimes = Array.isArray(response.crimes) ? response.crimes.map(asObject) : [];
-  const imported = await importCrimeBatch(db, apiKey, crimes);
+  const imported = await importCrimeBatch(db, context, apiKey, crimes);
   const complete = crimes.length < HISTORICAL_OC_PAGE;
   const advance = complete ? crimes.length : Math.max(1, crimes.length - HISTORICAL_OC_OVERLAP);
   const nextOffset = state.next_offset + advance;
-  await saveCursor(db, "organized_crimes", nextOffset, complete);
+  await saveCursor(db, context, "organized_crimes", nextOffset, complete);
   return { imported, offset: nextOffset, complete };
 }
 
@@ -384,14 +393,14 @@ async function sync(db: D1Database, apiKey: string) {
   const faction = asObject(factionResponse.faction);
   const factionId = asNumber(faction.id);
   const factionName = String(faction.name ?? "").trim();
-  if (!factionId || factionName.toLowerCase() !== BLOOD_COVEN) throw new Error("This API key does not belong to a Blood Coven member.");
+  const context = requireEnabledFaction(factionId, factionName);
 
   const recentResponse = await tornFetch(`/faction/${factionId}/rankedwars?limit=${RECENT_WAR_LIMIT}&offset=0`, apiKey);
   const recentWars = parseRankedWars(recentResponse);
   const recentWarsImported = await refreshRecentWars(db, apiKey, factionId, recentWars);
   const current = recentWars.find((war) => war.end === null);
   if (current) await trackActiveWar(db, apiKey, factionId, current);
-  else await db.prepare("DELETE FROM active_war").run();
+  else await db.prepare("DELETE FROM active_war WHERE faction_id = ?").bind(context.factionId).run();
 
   const warnings: string[] = [];
   let warBackfill = { imported: 0, offset: 0, complete: false };
@@ -401,14 +410,14 @@ async function sync(db: D1Database, apiKey: string) {
   let ocRecent = { imported: 0, count: 0 };
   let ocBackfill = { imported: 0, offset: HISTORICAL_OC_PAGE, complete: false };
   try {
-    ocRecent = await syncRecentCrimes(db, apiKey);
-    ocBackfill = await backfillCrimes(db, apiKey);
+    ocRecent = await syncRecentCrimes(db, context, apiKey);
+    ocBackfill = await backfillCrimes(db, context, apiKey);
   } catch (error) {
     warnings.push(`OC history requires a Minimal-or-higher key with faction API access: ${error instanceof Error ? error.message : "unavailable"}`);
   }
 
   return {
-    ...(await status(db)),
+    ...(await status(db, context)),
     faction: { id: factionId, name: factionName },
     syncedAt: new Date().toISOString(),
     history: { recentWarsImported, warBackfill, ocRecent, ocBackfill },
@@ -420,8 +429,8 @@ export async function GET() {
   try {
     const db = getD1();
     await ensureWarSchema(db);
-    await requireTreasuryLeader(db);
-    return Response.json(await status(db));
+    const actor = await requireTreasuryLeader(db);
+    return Response.json(await status(db, actor));
   }
   catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Unable to load war tracking." }, { status: error instanceof TreasuryAccessError ? 403 : 500 }); }
 }
@@ -432,7 +441,8 @@ export async function POST(request: Request) {
     const action = String(payload.action ?? "");
     const db = getD1();
     await ensureWarSchema(db);
-    await requireTreasuryLeader(db);
+    const actor = await requireTreasuryLeader(db);
+    rejectFactionOverride(payload, actor);
     if (action === "sync") return Response.json(await sync(db, String(payload.apiKey ?? "").trim()));
     const warId = asNumber(payload.warId);
     if (!warId) throw new Error("Choose a valid war.");
@@ -441,11 +451,11 @@ export async function POST(request: Request) {
       const taxBps = asNumber(payload.taxBps);
       if (amount <= 0) throw new Error("Reviewed value must be greater than zero.");
       if (taxBps < 0 || taxBps > 10000) throw new Error("Tax rate must be between 0% and 100%.");
-      await db.prepare("UPDATE pending_wars SET reviewed_value = ?, reviewed_tax_bps = ?, updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(amount, taxBps, warId).run();
+      await db.prepare("UPDATE pending_wars SET reviewed_value = ?, reviewed_tax_bps = ?, updated_at = CURRENT_TIMESTAMP WHERE faction_id = ? AND war_id = ? AND status = 'pending'").bind(amount, taxBps, actor.factionId, warId).run();
     } else if (action === "dismiss") {
-      await db.prepare("UPDATE pending_wars SET status = 'dismissed', updated_at = CURRENT_TIMESTAMP WHERE war_id = ? AND status = 'pending'").bind(warId).run();
+      await db.prepare("UPDATE pending_wars SET status = 'dismissed', updated_at = CURRENT_TIMESTAMP WHERE faction_id = ? AND war_id = ? AND status = 'pending'").bind(actor.factionId, warId).run();
     } else return Response.json({ error: "Unknown action." }, { status: 400 });
-    return Response.json(await status(db));
+    return Response.json(await status(db, actor));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update war tracking.";
     return Response.json({ error: message }, { status: error instanceof TreasuryAccessError ? 403 : /valid|choose|greater|belong|API key/i.test(message) ? 400 : 500 });

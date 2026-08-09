@@ -1,3 +1,11 @@
+import {
+  BLOOD_COVEN_ID,
+  BLOOD_COVEN_NAME,
+  ensureFactionFoundation,
+  recordVerifiedFactionMember,
+  requireEnabledFaction,
+} from "./tenant";
+
 export type ScriptSyncActor = {
   tokenId: string;
   memberId: number;
@@ -29,8 +37,6 @@ type TokenRow = ScriptSyncActor & { tokenHash: string };
 type JsonObject = Record<string, unknown>;
 
 const TORN_API = "https://api.torn.com/v2";
-const BLOOD_COVEN_ID = 52984;
-const BLOOD_COVEN_NAME = "Blood Coven";
 const MEMBERSHIP_RECHECK_MS = 5 * 60 * 1000;
 
 function randomHex(bytes: number) {
@@ -97,12 +103,13 @@ async function currentTornIdentity(apiKey: string) {
 }
 
 export async function ensureScriptSyncSchema(db: D1Database) {
+  await ensureFactionFoundation(db);
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS script_sync_tokens (
       token_id TEXT PRIMARY KEY,
       member_id INTEGER NOT NULL,
       member_name TEXT NOT NULL COLLATE NOCASE,
-      faction_id INTEGER,
+      faction_id INTEGER NOT NULL,
       faction_name TEXT NOT NULL DEFAULT '',
       token_hash TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -110,31 +117,12 @@ export async function ensureScriptSyncSchema(db: D1Database) {
       last_verified_at TEXT,
       expires_at TEXT,
       revoked_at TEXT,
-      revoked_reason TEXT
+      revoked_reason TEXT,
+      last_queue_depth INTEGER NOT NULL DEFAULT 0,
+      last_direct_push_at TEXT
     )`),
-    db.prepare("CREATE INDEX IF NOT EXISTS idx_script_sync_member ON script_sync_tokens(member_id, revoked_at, last_used_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_script_sync_faction_member ON script_sync_tokens(faction_id, member_id, revoked_at, last_used_at DESC)"),
   ]);
-
-  const columns = await db.prepare("PRAGMA table_info(script_sync_tokens)").all<{ name: string }>();
-  const additions = [
-    ["faction_id", "ALTER TABLE script_sync_tokens ADD COLUMN faction_id INTEGER"],
-    ["faction_name", "ALTER TABLE script_sync_tokens ADD COLUMN faction_name TEXT NOT NULL DEFAULT ''"],
-    ["last_verified_at", "ALTER TABLE script_sync_tokens ADD COLUMN last_verified_at TEXT"],
-    ["expires_at", "ALTER TABLE script_sync_tokens ADD COLUMN expires_at TEXT"],
-    ["revoked_reason", "ALTER TABLE script_sync_tokens ADD COLUMN revoked_reason TEXT"],
-  ] as const;
-  for (const [name, sql] of additions) {
-    if (columns.results.some((column) => column.name === name)) continue;
-    try { await db.prepare(sql).run(); }
-    catch (error) { if (!/duplicate column/i.test(error instanceof Error ? error.message : String(error))) throw error; }
-  }
-
-  await db.prepare(`UPDATE script_sync_tokens
-    SET faction_id = COALESCE(faction_id, ?),
-        faction_name = CASE WHEN faction_name = '' THEN ? ELSE faction_name END,
-        last_verified_at = COALESCE(last_verified_at, created_at)
-    WHERE revoked_at IS NULL`)
-    .bind(BLOOD_COVEN_ID, BLOOD_COVEN_NAME).run();
 }
 
 export async function issueScriptSyncToken(
@@ -145,21 +133,23 @@ export async function issueScriptSyncToken(
   factionName = BLOOD_COVEN_NAME,
 ) {
   await ensureScriptSyncSchema(db);
+  const context = requireEnabledFaction(factionId, factionName);
+  await recordVerifiedFactionMember(db, context, memberId, memberName);
   const tokenId = randomHex(16);
   const secret = randomHex(32);
   const tokenHash = await sha256(secret);
   await db.prepare(`INSERT INTO script_sync_tokens
     (token_id, member_id, member_name, faction_id, faction_name, token_hash, last_verified_at, expires_at)
     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)`)
-    .bind(tokenId, memberId, memberName, factionId, factionName, tokenHash).run();
+    .bind(tokenId, memberId, memberName, context.factionId, context.factionName, tokenHash).run();
   return `bc1.${tokenId}.${secret}`;
 }
 
-async function revokeToken(db: D1Database, tokenId: string, reason: string) {
+async function revokeToken(db: D1Database, tokenId: string, factionId: number, reason: string) {
   await db.prepare(`UPDATE script_sync_tokens
     SET revoked_at = CURRENT_TIMESTAMP, revoked_reason = ?
-    WHERE token_id = ? AND revoked_at IS NULL`)
-    .bind(reason.slice(0, 120), tokenId).run();
+    WHERE token_id = ? AND faction_id = ? AND revoked_at IS NULL`)
+    .bind(reason.slice(0, 120), tokenId, factionId).run();
 }
 
 export async function scriptSyncActor(request: Request, db: D1Database): Promise<ScriptSyncActor | null> {
@@ -200,7 +190,7 @@ export async function scriptSyncActor(request: Request, db: D1Database): Promise
       );
     }
     if (current.memberId !== row.memberId) {
-      await revokeToken(db, row.tokenId, `identity changed to ${current.memberId}`);
+      await revokeToken(db, row.tokenId, row.factionId, `identity changed to ${current.memberId}`);
       throw new ScriptSyncAccessError(
         "This userscript session belongs to a different Torn account and has been signed out.",
         "identity_changed",
@@ -208,8 +198,8 @@ export async function scriptSyncActor(request: Request, db: D1Database): Promise
         current.factionId ? { id: current.factionId, name: current.factionName } : null,
       );
     }
-    if (current.factionId !== row.factionId || current.factionId !== BLOOD_COVEN_ID) {
-      await revokeToken(db, row.tokenId, `faction changed to ${current.factionId || 0}:${current.factionName || "none"}`);
+    if (current.factionId !== row.factionId) {
+      await revokeToken(db, row.tokenId, row.factionId, `faction changed to ${current.factionId || 0}:${current.factionName || "none"}`);
       throw new ScriptSyncAccessError(
         current.factionId
           ? `Torn now reports membership in ${current.factionName || `faction #${current.factionId}`}; the Blood Coven userscript session has been signed out.`
@@ -220,15 +210,19 @@ export async function scriptSyncActor(request: Request, db: D1Database): Promise
       );
     }
 
+    const context = requireEnabledFaction(current.factionId, current.factionName);
+    await recordVerifiedFactionMember(db, context, current.memberId, current.memberName);
+
     row.memberName = current.memberName;
     row.factionName = current.factionName || row.factionName;
     row.lastVerifiedAt = new Date().toISOString();
     await db.prepare(`UPDATE script_sync_tokens
       SET member_name = ?, faction_name = ?, last_verified_at = CURRENT_TIMESTAMP, last_used_at = CURRENT_TIMESTAMP
-      WHERE token_id = ?`)
-      .bind(row.memberName, row.factionName, row.tokenId).run();
+      WHERE token_id = ? AND faction_id = ?`)
+      .bind(row.memberName, row.factionName, row.tokenId, row.factionId).run();
   } else {
-    await db.prepare("UPDATE script_sync_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token_id = ?").bind(row.tokenId).run();
+    await db.prepare("UPDATE script_sync_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token_id = ? AND faction_id = ?")
+      .bind(row.tokenId, row.factionId).run();
   }
 
   return {
@@ -239,6 +233,14 @@ export async function scriptSyncActor(request: Request, db: D1Database): Promise
     factionName: row.factionName,
     lastVerifiedAt: row.lastVerifiedAt,
   };
+}
+
+export async function recordScriptSyncPush(db: D1Database, actor: ScriptSyncActor, queueDepth: number) {
+  const safeDepth = Number.isSafeInteger(queueDepth) ? Math.max(0, Math.min(queueDepth, 100_000)) : 0;
+  await db.prepare(`UPDATE script_sync_tokens SET
+      last_queue_depth = ?, last_direct_push_at = CURRENT_TIMESTAMP, last_used_at = CURRENT_TIMESTAMP
+    WHERE token_id = ? AND faction_id = ? AND revoked_at IS NULL`)
+    .bind(safeDepth, actor.tokenId, actor.factionId).run();
 }
 
 export async function requireScriptSyncActor(request: Request, db: D1Database) {

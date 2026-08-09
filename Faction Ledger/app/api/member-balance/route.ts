@@ -1,6 +1,7 @@
 import { getD1 } from "../../../db";
-import { ensureMemberBalanceSchema } from "../../../db/member-balances";
+import { ensureMemberBalanceSchema, recordExplicitBalance } from "../../../db/member-balances";
 import { issueScriptSyncToken } from "../../../db/script-sync";
+import { recordVerifiedFactionMember, requireEnabledFaction, type FactionContext } from "../../../db/tenant";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
@@ -23,13 +24,6 @@ type VerifiedMember = {
 };
 
 const TORN_API = "https://api.torn.com/v2";
-const BLOOD_COVEN_ID = 52984;
-const EXPLICIT_OBSERVATION_PRIORITY = 2;
-const explicitObservationWins = `(member_balances.observed_at IS NULL
-  OR datetime(excluded.observed_at) > datetime(member_balances.observed_at)
-  OR (datetime(excluded.observed_at) = datetime(member_balances.observed_at)
-    AND excluded.observed_priority >= member_balances.observed_priority))`;
-
 function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
 }
@@ -59,22 +53,24 @@ async function verifyMember(apiKey: string): Promise<VerifiedMember> {
   const factionId = asNumber(faction.id);
   const factionName = String(faction.name ?? "").trim().slice(0, 100);
   if (!memberId || !memberName) throw new Error("Torn did not return a usable player identity.");
-  if (factionId !== BLOOD_COVEN_ID || factionName.toLowerCase() !== "blood coven") {
-    throw new Error(factionId
-      ? `This key currently belongs to ${factionName || `faction #${factionId}`}, not Blood Coven.`
-      : "This key does not currently belong to a faction.");
-  }
+  requireEnabledFaction(factionId, factionName);
   return { memberId, memberName, factionId, factionName };
 }
 
-async function memberSnapshot(db: D1Database, member: VerifiedMember) {
-  await db.prepare("UPDATE member_balances SET member_id = ? WHERE member_name = ? COLLATE NOCASE")
-    .bind(member.memberId, member.memberName).run();
-  const balance = await db.prepare("SELECT * FROM member_balances WHERE member_name = ? COLLATE NOCASE").bind(member.memberName).first<BalanceRow>();
+async function memberSnapshot(db: D1Database, context: FactionContext, member: VerifiedMember) {
+  await db.prepare(`UPDATE member_balances SET member_id = ?, member_name = ?, resolution_status = 'verified', updated_at = CURRENT_TIMESTAMP
+    WHERE id = (SELECT id FROM member_balances WHERE faction_id = ? AND member_id IS NULL AND member_name = ? COLLATE NOCASE ORDER BY id LIMIT 1)
+      AND faction_id = ? AND NOT EXISTS (SELECT 1 FROM member_balances WHERE faction_id = ? AND member_id = ?)`)
+    .bind(member.memberId, member.memberName, context.factionId, member.memberName, context.factionId, context.factionId, member.memberId).run();
+  await db.prepare("UPDATE member_balances SET member_name = ?, resolution_status = 'verified', updated_at = CURRENT_TIMESTAMP WHERE faction_id = ? AND member_id = ?")
+    .bind(member.memberName, context.factionId, member.memberId).run();
+  const balance = await db.prepare("SELECT * FROM member_balances WHERE faction_id = ? AND member_id = ?")
+    .bind(context.factionId, member.memberId).first<BalanceRow>();
   const requests = await db.prepare(`SELECT id, amount, status, note, delivery_preference AS deliveryPreference, created_at AS createdAt, updated_at AS updatedAt
-    FROM payout_requests WHERE member_id = ? ORDER BY created_at DESC LIMIT 10`).bind(member.memberId).all();
+    FROM payout_requests WHERE faction_id = ? AND member_id = ? ORDER BY created_at DESC LIMIT 10`).bind(context.factionId, member.memberId).all();
   const entries = await db.prepare(`SELECT amount, kind, source, summary, occurred_at AS occurredAt, created_at AS createdAt
-    FROM member_balance_entries WHERE member_name = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 20`).bind(member.memberName).all();
+    FROM member_balance_entries WHERE faction_id = ? AND member_id = ? ORDER BY created_at DESC LIMIT 20`)
+    .bind(context.factionId, member.memberId).all();
   return {
     member: { id: member.memberId, name: member.memberName },
     faction: { id: member.factionId, name: member.factionName },
@@ -88,26 +84,14 @@ async function memberSnapshot(db: D1Database, member: VerifiedMember) {
   };
 }
 
-async function applyExplicitBalance(db: D1Database, memberName: string, balance: number, observedAt: string, memberId?: number) {
-  await db.prepare(`INSERT INTO member_balances (member_name, member_id, balance, observed_at, observed_priority)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(member_name) DO UPDATE SET
-      member_id = COALESCE(excluded.member_id, member_balances.member_id),
-      balance = CASE WHEN ${explicitObservationWins} THEN excluded.balance ELSE member_balances.balance END,
-      observed_at = CASE WHEN ${explicitObservationWins} THEN excluded.observed_at ELSE member_balances.observed_at END,
-      observed_priority = CASE WHEN ${explicitObservationWins} THEN excluded.observed_priority ELSE member_balances.observed_priority END,
-      updated_at = CASE WHEN ${explicitObservationWins} THEN CURRENT_TIMESTAMP ELSE member_balances.updated_at END`)
-    .bind(memberName, memberId ?? null, balance, observedAt, EXPLICIT_OBSERVATION_PRIORITY).run();
-}
-
 export async function GET() {
   try {
     const db = getD1();
     await ensureMemberBalanceSchema(db);
-    await requireTreasuryLeader(db);
+    const actor = await requireTreasuryLeader(db);
     const [balances, requests] = await Promise.all([
-      db.prepare("SELECT member_id AS memberId, member_name AS memberName, balance, earned_total AS earnedTotal, paid_total AS paidTotal, observed_at AS observedAt, updated_at AS updatedAt FROM member_balances ORDER BY balance DESC, member_name ASC").all(),
-      db.prepare("SELECT id, member_id AS memberId, member_name AS memberName, amount, status, note, delivery_preference AS deliveryPreference, created_at AS createdAt, updated_at AS updatedAt FROM payout_requests ORDER BY created_at DESC LIMIT 100").all(),
+      db.prepare("SELECT member_id AS memberId, member_name AS memberName, balance, earned_total AS earnedTotal, paid_total AS paidTotal, observed_at AS observedAt, updated_at AS updatedAt FROM member_balances WHERE faction_id = ? ORDER BY balance DESC, member_name ASC").bind(actor.factionId).all(),
+      db.prepare("SELECT id, member_id AS memberId, member_name AS memberName, amount, status, note, delivery_preference AS deliveryPreference, created_at AS createdAt, updated_at AS updatedAt FROM payout_requests WHERE faction_id = ? ORDER BY created_at DESC LIMIT 100").bind(actor.factionId).all(),
     ]);
     return Response.json({ balances: balances.results, requests: requests.results });
   } catch (error) {
@@ -121,13 +105,15 @@ export async function POST(request: Request) {
     const payload = await request.json() as JsonObject;
     const apiKey = String(payload.apiKey ?? "").trim();
     const member = await verifyMember(apiKey);
+    const context = requireEnabledFaction(member.factionId, member.factionName);
     const db = getD1();
     await ensureMemberBalanceSchema(db);
+    await recordVerifiedFactionMember(db, context, member.memberId, member.memberName);
     const observedBalance = Number(payload.observedBalance);
     const observedAt = Date.parse(String(payload.observedAt ?? ""));
     if (payload.balanceSource === "armory" && Number.isSafeInteger(observedBalance) && observedBalance >= 0 && observedBalance <= 1_000_000_000_000
       && Number.isFinite(observedAt) && Math.abs(Date.now() - observedAt) <= 7 * 24 * 60 * 60 * 1000) {
-      await applyExplicitBalance(db, member.memberName, observedBalance, new Date(observedAt).toISOString(), member.memberId);
+      await recordExplicitBalance(db, context, member.memberName, observedBalance, new Date(observedAt).toISOString(), member.memberId);
     }
     const action = String(payload.action ?? "verify");
     if (action === "importSnapshots") {
@@ -153,29 +139,30 @@ export async function POST(request: Request) {
           const name = String(balanceRow.name ?? "").trim().slice(0, 80);
           const balance = Number(balanceRow.balance);
           if (!name || !Number.isSafeInteger(balance) || balance < 0 || balance > 1_000_000_000_000) continue;
-          await applyExplicitBalance(db, name, balance, snapshotObservedAtIso);
+          await recordExplicitBalance(db, context, name, balance, snapshotObservedAtIso);
         }
         acceptedKeys.push(eventKey);
       }
-      return Response.json({ acceptedKeys, ...(await memberSnapshot(db, member)) });
+      return Response.json({ acceptedKeys, ...(await memberSnapshot(db, context, member)) });
     }
     if (action === "request") {
-      const current = await memberSnapshot(db, member);
+      const current = await memberSnapshot(db, context, member);
       const amount = asNumber(payload.amount);
       if (amount <= 0 || amount > current.balance) throw new Error("Request an amount up to your available balance.");
-      const pending = await db.prepare("SELECT id FROM payout_requests WHERE member_id = ? AND status IN ('pending', 'approved') LIMIT 1").bind(member.memberId).first();
+      const pending = await db.prepare("SELECT id FROM payout_requests WHERE faction_id = ? AND member_id = ? AND status IN ('pending', 'approved') LIMIT 1")
+        .bind(context.factionId, member.memberId).first();
       if (pending) throw new Error("You already have an open payout request.");
       const note = String(payload.note ?? "").trim().slice(0, 160);
       const deliveryPreference = String(payload.deliveryPreference ?? "offline");
       if (!new Set(["offline", "online", "online_or_travel"]).has(deliveryPreference)) throw new Error("Choose a valid delivery preference.");
       await db.prepare(`INSERT INTO payout_requests
-        (member_id, member_name, amount, delivery_preference, note, requested_by_user_id, requested_by_email)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .bind(member.memberId, member.memberName, amount, deliveryPreference, note, user?.userId ?? "local-member", user?.email ?? "local@blood-coven").run();
+        (faction_id, member_id, member_name, amount, delivery_preference, note, requested_by_user_id, requested_by_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(context.factionId, member.memberId, member.memberName, amount, deliveryPreference, note, user?.userId ?? "local-member", user?.email ?? "local@blood-coven").run();
     } else if (action !== "verify") {
       return Response.json({ error: "Unknown action." }, { status: 400 });
     }
-    const result = await memberSnapshot(db, member);
+    const result = await memberSnapshot(db, context, member);
     if (action === "verify" && payload.issueSyncToken === true) {
       return Response.json({
         ...result,

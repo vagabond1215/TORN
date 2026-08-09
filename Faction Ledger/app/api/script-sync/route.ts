@@ -17,10 +17,9 @@ export async function GET(request: Request) {
     const actor = await requireScriptSyncActor(request, db);
     const row = await db.prepare(`SELECT member_id, member_name, balance, observed_at, updated_at
       FROM member_balances
-      WHERE member_id = ? OR member_name = ? COLLATE NOCASE
-      ORDER BY CASE WHEN member_id = ? THEN 0 ELSE 1 END
+      WHERE faction_id = ? AND member_id = ?
       LIMIT 1`)
-      .bind(actor.memberId, actor.memberName, actor.memberId).first<BalanceRow>();
+      .bind(actor.factionId, actor.memberId).first<BalanceRow>();
     return Response.json({
       member: { id: actor.memberId, name: actor.memberName },
       faction: { id: actor.factionId, name: actor.factionName },
