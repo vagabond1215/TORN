@@ -398,3 +398,70 @@ The synthetic second-faction tests prove that the two tenants can independently 
 ### Readiness
 
 The branch is ready for human code/migration review and exact-production-copy rehearsal. It is not yet approved for production D1, deployment, merge, or enabling non-Blood-Coven tenants.
+
+---
+
+## Reconciliation handoff — 2026-08-08
+
+### Git reconciliation and cleanup
+
+- Starting local branch: `codex/faction-ledger-multitenancy` at `5f180732ff66639813a0d5d7adb89fa9f3e6ed38`.
+- Starting remote branch: `origin/codex/faction-ledger-multitenancy` at the same SHA, `5f180732ff66639813a0d5d7adb89fa9f3e6ed38`.
+- Integration base: `origin/agent/fix-faction-ledger-sync-safety` at `38a9dbabf270447e854716e0c0101c6ceb9593b7`. There was no local branch with that name, so comparisons used the authoritative remote-tracking ref.
+- `git fetch --all --prune` completed successfully. No pull or fast-forward was required because local and remote Codex refs already matched and the worktree was clean.
+- Commit `5f180732ff66639813a0d5d7adb89fa9f3e6ed38` was verified to contain exactly 13 added PNG files under `Blissful Reverie/` and no `Faction Ledger/` changes. Its parent is the complete Faction Ledger handoff commit `d3a7ff5b927b3e98eca30a8124f16273a12799d1`.
+- The unrelated commit was removed from the branch contents with a normal, recoverable revert: `fb27cd8` (`Revert "Refactor Faction Ledger for multi-tenant faction isolation"`). No reset, rebase, history rewrite, or force-push was used.
+- Final implementation/cleanup SHA before this documentation-only handoff commit: `fb27cd8`. The exact pushed branch-tip SHA is reported in the task handoff after the documentation commit is created and the remote ref is verified.
+
+### Integration diff after cleanup
+
+The merge-base comparison against `origin/agent/fix-faction-ledger-sync-safety` contains only these 21 `Faction Ledger/` paths; no unrelated project files remain:
+
+- `app/BudgetTracker.tsx`
+- `app/MemberBalance.tsx`
+- `app/api/access/route.ts`
+- `app/api/budget/route.ts`
+- `app/api/member-balance/route.ts`
+- `app/api/script-sync/route.ts`
+- `app/api/torn-browser/route.ts`
+- `app/api/torn/route.ts`
+- `app/treasury-access.ts`
+- `db/member-balances.ts`
+- `db/schema.ts`
+- `db/script-sync.ts`
+- `db/tenant.ts`
+- `docs/CODEX_MULTI_TENANCY_RUN.md`
+- `drizzle/0008_sparkling_scream.sql`
+- `drizzle/meta/0008_snapshot.json`
+- `drizzle/meta/_journal.json`
+- `package.json`
+- `public/blood-coven-treasury.user.js`
+- `tests/multitenancy-isolation.test.mjs`
+- `tests/rendered-html.test.mjs`
+
+### Fresh validation results
+
+- `npm.cmd ci` — exit 0; 506 packages installed. NPM reported 21 dependency vulnerabilities (1 low, 4 moderate, 16 high); dependency upgrades were not introduced during this scoped reconciliation.
+- `npm.cmd run check` — exit 0; ESLint passed, the production build completed, and all 6 rendered/migration/isolation tests passed.
+- `npx.cmd tsc --noEmit -p tsconfig.json` — exit 0.
+- `node --test tests\\multitenancy-isolation.test.mjs` — exit 0; 3/3 tests passed.
+- `npm.cmd run db:generate` — exit 0 and reported `No schema changes, nothing to migrate`; no follow-up migration or metadata changes were generated.
+- `git diff --check` — exit 0.
+
+### Audit and migration evidence
+
+- Reviewed every changed durable query/runtime table in the access, budget, member-balance, script-sync, Torn browser, Torn API, treasury access, balance, tenant, schema, and userscript paths. Reads, writes, conflict targets, cursor keys, event keys, Armory keys, authorization, and replay guards are faction-scoped to verified context.
+- Verified that client-supplied faction overrides are rejected and that product writes remain gated by `requireEnabledFaction` to Blood Coven faction `52984`.
+- Reviewed `drizzle/0008_sparkling_scream.sql`, `drizzle/meta/0008_snapshot.json`, and `drizzle/meta/_journal.json`. The snapshot contains the expected 22 tables and the journal has a single ordered `0008_sparkling_scream` entry.
+- The local migration test again preserved the seeded legacy counts and totals: 1 transaction; 1,000 account balance; 1,000 member balance; 1,200 earned; 200 paid; 1 balance entry; 1 OC holding; and 1 Armory item. All other seeded tenant-owned rows also remained assigned to faction `52984`.
+- The synthetic isolation test again proved independent coexistence for identical member names, item names, event keys, OC keys, war IDs, policy keys, Armory categories, and history cursor keys, while duplicate observers and replay after journal pruning did not duplicate durable effects.
+- No implementation defect was found during reconciliation, so no production code or migration behavior was changed beyond the unrelated-asset revert and this appended evidence.
+
+### Remaining risks and product boundary
+
+- Legacy name-only member rows remain `unresolved`; duplicated or ambiguous legacy member IDs/names require manual review and are not guessed or merged.
+- `armory_items.observed_at` intentionally migrates as `NULL` for compatibility with historical runtime schemas that may not contain the column. Inventory names, categories, quantities, source, and update timestamps remain preserved.
+- Product authorization and userscript identity remain intentionally Blood-Coven-only (`52984`); arbitrary-faction production creation, login, selection, and writes are still disabled.
+- Before production D1 work: export/backup D1, inspect the exact production `sqlite_master` and `PRAGMA table_info` state, rehearse `0008` against a copy, compare pre/post counts and financial totals, review unresolved member mappings, and rehearse backup restoration. Concurrent writes require a maintenance window.
+- Rollback remains restore from the verified D1 backup/export or use of a separately reviewed reverse migration. Do not use a destructive reset.
+- This reconciliation did not connect to production D1, run Wrangler migration/deploy commands, deploy the application, merge a branch/PR, enable arbitrary-faction writes, or touch `main`.
