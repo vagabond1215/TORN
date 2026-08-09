@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.4.0
+// @version      1.5.0
 // @description  Shares Blood Coven balance, Armory, OC, and ranked-war observations between verified faction users and the private treasury.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -29,6 +29,7 @@
   const SYNC_FACTION_KEY = "blood-coven-script-sync-faction-v1";
   const SYNC_SIGNOUT_KEY = "blood-coven-script-sync-signout-v1";
   const SCANNER_POSITION = "blood-coven-scanner-position-v1";
+  const ACTIVE_SCOPE_KEY = "blood-coven-active-faction-scope-v2";
   const BLOOD_COVEN_ID = 52984;
   const MAX_QUEUE = 2000;
   let directSyncTimer = 0;
@@ -48,8 +49,17 @@
     return (result >>> 0).toString(36);
   }
 
+  function activeScope() {
+    const value = String(GM_getValue(ACTIVE_SCOPE_KEY, "") ?? "");
+    return /^\d+:\d+$/.test(value) ? value : "unbound";
+  }
+
+  function scopedKey(base, scope = activeScope()) {
+    return `${base}:${scope}`;
+  }
+
   function queue() {
-    const value = GM_getValue(QUEUE_KEY, []);
+    const value = GM_getValue(scopedKey(QUEUE_KEY), []);
     return Array.isArray(value) ? value : [];
   }
 
@@ -63,25 +73,26 @@
       unique.push(event);
       if (unique.length >= MAX_QUEUE) break;
     }
-    GM_setValue(QUEUE_KEY, unique.reverse());
+    GM_setValue(scopedKey(QUEUE_KEY), unique.reverse());
   }
 
   function syncToken() {
-    const value = String(GM_getValue(SYNC_TOKEN_KEY, "") ?? "");
+    const value = String(GM_getValue(scopedKey(SYNC_TOKEN_KEY), "") ?? "");
     return /^bc1\.[a-f0-9]{32}\.[a-f0-9]{64}$/i.test(value) ? value : "";
   }
 
   function syncApiKey() {
-    const value = String(GM_getValue(SYNC_API_KEY_KEY, "") ?? "").trim();
+    const value = String(GM_getValue(scopedKey(SYNC_API_KEY_KEY), "") ?? "").trim();
     return /^[A-Za-z0-9_-]{8,128}$/.test(value) ? value : "";
   }
 
   function syncFaction() {
-    const value = GM_getValue(SYNC_FACTION_KEY, null);
+    const value = GM_getValue(scopedKey(SYNC_FACTION_KEY), null);
     if (!value || typeof value !== "object") return null;
     const id = Number(value.id);
     const name = normalize(value.name);
-    return Number.isSafeInteger(id) && id > 0 && name ? { id, name } : null;
+    const memberId = Number(value.memberId);
+    return Number.isSafeInteger(id) && id > 0 && Number.isSafeInteger(memberId) && memberId > 0 && name ? { id, name, memberId } : null;
   }
 
   function syncSignout() {
@@ -90,12 +101,12 @@
   }
 
   function clearFactionState(message, currentFaction = null, code = "signed_out") {
-    saveQueue([]);
-    GM_setValue(BALANCE_STORE, null);
-    GM_setValue(SERVER_BALANCE_STORE, null);
-    GM_setValue(SYNC_TOKEN_KEY, "");
-    GM_setValue(SYNC_API_KEY_KEY, "");
-    GM_setValue(SYNC_FACTION_KEY, null);
+    const scope = activeScope();
+    for (const key of [QUEUE_KEY, BALANCE_STORE, SERVER_BALANCE_STORE, SYNC_TOKEN_KEY, SYNC_API_KEY_KEY, SYNC_FACTION_KEY, SCANNER_POSITION]) {
+      GM_setValue(scopedKey(key, scope), null);
+      GM_setValue(key, null);
+    }
+    GM_setValue(ACTIVE_SCOPE_KEY, "");
     GM_setValue(SYNC_SIGNOUT_KEY, {
       code,
       message: normalize(message) || "Faction sync was signed out.",
@@ -105,21 +116,26 @@
     document.getElementById("blood-coven-faction-balance")?.remove();
   }
 
-  function installSyncIdentity(token, apiKey, faction) {
+  function installSyncIdentity(token, apiKey, faction, member) {
     const cleanToken = String(token ?? "");
     const cleanApiKey = String(apiKey ?? "").trim();
     const factionId = Number(faction?.id);
     const factionName = normalize(faction?.name);
+    const memberId = Number(member?.id);
     if (!/^bc1\.[a-f0-9]{32}\.[a-f0-9]{64}$/i.test(cleanToken)) return false;
     if (!/^[A-Za-z0-9_-]{8,128}$/.test(cleanApiKey)) return false;
     if (factionId !== BLOOD_COVEN_ID || factionName.toLowerCase() !== "blood coven") return false;
+    if (!Number.isSafeInteger(memberId) || memberId <= 0) return false;
 
-    saveQueue([]);
-    GM_setValue(BALANCE_STORE, null);
-    GM_setValue(SERVER_BALANCE_STORE, null);
-    GM_setValue(SYNC_TOKEN_KEY, cleanToken);
-    GM_setValue(SYNC_API_KEY_KEY, cleanApiKey);
-    GM_setValue(SYNC_FACTION_KEY, { id: factionId, name: factionName });
+    const nextScope = `${factionId}:${memberId}`;
+    if (activeScope() !== nextScope) clearFactionState("Faction identity changed; old local state was cleared.", faction, "identity_switch");
+    GM_setValue(ACTIVE_SCOPE_KEY, nextScope);
+    GM_setValue(scopedKey(QUEUE_KEY), []);
+    GM_setValue(scopedKey(BALANCE_STORE), null);
+    GM_setValue(scopedKey(SERVER_BALANCE_STORE), null);
+    GM_setValue(scopedKey(SYNC_TOKEN_KEY), cleanToken);
+    GM_setValue(scopedKey(SYNC_API_KEY_KEY), cleanApiKey);
+    GM_setValue(scopedKey(SYNC_FACTION_KEY), { id: factionId, name: factionName, memberId });
     GM_setValue(SYNC_SIGNOUT_KEY, null);
     return true;
   }
@@ -419,7 +435,7 @@
     const pageText = normalize(document.body.innerText);
     const match = pageText.match(/You have \$[\d,]+(?:\.\d{1,2})? and a balance of \$([\d,]+(?:\.\d{1,2})?)/i);
     if (!match) return false;
-    GM_setValue(BALANCE_STORE, {
+    GM_setValue(scopedKey(BALANCE_STORE), {
       balance: moneyValue(match[1]),
       source: "armory",
       updatedAt: new Date().toISOString(),
@@ -461,12 +477,12 @@
   }
 
   function armoryBalanceCache() {
-    const value = GM_getValue(BALANCE_STORE, null);
+    const value = GM_getValue(scopedKey(BALANCE_STORE), null);
     return value && typeof value === "object" && value.source === "armory" ? value : null;
   }
 
   function serverBalanceCache() {
-    const value = GM_getValue(SERVER_BALANCE_STORE, null);
+    const value = GM_getValue(scopedKey(SERVER_BALANCE_STORE), null);
     return value && typeof value === "object" && value.source === "server" ? value : null;
   }
 
@@ -653,7 +669,7 @@
     const memberName = normalize(payload?.member?.name);
     if (!Number.isSafeInteger(balance) || balance < 0 || balance > 1_000_000_000_000 || !memberName) return;
     const updatedAt = String(payload.observedAt || payload.updatedAt || payload.serverTime || new Date().toISOString());
-    GM_setValue(SERVER_BALANCE_STORE, { balance, memberName, source: "server", updatedAt });
+    GM_setValue(scopedKey(SERVER_BALANCE_STORE), { balance, memberName, source: "server", updatedAt });
     addFactionBalance();
   }
 
@@ -667,7 +683,8 @@
 
       const pending = queue().slice(0, 100);
       if (pending.length) {
-        const imported = await directRequest("POST", "/api/torn-browser", { events: pending });
+        const faction = syncFaction();
+        const imported = await directRequest("POST", "/api/torn-browser", { events: pending, queueDepth: queue().length, factionId: faction?.id });
         const accepted = new Set(Array.isArray(imported.acceptedKeys) ? imported.acceptedKeys.map(String) : []);
         if (accepted.size) saveQueue(queue().filter((item) => !accepted.has(item.eventKey)));
       }
@@ -703,7 +720,7 @@
   }
 
   function postToTreasury(kind, extra = {}) {
-    window.postMessage({ channel: CHANNEL, kind, version: "1.4.0", ...extra }, TREASURY_ORIGIN);
+    window.postMessage({ channel: CHANNEL, kind, version: "1.5.0", ...extra }, TREASURY_ORIGIN);
   }
 
   function runTreasuryBridge() {
@@ -721,7 +738,7 @@
       if (event.origin !== TREASURY_ORIGIN || event.data?.channel !== CHANNEL) return;
       if (event.data.kind === "ping") sendReady();
       if (event.data.kind === "installSyncToken") {
-        if (installSyncIdentity(event.data.token, event.data.apiKey, event.data.faction)) {
+        if (installSyncIdentity(event.data.token, event.data.apiKey, event.data.faction, event.data.member)) {
           postToTreasury("syncTokenInstalled");
           sendReady();
         }
@@ -803,7 +820,7 @@
       border: "1px solid rgba(255,255,255,.45)", background: "#8e1b2d", color: "#fff", cursor: "grab",
       font: "800 11px/1 Arial,sans-serif", boxShadow: "0 4px 16px rgba(0,0,0,.4)", userSelect: "none", touchAction: "none",
     });
-    const saved = GM_getValue(SCANNER_POSITION, null);
+    const saved = GM_getValue(scopedKey(SCANNER_POSITION), null);
     const left = Number(saved?.left);
     const top = Number(saved?.top);
     button.style.left = `${Number.isFinite(left) ? Math.max(4, Math.min(window.innerWidth - 52, left)) : window.innerWidth - 66}px`;
@@ -833,7 +850,7 @@
       drag = null;
       button.releasePointerCapture(event.pointerId);
       button.style.cursor = "grab";
-      GM_setValue(SCANNER_POSITION, { left: parseFloat(button.style.left), top: parseFloat(button.style.top) });
+      GM_setValue(scopedKey(SCANNER_POSITION), { left: parseFloat(button.style.left), top: parseFloat(button.style.top) });
       if (!moved) manualScan();
     });
     document.body.appendChild(button);

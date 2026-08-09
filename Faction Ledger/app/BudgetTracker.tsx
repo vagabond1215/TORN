@@ -58,6 +58,7 @@ const emptyData: BudgetData = { currentUser: null, accounts: [], policies: [], t
 const emptyWars: WarStatus = { pendingWars: [], activeWar: null };
 const emptyBridge: BrowserBridgeInfo = { totalEvents: 0, lastImportedAt: null, recentEvents: [], ocHoldings: [], armoryItems: [] };
 const BRIDGE_CHANNEL = "blood-coven-treasury-bridge-v1";
+const TORN_KEY_STORAGE = "torn-treasury-api-key-v2:52984";
 const ARMORY_TABS: Array<{ key: ArmoryCategory; label: string }> = [
   { key: "all", label: "All" },
   { key: "primary", label: "Primary" },
@@ -266,7 +267,9 @@ export default function BudgetTracker() {
     const task = window.setTimeout(() => {
       const savedTheme = window.localStorage.getItem("blood-coven-theme");
       if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") setTheme(savedTheme);
-      const savedKey = window.localStorage.getItem("blood-coven-torn-key") ?? "";
+      const savedKey = window.localStorage.getItem(TORN_KEY_STORAGE) ?? window.localStorage.getItem("blood-coven-torn-key") ?? "";
+      if (savedKey) window.localStorage.setItem(TORN_KEY_STORAGE, savedKey);
+      window.localStorage.removeItem("blood-coven-torn-key");
       setTornKey(savedKey);
       setTornKeyDraft(savedKey);
       Promise.all([loadBudget(), loadWars(), loadMemberAdmin()]).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load the treasury."))
@@ -445,10 +448,10 @@ export default function BudgetTracker() {
     event.preventDefault();
     const next = tornKeyDraft.trim();
     if (!next) { setError("Enter a Torn API key."); return; }
-    window.localStorage.setItem("blood-coven-torn-key", next); setTornKey(next); setError(""); flash("Torn key saved on this device. Syncing now.");
+    window.localStorage.setItem(TORN_KEY_STORAGE, next); setTornKey(next); setError(""); flash("Torn key saved on this device. Syncing now.");
   }
   function removeTornKey() {
-    window.localStorage.removeItem("blood-coven-torn-key"); setTornKey(""); setTornKeyDraft(""); setLastSyncAt(""); flash("Torn key removed from this device.");
+    window.localStorage.removeItem(TORN_KEY_STORAGE); window.localStorage.removeItem("blood-coven-torn-key"); setTornKey(""); setTornKeyDraft(""); setLastSyncAt(""); flash("Torn key removed from this device.");
   }
   function copySiteLink() { void navigator.clipboard.writeText(window.location.href); flash("Site link copied."); }
   function copyBalanceLink() { void navigator.clipboard.writeText(`${window.location.origin}/balance`); flash("Member balance link copied."); }

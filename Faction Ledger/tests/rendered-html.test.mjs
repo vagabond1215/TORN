@@ -71,7 +71,7 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(script, /GM_getValue/);
   assert.match(script, /xanax_use/);
   assert.match(script, /faction_payout/);
-  assert.match(script, /oc_credit/);
+  assert.match(script, /member_balance_change/);
   assert.match(script, /Request faction balance/);
   assert.match(script, /bc-balance-label\">Faction:/);
   assert.match(script, /insertBefore\(entry, pointsLink\)/);
