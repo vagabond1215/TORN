@@ -1,6 +1,6 @@
 # Next Codex Run: Payout Settlement Atomicity and Migration Ownership
 
-**Status: ACTIVE**
+**Status: COMPLETED**
 
 This is the authoritative current Codex task for `Faction Ledger/`. The broader tenancy design and historical handoff evidence remain in [`CODEX_MULTI_TENANCY_RUN.md`](./CODEX_MULTI_TENANCY_RUN.md), but when this file is marked **ACTIVE**, execute this file's scope before returning to broader roadmap work.
 
@@ -470,3 +470,65 @@ Report:
 - confirmation that nothing was deployed or merged.
 
 Do not call the run complete unless both current blockers are covered by behavioral tests and the full existing suite still passes.
+
+---
+
+## Result — 2026-08-09
+
+### Git state and files changed
+
+- Starting branch/SHA: `codex/faction-ledger-multitenancy` at `107d0e2a81de0c0e78ab7f9a8760fa0fce3580ca`.
+- Local and remote branch refs matched after `git fetch --all --prune`; no pull or fast-forward was required and the starting worktree was clean.
+- Implementation/migration commit: `bd377cf` (`Make payout request settlement atomic and member-ID safe`).
+- Regression commit: `4b7a43f` (`Add payout settlement and migration ownership regressions`).
+- Final implementation/test SHA before this documentation handoff: `4b7a43f`. The exact pushed branch-tip SHA is reported in the task handoff and PR comment after the documentation commit is created.
+- Changed paths for this follow-up: `app/api/torn-browser/route.ts`, `db/member-balances.ts`, `db/schema.ts`, `drizzle/0010_fluffy_luckman.sql`, `drizzle/meta/0010_snapshot.json`, `drizzle/meta/_journal.json`, `package.json`, `tests/member-balance-atomicity.test.mjs`, `tests/member-balance-schema-ownership.test.mjs`, `tests/multitenancy-isolation.test.mjs`, this handoff, and `docs/CODEX_MULTI_TENANCY_RUN.md`.
+
+### Exact payout-settlement design
+
+- `member_balance_entries` now has nullable `payout_request_id`. `prepareBalanceEventInsert()` resolves Torn member ID first and, only for a new payout with a resolved ID, selects the oldest eligible `pending`/`approved` request for the same `(faction_id, member_id)` whose amount is no greater than the observed payout. Selection occurs as a scalar subquery inside the event `INSERT`, not as an application-memory check/update sequence.
+- The upgraded `apply_member_balance_entry` trigger applies the canonical balance and `paid_total`, validates the exact selected request is still faction/member-local and open, and marks only `NEW.payout_request_id` paid. The event marker, balance/totals, and request transition therefore share the outer SQLite/D1 statement transaction and roll back together on any trigger-side failure.
+- Duplicate `(faction_id, event_key)` inserts do not fire the trigger. An old replay retains its original association (or `NULL`) and cannot consume a newer request. An event accepted without an eligible request cannot settle a request created later.
+- Request identity uses canonical `(faction_id, member_id)`. A payout with resolved member ID `101` settles that member's request even when its historical request name is `Old Name` and the event/current display name is `New Name`. When no member ID can be resolved, the existing unresolved balance behavior remains available but no payout request is guessed by name.
+- The separate name-based request update was removed from the Torn browser route. Optional `memberId`/`recipientId` event payload values are used when present; otherwise the existing verified faction-member resolver is used.
+
+### Migration ownership and reviewed migration
+
+- Generated and reviewed additive migration `drizzle/0010_fluffy_luckman.sql` and snapshot `drizzle/meta/0010_snapshot.json`; the journal entry is ordered after `0009`. Drizzle generated the nullable column addition. The migration was deliberately extended to `DROP TRIGGER IF EXISTS apply_member_balance_entry` and recreate the latest definition because `CREATE TRIGGER IF NOT EXISTS` cannot upgrade the `0009` trigger. Historical migration `0009` was not rewritten.
+- A genuinely fresh database runtime bootstrap creates `member_balance_entries` with both `explicit_balance` and `payout_request_id`, then creates the latest triggers.
+- If `member_balance_entries` already exists without either required migration-owned column, `ensureMemberBalanceSchema()` fails before its foundation/table/trigger batch with a clear `Member balance schema migration required` error. It no longer executes request-time `ALTER TABLE` repair.
+- Runtime trigger creation occurs only after required columns are confirmed. A database migrated through `0009` and `0010` starts successfully; executable tests prove the helper does not alter the migrated entry-table or trigger definitions, and the formal/runtime trigger SQL normalizes identically.
+
+### Commands and exact results
+
+- `git fetch --all --prune` — exit 0.
+- Baseline `npm.cmd ci` — exit 0; 506 packages installed. NPM reported 21 existing dependency vulnerabilities (1 low, 4 moderate, 16 high); no dependency versions were changed.
+- Baseline `npm.cmd run check` — exit 0; 16/16 tests passed before edits.
+- First `npm.cmd run db:generate` — exit 0; generated `0010_fluffy_luckman.sql` and `0010_snapshot.json`.
+- Focused development runs: `node --test tests\\member-balance-atomicity.test.mjs` — exit 0, 16/16; `node --test tests\\member-balance-schema-ownership.test.mjs` — exit 0, 4/4; `node --test tests\\multitenancy-isolation.test.mjs` — exit 0, 3/3.
+- Final `npm.cmd run check` — exit 0; lint and production build passed, 26/26 aggregate tests passed.
+- Final `npx.cmd tsc --noEmit -p tsconfig.json` — exit 0.
+- Final direct `node --test tests\\multitenancy-isolation.test.mjs` — exit 0, 3/3.
+- Final direct `node --test tests\\member-balance-atomicity.test.mjs` — exit 0, 16/16.
+- Final direct `node --test tests\\member-balance-schema-ownership.test.mjs` — exit 0, 4/4.
+- Second `npm.cmd run db:generate` — exit 0; `No schema changes, nothing to migrate`.
+- `git diff --check` — exit 0 before documentation; rerun after documentation is recorded in the final task handoff.
+
+### Regression final-state evidence
+
+- Normal payout from balance `100` with request `R1=30`: one marker associated to `R1`, balance `70`, `paid_total=30`, `R1=paid`; duplicate replay changes nothing.
+- Forced request-settlement abort: marker count `0`, balance `100`, `paid_total=0`, request still pending; removing the failure and retrying produces marker `1`, balance `70`, `paid_total=30`, request paid exactly once.
+- Rename: request stored as `Old Name`, resolved member ID `101`, event name `New Name`; the same request is paid and canonical balance metadata becomes `New Name`.
+- Old replay: after `R1` is paid and `R2` is created, replay leaves `R2=pending`, balance `70`, and `paid_total=30`; association remains `R1`.
+- No-request replay: original association remains `NULL`; a future request stays pending.
+- Same name/event key in factions `52984` and `999999`: each marker associates only with its own faction-local request; final balances are `70` and `160`, paid totals `30` and `40`.
+- Existing credit/observation rollback, duplicate observer, timestamp priority, stale lifetime-total, new-member convergence, ambiguous identity, migration preservation, and two-faction isolation tests remain green.
+
+### Remaining risks and safety confirmation
+
+- Production D1 still requires export/backup, exact `sqlite_master`/`PRAGMA table_info` inspection, read-only conflict preflight, exact-copy rehearsal of `0008` through `0010`, pre/post financial comparisons, unresolved member review, local Miniflare concurrency exercise, restore rehearsal, and a maintenance window before migration.
+- Name-only payout observations intentionally do not guess a request when no unambiguous verified member-ID mapping exists. Improving Torn DOM member-ID capture is separate product work, not a reason to weaken canonical identity here.
+- The runtime-helper behavioral seam uses Node's experimental SQLite and `stripTypeScriptTypes` APIs in tests; production code has no new dependency or runtime reliance on those APIs.
+- GitHub issue #2, draft PR #3 comments/reviews, and review-thread state were inspected through the connected GitHub app. The two active blockers match this completed scope; there were no unresolved inline review threads.
+- The repository was clean at the start. During final documentation, unrelated user-owned workbook changes appeared outside `Faction Ledger/` (`AUG2026 Growth Contest.xlsx` moved under `Growth comp/`, plus an Excel lock file); they were preserved and not staged or committed by this run.
+- Production D1 was not contacted. No Wrangler remote command, deployment, merge, PR-ready transition, arbitrary-faction write enablement, force-push, rebase, or history reset was performed.

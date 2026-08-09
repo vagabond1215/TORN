@@ -543,3 +543,16 @@ The test also proves ambiguous unresolved names abort without consuming a marker
 - Before any production D1 migration: export/backup D1; inspect actual `sqlite_master` and `PRAGMA table_info` for every static/runtime table; run the read-only unique-key preflight; rehearse `0008` and `0009` against an exact production copy; compare row counts and financial totals; review unresolved member identities; exercise concurrent ingestion through local Miniflare; rehearse restore; and schedule a maintenance window.
 - Rollback remains restoration from a verified D1 export/backup or a separately reviewed reverse migration. Do not use a destructive reset.
 - This run did not contact production D1, run remote Wrangler/D1 commands, deploy, merge PR #3 or PR #1, mark PR #3 ready, enable arbitrary-faction writes, rewrite reviewed history, or touch `main`.
+
+---
+
+## Payout settlement and migration-ownership handoff — 2026-08-09
+
+- Starting SHA `107d0e2`; implementation commits `bd377cf` and `4b7a43f` on `codex/faction-ledger-multitenancy`. No pull was required after fetching because local and remote refs matched.
+- Added nullable `member_balance_entries.payout_request_id`. The payout event insert selects the oldest eligible request by `(faction_id, member_id)` inside the insert statement; the upgraded balance-entry trigger applies balance/`paid_total` and marks only that associated request paid in the same transaction. Duplicate/old events cannot fire the trigger or consume a later request, and events accepted with no request keep a null association.
+- Canonical member ID now controls payout settlement across display-name changes. An unresolved name-only payout never guesses a durable request.
+- Generated and reviewed additive `drizzle/0010_fluffy_luckman.sql` plus snapshot/journal metadata. Its manual trigger portion explicitly drops/recreates the `0009` entry trigger; historical migrations were preserved. A second Drizzle generation reported no schema drift.
+- Existing `member_balance_entries` tables missing `explicit_balance` or `payout_request_id` now fail clearly before request-time bootstrap mutates schema. Fresh databases receive the latest complete shape; formally migrated databases start without duplicate column/trigger work.
+- Fresh validation: `npm run check` exit 0 (26/26); TypeScript exit 0; multitenancy 3/3; balance atomicity/payout regressions 16/16; schema ownership 4/4; second `db:generate` exit 0 with no changes; `git diff --check` exit 0 before docs.
+- Local tests proved forced payout-request failure rolls back marker/balance/totals/request together, retry succeeds once, rename settlement is ID-safe, old/no-request replays cannot consume future requests, and same names/keys remain isolated across factions `52984` and `999999`.
+- Production D1 remains untouched and blocked on backup/schema inspection/exact-copy rehearsal/count-and-total comparison/concurrency/restore/maintenance-window gates. Nothing was deployed, merged, marked ready, force-pushed, or enabled for arbitrary-faction writes.
