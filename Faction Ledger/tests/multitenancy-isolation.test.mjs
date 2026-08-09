@@ -74,11 +74,17 @@ function metrics(db, where = "") {
   };
 }
 
+async function applyTenantMigrations(db) {
+  for (const path of ["../drizzle/0008_sparkling_scream.sql", "../drizzle/0009_lyrical_morlocks.sql"]) {
+    const sql = await readFile(new URL(path, import.meta.url), "utf8");
+    for (const statement of sql.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) db.exec(statement);
+  }
+}
+
 test("migration preserves Blood Coven rows and financial totals", async () => {
   const db = legacyDatabase();
   const before = metrics(db);
-  const sql = await readFile(new URL("../drizzle/0008_sparkling_scream.sql", import.meta.url), "utf8");
-  for (const statement of sql.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) db.exec(statement);
+  await applyTenantMigrations(db);
   const after = metrics(db, BLOOD_COVEN);
   assert.deepEqual(after, before);
   for (const table of ["accounts","transactions","policies","pending_wars","active_war","war_member_baselines","treasury_leaders","member_balances","member_balance_entries","member_balance_observations","payout_requests","oc_holdings","armory_items","armory_snapshot_state","armory_item_effects","torn_browser_events","torn_sync_cursors","script_sync_tokens"]) {
@@ -92,8 +98,7 @@ test("migration preserves Blood Coven rows and financial totals", async () => {
 
 test("two factions isolate identities, keys, inventory, policy, authorization, cursors, and replay effects", async () => {
   const db = legacyDatabase();
-  const sql = await readFile(new URL("../drizzle/0008_sparkling_scream.sql", import.meta.url), "utf8");
-  for (const statement of sql.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) db.exec(statement);
+  await applyTenantMigrations(db);
   db.prepare("INSERT INTO factions(faction_id,name,slug) VALUES (?,?,?)").run(OTHER_FACTION,"Synthetic Faction","synthetic-faction");
   db.prepare("INSERT INTO member_balances(faction_id,member_id,member_name,balance,resolution_status) VALUES (?,?,?,?, 'verified')").run(OTHER_FACTION,202,"Alice",999);
   db.prepare("INSERT INTO accounts(faction_id,name,allocation_bps,balance,color) VALUES (?,?,?,?,?)").run(OTHER_FACTION,"Reserve",10000,999,"gold");
@@ -109,7 +114,7 @@ test("two factions isolate identities, keys, inventory, policy, authorization, c
   db.prepare("INSERT INTO torn_sync_cursors(faction_id,source_key,next_offset,complete) VALUES (?,?,?,?)").run(OTHER_FACTION,"organized_crimes",300,1);
 
   assert.equal(db.prepare("SELECT balance FROM member_balances WHERE faction_id=? AND member_id=?").get(BLOOD_COVEN,101).balance,700);
-  assert.equal(db.prepare("SELECT balance FROM member_balances WHERE faction_id=? AND member_id=?").get(OTHER_FACTION,202).balance,999);
+  assert.equal(db.prepare("SELECT balance FROM member_balances WHERE faction_id=? AND member_id=?").get(OTHER_FACTION,202).balance,1049);
   assert.equal(db.prepare("SELECT balance FROM accounts WHERE faction_id=? AND name='Reserve'").get(BLOOD_COVEN).balance,600);
   assert.equal(db.prepare("SELECT balance FROM accounts WHERE faction_id=? AND name='Reserve'").get(OTHER_FACTION).balance,999);
   assert.equal(db.prepare("SELECT quantity FROM armory_items WHERE faction_id=? AND item_name='Xanax'").get(BLOOD_COVEN).quantity,25);
