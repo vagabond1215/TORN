@@ -7,6 +7,10 @@ on:
     paths:
       - 'AUG2026 Growth Contest.xlsx'
       - 'Growth comp/AUG2026 Growth Contest.xlsx'
+      - 'Growth comp/*.png'
+      - 'Growth comp/*.jpg'
+      - 'Growth comp/*.jpeg'
+      - 'Growth comp/*.webp'
       - 'tools/inspect_growth_workbook.py'
       - '.github/workflows/inspect-growth-workbook.yml'
   workflow_dispatch:
@@ -25,3 +29,11 @@ jobs:
         with:
           name: growth-workbook-snapshot
           path: growth_workbook_snapshot.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: growth-comp-submissions
+          path: |
+            Growth comp/*.png
+            Growth comp/*.jpg
+            Growth comp/*.jpeg
+            Growth comp/*.webp
