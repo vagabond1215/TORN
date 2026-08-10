@@ -20,24 +20,24 @@ jobs:
         run: |
           set -euo pipefail
           cat .upload_chunks/images.b64.* | tr -d '\n\r' | base64 -d > /tmp/growth-submissions.zip
-          echo "333bbcf8dd46b6455b1bde6fe44173d6d9e8845ae3bf3e33cec14cb3f19ab88b  /tmp/growth-submissions.zip" | sha256sum -c -
+          echo "77dfcb62e0ece2fce0c0d5d708492a28d2e2bddf625aa495bef370e44175189f  /tmp/growth-submissions.zip" | sha256sum -c -
           unzip -o /tmp/growth-submissions.zip -d "Growth comp"
-          echo "4f9d7c672a17cc6bb18600c9d2ade3bfbe203aa8c9dda5d7f4e256f580cd3ae3  Growth comp/cole3665_Ending_NameStats.jpg" | sha256sum -c -
-          echo "1a1a2ec6a92d0efd1acdfd05f002f40b6bb4f1ec7f20b455b5a203b709b63277  Growth comp/cole3665_Ending_TimeStats.jpg" | sha256sum -c -
-          echo "88811f5a27b51689303bb212c89ac6c2ca14fdf4e64a78513d11ec58043d176a  Growth comp/Gambiit_Ending.jpg" | sha256sum -c -
-          echo "414dc0e4685463c00d997c7014d53bd0d70695b0e8ccee8ec8272f742da08d29  Growth comp/CoolBlu3_Ending.jpg" | sha256sum -c -
-          echo "f149a2f2ffbed7088a09f0d14854830fe8a5b34b42ccefa8d4e269e0faf09999  Growth comp/Lythen_Ending_Gym.webp" | sha256sum -c -
-          echo "5b15f4d8e0ec737fe5e60127e060b44315d4ab8a6c9993bcadd49fc5409e0be5  Growth comp/Lythen_Ending_TornStats.webp" | sha256sum -c -
-      - name: Commit exact submission images
+          echo "2ace7783dfe006605be06a399f0c284093221a3865108664e6c19264015bd949  Growth comp/cole3665_Ending_NameStats.webp" | sha256sum -c -
+          echo "1b1d66cc6d88e975aefefdce4dbabcec359ba7cfde70295c728c98fa3a65d580  Growth comp/cole3665_Ending_TimeStats.webp" | sha256sum -c -
+          echo "48f703da1b403633cf8df18a904ebb64e6f819678e7d59dc04a7c55ab1219b31  Growth comp/Gambiit_Ending.webp" | sha256sum -c -
+          echo "03d377e3e720473d28294cb1986cb91cd8e801983f9af33a9bc0077669b412d7  Growth comp/CoolBlu3_Ending.webp" | sha256sum -c -
+          echo "ece528bb8444a67cc4d4dc9075786e787d7178421d805f50c58ed4920b9198cb  Growth comp/Lythen_Ending_Gym.webp" | sha256sum -c -
+          echo "46f2b7e39f7c7b6e2d2533ac34679663d084cb198f6f664faeb1f625e3f397e8  Growth comp/Lythen_Ending_TornStats.webp" | sha256sum -c -
+      - name: Commit submission evidence images
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "Growth comp/cole3665_Ending_NameStats.jpg" \
-                  "Growth comp/cole3665_Ending_TimeStats.jpg" \
-                  "Growth comp/Gambiit_Ending.jpg" \
-                  "Growth comp/CoolBlu3_Ending.jpg" \
+          git add "Growth comp/cole3665_Ending_NameStats.webp" \
+                  "Growth comp/cole3665_Ending_TimeStats.webp" \
+                  "Growth comp/Gambiit_Ending.webp" \
+                  "Growth comp/CoolBlu3_Ending.webp" \
                   "Growth comp/Lythen_Ending_Gym.webp" \
                   "Growth comp/Lythen_Ending_TornStats.webp"
           git rm -r .upload_chunks
