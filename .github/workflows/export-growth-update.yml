@@ -1,0 +1,22 @@
+name: Export growth update files
+
+on:
+  push:
+    branches:
+      - update/growth-results-anubis
+    paths:
+      - '.github/workflows/export-growth-update.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: growth-update-files
+          path: |
+            Growth comp/AUG2026 Growth Contest.xlsx
+            Growth comp/Anubis84_beginning.webp
+            Growth comp/Anubis84_Ending.webp
