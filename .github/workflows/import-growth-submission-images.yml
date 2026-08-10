@@ -5,7 +5,7 @@ on:
     branches:
       - update/growth-endings-cole-gambiit-coolblu3-lythen
     paths:
-      - '.upload_chunks/READY'
+      - '.upload_imgs/READY'
 
 permissions:
   contents: write
@@ -15,19 +15,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rebuild submission archive
+      - name: Decode submission evidence
         shell: bash
         run: |
           set -euo pipefail
-          cat .upload_chunks/images.b64.* | tr -d '\n\r' | base64 -d > /tmp/growth-submissions.zip
-          echo "77dfcb62e0ece2fce0c0d5d708492a28d2e2bddf625aa495bef370e44175189f  /tmp/growth-submissions.zip" | sha256sum -c -
-          unzip -o /tmp/growth-submissions.zip -d "Growth comp"
-          echo "2ace7783dfe006605be06a399f0c284093221a3865108664e6c19264015bd949  Growth comp/cole3665_Ending_NameStats.webp" | sha256sum -c -
-          echo "1b1d66cc6d88e975aefefdce4dbabcec359ba7cfde70295c728c98fa3a65d580  Growth comp/cole3665_Ending_TimeStats.webp" | sha256sum -c -
-          echo "48f703da1b403633cf8df18a904ebb64e6f819678e7d59dc04a7c55ab1219b31  Growth comp/Gambiit_Ending.webp" | sha256sum -c -
-          echo "03d377e3e720473d28294cb1986cb91cd8e801983f9af33a9bc0077669b412d7  Growth comp/CoolBlu3_Ending.webp" | sha256sum -c -
-          echo "ece528bb8444a67cc4d4dc9075786e787d7178421d805f50c58ed4920b9198cb  Growth comp/Lythen_Ending_Gym.webp" | sha256sum -c -
-          echo "46f2b7e39f7c7b6e2d2533ac34679663d084cb198f6f664faeb1f625e3f397e8  Growth comp/Lythen_Ending_TornStats.webp" | sha256sum -c -
+          mkdir -p "Growth comp"
+          for src in .upload_imgs/*.webp.b64; do
+            name="$(basename "$src" .b64)"
+            tr -d '\n\r' < "$src" | base64 -d > "Growth comp/$name"
+          done
+          echo "1ce8a49b502faadd1ac8ec061a34d9d826438ce35d9cfefbf486317aeebc539c  Growth comp/cole3665_Ending_NameStats.webp" | sha256sum -c -
+          echo "9825144541ceebcaeca9b1441fbf13a6b438ecf04a4f24903eb26e3f473b2a87  Growth comp/cole3665_Ending_TimeStats.webp" | sha256sum -c -
+          echo "a80898e68f251962d98826f12e707a0f6ff7497336ac982bcf89ce9036e0bb5a  Growth comp/Gambiit_Ending.webp" | sha256sum -c -
+          echo "ad0f0362510fbf7ea2de40f1d2a912c3c6d3967277d87431ec800f5fe5e750f0  Growth comp/CoolBlu3_Ending.webp" | sha256sum -c -
+          echo "bed8d7407bef66813facc77308c80a105f5831d1d62dc7722e0d0f954bb7b88d  Growth comp/Lythen_Ending_Gym.webp" | sha256sum -c -
+          echo "d6e50cbd0207571fbed629a2ec36fda1ba8a287183fbf3dbaab4e2c704305b97  Growth comp/Lythen_Ending_TornStats.webp" | sha256sum -c -
       - name: Commit submission evidence images
         shell: bash
         run: |
@@ -40,7 +42,7 @@ jobs:
                   "Growth comp/CoolBlu3_Ending.webp" \
                   "Growth comp/Lythen_Ending_Gym.webp" \
                   "Growth comp/Lythen_Ending_TornStats.webp"
-          git rm -r .upload_chunks
+          git rm -r .upload_imgs
           git rm .github/workflows/import-growth-submission-images.yml
           git commit -m "Add new growth contest submission images"
           git push
