@@ -27,6 +27,10 @@ jobs:
       - run: python tools/inspect_growth_workbook.py
       - uses: actions/upload-artifact@v4
         with:
+          name: growth-workbook-source
+          path: 'AUG2026 Growth Contest.xlsx'
+      - uses: actions/upload-artifact@v4
+        with:
           name: growth-workbook-snapshot
           path: growth_workbook_snapshot.json
       - uses: actions/upload-artifact@v4
