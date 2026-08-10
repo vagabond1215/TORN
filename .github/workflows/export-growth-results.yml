@@ -1,0 +1,23 @@
+name: Export growth contest files
+
+on:
+  push:
+    branches:
+      - fix/growth-results-2026-08-10
+    paths:
+      - '.github/workflows/export-growth-results.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: growth-contest-current
+          path: |
+            Growth comp/AUG2026 Growth Contest.xlsx
+            Growth comp/DMEN559_Ending.jpg
+            Growth comp/Slywolf21_Ending.webp
+            Growth comp/TiberSeptim_Ending.webp
