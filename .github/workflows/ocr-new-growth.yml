@@ -1,0 +1,46 @@
+name: OCR new growth submissions
+
+on:
+  push:
+    branches:
+      - process/growth-submissions-2026-08-10-b
+    paths:
+      - '.github/workflows/ocr-new-growth.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OCR tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr imagemagick
+      - name: OCR selected ending submissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > growth_ocr_report.txt
+          for f in \
+            'Growth comp/Jack_123456_ending.webp' \
+            'Growth comp/Kordryan_ending.webp' \
+            'Growth comp/MrSly__ending.webp' \
+            'Growth comp/CoolBlu3_Ending.webp'; do
+            echo "===== $f =====" >> growth_ocr_report.txt
+            tesseract "$f" stdout --psm 6 2>/dev/null >> growth_ocr_report.txt || true
+            echo >> growth_ocr_report.txt
+            echo "--- alternate psm11 ---" >> growth_ocr_report.txt
+            tesseract "$f" stdout --psm 11 2>/dev/null >> growth_ocr_report.txt || true
+            echo -e "\n" >> growth_ocr_report.txt
+          done
+      - name: Commit OCR report
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add growth_ocr_report.txt
+          git commit -m 'Generate OCR report for new growth submissions'
+          git push
