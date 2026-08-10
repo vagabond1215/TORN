@@ -1,0 +1,49 @@
+name: Enhanced OCR Kordryan ending v2
+
+on:
+  push:
+    branches:
+      - process/growth-submissions-2026-08-10-b
+    paths:
+      - '.github/workflows/ocr-kordryan-enhanced2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr imagemagick
+      - name: Enhanced OCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          f='Growth comp/Kordryan_ending.webp'
+          identify "$f" > kordryan_ocr_report2.txt
+          convert "$f" -resize 300% -colorspace Gray -contrast-stretch 1%x1% /tmp/kord_full.png
+          echo '=== FULL ENHANCED PSM6 ===' >> kordryan_ocr_report2.txt
+          tesseract /tmp/kord_full.png stdout --psm 6 2>/dev/null >> kordryan_ocr_report2.txt || true
+          echo '=== FULL ENHANCED PSM11 ===' >> kordryan_ocr_report2.txt
+          tesseract /tmp/kord_full.png stdout --psm 11 2>/dev/null >> kordryan_ocr_report2.txt || true
+          read w h < <(identify -format '%w %h' "$f")
+          crop_h=$((h*65/100))
+          convert "$f" -crop "${w}x${crop_h}+0+0" +repage -resize 400% -colorspace Gray -contrast-stretch 1%x1% /tmp/kord_top.png
+          echo '=== TOP65 ENHANCED PSM6 ===' >> kordryan_ocr_report2.txt
+          tesseract /tmp/kord_top.png stdout --psm 6 2>/dev/null >> kordryan_ocr_report2.txt || true
+          echo '=== TOP65 ENHANCED PSM11 ===' >> kordryan_ocr_report2.txt
+          tesseract /tmp/kord_top.png stdout --psm 11 2>/dev/null >> kordryan_ocr_report2.txt || true
+          convert "$f" -resize 400% -colorspace Gray -threshold 58% /tmp/kord_thresh.png
+          echo '=== THRESHOLD PSM6 ===' >> kordryan_ocr_report2.txt
+          tesseract /tmp/kord_thresh.png stdout --psm 6 2>/dev/null >> kordryan_ocr_report2.txt || true
+      - name: Commit report
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add kordryan_ocr_report2.txt
+          git commit -m 'Generate enhanced OCR v2 for Kordryan ending'
+          git push
