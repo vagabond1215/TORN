@@ -1,0 +1,36 @@
+name: Audit growth submissions export
+
+on:
+  push:
+    branches:
+      - fix/growth-results-2026-08-10
+    paths:
+      - '.github/workflows/audit-growth-submissions.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: growth-submissions-audit
+          path: |
+            Growth comp/*Beginning*.png
+            Growth comp/*Beginning*.jpg
+            Growth comp/*Beginning*.jpeg
+            Growth comp/*Beginning*.webp
+            Growth comp/*beginning*.png
+            Growth comp/*beginning*.jpg
+            Growth comp/*beginning*.jpeg
+            Growth comp/*beginning*.webp
+            Growth comp/*Ending*.png
+            Growth comp/*Ending*.jpg
+            Growth comp/*Ending*.jpeg
+            Growth comp/*Ending*.webp
+            Growth comp/*ending*.png
+            Growth comp/*ending*.jpg
+            Growth comp/*ending*.jpeg
+            Growth comp/*ending*.webp
+          if-no-files-found: error
