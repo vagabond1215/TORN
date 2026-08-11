@@ -43,8 +43,8 @@ Once the application enters actual use, stop direct-to-`main` development and re
 
 1. **Faction isolation:** every durable faction-owned row must be attributable to a `faction_id`, and every API query/mutation must scope by the authenticated/verified faction. A client-supplied faction ID alone is never authorization.
 2. **Torn member ID is canonical identity:** use Torn `member_id`/user ID as the durable member key. Names are mutable display metadata and must not be primary identity.
-3. **Idempotent observations:** the same Torn event observed by multiple users must apply once. Dedupe keys must be faction-scoped (`faction_id` + stable event key/ID).
-4. **Atomic derived effects:** a durable event marker and every canonical financial state transition it uniquely owns must commit/roll back together or be provably recoverable. A retry of an old event must never consume a newer request/state transition.
+3. **Idempotent observations and durable replay authority:** the same Torn event observed by multiple users must apply once. Dedupe keys must be faction-scoped (`faction_id` + stable event key/ID). Once a durable event/effect row has been accepted, duplicate transport replays must not use later request metadata to steer canonical materialization; any replay/self-healing must derive authority from the persisted event/effect state.
+4. **Atomic derived effects:** a durable event marker and every canonical financial/inventory state transition it uniquely owns must commit/roll back together or be provably recoverable. A retry of an old event must never consume or overwrite a newer canonical request/state transition.
 5. **Ordering:** newer Torn observations win. At the same timestamp, explicit balances (`from X to Y`, full snapshots, direct balance observations) beat inferred deltas. Armory materialization must also be deterministic for equal-time durable movement sets.
 6. **Prunable transport:** `torn_browser_events` and userscript queues are transport/audit journals, not canonical state. Pruning them must never roll back balances, inventory, OC history, wars, or treasury accounts.
 7. **Armory truth:** current Armory inventory comes from authoritative category snapshots plus later idempotent movements. Historical OC rewards are history and must not inflate current Armory inventory.
@@ -111,8 +111,8 @@ The architectural order remains:
 - Targeted regression tests named by the current handoff pass.
 - Schema/migration changes preserve Blood Coven data and have local migration/regression coverage.
 - Two synthetic factions can hold the same member name, item name, event key, policy key, and similar records without collision or cross-read.
-- Duplicate multi-observer submissions change durable financial/inventory state once.
-- Durable balance/payout markers cannot commit while their uniquely owned canonical state transition is silently lost.
+- Duplicate multi-observer submissions change durable financial/inventory state once, and duplicate payload metadata cannot override a previously accepted durable event/effect.
+- Durable balance/payout/inventory markers cannot commit while their uniquely owned canonical state transition is silently lost.
 - Membership/faction change clears local stale state and cannot upload observations to the previous tenant.
 - Update `docs/NEXT_CODEX_RUN.md` with current run results/status and append significant architecture/migration outcomes to `docs/CODEX_MULTI_TENANCY_RUN.md` before handing control back.
 - Keep `README.md`, `docs/README.md`, and these instructions accurate if the workflow/document paths change.
