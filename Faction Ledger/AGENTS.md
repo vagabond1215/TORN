@@ -10,17 +10,29 @@ Read the project instructions in this order before changing code:
 2. [`docs/README.md`](./docs/README.md) — documentation map and precedence rules.
 3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — when its status is **ACTIVE**, this is the authoritative current implementation scope.
 4. [`docs/CODEX_MULTI_TENANCY_RUN.md`](./docs/CODEX_MULTI_TENANCY_RUN.md) — broader architecture, completed phases, migration history, and prior validation evidence.
-5. GitHub issue #2 and draft PR #3 reviews/comments when GitHub access is available.
+5. GitHub issue #2 and current PR/review discussion when GitHub access is available.
 
 If an older prompt in the historical runbook conflicts with an **ACTIVE** `NEXT_CODEX_RUN.md`, follow the current next-run scope while preserving every invariant and safety rule in this file. Do not create a competing ad hoc prompt elsewhere in the repo; update the rolling next-run handoff instead.
 
-## Working branch and safety
+## Development-mode branch policy
 
-- Integration baseline: `agent/fix-faction-ledger-sync-safety`.
-- Codex implementation branch: `codex/faction-ledger-multitenancy`, created from the prepared integration baseline. Do all large tenancy-refactor/follow-up commits there.
-- Do not commit directly to `main`. Do not merge, deploy, force-push, or retarget production from Codex.
+Faction Ledger is currently **pre-production and not in active service**. Until a human explicitly declares that it has moved into actual use, the normal Codex working branch is `main` and ordinary Codex development may commit and push directly to `main` after local validation.
+
+There is one temporary transition exception:
+
+- PR #3 now targets `main` directly and contains the accumulated Faction Ledger development history.
+- While PR #3 remains open, execute the ACTIVE `docs/NEXT_CODEX_RUN.md` on `codex/faction-ledger-multitenancy`; first reconcile current `origin/main` into that branch with a normal merge, then complete the focused blockers and hand back for review.
+- Do **not** merge PR #3 from Codex. After the reviewed bridge is merged to `main`, retire the Codex branch/integration-branch workflow and start subsequent Codex runs from current `main`.
+- PR #1 / `agent/fix-faction-ledger-sync-safety` is a historical integration layer and is no longer the development target.
+
+Once the application enters actual use, stop direct-to-`main` development and re-establish branch/PR/review protection before further production-affecting changes.
+
+## Safety
+
 - Production Cloudflare D1 is canonical. Local `.wrangler` / Miniflare state is disposable development data.
 - Never point local tests or migrations at production D1. Never use destructive resets, `DROP`-and-recreate production tables, or force-push history.
+- Never force-push `main` or any reviewed branch.
+- Direct-to-`main` development while pre-production does **not** authorize deployment, production D1 migration, or arbitrary-faction enablement.
 - Prefer additive, idempotent migrations with explicit backfills and validation queries. Preserve existing Blood Coven data (faction ID `52984`).
 - Do not enable arbitrary-faction writes until every durable read/write path is tenant-scoped and isolation tests pass.
 - Existing-database schema evolution must be migration-owned. Request-time helpers may bootstrap a genuinely fresh disposable database, but must not silently pre-apply formal migration columns/trigger upgrades to an already-existing production-shaped table.
@@ -31,11 +43,26 @@ If an older prompt in the historical runbook conflicts with an **ACTIVE** `NEXT_
 2. **Torn member ID is canonical identity:** use Torn `member_id`/user ID as the durable member key. Names are mutable display metadata and must not be primary identity.
 3. **Idempotent observations:** the same Torn event observed by multiple users must apply once. Dedupe keys must be faction-scoped (`faction_id` + stable event key/ID).
 4. **Atomic derived effects:** a durable event marker and every canonical financial state transition it uniquely owns must commit/roll back together or be provably recoverable. A retry of an old event must never consume a newer request/state transition.
-5. **Ordering:** newer Torn observations win. At the same timestamp, explicit balances (`from X to Y`, full snapshots, direct balance observations) beat inferred deltas.
+5. **Ordering:** newer Torn observations win. At the same timestamp, explicit balances (`from X to Y`, full snapshots, direct balance observations) beat inferred deltas. Armory materialization must also be deterministic for equal-time durable movement sets.
 6. **Prunable transport:** `torn_browser_events` and userscript queues are transport/audit journals, not canonical state. Pruning them must never roll back balances, inventory, OC history, wars, or treasury accounts.
 7. **Armory truth:** current Armory inventory comes from authoritative category snapshots plus later idempotent movements. Historical OC rewards are history and must not inflate current Armory inventory.
 8. **Membership-before-upload:** userscript direct sync must validate current Torn identity/faction before uploading queued observations once the membership freshness window is stale. Confirmed identity/faction changes revoke the session and scrub faction-local client state; temporary Torn/API failures retain state and retry.
 9. **No cross-faction stale UI:** switching faction/account must clear old faction token, API key, queue, cached balances, injected balance UI, and any other local faction-specific state before a new tenant is displayed.
+
+## Starting a Codex pass
+
+After the one-time PR #3 transition is complete, start ordinary pre-production work with:
+
+```bash
+git fetch origin
+git switch main
+git pull --ff-only origin main
+git status -sb
+```
+
+If local `main` has uncommitted work or has diverged from `origin/main`, stop and inspect rather than resetting, rebasing, or force-pushing automatically.
+
+During the current transition, follow the branch-reconciliation instructions in the ACTIVE `docs/NEXT_CODEX_RUN.md` instead.
 
 ## Validation commands
 
@@ -87,3 +114,4 @@ The architectural order remains:
 - Membership/faction change clears local stale state and cannot upload observations to the previous tenant.
 - Update `docs/NEXT_CODEX_RUN.md` with current run results/status and append significant architecture/migration outcomes to `docs/CODEX_MULTI_TENANCY_RUN.md` before handing control back.
 - Keep `README.md`, `docs/README.md`, and these instructions accurate if the workflow/document paths change.
+- While direct-to-`main` pre-production mode is active, push only after the full requested validation passes and use normal commits; do not force-push or rewrite shared history.
