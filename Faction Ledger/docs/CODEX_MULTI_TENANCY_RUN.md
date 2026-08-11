@@ -556,3 +556,15 @@ The test also proves ambiguous unresolved names abort without consuming a marker
 - Fresh validation: `npm run check` exit 0 (26/26); TypeScript exit 0; multitenancy 3/3; balance atomicity/payout regressions 16/16; schema ownership 4/4; second `db:generate` exit 0 with no changes; `git diff --check` exit 0 before docs.
 - Local tests proved forced payout-request failure rolls back marker/balance/totals/request together, retry succeeds once, rename settlement is ID-safe, old/no-request replays cannot consume future requests, and same names/keys remain isolated across factions `52984` and `999999`.
 - Production D1 remains untouched and blocked on backup/schema inspection/exact-copy rehearsal/count-and-total comparison/concurrency/restore/maintenance-window gates. Nothing was deployed, merged, marked ready, force-pushed, or enabled for arbitrary-faction writes.
+
+---
+
+## Armory ordering and sync-error handoff — 2026-08-11
+
+- Starting SHA `bccec0a`; scope-restoration commit `141b2ea`; implementation commit `1f84aa6`; regression commit/final code SHA before docs `4e2f351`. The unrelated Growth Contest consolidation was normally reverted so PR #3 again contains only `Faction Ledger/` paths, without rewriting history or losing either workbook version from Git history.
+- Additive migration `0011_thin_pyro.sql` adds nullable movement occurrence time and replaces the Armory effect trigger. Fresh/runtime/formal schema definitions converge; old Armory tables now fail clearly before request-time mutation. A second Drizzle generation reported no drift.
+- Armory snapshots now transactionally establish a faction/category base and fold durable known-time movements after the snapshot. Delayed snapshots cannot erase later withdrawals/deposits, duplicate keys remain exact-once per faction, absent later deposits survive, categories/factions remain isolated, and OC history remains separate.
+- Existing effects with unknown historical time remain `NULL` and are not replayed across a later authoritative snapshot. No historical timestamps were invented. Equal-time snapshots are authoritative over movements at the same timestamp.
+- Browser and script-sync APIs now preserve structured `ScriptSyncAccessError` status/code/faction data. Network/5xx/ambiguous failures remain retryable 503s; malformed/missing keys, HTTP 401, and official Torn key errors 1/2/16/18 require 401 revalidation. Identity/faction changes retain their prior revoke semantics.
+- Fresh validation: `npm ci` exit 0; `npm run check` exit 0 (45/45); TypeScript exit 0; direct multitenancy 3/3; balance atomicity 16/16; member schema ownership 4/4; Armory ordering/ownership 11/11; sync semantics 8/8; second `db:generate` no drift; `git diff --check` exit 0.
+- Production D1 was not contacted. Nothing was deployed, merged, marked ready, force-pushed, or enabled for arbitrary-faction writes. Production remains gated on backup, exact-schema inspection, exact-copy migration/concurrency/restore rehearsal, count/total/Armory comparison, unresolved-identity review, and a maintenance window; Blood Coven `52984` remains the only enabled faction.

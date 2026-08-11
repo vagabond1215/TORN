@@ -1,6 +1,6 @@
 # Next Codex Run: Armory Temporal Ordering and Sync Error Semantics
 
-**Status: ACTIVE**
+**Status: COMPLETED**
 
 This is the authoritative current Codex task for `Faction Ledger/`. The previous payout-settlement and migration-ownership run is complete and its evidence is preserved in [`CODEX_MULTI_TENANCY_RUN.md`](./CODEX_MULTI_TENANCY_RUN.md). Do not rerun that completed scope unless a regression requires it.
 
@@ -377,3 +377,60 @@ Before marking this file COMPLETED, append a dated result section here and a con
 Keep PR #3 draft and push normally. Do not force-push.
 
 Do not call this run complete unless delayed Armory snapshots provably cannot erase later movements, transient membership failures remain retryable end-to-end, clear invalid-key failures are distinguished from outages, and the PR diff is restored to `Faction Ledger/` only.
+
+---
+
+## Completion result — 2026-08-11 11:38:55 -04:00
+
+### Git state and branch scope
+
+- Starting branch/SHA: `codex/faction-ledger-multitenancy` at `bccec0a870b1f9777cc2b6da02a0b54c6b6fd5b7`.
+- The unrelated `af20b35` workbook consolidation was removed from PR #3 with normal commit `141b2ea` (`Revert "consolidation"`). The integration-branch workbook path/content was restored, the consolidated version remains recoverable in Git history, and no history was rewritten.
+- Implementation commit: `1f84aa6` (`Fix Armory ordering and script sync errors`).
+- Regression commit: `4e2f351` (`Add Armory ordering and sync error regressions`).
+- Final implementation/test SHA before this documentation commit: `4e2f3512d01afafbe378e8bd42585016db5f155e`. The exact pushed documentation tip is recorded in the PR comment and Codex handoff after push verification.
+
+### Armory convergence and migration ownership
+
+- Added durable nullable `armory_item_effects.occurred_at` in additive migration `drizzle/0011_thin_pyro.sql`, plus `drizzle/meta/0011_snapshot.json` and the ordered journal entry after `0010`. Existing effect rows retain `NULL`; no historical timestamps are invented and the migration does not replay them.
+- A movement applies immediately only when its category has no authoritative snapshot or its known occurrence time is strictly later than that snapshot. Duplicate `(faction_id, event_key, item_name)` effects remain exact-once.
+- An accepted snapshot transactionally replaces its faction/category base and folds every durable, known-time effect after the snapshot in occurrence/event-key order. This preserves later withdrawals and deposits, including items absent from the delayed snapshot. Snapshot state uses monotonic observed-time ordering with a deterministic event-key tie break.
+- Snapshot state, category replacement, base rows, and later-effect folding execute in one D1 batch. Concurrent inserts before the batch are included in the fold; inserts after it are evaluated by the trigger against the new snapshot state.
+- Fresh databases bootstrap the complete current Armory shape. Existing Armory tables missing migration-owned `observed_at` or `occurred_at` fail before request-time mutation. Runtime code no longer performs `ALTER TABLE` or replaces the trigger on each request.
+- The generated migration was inspected and extended only to replace the temporal trigger. Historical migrations `0008`–`0010` were not changed. A second `npm.cmd run db:generate` reported `No schema changes, nothing to migrate`.
+
+### Script-sync error semantics
+
+- Both `/api/script-sync` and `/api/torn-browser` now serialize `ScriptSyncAccessError` through the same response function, preserving `status`, `code`, and `currentFaction`.
+- Network failures, unreadable responses, Torn 5xx responses, and ambiguous non-credential API failures return `membership_check_unavailable` / HTTP 503. They do not revoke a valid script token, and the userscript retains faction-local state for retry.
+- Malformed/missing local keys, HTTP 401, and official Torn credential/access errors 1 (empty key), 2 (incorrect key), 16 (insufficient access), and 18 (owner-paused key) return `membership_revalidation_required` / HTTP 401. Existing identity/faction-change revoke and sign-out semantics remain unchanged.
+
+### Behavioral evidence
+
+- Armory A1/A2 both finish at Xanax `9`; A3 finishes at `2`; A4 applies a duplicate once; A5 independently finishes at `9`/`19` for factions `52984`/`999999`; A6 leaves the unrelated category unchanged; A7 replay remains `9`; A8 proves OC history does not change current Armory inventory.
+- Armory ownership tests prove fresh runtime shape, clear pre-migration failure without mutation, preservation of legacy `NULL occurred_at` rows/current quantities, formal/runtime trigger equivalence, and no runtime schema drift after `0011`.
+- B1 invokes the actual browser `POST` handler with a constructed retryable sync error and receives structured HTTP 503; identity/faction structured 401 behavior is also covered. Userscript regression checks prove 401 clears faction-local state while 503 retains it.
+- B2 covers network failure, Torn 5xx, official incorrect-key response, malformed local key, valid unchanged identity/faction, renamed member metadata, changed identity, and changed faction.
+- Existing Blood Coven migration totals and all two-faction isolation, payout atomicity, replay, canonical-member-ID, and schema-ownership regressions remain green.
+
+### Final commands and exit status
+
+- `npm.cmd ci` — exit 0; 506 packages installed.
+- `npm.cmd run check` — exit 0; ESLint/build passed and 45/45 tests passed.
+- `npx.cmd tsc --noEmit -p tsconfig.json` — exit 0.
+- `node --test tests\\multitenancy-isolation.test.mjs` — exit 0; 3/3 passed.
+- `node --test tests\\member-balance-atomicity.test.mjs` — exit 0; 16/16 passed.
+- `node --test tests\\member-balance-schema-ownership.test.mjs` — exit 0; 4/4 passed.
+- `node --test tests\\armory-ordering.test.mjs` — exit 0; 11/11 passed.
+- `node --test tests\\script-sync-errors.test.mjs` — exit 0; 8/8 passed.
+- `npm.cmd run db:generate` — first run generated/reviewed `0011`; second run exit 0 with no schema drift.
+- `git diff --check` — exit 0.
+- A preliminary combined dependency/check wrapper exceeded its 120-second capture timeout after dependency installation; the standalone commands above were rerun to completion and are the authoritative results.
+
+### Remaining production blockers and boundaries
+
+- Historical Armory effects predating `occurred_at` remain nullable and are not folded across a later authoritative snapshot. This avoids fabricating time but means exact pre-migration temporal reconstruction is intentionally unavailable.
+- Equal-timestamp movements are not applied after a snapshot at that same timestamp; the snapshot is treated as authoritative for that instant. Observer clock/source quality still requires production-copy rehearsal.
+- Before production D1 work: export/backup D1; inspect exact production `sqlite_master`/`PRAGMA table_info`; rehearse `0008`–`0011` against an exact copy; compare counts, financial totals, Armory quantities, and unresolved identities; exercise concurrent ingestion with local Miniflare; rehearse restoration; and schedule a maintenance window.
+- Production remains intentionally Blood-Coven-only through faction `52984`. Arbitrary-faction creation/login/writes remain disabled.
+- This run did not contact production D1, run remote Wrangler/D1 commands, deploy, merge, mark PR #3 ready, enable arbitrary-faction writes, reset reviewed history, or force-push.
