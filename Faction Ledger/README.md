@@ -11,7 +11,9 @@ A Torn City faction treasury and synchronization application for balances, earma
 - Torn member ID is the canonical durable member identity; member names are mutable display metadata.
 - Browser observations are faction-scoped and deduplicated so repeated viewers do not multiply durable financial effects.
 - Balance event/observation markers and payout-request settlement use database-side transactional effects so failed derived writes do not permanently consume event keys.
-- Current Armory state is snapshot-backed by category and folds durable post-snapshot movements by occurrence time; historical OC rewards remain historical and do not inflate current inventory. Equal-timestamp movement convergence and future-time sanity remain the current active review items.
+- Current Armory state is snapshot-backed by category. Migration `0012_exotic_tarot.sql` adds durable snapshot-base JSON and deterministic post-snapshot movement folding by `occurred_at`, `event_key`, then `item_name`; historical OC rewards remain historical and do not inflate current inventory.
+- Armory movement times more than five minutes in the future are ignored, and generic `payload.endedAt` is not allowed to override Armory movement/Xanax-use occurrence time.
+- A current connector review item remains: duplicate Armory journal replays must rematerialize from the already-accepted durable movement metadata rather than allowing replay request metadata to steer canonical state.
 - Userscript sessions are dynamically revalidated against Torn faction membership before stale sessions upload more observations, and faction/member-local client storage is scoped/scrubbed on identity changes.
 
 The application is **still intentionally Blood-Coven-only in production authorization**. The data model supports isolated synthetic tenants, but arbitrary-faction production creation/login/writes remain gated until production D1 migration rehearsal and all active review blockers are cleared.
@@ -47,7 +49,7 @@ npm run check
 
 ## Codex development workflow
 
-Faction Ledger is currently **pre-production and not in active service**. Codex now works directly on:
+Faction Ledger is currently **pre-production and not in active service**. Codex works directly on:
 
 ```text
 main
@@ -82,15 +84,20 @@ An older embedded prompt in the historical runbook must not override an **ACTIVE
 
 ### Current handoff
 
-`docs/NEXT_CODEX_RUN.md` is **ACTIVE** on `main` for the narrow connector-found Armory follow-up. It currently covers:
+`docs/NEXT_CODEX_RUN.md` is **ACTIVE** on `main` for a focused Armory durable-replay-authority follow-up. The previous same-time/timestamp-safety run completed at implementation SHA `5d155ce7` and documentation SHA `41fd50a` with migration `0012` and reported 52/52 aggregate tests.
 
-- make equal-timestamp Armory movements deterministic so the same durable event set produces the same quantity regardless of observer/network arrival order, including zero-floor cases;
-- add future-time sanity validation for Armory movements now that `occurred_at` controls replay across snapshots;
-- preserve the completed delayed-snapshot convergence, exact-once dedupe, tenant/category isolation, OC-history isolation, and script-sync 401/503 semantics;
-- keep any new schema evolution additive after `0011_thin_pyro.sql` and migration-owned for existing databases.
+The current task requires:
 
-Codex must update the rolling next-run file with results/status before handing control back. Significant architecture/migration outcomes should also be appended to the historical runbook rather than replacing its prior evidence.
+- once `(faction_id, event_key, item_name)` has been accepted into `armory_item_effects`, replay request metadata must not be able to choose a different category/effect scope during rematerialization;
+- duplicate journal re-imports may self-heal only from canonical persisted movement metadata;
+- mismatched-category/action/amount replay regressions must prove the durable accepted event remains authoritative;
+- the completed equal-time ordering, zero-floor convergence, delayed-snapshot behavior, future-time bound, tenant/category isolation, OC-history isolation, and sync-error semantics must remain intact;
+- audit the handling of newly ingested movements whose normalized occurrence time is missing, without inventing historical timestamps.
+
+No schema change is expected for this replay-authority fix unless Codex demonstrates a genuine need; `db:generate` should otherwise report no drift.
+
+Codex must update the rolling next-run file with results/status before handing control back. Significant architecture/migration outcomes should also be appended to the historical runbook rather than replacing prior evidence.
 
 ## Production rollout boundary
 
-Direct-to-`main` development while the app is pre-production does **not** mean production deployment is approved. Before production D1 migration or arbitrary-faction enablement, the repository still requires a verified D1 export/backup, exact production `sqlite_master`/`PRAGMA table_info` inspection, read-only unique-key preflight, migration rehearsal against a copy of the real data, pre/post financial and row-count comparison, unresolved member-identity review, concurrency rehearsal, restore rehearsal, and a maintenance window.
+Direct-to-`main` development while the app is pre-production does **not** mean production deployment is approved. Before production D1 migration or arbitrary-faction enablement, the repository still requires a verified D1 export/backup, exact production `sqlite_master`/`PRAGMA table_info` inspection, read-only unique-key preflight, migration rehearsal against a copy of the real data, pre/post financial/row-count/Armory comparison, unresolved member-identity review, concurrency rehearsal, restore rehearsal, and a maintenance window.
