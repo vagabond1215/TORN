@@ -13,10 +13,10 @@ A Torn City faction treasury and synchronization application for balances, earma
 - Balance event/observation markers and payout-request settlement use database-side transactional effects so failed derived writes do not permanently consume event keys.
 - Current Armory state is snapshot-backed by category. Migration `0012_exotic_tarot.sql` adds durable snapshot-base JSON and deterministic post-snapshot movement folding by `occurred_at`, `event_key`, then `item_name`; historical OC rewards remain historical and do not inflate current inventory.
 - Armory movement times more than five minutes in the future are ignored, and generic `payload.endedAt` is not allowed to override Armory movement/Xanax-use occurrence time.
-- A current connector review item remains: duplicate Armory journal replays must rematerialize from the already-accepted durable movement metadata rather than allowing replay request metadata to steer canonical state.
+- Once an Armory movement is durably accepted, replay/rematerialization derives authority from the persisted `armory_item_effects` row rather than replay request metadata. New movements without a normalized occurrence time are rejected before journal acknowledgement/durable application; migrated historical `NULL occurred_at` rows remain preserved without invented timestamps.
 - Userscript sessions are dynamically revalidated against Torn faction membership before stale sessions upload more observations, and faction/member-local client storage is scoped/scrubbed on identity changes.
 
-The application is **still intentionally Blood-Coven-only in production authorization**. The data model supports isolated synthetic tenants, but arbitrary-faction production creation/login/writes remain gated until production D1 migration rehearsal and all active review blockers are cleared.
+The application is **still intentionally Blood-Coven-only in production authorization**. The data model supports isolated synthetic tenants, but arbitrary-faction production creation/login/writes remain gated until production D1 migration rehearsal and the pre-go-live controls are complete.
 
 ## Features
 
@@ -76,27 +76,25 @@ When the application is moved into actual use, this policy must be reversed befo
 
 1. [`AGENTS.md`](./AGENTS.md) — always first; safety rules, direct-main pre-production policy, and non-negotiable data/sync invariants.
 2. [`docs/README.md`](./docs/README.md) — documentation routing and instruction precedence.
-3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — when marked **ACTIVE**, this is the authoritative current task/prompt and handback checklist.
+3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — authoritative current task only when marked **ACTIVE**; otherwise it preserves the latest completed handoff/result.
 4. [`docs/CODEX_MULTI_TENANCY_RUN.md`](./docs/CODEX_MULTI_TENANCY_RUN.md) — broader architecture, completed migration plan, historical handoffs, and prior validation evidence.
-5. GitHub issue **#2** and relevant review/history when GitHub access is available.
+5. GitHub issues/review history when relevant.
 
 An older embedded prompt in the historical runbook must not override an **ACTIVE** `NEXT_CODEX_RUN.md`.
 
-### Current handoff
+### Current handoff state
 
-`docs/NEXT_CODEX_RUN.md` is **ACTIVE** on `main` for a focused Armory durable-replay-authority follow-up. The previous same-time/timestamp-safety run completed at implementation SHA `5d155ce7` and documentation SHA `41fd50a` with migration `0012` and reported 52/52 aggregate tests.
+`docs/NEXT_CODEX_RUN.md` is currently **COMPLETED**. The latest completed pass is the Armory durable-replay-authority follow-up at implementation SHA `c13d9f9d8bb59fcedddbe68cfed292299626a51f` with documentation SHA `c79fa4b0206e256692767ca483232d5703d3577e`.
 
-The current task requires:
+That pass completed the remaining reviewed Armory correctness work without a schema change:
 
-- once `(faction_id, event_key, item_name)` has been accepted into `armory_item_effects`, replay request metadata must not be able to choose a different category/effect scope during rematerialization;
-- duplicate journal re-imports may self-heal only from canonical persisted movement metadata;
-- mismatched-category/action/amount replay regressions must prove the durable accepted event remains authoritative;
-- the completed equal-time ordering, zero-floor convergence, delayed-snapshot behavior, future-time bound, tenant/category isolation, OC-history isolation, and sync-error semantics must remain intact;
-- audit the handling of newly ingested movements whose normalized occurrence time is missing, without inventing historical timestamps.
+- duplicate journal re-imports rematerialize from canonical persisted movement metadata;
+- replay category/action/amount/time cannot alter an already accepted effect;
+- exact duplicate and cross-faction replay remain idempotent/isolated;
+- equal-time ordering, zero-floor convergence, delayed-snapshot behavior, future-time bounds, OC isolation, and script-sync error semantics remain covered;
+- new normalized timestamp-less movements are rejected, while migrated historical `NULL occurred_at` effects remain preserved.
 
-No schema change is expected for this replay-authority fix unless Codex demonstrates a genuine need; `db:generate` should otherwise report no drift.
-
-Codex must update the rolling next-run file with results/status before handing control back. Significant architecture/migration outcomes should also be appended to the historical runbook rather than replacing prior evidence.
+The reported local validation for that pass is recorded in `docs/NEXT_CODEX_RUN.md` and `docs/CODEX_MULTI_TENANCY_RUN.md`. There is still no dedicated Faction Ledger GitHub CI check, so pre-go-live CI/security/branch-protection work remains tracked separately in issue #6.
 
 ## Production rollout boundary
 
