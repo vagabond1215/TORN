@@ -136,6 +136,9 @@ function cleanEvent(input: BrowserEventInput) {
 
   if (!/^[a-z0-9:_-]{8,120}$/i.test(eventKey)) throw new Error("A browser event has an invalid key.");
   if (!allowedTypes.has(eventType)) throw new Error("A browser event has an invalid type.");
+  if ((eventType === "armory_movement" || eventType === "xanax_use") && !occurredAt) {
+    throw new Error("An Armory movement has an invalid occurrence time.");
+  }
   if (!category || !summary) throw new Error("A browser event is incomplete.");
   let parsedUrl: URL;
   try { parsedUrl = new URL(sourceUrl); }

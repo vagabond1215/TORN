@@ -154,27 +154,33 @@ export async function recordArmoryMovement(db: D1Database, context: ArmoryContex
   const delta = ["deposited", "returned"].includes(action) ? quantity : -quantity;
   const category = normalizeArmoryCategory(movement.category, itemName);
   const occurredAt = normalizedTimestamp(movement.occurredAt);
-  if (occurredAt && Date.parse(occurredAt) > Date.now() + ARMORY_FUTURE_TOLERANCE_MS) return false;
+  if (!occurredAt || Date.parse(occurredAt) > Date.now() + ARMORY_FUTURE_TOLERANCE_MS) return false;
   const results = await db.batch([
     db.prepare(`INSERT OR IGNORE INTO armory_item_effects
       (faction_id, event_key, item_name, delta, category, source, occurred_at)
       VALUES (?, ?, ?, ?, ?, 'activity', ?)`)
       .bind(context.factionId, movement.eventKey, itemName, delta, category, occurredAt),
-    db.prepare(`WITH snapshot AS (
-        SELECT observed_at, items_json
-        FROM armory_snapshot_state
-        WHERE faction_id = ? AND category = ? AND items_json IS NOT NULL
+    db.prepare(`WITH canonical_effect AS (
+        SELECT item_name, category
+        FROM armory_item_effects
+        WHERE faction_id = ? AND event_key = ? AND item_name = ? COLLATE NOCASE
+      ), snapshot AS (
+        SELECT state.observed_at, state.items_json, effect.item_name, effect.category
+        FROM canonical_effect AS effect
+        JOIN armory_snapshot_state AS state
+          ON state.faction_id = ? AND state.category = effect.category
+        WHERE state.items_json IS NOT NULL
       ), base AS (
-        SELECT snapshot.observed_at,
+        SELECT snapshot.observed_at, snapshot.item_name, snapshot.category,
           COALESCE((
             SELECT CAST(json_extract(item.value, '$.quantity') AS INTEGER)
             FROM json_each(snapshot.items_json) AS item
-            WHERE lower(CAST(json_extract(item.value, '$.name') AS TEXT)) = lower(?)
+            WHERE CAST(json_extract(item.value, '$.name') AS TEXT) = snapshot.item_name COLLATE NOCASE
             LIMIT 1
           ), 0) AS quantity
         FROM snapshot
       ), ordered_effects AS (
-        SELECT effect.delta, effect.occurred_at, effect.event_key,
+        SELECT effect.delta, effect.source, effect.occurred_at, effect.event_key,
           SUM(effect.delta) OVER (
             ORDER BY julianday(effect.occurred_at), effect.event_key, effect.item_name
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
@@ -183,22 +189,23 @@ export async function recordArmoryMovement(db: D1Database, context: ArmoryContex
             ORDER BY julianday(effect.occurred_at) DESC, effect.event_key DESC, effect.item_name DESC
           ) AS latest_rank
         FROM armory_item_effects AS effect, base
-        WHERE effect.faction_id = ? AND effect.category = ?
-          AND effect.item_name = ? COLLATE NOCASE
+        WHERE effect.faction_id = ? AND effect.category = base.category
+          AND effect.item_name = base.item_name COLLATE NOCASE
           AND effect.occurred_at IS NOT NULL
           AND julianday(effect.occurred_at) > julianday(base.observed_at)
       ), effect_totals AS (
         SELECT SUM(delta) AS total_delta,
           MIN(running_delta) AS min_running_delta,
+          MAX(CASE WHEN latest_rank = 1 THEN source END) AS source,
           MAX(CASE WHEN latest_rank = 1 THEN occurred_at END) AS occurred_at
         FROM ordered_effects
         HAVING COUNT(*) > 0
       )
       INSERT INTO armory_items (faction_id, item_name, category, quantity, source, observed_at, updated_at)
-      SELECT ?, ?, ?,
+      SELECT ?, base.item_name, base.category,
         MAX(0, base.quantity + totals.total_delta
           - MIN(0, base.quantity + MIN(0, totals.min_running_delta))),
-        'activity', totals.occurred_at, CURRENT_TIMESTAMP
+        totals.source, totals.occurred_at, CURRENT_TIMESTAMP
       FROM base, effect_totals AS totals
       WHERE true
       ON CONFLICT(faction_id, item_name) DO UPDATE SET
@@ -207,9 +214,8 @@ export async function recordArmoryMovement(db: D1Database, context: ArmoryContex
         source = excluded.source,
         observed_at = excluded.observed_at,
         updated_at = CURRENT_TIMESTAMP`)
-      .bind(context.factionId, category, itemName,
-        context.factionId, category, itemName,
-        context.factionId, itemName, category),
+      .bind(context.factionId, movement.eventKey, itemName,
+        context.factionId, context.factionId, context.factionId),
   ]);
   return Boolean(results[0]?.meta.changes);
 }

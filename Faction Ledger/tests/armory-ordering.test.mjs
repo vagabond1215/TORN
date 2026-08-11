@@ -127,6 +127,77 @@ test("A4 duplicate movement keys apply exactly once", async () => {
   state.sqlite.close();
 });
 
+test("R1 duplicate category metadata cannot steer canonical durable movement state", async () => {
+  const state = await armoryDatabase();
+  await snapshot(state, {
+    eventKey: "snapshot:r1:drugs", observedAt: T1, category: "drugs",
+    items: [{ name: "Xanax", quantity: 10 }],
+  });
+  await snapshot(state, {
+    eventKey: "snapshot:r1:medical", observedAt: T1, category: "medical",
+    items: [{ name: "Xanax", quantity: 100 }],
+  });
+  await movement(state, {
+    eventKey: "movement:r1:medical-history", occurredAt: T2, category: "medical",
+    quantity: 5, action: "deposited",
+  });
+  assert.equal(quantity(state.sqlite), 105);
+
+  assert.equal(await movement(state, {
+    eventKey: "movement:replay-authority", occurredAt: T3, category: "drugs",
+    quantity: 1, action: "used",
+  }), true);
+  assert.equal(quantity(state.sqlite), 9);
+
+  assert.equal(await movement(state, {
+    eventKey: "movement:replay-authority", occurredAt: T2, category: "medical",
+    quantity: 50, action: "deposited",
+  }), false);
+  const durable = state.sqlite.prepare(`SELECT category, delta, occurred_at, source
+    FROM armory_item_effects
+    WHERE faction_id = ? AND event_key = ? AND item_name = ? COLLATE NOCASE`).get(
+    BLOOD_COVEN, "movement:replay-authority", "Xanax",
+  );
+  assert.deepEqual({ ...durable }, { category: "drugs", delta: -1, occurred_at: T3, source: "activity" });
+  assert.equal(state.sqlite.prepare(`SELECT COUNT(*) AS count FROM armory_item_effects
+    WHERE faction_id = ? AND event_key = ?`).get(BLOOD_COVEN, "movement:replay-authority").count, 1);
+  assert.deepEqual({ ...state.sqlite.prepare(`SELECT category, quantity FROM armory_items
+    WHERE faction_id = ? AND item_name = ? COLLATE NOCASE`).get(BLOOD_COVEN, "Xanax") }, {
+    category: "drugs", quantity: 9,
+  });
+  state.sqlite.close();
+});
+
+test("R2 exact duplicate replay remains idempotent while rebuilding from durable state", async () => {
+  const state = await armoryDatabase();
+  await snapshot(state, { eventKey: "snapshot:r2", observedAt: T1, items: [{ name: "Xanax", quantity: 10 }] });
+  const accepted = { eventKey: "movement:r2", occurredAt: T2, quantity: 2, action: "used" };
+  assert.equal(await movement(state, accepted), true);
+  assert.equal(await movement(state, accepted), false);
+  assert.equal(await movement(state, accepted), false);
+  assert.equal(quantity(state.sqlite), 8);
+  assert.equal(state.sqlite.prepare("SELECT COUNT(*) AS count FROM armory_item_effects WHERE faction_id = ? AND event_key = ?")
+    .get(BLOOD_COVEN, accepted.eventKey).count, 1);
+  state.sqlite.close();
+});
+
+test("R3 changed duplicate amount action and time cannot alter the accepted effect", async () => {
+  const state = await armoryDatabase();
+  await snapshot(state, { eventKey: "snapshot:r3", observedAt: T1, items: [{ name: "Xanax", quantity: 10 }] });
+  assert.equal(await movement(state, {
+    eventKey: "movement:r3", occurredAt: T2, quantity: 2, action: "used",
+  }), true);
+  assert.equal(await movement(state, {
+    eventKey: "movement:r3", occurredAt: T3, quantity: 50, action: "deposited",
+  }), false);
+  assert.equal(quantity(state.sqlite), 8);
+  assert.deepEqual({ ...state.sqlite.prepare(`SELECT delta, occurred_at, category, source
+    FROM armory_item_effects WHERE faction_id = ? AND event_key = ?`).get(BLOOD_COVEN, "movement:r3") }, {
+    delta: -2, occurred_at: T2, category: "drugs", source: "activity",
+  });
+  state.sqlite.close();
+});
+
 test("A5 identical movement keys apply independently across factions", async () => {
   const state = await armoryDatabase();
   await snapshot(state, { factionId: BLOOD_COVEN, eventKey: "snapshot:a5:b", observedAt: T1, items: [{ name: "Xanax", quantity: 10 }] });
@@ -216,6 +287,26 @@ test("A11 equal-time keys remain independent across factions", async () => {
   state.sqlite.close();
 });
 
+test("R6 duplicate replay in one faction cannot rematerialize another faction", async () => {
+  const state = await armoryDatabase();
+  for (const [factionId, base] of [[BLOOD_COVEN, 10], [OTHER_FACTION, 20]]) {
+    await snapshot(state, {
+      factionId, eventKey: `snapshot:r6:${factionId}`, observedAt: T1,
+      items: [{ name: "Xanax", quantity: base }],
+    });
+    await movement(state, { factionId, eventKey: "movement:r6", occurredAt: T2 });
+  }
+  await movement(state, {
+    factionId: BLOOD_COVEN, eventKey: "movement:r6", occurredAt: T3,
+    quantity: 99, action: "deposited", category: "medical",
+  });
+  assert.equal(quantity(state.sqlite, BLOOD_COVEN), 9);
+  assert.equal(quantity(state.sqlite, OTHER_FACTION), 19);
+  assert.equal(state.sqlite.prepare("SELECT COUNT(*) AS count FROM armory_item_effects WHERE event_key = ?")
+    .get("movement:r6").count, 2);
+  state.sqlite.close();
+});
+
 test("A12 delayed snapshot folding matches live equal-time materialization in either arrival order", async () => {
   for (const order of [["withdraw", "deposit"], ["deposit", "withdraw"]]) {
     const live = await equalTimeResult(order);
@@ -245,6 +336,21 @@ test("future movement timestamps are bounded while legitimate times remain accep
   assert.equal(state.sqlite.prepare("SELECT COUNT(*) AS count FROM armory_item_effects").get().count, 2);
   assert.equal(state.sqlite.prepare("SELECT COUNT(*) AS count FROM armory_item_effects WHERE event_key = 'movement:far-future'").get().count, 0);
   assert.equal(quantity(state.sqlite), 2);
+  state.sqlite.close();
+});
+
+test("new unknown-time movement is rejected before snapshot-backed durable state changes", async () => {
+  const state = await armoryDatabase();
+  await snapshot(state, { eventKey: "snapshot:null-time", observedAt: T1, items: [{ name: "Xanax", quantity: 10 }] });
+  assert.equal(await movement(state, {
+    eventKey: "movement:null-time", occurredAt: null, quantity: 2, action: "used",
+  }), false);
+  assert.equal(quantity(state.sqlite), 10);
+  assert.equal(state.sqlite.prepare("SELECT COUNT(*) AS count FROM armory_item_effects WHERE faction_id = ?")
+    .get(BLOOD_COVEN).count, 0);
+  const route = await readFile(new URL("../app/api/torn-browser/route.ts", import.meta.url), "utf8");
+  assert.match(route, /\(eventType === "armory_movement" \|\| eventType === "xanax_use"\) && !occurredAt/);
+  assert.match(route, /Armory movement has an invalid occurrence time/);
   state.sqlite.close();
 });
 
