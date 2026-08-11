@@ -47,57 +47,47 @@ npm run check
 
 ## Codex development workflow
 
-Faction Ledger is currently **pre-production and not in active service**. The intended steady-state development workflow is therefore direct-to-`main`: once the current bridge PR is merged, Codex should start from current `main`, make normal commits, validate locally, and push directly to `main`.
-
-When the application is moved into actual use, this policy must be reversed before further production-affecting development: restore feature branches/PR review, required CI, and appropriate branch protection.
-
-### One-time transition now in progress
-
-The accumulated Faction Ledger development history still lives on:
-
-```text
-codex/faction-ledger-multitenancy
-```
-
-PR #3 now targets:
+Faction Ledger is currently **pre-production and not in active service**. Codex now works directly on:
 
 ```text
 main
 ```
 
-directly. The old `agent/fix-faction-ledger-sync-safety` integration layer / PR #1 is superseded and is no longer the development target.
+PR #3 merged the accumulated Faction Ledger tenancy/synchronization development into `main`. PR #1 was closed unmerged as a superseded historical integration layer. The previous long-lived Codex/integration branch stack is retired.
 
-Because the Codex branch and current `main` have long-running divergent history, this ACTIVE run is the final branch-based transition pass. Codex must:
+For each Codex run:
 
-1. fetch current refs;
-2. merge current `origin/main` into `codex/faction-ledger-multitenancy` using a normal history-preserving merge;
-3. preserve current `main` for unrelated repository work and semantically preserve the Faction Ledger implementation;
-4. finish the ACTIVE Armory same-time/timestamp-safety blockers;
-5. run the full validation suite;
-6. push the reconciled branch and hand back for review/merge of PR #3.
+```bash
+git fetch origin
+git switch main
+git pull --ff-only origin main
+git status -sb
+```
 
-After PR #3 is merged, new Codex work starts on `main` directly unless a human explicitly changes the policy.
+If local `main` is dirty or diverged, stop and inspect instead of resetting/rebasing/force-pushing automatically.
+
+Make normal commits, run the requested validation, and push directly to `main` while the application remains pre-production.
+
+When the application is moved into actual use, this policy must be reversed before further production-affecting development: restore feature branches/PR review, required CI, and appropriate branch protection.
 
 ### Read before editing
 
-1. [`AGENTS.md`](./AGENTS.md) — always first; safety rules, current development-mode branch policy, and non-negotiable data/sync invariants.
+1. [`AGENTS.md`](./AGENTS.md) — always first; safety rules, direct-main pre-production policy, and non-negotiable data/sync invariants.
 2. [`docs/README.md`](./docs/README.md) — documentation routing and instruction precedence.
 3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — when marked **ACTIVE**, this is the authoritative current task/prompt and handback checklist.
 4. [`docs/CODEX_MULTI_TENANCY_RUN.md`](./docs/CODEX_MULTI_TENANCY_RUN.md) — broader architecture, completed migration plan, historical handoffs, and prior validation evidence.
-5. GitHub issue **#2** and current PR/review discussion when GitHub access is available.
+5. GitHub issue **#2** and relevant review/history when GitHub access is available.
 
 An older embedded prompt in the historical runbook must not override an **ACTIVE** `NEXT_CODEX_RUN.md`.
 
 ### Current handoff
 
-`docs/NEXT_CODEX_RUN.md` is **ACTIVE** for a narrow connector-found Armory follow-up plus the one-time branch reconciliation. It currently covers:
+`docs/NEXT_CODEX_RUN.md` is **ACTIVE** on `main` for the narrow connector-found Armory follow-up. It currently covers:
 
-- merge current `origin/main` into the Codex branch without rewriting history and ensure the resulting PR-to-main diff contains only intended Faction Ledger development changes;
 - make equal-timestamp Armory movements deterministic so the same durable event set produces the same quantity regardless of observer/network arrival order, including zero-floor cases;
 - add future-time sanity validation for Armory movements now that `occurred_at` controls replay across snapshots;
 - preserve the completed delayed-snapshot convergence, exact-once dedupe, tenant/category isolation, OC-history isolation, and script-sync 401/503 semantics;
-- keep any new schema evolution additive after `0011_thin_pyro.sql` and migration-owned for existing databases;
-- hand back PR #3 for the one-time merge to `main`, after which the branch-based development workflow is retired.
+- keep any new schema evolution additive after `0011_thin_pyro.sql` and migration-owned for existing databases.
 
 Codex must update the rolling next-run file with results/status before handing control back. Significant architecture/migration outcomes should also be appended to the historical runbook rather than replacing its prior evidence.
 
