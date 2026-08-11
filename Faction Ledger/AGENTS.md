@@ -10,28 +10,30 @@ Read the project instructions in this order before changing code:
 2. [`docs/README.md`](./docs/README.md) — documentation map and precedence rules.
 3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — when its status is **ACTIVE**, this is the authoritative current implementation scope.
 4. [`docs/CODEX_MULTI_TENANCY_RUN.md`](./docs/CODEX_MULTI_TENANCY_RUN.md) — broader architecture, completed phases, migration history, and prior validation evidence.
-5. GitHub issue #2 and current PR/review discussion when GitHub access is available.
+5. GitHub issue #2 and relevant review/history when GitHub access is available.
 
 If an older prompt in the historical runbook conflicts with an **ACTIVE** `NEXT_CODEX_RUN.md`, follow the current next-run scope while preserving every invariant and safety rule in this file. Do not create a competing ad hoc prompt elsewhere in the repo; update the rolling next-run handoff instead.
 
 ## Development-mode branch policy
 
-Faction Ledger is currently **pre-production and not in active service**. Until a human explicitly declares that it has moved into actual use, the normal Codex working branch is `main` and ordinary Codex development may commit and push directly to `main` after local validation.
+Faction Ledger is currently **pre-production and not in active service**.
 
-There is one temporary transition exception:
+Until a human explicitly declares that it has moved into actual use:
 
-- PR #3 now targets `main` directly and contains the accumulated Faction Ledger development history.
-- While PR #3 remains open, execute the ACTIVE `docs/NEXT_CODEX_RUN.md` on `codex/faction-ledger-multitenancy`; first reconcile current `origin/main` into that branch with a normal merge, then complete the focused blockers and hand back for review.
-- Do **not** merge PR #3 from Codex. After the reviewed bridge is merged to `main`, retire the Codex branch/integration-branch workflow and start subsequent Codex runs from current `main`.
-- PR #1 / `agent/fix-faction-ledger-sync-safety` is a historical integration layer and is no longer the development target.
+- `main` is the normal Codex working branch;
+- ordinary Codex development may commit and push directly to `main` after local validation;
+- start each run from current `origin/main` with a clean fast-forward update;
+- use normal commits only; never force-push or rewrite shared history.
 
-Once the application enters actual use, stop direct-to-`main` development and re-establish branch/PR/review protection before further production-affecting changes.
+The previous `codex/faction-ledger-multitenancy` → integration → `main` branch stack is retired. PR #3 merged the accumulated Faction Ledger development state into `main`; PR #1 was closed unmerged as a superseded historical integration layer.
+
+Once the application enters actual use, stop direct-to-`main` development and re-establish feature branches/PR review, CI requirements, and appropriate branch protection before further production-affecting changes.
 
 ## Safety
 
 - Production Cloudflare D1 is canonical. Local `.wrangler` / Miniflare state is disposable development data.
 - Never point local tests or migrations at production D1. Never use destructive resets, `DROP`-and-recreate production tables, or force-push history.
-- Never force-push `main` or any reviewed branch.
+- Never force-push `main`.
 - Direct-to-`main` development while pre-production does **not** authorize deployment, production D1 migration, or arbitrary-faction enablement.
 - Prefer additive, idempotent migrations with explicit backfills and validation queries. Preserve existing Blood Coven data (faction ID `52984`).
 - Do not enable arbitrary-faction writes until every durable read/write path is tenant-scoped and isolation tests pass.
@@ -51,7 +53,7 @@ Once the application enters actual use, stop direct-to-`main` development and re
 
 ## Starting a Codex pass
 
-After the one-time PR #3 transition is complete, start ordinary pre-production work with:
+Start ordinary pre-production work with:
 
 ```bash
 git fetch origin
@@ -62,7 +64,7 @@ git status -sb
 
 If local `main` has uncommitted work or has diverged from `origin/main`, stop and inspect rather than resetting, rebasing, or force-pushing automatically.
 
-During the current transition, follow the branch-reconciliation instructions in the ACTIVE `docs/NEXT_CODEX_RUN.md` instead.
+Then read and execute any **ACTIVE** `docs/NEXT_CODEX_RUN.md` before broadening scope.
 
 ## Validation commands
 
