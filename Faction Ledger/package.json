@@ -9,7 +9,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/multitenancy-isolation.test.mjs tests/member-balance-atomicity.test.mjs tests/member-balance-schema-ownership.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/multitenancy-isolation.test.mjs tests/member-balance-atomicity.test.mjs tests/member-balance-schema-ownership.test.mjs tests/armory-ordering.test.mjs tests/script-sync-errors.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "check": "npm run lint && npm test",
     "db:generate": "drizzle-kit generate"

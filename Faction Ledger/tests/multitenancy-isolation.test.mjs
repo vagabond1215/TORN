@@ -75,7 +75,7 @@ function metrics(db, where = "") {
 }
 
 async function applyTenantMigrations(db) {
-  for (const path of ["../drizzle/0008_sparkling_scream.sql", "../drizzle/0009_lyrical_morlocks.sql", "../drizzle/0010_fluffy_luckman.sql"]) {
+  for (const path of ["../drizzle/0008_sparkling_scream.sql", "../drizzle/0009_lyrical_morlocks.sql", "../drizzle/0010_fluffy_luckman.sql", "../drizzle/0011_thin_pyro.sql"]) {
     const sql = await readFile(new URL(path, import.meta.url), "utf8");
     for (const statement of sql.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) db.exec(statement);
   }
@@ -134,11 +134,11 @@ test("two factions isolate identities, keys, inventory, policy, authorization, c
   db.prepare("INSERT INTO event_observers(faction_id,event_key,observer_token_id,observer_member_id) VALUES (?,?,?,?)").run(BLOOD_COVEN,"shared:move","observer-b",102);
   assert.equal(db.prepare("SELECT COUNT(*) AS value FROM event_observers WHERE faction_id=? AND event_key='shared:move'").get(BLOOD_COVEN).value,2);
 
-  db.prepare("INSERT INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source) VALUES (?,?,?,?,?,?)").run(BLOOD_COVEN,"shared:move","Xanax",-1,"drugs","activity");
-  assert.equal(db.prepare("INSERT OR IGNORE INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source) VALUES (?,?,?,?,?,?)").run(BLOOD_COVEN,"shared:move","Xanax",-1,"drugs","activity").changes,0);
-  db.prepare("INSERT INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source) VALUES (?,?,?,?,?,?)").run(OTHER_FACTION,"shared:move","Xanax",-1,"drugs","activity");
+  db.prepare("INSERT INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source,occurred_at) VALUES (?,?,?,?,?,?,?)").run(BLOOD_COVEN,"shared:move","Xanax",-1,"drugs","activity","2026-08-08T02:00:00.000Z");
+  assert.equal(db.prepare("INSERT OR IGNORE INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source,occurred_at) VALUES (?,?,?,?,?,?,?)").run(BLOOD_COVEN,"shared:move","Xanax",-1,"drugs","activity","2026-08-08T02:00:00.000Z").changes,0);
+  db.prepare("INSERT INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source,occurred_at) VALUES (?,?,?,?,?,?,?)").run(OTHER_FACTION,"shared:move","Xanax",-1,"drugs","activity","2026-08-08T02:00:00.000Z");
   db.prepare("DELETE FROM torn_browser_events WHERE faction_id=?").run(BLOOD_COVEN);
-  assert.equal(db.prepare("INSERT OR IGNORE INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source) VALUES (?,?,?,?,?,?)").run(BLOOD_COVEN,"shared:move","Xanax",-1,"drugs","activity").changes,0);
+  assert.equal(db.prepare("INSERT OR IGNORE INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source,occurred_at) VALUES (?,?,?,?,?,?,?)").run(BLOOD_COVEN,"shared:move","Xanax",-1,"drugs","activity","2026-08-08T02:00:00.000Z").changes,0);
   assert.equal(db.prepare("SELECT quantity FROM armory_items WHERE faction_id=? AND item_name='Xanax'").get(BLOOD_COVEN).quantity,24);
   assert.equal(db.prepare("SELECT quantity FROM armory_items WHERE faction_id=? AND item_name='Xanax'").get(OTHER_FACTION).quantity,9);
   db.prepare("INSERT INTO oc_holdings(faction_id,event_key,crime_name,items_json) VALUES (?,?,?,?)").run(BLOOD_COVEN,"oc:xanax-history","OC reward",'[{"name":"Xanax","quantity":20}]');
@@ -161,7 +161,8 @@ test("routes derive tenant from verified context and client state is faction sco
   assert.match(accessRoute, /WHERE faction_id = \?/);
   assert.match(memberRoute, /WHERE faction_id = \? AND member_id = \?/);
   assert.match(balances, /incoming > current \|\| \(incoming === current && priority >= row\.observed_priority\)/);
-  assert.match(browserRoute, /previous && Date\.parse\(previous\.observed_at\) > observedAtMs/);
+  assert.match(browserRoute, /recordArmorySnapshot\(db, context/);
+  assert.match(browserRoute, /assertArmorySchemaReady\(db\)/);
   assert.match(browserRoute, /event\.eventType === "member_balance_snapshot"/);
   assert.match(script, /ACTIVE_SCOPE_KEY/);
   assert.match(script, /scopedKey\(QUEUE_KEY\)/);
