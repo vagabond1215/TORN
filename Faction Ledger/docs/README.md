@@ -6,10 +6,10 @@ This directory separates **current execution instructions** from **architecture/
 
 For any Codex change under `Faction Ledger/`:
 
-1. [`../AGENTS.md`](../AGENTS.md) — always read first. It contains subtree safety rules, development-mode branch policy, and non-negotiable data-integrity invariants.
+1. [`../AGENTS.md`](../AGENTS.md) — always read first. It contains subtree safety rules, direct-main pre-production policy, and non-negotiable data-integrity invariants.
 2. [`NEXT_CODEX_RUN.md`](./NEXT_CODEX_RUN.md) — read next when its status is **ACTIVE**. It is the authoritative current implementation scope and handoff checklist.
 3. [`CODEX_MULTI_TENANCY_RUN.md`](./CODEX_MULTI_TENANCY_RUN.md) — architecture, completed migration plan, historical handoffs, and prior validation evidence.
-4. GitHub issue **#2** and current PR/review discussion — use for current review/status when GitHub access is available.
+4. GitHub issue **#2** and relevant review/history — use for additional context when GitHub access is available.
 
 ## Instruction precedence
 
@@ -34,24 +34,16 @@ Preserve historical migration/test evidence in `CODEX_MULTI_TENANCY_RUN.md`. Do 
 
 Faction Ledger is currently pre-production and not in active service.
 
-Steady-state policy after the current bridge is merged:
+Current policy:
 
 ```text
 main   ← Codex works here directly during pre-production development
 ```
 
-The current transition is the only exception:
+PR #3 merged the accumulated development branch into `main`. PR #1 was closed unmerged as a superseded historical integration layer. The former Codex/integration branch stack is retired for ordinary work.
 
-```text
-codex/faction-ledger-multitenancy   (PR #3 / final bridge)
-                 ↓
-                main
-```
+Start each Codex run from current `origin/main`, use normal commits, validate locally, and push directly to `main`. Never force-push.
 
-PR #3 now targets `main` directly. The old `agent/fix-faction-ledger-sync-safety` / PR #1 integration layer is superseded.
-
-The ACTIVE next-run handoff requires Codex to reconcile current `origin/main` into the Codex branch, finish the narrow remaining blockers, validate, and hand PR #3 back for a one-time merge. After that merge, future Codex sessions start from and push to `main` directly until a human declares the application actively used.
-
-When actual use begins, restore branch/PR/CI protection before further production-affecting development.
+When actual use begins, restore feature branches/PR review, CI requirements, and branch protection before further production-affecting development.
 
 Direct-to-`main` development never authorizes deployment, production D1 access/migration, force-pushes, or arbitrary-faction production enablement.
