@@ -27,11 +27,20 @@ type ActiveWar = {
   members: Array<{ id: number; name: string; hits: number; xanax: number; refills: number; energyEstimate: number }>;
 };
 type WarStatus = { pendingWars: PendingWar[]; activeWar: ActiveWar | null };
+type TornSyncResult = WarStatus & {
+  error?: string; syncedAt?: string; warnings?: string[];
+  history?: {
+    warBackfill?: { imported: number; offset: number; complete: boolean };
+    ocRecent?: { imported: number; count: number };
+    ocBackfill?: { imported: number; offset: number; complete: boolean };
+  };
+};
 type Modal = "deposit" | "directDeposit" | "spend" | "transfer" | "settings" | null;
 type MainTab = "accounts" | "balances" | "armory" | "wars" | "ocs" | "history";
 type SettingsSection = "accounts" | "policies" | "torn" | "script" | "access" | "appearance";
 type Theme = "light" | "dark" | "system";
 type BridgeStatus = "checking" | "connected" | "missing";
+type ArmoryCategory = "all" | "primary" | "secondary" | "melee" | "temporary" | "armor" | "clothing" | "medical" | "drugs" | "boosters" | "consumables" | "utility" | "special" | "other";
 type BrowserEvent = {
   eventKey: string; eventType: string; category: string; occurredAt: string | null; summary: string;
   sourceUrl: string; payload: Record<string, unknown>; createdAt: string;
@@ -49,6 +58,23 @@ const emptyData: BudgetData = { currentUser: null, accounts: [], policies: [], t
 const emptyWars: WarStatus = { pendingWars: [], activeWar: null };
 const emptyBridge: BrowserBridgeInfo = { totalEvents: 0, lastImportedAt: null, recentEvents: [], ocHoldings: [], armoryItems: [] };
 const BRIDGE_CHANNEL = "blood-coven-treasury-bridge-v1";
+const TORN_KEY_STORAGE = "torn-treasury-api-key-v2:52984";
+const ARMORY_TABS: Array<{ key: ArmoryCategory; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "primary", label: "Primary" },
+  { key: "secondary", label: "Secondary" },
+  { key: "melee", label: "Melee" },
+  { key: "temporary", label: "Temporary" },
+  { key: "armor", label: "Armor" },
+  { key: "clothing", label: "Clothing" },
+  { key: "medical", label: "Medical" },
+  { key: "drugs", label: "Drugs" },
+  { key: "boosters", label: "Boosters" },
+  { key: "consumables", label: "Consumables" },
+  { key: "utility", label: "Utility" },
+  { key: "special", label: "Special" },
+  { key: "other", label: "Other" },
+];
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const integer = new Intl.NumberFormat("en-US");
 const parseMoney = (value: string) => Number(value.replace(/[$,\s]/g, ""));
@@ -129,6 +155,7 @@ export default function BudgetTracker() {
   const [theme, setTheme] = useState<Theme>("system");
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [activityFilter, setActivityFilter] = useState("all");
+  const [armoryCategory, setArmoryCategory] = useState<ArmoryCategory>("all");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [sourceKey, setSourceKey] = useState("war");
@@ -240,7 +267,9 @@ export default function BudgetTracker() {
     const task = window.setTimeout(() => {
       const savedTheme = window.localStorage.getItem("blood-coven-theme");
       if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") setTheme(savedTheme);
-      const savedKey = window.localStorage.getItem("blood-coven-torn-key") ?? "";
+      const savedKey = window.localStorage.getItem(TORN_KEY_STORAGE) ?? window.localStorage.getItem("blood-coven-torn-key") ?? "";
+      if (savedKey) window.localStorage.setItem(TORN_KEY_STORAGE, savedKey);
+      window.localStorage.removeItem("blood-coven-torn-key");
       setTornKey(savedKey);
       setTornKeyDraft(savedKey);
       Promise.all([loadBudget(), loadWars(), loadMemberAdmin()]).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load the treasury."))
@@ -282,11 +311,21 @@ export default function BudgetTracker() {
     syncingRef.current = true; setSyncing(true); setError("");
     try {
       const response = await fetch("/api/torn", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "sync", apiKey }) });
-      const result = (await response.json()) as WarStatus & { error?: string; syncedAt?: string };
+      const result = (await response.json()) as TornSyncResult;
       if (!response.ok) throw new Error(result.error || "Unable to sync Torn.");
       applyWarStatus(result);
+      await loadBridgeInfo();
       setLastSyncAt(result.syncedAt ?? new Date().toISOString());
-      if (announce) flash("Torn war data updated.");
+      if (announce) {
+        const warHistory = result.history?.warBackfill;
+        const ocHistory = result.history?.ocBackfill;
+        const progress = [
+          warHistory && !warHistory.complete ? `war history offset ${warHistory.offset}` : null,
+          ocHistory && !ocHistory.complete ? `OC history offset ${ocHistory.offset}` : null,
+        ].filter(Boolean).join(" · ");
+        if (result.warnings?.length) flash(`Torn data updated. ${result.warnings[0]}`);
+        else flash(progress ? `Torn data updated · ${progress}` : "Torn data and history updated.");
+      }
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "Unable to sync Torn.");
     } finally { syncingRef.current = false; setSyncing(false); }
@@ -409,10 +448,10 @@ export default function BudgetTracker() {
     event.preventDefault();
     const next = tornKeyDraft.trim();
     if (!next) { setError("Enter a Torn API key."); return; }
-    window.localStorage.setItem("blood-coven-torn-key", next); setTornKey(next); setError(""); flash("Torn key saved on this device. Syncing now.");
+    window.localStorage.setItem(TORN_KEY_STORAGE, next); setTornKey(next); setError(""); flash("Torn key saved on this device. Syncing now.");
   }
   function removeTornKey() {
-    window.localStorage.removeItem("blood-coven-torn-key"); setTornKey(""); setTornKeyDraft(""); setLastSyncAt(""); flash("Torn key removed from this device.");
+    window.localStorage.removeItem(TORN_KEY_STORAGE); window.localStorage.removeItem("blood-coven-torn-key"); setTornKey(""); setTornKeyDraft(""); setLastSyncAt(""); flash("Torn key removed from this device.");
   }
   function copySiteLink() { void navigator.clipboard.writeText(window.location.href); flash("Site link copied."); }
   function copyBalanceLink() { void navigator.clipboard.writeText(`${window.location.origin}/balance`); flash("Member balance link copied."); }
@@ -432,7 +471,12 @@ export default function BudgetTracker() {
     .filter((event) => ["ranked_war_report", "faction_news", "xanax_use"].includes(event.eventType))
     .sort((a, b) => browserEventTime(b) - browserEventTime(a));
   const ocEvents = bridgeInfo.recentEvents.filter((event) => event.eventType === "oc_credit" || event.category === "crimes");
-  const armoryEvents = bridgeInfo.recentEvents.filter((event) => ["armory", "armory_movement", "xanax_use"].includes(event.eventType));
+  const armoryEvents = bridgeInfo.recentEvents.filter((event) => ["armory", "armory_movement", "armory_snapshot", "xanax_use"].includes(event.eventType));
+  const visibleArmoryItems = armoryCategory === "all" ? bridgeInfo.armoryItems : bridgeInfo.armoryItems.filter((item) => item.category === armoryCategory);
+  const armoryCounts = bridgeInfo.armoryItems.reduce<Record<string, number>>((counts, item) => {
+    counts[item.category] = (counts[item.category] ?? 0) + 1;
+    return counts;
+  }, {});
   const openRequests = memberAdmin.requests.filter((request) => ["pending", "approved"].includes(request.status));
 
   return (
@@ -470,20 +514,30 @@ export default function BudgetTracker() {
         <div className="balance-register"><div className="section-heading"><div><h2>Member balances</h2><small>Updated by visitors to Torn&apos;s faction Funds page</small></div></div>{memberAdmin.balances.length === 0 ? <div className="empty-state">No member balances imported yet.</div> : memberAdmin.balances.map((member) => <div className="balance-register-row" key={member.memberName}><strong>{member.memberName}</strong><span>{money.format(member.balance)}</span></div>)}</div>
       </section>}
 
-      {mainTab === "armory" && <section className="armory-section tab-panel"><div className="section-heading"><div><h2>Faction vault</h2><small>Consumables held from OC rewards and tracked Armory movements</small></div></div>{bridgeInfo.armoryItems.length === 0 ? <div className="empty-state event-empty">Visit the Armory activity log or a completed OC with the browser script running.</div> : <div className="vault-grid">{bridgeInfo.armoryItems.map((item) => <article className="vault-row" key={item.itemName}><div><strong>{item.itemName}</strong><small>{item.category} · {item.source}</small></div><b>{integer.format(item.quantity)}</b></article>)}</div>}{armoryEvents.length > 0 && <div className="event-history armory-history"><div className="section-heading"><h2>Armory activity</h2></div>{armoryEvents.slice(0, 40).map((event) => <article className="event-row" key={event.eventKey}><p>{cleanTornActivitySummary(event.summary)}</p><time>{formatTornEventDate(event)}</time></article>)}</div>}</section>}
+      {mainTab === "armory" && <section className="armory-section tab-panel">
+        <div className="section-heading"><div><h2>Faction armory</h2><small>Latest Torn inventory snapshots by category, with tracked activity applied between scans</small></div></div>
+        <div className="activity-filters" role="tablist" aria-label="Armory category">
+          {ARMORY_TABS.map((tab) => {
+            const count = tab.key === "all" ? bridgeInfo.armoryItems.length : (armoryCounts[tab.key] ?? 0);
+            return <button key={tab.key} role="tab" aria-selected={armoryCategory === tab.key} className={armoryCategory === tab.key ? "active" : ""} onClick={() => setArmoryCategory(tab.key)}>{tab.label}{count > 0 ? ` (${count})` : ""}</button>;
+          })}
+        </div>
+        {bridgeInfo.armoryItems.length === 0 ? <div className="empty-state event-empty">Open a Torn faction Armory category and click the movable BC ↻ button to capture its current inventory.</div> : visibleArmoryItems.length === 0 ? <div className="empty-state event-empty">No current items have been captured in this category. Scan that Torn Armory tab with BC ↻ to populate it.</div> : <div className="vault-grid">{visibleArmoryItems.map((item) => <article className="vault-row" key={`${item.category}:${item.itemName}`}><div><strong>{item.itemName}</strong><small>{item.category} · {item.source === "snapshot" ? "Torn snapshot" : item.source}</small></div><b>{integer.format(item.quantity)}</b></article>)}</div>}
+        {armoryEvents.length > 0 && <div className="event-history armory-history"><div className="section-heading"><h2>Armory activity</h2></div>{armoryEvents.slice(0, 40).map((event) => <article className="event-row" key={event.eventKey}><p>{cleanTornActivitySummary(event.summary)}</p><time>{formatTornEventDate(event)}</time></article>)}</div>}
+      </section>}
 
       {mainTab === "history" && <section className="activity-section tab-panel">
         <div className="section-heading"><h2>Transaction history</h2></div><div className="activity-filters" role="group" aria-label="Filter ledger">{["all", "income", "spend", "transfer", "changes"].map((filter) => <button key={filter} className={activityFilter === filter ? "active" : ""} onClick={() => setActivityFilter(filter)}>{filter === "transfer" ? "Moves" : filter.charAt(0).toUpperCase() + filter.slice(1)}</button>)}</div><div className="activity-list">{filteredTransactions.length === 0 ? <div className="empty-state">No matching history.</div> : filteredTransactions.slice(0, 80).map((item) => <article className="activity-item" key={item.id}><div><strong>{transactionLabel(item)}</strong><p>{item.note}</p><time>{formatDate(item.createdAt)} · {item.actorName ?? "Legacy entry"}</time>{item.type === "deposit" && item.details.allocations && <details><summary>View settlement</summary><span>Gross proceeds<b>{money.format(item.details.grossAmount ?? item.amount)}</b></span><span>Player payout<b>{money.format(item.details.playerPayout ?? 0)}</b></span><span>Faction share ({(item.details.taxBps ?? 10000) / 100}%)<b>{money.format(item.details.factionShare ?? item.amount)}</b></span>{item.details.allocations.map((split) => <span className="account-split" key={split.name}>{split.name}<b>{money.format(split.amount)}</b></span>)}</details>}</div>{item.amount > 0 && <b className={`activity-amount ${item.type}`}>{["deposit", "direct_deposit"].includes(item.type) ? "+" : item.type === "spend" ? "-" : ""}{money.format(item.amount)}</b>}</article>)}</div>
       </section>}
 
-      {mainTab === "ocs" && <section className="oc-section tab-panel"><div className="section-heading"><div><h2>Organized crimes</h2><small>Completed rewards remain in faction custody until distributed</small></div></div>{bridgeInfo.ocHoldings.length === 0 ? <div className="empty-state event-empty">Visit the faction Crimes page after an OC completes to import its rewards.</div> : <div className="oc-holdings">{bridgeInfo.ocHoldings.map((holding) => <article className="oc-holding" key={holding.eventKey}><div><span className={`result-tag ${holding.status === "held" ? "won" : ""}`}>{holding.status === "held" ? "In custody" : holding.status}</span><strong>{holding.crimeName}</strong><small>{holding.occurredAt ? formatDate(holding.occurredAt) : formatDate(holding.createdAt)}</small></div><div className="oc-assets">{holding.cashAmount > 0 && <b>{money.format(holding.cashAmount)}</b>}{holding.items.map((item) => <span key={item.name}>{item.quantity}x {item.name}</span>)}</div></article>)}</div>}{ocEvents.length > 0 && <div className="event-history oc-history"><div className="section-heading"><h2>OC activity</h2></div>{ocEvents.slice(0, 60).map((event) => <article className="event-row" key={event.eventKey}><div><strong>{String(event.payload.crimeName ?? event.payload.memberName ?? "Organized crime")}</strong><p>{cleanTornActivitySummary(event.summary)}</p></div>{Number(event.payload.amount) > 0 && <b>{money.format(Number(event.payload.amount))}</b>}</article>)}</div>}</section>}
+      {mainTab === "ocs" && <section className="oc-section tab-panel"><div className="section-heading"><div><h2>Organized crimes</h2><small>Completed OC history is durable server data; browser scans can fill gaps from rendered Torn pages</small></div></div>{bridgeInfo.ocHoldings.length === 0 ? <div className="empty-state event-empty">Sync with a Minimal-or-higher Torn key that has faction API access, or open a completed OC page and click BC ↻.</div> : <div className="oc-holdings">{bridgeInfo.ocHoldings.map((holding) => <article className="oc-holding" key={holding.eventKey}><div><span className={`result-tag ${holding.status === "held" ? "won" : ""}`}>{holding.status === "held" ? "In custody" : holding.status}</span><strong>{holding.crimeName}</strong><small>{holding.occurredAt ? formatDate(holding.occurredAt) : formatDate(holding.createdAt)}</small></div><div className="oc-assets">{holding.cashAmount > 0 && <b>{money.format(holding.cashAmount)}</b>}{holding.items.map((item) => <span key={item.name}>{item.quantity}x {item.name}</span>)}</div></article>)}</div>}{ocEvents.length > 0 && <div className="event-history oc-history"><div className="section-heading"><h2>OC activity</h2></div>{ocEvents.slice(0, 60).map((event) => <article className="event-row" key={event.eventKey}><div><strong>{String(event.payload.crimeName ?? event.payload.memberName ?? "Organized crime")}</strong><p>{cleanTornActivitySummary(event.summary)}</p></div>{Number(event.payload.amount) > 0 && <b>{money.format(Number(event.payload.amount))}</b>}</article>)}</div>}</section>}
 
       {modal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeModal()}><section className={`modal ${modal === "settings" ? "modal-settings" : ""}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><button className="modal-close" onClick={closeModal} aria-label="Close">×</button>
         {modal === "settings" ? <div className="settings-layout"><nav className="settings-nav" aria-label="Settings sections">{(["accounts", "policies", "torn", "script", "access", "appearance"] as SettingsSection[]).map((section) => <button key={section} className={settingsSection === section ? "active" : ""} onClick={() => { setError(""); setSettingsSection(section); }}>{section === "torn" ? "Torn API" : section === "script" ? "Browser script" : section.charAt(0).toUpperCase() + section.slice(1)}</button>)}</nav><div className="settings-content">
           {settingsSection === "accounts" && <form onSubmit={saveAllocations}><h2 id="modal-title">Accounts</h2><p className="modal-intro">Divide the faction share between treasury accounts.</p>{draftTotalBps !== 10000 && <p className="allocation-warning">Allocations must total 100%. Currently {draftTotalBps / 100}%.</p>}<div className="allocation-editor">{draftAccounts.map((account) => <div className="allocation-row" key={account.id}><label><span>Account</span><input value={account.name} maxLength={50} onChange={(event) => setDraftAccounts((current) => current.map((item) => item.id === account.id ? { ...item, name: event.target.value } : item))} /></label><label className="percent-field"><span>Share</span><div><input type="number" min="0" max="100" step="0.01" value={account.allocationBps / 100} onChange={(event) => setDraftAccounts((current) => current.map((item) => item.id === account.id ? { ...item, allocationBps: Math.round(Number(event.target.value) * 100) } : item))} /><b>%</b></div></label><button type="button" className="delete-button" onClick={() => void deleteAccount(account)} disabled={account.balance !== 0 || saving}>×</button></div>)}</div><div className="add-account-row"><input value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} placeholder="New account name" maxLength={50} /><button type="button" onClick={() => void addAccount()} disabled={!newAccountName.trim() || saving}>Add</button></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-primary" disabled={saving || draftTotalBps !== 10000}>{saving ? "Saving..." : "Save accounts"}</button></div></form>}
           {settingsSection === "policies" && <form onSubmit={savePolicies}><h2 id="modal-title">Tax policies</h2><p className="modal-intro">These percentages determine the faction share before account allocation.</p><div className="policy-editor">{draftPolicies.map((policy) => <label key={policy.sourceKey}><span>{policy.label}</span><div><input type="number" min="0" max="100" step="0.01" value={policy.taxBps / 100} onChange={(event) => setDraftPolicies((current) => current.map((item) => item.sourceKey === policy.sourceKey ? { ...item, taxBps: Math.round(Number(event.target.value) * 100) } : item))} /><b>%</b></div></label>)}</div>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-primary" disabled={saving}>{saving ? "Saving..." : "Save policies"}</button></div></form>}
-          {settingsSection === "torn" && <form onSubmit={saveTornKey}><h2 id="modal-title">Torn API</h2><p className="modal-intro">A Public-level key is enough. It verifies Blood Coven membership, detects ranked wars, values cache rewards, and reads public member statistics.</p><label className="field"><span>Personal API key</span><input type="password" autoComplete="off" value={tornKeyDraft} onChange={(event) => setTornKeyDraft(event.target.value)} placeholder="Paste a Public Torn key" /></label><p className="settings-note api-note">The key is stored only in this browser. It is sent transiently for Torn requests and is never written to the treasury database. Automatic updates run every two minutes while this page is open.</p>{error && <p className="form-error" role="alert">{error}</p>}<div className="api-actions"><button className="button button-primary">{tornKey ? "Update key" : "Save and connect"}</button>{tornKey && <><button type="button" className="button button-secondary" onClick={() => void syncTorn()} disabled={syncing}>{syncing ? "Syncing..." : "Sync now"}</button><button type="button" className="text-button danger-text" onClick={removeTornKey}>Remove from device</button></>}</div>{lastSyncAt && <small className="sync-status">Last synced {formatDate(lastSyncAt)}</small>}</form>}
-          {settingsSection === "script" && <section><h2 id="modal-title">Torn browser script</h2><p className="modal-intro">The userscript watches the Blood Coven Funds and Armory logs plus ranked-war pages you visit. It imports payouts, OC credits, Xanax use, and war activity whenever this treasury is open.</p><div className={`bridge-status ${bridgeStatus}`}><span className="bridge-dot" /><div><strong>{bridgeStatus === "connected" ? "Browser script connected" : bridgeStatus === "checking" ? "Checking for browser script..." : "Browser script not detected"}</strong><small>{bridgeStatus === "connected" ? `${bridgePendingCount} event${bridgePendingCount === 1 ? "" : "s"} waiting to import` : bridgeStatus === "missing" ? "No compatible userscript responded on this page." : "Waiting for a Tampermonkey-compatible bridge response."}</small></div></div><p className="settings-note">Browsers do not reveal whether Tampermonkey or another extension is installed. The treasury detects the installed script itself. If it is not detected, install Tampermonkey, Violentmonkey, or a comparable userscript manager first.</p><div className="api-actions"><a className="button button-primary" href="/blood-coven-treasury.user.js" target="_blank" rel="noreferrer">Install script</a><button type="button" className="button button-secondary" onClick={checkBridge}>Check again</button></div>{bridgeInfo.lastImportedAt && <p className="bridge-import-summary">Last import {formatDate(bridgeInfo.lastImportedAt)} · {integer.format(bridgeInfo.totalEvents)} saved events</p>}{bridgeInfo.recentEvents.length > 0 && <div className="bridge-events" aria-label="Recent browser imports">{bridgeInfo.recentEvents.slice(0, 5).map((event) => <div key={event.eventKey}><span>{event.category.replace(/_/g, " ")}</span><strong>{event.summary}</strong><small>{formatDate(event.createdAt)}</small></div>)}</div>}</section>}
+          {settingsSection === "torn" && <form onSubmit={saveTornKey}><h2 id="modal-title">Torn API</h2><p className="modal-intro">A Public-level key covers member verification, ranked-war history, reward valuation, and public member statistics. A Minimal-or-higher key with faction API access also backfills completed OC history.</p><label className="field"><span>Personal API key</span><input type="password" autoComplete="off" value={tornKeyDraft} onChange={(event) => setTornKeyDraft(event.target.value)} placeholder="Paste a Torn API key" /></label><p className="settings-note api-note">The key is stored only in this browser. It is sent transiently for Torn requests and is never written to the treasury database. Automatic updates run every two minutes while this page is open; each sync advances older war and OC history in bounded batches.</p>{error && <p className="form-error" role="alert">{error}</p>}<div className="api-actions"><button className="button button-primary">{tornKey ? "Update key" : "Save and connect"}</button>{tornKey && <><button type="button" className="button button-secondary" onClick={() => void syncTorn()} disabled={syncing}>{syncing ? "Syncing..." : "Sync now"}</button><button type="button" className="text-button danger-text" onClick={removeTornKey}>Remove from device</button></>}</div>{lastSyncAt && <small className="sync-status">Last synced {formatDate(lastSyncAt)}</small>}</form>}
+          {settingsSection === "script" && <section><h2 id="modal-title">Torn browser script</h2><p className="modal-intro">The userscript watches Torn automatically and adds a movable BC ↻ control. Click it on Funds, Armory, completed OC, or ranked-war pages to force a scan and immediately open the Treasury bridge for upload.</p><div className={`bridge-status ${bridgeStatus}`}><span className="bridge-dot" /><div><strong>{bridgeStatus === "connected" ? "Browser script connected" : bridgeStatus === "checking" ? "Checking for browser script..." : "Browser script not detected"}</strong><small>{bridgeStatus === "connected" ? `${bridgePendingCount} event${bridgePendingCount === 1 ? "" : "s"} waiting to import` : bridgeStatus === "missing" ? "No compatible userscript responded on this page." : "Waiting for a Tampermonkey-compatible bridge response."}</small></div></div><p className="settings-note">The browser event journal is only an import/audit channel. Member balances, Armory snapshots, OCs, wars, and treasury account values are stored separately on the server, so trimming old browser events does not roll those values back.</p><div className="api-actions"><a className="button button-primary" href="/blood-coven-treasury.user.js" target="_blank" rel="noreferrer">Install script</a><button type="button" className="button button-secondary" onClick={checkBridge}>Check again</button></div>{bridgeInfo.lastImportedAt && <p className="bridge-import-summary">Last import {formatDate(bridgeInfo.lastImportedAt)} · {integer.format(bridgeInfo.totalEvents)} retained browser events</p>}{bridgeInfo.recentEvents.length > 0 && <div className="bridge-events" aria-label="Recent browser imports">{bridgeInfo.recentEvents.slice(0, 5).map((event) => <div key={event.eventKey}><span>{event.category.replace(/_/g, " ")}</span><strong>{event.summary}</strong><small>{formatDate(event.createdAt)}</small></div>)}</div>}</section>}
           {settingsSection === "access" && <section><h2 id="modal-title">Access</h2><p className="modal-intro">Site sharing controls who may open the app. Treasury roles below control who can see financial data.</p><div className="access-card"><span>Signed in as</span><strong>{data.currentUser?.name ?? "Authorized member"}</strong><small>{data.currentUser?.email}</small></div><div className="leader-editor"><h3>Leadership</h3>{accessData.leaders.map((leader) => <div className="leader-row" key={leader.email}><div><strong>{leader.name || leader.email}</strong><small>{leader.email}</small></div><button type="button" className="text-button danger-text" onClick={() => void updateLeader("remove", leader.email)} disabled={leader.email === data.currentUser?.email || saving}>Remove</button></div>)}<div className="add-leader"><input type="email" value={leaderEmail} onChange={(event) => setLeaderEmail(event.target.value)} placeholder="leader@example.com" /><button type="button" className="button button-secondary" onClick={() => void updateLeader("add", leaderEmail)} disabled={!leaderEmail.trim() || saving}>Add leader</button></div></div>{error && <p className="form-error" role="alert">{error}</p>}<p className="settings-note">Add the same email in the site sharing controls. Members without a leadership role are sent to the balance-only page.</p><div className="api-actions"><button type="button" className="button button-secondary" onClick={copySiteLink}>Copy treasury link</button><button type="button" className="button button-secondary" onClick={copyBalanceLink}>Copy member balance link</button></div></section>}
           {settingsSection === "appearance" && <section><h2 id="modal-title">Appearance</h2><p className="modal-intro">Theme preference is saved on this device.</p><div className="theme-options">{(["light", "dark", "system"] as Theme[]).map((option) => <button key={option} className={theme === option ? "active" : ""} onClick={() => chooseTheme(option)}><strong>{option.charAt(0).toUpperCase() + option.slice(1)}</strong><small>{option === "system" ? "Match this device" : `Always use ${option} mode`}</small></button>)}</div></section>}
         </div></div> : <form onSubmit={submitFinancial}>
