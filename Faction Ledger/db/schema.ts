@@ -246,6 +246,7 @@ export const armorySnapshotState = sqliteTable("armory_snapshot_state", {
   category: text("category").notNull(),
   eventKey: text("event_key").notNull(),
   observedAt: text("observed_at").notNull(),
+  itemsJson: text("items_json"),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [primaryKey({ columns: [table.factionId, table.category] })]);
 

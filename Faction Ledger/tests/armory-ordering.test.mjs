@@ -50,6 +50,11 @@ const armoryModulePromise = readFile(new URL("../db/armory.ts", import.meta.url)
   return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
 });
 
+const browserEventModulePromise = readFile(new URL("../db/browser-events.ts", import.meta.url), "utf8").then(async (source) => {
+  const javascript = stripTypeScriptTypes(source, { mode: "transform" });
+  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
+});
+
 async function armoryDatabase() {
   const armory = await armoryModulePromise;
   const sqlite = new DatabaseSync(":memory:");
@@ -164,12 +169,102 @@ test("A8 historical OC rewards do not change current Armory inventory", async ()
   state.sqlite.close();
 });
 
+async function equalTimeResult(order, { factionId = BLOOD_COVEN, base = 1, delayedSnapshot = false } = {}) {
+  const state = await armoryDatabase();
+  await snapshot(state, { factionId, eventKey: "snapshot:equal:t1", observedAt: T1, items: [{ name: "Xanax", quantity: base }] });
+  for (const kind of order) {
+    await movement(state, {
+      factionId,
+      eventKey: kind === "withdraw" ? "movement:a" : "movement:b",
+      occurredAt: T3,
+      quantity: 2,
+      action: kind === "withdraw" ? "used" : "deposited",
+    });
+  }
+  if (delayedSnapshot) {
+    await snapshot(state, { factionId, eventKey: "snapshot:equal:t2", observedAt: T2, items: [{ name: "Xanax", quantity: base }] });
+  }
+  return state;
+}
+
+test("A9 equal-time opposing movements converge by event key through the zero floor", async () => {
+  for (const order of [["withdraw", "deposit"], ["deposit", "withdraw"]]) {
+    const state = await equalTimeResult(order);
+    assert.equal(quantity(state.sqlite), 2);
+    state.sqlite.close();
+  }
+});
+
+test("A10 duplicate observers cannot multiply the equal-time durable effect set", async () => {
+  const state = await equalTimeResult(["withdraw", "deposit"]);
+  await movement(state, { eventKey: "movement:b", occurredAt: T3, quantity: 2, action: "deposited" });
+  await movement(state, { eventKey: "movement:a", occurredAt: T3, quantity: 2, action: "used" });
+  assert.equal(quantity(state.sqlite), 2);
+  assert.equal(state.sqlite.prepare("SELECT COUNT(*) AS count FROM armory_item_effects WHERE faction_id = ?").get(BLOOD_COVEN).count, 2);
+  state.sqlite.close();
+});
+
+test("A11 equal-time keys remain independent across factions", async () => {
+  const state = await armoryDatabase();
+  for (const [factionId, base] of [[BLOOD_COVEN, 1], [OTHER_FACTION, 5]]) {
+    await snapshot(state, { factionId, eventKey: `snapshot:equal:${factionId}`, observedAt: T1, items: [{ name: "Xanax", quantity: base }] });
+    await movement(state, { factionId, eventKey: "movement:b", occurredAt: T3, quantity: 2, action: "deposited" });
+    await movement(state, { factionId, eventKey: "movement:a", occurredAt: T3, quantity: 2, action: "used" });
+  }
+  assert.equal(quantity(state.sqlite, BLOOD_COVEN), 2);
+  assert.equal(quantity(state.sqlite, OTHER_FACTION), 5);
+  state.sqlite.close();
+});
+
+test("A12 delayed snapshot folding matches live equal-time materialization in either arrival order", async () => {
+  for (const order of [["withdraw", "deposit"], ["deposit", "withdraw"]]) {
+    const live = await equalTimeResult(order);
+    const delayed = await equalTimeResult(order, { delayedSnapshot: true });
+    assert.equal(quantity(live.sqlite), 2);
+    assert.equal(quantity(delayed.sqlite), quantity(live.sqlite));
+    live.sqlite.close();
+    delayed.sqlite.close();
+  }
+});
+
+test("A13 equal-time effects without a zero crossing converge to their arithmetic total", async () => {
+  for (const order of [["withdraw", "deposit"], ["deposit", "withdraw"]]) {
+    const state = await equalTimeResult(order, { base: 10 });
+    assert.equal(quantity(state.sqlite), 10);
+    state.sqlite.close();
+  }
+});
+
+test("future movement timestamps are bounded while legitimate times remain accepted", async () => {
+  const state = await armoryDatabase();
+  const withinTolerance = new Date(Date.now() + 4 * 60 * 1000).toISOString();
+  const beyondTolerance = new Date(Date.now() + 6 * 60 * 1000).toISOString();
+  assert.equal(await movement(state, { eventKey: "movement:near-future", occurredAt: withinTolerance, action: "deposited" }), true);
+  assert.equal(await movement(state, { eventKey: "movement:far-future", occurredAt: beyondTolerance, action: "deposited" }), false);
+  assert.equal(await movement(state, { eventKey: "movement:historical", occurredAt: T2, action: "deposited" }), true);
+  assert.equal(state.sqlite.prepare("SELECT COUNT(*) AS count FROM armory_item_effects").get().count, 2);
+  assert.equal(state.sqlite.prepare("SELECT COUNT(*) AS count FROM armory_item_effects WHERE event_key = 'movement:far-future'").get().count, 0);
+  assert.equal(quantity(state.sqlite), 2);
+  state.sqlite.close();
+});
+
+test("Armory parsing ignores irrelevant payload endedAt before future-time validation", async () => {
+  const browserEvents = await browserEventModulePromise;
+  const farFutureEndedAt = Math.floor((Date.now() + 24 * 60 * 60 * 1000) / 1000);
+  assert.equal(browserEvents.normalizedBrowserOccurredAt("", T2, { endedAt: farFutureEndedAt }, false), T2);
+  const route = await readFile(new URL("../app/api/torn-browser/route.ts", import.meta.url), "utf8");
+  assert.match(route, /eventType !== "armory_movement" && eventType !== "xanax_use"/);
+});
+
 test("fresh bootstrap owns the latest Armory columns, index, and trigger", async () => {
   const state = await armoryDatabase();
   const effectColumns = state.sqlite.prepare("PRAGMA table_info(armory_item_effects)").all().map((row) => row.name);
+  const snapshotColumns = state.sqlite.prepare("PRAGMA table_info(armory_snapshot_state)").all().map((row) => row.name);
   assert.equal(effectColumns.includes("occurred_at"), true);
+  assert.equal(snapshotColumns.includes("items_json"), true);
   assert.ok(state.sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_armory_effects_faction_category_occurred'").get());
   assert.match(triggerSql(state.sqlite), /NEW\.occurred_at/);
+  assert.match(triggerSql(state.sqlite), /items_json/);
   state.sqlite.close();
 });
 
@@ -178,6 +273,7 @@ test("existing pre-migration Armory tables fail without runtime mutation", async
   for (const setup of [
     "CREATE TABLE armory_items (faction_id INTEGER, item_name TEXT);",
     "CREATE TABLE armory_items (faction_id INTEGER, item_name TEXT, observed_at TEXT); CREATE TABLE armory_item_effects (faction_id INTEGER, event_key TEXT, item_name TEXT);",
+    "CREATE TABLE armory_items (faction_id INTEGER, item_name TEXT, observed_at TEXT); CREATE TABLE armory_item_effects (faction_id INTEGER, event_key TEXT, item_name TEXT, occurred_at TEXT); CREATE TABLE armory_snapshot_state (faction_id INTEGER, category TEXT, event_key TEXT, observed_at TEXT);",
   ]) {
     const sqlite = new DatabaseSync(":memory:");
     sqlite.exec(setup);
@@ -208,16 +304,20 @@ test("formal migration preserves legacy effects with unknown time and converges 
     );
     CREATE TRIGGER apply_armory_item_effect AFTER INSERT ON armory_item_effects BEGIN SELECT 1; END;
     INSERT INTO armory_items(faction_id,item_name,category,quantity,source) VALUES (52984,'Xanax','drugs',24,'activity');
+    INSERT INTO armory_snapshot_state(faction_id,category,event_key,observed_at) VALUES (52984,'drugs','legacy:snapshot','2026-08-01T00:00:00.000Z');
     INSERT INTO armory_item_effects(faction_id,event_key,item_name,delta,category,source) VALUES (52984,'legacy:unknown','Xanax',-1,'drugs','activity');
   `);
-  const migration = await readFile(new URL("../drizzle/0011_thin_pyro.sql", import.meta.url), "utf8");
-  for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) sqlite.exec(statement);
+  for (const migrationName of ["0011_thin_pyro.sql", "0012_exotic_tarot.sql"]) {
+    const migration = await readFile(new URL(`../drizzle/${migrationName}`, import.meta.url), "utf8");
+    for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) sqlite.exec(statement);
+  }
   assert.equal(quantity(sqlite), 24);
   assert.equal(sqlite.prepare("SELECT occurred_at FROM armory_item_effects WHERE event_key = 'legacy:unknown'").get().occurred_at, null);
+  assert.equal(sqlite.prepare("SELECT items_json FROM armory_snapshot_state LIMIT 1").get().items_json, null);
   const migratedTrigger = triggerSql(sqlite);
-  const beforeObjects = sqlite.prepare("SELECT type, name, sql FROM sqlite_master WHERE name IN ('armory_item_effects','apply_armory_item_effect','idx_armory_effects_faction_category_occurred') ORDER BY type, name").all().map((row) => ({ ...row }));
+  const beforeObjects = sqlite.prepare("SELECT type, name, sql FROM sqlite_master WHERE name IN ('armory_item_effects','armory_snapshot_state','apply_armory_item_effect','idx_armory_effects_faction_category_occurred') ORDER BY type, name").all().map((row) => ({ ...row }));
   await armory.ensureArmorySchema(new D1DatabaseAdapter(sqlite));
-  assert.deepEqual(sqlite.prepare("SELECT type, name, sql FROM sqlite_master WHERE name IN ('armory_item_effects','apply_armory_item_effect','idx_armory_effects_faction_category_occurred') ORDER BY type, name").all().map((row) => ({ ...row })), beforeObjects);
+  assert.deepEqual(sqlite.prepare("SELECT type, name, sql FROM sqlite_master WHERE name IN ('armory_item_effects','armory_snapshot_state','apply_armory_item_effect','idx_armory_effects_faction_category_occurred') ORDER BY type, name").all().map((row) => ({ ...row })), beforeObjects);
 
   const fresh = await armoryDatabase();
   assert.equal(normalizedSql(migratedTrigger), normalizedSql(triggerSql(fresh.sqlite)));

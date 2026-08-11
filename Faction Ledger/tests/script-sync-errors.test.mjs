@@ -120,6 +120,9 @@ test("B1 structured sync responses preserve retryable 503 and identity 401 seman
     export async function recordArmoryMovement() {}
     export async function recordArmorySnapshot() {}
   `);
+  const browserEventsUrl = moduleUrl(`
+    export function normalizedBrowserOccurredAt() { return null; }
+  `);
   const balancesUrl = moduleUrl(`
     export async function ensureMemberBalanceSchema() {}
     export async function recordBalanceEvent() { return false; }
@@ -142,6 +145,7 @@ test("B1 structured sync responses preserve retryable 503 and identity 401 seman
   const linkedBrowserRoute = browserRouteSource
     .replace('from "../../../db"', `from "${dbUrl}"`)
     .replace('from "../../../db/armory"', `from "${armoryUrl}"`)
+    .replace('from "../../../db/browser-events"', `from "${browserEventsUrl}"`)
     .replace('from "../../../db/member-balances"', `from "${balancesUrl}"`)
     .replace('from "../../../db/script-sync"', `from "${syncUrl}"`)
     .replace('from "../../../db/tenant"', `from "${tenantUrl}"`)

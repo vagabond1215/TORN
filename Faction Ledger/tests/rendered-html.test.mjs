@@ -91,7 +91,7 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(script, /armoryBalance/);
   assert.match(route, /INSERT OR IGNORE INTO torn_browser_events/);
   assert.match(route, /ranked_war_report/);
-  assert.match(route, /normalizedOccurredAt/);
+  assert.match(route, /normalizedBrowserOccurredAt/);
   assert.match(route, /Date\.parse\(b\.occurredAt/);
   assert.match(route, /oc_holdings/);
   assert.match(route, /armory_items/);

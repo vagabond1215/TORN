@@ -75,7 +75,7 @@ function metrics(db, where = "") {
 }
 
 async function applyTenantMigrations(db) {
-  for (const path of ["../drizzle/0008_sparkling_scream.sql", "../drizzle/0009_lyrical_morlocks.sql", "../drizzle/0010_fluffy_luckman.sql", "../drizzle/0011_thin_pyro.sql"]) {
+  for (const path of ["../drizzle/0008_sparkling_scream.sql", "../drizzle/0009_lyrical_morlocks.sql", "../drizzle/0010_fluffy_luckman.sql", "../drizzle/0011_thin_pyro.sql", "../drizzle/0012_exotic_tarot.sql"]) {
     const sql = await readFile(new URL(path, import.meta.url), "utf8");
     for (const statement of sql.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) db.exec(statement);
   }
