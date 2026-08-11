@@ -1,6 +1,6 @@
 # Next Codex Run: Armory Same-Time Convergence and Timestamp Safety
 
-**Status: ACTIVE**
+**Status: COMPLETED**
 
 This is the authoritative current Codex task for `Faction Ledger/`.
 
@@ -250,3 +250,17 @@ Before marking this file COMPLETED:
 7. push the validated normal commits directly to `main`.
 
 Do not call this run complete unless identical durable Armory events produce the same current inventory regardless of observer/network arrival order, including equal timestamps and zero-floor cases, and future movement timestamps are safely bounded.
+
+---
+
+## Completion result - 2026-08-11
+
+- Starting `main` SHA: `854e61cb1c532f028427c49fecc39b17b65af039`; local and `origin/main` matched before editing and the worktree was clean.
+- Tested implementation commit: `5d155ce7fb66ff9475811768650e89a6b90da2e8` (`Make Armory movement ordering deterministic`). The documentation-only commit containing this result is reported with the final pushed branch tip in the task handoff.
+- Equal-time movement materialization now uses the stable total order `occurred_at`, `event_key`, then `item_name`. For snapshot-backed categories, each accepted movement atomically rematerializes the affected item from the durable snapshot base plus the complete durable post-snapshot effect set, including deterministic zero-floor recovery.
+- Additive migration `0012_exotic_tarot.sql` adds nullable `armory_snapshot_state.items_json` and replaces the temporal trigger. Existing rows retain `NULL` snapshot bases and their current quantities; no historical base or occurrence time is invented. The next authoritative snapshot establishes the deterministic base.
+- Armory movements more than five minutes in the future are ignored before either the durable effect or materialized item can change. Times within the tolerance and legitimate historical times remain valid. Generic `payload.endedAt` is not allowed to override Armory movement or Xanax-use occurrence time.
+- Regression coverage proves equal-time opposing events converge through the zero floor in both arrival orders; duplicate observers remain exact-once; identical keys remain faction-local across `52984` and `999999`; delayed snapshots converge with live ingestion; arithmetic totals remain correct when the floor is not reached; future events do not mutate either Armory table; and Blood Coven migration quantities remain unchanged.
+- Validation: `npm.cmd ci` exit 0 (506 packages); `npm.cmd run check` exit 0 (52/52); TypeScript exit 0; direct multitenancy 3/3; member-balance atomicity 16/16; member-balance schema ownership 4/4; Armory ordering 18/18; script-sync semantics 8/8; second `npm.cmd run db:generate` exit 0 with no schema drift; `git diff --check` exit 0.
+- No production D1 connection, remote Wrangler/D1 migration, deployment, force-push, arbitrary-faction enablement, or history rewrite occurred. Blood Coven faction `52984`, faction scoping, exact-once keys, OC isolation, delayed snapshots, and existing script-sync behavior remain preserved.
+- Production remains blocked on backup/export, exact production-schema inspection, migration and concurrency rehearsal against an exact local copy, pre/post count/financial/Armory comparison, unresolved-identity review, restore rehearsal, and a maintenance window.
