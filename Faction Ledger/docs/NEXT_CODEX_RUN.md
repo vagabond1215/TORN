@@ -1,6 +1,6 @@
 # Next Codex Run: Armory Durable-Replay Authority
 
-**Status: ACTIVE**
+**Status: COMPLETED**
 
 This is the authoritative current Codex task for `Faction Ledger/`.
 
@@ -224,3 +224,17 @@ Before marking this file COMPLETED:
 9. push validated normal commits directly to `main`.
 
 Do not call this run complete while duplicate replay payload metadata can influence materialization after the durable event identity has already been accepted.
+
+---
+
+## Completion result - 2026-08-11
+
+- Started from clean, synchronized `main` at `e04729ef26d344d3b1eb1e2ebb13b6cf87d68522`.
+- Final tested implementation SHA before this documentation-only commit: `c13d9f9d8bb59fcedddbe68cfed292299626a51f` (`Make Armory replay use durable metadata`). The documentation commit and final pushed `main` tip are reported in the task handoff.
+- `recordArmoryMovement()` still inserts the exact-once durable effect and rematerializes in one atomic D1 batch. Its rebuild now begins by selecting the owning `(faction_id, event_key, item_name)` row and derives item name, category, source, deltas, and occurrence ordering from persisted effects. Replay-supplied category, amount, action, or occurrence time cannot select a different snapshot/effect history or overwrite accepted metadata.
+- No schema changed. `npm.cmd run db:generate` reported `No schema changes, nothing to migrate`; no migration or Drizzle metadata was created or modified.
+- New replay regressions prove mismatched category metadata cannot replace canonical `drugs / 9` with unrelated `medical / 105` history; exact duplicate replays remain one effect; changed duplicate amount/action/time cannot alter the stored delta; and the same event key remains independent across factions `52984` and `999999`. Existing equal-time zero-floor and delayed-snapshot equivalence cases remain green.
+- New normalized `NULL occurredAt` movements are deliberately rejected before browser-journal insertion and again in `recordArmoryMovement()` before the atomic batch. The userscript contract always supplies an occurrence time (using parsed Torn time or its existing current-time fallback). Historical migrated `NULL occurred_at` rows remain preserved and are neither rejected retroactively nor assigned invented timestamps.
+- Validation: `npm.cmd ci` exit 0 (506 packages); baseline and final `npm.cmd run check` exit 0, with final aggregate 57/57; TypeScript exit 0; multitenancy 3/3; member-balance atomicity 16/16; member-balance schema ownership 4/4; Armory ordering/replay 23/23; script-sync semantics 8/8; `db:generate` no drift; `git diff --check` exit 0.
+- Blood Coven faction `52984`, exact-once effects, deterministic equal-time ordering, zero-floor convergence, delayed snapshots, snapshot-base JSON, legacy null preservation, faction/category isolation, OC isolation, five-minute future rejection, and script-sync 401/503 behavior remain intact.
+- No production D1 connection, deployment, remote Wrangler/D1 migration, force-push, shared-history rewrite, or arbitrary-faction enablement occurred. Production remains gated on backup/export, exact-schema inspection, exact-copy migration/concurrency/restore rehearsal, count/financial/Armory comparison, unresolved-identity review, and a maintenance window.
