@@ -11,7 +11,7 @@ A Torn City faction treasury and synchronization application for balances, earma
 - Torn member ID is the canonical durable member identity; member names are mutable display metadata.
 - Browser observations are faction-scoped and deduplicated so repeated viewers do not multiply durable financial effects.
 - Balance event/observation markers and payout-request settlement use database-side transactional effects so failed derived writes do not permanently consume event keys.
-- Current Armory state is snapshot-backed by category; historical OC rewards remain historical and do not inflate current inventory. Temporal convergence between delayed snapshots and later movements is an active review item; see the current Codex handoff.
+- Current Armory state is snapshot-backed by category and folds durable post-snapshot movements by occurrence time; historical OC rewards remain historical and do not inflate current inventory. Equal-timestamp movement arrival-order convergence remains an active review item; see the current Codex handoff.
 - Userscript sessions are dynamically revalidated against Torn faction membership before stale sessions upload more observations, and faction/member-local client storage is scoped/scrubbed on identity changes.
 
 The application is **still intentionally Blood-Coven-only in production authorization**. The data model supports isolated synthetic tenants, but arbitrary-faction production creation/login/writes remain gated until production D1 migration rehearsal and all active review blockers are cleared.
@@ -73,13 +73,12 @@ An older embedded prompt in the historical runbook must not override an **ACTIVE
 
 ### Current handoff
 
-`docs/NEXT_CODEX_RUN.md` is **ACTIVE** for the next connector-found correctness pass. It currently covers:
+`docs/NEXT_CODEX_RUN.md` is **ACTIVE** for a narrow connector-found Armory follow-up after the completed `0011` pass. It currently covers:
 
-- make Armory snapshot/movement materialization observation-time convergent so a delayed snapshot cannot erase a later movement;
-- preserve `ScriptSyncAccessError` status/code/current-faction semantics through `/api/torn-browser` so transient 503 membership failures do not become destructive 401 sign-outs;
-- distinguish clear invalid/revoked Torn API-key failures from retryable Torn/network outages;
-- finish migration ownership for `armory_items` so request-time code does not silently `ALTER TABLE` an existing production-shaped database;
-- restore PR #3 scope to `Faction Ledger/` only without deleting the unrelated Growth Contest workbook content.
+- make equal-timestamp Armory movements deterministic so the same durable event set produces the same quantity regardless of observer/network arrival order, including zero-floor cases;
+- add future-time sanity validation for Armory movements now that `occurred_at` controls replay across snapshots;
+- preserve the completed delayed-snapshot convergence, exact-once dedupe, tenant/category isolation, OC-history isolation, and script-sync 401/503 semantics;
+- keep any new schema evolution additive after `0011_thin_pyro.sql` and migration-owned for existing databases.
 
 Codex must update the rolling next-run file with results/status before handing control back. Significant architecture/migration outcomes should also be appended to the historical runbook rather than replacing its prior evidence.
 
