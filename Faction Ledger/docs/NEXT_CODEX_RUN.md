@@ -1,14 +1,14 @@
-# Next Codex Run: Armory Same-Time Convergence and Timestamp Safety
+# Next Codex Run: Armory Durable-Replay Authority
 
-**Status: COMPLETED**
+**Status: ACTIVE**
 
 This is the authoritative current Codex task for `Faction Ledger/`.
 
-Faction Ledger is pre-production and not in active service. The accumulated tenancy/synchronization development is now merged into `main`, and this ACTIVE follow-up should be executed **directly on `main`**.
+Faction Ledger is pre-production and not in active service. Work directly on `main` under the development-mode policy in [`../AGENTS.md`](../AGENTS.md).
 
-The prior Armory delayed-snapshot and script-sync error pass completed at implementation/test SHA `4e2f3512d01afafbe378e8bd42585016db5f155e` with documentation tip `a9e386f677db707a6ae92e096b07b090ca670757`. PR #3 later merged that development history into `main`. Full historical evidence is preserved in [`CODEX_MULTI_TENANCY_RUN.md`](./CODEX_MULTI_TENANCY_RUN.md) and the merged PR discussion.
+The prior Armory same-time/timestamp-safety run completed at implementation SHA `5d155ce7fb66ff9475811768650e89a6b90da2e8` with documentation SHA `41fd50a43fdbe97d2730c3c9d4572626f56eb19b`. That run added migration `0012_exotic_tarot.sql`, durable snapshot-base JSON, deterministic `(occurred_at, event_key, item_name)` rematerialization for snapshot-backed categories, and the five-minute future-time bound. Its full validation evidence is preserved in [`CODEX_MULTI_TENANCY_RUN.md`](./CODEX_MULTI_TENANCY_RUN.md).
 
-Do not rerun or rewrite completed work unless required by the focused regressions below.
+Do not rewrite or broaden that completed work except as required by the focused replay-integrity regression below.
 
 ## Read order
 
@@ -16,16 +16,9 @@ Do not rerun or rewrite completed work unless required by the focused regression
 2. [`README.md`](./README.md)
 3. **This file**
 4. [`CODEX_MULTI_TENANCY_RUN.md`](./CODEX_MULTI_TENANCY_RUN.md)
-5. GitHub issue #2 and relevant review/history if GitHub access is available
+5. GitHub issue #2 and relevant merged PR/review history if GitHub access is available
 
-## Repository / branch
-
-- Repository: `vagabond1215/TORN`
-- Project: `Faction Ledger/`
-- Working branch: `main`
-- Production tenant to preserve: Blood Coven, faction `52984`
-
-Start with:
+## Start on `main`
 
 ```bash
 git fetch origin
@@ -36,170 +29,149 @@ git rev-parse HEAD
 git rev-parse origin/main
 ```
 
-Local and remote `main` should match before editing. If the worktree is dirty or local `main` has diverged, stop and inspect rather than resetting, rebasing, or force-pushing automatically.
+Local and remote `main` must match before editing. If the worktree is dirty or local `main` diverged, stop and inspect rather than resetting, rebasing, or force-pushing automatically.
 
 ## Safety boundary
 
-Direct-to-`main` development is allowed because the application is still pre-production, but the following remain prohibited:
-
-- do not deploy;
-- do not contact production D1;
-- do not run remote Wrangler/D1 migrations;
-- do not enable arbitrary-faction writes;
-- do not force-push or rewrite shared history;
-- do not discard unrelated user-owned work;
-- do not weaken tests to obtain green output.
+Direct-to-`main` development is allowed only because the application is still pre-production. Do not deploy, contact production D1, run remote Wrangler/D1 migrations, enable arbitrary-faction production writes, force-push, rewrite shared history, discard unrelated user-owned work, or weaken tests.
 
 Use local/in-memory/Miniflare data only.
 
-When the application is declared actively used, direct-to-`main` development must stop and branch/PR/CI protection must be restored before further production-affecting work.
-
 ---
 
-# Blocker A — same-timestamp Armory movements are still arrival-order dependent
+# Blocker — duplicate Armory replay can use non-canonical request metadata
 
-The completed pass fixed delayed snapshots by adding `armory_item_effects.occurred_at`, a temporal movement trigger, and deterministic folding after a snapshot.
+## Confirmed current behavior
 
-However, `apply_armory_item_effect` still applies newly inserted movements incrementally in **database arrival order** whenever `occurred_at` is later than the current snapshot.
+`POST /api/torn-browser` intentionally re-runs all derived importers for journal duplicates so downstream durable idempotency can recover from earlier importer failures.
 
-The delayed-snapshot fold instead orders durable effects by:
+For Armory movements this means a duplicate browser event calls `recordArmoryMovement()` again.
 
-`occurred_at`, then `event_key`.
+`recordArmoryMovement()` currently executes one D1 batch containing:
 
-These are not equivalent when two movements share the same Torn timestamp and the quantity floor at zero is reached.
+1. `INSERT OR IGNORE` into `armory_item_effects`; then
+2. an Armory rematerialization query.
 
-The userscript parses Armory news timestamps only to whole seconds (`HH:MM:SS DD/MM/YY`), so distinct legitimate movements can share the same `occurred_at`.
+The rematerialization query uses the **current request's normalized `category` and `itemName` parameters** to choose the snapshot base and durable effect set.
 
-Example from a snapshot base of quantity `1`, with both movements at the exact same timestamp:
+If the insert is a duplicate, the durable event row is correctly left unchanged — but the second statement still runs.
 
-- event `movement:a`: use/withdraw `2`
-- event `movement:b`: deposit/return `2`
+Therefore the already-accepted durable event is not fully authoritative over replay behavior.
 
-Arrival order A then B:
+This matters because userscript Armory event identity is based on the stable event type plus `hash("armory|<summary>")`, while `payload.category` is observer/page-state metadata. Multiple observers or manual scans can therefore submit the same `eventKey` with different category metadata without changing the event identity.
 
-`1 -> 0 -> 2`
+A stale or differently classified duplicate must not be able to rematerialize current inventory using a category that was never accepted into the durable event row.
 
-Arrival order B then A:
+## Required invariant
 
-`1 -> 3 -> 1`
+Once `(faction_id, event_key, item_name)` exists in `armory_item_effects`, that durable row is the canonical accepted movement.
 
-The same durable event set therefore materializes as either `2` or `1` depending on network/observer arrival order.
+A replay of the same durable identity may be used to verify/self-heal materialization, but **request-time replay metadata must not be able to change which category, delta, occurrence time, or source is authoritative**.
 
-This violates the invariant that canonical current Armory state must be equivalent to applying authoritative snapshots and idempotent movements in observation-time order regardless of observer/network arrival order.
+Duplicate observer submissions must be semantically inert unless they deterministically rebuild state from the already-stored durable event set.
 
 ## Required fix
 
-Make movement materialization deterministic for equal timestamps as well as different timestamps.
+Choose the smallest design that makes replay authority explicit.
 
-Use a stable total ordering such as:
+Preferred direction:
 
-1. `occurred_at`
-2. `event_key`
-3. `item_name` only if still needed as a final deterministic tie
+- derive rematerialization scope from the durable `armory_item_effects` row that owns `(faction_id, event_key, item_name)`, not from the replay payload; or
+- make rematerialization conditional on a genuinely new accepted insert if duplicate self-healing is not needed.
 
-The canonical quantity produced from a snapshot base plus the durable post-snapshot movement set must be independent of ingestion order.
+Because the event insert and rematerialization already run in one database batch, do not reintroduce a marker-then-effect partial-write window.
 
-Do not rely on insertion order.
+If duplicate replays continue to trigger rematerialization, they must do so using canonical persisted metadata.
 
-A robust design may require recomputing the affected item/category from an authoritative snapshot base plus all later durable effects whenever a new movement is accepted, rather than incrementing the current materialized row blindly. If the current schema does not preserve enough snapshot-base information to do that safely, add the smallest durable schema needed and generate an additive migration.
-
-Do not use the prunable `torn_browser_events` journal as the only source for authoritative snapshot base state.
+Do not solve this with an in-memory lock or by trusting the first/last observer's request payload outside the durable row.
 
 Preserve:
 
-- `(faction_id, event_key, item_name)` exact-once dedupe;
-- category isolation;
-- faction isolation;
+- exact-once key `(faction_id, event_key, item_name)`;
+- deterministic equal-time ordering from migration `0012`;
+- zero-floor convergence;
+- delayed-snapshot convergence;
+- snapshot-base `items_json` semantics;
+- legacy `NULL items_json` / `NULL occurred_at` preservation;
+- faction/category isolation;
 - OC-history isolation;
-- existing delayed-snapshot behavior;
-- historical `NULL occurred_at` semantics without inventing timestamps.
+- five-minute future-time rejection;
+- script-sync 401/503 behavior;
+- Blood Coven `52984` data.
 
-## Required regressions
+## Required behavioral regressions
 
-Add behavioral database tests proving at least:
+Add database-level tests that exercise the real `recordArmoryMovement()` path.
 
-### A1 — equal-time opposing movements converge
+### R1 — duplicate payload category cannot steer canonical state
 
-Start from snapshot quantity `1` at `t1`.
+Create authoritative snapshot bases for at least two categories and durable history that makes choosing the wrong category observably different.
 
-At the same timestamp `t2`, create two distinct durable events:
+Accept an Armory movement with:
 
-- withdrawal/use `2`
-- deposit/return `2`
+- faction `52984`;
+- stable event key `movement:replay-authority`;
+- a specific item;
+- canonical category A.
 
-Run once with arrival order withdrawal -> deposit.
-Run again from the same initial state with arrival order deposit -> withdrawal.
+Then replay the same `(faction_id, event_key, item_name)` with category B.
 
-Final canonical quantity must be identical in both runs and match the documented deterministic tie ordering.
+Assert:
 
-### A2 — same-time duplicate observer replay
+- `armory_item_effects` still contains exactly one durable row;
+- the durable row's original category/delta/occurred time remain unchanged;
+- current `armory_items` remains the result of canonical category A history;
+- the replay cannot resurrect or rematerialize category B history over the current item.
 
-The same two movement event keys observed/replayed by multiple clients must not multiply effects.
+### R2 — journal-style duplicate replay remains exact-once
 
-### A3 — same-time cross-faction isolation
+Replay the same event with its original metadata multiple times.
 
-The same event keys/timestamps must remain independently valid in factions `52984` and `999999`.
+Assert effect count stays one and quantity does not multiply.
 
-### A4 — delayed snapshot plus equal-time later effects
+### R3 — changed duplicate amount/action cannot alter accepted effect
 
-Prove a delayed snapshot followed by folding the same equal-time effect set produces the exact same final quantity as the normal live-ingestion path in either arrival order.
+Replay the same durable identity with a different quantity/action.
 
-### A5 — no-zero-crossing sanity
+Assert the stored delta remains authoritative and materialized quantity does not change to match the replay request.
 
-Equal-time movements whose running quantity never reaches zero must still converge to the arithmetic total and must not be accidentally double-applied.
+### R4 — equal-time convergence remains intact
 
----
+Re-run the existing opposing equal-time movement cases in both arrival orders and prove the result remains deterministic through the zero floor.
 
-# Blocker B — movement timestamps need future-time sanity bounds
+### R5 — delayed snapshot equivalence remains intact
 
-`cleanEvent()` normalizes a client-supplied `occurredAt` and can also prefer `payload.endedAt`. `importArmorySnapshot()` rejects snapshots more than five minutes in the future, but `importArmoryMovement()` currently forwards movement timestamps without the same future bound.
+The same durable effect set must still produce identical materialization through the live and delayed-snapshot paths.
 
-Because movement `occurred_at` now controls whether an effect survives and is replayed across later snapshots, an accidentally or deliberately far-future movement can remain "later than" authoritative snapshots for an extended period and repeatedly participate in rebuilds.
+### R6 — cross-faction isolation
 
-## Required fix
+The same event key remains independently valid in factions `52984` and `999999`; a duplicate replay in one faction cannot rematerialize the other.
 
-For Armory movements, reject or safely ignore impossible future occurrence times using the same general tolerance already used for snapshots (currently five minutes), unless there is a documented Torn-specific reason for a different bound.
+## Secondary audit — new unknown-time movements
 
-Do not rewrite an invalid/future occurrence time to `now`; that would fabricate ordering evidence.
+Review the behavior of a **new** movement whose normalized `occurredAt` is `NULL` after a snapshot base exists.
 
-Preserve legitimate historical movement timestamps.
+Historical migrated `NULL occurred_at` rows must remain preserved without inventing timestamps.
 
-Also ensure a generic payload field irrelevant to Armory movement cannot silently override the movement timestamp into the future without validation.
+For new ingestion, make sure the behavior is deliberate and covered: do not silently claim a movement was canonically applied if it is durably accepted but intentionally excluded from snapshot-backed materialization. If the existing userscript/API contract guarantees a timestamp, a focused rejection/validation regression is preferable to inventing an occurrence time.
 
-## Required regressions
-
-- movement timestamp within tolerance is accepted;
-- movement timestamp beyond tolerance is rejected/ignored without changing `armory_item_effects` or `armory_items`;
-- a far-future `payload.endedAt` cannot poison an Armory movement's temporal order;
-- valid historical movements remain accepted.
-
----
-
-# Re-check completed script-sync work
-
-Do not broaden this run into another sync refactor. Run the existing sync-error suite and confirm the prior behavior remains intact:
-
-- retryable Torn/network/5xx failures => structured 503, local state retained;
-- clear key errors 1/2/16/18 and malformed/missing keys => structured 401/revalidation;
-- identity/faction changes retain revoke/sign-out semantics.
-
-Do not expand credential classification without a concrete reason and regression coverage.
+Do not broaden this into historical timestamp backfill.
 
 ---
 
-# Schema / migration rules
+# Schema / migration expectation
 
-If the same-time convergence fix needs new durable snapshot-base state or ordering fields:
+This replay-authority fix should not normally require a schema change because the canonical metadata already exists in `armory_item_effects`.
 
-- update `db/schema.ts`;
-- run `npm.cmd run db:generate`;
-- create a new additive migration after `0011_thin_pyro.sql`;
-- inspect generated SQL manually;
-- do not rewrite migrations `0008` through `0011`;
-- keep runtime bootstrap and formal migration schemas convergent;
-- existing production-shaped databases must fail clearly rather than self-mutating migration-owned columns at request time.
+If no schema change is required:
 
-Preserve Blood Coven `52984` rows and current quantities during migration tests.
+```bash
+npm.cmd run db:generate
+```
+
+must report no schema drift and **no new migration should be created**.
+
+If you discover a genuine schema requirement, explain it before generating an additive migration after `0012_exotic_tarot.sql`; do not rewrite migrations `0008` through `0012`.
 
 ---
 
@@ -220,11 +192,11 @@ npm.cmd run db:generate
 git diff --check
 ```
 
-Run any new focused Armory tie-order/timestamp test directly as well.
+Run any new replay-authority test file directly as well.
 
-Do not weaken tests to obtain green output.
+Do not weaken existing tests to obtain green output.
 
-Before push verify:
+Before push:
 
 ```bash
 git fetch origin
@@ -233,7 +205,7 @@ git log --oneline --decorate -12
 git diff --check
 ```
 
-If `origin/main` moved during the run, reconcile safely before pushing. Prefer a fast-forward pull when possible; if both local and remote contain new commits, stop and inspect rather than force-pushing.
+If `origin/main` moved during the run, reconcile safely before pushing. Fast-forward when possible; if both sides contain new commits, stop and inspect rather than force-pushing.
 
 ---
 
@@ -241,26 +213,14 @@ If `origin/main` moved during the run, reconcile safely before pushing. Prefer a
 
 Before marking this file COMPLETED:
 
-1. append the final design and actual validation evidence to `CODEX_MULTI_TENANCY_RUN.md`;
-2. append a dated completion result to this file;
-3. record starting SHA, final SHA, exact commits, migration generated if any, command exit statuses, and remaining production blockers;
-4. explicitly state the deterministic ordering rule for equal-time movements;
-5. explicitly state the future-time validation rule;
-6. confirm no production D1 contact/deploy/force-push/arbitrary-faction enablement;
-7. push the validated normal commits directly to `main`.
+1. append the design and actual validation evidence to `CODEX_MULTI_TENANCY_RUN.md`;
+2. append a dated completion result here;
+3. record starting/final `main` SHAs and exact commits;
+4. state whether schema changed and whether `db:generate` produced anything;
+5. explain why a duplicate replay cannot use request metadata to steer canonical Armory state;
+6. record the new regression results, including mismatched-category replay;
+7. record the result of the new-`NULL occurredAt` audit;
+8. confirm no production D1 contact, deployment, remote migration, force-push, or arbitrary-faction enablement;
+9. push validated normal commits directly to `main`.
 
-Do not call this run complete unless identical durable Armory events produce the same current inventory regardless of observer/network arrival order, including equal timestamps and zero-floor cases, and future movement timestamps are safely bounded.
-
----
-
-## Completion result - 2026-08-11
-
-- Starting `main` SHA: `854e61cb1c532f028427c49fecc39b17b65af039`; local and `origin/main` matched before editing and the worktree was clean.
-- Tested implementation commit: `5d155ce7fb66ff9475811768650e89a6b90da2e8` (`Make Armory movement ordering deterministic`). The documentation-only commit containing this result is reported with the final pushed branch tip in the task handoff.
-- Equal-time movement materialization now uses the stable total order `occurred_at`, `event_key`, then `item_name`. For snapshot-backed categories, each accepted movement atomically rematerializes the affected item from the durable snapshot base plus the complete durable post-snapshot effect set, including deterministic zero-floor recovery.
-- Additive migration `0012_exotic_tarot.sql` adds nullable `armory_snapshot_state.items_json` and replaces the temporal trigger. Existing rows retain `NULL` snapshot bases and their current quantities; no historical base or occurrence time is invented. The next authoritative snapshot establishes the deterministic base.
-- Armory movements more than five minutes in the future are ignored before either the durable effect or materialized item can change. Times within the tolerance and legitimate historical times remain valid. Generic `payload.endedAt` is not allowed to override Armory movement or Xanax-use occurrence time.
-- Regression coverage proves equal-time opposing events converge through the zero floor in both arrival orders; duplicate observers remain exact-once; identical keys remain faction-local across `52984` and `999999`; delayed snapshots converge with live ingestion; arithmetic totals remain correct when the floor is not reached; future events do not mutate either Armory table; and Blood Coven migration quantities remain unchanged.
-- Validation: `npm.cmd ci` exit 0 (506 packages); `npm.cmd run check` exit 0 (52/52); TypeScript exit 0; direct multitenancy 3/3; member-balance atomicity 16/16; member-balance schema ownership 4/4; Armory ordering 18/18; script-sync semantics 8/8; second `npm.cmd run db:generate` exit 0 with no schema drift; `git diff --check` exit 0.
-- No production D1 connection, remote Wrangler/D1 migration, deployment, force-push, arbitrary-faction enablement, or history rewrite occurred. Blood Coven faction `52984`, faction scoping, exact-once keys, OC isolation, delayed snapshots, and existing script-sync behavior remain preserved.
-- Production remains blocked on backup/export, exact production-schema inspection, migration and concurrency rehearsal against an exact local copy, pre/post count/financial/Armory comparison, unresolved-identity review, restore rehearsal, and a maintenance window.
+Do not call this run complete while duplicate replay payload metadata can influence materialization after the durable event identity has already been accepted.
