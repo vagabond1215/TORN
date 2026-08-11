@@ -256,8 +256,12 @@ export const armoryItemEffects = sqliteTable("armory_item_effects", {
   delta: integer("delta").notNull().default(0),
   category: text("category").notNull().default("other"),
   source: text("source").notNull().default("activity"),
+  occurredAt: text("occurred_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [primaryKey({ columns: [table.factionId, table.eventKey, table.itemName] })]);
+}, (table) => [
+  primaryKey({ columns: [table.factionId, table.eventKey, table.itemName] }),
+  index("idx_armory_effects_faction_category_occurred").on(table.factionId, table.category, table.occurredAt),
+]);
 
 export const tornSyncCursors = sqliteTable("torn_sync_cursors", {
   factionId: integer("faction_id").notNull(),

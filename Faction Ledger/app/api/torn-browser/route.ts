@@ -1,6 +1,7 @@
 import { getD1 } from "../../../db";
+import { assertArmorySchemaReady, ensureArmorySchema, recordArmoryMovement, recordArmorySnapshot } from "../../../db/armory";
 import { ensureMemberBalanceSchema, recordBalanceEvent, recordBalanceObservation, recordExplicitBalance } from "../../../db/member-balances";
-import { recordScriptSyncPush, requireScriptSyncActor, ScriptSyncAccessError } from "../../../db/script-sync";
+import { recordScriptSyncPush, requireScriptSyncActor, ScriptSyncAccessError, scriptSyncErrorResponse } from "../../../db/script-sync";
 import { rejectFactionOverride, type FactionContext } from "../../../db/tenant";
 import { requireTreasuryLeader, TreasuryAccessError } from "../../treasury-access";
 
@@ -24,7 +25,6 @@ type BrowserEventRow = {
   payload_json: string;
   created_at: string;
 };
-type ArmorySnapshotItem = { name: string; quantity: number; category: string };
 
 const EVENT_JOURNAL_LIMIT = 5000;
 const allowedTypes = new Set([
@@ -33,6 +33,7 @@ const allowedTypes = new Set([
 ]);
 
 async function ensureSchema(db: D1Database) {
+  await assertArmorySchemaReady(db);
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS torn_browser_events (
       faction_id INTEGER NOT NULL,
@@ -80,56 +81,6 @@ async function ensureSchema(db: D1Database) {
       PRIMARY KEY (faction_id, event_key)
     )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_oc_holdings_faction_status_created ON oc_holdings(faction_id, status, created_at DESC)"),
-    db.prepare(`CREATE TABLE IF NOT EXISTS armory_items (
-      faction_id INTEGER NOT NULL,
-      item_name TEXT NOT NULL COLLATE NOCASE,
-      category TEXT NOT NULL DEFAULT 'other',
-      quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
-      source TEXT NOT NULL DEFAULT 'activity',
-      observed_at TEXT,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (faction_id, item_name)
-    )`),
-    db.prepare("CREATE INDEX IF NOT EXISTS idx_armory_items_faction_category_name ON armory_items(faction_id, category, item_name)"),
-    db.prepare(`CREATE TABLE IF NOT EXISTS armory_snapshot_state (
-      faction_id INTEGER NOT NULL,
-      category TEXT NOT NULL,
-      event_key TEXT NOT NULL,
-      observed_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (faction_id, category)
-    )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS armory_item_effects (
-      faction_id INTEGER NOT NULL,
-      event_key TEXT NOT NULL,
-      item_name TEXT NOT NULL COLLATE NOCASE,
-      delta INTEGER NOT NULL DEFAULT 0,
-      category TEXT NOT NULL DEFAULT 'other',
-      source TEXT NOT NULL DEFAULT 'activity',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (faction_id, event_key, item_name)
-    )`),
-    db.prepare(`INSERT OR IGNORE INTO armory_item_effects (faction_id, event_key, item_name, delta, category, source)
-      SELECT faction_id, event_key,
-        CASE WHEN event_type = 'xanax_use' THEN COALESCE(NULLIF(TRIM(json_extract(payload_json, '$.item')), ''), 'Xanax')
-          ELSE TRIM(json_extract(payload_json, '$.item')) END,
-        0, 'legacy', 'legacy'
-      FROM torn_browser_events
-      WHERE event_type IN ('armory_movement', 'xanax_use')
-        AND (event_type = 'xanax_use' OR NULLIF(TRIM(json_extract(payload_json, '$.item')), '') IS NOT NULL)`),
-    db.prepare("DROP TRIGGER IF EXISTS apply_armory_item_effect"),
-    db.prepare(`CREATE TRIGGER apply_armory_item_effect
-      AFTER INSERT ON armory_item_effects
-      WHEN NEW.delta != 0
-      BEGIN
-        INSERT INTO armory_items (faction_id, item_name, category, quantity, source)
-        VALUES (NEW.faction_id, NEW.item_name, NEW.category, MAX(0, NEW.delta), NEW.source)
-        ON CONFLICT(faction_id, item_name) DO UPDATE SET
-          quantity = MAX(0, armory_items.quantity + NEW.delta),
-          category = CASE WHEN NEW.category = 'other' THEN armory_items.category ELSE NEW.category END,
-          source = NEW.source,
-          updated_at = CURRENT_TIMESTAMP;
-      END`),
     db.prepare(`CREATE TABLE IF NOT EXISTS event_observers (
       faction_id INTEGER NOT NULL,
       event_key TEXT NOT NULL,
@@ -150,12 +101,16 @@ async function ensureSchema(db: D1Database) {
       PRIMARY KEY (faction_id, source_key)
     )`),
   ]);
-
-  const columns = await db.prepare("PRAGMA table_info(armory_items)").all<{ name: string }>();
-  if (!columns.results.some((column) => column.name === "observed_at")) {
-    try { await db.prepare("ALTER TABLE armory_items ADD COLUMN observed_at TEXT").run(); }
-    catch (error) { if (!/duplicate column/i.test(error instanceof Error ? error.message : String(error))) throw error; }
-  }
+  await ensureArmorySchema(db);
+  await db.prepare(`INSERT OR IGNORE INTO armory_item_effects
+    (faction_id, event_key, item_name, delta, category, source, occurred_at)
+    SELECT faction_id, event_key,
+      CASE WHEN event_type = 'xanax_use' THEN COALESCE(NULLIF(TRIM(json_extract(payload_json, '$.item')), ''), 'Xanax')
+        ELSE TRIM(json_extract(payload_json, '$.item')) END,
+      0, 'legacy', 'legacy', occurred_at
+    FROM torn_browser_events
+    WHERE event_type IN ('armory_movement', 'xanax_use')
+      AND (event_type = 'xanax_use' OR NULLIF(TRIM(json_extract(payload_json, '$.item')), '') IS NOT NULL)`).run();
 }
 
 function asObject(value: unknown): JsonObject {
@@ -180,25 +135,6 @@ function normalizedOccurredAt(summary: string, occurredAt: string | null, payloa
     if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
   }
   return null;
-}
-
-function normalizeArmoryCategory(value: unknown, itemName = "") {
-  const category = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
-  if (/primary/.test(category)) return "primary";
-  if (/secondary/.test(category)) return "secondary";
-  if (/melee/.test(category)) return "melee";
-  if (/temp|temporary/.test(category)) return "temporary";
-  if (/\barmou?r\b/.test(category)) return "armor";
-  if (/cloth/.test(category)) return "clothing";
-  if (/medical|meds/.test(category)) return "medical";
-  if (/drug/.test(category)) return "drugs";
-  if (/booster/.test(category)) return "boosters";
-  if (/candy|alcohol|energy drink|consumable/.test(category)) return "consumables";
-  if (/utility|tool|material|enhancer/.test(category)) return "utility";
-  if (/special/.test(category)) return "special";
-  if (/xanax|vicodin|ecstasy|lsd|cannabis|opium|ketamine|pcp|shroom|speed/i.test(itemName)) return "drugs";
-  if (/blood bag|first aid|medical|morphine|epinephrine|melatonin/i.test(itemName)) return "medical";
-  return "other";
 }
 
 function cleanEvent(input: BrowserEventInput) {
@@ -368,57 +304,28 @@ async function importOcHolding(db: D1Database, context: FactionContext, event: R
 async function importArmoryMovement(db: D1Database, context: FactionContext, event: ReturnType<typeof cleanEvent>) {
   if (event.eventType !== "armory_movement" && event.eventType !== "xanax_use") return;
   const itemName = String(event.payload.item ?? (event.eventType === "xanax_use" ? "Xanax" : "")).trim().slice(0, 80);
-  const quantity = Math.max(1, asInteger(event.payload.quantity));
-  const action = String(event.payload.action ?? "used").toLowerCase();
   if (!itemName) return;
-  const delta = ["deposited", "returned"].includes(action) ? quantity : -quantity;
-  const category = normalizeArmoryCategory(event.payload.category, itemName);
-  await db.prepare(`INSERT OR IGNORE INTO armory_item_effects (faction_id, event_key, item_name, delta, category, source)
-    VALUES (?, ?, ?, ?, ?, 'activity')`)
-    .bind(context.factionId, event.eventKey, itemName, delta, category).run();
+  await recordArmoryMovement(db, context, {
+    eventKey: event.eventKey,
+    itemName,
+    quantity: Math.max(1, asInteger(event.payload.quantity)),
+    action: String(event.payload.action ?? "used"),
+    category: event.payload.category,
+    occurredAt: event.occurredAt,
+  });
 }
 
 async function importArmorySnapshot(db: D1Database, context: FactionContext, event: ReturnType<typeof cleanEvent>) {
   if (event.eventType !== "armory_snapshot") return;
   const observedAtMs = Date.parse(event.occurredAt ?? "");
   if (!Number.isFinite(observedAtMs) || observedAtMs > Date.now() + 5 * 60 * 1000) return;
-  const observedAt = new Date(observedAtMs).toISOString();
   const rawItems = Array.isArray(event.payload.items) ? event.payload.items.slice(0, 500) : [];
-  const suppliedCategory = normalizeArmoryCategory(event.payload.category);
-  const itemsByCategory = new Map<string, Map<string, ArmorySnapshotItem>>();
-
-  for (const rawItem of rawItems) {
-    const item = asObject(rawItem);
-    const name = String(item.name ?? item.itemName ?? "").trim().slice(0, 100);
-    const quantity = asInteger(item.quantity);
-    if (!name || quantity < 0 || quantity > 1_000_000_000) continue;
-    const category = normalizeArmoryCategory(item.category ?? suppliedCategory, name);
-    if (category === "other" && suppliedCategory !== "other") continue;
-    const group = itemsByCategory.get(category) ?? new Map<string, ArmorySnapshotItem>();
-    group.set(name.toLowerCase(), { name, quantity, category });
-    itemsByCategory.set(category, group);
-  }
-
-  if (itemsByCategory.size === 0) return;
-  for (const [category, itemMap] of itemsByCategory) {
-    const previous = await db.prepare("SELECT event_key, observed_at FROM armory_snapshot_state WHERE faction_id = ? AND category = ?").bind(context.factionId, category)
-      .first<{ event_key: string; observed_at: string }>();
-    if (previous?.event_key === event.eventKey) continue;
-    if (previous && Date.parse(previous.observed_at) > observedAtMs) continue;
-    const items = Array.from(itemMap.values());
-    const statements = [
-      db.prepare("DELETE FROM armory_items WHERE faction_id = ? AND category = ?").bind(context.factionId, category),
-      ...items.filter((item) => item.quantity > 0).map((item) => db.prepare(`INSERT INTO armory_items
-        (faction_id, item_name, category, quantity, source, observed_at, updated_at) VALUES (?, ?, ?, ?, 'snapshot', ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(faction_id, item_name) DO UPDATE SET category = excluded.category, quantity = excluded.quantity,
-          source = 'snapshot', observed_at = excluded.observed_at, updated_at = CURRENT_TIMESTAMP`)
-        .bind(context.factionId, item.name, category, item.quantity, observedAt)),
-      db.prepare(`INSERT INTO armory_snapshot_state (faction_id, category, event_key, observed_at) VALUES (?, ?, ?, ?)
-        ON CONFLICT(faction_id, category) DO UPDATE SET event_key = excluded.event_key, observed_at = excluded.observed_at, updated_at = CURRENT_TIMESTAMP`)
-        .bind(context.factionId, category, event.eventKey, observedAt),
-    ];
-    await db.batch(statements);
-  }
+  await recordArmorySnapshot(db, context, {
+    eventKey: event.eventKey,
+    observedAt: new Date(observedAtMs).toISOString(),
+    category: event.payload.category,
+    items: rawItems,
+  });
 }
 
 async function pruneEventJournal(db: D1Database, context: FactionContext) {
@@ -503,9 +410,9 @@ export async function POST(request: Request) {
     return Response.json({ acceptedKeys, newEventCount: newEvents.length, ...(await snapshot(db, context)) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to import browser events.";
-    const status = error instanceof ScriptSyncAccessError ? 401
-      : error instanceof TreasuryAccessError ? 403
-        : /invalid|incomplete|only|large|no browser|too many/i.test(message) ? 400 : 500;
+    if (error instanceof ScriptSyncAccessError) return scriptSyncErrorResponse(error);
+    const status = error instanceof TreasuryAccessError ? 403
+      : /invalid|incomplete|only|large|no browser|too many/i.test(message) ? 400 : 500;
     return Response.json({ error: message }, { status });
   }
 }

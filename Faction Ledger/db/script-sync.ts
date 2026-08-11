@@ -5,6 +5,9 @@ import {
   recordVerifiedFactionMember,
   requireEnabledFaction,
 } from "./tenant";
+import { ScriptSyncAccessError } from "./script-sync-errors";
+export { ScriptSyncAccessError, scriptSyncErrorResponse } from "./script-sync-errors";
+export type { ScriptSyncErrorCode } from "./script-sync-errors";
 
 export type ScriptSyncActor = {
   tokenId: string;
@@ -14,24 +17,6 @@ export type ScriptSyncActor = {
   factionName: string;
   lastVerifiedAt: string;
 };
-
-export type ScriptSyncErrorCode =
-  | "membership_revalidation_required"
-  | "membership_check_unavailable"
-  | "identity_changed"
-  | "faction_changed"
-  | "invalid_session";
-
-export class ScriptSyncAccessError extends Error {
-  constructor(
-    message: string,
-    public readonly code: ScriptSyncErrorCode = "invalid_session",
-    public readonly status = 401,
-    public readonly currentFaction: { id: number; name: string } | null = null,
-  ) {
-    super(message);
-  }
-}
 
 type TokenRow = ScriptSyncActor & { tokenHash: string };
 type JsonObject = Record<string, unknown>;
@@ -59,29 +44,50 @@ function asNumber(value: unknown) {
   return Number.isFinite(number) ? Math.trunc(number) : 0;
 }
 
-async function tornFetch(path: string, apiKey: string) {
+const TORN_CREDENTIAL_ERROR_CODES = new Set([1, 2, 16, 18]);
+
+function unavailableMembership(message: string) {
+  return new ScriptSyncAccessError(
+    `Unable to reverify Torn membership: ${message}`,
+    "membership_check_unavailable",
+    503,
+  );
+}
+
+export async function tornFetch(path: string, apiKey: string) {
+  let response: Response;
   try {
-    const response = await fetch(`${TORN_API}${path}?comment=BloodCovenScriptMembership`, {
+    response = await fetch(`${TORN_API}${path}?comment=BloodCovenScriptMembership`, {
       headers: { Authorization: `ApiKey ${apiKey}` },
       cache: "no-store",
     });
-    const payload = await response.json() as JsonObject;
-    const error = asObject(payload.error);
-    if (!response.ok || error.error || error.code) {
-      throw new Error(String(error.error ?? error.message ?? "Torn API membership verification failed."));
-    }
-    return payload;
   } catch (error) {
-    if (error instanceof ScriptSyncAccessError) throw error;
+    throw unavailableMembership(error instanceof Error ? error.message : "Torn could not be reached.");
+  }
+
+  let payload: JsonObject;
+  try { payload = await response.json() as JsonObject; }
+  catch { throw unavailableMembership(`Torn returned an unreadable response (${response.status}).`); }
+
+  const error = asObject(payload.error);
+  if (response.ok && !error.error && !error.code) return payload;
+
+  const errorCode = asNumber(error.code);
+  const message = String(error.error ?? error.message ?? `Torn API membership verification failed (${response.status}).`);
+  if (response.status >= 500) throw unavailableMembership(message);
+  // Official Torn API errors 1/2 are empty/incorrect keys, 16 is insufficient
+  // key access, and 18 is a key paused by its owner. Those require user action.
+  if (response.status === 401 || TORN_CREDENTIAL_ERROR_CODES.has(errorCode)) {
     throw new ScriptSyncAccessError(
-      error instanceof Error ? `Unable to reverify Torn membership: ${error.message}` : "Unable to reverify Torn membership.",
-      "membership_check_unavailable",
-      503,
+      `Reconnect the userscript API key: ${message}`,
+      "membership_revalidation_required",
+      401,
     );
   }
+  throw unavailableMembership(message);
 }
 
-async function currentTornIdentity(apiKey: string) {
+export async function currentTornIdentity(apiKey: string) {
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(apiKey)) {
     throw new ScriptSyncAccessError(
       "Reconnect the userscript with a valid Torn API key.",

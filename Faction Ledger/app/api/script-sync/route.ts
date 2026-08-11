@@ -1,6 +1,6 @@
 import { getD1 } from "../../../db";
 import { ensureMemberBalanceSchema } from "../../../db/member-balances";
-import { requireScriptSyncActor, ScriptSyncAccessError } from "../../../db/script-sync";
+import { requireScriptSyncActor, ScriptSyncAccessError, scriptSyncErrorResponse } from "../../../db/script-sync";
 
 type BalanceRow = {
   member_id: number | null;
@@ -32,11 +32,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to synchronize the userscript.";
     if (error instanceof ScriptSyncAccessError) {
-      return Response.json({
-        error: message,
-        code: error.code,
-        currentFaction: error.currentFaction,
-      }, { status: error.status });
+      return scriptSyncErrorResponse(error);
     }
     return Response.json({ error: message }, { status: 500 });
   }
