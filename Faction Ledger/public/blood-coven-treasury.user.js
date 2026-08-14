@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Blood Coven Treasury Bridge
 // @namespace    https://faction-ledger-torn.vagabond1215.chatgpt.site/
-// @version      1.5.0
+// @version      1.5.1
 // @description  Shares Blood Coven balance, Armory, OC, and ranked-war observations between verified faction users and the private treasury.
 // @author       Blood Coven
 // @match        https://www.torn.com/*
@@ -180,7 +180,7 @@
   function factionCategory() {
     const pageHash = location.hash.toLowerCase();
     if (pageHash.includes("tab=crimes")) return "crimes";
-    if (pageHash.includes("tab=armory")) return "armory";
+    if (pageHash.includes("tab=armory") || pageHash.includes("tab=armoury")) return "armory";
     const type = new URLSearchParams(location.search).get("type") ?? "1";
     return ({ "1": "main_news", "2": "attacking", "3": "funds", "4": "armory", "5": "crimes", "6": "membership" })[type] ?? "faction";
   }
@@ -203,6 +203,9 @@
   }
 
   function currentArmoryCategory() {
+    const hashParameters = new URLSearchParams(location.hash.replace(/^#\/?/, ""));
+    const routeCategory = armoryCategory(hashParameters.get("sub") ?? "");
+    if (routeCategory !== "other") return routeCategory;
     const controls = Array.from(document.querySelectorAll("[role='tab'], button, a"));
     const active = controls.find((control) => {
       const selected = control.getAttribute("aria-selected") === "true" || /(^|\s)(active|selected|current)(\s|$)/i.test(String(control.className ?? ""));
@@ -314,29 +317,84 @@
     return Number(dataId) || 0;
   }
 
-  function scanCrimeRow(row, text) {
-    if (text.length < 12 || text.length > 5000 || !/(success|successful|completed|reward|received|earned|failed|failure)/i.test(text)) return false;
+  function ownText(element) {
+    return normalize(Array.from(element.childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent)
+      .join(" "));
+  }
+
+  function crimeNameFromRow(row, text) {
     const heading = row.querySelector("h2, h3, h4, strong, [class*='title'], [class*='name'], [class*='scenario']");
-    const crimeName = normalize(heading?.textContent || text.split(/(?:success|successful|completed|failed|failure)/i)[0]).slice(0, 100) || "Organized crime";
-    const cashValues = Array.from(text.matchAll(/\$([\d,]+)/g)).map((item) => moneyValue(item[1]));
+    const headingText = normalize(heading?.textContent);
+    if (headingText && !/^(?:success|successful|completed|failed|failure)$/i.test(headingText)) return headingText.slice(0, 100);
+    const ownTexts = [row, ...row.querySelectorAll("*")]
+      .map(ownText)
+      .filter((value) => value && value.length <= 100);
+    const statusIndex = ownTexts.findIndex((value) => /^(?:success|successful|completed|failed|failure)$/i.test(value));
+    const afterStatus = ownTexts.slice(statusIndex + 1).find((value) =>
+      !/^(?:show more|paid|unpaid|reward|rewards?|cash)$/i.test(value) &&
+      !/^\$?[\d,.]+(?:\s*x\s*\d+)?$/i.test(value));
+    if (afterStatus) return afterStatus.slice(0, 100);
+    return normalize(text.replace(/^.*?\b(?:success|successful|completed|failed|failure)\b/i, "").split(/show more/i)[0]).slice(0, 100) || "Organized crime";
+  }
+
+  function itemRewardsFromRow(row, text) {
     const itemMatches = [
       ...Array.from(text.matchAll(/(\d+)\s*x\s+([A-Za-z][A-Za-z0-9 '&-]{2,70}?)(?=,|\.|\$|\d{2}:|$)/gi)).map((item) => ({ quantity: Number(item[1]), name: normalize(item[2]) })),
       ...Array.from(text.matchAll(/([A-Za-z][A-Za-z0-9 '&-]{2,70}?)\s*x\s*(\d+)(?=,|\.|\$|\d{2}:|$)/gi)).map((item) => ({ quantity: Number(item[2]), name: normalize(item[1]) })),
     ];
-    const items = Array.from(new Map(itemMatches.filter((item) => item.quantity > 0).map((item) => [item.name.toLowerCase(), item])).values());
+    for (const element of row.querySelectorAll("[data-item-name], img[alt]")) {
+      const explicitName = normalize(element.getAttribute("data-item-name"));
+      const name = explicitName || normalize(element.getAttribute("alt"));
+      if (!name || name.length > 80 || /^(?:show more|paid|success|failure|reward|link|view|use|give|loan|retrieve)$/i.test(name)) continue;
+      const containerText = normalize(element.closest("li, [class*='reward'], [class*='item'], span, div")?.textContent);
+      const quantityMatch = containerText.match(/(?:^|\s)x\s*(\d+)(?:\s|$)/i) || containerText.match(/(?:^|\s)(\d+)\s*x(?:\s|$)/i) || containerText.match(/(?:^|\s)(\d+)$/);
+      if (!explicitName && !quantityMatch) continue;
+      itemMatches.push({ name, quantity: Number(quantityMatch?.[1] ?? 1) });
+    }
+    return Array.from(new Map(itemMatches
+      .filter((item) => item.quantity > 0 && item.name)
+      .map((item) => [item.name.toLowerCase(), item])).values());
+  }
+
+  function completedCrimeCards(scope) {
+    const directCandidates = Array.from(scope.querySelectorAll("article, li, tr, [class*='crime'], [class*='result'], [class*='scenario'], [data-crime-id]"));
+    const statusNodes = Array.from(scope.querySelectorAll("div, span, p, strong, b"))
+      .filter((element) => /^(?:success|successful|completed|failed|failure)$/i.test(normalize(element.textContent)));
+    for (const statusNode of statusNodes) {
+      let candidate = statusNode.parentElement;
+      while (candidate && candidate !== scope) {
+        const text = normalize(candidate.textContent);
+        if (text.length >= 30 && text.length <= 5000 && /show more|\$[\d,]+|\bpaid\b|\breward/i.test(text)) {
+          directCandidates.push(candidate);
+          break;
+        }
+        candidate = candidate.parentElement;
+      }
+    }
+    return directCandidates;
+  }
+
+  function scanCrimeRow(row, text) {
+    if (text.length < 12 || text.length > 5000 || !/(success|successful|completed|reward|received|earned|failed|failure)/i.test(text)) return false;
+    const crimeName = crimeNameFromRow(row, text);
+    const cashValues = Array.from(text.matchAll(/\$([\d,]+)/g)).map((item) => moneyValue(item[1]));
+    const items = itemRewardsFromRow(row, text);
     const crimeId = crimeIdFromRow(row);
     const success = !/(failed|failure)/i.test(text);
-    const stableKey = crimeId ? String(crimeId) : hash(text);
+    const status = /\bpaid\b/i.test(text) ? "distributed" : "held";
+    const stableKey = crimeId ? String(crimeId) : hash(text.replace(/\b(?:paid|unpaid)\b/gi, ""));
     return addEvent("oc_completion", "crimes", text, {
-      crimeId: crimeId || undefined, crimeName, success, status: "held",
+      crimeId: crimeId || undefined, crimeName, success, status,
       cashAmount: cashValues.length ? Math.max(...cashValues) : 0, items,
     }, stableKey);
   }
 
   function scanCrimeCards(force = false) {
     if (!force && factionCategory() !== "crimes") return 0;
-    const scope = document.querySelector("#react-root, #factions") ?? document.body;
-    const candidates = Array.from(scope.querySelectorAll("article, li, tr, [class*='crime'], [class*='result'], [class*='scenario'], [data-crime-id]"))
+    const scope = document.querySelector("#faction-crimes-root, #react-root, #factions") ?? document.body;
+    const candidates = completedCrimeCards(scope)
       .map((row) => ({ row, text: normalize(row.textContent) }))
       .filter(({ text }) => text.length >= 12 && text.length <= 5000 && /(success|successful|completed|failed|failure)/i.test(text))
       .sort((a, b) => a.text.length - b.text.length);
@@ -361,7 +419,10 @@
     const title = Array.from(row.querySelectorAll("[title]"))
       .map((element) => normalize(element.getAttribute("title")))
       .find((value) => value && value.length <= 100 && !/give|loan|deposit|remove|view/i.test(value));
-    return title || "";
+    if (title) return title;
+    const rowText = normalize(row.textContent);
+    const compactName = rowText.match(/^(.{1,100}?)\s+x\s*[\d,]+(?=[A-Z]|$)/);
+    return normalize(compactName?.[1]);
   }
 
   function quantityFromRow(row, name) {
@@ -388,7 +449,7 @@
     if (force && !pageLooksArmory && location.pathname.toLowerCase() !== "/factions.php") return { category: "other", items: 0 };
     const category = currentArmoryCategory();
     if (category === "other" && !pageLooksArmory) return { category, items: 0 };
-    const scope = document.querySelector("#react-root, #factions") ?? document.body;
+    const scope = document.querySelector("#faction-armoury, #react-root, #factions") ?? document.body;
     const rows = Array.from(scope.querySelectorAll("tr, li, [class*='item'], [class*='armory'], [class*='armoury']"));
     const found = new Map();
     for (const row of rows) {
@@ -415,6 +476,7 @@
     const category = factionCategory();
     if (category === "funds" || force) scanFundBalances(force);
     if (category === "crimes" || force) scanCrimeCards(force);
+    if (category === "armory") scanArmoryInventory();
     const activeArmoryCategory = currentArmoryCategory();
     const rows = document.querySelectorAll("#react-root li, #factions li, #react-root tr, #factions tr");
     for (const row of rows) {

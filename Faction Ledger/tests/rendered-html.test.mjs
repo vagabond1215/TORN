@@ -80,6 +80,11 @@ test("ships a private Torn userscript bridge and durable event ingestion", async
   assert.match(script, /scanArmoryBalance/);
   assert.match(script, /and a balance of/);
   assert.match(script, /source: "armory"/);
+  assert.match(script, /tab=armoury/);
+  assert.match(script, /#faction-armoury/);
+  assert.match(script, /#faction-crimes-root/);
+  assert.match(script, /completedCrimeCards/);
+  assert.match(script, /compactName/);
   assert.match(script, /findClassicMoneyRow/);
   assert.match(script, /\^Money:\?\$/);
   assert.match(script, /bc-wide-classic/);
