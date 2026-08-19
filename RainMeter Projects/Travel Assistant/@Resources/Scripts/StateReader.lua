@@ -57,6 +57,29 @@ local function setVariable(name, value)
     SKIN:Bang('!SetVariable', name, tostring(value or ''))
 end
 
+local function getStatusPresentation(status)
+    if status == 'SAFE_WINDOW' then
+        return '86,190,116,255', ''
+    elseif status == 'BEST_ODDS' then
+        return '232,178,72,255', ''
+    elseif status == 'LOW_MARGIN' then
+        return '232,178,72,255', ''
+    elseif status == 'UNPROFITABLE' or status == 'WINDOW_CLOSED' then
+        return '224,90,90,255', ''
+    elseif status == 'STALE_DATA' then
+        return '232,178,72,255', 'STALE DATA · CHECK WEAV3R'
+    elseif status == 'SOURCE_DISAGREEMENT' then
+        return '232,178,72,255', 'SOURCE ISSUE · CHECK WEAV3R'
+    elseif status == 'PRICE_REGIME_UNVERIFIED' then
+        return '232,178,72,255', 'PRICE REGIME UNVERIFIED · CHECK WEAV3R'
+    elseif status == 'CHECK_EXTERNAL' then
+        return '232,178,72,255', 'CHECK WEAV3R'
+    elseif status == 'INSUFFICIENT_HISTORY' then
+        return '145,152,164,255', 'LEARNING · CHECK WEAV3R'
+    end
+    return '145,152,164,255', ''
+end
+
 local function updateDestination(data, prefix)
     local now = os.time()
     local travelSeconds = number(data[prefix .. 'TravelSeconds'])
@@ -70,11 +93,14 @@ local function updateDestination(data, prefix)
     local hitRate = number(data[prefix .. 'HitRate'])
     local status = safeText(data[prefix .. 'Status'], 'INSUFFICIENT_HISTORY')
     local message = safeText(data[prefix .. 'Message'], '')
+    local statusColor, overlayText = getStatusPresentation(status)
 
     setVariable(prefix .. 'TravelText', formatDuration(travelSeconds))
     setVariable(prefix .. 'StockText', formatInteger(stock))
     setVariable(prefix .. 'PriceText', formatMoney(foreignPrice))
     setVariable(prefix .. 'StatusText', status:gsub('_', ' '))
+    setVariable(prefix .. 'StatusColor', statusColor)
+    setVariable(prefix .. 'OverlayText', overlayText)
 
     if lastSoldOutAt > 0 then
         setVariable(prefix .. 'LastSoldOutText', os.date('%H:%M', lastSoldOutAt))
