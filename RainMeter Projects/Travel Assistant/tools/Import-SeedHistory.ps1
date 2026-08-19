@@ -74,11 +74,12 @@ function Assert-NotSynthetic {
 
 function Validate-Observation {
     param([object]$Row, [System.Collections.Generic.HashSet[string]]$KnownCountries, [System.Collections.Generic.HashSet[int]]$KnownItems)
-    foreach ($name in @('schemaVersion','timestamp','country','itemId','stock','foreignPrice','source')) {
+    foreach ($name in @('schemaVersion','timestamp','country','itemId','stock','foreignPrice','source','sourceTimestamp')) {
         if (-not $Row.PSObject.Properties[$name]) { throw "Observation is missing '$name'." }
     }
     if ([int]$Row.schemaVersion -ne 1) { throw 'Unsupported observation schemaVersion.' }
     if ([long]$Row.timestamp -le 0) { throw 'Observation timestamp must be positive.' }
+    if ([long]$Row.sourceTimestamp -lt 0) { throw 'Observation sourceTimestamp cannot be negative.' }
     if ([int]$Row.stock -lt 0) { throw 'Observation stock cannot be negative.' }
     if ([long]$Row.foreignPrice -lt 0) { throw 'Observation foreignPrice cannot be negative.' }
     if (-not $KnownCountries.Contains([string]$Row.country)) { throw "Unknown configured country '$($Row.country)'." }
