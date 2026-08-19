@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "travelMode": "airstrip",
+  "pollIntervalSeconds": 60,
+  "staleAfterSeconds": 300,
+  "highResolutionRetentionHours": 48,
+  "cycleRetentionDays": 90,
+  "graphWindowHours": 24,
+  "profitability": {
+    "minimumProfitPerItem": 50000,
+    "minimumMarginPercent": 5.0
+  },
+  "recommendation": {
+    "minimumComparableCycles": 5,
+    "minimumSafeCycles": 8,
+    "arrivalBufferSeconds": 60,
+    "candidateStepSeconds": 30
+  },
+  "providers": {
+    "liveStock": "yata",
+    "historicalBootstrap": "none",
+    "resalePrice": "torn_itemmarket"
+  },
+  "externalLinks": {
+    "weav3rTravelStock": "https://weav3r.dev/travel-stock"
+  }
+}
