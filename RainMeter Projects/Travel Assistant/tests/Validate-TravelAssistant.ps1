@@ -65,23 +65,48 @@ if ($null -ne $items) {
 $modes = $config['config\travel-modes.json']
 $countries = $config['config\countries.json']
 if ($null -ne $modes -and $null -ne $countries) {
-    $modeIds = @($modes.modes | Where-Object { $_.enabled -eq $true } | ForEach-Object { [string]$_.id })
+    $allModeIds = @($modes.modes | ForEach-Object { [string]$_.id })
+    $enabledModeIds = @($modes.modes | Where-Object { $_.enabled -eq $true } | ForEach-Object { [string]$_.id })
+
     foreach ($requiredMode in @('standard','airstrip','wlt','business')) {
-        if ($modeIds -notcontains $requiredMode) { Fail "Missing enabled travel mode: $requiredMode" }
+        if ($allModeIds -notcontains $requiredMode) { Fail "Missing configured travel mode: $requiredMode" }
+    }
+    foreach ($requiredEnabledMode in @('standard','airstrip','wlt')) {
+        if ($enabledModeIds -notcontains $requiredEnabledMode) { Fail "Missing enabled travel mode: $requiredEnabledMode" }
     }
     if ([string]$modes.defaultMode -ne 'airstrip') { Fail 'Default travel mode must be airstrip.' }
+
+    $business = @($modes.modes | Where-Object { [string]$_.id -eq 'business' } | Select-Object -First 1)
+    if ($business.Count -eq 1 -and $business[0].enabled -ne $true) {
+        if (-not $business[0].PSObject.Properties['disabledReason'] -or [string]::IsNullOrWhiteSpace([string]$business[0].disabledReason)) {
+            Fail 'Disabled Business mode must explain why it is gated.'
+        } else {
+            Note 'Business mode is configured but intentionally disabled until Business Class Ticket/free-Lingerie trip economics are included in profitability gating.'
+        }
+    }
 
     foreach ($countryId in @('united_kingdom','japan')) {
         $row = @($countries.countries | Where-Object { [string]$_.id -eq $countryId -and $_.enabled -eq $true })
         if ($row.Count -ne 1) { Fail "Missing enabled country: $countryId"; continue }
-        foreach ($modeId in $modeIds) {
-            $prop = $row[0].travelSeconds.PSObject.Properties[$modeId]
-            if ($null -eq $prop -or [long]$prop.Value -le 0) { Fail "$countryId has no positive travelSeconds for $modeId" }
+
+        foreach ($modeId in $allModeIds) {
+            $timeProp = $row[0].travelSeconds.PSObject.Properties[$modeId]
+            if ($null -eq $timeProp -or [long]$timeProp.Value -le 0) { Fail "$countryId has no positive travelSeconds for $modeId" }
+
+            $capacityProp = $row[0].baseTravelCapacity.PSObject.Properties[$modeId]
+            if ($null -eq $capacityProp -or [int]$capacityProp.Value -le 0) { Fail "$countryId has no positive baseTravelCapacity for $modeId" }
         }
+
+        foreach ($freeMode in @('airstrip','wlt')) {
+            $costProp = $row[0].travelCosts.PSObject.Properties[$freeMode]
+            if ($null -eq $costProp -or [long]$costProp.Value -ne 0) { Fail "$countryId $freeMode travel cost must be explicitly zero." }
+        }
+        $standardCost = $row[0].travelCosts.PSObject.Properties['standard']
+        if ($null -eq $standardCost -or [long]$standardCost.Value -le 0) { Fail "$countryId standard travel cost must be positive." }
     }
 }
 
-foreach ($relative in @('data\seed\observations.jsonl','data\seed\cycles.jsonl','tests\fixtures\cycles-safe.jsonl','tests\fixtures\cycles-fast.jsonl')) {
+foreach ($relative in @('data\seed\observations.jsonl','data\seed\cycles.jsonl','tests\fixtures\cycles-safe.jsonl','tests\fixtures\cycles-fast.jsonl','tests\fixtures\normalized-observations.sample.jsonl')) {
     $path = Join-Path $ProjectRoot $relative
     if (-not (Test-Path -LiteralPath $path)) { continue }
     $lineNumber = 0
@@ -97,7 +122,10 @@ $scriptFiles = @(
     '@Resources\Scripts\RunUpdate.ps1',
     '@Resources\Scripts\UpdateTracker.ps1',
     'tests\Validate-TravelAssistant.ps1',
+    'tests\Validate-HistoricalTools.ps1',
+    'tests\Run-HistoricalPipelineTests.ps1',
     'tests\Run-ModelTests.ps1',
+    'tests\Run-All.ps1',
     'Install.ps1'
 )
 foreach ($relative in $scriptFiles) {
