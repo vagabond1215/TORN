@@ -43,12 +43,18 @@ The suite currently covers:
 - travel-mode/economics configuration;
 - historical-tool parser/seed checks;
 - normalized observation -> completed-cycle replay;
+- isolated seed-import/dedup/provenance behavior;
 - production-function YATA normalization;
 - production safe-window/best-odds behavior;
-- stale-data suppression;
+- stale stock-data suppression;
 - fee-adjusted low-margin/unprofitable suppression;
 - travel-mode timing changes;
-- live depletion shortening/closing historical safety.
+- live depletion shortening/closing historical safety;
+- final-state resale-cache freshness suppression;
+- final-state Standard travel cost/base-capacity trip-profit gating;
+- zero-cost Airstrip preservation of a healthy timing recommendation;
+- independent restock display while an opportunity is low-margin;
+- unresolved Business economics suppressing timing if Business is manually forced.
 
 If this fails, stop and preserve the complete console output.
 
@@ -61,6 +67,20 @@ For full profitability validation, put a suitable local Torn API key in that ign
 Do **not** paste a limited/full-authority key into an issue, chat log, committed file, diagnostic report, or screenshot.
 
 The live YATA stock collection itself does not need a Torn key.
+
+Useful optional local profitability fields include:
+
+```json
+{
+  "profitability": {
+    "minimumTotalTripProfit": 0,
+    "capacityOverride": 0,
+    "resaleStaleAfterSeconds": 600
+  }
+}
+```
+
+`capacityOverride = 0` means use the conservative configured base capacity. If the user knows their actual travel capacity, a positive override makes the trip-level profitability gate use that value instead.
 
 ## 3. Bounded live environment pass
 
@@ -75,7 +95,7 @@ This intentionally performs a small bounded amount of work:
 - the deterministic/static suite;
 - one YATA live request;
 - one Torn Item Market request when a key is configured;
-- one serialized production updater pass;
+- one serialized production updater + final-state guard pass;
 - runtime/generated disk-size comparison;
 - Rainmeter installation-path check;
 - whole-Rainmeter-process memory observation when Rainmeter is already running.
@@ -86,7 +106,7 @@ Record:
 
 - YATA success/failure;
 - Torn Item Market success/failure or intentional skip;
-- updater exit code and elapsed time;
+- updater/finalizer exit code and elapsed time;
 - runtime/generated directory size before/after;
 - any PowerShell exceptions.
 
@@ -138,7 +158,9 @@ With the skin running for several minutes:
 - confirm foreign purchase price is present when supplied by YATA;
 - confirm the source does not become stale merely because Rainmeter's one-second UI refresh is faster than the provider polling cadence;
 - when local history is insufficient, confirm the skin shows learning/check-external behavior rather than inventing a departure window;
-- if a valid Torn key is configured, confirm low-margin/unprofitable states suppress timing advice.
+- if a valid Torn key is configured, confirm low-margin/unprofitable states suppress **departure timing** while stock and actual/estimated restock information remain available;
+- if an actual restock is observed while the skin is running, confirm the Restock field changes to an elapsed live-restock display such as `live +04:12` rather than treating that observed timestamp as a future estimate;
+- confirm an old cached resale value cannot keep a safe/best-odds countdown active after `resaleStaleAfterSeconds` is exceeded.
 
 Do not wait for or manufacture a restock/sellout just to finish validation. Actual-cycle behavior can remain a shadow-mode/live-observation follow-up.
 
@@ -150,13 +172,14 @@ Open Rainmeter's log/diagnostic view after loading/refreshing the skin and check
 - RunCommand errors/timeouts;
 - missing file/image errors;
 - unsupported meter/measure options;
-- repeated PowerShell launch failures.
+- repeated PowerShell launch failures;
+- errors from `UpdateTracker.ps1` or `FinalizeState.ps1`.
 
 If there is a defect, capture the relevant log lines and the output of the failing repository validation command. Do not include API keys.
 
 ## 8. Resource sanity check
 
-Travel Assistant is intentionally designed so the one-second path does not spawn PowerShell or access the network. During normal idle operation, the short-lived updater should appear only around the configured minute-scale poll.
+Travel Assistant is intentionally designed so the one-second path does not spawn PowerShell or access the network. During normal idle operation, the short-lived updater/finalizer should appear only around the configured minute-scale poll.
 
 Check for:
 
