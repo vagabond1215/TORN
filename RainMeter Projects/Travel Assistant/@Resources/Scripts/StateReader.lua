@@ -1,6 +1,7 @@
 local statePath = nil
 
 local function trim(s)
+    s = s:gsub('^\239\187\191', '')
     return (s:gsub('^%s+', ''):gsub('%s+$', ''))
 end
 
