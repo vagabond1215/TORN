@@ -65,6 +65,39 @@ The Travel Assistant does **not** use a browser-render/scrape loop. If Weav3r la
 
 The Rainmeter timing/status field and low-confidence overlays are clickable so uncertain situations can be checked on Weav3r quickly.
 
+## Open-source travel-planner history candidate
+
+The public `shab00m/torn-travel-planner` repository documents a YATA-backed snapshot store and this read-only history route:
+
+```text
+GET /api/history/:country/:itemId?hours=24
+```
+
+The documented history response contains points with:
+
+```text
+yata_ts
+quantity
+cost
+```
+
+which map directly to Travel Assistant's observation timestamp, stock, and foreign purchase price. The upstream project states that it polls YATA approximately every 60 seconds and deduplicates snapshots by YATA's per-country update timestamp.
+
+It also exposes its own restock/depletion and safe-window endpoints. Those are useful comparative design evidence, but Travel Assistant's seed path should import **snapshot observations** and derive completed cycles itself instead of treating another model's predicted windows as historical truth.
+
+`tools/Import-TravelPlannerHistory.ps1` implements a compatible, bounded adapter. It:
+
+- requires an explicit `-BaseUrl` rather than guessing a deployment host;
+- requests only UK/Japan Xanax history;
+- defaults to 168 hours and refuses requests over 720 hours;
+- writes preview data under ignored runtime storage;
+- derives cycles from observed transitions;
+- requires `-ImportToSeed` before touching committed seed data.
+
+The provider stays disabled until a specific deployed host and its external-use expectations are verified.
+
+Reference implementation: https://github.com/shab00m/torn-travel-planner
+
 ## DroqsDB
 
 DroqsDB public documentation currently advertises:
@@ -101,7 +134,7 @@ The tracker starts collecting structured live observations locally and derives a
 5. observed transitions can be distinguished from predictions;
 6. the data improves first-run recommendations rather than merely adding volume.
 
-The repository now includes generic tools to build cycles from normalized observations and merge verified history into the immutable seed with deduplication/provenance checks.
+The repository now includes generic tools to build cycles from normalized observations and merge verified history into the immutable seed with deduplication/provenance checks, plus a preview-first adapter for a travel-planner-compatible history contract.
 
 Until a verified backfill is available, the correct first-run behavior is `INSUFFICIENT_HISTORY` / `CHECK_EXTERNAL`, not a fabricated departure window.
 
