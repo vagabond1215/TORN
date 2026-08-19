@@ -8,7 +8,8 @@ $tests = @(
     'Run-HistoricalPipelineTests.ps1',
     'Run-SeedImporterTests.ps1',
     'Run-ModelTests.ps1',
-    'Run-FinalizeStateTests.ps1'
+    'Run-FinalizeStateTests.ps1',
+    'Run-RestockDisplayTests.ps1'
 )
 
 foreach ($name in $tests) {
