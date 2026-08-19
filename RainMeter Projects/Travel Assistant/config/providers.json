@@ -19,6 +19,16 @@
       "notes": "Use a local Torn API key when available. Prefer the lowest listing for immediate resale reference; retain the provider-reported average as secondary context. Item Market profitability applies the configured regular sales-tax percentage before margin gating."
     },
     {
+      "id": "travel_planner_history",
+      "role": ["historicalBootstrapCandidate", "crossCheckCandidate"],
+      "enabled": false,
+      "referenceImplementation": "https://github.com/shab00m/torn-travel-planner",
+      "historyPathTemplate": "/api/history/{countryCode}/{itemId}?hours={hours}",
+      "restocksPathTemplate": "/api/restocks/{countryCode}/{itemId}",
+      "importScript": "tools/Import-TravelPlannerHistory.ps1",
+      "notes": "An open-source YATA-backed travel planner documents a read-only snapshot history endpoint returning yata_ts, quantity, and cost. Travel Assistant has a bounded compatible importer, but no deployment host is assumed or enabled. Verify the specific host and its usage expectations before importing seed history."
+    },
+    {
       "id": "droqsdb",
       "role": ["historicalBootstrapCandidate", "crossCheckCandidate", "forecastReferenceCandidate", "resalePriceFallbackCandidate"],
       "enabled": false,
