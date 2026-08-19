@@ -6,7 +6,7 @@ Version 1 focuses on **Xanax in the United Kingdom and Japan**, while the data m
 
 ## Current status
 
-**Initial implementation is now in the repository; Windows/Rainmeter runtime validation is still required.**
+**Initial implementation is in the repository; Windows/Rainmeter runtime validation is still required.**
 
 Implemented so far:
 
@@ -23,8 +23,9 @@ Implemented so far:
 - cached local fallback when the live stock provider fails;
 - 24-hour generated stock graphs with restock/sellout markers;
 - bounded runtime retention and ignored local/runtime state;
-- synthetic fixtures and a PowerShell static-validation script;
-- non-destructive Rainmeter junction installer.
+- synthetic fixtures, production-function replay tests, historical-pipeline tests, and static validators;
+- non-destructive Rainmeter junction installer;
+- bounded historical-provider probe, normalized-observation cycle builder, and provenance-aware seed importer.
 
 The current implementation remains in learning mode until it has sufficient actual restock/sellout history or a verified historical seed is added. The committed seed is intentionally empty rather than fabricated.
 
@@ -126,17 +127,17 @@ or define the environment variable:
 TORN_API_KEY
 ```
 
-Do not commit limited/full-authority keys. The user has explicitly allowed public keys to be used when appropriate, but local configuration remains the default so the project does not need a committed credential.
+Do not commit limited/full-authority keys. Public keys are sufficient for public Item Market data; local configuration remains the default so the repository does not need a committed credential.
 
 ## Profitability behavior
 
 The initial sell target is the Torn Item Market. The calculation uses the configured Item Market selling fee before determining net profit.
 
+Torn's official Item Market documentation currently specifies a regular 5% sales tax. Bazaar sales do not use that regular Item Market fee, so a future Bazaar sell target must be an explicit mode with its own price source/fee behavior rather than silently sharing Item Market assumptions.
+
 Default settings are configurable in `config/settings.example.json`; personal overrides belong in ignored `config/settings.local.json`.
 
 An unprofitable or below-threshold trip still contributes useful stock/restock/depletion history, but receives **no departure timing recommendation**.
-
-Future sell targets such as bazaar/trader pricing should be explicit modes rather than silently sharing Item Market fee assumptions.
 
 ## Decision order
 
@@ -189,7 +190,7 @@ Rainmeter UI
 
 Provider-specific logic is isolated so the live source or historical bootstrap can change without rewriting the model or skin.
 
-See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the durable data model and [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) for current provider choices.
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the durable data model, [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) for current provider choices, and [`docs/HISTORICAL_BOOTSTRAP.md`](./docs/HISTORICAL_BOOTSTRAP.md) for seed/backfill rules.
 
 ## Historical data and learning
 
@@ -202,6 +203,16 @@ The project distinguishes **seed data** from **runtime data**.
 - Long-term learning should eventually favor compact aggregates over permanent minute-by-minute logs.
 
 The initial historical seed is empty because no bounded historical source has yet been validated strongly enough to commit as training evidence. The tracker therefore starts conservatively and learns from live observations.
+
+The repository now includes:
+
+```text
+tools\Probe-DroqsDb.ps1
+tools\Build-CyclesFromObservations.ps1
+tools\Import-SeedHistory.ps1
+```
+
+so a future verified structured backfill can be inspected, normalized, converted to **observed** completed cycles, provenance-checked, and merged into the immutable seed without changing the runtime model.
 
 ## Price-aware behavior
 
@@ -221,21 +232,30 @@ The skin is designed to remain lightweight on a continuously running Windows des
 
 - One-second UI updates perform local countdown/string work through a Lua measure.
 - Network/history/model updates default to once per minute.
+- Overlapping updater runs are serialized rather than allowed to race.
 - Torn resale pricing is cached and is not queried every second.
 - No persistent browser is used.
 - Graphs are two small generated PNGs rather than thousands of Rainmeter meters.
 - Runtime observations/cycles are pruned.
-- Runtime state, generated graphs, logs, and credentials are ignored by Git.
+- Runtime state, generated graphs, logs, provider probes, and credentials are ignored by Git.
 
 Actual CPU/RAM/disk measurements still require a Windows/Rainmeter runtime pass before the project should be called stable.
 
 ## Validation
 
-Static validation entry point:
+Run all connector-authored deterministic/static PowerShell checks with:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-TravelAssistant.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
 ```
+
+For the first bounded live Windows/provider/resource pass:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1
+```
+
+This deliberately performs only a small number of live requests and one production updater pass; it is not a stress loop.
 
 Synthetic fixtures under `tests/fixtures/` are not historical/training data.
 
@@ -249,6 +269,8 @@ Read in this order before implementation work:
 2. [`docs/README.md`](./docs/README.md) — documentation map and precedence.
 3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — authoritative active implementation pass.
 4. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — durable architecture and expansion design.
-5. [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) — provider-specific decisions and unresolved discovery.
+5. [`docs/IMPLEMENTATION_STATUS.md`](./docs/IMPLEMENTATION_STATUS.md) — current checkpoint and runtime boundary.
+6. [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) — provider-specific decisions and unresolved discovery.
+7. [`docs/HISTORICAL_BOOTSTRAP.md`](./docs/HISTORICAL_BOOTSTRAP.md) — historical seed/provenance workflow.
 
 Keep these documents synchronized when architecture or execution policy changes.
