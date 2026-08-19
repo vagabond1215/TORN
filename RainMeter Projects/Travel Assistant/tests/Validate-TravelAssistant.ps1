@@ -12,6 +12,7 @@ $required = @(
     'TravelAssistant.ini',
     'AGENTS.md',
     'Readme.md',
+    'Install.ps1',
     'config\items.json',
     'config\countries.json',
     'config\travel-modes.json',
@@ -20,8 +21,10 @@ $required = @(
     'data\seed\metadata.json',
     'data\seed\observations.jsonl',
     'data\seed\cycles.jsonl',
+    '@Resources\Scripts\RunUpdate.ps1',
     '@Resources\Scripts\UpdateTracker.ps1',
-    '@Resources\Scripts\StateReader.lua'
+    '@Resources\Scripts\StateReader.lua',
+    'tests\Run-ModelTests.ps1'
 )
 
 foreach ($relative in $required) {
@@ -91,8 +94,10 @@ foreach ($relative in @('data\seed\observations.jsonl','data\seed\cycles.jsonl',
 }
 
 $scriptFiles = @(
+    '@Resources\Scripts\RunUpdate.ps1',
     '@Resources\Scripts\UpdateTracker.ps1',
     'tests\Validate-TravelAssistant.ps1',
+    'tests\Run-ModelTests.ps1',
     'Install.ps1'
 )
 foreach ($relative in $scriptFiles) {
@@ -107,8 +112,11 @@ foreach ($relative in $scriptFiles) {
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 if (Test-Path -LiteralPath $iniPath) {
     $ini = Get-Content -LiteralPath $iniPath -Raw
-    foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureState]','[MeterUKGraph]','[MeterJPGraph]')) {
+    foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureCycleMode]','[MeasureState]','[MeterUKGraph]','[MeterJPGraph]')) {
         if (-not $ini.Contains($section)) { Fail "Rainmeter skin missing expected section $section" }
+    }
+    if (-not $ini.Contains('@#Scripts\RunUpdate.ps1') -and -not $ini.Contains('#@#Scripts\RunUpdate.ps1')) {
+        Fail 'Rainmeter skin does not route updater calls through RunUpdate.ps1.'
     }
 }
 
