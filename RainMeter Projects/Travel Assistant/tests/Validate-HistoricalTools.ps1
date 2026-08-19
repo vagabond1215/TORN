@@ -11,12 +11,14 @@ function Fail([string]$Message) { $script:failures.Add($Message) }
 $toolFiles = @(
     'tools\Probe-DroqsDb.ps1',
     'tools\Build-CyclesFromObservations.ps1',
-    'tools\Import-SeedHistory.ps1'
+    'tools\Import-SeedHistory.ps1',
+    'tools\Import-TravelPlannerHistory.ps1',
+    'tools\Validate-LiveEnvironment.ps1'
 )
 
 foreach ($relative in $toolFiles) {
     $path = Join-Path $ProjectRoot $relative
-    if (-not (Test-Path -LiteralPath $path)) { Fail "Missing historical tool: $relative"; continue }
+    if (-not (Test-Path -LiteralPath $path)) { Fail "Missing historical/tooling file: $relative"; continue }
     $tokens = $null
     $parseErrors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors)
