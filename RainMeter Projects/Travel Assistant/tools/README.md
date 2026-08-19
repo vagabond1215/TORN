@@ -22,6 +22,35 @@ Saved probe output goes under `data/runtime/provider-probes/` and is ignored by 
 
 The probe deliberately does **not** assume that a documented historical endpoint is live. It first asks `/api/public/v1/meta` for the provider's current advertised endpoint/history metadata and reports what it finds.
 
+## `Import-TravelPlannerHistory.ps1`
+
+A bounded adapter for a verified deployment exposing the read-only history contract documented by the open-source `shab00m/torn-travel-planner` project:
+
+```text
+GET /api/history/:country/:itemId?hours=...
+```
+
+Usage requires an explicit deployment base URL; the repository does not assume or scrape one:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Import-TravelPlannerHistory.ps1 `
+  -BaseUrl https://verified.example `
+  -Hours 168
+```
+
+The default is **preview only**. It makes two bounded history requests (UK Xanax and Japan Xanax), normalizes the returned `yata_ts / quantity / cost` points, writes candidate files under ignored `data/runtime/historical-imports/`, and derives cycles from observed transitions.
+
+Only after reviewing the host/usage expectations and runtime-only candidate files should the explicit import switch be used:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Import-TravelPlannerHistory.ps1 `
+  -BaseUrl https://verified.example `
+  -Hours 168 `
+  -ImportToSeed
+```
+
+The command intentionally caps history requests at 720 hours. It never imports the provider's safe-window predictions as historical facts.
+
 ## `Build-CyclesFromObservations.ps1`
 
 Takes normalized observation JSONL and derives completed cycles only from observed transitions:
