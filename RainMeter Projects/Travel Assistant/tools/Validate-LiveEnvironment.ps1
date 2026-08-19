@@ -58,10 +58,10 @@ try {
         $code = $pair[0]
         $label = $pair[1]
         $countryProp = $yata.stocks.PSObject.Properties[$code]
-        if ($null -eq $countryProp) { Write-Host "  $label: missing country payload" -ForegroundColor Yellow; continue }
+        if ($null -eq $countryProp) { Write-Host "  ${label}: missing country payload" -ForegroundColor Yellow; continue }
         $country = $countryProp.Value
         $xanax = @($country.stocks | Where-Object { [int]$_.id -eq 206 } | Select-Object -First 1)
-        if ($xanax.Count -eq 0) { Write-Host "  $label: Xanax row missing" -ForegroundColor Yellow; continue }
+        if ($xanax.Count -eq 0) { Write-Host "  ${label}: Xanax row missing" -ForegroundColor Yellow; continue }
         Write-Host ("  {0}: stock {1:N0}, buy {2:C0}, source timestamp {3}" -f $label, [int]$xanax[0].quantity, [long]$xanax[0].cost, [long]$country.update) -ForegroundColor Green
     }
     Write-Host ("  request elapsed: {0:N0} ms" -f $watch.Elapsed.TotalMilliseconds)
