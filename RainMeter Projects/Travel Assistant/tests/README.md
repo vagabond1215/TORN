@@ -2,7 +2,7 @@
 
 These fixtures are **synthetic validation data**, not historical evidence and not seed/training data.
 
-They exist so provider normalization, history deduplication, profitability gating, and recommendation behavior can be replayed without depending exclusively on live web services.
+They exist so provider normalization, history deduplication, profitability gating, recommendation behavior, and historical tooling can be checked without depending exclusively on live web services.
 
 ## Fixtures
 
@@ -10,7 +10,7 @@ They exist so provider normalization, history deduplication, profitability gatin
 - `fixtures/cycles-safe.jsonl` — synthetic high-price/long-availability UK cycles with a conservative Airstrip overlap.
 - `fixtures/cycles-fast.jsonl` — synthetic low-price/fast-depletion UK cycles designed to have no conservative overlap and require best-odds timing.
 
-Do **not** copy these fixture cycles into `data/seed/` or runtime history.
+Do **not** copy fixture data into `data/seed/` or runtime history.
 
 ## Static validation
 
@@ -45,6 +45,30 @@ Current scenarios cover:
 
 These tests are deterministic and make no network calls. They still require a local PowerShell execution pass before their results can be recorded as passing.
 
+## Historical-tool validation
+
+Run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-HistoricalTools.ps1
+```
+
+This checks:
+
+- PowerShell parsing for the DroqsDB probe, generic cycle builder, and seed importer;
+- seed JSON/JSONL parseability;
+- seed metadata coverage counts against the actual committed files;
+- completed-cycle timestamp/availability consistency;
+- that committed seed provenance does not identify synthetic/test sources.
+
+Historical-provider **network** probing is separate and explicitly opt-in:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Probe-DroqsDb.ps1
+```
+
+Use `-SaveProbe` only when a runtime-only capture under `data/runtime/provider-probes/` is useful for debugging. Probe output is ignored by Git and must not be treated as seed history by itself.
+
 ## Runtime validation boundary
 
 A release-quality validation pass still needs Windows/Rainmeter because connector-only work cannot establish:
@@ -53,5 +77,6 @@ A release-quality validation pass still needs Windows/Rainmeter because connecto
 - RunCommand/Lua interaction on the installed Rainmeter build;
 - `System.Drawing` graph generation under the local PowerShell runtime;
 - live YATA and Torn API behavior from the user's machine;
+- live historical-provider endpoint behavior from the user's network;
 - junction installation behavior;
 - actual CPU/RAM/disk usage over time.
