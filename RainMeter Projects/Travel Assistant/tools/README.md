@@ -1,6 +1,6 @@
 # Travel Assistant Tools
 
-These scripts support **bounded provider discovery and seed-data preparation**. They are not part of the one-second Rainmeter UI path.
+These scripts support **bounded provider discovery, seed-data preparation, and local validation**. They are not part of the one-second Rainmeter UI path.
 
 ## `Probe-DroqsDb.ps1`
 
@@ -57,6 +57,36 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Import-SeedHisto
 
 The importer rejects files under `tests/` and source names containing `synthetic`, `fixture`, or `test` unless `-AllowSynthetic` is explicitly supplied. **Do not use `-AllowSynthetic` for committed production seed data.**
 
+## `Validate-LiveEnvironment.ps1`
+
+Runs a deliberately bounded local environment pass:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1
+```
+
+It:
+
+- runs the deterministic/static test suite unless `-SkipTests` is used;
+- performs one YATA live-stock request;
+- performs one Torn Item Market request when a local API key is configured;
+- runs one serialized production updater pass unless `-SkipUpdater` is used;
+- reports runtime/generated directory size before/after the updater;
+- checks the expected Rainmeter skin path/junction;
+- reports whole-Rainmeter-process working-set memory when Rainmeter is running.
+
+It intentionally does **not** loop provider requests or claim Travel Assistant-only RAM attribution. Use it to get the first real Windows/runtime evidence without turning validation into another persistent process.
+
+## Tests
+
+The shortest deterministic validation entry point is:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
+```
+
+See `../tests/README.md` for individual validation layers.
+
 ## Validation boundary
 
-The GitHub connector can create/review these scripts, but running them against live providers and Windows PowerShell is a local validation task. Record live results in `docs/IMPLEMENTATION_STATUS.md` or the active run handoff before treating a historical source as trusted.
+The GitHub connector can create/review these scripts, but running them against live providers and Windows PowerShell is a local validation task. Record live results in `docs/IMPLEMENTATION_STATUS.md` or the active run handoff before treating a historical source, Rainmeter behavior, or resource profile as trusted.
