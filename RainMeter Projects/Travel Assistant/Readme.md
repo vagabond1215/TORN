@@ -20,13 +20,14 @@ Implemented so far:
 - conservative safe-window vs. best-odds departure logic;
 - current-cycle depletion estimate that may shorten, but never extend, a conservative historical window;
 - Torn Item Market resale lookup when a local API key is supplied;
-- profitability gating using configurable Item Market fee, minimum net profit per item, and minimum margin;
+- two-stage profitability gating: per-item margin first, then final resale-freshness + carrying-capacity + travel-cost trip checks;
+- restock information remains available independently of profitability, including exact live-restock elapsed time when observed;
 - cached local fallback when the live stock provider fails;
 - 24-hour generated stock graphs with restock/sellout markers;
 - bounded runtime retention and ignored local/runtime state;
-- synthetic fixtures, production-function replay tests, historical-pipeline tests, and static validators;
+- synthetic fixtures, production-function replay tests, final-state/economics tests, historical-pipeline tests, and static validators;
 - non-destructive Rainmeter junction installer;
-- bounded historical-provider probes/adapters, normalized-observation cycle builder, and provenance-aware seed importer.
+- bounded historical-provider probes/adapters, normalized-observation cycle builder, provenance-aware seed importer, and offline history analyzer.
 
 The current implementation remains in learning mode until it has sufficient actual restock/sellout history or a verified historical seed is added. The committed seed is intentionally empty rather than fabricated.
 
@@ -85,6 +86,8 @@ BEST ODDS             | historical hit rate shown when useful
 
 The exact labels are state-driven. The skin does not display a clock; relative countdowns are preferred.
 
+When a restock is actually observed and still live, the Restock field can display elapsed live time such as `live +04:12`. If the trip is currently low-margin, that restock information still remains visible while all departure timing is suppressed.
+
 ## Install from the repository clone
 
 Expected source location:
@@ -137,26 +140,44 @@ The initial sell target is the Torn Item Market. The calculation uses the config
 
 Torn's official Item Market documentation currently specifies a regular 5% sales tax. Bazaar sales do not use that regular Item Market fee, so a future Bazaar sell target must be an explicit mode with its own price source/fee behavior rather than silently sharing Item Market assumptions.
 
-`config/countries.json` now also records per-destination Standard cash travel cost plus base carrying capacity for Standard/Airstrip/WLT/Business. Airstrip and WLT are explicitly represented as free travel modes. These economics fields are groundwork for total-trip profitability rather than permission to ignore unresolved costs.
+`config/countries.json` records per-destination Standard cash travel cost plus base carrying capacity for Standard/Airstrip/WLT/Business. Airstrip and WLT are explicitly represented as free travel modes.
 
-Business is therefore **disabled in the selector for now**: a Business Class Ticket can be a major trip cost unless the user's company perk makes Business travel free. The project will not issue Business-mode departure advice until that branch is modeled safely.
+After the primary recommendation model runs, `FinalizeState.ps1` applies the final trip-level guard:
+
+```text
+net resale = current resale reference after configured selling fee
+net profit/item = net resale - foreign purchase price
+trip net = (net profit/item × usable capacity) - travel cost
+```
+
+It suppresses timing if:
+
+- the cached resale reference is too old;
+- the trip is negative;
+- the trip does not meet the configured net-profit/margin floors;
+- the selected travel mode has unresolved economics.
+
+Default behavior uses the conservative base carrying capacity in `countries.json`. A positive local `capacityOverride` can represent the user's actual travel capacity. `minimumTotalTripProfit` can impose a separate whole-trip floor, while `minimumProfitPerItem × capacity` remains the default scaled requirement.
+
+Business is **disabled in the selector for now**: a Business Class Ticket can be a major trip cost unless the user's company perk makes Business travel free. The project will not issue Business-mode departure advice until that branch is modeled safely.
 
 Default settings are configurable in `config/settings.example.json`; personal overrides belong in ignored `config/settings.local.json`.
 
-An unprofitable or below-threshold trip still contributes useful stock/restock/depletion history, but receives **no departure timing recommendation**.
+An unprofitable or below-threshold trip still contributes useful stock/restock/depletion history and still may display restock information, but receives **no departure timing recommendation**.
 
 ## Decision order
 
-The recommendation engine evaluates conditions in this order:
+The recommendation pipeline effectively evaluates:
 
-1. Is source data current enough to use?
-2. Is the trip sufficiently profitable under configured thresholds?
-3. Is the current foreign-price/depletion regime comparable to useful history?
-4. Is there enough reliable history to recommend anything?
-5. If stock is currently live, does current depletion still support arrival?
-6. Is there a conservative departure interval supported by comparable cycles?
-7. If not, is there a useful best-odds departure point?
-8. Otherwise, show no departure recommendation and direct the user to external verification when appropriate.
+1. Is the stock source current enough to use?
+2. Is the resale reference current enough to support a money-sensitive departure decision?
+3. Is the trip sufficiently profitable after selling fee, carrying capacity, and travel-mode cost?
+4. Is the current foreign-price/depletion regime comparable to useful history?
+5. Is there enough reliable history to recommend anything?
+6. If stock is currently live, does current depletion still support arrival?
+7. Is there a conservative departure interval supported by comparable cycles?
+8. If not, is there a useful best-odds departure point?
+9. Otherwise, show no departure recommendation and direct the user to external verification when appropriate.
 
 Primary reason/status codes remain machine-readable, including:
 
@@ -187,7 +208,9 @@ History / cycle engine
    ↓
 Restock + price-aware depletion analytics
    ↓
-Profitability + opportunity engine
+Primary profitability + opportunity engine
+   ↓
+Final restock / resale-freshness / trip-economics guards
    ↓
 Compact generated state
    ↓
@@ -210,16 +233,19 @@ The project distinguishes **seed data** from **runtime data**.
 
 The initial historical seed is empty because no bounded historical source has yet been validated strongly enough to commit as training evidence. The tracker therefore starts conservatively and learns from live observations.
 
-The repository now includes:
+The repository includes:
 
 ```text
 tools\Probe-DroqsDb.ps1
 tools\Import-TravelPlannerHistory.ps1
 tools\Build-CyclesFromObservations.ps1
 tools\Import-SeedHistory.ps1
+tools\Analyze-History.ps1
 ```
 
 The travel-planner-compatible adapter targets a documented read-only snapshot-history shape (`yata_ts`, `quantity`, `cost`) and is preview-only unless `-ImportToSeed` is explicitly supplied. No deployment host is assumed. A future verified structured backfill can therefore be inspected, normalized, converted to **observed** completed cycles, provenance-checked, and merged into the immutable seed without changing the runtime model.
+
+`Analyze-History.ps1` can inspect accumulated completed cycles by price bucket and UTC restock hour without automatically promoting small/noisy patterns into production rules.
 
 ## Price-aware behavior
 
@@ -240,6 +266,7 @@ The skin is designed to remain lightweight on a continuously running Windows des
 - One-second UI updates perform local countdown/string work through a Lua measure.
 - Network/history/model updates default to once per minute.
 - Overlapping updater runs are serialized rather than allowed to race.
+- The final state/economics pass makes no extra web request.
 - Torn resale pricing is cached and is not queried every second.
 - No persistent browser is used.
 - Graphs are two small generated PNGs rather than thousands of Rainmeter meters.
@@ -256,17 +283,21 @@ Run all connector-authored deterministic/static PowerShell checks with:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
 ```
 
+That suite now includes isolated final-state tests for stale resale suppression, Standard-trip cost/capacity, zero-cost Airstrip, Business economics gating, and restock display independent of profitability.
+
 For the first bounded live Windows/provider/resource pass:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1
 ```
 
-This deliberately performs only a small number of live requests and one production updater pass; it is not a stress loop.
+This deliberately performs only a small number of live requests and one production updater/finalizer pass; it is not a stress loop.
 
 Synthetic fixtures under `tests/fixtures/` are not historical/training data.
 
 Connector-side repository work must not claim that Windows PowerShell, Rainmeter rendering, live provider access, or resource usage has been validated locally when it has not.
+
+See [`docs/WINDOWS_VALIDATION.md`](./docs/WINDOWS_VALIDATION.md) for the exact local checklist.
 
 ## Documentation routing
 
@@ -279,5 +310,6 @@ Read in this order before implementation work:
 5. [`docs/IMPLEMENTATION_STATUS.md`](./docs/IMPLEMENTATION_STATUS.md) — current checkpoint and runtime boundary.
 6. [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) — provider-specific decisions and unresolved discovery.
 7. [`docs/HISTORICAL_BOOTSTRAP.md`](./docs/HISTORICAL_BOOTSTRAP.md) — historical seed/provenance workflow.
+8. [`docs/WINDOWS_VALIDATION.md`](./docs/WINDOWS_VALIDATION.md) — required local runtime validation.
 
 Keep these documents synchronized when architecture or execution policy changes.
