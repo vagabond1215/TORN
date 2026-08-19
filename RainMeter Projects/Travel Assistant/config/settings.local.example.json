@@ -3,6 +3,8 @@
   "tornApiKey": "",
   "travelMode": "airstrip",
   "profitability": {
+    "sellTarget": "item_market",
+    "itemMarketFeePercent": 5.0,
     "minimumProfitPerItem": 50000,
     "minimumMarginPercent": 5.0
   }
