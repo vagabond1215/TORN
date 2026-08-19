@@ -1,0 +1,27 @@
+# Travel Assistant runtime / generated state
+data/runtime/
+@Resources/Data/runtime/
+@Resources/Cache/
+@Resources/Generated/
+*.tmp
+*.log
+*.bak
+
+# Local-only configuration / credentials
+config/settings.local.json
+config/secrets.json
+@Resources/Settings.local.inc
+.env
+.env.*
+!.env.example
+
+# PowerShell / editor / OS noise
+*.clixml
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Test / scratch output
+coverage/
+test-output/
