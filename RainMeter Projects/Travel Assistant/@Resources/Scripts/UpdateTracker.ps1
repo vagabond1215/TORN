@@ -79,11 +79,13 @@ function Load-Settings {
             else { $settings | Add-Member NoteProperty tornApiKey ([string]$local.tornApiKey) }
         }
         if ($local.PSObject.Properties['profitability'] -and $null -ne $local.profitability) {
-            if ($local.profitability.PSObject.Properties['minimumProfitPerItem']) {
-                $settings.profitability.minimumProfitPerItem = [double]$local.profitability.minimumProfitPerItem
-            }
-            if ($local.profitability.PSObject.Properties['minimumMarginPercent']) {
-                $settings.profitability.minimumMarginPercent = [double]$local.profitability.minimumMarginPercent
+            foreach ($name in @('sellTarget','itemMarketFeePercent','minimumProfitPerItem','minimumMarginPercent')) {
+                $localProp = $local.profitability.PSObject.Properties[$name]
+                if ($null -ne $localProp) {
+                    $targetProp = $settings.profitability.PSObject.Properties[$name]
+                    if ($null -eq $targetProp) { $settings.profitability | Add-Member NoteProperty $name $localProp.Value }
+                    else { $targetProp.Value = $localProp.Value }
+                }
             }
         }
     }
@@ -283,6 +285,23 @@ function Load-Cycles {
     return @($rows)
 }
 
+function Get-LiveStockoutEstimate {
+    param([object[]]$Rows, [long]$RestockAt)
+    if ($RestockAt -le 0 -or $null -eq $Rows) { return 0 }
+    $positive = @($Rows | Where-Object { [long]$_.timestamp -ge $RestockAt -and [int]$_.stock -gt 0 } | Sort-Object timestamp)
+    if ($positive.Count -lt 3) { return 0 }
+    $first = $positive[0]
+    $last = $positive[$positive.Count - 1]
+    $elapsed = [long]$last.timestamp - [long]$first.timestamp
+    $drop = [double]$first.stock - [double]$last.stock
+    if ($elapsed -lt 120 -or $drop -le 0) { return 0 }
+    $rate = $drop / [double]$elapsed
+    if ($rate -le 0) { return 0 }
+    $remaining = [long][Math]::Round([double]$last.stock / $rate)
+    if ($remaining -lt 0) { return 0 }
+    return ([long]$last.timestamp + $remaining)
+}
+
 function Get-Recommendation {
     param(
         [object]$Settings,
@@ -291,7 +310,8 @@ function Get-Recommendation {
         [object]$DestState,
         [long]$ResalePrice,
         [string]$TravelMode,
-        [long]$Now
+        [long]$Now,
+        [object[]]$RecentObservations
     )
 
     $result = [ordered]@{
@@ -317,17 +337,22 @@ function Get-Recommendation {
         return [pscustomobject]$result
     }
 
-    $profit = $ResalePrice - [long]$Observation.foreignPrice
+    $feePercent = 5.0
+    if ($Settings.profitability.PSObject.Properties['itemMarketFeePercent']) { $feePercent = [double]$Settings.profitability.itemMarketFeePercent }
+    if ($feePercent -lt 0) { $feePercent = 0 }
+    if ($feePercent -gt 100) { $feePercent = 100 }
+    $netResalePrice = [long][Math]::Floor($ResalePrice * (1.0 - ($feePercent / 100.0)))
+    $profit = $netResalePrice - [long]$Observation.foreignPrice
     $margin = 0.0
     if ([long]$Observation.foreignPrice -gt 0) { $margin = (100.0 * $profit / [double]$Observation.foreignPrice) }
     if ($profit -lt 0) {
         $result.Status = 'UNPROFITABLE'
-        $result.Message = 'Foreign price is above the current resale reference'
+        $result.Message = ('Net resale after {0:N1}% fee is below foreign price' -f $feePercent)
         return [pscustomobject]$result
     }
     if ($profit -lt [double]$Settings.profitability.minimumProfitPerItem -or $margin -lt [double]$Settings.profitability.minimumMarginPercent) {
         $result.Status = 'LOW_MARGIN'
-        $result.Message = ('Margin too low: ${0:N0}/ea · {1:N1}%' -f $profit, $margin)
+        $result.Message = ('Net margin too low: ${0:N0}/ea · {1:N1}%' -f $profit, $margin)
         return [pscustomobject]$result
     }
 
@@ -347,16 +372,60 @@ function Get-Recommendation {
         return [pscustomobject]$result
     }
 
+    $travelSeconds = [long](Get-DynamicProperty $Country.travelSeconds $TravelMode)
+    if ($travelSeconds -le 0) { return [pscustomobject]$result }
+    $buffer = [long]$Settings.recommendation.arrivalBufferSeconds
+
+    # If a restock is currently live, exact restock timing is known. In this state,
+    # current depletion can only shorten a historical safe window; it never extends one.
+    if ([int]$Observation.stock -gt 0 -and $null -ne $DestState.activeCycle) {
+        $activeRestockAt = [long]$DestState.activeCycle.restockAt
+        if ($activeRestockAt -gt 0) {
+            $result.RestockEstimateAt = $activeRestockAt
+            $availabilityValues = [double[]]@($similar | ForEach-Object { [double]$_.availabilitySeconds })
+            $earliestAvailability = [long](($availabilityValues | Measure-Object -Minimum).Minimum)
+            $safeCloseAt = $activeRestockAt + $earliestAvailability - $travelSeconds - $buffer
+            $liveStockoutAt = Get-LiveStockoutEstimate -Rows $RecentObservations -RestockAt $activeRestockAt
+            if ($liveStockoutAt -gt 0) {
+                $liveCloseAt = $liveStockoutAt - $travelSeconds - $buffer
+                if ($liveCloseAt -lt $safeCloseAt) { $safeCloseAt = $liveCloseAt }
+            }
+
+            if ($similar.Count -ge [int]$Settings.recommendation.minimumSafeCycles -and $safeCloseAt -ge ($Now - 60)) {
+                $result.Status = 'SAFE_WINDOW'
+                $result.Message = 'Stock is live; conservative availability still covers arrival'
+                $result.WindowOpenAt = $Now - 1
+                $result.WindowCloseAt = $safeCloseAt
+                return [pscustomobject]$result
+            }
+
+            $arrivalOffset = ($Now - $activeRestockAt) + $travelSeconds
+            $hits = 0
+            foreach ($c in $similar) {
+                if ($arrivalOffset -ge 0 -and $arrivalOffset -le [long]$c.availabilitySeconds) { $hits++ }
+            }
+            $hitRate = $hits / [double]$similar.Count
+            if ($liveStockoutAt -gt 0 -and ($Now + $travelSeconds) -gt $liveStockoutAt) { $hitRate = 0.0 }
+            if ($hitRate -gt 0) {
+                $result.Status = 'BEST_ODDS'
+                $result.Message = 'Stock is live; leaving now has the strongest remaining modeled chance'
+                $result.BestDepartureAt = $Now
+                $result.HitRate = $hitRate
+                return [pscustomobject]$result
+            }
+
+            $result.Status = 'WINDOW_CLOSED'
+            $result.Message = 'Current live stock is unlikely to survive until arrival'
+            return [pscustomobject]$result
+        }
+    }
+
     $lastSellOut = [long]$DestState.lastSellOutAt
     if ($lastSellOut -le 0) { return [pscustomobject]$result }
 
     $restockDelays = [double[]]@($similar | ForEach-Object { [double]$_.restockDelaySeconds })
     $medianRestock = [long][Math]::Round((Get-Median $restockDelays))
     $result.RestockEstimateAt = $lastSellOut + $medianRestock
-
-    $travelSeconds = [long](Get-DynamicProperty $Country.travelSeconds $TravelMode)
-    if ($travelSeconds -le 0) { return [pscustomobject]$result }
-    $buffer = [long]$Settings.recommendation.arrivalBufferSeconds
 
     $lowers = New-Object System.Collections.Generic.List[double]
     $uppers = New-Object System.Collections.Generic.List[double]
@@ -585,13 +654,17 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
 
     $destKey = ([string]$country.id) + ':' + ([string]$item.itemId)
     $destState = Get-DestinationState -EngineState $engineState -Key $destKey
+    $cachedStock = [int]$destState.lastStock
+    if ($cachedStock -lt 0) { $cachedStock = 0 }
+    $stateValues[$prefix + 'Stock'] = $cachedStock
+    $stateValues[$prefix + 'ForeignPrice'] = [long]$destState.lastForeignPrice
     $stateValues[$prefix + 'LastSoldOutAt'] = [long]$destState.lastSellOutAt
 
     if ($null -eq $yataPayload) { continue }
     $observation = Get-YataObservation -Payload $yataPayload -Country $country -Item $item -Now $now
     if ($null -eq $observation) {
         $stateValues[$prefix + 'Status'] = 'SOURCE_DISAGREEMENT'
-        $stateValues[$prefix + 'Message'] = 'Xanax row missing from live stock export'
+        $stateValues[$prefix + 'Message'] = 'Xanax row missing from live stock export; showing cached values'
         continue
     }
 
@@ -607,7 +680,10 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
     }
 
     $stateValues[$prefix + 'LastSoldOutAt'] = [long]$destState.lastSellOutAt
-    $rec = Get-Recommendation -Settings $settings -Country $country -Observation $observation -DestState $destState -ResalePrice $resalePrice -TravelMode $travelMode -Now $now
+    $graphCutoff = $now - ([long]$settings.graphWindowHours * 3600)
+    $graphRows = @(Get-RecentObservations -Country ([string]$country.id) -ItemId ([int]$item.itemId) -Cutoff $graphCutoff)
+
+    $rec = Get-Recommendation -Settings $settings -Country $country -Observation $observation -DestState $destState -ResalePrice $resalePrice -TravelMode $travelMode -Now $now -RecentObservations $graphRows
     $stateValues[$prefix + 'Status'] = [string]$rec.Status
     $stateValues[$prefix + 'Message'] = [string]$rec.Message
     $stateValues[$prefix + 'RestockEstimateAt'] = [long]$rec.RestockEstimateAt
@@ -616,8 +692,6 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
     $stateValues[$prefix + 'BestDepartureAt'] = [long]$rec.BestDepartureAt
     $stateValues[$prefix + 'HitRate'] = [double]$rec.HitRate
 
-    $graphCutoff = $now - ([long]$settings.graphWindowHours * 3600)
-    $graphRows = @(Get-RecentObservations -Country ([string]$country.id) -ItemId ([int]$item.itemId) -Cutoff $graphCutoff)
     $graphPath = Join-Path $GeneratedDir (($prefix.ToLowerInvariant()) + '-stock.png')
     try { Write-StockGraph -Rows $graphRows -Path $graphPath -Now $now -WindowHours ([int]$settings.graphWindowHours) } catch { }
 }
