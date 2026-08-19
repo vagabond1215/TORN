@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "itemId": 206,
+      "slug": "xanax",
+      "name": "Xanax",
+      "category": "Drug",
+      "enabled": true,
+      "resalePricing": {
+        "preferredSource": "torn_itemmarket",
+        "fallbackSources": ["provider_market_value"],
+        "useLowestListingWhenAvailable": true
+      }
+    }
+  ]
+}
