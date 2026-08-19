@@ -31,11 +31,11 @@ The normalized internal observation is:
 }
 ```
 
-Network polling is intentionally conservative. The default is 60 seconds, and duplicate source/value observations are not appended to local history.
+Network polling is intentionally conservative. The default is 60 seconds, duplicate source/value observations are not appended to local history, and a serialized updater wrapper prevents overlapping Rainmeter refresh/poll executions from racing on history/state/graph files.
 
 ## Current resale reference: Torn Item Market API
 
-Profitability gating is designed to use Torn API v2 item-market data for the current resale reference:
+Profitability gating uses Torn API v2 item-market data for the current resale reference:
 
 ```text
 https://api.torn.com/v2/market/{itemId}/itemmarket?limit=1
@@ -43,11 +43,13 @@ https://api.torn.com/v2/market/{itemId}/itemmarket?limit=1
 
 A local API key is required. It may be supplied through ignored `config/settings.local.json` or the `TORN_API_KEY` environment variable. No API key should be committed merely to make the project runnable.
 
-The implementation caches resale observations and should not request the item market on every one-second Rainmeter update.
+The implementation caches resale observations and does not request the item market on every one-second Rainmeter update.
 
 ### Selling-fee note
 
-The Torn Item Market currently charges a regular 5% sales tax. Profitability calculations that use an Item Market resale target should ultimately use the **net** sell value after the configured market fee, not the gross listing price. This is a required correctness item before recommendations are treated as production-ready. Bazaar/trader sell targets can be added later as explicit alternatives instead of silently assuming the same fee.
+The Torn Item Market regular sales tax is currently 5%. The v1 Item Market profitability gate therefore uses the **net** sell value after the configured fee rather than the gross listing reference.
+
+Bazaar is intentionally not silently treated as equivalent: Torn's official wiki notes that Bazaar sales do not incur the regular Item Market 5% sales fee. If a future user-selectable Bazaar resale target is added, it should have its own price source and fee behavior rather than reusing Item Market assumptions.
 
 Reference: https://wiki.torn.com/wiki/Item_Market
 
@@ -61,33 +63,47 @@ https://weav3r.dev/travel-stock
 
 The Travel Assistant does **not** use a browser-render/scrape loop. If Weav3r later exposes a suitable structured endpoint that can be used appropriately and economically, it may be added as a provider adapter or bounded historical-bootstrap source.
 
-The Rainmeter timing/status field is clickable so low-confidence situations can be checked on Weav3r quickly.
+The Rainmeter timing/status field and low-confidence overlays are clickable so uncertain situations can be checked on Weav3r quickly.
 
 ## DroqsDB
 
-DroqsDB public documentation advertises country/item snapshots, market/bazaar pricing, restock guidance, forecasts, exports, and historical series:
+DroqsDB public documentation currently advertises:
 
 ```text
 https://droqsdb.com/api-docs
 ```
 
-The provider registry keeps DroqsDB disabled for now because the exact live endpoint/history contract has not yet been validated in this implementation pass. Do not seed Git with inferred or manufactured history merely because the documentation describes a historical endpoint.
+including:
 
-DroqsDB is a good candidate for a future bounded bootstrap/cross-check pass if the live API contract is verified.
+- `/api/public/v1/meta` metadata;
+- country/item/export current snapshots;
+- `api.historyMetrics` metadata referring to historical chart support;
+- a daily forecast endpoint with predicted fly-out/restock/stockout context.
+
+The crawler-visible docs currently show failed/404 live example responses, so Travel Assistant does not treat the documentation by itself as a verified live historical contract.
+
+The provider registry keeps DroqsDB disabled for training/cross-check use until local verification. `tools/Probe-DroqsDb.ps1` probes only the documented metadata/current endpoints and reports history-looking endpoints advertised by the live metadata response. It does not automatically call guessed historical URLs.
+
+Provider forecasts may later be useful as a **comparison** signal, but forecast restock/stockout timestamps are not actual historical events and must never populate completed-cycle truth records or `Last Sold Out`.
+
+See [`HISTORICAL_BOOTSTRAP.md`](./HISTORICAL_BOOTSTRAP.md) for the bounded bootstrap procedure.
 
 ## Historical bootstrap status
 
 `data/seed/` is currently a valid **empty bootstrap**. This is deliberate.
 
-The tracker starts collecting structured live observations locally and will derive actual restocks/sellouts as transitions are observed. Historical data may be committed later only when:
+The tracker starts collecting structured live observations locally and derives actual restocks/sellouts as transitions are observed. Historical data may be committed later only when:
 
 1. the source and query contract are verified;
 2. acquisition is bounded and appropriate;
 3. foreign price, timestamps, and country/item identity are sufficiently reliable;
 4. provenance is written to `data/seed/metadata.json`;
-5. the data improves first-run recommendations rather than merely adding volume.
+5. observed transitions can be distinguished from predictions;
+6. the data improves first-run recommendations rather than merely adding volume.
 
-Until then, the correct first-run behavior is `INSUFFICIENT_HISTORY` / `CHECK_EXTERNAL`, not a fabricated departure window.
+The repository now includes generic tools to build cycles from normalized observations and merge verified history into the immutable seed with deduplication/provenance checks.
+
+Until a verified backfill is available, the correct first-run behavior is `INSUFFICIENT_HISTORY` / `CHECK_EXTERNAL`, not a fabricated departure window.
 
 ## Provider failure policy
 
