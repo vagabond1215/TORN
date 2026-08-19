@@ -1,6 +1,6 @@
 # Travel Assistant Tools
 
-These scripts support **bounded provider discovery, seed-data preparation, and local validation**. They are not part of the one-second Rainmeter UI path.
+These scripts support **bounded provider discovery, seed-data preparation, offline analysis, and local validation**. They are not part of the one-second Rainmeter UI path.
 
 ## `Probe-DroqsDb.ps1`
 
@@ -85,6 +85,31 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Import-SeedHisto
 ```
 
 The importer rejects files under `tests/` and source names containing `synthetic`, `fixture`, or `test` unless `-AllowSynthetic` is explicitly supplied. **Do not use `-AllowSynthetic` for committed production seed data.**
+
+## `Analyze-History.ps1`
+
+Reads the current immutable seed plus local runtime completed cycles and produces descriptive summaries without changing recommendation state:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Analyze-History.ps1
+```
+
+Useful options:
+
+```powershell
+.\tools\Analyze-History.ps1 -Country united_kingdom -ItemId 206
+.\tools\Analyze-History.ps1 -PriceBucketSize 25000 -MinimumSamples 5
+.\tools\Analyze-History.ps1 -SaveJson
+```
+
+It reports:
+
+- overall median/range of stock availability;
+- overall median/range of previous-sellout-to-restock delay;
+- price buckets with enough samples;
+- UTC restock-hour groups with enough samples.
+
+`-SaveJson` writes a runtime-only analysis file under `data/runtime/analysis/`. This tool is intentionally descriptive: small cohorts are **not** automatically promoted into production rules simply because a pattern appears in the report.
 
 ## `Validate-LiveEnvironment.ps1`
 
