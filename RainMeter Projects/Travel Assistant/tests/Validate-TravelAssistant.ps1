@@ -17,14 +17,17 @@ $required = @(
     'config\countries.json',
     'config\travel-modes.json',
     'config\settings.example.json',
+    'config\settings.local.example.json',
     'config\providers.json',
     'data\seed\metadata.json',
     'data\seed\observations.jsonl',
     'data\seed\cycles.jsonl',
     '@Resources\Scripts\RunUpdate.ps1',
     '@Resources\Scripts\UpdateTracker.ps1',
+    '@Resources\Scripts\FinalizeState.ps1',
     '@Resources\Scripts\StateReader.lua',
-    'tests\Run-ModelTests.ps1'
+    'tests\Run-ModelTests.ps1',
+    'tests\Run-FinalizeStateTests.ps1'
 )
 
 foreach ($relative in $required) {
@@ -37,6 +40,7 @@ $configFiles = @(
     'config\countries.json',
     'config\travel-modes.json',
     'config\settings.example.json',
+    'config\settings.local.example.json',
     'config\providers.json',
     'data\seed\metadata.json'
 )
@@ -60,6 +64,25 @@ $items = $config['config\items.json']
 if ($null -ne $items) {
     $xanax = @($items.items | Where-Object { [int]$_.itemId -eq 206 -and $_.enabled -eq $true })
     if ($xanax.Count -ne 1) { Fail 'Exactly one enabled Xanax itemId 206 entry is required for v1.' }
+}
+
+$settings = $config['config\settings.example.json']
+if ($null -ne $settings) {
+    if (-not $settings.PSObject.Properties['profitability'] -or $null -eq $settings.profitability) {
+        Fail 'settings.example.json must contain profitability settings.'
+    } else {
+        foreach ($requiredProfitField in @('sellTarget','itemMarketFeePercent','minimumProfitPerItem','minimumMarginPercent','minimumTotalTripProfit','capacityOverride','resaleStaleAfterSeconds')) {
+            if (-not $settings.profitability.PSObject.Properties[$requiredProfitField]) {
+                Fail "settings.example.json profitability is missing '$requiredProfitField'."
+            }
+        }
+        if ($settings.profitability.PSObject.Properties['capacityOverride'] -and [int]$settings.profitability.capacityOverride -lt 0) {
+            Fail 'capacityOverride cannot be negative.'
+        }
+        if ($settings.profitability.PSObject.Properties['resaleStaleAfterSeconds'] -and [long]$settings.profitability.resaleStaleAfterSeconds -lt 60) {
+            Fail 'resaleStaleAfterSeconds must be at least 60 seconds.'
+        }
+    }
 }
 
 $modes = $config['config\travel-modes.json']
@@ -121,10 +144,13 @@ foreach ($relative in @('data\seed\observations.jsonl','data\seed\cycles.jsonl',
 $scriptFiles = @(
     '@Resources\Scripts\RunUpdate.ps1',
     '@Resources\Scripts\UpdateTracker.ps1',
+    '@Resources\Scripts\FinalizeState.ps1',
     'tests\Validate-TravelAssistant.ps1',
     'tests\Validate-HistoricalTools.ps1',
     'tests\Run-HistoricalPipelineTests.ps1',
+    'tests\Run-SeedImporterTests.ps1',
     'tests\Run-ModelTests.ps1',
+    'tests\Run-FinalizeStateTests.ps1',
     'tests\Run-All.ps1',
     'Install.ps1'
 )
@@ -135,6 +161,12 @@ foreach ($relative in $scriptFiles) {
     $parseErrors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in ${relative}: $($parseError.Message)" }
+}
+
+$wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
+if (Test-Path -LiteralPath $wrapperPath) {
+    $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
+    if (-not $wrapper.Contains('FinalizeState.ps1')) { Fail 'RunUpdate.ps1 does not invoke FinalizeState.ps1.' }
 }
 
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
