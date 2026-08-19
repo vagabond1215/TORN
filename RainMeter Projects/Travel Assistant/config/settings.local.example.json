@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "tornApiKey": "",
+  "travelMode": "airstrip",
+  "profitability": {
+    "minimumProfitPerItem": 50000,
+    "minimumMarginPercent": 5.0
+  }
+}
