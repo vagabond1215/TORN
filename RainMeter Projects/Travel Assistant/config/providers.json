@@ -16,14 +16,19 @@
       "endpointTemplate": "https://api.torn.com/v2/market/{itemId}/itemmarket?limit=1",
       "minimumPollSeconds": 300,
       "requiresApiKey": true,
-      "notes": "Use a local Torn API key when available. Prefer the lowest listing for immediate resale reference; retain the provider-reported average as secondary context."
+      "notes": "Use a local Torn API key when available. Prefer the lowest listing for immediate resale reference; retain the provider-reported average as secondary context. Item Market profitability applies the configured regular sales-tax percentage before margin gating."
     },
     {
       "id": "droqsdb",
-      "role": ["historicalBootstrap", "crossCheck", "resalePriceFallback"],
+      "role": ["historicalBootstrapCandidate", "crossCheckCandidate", "forecastReferenceCandidate", "resalePriceFallbackCandidate"],
       "enabled": false,
       "documentation": "https://droqsdb.com/api-docs",
-      "notes": "Public documentation advertises historical series and current stock/pricing endpoints. Keep disabled until the exact live endpoint contract is revalidated during implementation."
+      "metaEndpoint": "https://droqsdb.com/api/public/v1/meta",
+      "itemEndpointTemplate": "https://droqsdb.com/api/public/v1/item/{itemName}",
+      "countryEndpointTemplate": "https://droqsdb.com/api/public/v1/country/{countryName}",
+      "dailyForecastEndpoint": "https://droqsdb.com/api/public/v1/daily-forecast",
+      "probeScript": "tools/Probe-DroqsDb.ps1",
+      "notes": "Public documentation advertises metadata, current snapshots, historical metrics and forecast windows. Keep disabled for model/seed use until the live contract is verified from the user's machine. Forecast restock/stockout values are predictions and must not be imported as observed historical events."
     },
     {
       "id": "weav3r",
