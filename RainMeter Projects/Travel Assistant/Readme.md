@@ -11,7 +11,8 @@ Version 1 focuses on **Xanax in the United Kingdom and Japan**, while the data m
 Implemented so far:
 
 - dark, vertically stacked UK/Japan Rainmeter skin;
-- default Airstrip travel mode with a clickable Standard → Airstrip → WLT → Business mode cycle;
+- default Airstrip travel mode with a clickable Standard → Airstrip → WLT cycle;
+- Business travel mode is configured but intentionally gated until Business Class Ticket / free 10* Lingerie economics are included in profitability checks;
 - structured live stock/foreign-price adapter using YATA;
 - generic observation and completed-cycle persistence;
 - actual restock/sellout transition detection;
@@ -25,7 +26,7 @@ Implemented so far:
 - bounded runtime retention and ignored local/runtime state;
 - synthetic fixtures, production-function replay tests, historical-pipeline tests, and static validators;
 - non-destructive Rainmeter junction installer;
-- bounded historical-provider probe, normalized-observation cycle builder, and provenance-aware seed importer.
+- bounded historical-provider probes/adapters, normalized-observation cycle builder, and provenance-aware seed importer.
 
 The current implementation remains in learning mode until it has sufficient actual restock/sellout history or a verified historical seed is added. The committed seed is intentionally empty rather than fabricated.
 
@@ -44,7 +45,8 @@ The assistant must prefer **no recommendation** over a confident-looking recomme
 - United Kingdom — Xanax
 - Japan — Xanax
 - Airstrip travel mode by default
-- Runtime-selectable Standard, Airstrip, WLT, Business travel modes
+- Runtime-selectable Standard, Airstrip, and WLT travel modes
+- Business travel-time metadata retained for future activation once ticket/free-flight economics are safely modeled
 - Vertically stacked destination panels and graphs
 - 24-hour stock history graph per destination
 - Inline status rows:
@@ -135,6 +137,10 @@ The initial sell target is the Torn Item Market. The calculation uses the config
 
 Torn's official Item Market documentation currently specifies a regular 5% sales tax. Bazaar sales do not use that regular Item Market fee, so a future Bazaar sell target must be an explicit mode with its own price source/fee behavior rather than silently sharing Item Market assumptions.
 
+`config/countries.json` now also records per-destination Standard cash travel cost plus base carrying capacity for Standard/Airstrip/WLT/Business. Airstrip and WLT are explicitly represented as free travel modes. These economics fields are groundwork for total-trip profitability rather than permission to ignore unresolved costs.
+
+Business is therefore **disabled in the selector for now**: a Business Class Ticket can be a major trip cost unless the user's company perk makes Business travel free. The project will not issue Business-mode departure advice until that branch is modeled safely.
+
 Default settings are configurable in `config/settings.example.json`; personal overrides belong in ignored `config/settings.local.json`.
 
 An unprofitable or below-threshold trip still contributes useful stock/restock/depletion history, but receives **no departure timing recommendation**.
@@ -208,11 +214,12 @@ The repository now includes:
 
 ```text
 tools\Probe-DroqsDb.ps1
+tools\Import-TravelPlannerHistory.ps1
 tools\Build-CyclesFromObservations.ps1
 tools\Import-SeedHistory.ps1
 ```
 
-so a future verified structured backfill can be inspected, normalized, converted to **observed** completed cycles, provenance-checked, and merged into the immutable seed without changing the runtime model.
+The travel-planner-compatible adapter targets a documented read-only snapshot-history shape (`yata_ts`, `quantity`, `cost`) and is preview-only unless `-ImportToSeed` is explicitly supplied. No deployment host is assumed. A future verified structured backfill can therefore be inspected, normalized, converted to **observed** completed cycles, provenance-checked, and merged into the immutable seed without changing the runtime model.
 
 ## Price-aware behavior
 
