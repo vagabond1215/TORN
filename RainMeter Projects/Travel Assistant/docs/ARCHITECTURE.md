@@ -28,6 +28,8 @@ Restock + depletion analytics
       ↓
 Travel / profitability / opportunity engine
       ↓
+Final state guards
+      ↓
 Compact computed state
       ↓
 Rainmeter presentation
@@ -83,16 +85,19 @@ Responsibilities:
 
 - foreign purchase price;
 - current resale reference;
+- resale-reference freshness;
 - transaction/selling fee;
 - minimum absolute profit per item;
 - minimum percentage margin;
 - travel-mode cost;
 - conservative/default carrying capacity;
-- later: user-specific capacity, minimum total-trip profit, free Business-Class perk, Business Class Ticket opportunity cost, and multiple resale targets.
+- optional user capacity override;
+- minimum total-trip profit;
+- later: free Business-Class perk, Business Class Ticket opportunity cost, and multiple resale targets.
 
 Profitability is a gate on recommendations, not on data collection.
 
-`config/countries.json` now stores the durable travel-economics inputs that are stable by destination/mode:
+`config/countries.json` stores durable travel-economics inputs that are stable by destination/mode:
 
 ```text
 travelSeconds
@@ -108,13 +113,49 @@ For v1:
 
 Therefore Business remains configured but disabled in the runtime selector until that cost branch is represented safely. This follows the project invariant that **no recommendation is better than an economically misleading recommendation**.
 
-The current production gate still evaluates per-item net margin; applying Standard travel cash cost and user-specific capacity to total-trip profit is the next profitability step.
+The primary recommendation engine performs the early per-item profit/margin gate. `FinalizeState.ps1` then applies the final trip-level economics/freshness guard using the generated state plus cached resale data:
+
+```text
+netResalePrice = grossResaleReference × (1 - sellingFee)
+netProfitPerItem = netResalePrice - foreignPrice
+tripNet = (netProfitPerItem × usableCapacity) - travelModeCost
+requiredTripProfit = max(minimumTotalTripProfit,
+                         minimumProfitPerItem × usableCapacity)
+```
+
+`capacityOverride = 0` means use the conservative configured base capacity. A positive local override allows the user's actual carrying capacity to replace that base value without changing country/item contracts.
+
+If the cached resale reference is too old, a timing recommendation is suppressed even if the last primary model pass had produced a safe/best-odds departure. This prevents an old market value from keeping a departure countdown alive indefinitely.
+
+### Final state guards
+
+`RunUpdate.ps1` serializes the update pipeline and calls:
+
+```text
+UpdateTracker.ps1
+      ↓
+FinalizeState.ps1
+```
+
+The finalizer performs no additional web requests. It exists to enforce display/recommendation invariants that should remain independent from the primary model's early-return path.
+
+Current responsibilities:
+
+- preserve/derive restock timing for display even when profitability suppresses departure advice;
+- use exact observed active-restock time while stock is live;
+- otherwise derive a median restock estimate from enough completed-cycle restock delays;
+- ensure a stale resale reference cannot support `SAFE_WINDOW`/`BEST_ODDS` timing;
+- apply mode cost + carrying capacity to trip-level profitability;
+- suppress timing if travel-mode economics are unresolved;
+- clear departure fields when a final economics/freshness gate fails without erasing actual sellout/restock information.
+
+This separation is intentional: **informational stock/restock history remains useful even when the correct travel recommendation is “do not go.”**
 
 ### Rainmeter presentation
 
 Responsibilities:
 
-- display the latest computed state;
+- display the latest finalized state;
 - update relative countdown strings cheaply;
 - render/cycle enabled travel modes;
 - open external verification links when requested;
@@ -193,6 +234,8 @@ Useful statistics may include:
 
 Pattern detection must not create false precision from tiny samples. If a proposed cohort has inadequate support, fall back to a broader cohort and reduce confidence.
 
+Restock timing is **informationally independent of profitability**. If the current foreign price makes a trip unattractive, the assistant may still display an observed/estimated restock time while suppressing all departure advice.
+
 ---
 
 ## Price-conditioned depletion model
@@ -230,6 +273,8 @@ departure offset → historical success rate
 
 The model uses comparable cycles, not every cycle equally.
 
+`recommendation.arrivalBufferSeconds` acts as an edge-safety margin when converting historical restock/stockout intervals into departure intervals; the current model favors arrivals inside the observed availability interval rather than pretending an uncertain early arrival is automatically equivalent to a confirmed hit.
+
 ### Conservative safe window
 
 A safe window exists only when qualifying comparable cycles support a meaningful overlapping departure interval after travel-time conversion.
@@ -259,9 +304,11 @@ The UI may show a historical hit rate/confidence when useful.
 The recommendation pipeline is:
 
 ```text
-fresh data?
+fresh stock data?
   ↓
-profitable enough?
+fresh resale reference?
+  ↓
+profitable enough per item and per trip?
   ↓
 comparable regime / sufficient confidence?
   ↓
@@ -274,23 +321,19 @@ Current production checks include:
 
 - Item Market resale reference;
 - configured Item Market fee;
+- resale-reference freshness;
 - minimum net profit per item;
-- minimum net percentage margin.
+- minimum net percentage margin;
+- mode-specific cash travel cost;
+- configured or overridden carrying capacity;
+- minimum total-trip profit.
 
-Travel-economics configuration now additionally records:
+Travel-economics configuration records:
 
 - Standard destination cash cost;
 - Airstrip/WLT zero travel cost;
 - base carrying capacity by mode;
 - unresolved Business cost explicitly as `null`.
-
-Next production step:
-
-```text
-tripNet = (netProfitPerItem × usableCapacity) - travelModeCost
-```
-
-with user-specific capacity overriding conservative base capacity when available.
 
 Business must remain disabled until `travelModeCost` can be safely resolved as either:
 
@@ -300,6 +343,7 @@ Business must remain disabled until `travelModeCost` can be safely resolved as e
 If any profitability gate fails:
 
 - continue collecting stock/cycle data;
+- continue displaying actual/estimated restock information when supported;
 - show `LOW_MARGIN` or `UNPROFITABLE`;
 - do not show a departure time/window.
 
@@ -391,6 +435,7 @@ data/runtime/
   preferences.json
   provider-probes/
   historical-imports/
+  analysis/
 ```
 
 Default targets:
@@ -398,7 +443,7 @@ Default targets:
 - high-resolution observations: about 48 hours;
 - completed cycle summaries: about 90 days initially;
 - long-term learning: compact aggregates when introduced;
-- probe/import previews: local and manually disposable;
+- probe/import/analysis output: local and manually disposable;
 - logs: rotated/pruned or intentionally tiny.
 
 No unbounded raw HTTP response archive, screenshot archive, or browser cache.
@@ -432,6 +477,7 @@ Subject to provider limits/usefulness:
 - normalize/append changed samples;
 - detect price/stock/restock/sellout changes;
 - update model state;
+- finalize resale/trip-economics guards locally;
 - regenerate the two compact graph images.
 
 Updater executions are serialized so refresh and scheduled poll events cannot write concurrently.
@@ -441,6 +487,7 @@ Updater executions are serialized so refresh and scheduled poll events cannot wr
 - prune/compact old runtime data;
 - historical bootstrap/probe runs;
 - migration/seed maintenance;
+- offline descriptive history analysis;
 - future aggregate recalculation.
 
 ---
@@ -500,6 +547,7 @@ Do not create functions/data models named around fixed combinations such as `Get
 - `SelectComparableCycles(country, item, price, context)`
 - `EvaluateDepartureWindow(...)`
 - `EvaluateProfitability(...)`
+- `FinalizeRecommendationState(...)`
 
 Adding a new item/destination should primarily require configuration, provider coverage, sufficient history, economics metadata, and UI selection—not a rewrite of persistence or analytics.
 
