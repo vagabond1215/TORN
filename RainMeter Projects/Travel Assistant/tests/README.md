@@ -2,7 +2,7 @@
 
 These fixtures are **synthetic validation data**, not historical evidence and not seed/training data.
 
-They exist so provider normalization, history deduplication, profitability gating, recommendation behavior, seed import behavior, and historical tooling can be checked without depending exclusively on live web services.
+They exist so provider normalization, history deduplication, profitability gating, recommendation behavior, seed import behavior, final display/economics guards, and historical tooling can be checked without depending exclusively on live web services.
 
 ## Fixtures
 
@@ -28,6 +28,7 @@ The runner currently executes:
 3. `Run-HistoricalPipelineTests.ps1`
 4. `Run-SeedImporterTests.ps1`
 5. `Run-ModelTests.ps1`
+6. `Run-FinalizeStateTests.ps1`
 
 No test in this sequence is intended to require a live web provider.
 
@@ -37,7 +38,7 @@ No test in this sequence is intended to require a live web provider.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-TravelAssistant.ps1
 ```
 
-This checks JSON contracts, JSONL parseability, required project files, travel-mode/economics configuration, PowerShell parser errors, basic Rainmeter skin structure, serialized updater routing, and runtime/generated Git ignore rules. It does not prove that Rainmeter can load/run the skin or that live provider calls succeed.
+This checks JSON contracts, JSONL parseability, required project files, travel-mode/economics configuration, finalizer settings, PowerShell parser errors, basic Rainmeter skin structure, serialized updater/finalizer routing, and runtime/generated Git ignore rules. It does not prove that Rainmeter can load/run the skin or that live provider calls succeed.
 
 ## Historical observation pipeline
 
@@ -87,6 +88,23 @@ Current scenarios cover:
 - stale-source suppression;
 - travel-mode-dependent departure timing;
 - current-cycle fast depletion closing an otherwise historically safe live opportunity.
+
+## Final state / trip-economics guard tests
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-FinalizeStateTests.ps1
+```
+
+This runs the production `FinalizeState.ps1` in an isolated temporary project tree. It verifies that the post-processing layer:
+
+- preserves an observed live-restock timestamp even when profitability is `LOW_MARGIN`;
+- suppresses timing when the cached resale reference is stale;
+- applies UK Standard cash travel cost and base capacity to total-trip profitability;
+- can downgrade a borderline Standard opportunity that passed the original per-item threshold;
+- leaves a healthy zero-cost Airstrip timing recommendation intact;
+- suppresses timing if Business mode is manually forced before its ticket/free-company economics are resolved.
+
+This layer is deliberately independent from live provider calls so its economics and display guards are deterministic.
 
 ## Historical-tool validation
 
