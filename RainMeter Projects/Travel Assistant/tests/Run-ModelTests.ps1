@@ -51,7 +51,11 @@ function Import-ProductionFunctions {
     foreach ($name in $wanted) {
         $definition = @($definitions | Where-Object { $_.Name -eq $name } | Select-Object -First 1)
         if ($definition.Count -ne 1) { throw "Could not locate production function '$name' in UpdateTracker.ps1" }
-        Invoke-Expression $definition[0].Extent.Text
+        # The AST extent is the exact production function source. Re-scope only the
+        # declaration so the imported function survives after this helper returns.
+        $source = [string]$definition[0].Extent.Text
+        $scoped = $source -replace ('^function\s+' + [regex]::Escape($name)), ('function script:' + $name)
+        Invoke-Expression $scoped
     }
 }
 
