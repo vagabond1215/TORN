@@ -108,7 +108,9 @@ local function updateDestination(data, prefix)
         setVariable(prefix .. 'LastSoldOutText', '—')
     end
 
-    if restockAt > now then
+    if stock > 0 and restockAt > 0 and restockAt <= now then
+        setVariable(prefix .. 'RestockText', 'live +' .. formatDuration(now - restockAt))
+    elseif restockAt > now then
         setVariable(prefix .. 'RestockText', '~' .. formatDuration(restockAt - now))
     elseif restockAt > 0 then
         setVariable(prefix .. 'RestockText', 'due / variable')
