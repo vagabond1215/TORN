@@ -48,7 +48,8 @@ function Write-StateKvAtomic {
     $lines = New-Object System.Collections.Generic.List[string]
     foreach ($key in ($Values.Keys | Sort-Object)) {
         $value = [string]$Values[$key]
-        $lines.Add("$key=$($value.Replace("`r", ' ').Replace("`n", ' '))")
+        $cleanValue = $value.Replace("`r", ' ').Replace("`n", ' ')
+        $lines.Add("$key=$cleanValue")
     }
     [System.IO.File]::WriteAllLines($tmp, @($lines), [System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $tmp -Destination $Path -Force
@@ -114,13 +115,13 @@ $engineState = Read-JsonFile $EngineStateFile
 $state = Read-StateKv $StateKvFile
 
 if ($null -eq $settings -or $null -eq $itemsConfig -or $null -eq $countriesConfig -or $null -eq $engineState -or $state.Count -eq 0) {
-    # The primary updater is responsible for creating first-run state. A missing
-    # state file is not a reason for this local post-processor to fabricate one.
-    exit 0
+    # The primary updater owns first-run state. The finalizer never fabricates a
+    # recommendation when its input state is missing or incomplete.
+    return
 }
 
 $enabledItem = @($itemsConfig.items | Where-Object { $_.enabled -eq $true } | Select-Object -First 1)
-if ($enabledItem.Count -eq 0) { exit 0 }
+if ($enabledItem.Count -eq 0) { return }
 $item = $enabledItem[0]
 $itemId = [int]$item.itemId
 $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -148,6 +149,7 @@ $minimumProfitPerItem = if ($profitability.PSObject.Properties['minimumProfitPer
 $minimumMarginPercent = if ($profitability.PSObject.Properties['minimumMarginPercent']) { [double]$profitability.minimumMarginPercent } else { 0.0 }
 $minimumTotalTripProfit = if ($profitability.PSObject.Properties['minimumTotalTripProfit']) { [double]$profitability.minimumTotalTripProfit } else { 0.0 }
 $capacityOverride = if ($profitability.PSObject.Properties['capacityOverride']) { [int]$profitability.capacityOverride } else { 0 }
+if ($capacityOverride -lt 0) { $capacityOverride = 0 }
 
 $cutoff = $now - ([long]$settings.cycleRetentionDays * 86400)
 $minimumRestockSamples = [int]$settings.recommendation.minimumComparableCycles
@@ -243,4 +245,4 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
 }
 
 Write-StateKvAtomic -Values $state -Path $StateKvFile
-exit 0
+return
