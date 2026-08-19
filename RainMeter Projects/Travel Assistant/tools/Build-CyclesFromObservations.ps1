@@ -21,11 +21,12 @@ function Read-ObservationJsonl {
         try { $row = $line | ConvertFrom-Json }
         catch { throw "Invalid JSON at line ${lineNumber}: $($_.Exception.Message)" }
 
-        foreach ($name in @('schemaVersion','timestamp','country','itemId','stock','foreignPrice','source')) {
+        foreach ($name in @('schemaVersion','timestamp','country','itemId','stock','foreignPrice','source','sourceTimestamp')) {
             if (-not $row.PSObject.Properties[$name]) { throw "Observation line $lineNumber is missing '$name'." }
         }
         if ([int]$row.schemaVersion -ne 1) { throw "Observation line $lineNumber has unsupported schemaVersion." }
         if ([long]$row.timestamp -le 0) { throw "Observation line $lineNumber has invalid timestamp." }
+        if ([long]$row.sourceTimestamp -lt 0) { throw "Observation line $lineNumber has invalid sourceTimestamp." }
         if ([int]$row.itemId -le 0) { throw "Observation line $lineNumber has invalid itemId." }
         if ([int]$row.stock -lt 0) { throw "Observation line $lineNumber has negative stock." }
         if ([long]$row.foreignPrice -lt 0) { throw "Observation line $lineNumber has negative foreignPrice." }
