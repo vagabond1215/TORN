@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "countries": [
+    {
+      "id": "united_kingdom",
+      "name": "United Kingdom",
+      "city": "London",
+      "enabled": true,
+      "providerCodes": {
+        "yata": "uni",
+        "droqsdb": "United Kingdom",
+        "weav3r": "United Kingdom"
+      },
+      "travelSeconds": {
+        "standard": 9060,
+        "airstrip": 6360,
+        "wlt": 4560,
+        "business": 2700
+      },
+      "travelTimeSource": "https://wiki.torn.com/wiki/United_Kingdom",
+      "travelTimeVerifiedAt": "2026-08-19"
+    },
+    {
+      "id": "japan",
+      "name": "Japan",
+      "city": "Tokyo",
+      "enabled": true,
+      "providerCodes": {
+        "yata": "jap",
+        "droqsdb": "Japan",
+        "weav3r": "Japan"
+      },
+      "travelSeconds": {
+        "standard": 12780,
+        "airstrip": 8940,
+        "wlt": 6420,
+        "business": 3840
+      },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Japan",
+      "travelTimeVerifiedAt": "2026-08-19"
+    }
+  ]
+}
