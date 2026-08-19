@@ -27,7 +27,8 @@ $required = @(
     '@Resources\Scripts\FinalizeState.ps1',
     '@Resources\Scripts\StateReader.lua',
     'tests\Run-ModelTests.ps1',
-    'tests\Run-FinalizeStateTests.ps1'
+    'tests\Run-FinalizeStateTests.ps1',
+    'tests\Run-RestockDisplayTests.ps1'
 )
 
 foreach ($relative in $required) {
@@ -151,6 +152,7 @@ $scriptFiles = @(
     'tests\Run-SeedImporterTests.ps1',
     'tests\Run-ModelTests.ps1',
     'tests\Run-FinalizeStateTests.ps1',
+    'tests\Run-RestockDisplayTests.ps1',
     'tests\Run-All.ps1',
     'Install.ps1'
 )
