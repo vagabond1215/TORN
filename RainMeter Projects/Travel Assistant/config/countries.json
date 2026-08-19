@@ -17,8 +17,22 @@
         "wlt": 4560,
         "business": 2700
       },
+      "travelCosts": {
+        "standard": 18000,
+        "airstrip": 0,
+        "wlt": 0,
+        "business": null
+      },
+      "baseTravelCapacity": {
+        "standard": 10,
+        "airstrip": 15,
+        "wlt": 15,
+        "business": 15
+      },
       "travelTimeSource": "https://wiki.torn.com/wiki/United_Kingdom",
-      "travelTimeVerifiedAt": "2026-08-19"
+      "travelTimeVerifiedAt": "2026-08-19",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-19"
     },
     {
       "id": "japan",
@@ -36,8 +50,22 @@
         "wlt": 6420,
         "business": 3840
       },
+      "travelCosts": {
+        "standard": 32000,
+        "airstrip": 0,
+        "wlt": 0,
+        "business": null
+      },
+      "baseTravelCapacity": {
+        "standard": 10,
+        "airstrip": 15,
+        "wlt": 15,
+        "business": 15
+      },
       "travelTimeSource": "https://wiki.torn.com/wiki/Japan",
-      "travelTimeVerifiedAt": "2026-08-19"
+      "travelTimeVerifiedAt": "2026-08-19",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-19"
     }
   ]
 }
