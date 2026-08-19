@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-19T18:46:00Z",
+  "status": "empty-bootstrap",
+  "items": [206],
+  "countries": ["united_kingdom", "japan"],
+  "sources": [],
+  "coverage": {
+    "observationCount": 0,
+    "cycleCount": 0
+  },
+  "notes": [
+    "No historical observations are committed yet.",
+    "The live implementation starts with YATA structured stock observations and learns locally while bounded historical-source discovery continues.",
+    "Do not manufacture historical restock/sellout data when a source cannot be verified."
+  ]
+}
