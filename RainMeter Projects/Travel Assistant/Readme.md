@@ -2,13 +2,33 @@
 
 Rainmeter-based Torn travel decision assistant.
 
-The initial version focuses on **Xanax in the United Kingdom and Japan**, but the data model and analysis engine are intentionally generic so additional foreign items and destinations can be added later without rewriting the project.
+Version 1 focuses on **Xanax in the United Kingdom and Japan**, while the data model and analysis engine remain generic so additional foreign items and destinations can be added later without rewriting the project.
 
 ## Current status
 
-**Planning / initial implementation.**
+**Initial implementation is now in the repository; Windows/Rainmeter runtime validation is still required.**
 
-The first implementation pass is defined in [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md). Read [`AGENTS.md`](./AGENTS.md) before changing anything in this subtree.
+Implemented so far:
+
+- dark, vertically stacked UK/Japan Rainmeter skin;
+- default Airstrip travel mode with a clickable Standard → Airstrip → WLT → Business mode cycle;
+- structured live stock/foreign-price adapter using YATA;
+- generic observation and completed-cycle persistence;
+- actual restock/sellout transition detection;
+- price-aware comparable-cycle selection;
+- conservative safe-window vs. best-odds departure logic;
+- current-cycle depletion estimate that may shorten, but never extend, a conservative historical window;
+- Torn Item Market resale lookup when a local API key is supplied;
+- profitability gating using configurable Item Market fee, minimum net profit per item, and minimum margin;
+- cached local fallback when the live stock provider fails;
+- 24-hour generated stock graphs with restock/sellout markers;
+- bounded runtime retention and ignored local/runtime state;
+- synthetic fixtures and a PowerShell static-validation script;
+- non-destructive Rainmeter junction installer.
+
+The current implementation remains in learning mode until it has sufficient actual restock/sellout history or a verified historical seed is added. The committed seed is intentionally empty rather than fabricated.
+
+The active implementation scope is in [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md). Read [`AGENTS.md`](./AGENTS.md) before changing anything in this subtree.
 
 ## Primary goal
 
@@ -23,7 +43,7 @@ The assistant must prefer **no recommendation** over a confident-looking recomme
 - United Kingdom — Xanax
 - Japan — Xanax
 - Airstrip travel mode by default
-- Runtime-selectable travel mode where practical: Standard, Airstrip, WLT, Business
+- Runtime-selectable Standard, Airstrip, WLT, Business travel modes
 - Vertically stacked destination panels and graphs
 - 24-hour stock history graph per destination
 - Inline status rows:
@@ -37,44 +57,101 @@ The assistant must prefer **no recommendation** over a confident-looking recomme
 - Best-odds exact departure timing when no conservative window exists
 - Profitability gating: unprofitable or low-margin opportunities do not receive departure recommendations
 - Low-confidence and stale-data warnings
-- Clickable `CHECK WEAV3R` fallback when the timing appears relevant but the local model cannot verify it confidently
+- Clickable Weav3r fallback for external verification
 - Bounded CPU, memory, network, and disk usage
 
 ## Display concept
 
 ```text
-TRAVEL ASSISTANT                              AIRSTRIP
+TRAVEL ASSISTANT                              AIRSTRIP ›
 
-UNITED KINGDOM
-Travel: 1:xx:xx       | Leave in: 00:11:24
-Restock: ~1:xx         | Last Sold Out: 12:41
-Stock: 2,143           | Price: $728,000
+UNITED KINGDOM · XANAX
+Travel: 1:46:00       | Leave in: 00:11:24
+Restock: ~1:xx        | Last Sold Out: 12:41
+Stock: 2,143          | Price: $728,000
 [                24-HOUR STOCK GRAPH                ]
-SAFE WINDOW OPEN       | Leave before: 00:08:36
+SAFE WINDOW           | Leave before: 00:08:36
 
-JAPAN
-Travel: 2:xx:xx       | Best Departure: 00:07:13
-Restock: ~2:xx         | Last Sold Out: 11:52
-Stock: 0               | Price: $742,000
+JAPAN · XANAX
+Travel: 2:29:00       | Leave in: 00:07:13
+Restock: ~2:xx        | Last Sold Out: 11:52
+Stock: 0              | Price: $742,000
 [                24-HOUR STOCK GRAPH                ]
-BEST ODDS              | Estimated hit rate: 63%
+BEST ODDS             | historical hit rate shown when useful
 ```
 
-The exact labels are state-driven. The skin does not need to display a clock; relative countdowns are preferred.
+The exact labels are state-driven. The skin does not display a clock; relative countdowns are preferred.
+
+## Install from the repository clone
+
+Expected source location:
+
+```text
+C:\Codex\TORN\RainMeter Projects\Travel Assistant\
+```
+
+From that directory in Windows PowerShell:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
+```
+
+The installer:
+
+1. creates ignored runtime/generated directories;
+2. creates `config/settings.local.json` from the local example if needed;
+3. creates a non-destructive junction under the current user's Rainmeter `Skins` directory pointing back to the repository source.
+
+It will **not** delete or replace an unrelated existing `Travel Assistant` skin directory.
+
+After installation, refresh Rainmeter and load:
+
+```text
+Travel Assistant\TravelAssistant.ini
+```
+
+## Local API key
+
+The live foreign stock feed does not require a Torn key, so the tracker can begin learning immediately.
+
+Profitability-gated departure recommendations currently require a Torn API key for the resale reference. Put it in ignored:
+
+```text
+config\settings.local.json
+```
+
+or define the environment variable:
+
+```text
+TORN_API_KEY
+```
+
+Do not commit limited/full-authority keys. The user has explicitly allowed public keys to be used when appropriate, but local configuration remains the default so the project does not need a committed credential.
+
+## Profitability behavior
+
+The initial sell target is the Torn Item Market. The calculation uses the configured Item Market selling fee before determining net profit.
+
+Default settings are configurable in `config/settings.example.json`; personal overrides belong in ignored `config/settings.local.json`.
+
+An unprofitable or below-threshold trip still contributes useful stock/restock/depletion history, but receives **no departure timing recommendation**.
+
+Future sell targets such as bazaar/trader pricing should be explicit modes rather than silently sharing Item Market fee assumptions.
 
 ## Decision order
 
-The recommendation engine should evaluate conditions in this order:
+The recommendation engine evaluates conditions in this order:
 
 1. Is source data current enough to use?
 2. Is the trip sufficiently profitable under configured thresholds?
-3. Is the current foreign-price / depletion regime comparable to useful history?
+3. Is the current foreign-price/depletion regime comparable to useful history?
 4. Is there enough reliable history to recommend anything?
-5. Is there a conservative departure interval supported by comparable cycles?
-6. If not, is there a useful best-odds departure point?
-7. Otherwise, show no departure recommendation and direct the user to verify externally when appropriate.
+5. If stock is currently live, does current depletion still support arrival?
+6. Is there a conservative departure interval supported by comparable cycles?
+7. If not, is there a useful best-odds departure point?
+8. Otherwise, show no departure recommendation and direct the user to external verification when appropriate.
 
-Primary reason/status codes should remain machine-readable, for example:
+Primary reason/status codes remain machine-readable, including:
 
 - `SAFE_WINDOW`
 - `BEST_ODDS`
@@ -101,80 +178,68 @@ Normalized observations
    ↓
 History / cycle engine
    ↓
-Restock + depletion analytics
+Restock + price-aware depletion analytics
    ↓
 Profitability + opportunity engine
    ↓
-Compact computed state
+Compact generated state
    ↓
 Rainmeter UI
 ```
 
-Provider-specific logic must be isolated behind adapters so a provider can change without rewriting the model or skin.
+Provider-specific logic is isolated so the live source or historical bootstrap can change without rewriting the model or skin.
 
-See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the durable data model, retention rules, and expansion strategy.
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the durable data model and [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) for current provider choices.
 
 ## Historical data and learning
 
 The project distinguishes **seed data** from **runtime data**.
 
-- `data/seed/` may contain a compact, provenance-documented historical bootstrap committed to Git.
-- `data/runtime/` is local, bounded, automatically pruned/compacted, and must not be committed.
-- High-resolution observations should be short-lived (roughly 24–48 hours by default).
-- Completed cycle summaries can be retained longer (roughly 60–90 days initially).
-- Long-term learning should favor compact aggregates over permanent minute-by-minute logs.
+- `data/seed/` is reserved for a compact, provenance-documented historical bootstrap committed to Git.
+- `data/runtime/` is local, bounded, automatically pruned/compacted, and ignored by Git.
+- High-resolution runtime observations default to roughly 48 hours.
+- Completed cycle summaries default to roughly 90 days.
+- Long-term learning should eventually favor compact aggregates over permanent minute-by-minute logs.
 
-Historical backfill should use a suitable provider endpoint when available. Do not build a high-frequency page scraper or an unbounded archive.
+The initial historical seed is empty because no bounded historical source has yet been validated strongly enough to commit as training evidence. The tracker therefore starts conservatively and learns from live observations.
 
 ## Price-aware behavior
 
-Foreign price is a first-class part of the model. Sellout behavior at a very low foreign price must not be treated as interchangeable with behavior at a high foreign price.
+Foreign price is first-class. Sellout behavior at a very low foreign price is not treated as interchangeable with behavior at a high foreign price.
 
-For a current cycle, evidence should be weighted roughly in this order:
+For a current opportunity, evidence is intended to be weighted in this order:
 
-1. current observed depletion;
-2. comparable same-price historical cycles;
-3. nearby-price cycles;
-4. broader destination/item history.
+1. current observed depletion when a restock is already live;
+2. comparable same/near-price historical cycles;
+3. broader destination/item history only at reduced confidence.
 
-Confidence must drop when the current price regime is outside the supported historical range.
-
-## Profitability
-
-Before displaying a departure recommendation, evaluate the opportunity against configurable thresholds such as:
-
-- minimum profit per item;
-- minimum percentage spread;
-- later: carrying capacity and minimum total-trip profit.
-
-An unprofitable trip may still be useful training data, so history collection continues even when departure advice is suppressed.
+The current v1 engine selects a bounded near-price cohort. Further continuous price weighting/pattern detection can be added after real history exists to calibrate against.
 
 ## Performance boundary
 
-The skin should remain lightweight on a continuously running Windows desktop.
+The skin is designed to remain lightweight on a continuously running Windows desktop.
 
-- One-second UI updates should perform local countdown/string work only.
-- Network polling should be conservative (normally around 60–120 seconds unless provider behavior calls for something different).
-- Recompute heavy statistics on meaningful data/event changes, not every second.
-- Do not spawn persistent browser processes.
-- Do not maintain thousands of Rainmeter meters for graph points.
-- Do not create unbounded logs, databases, screenshots, or raw-response archives.
+- One-second UI updates perform local countdown/string work through a Lua measure.
+- Network/history/model updates default to once per minute.
+- Torn resale pricing is cached and is not queried every second.
+- No persistent browser is used.
+- Graphs are two small generated PNGs rather than thousands of Rainmeter meters.
+- Runtime observations/cycles are pruned.
+- Runtime state, generated graphs, logs, and credentials are ignored by Git.
 
-## Repository / local location
+Actual CPU/RAM/disk measurements still require a Windows/Rainmeter runtime pass before the project should be called stable.
 
-Repository subtree:
+## Validation
 
-```text
-RainMeter Projects/Travel Assistant/
+Static validation entry point:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-TravelAssistant.ps1
 ```
 
-Expected local clone location:
+Synthetic fixtures under `tests/fixtures/` are not historical/training data.
 
-```text
-C:\Codex\TORN\RainMeter Projects\Travel Assistant\
-```
-
-Runtime installation into Rainmeter may use a separate Rainmeter skin location; repository source should remain the development/source-of-truth copy.
+Connector-side repository work must not claim that Windows PowerShell, Rainmeter rendering, live provider access, or resource usage has been validated locally when it has not.
 
 ## Documentation routing
 
@@ -184,5 +249,6 @@ Read in this order before implementation work:
 2. [`docs/README.md`](./docs/README.md) — documentation map and precedence.
 3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — authoritative active implementation pass.
 4. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — durable architecture and expansion design.
+5. [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) — provider-specific decisions and unresolved discovery.
 
 Keep these documents synchronized when architecture or execution policy changes.
