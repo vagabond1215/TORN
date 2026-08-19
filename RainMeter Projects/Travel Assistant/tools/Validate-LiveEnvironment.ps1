@@ -117,9 +117,19 @@ $skinPath = Join-Path $skinRoot 'Travel Assistant'
 if (Test-Path -LiteralPath $skinPath) {
     $skin = Get-Item -LiteralPath $skinPath -Force
     $target = $null
-    if ($skin.PSObject.Properties['Target']) { $target = @($skin.Target) | Select-Object -First 1 }
+    $linkType = $null
+    $targetProp = $skin.PSObject.Properties['Target']
+    $linkTypeProp = $skin.PSObject.Properties['LinkType']
+    if ($null -ne $targetProp) { $target = @($targetProp.Value) | Select-Object -First 1 }
+    if ($null -ne $linkTypeProp) { $linkType = [string]$linkTypeProp.Value }
     Write-Host ("  skin path exists: {0}" -f $skinPath) -ForegroundColor Green
-    if ($skin.LinkType) { Write-Host ("  link type: {0}; target: {1}" -f $skin.LinkType, $target) }
+    if (-not [string]::IsNullOrWhiteSpace($linkType)) {
+        Write-Host ("  link type: {0}; target: {1}" -f $linkType, $target)
+    } elseif (-not [string]::IsNullOrWhiteSpace([string]$target)) {
+        Write-Host ("  link target: {0}" -f $target)
+    } else {
+        Write-Host '  link metadata is not exposed by this PowerShell build; verify the junction target with Install.ps1 / filesystem tools if needed.' -ForegroundColor Yellow
+    }
 } else {
     Write-Host '  Travel Assistant skin path not installed yet; run Install.ps1.' -ForegroundColor Yellow
 }
