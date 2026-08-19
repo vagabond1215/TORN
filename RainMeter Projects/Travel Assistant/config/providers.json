@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "providers": [
+    {
+      "id": "yata",
+      "role": ["liveStock"],
+      "enabled": true,
+      "endpoint": "https://yata.yt/api/v1/travel/export/",
+      "minimumPollSeconds": 60,
+      "notes": "Structured public abroad-stock export. Normalize provider country codes and per-country update timestamps at the adapter boundary."
+    },
+    {
+      "id": "torn_itemmarket",
+      "role": ["resalePrice"],
+      "enabled": true,
+      "endpointTemplate": "https://api.torn.com/v2/market/{itemId}/itemmarket?limit=1",
+      "minimumPollSeconds": 300,
+      "requiresApiKey": true,
+      "notes": "Use a local Torn API key when available. Prefer the lowest listing for immediate resale reference; retain the provider-reported average as secondary context."
+    },
+    {
+      "id": "droqsdb",
+      "role": ["historicalBootstrap", "crossCheck", "resalePriceFallback"],
+      "enabled": false,
+      "documentation": "https://droqsdb.com/api-docs",
+      "notes": "Public documentation advertises historical series and current stock/pricing endpoints. Keep disabled until the exact live endpoint contract is revalidated during implementation."
+    },
+    {
+      "id": "weav3r",
+      "role": ["externalVerification", "historicalBootstrapCandidate"],
+      "enabled": false,
+      "page": "https://weav3r.dev/travel-stock",
+      "notes": "Use as a clickable verification page. Do not create a page-scraping loop; only enable a structured adapter if a suitable bounded endpoint is identified and its usage remains appropriate."
+    }
+  ]
+}
