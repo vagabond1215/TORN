@@ -1,0 +1,18 @@
+{
+  "stocks": {
+    "uni": {
+      "update": 1787168400,
+      "stocks": [
+        { "id": 206, "name": "Xanax", "quantity": 1834, "cost": 728000 },
+        { "id": 258, "name": "Jaguar Plushie", "quantity": 400, "cost": 10000 }
+      ]
+    },
+    "jap": {
+      "update": 1787168460,
+      "stocks": [
+        { "id": 206, "name": "Xanax", "quantity": 0, "cost": 742000 },
+        { "id": 277, "name": "Cherry Blossom", "quantity": 150, "cost": 500 }
+      ]
+    }
+  }
+}
