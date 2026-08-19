@@ -10,7 +10,10 @@
     "sellTarget": "item_market",
     "itemMarketFeePercent": 5.0,
     "minimumProfitPerItem": 50000,
-    "minimumMarginPercent": 5.0
+    "minimumMarginPercent": 5.0,
+    "minimumTotalTripProfit": 0,
+    "capacityOverride": 0,
+    "resaleStaleAfterSeconds": 600
   },
   "recommendation": {
     "minimumComparableCycles": 5,
