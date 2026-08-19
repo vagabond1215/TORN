@@ -81,10 +81,11 @@ if ($null -ne $metadata) {
 }
 
 foreach ($row in $observations) {
-    foreach ($required in @('schemaVersion','timestamp','country','itemId','stock','foreignPrice','source')) {
+    foreach ($required in @('schemaVersion','timestamp','country','itemId','stock','foreignPrice','source','sourceTimestamp')) {
         if (-not $row.PSObject.Properties[$required]) { Fail "Seed observation missing '$required'." }
     }
     if ($row.PSObject.Properties['schemaVersion'] -and [int]$row.schemaVersion -ne 1) { Fail 'Seed observation has unsupported schemaVersion.' }
+    if ($row.PSObject.Properties['sourceTimestamp'] -and [long]$row.sourceTimestamp -lt 0) { Fail 'Seed observation has negative sourceTimestamp.' }
 }
 if ($observations.Count -ge 0) { Pass 'Seed observation contract scan completed' }
 
