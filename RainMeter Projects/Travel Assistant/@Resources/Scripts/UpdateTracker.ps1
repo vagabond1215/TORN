@@ -9,9 +9,12 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$SeedDir = Join-Path $ProjectRoot 'data\seed'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $ObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $CycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
+$SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
+$SeedCycleFile = Join-Path $SeedDir 'cycles.jsonl'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $PreferenceFile = Join-Path $RuntimeDir 'preferences.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
@@ -273,14 +276,19 @@ function Update-CycleState {
 
 function Load-Cycles {
     param([string]$Country, [int]$ItemId, [long]$Cutoff)
-    if (-not (Test-Path -LiteralPath $CycleFile)) { return @() }
     $rows = New-Object System.Collections.Generic.List[object]
-    foreach ($line in Get-Content -LiteralPath $CycleFile) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try {
-            $row = $line | ConvertFrom-Json
-            if ([string]$row.country -eq $Country -and [int]$row.itemId -eq $ItemId -and [long]$row.soldOutAt -ge $Cutoff) { $rows.Add($row) }
-        } catch { }
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($path in @($SeedCycleFile, $CycleFile)) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        foreach ($line in Get-Content -LiteralPath $path) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $row = $line | ConvertFrom-Json
+                if ([string]$row.country -ne $Country -or [int]$row.itemId -ne $ItemId -or [long]$row.soldOutAt -lt $Cutoff) { continue }
+                $key = ('{0}|{1}|{2}|{3}|{4}' -f [string]$row.country, [int]$row.itemId, [long]$row.restockAt, [long]$row.soldOutAt, [long]$row.foreignPrice)
+                if ($seen.Add($key)) { $rows.Add($row) }
+            } catch { }
+        }
     }
     return @($rows)
 }
@@ -529,14 +537,19 @@ function Prune-RuntimeData {
 
 function Get-RecentObservations {
     param([string]$Country, [int]$ItemId, [long]$Cutoff)
-    if (-not (Test-Path -LiteralPath $ObservationFile)) { return @() }
     $rows = New-Object System.Collections.Generic.List[object]
-    foreach ($line in Get-Content -LiteralPath $ObservationFile) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try {
-            $row = $line | ConvertFrom-Json
-            if ([string]$row.country -eq $Country -and [int]$row.itemId -eq $ItemId -and [long]$row.timestamp -ge $Cutoff) { $rows.Add($row) }
-        } catch { }
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($path in @($SeedObservationFile, $ObservationFile)) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        foreach ($line in Get-Content -LiteralPath $path) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $row = $line | ConvertFrom-Json
+                if ([string]$row.country -ne $Country -or [int]$row.itemId -ne $ItemId -or [long]$row.timestamp -lt $Cutoff) { continue }
+                $key = ('{0}|{1}|{2}|{3}|{4}|{5}' -f [string]$row.country, [int]$row.itemId, [long]$row.timestamp, [int]$row.stock, [long]$row.foreignPrice, [string]$row.source)
+                if ($seen.Add($key)) { $rows.Add($row) }
+            } catch { }
+        }
     }
     return @($rows | Sort-Object timestamp)
 }
