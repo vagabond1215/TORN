@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "defaultMode": "airstrip",
+  "modes": [
+    { "id": "standard", "label": "Standard", "shortLabel": "STD", "enabled": true },
+    { "id": "airstrip", "label": "Airstrip", "shortLabel": "AIR", "enabled": true },
+    { "id": "wlt", "label": "WLT", "shortLabel": "WLT", "enabled": true },
+    { "id": "business", "label": "Business", "shortLabel": "BIZ", "enabled": true }
+  ]
+}
