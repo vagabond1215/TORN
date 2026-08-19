@@ -133,7 +133,7 @@ foreach ($entry in $reports) {
     if (@($entry.priceBuckets).Count -gt 0) {
         Write-Host '  trained price buckets:'
         foreach ($bucket in @($entry.priceBuckets)) {
-            Write-Host ("    ${0:N0}–${1:N0}: n={2}, median availability={3}s" -f $bucket.priceMin, ($bucket.priceMaxExclusive - 1), $bucket.summary.samples, $bucket.summary.medianAvailabilitySeconds)
+            Write-Host ('    {0:C0}–{1:C0}: n={2}, median availability={3}s' -f $bucket.priceMin, ($bucket.priceMaxExclusive - 1), $bucket.summary.samples, $bucket.summary.medianAvailabilitySeconds)
         }
     }
     if (@($entry.restockUtcHours).Count -gt 0) {
