@@ -1,6 +1,6 @@
-# Travel Assistant Codex Instructions
+# Travel Assistant Agent Instructions
 
-These instructions apply to the entire `RainMeter Projects/Travel Assistant/` subtree.
+These instructions apply to the entire `RainMeter Projects/Travel Assistant/` subtree, regardless of whether work is performed through the GitHub connector, GPT, Codex, or a local development environment.
 
 ## Read order
 
@@ -8,11 +8,23 @@ Before changing code or data, read:
 
 1. **This file (`AGENTS.md`)** — authoritative subtree rules and invariants.
 2. [`docs/README.md`](./docs/README.md) — documentation routing and precedence.
-3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — when marked **ACTIVE**, the authoritative implementation scope.
+3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — when marked **ACTIVE**, the authoritative implementation scope. Despite the historical filename, it applies to connector-first implementation as well as Codex/local work.
 4. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — durable architecture, data model, retention, provider boundaries, and expansion design.
 5. [`Readme.md`](./Readme.md) — human-facing project overview.
 
 If an older plan conflicts with an **ACTIVE** `NEXT_CODEX_RUN.md`, follow the current run document while preserving every invariant in this file.
+
+## Connector-first execution policy
+
+The preferred implementation path for Travel Assistant is **GPT + the connected GitHub connector**. Codex/local execution is a fallback, not the default.
+
+- Use the GitHub connector whenever it can safely inspect the repository, read files, create/update text source files, maintain documentation, inspect history, manage normal commits/branches/PRs, or otherwise perform the requested repository work.
+- Do **not** invoke Codex or require a separate local coding pass merely because source code must be written. If the connector can create or update the required files safely, use it.
+- External provider/API discovery may use normal web access where needed; repository changes should still be performed through the GitHub connector when practical.
+- Use Codex/local execution only when there is a concrete requirement the connector cannot satisfy, such as running Rainmeter on Windows, executing PowerShell/Rainmeter behavior against the local machine, measuring local CPU/RAM/disk use, exercising OS-specific integrations, running local-only test tooling, or manipulating files/binaries the connector cannot safely create or validate.
+- Before escalating to Codex/local execution, identify the specific missing capability or validation requirement. Keep any Codex/local scope as narrow as possible and return durable results/documentation to the repository afterward.
+- Connector-only work must not claim local runtime validation that did not occur. Record repository/static/fixture validation separately from Windows/Rainmeter/local execution validation.
+- A future implementation should remain maintainable from the connector wherever possible: favor text-based source/config, deterministic fixtures, scriptable tests, and provider adapters over opaque generated/binary state.
 
 ## Scope boundary
 
@@ -34,7 +46,7 @@ Until a human declares otherwise:
 - if `origin/main` moves during a run, reconcile safely before pushing;
 - when the project becomes relied on operationally, move to feature branches/PR review and appropriate automated validation before further high-impact changes.
 
-Recommended start from the repository root:
+When local execution is actually required, the recommended start from the repository root is:
 
 ```bash
 git fetch origin
@@ -164,15 +176,17 @@ Do not name core engine functions/classes/data formats after `XanaxUK` or simila
 Until concrete test tooling exists, every implementation pass must at minimum:
 
 - validate JSON/config syntax;
-- run PowerShell parser/static checks applicable to changed scripts;
+- run PowerShell parser/static checks applicable to changed scripts when a local execution environment is available;
 - exercise provider normalization against saved fixtures, not only live data;
-- replay representative historical cycles through the recommendation model;
+- replay representative historical cycles through the recommendation model where execution tooling permits;
 - verify low-margin/unprofitable suppression;
 - verify stale/low-confidence behavior;
 - verify travel-mode changes recalculate recommendations;
 - verify runtime retention/pruning is bounded;
-- verify ignored local/runtime files are not accidentally staged;
-- run `git diff --check` before handoff.
+- verify ignored local/runtime files are not accidentally committed;
+- inspect repository diffs for whitespace/path mistakes.
+
+For connector-only passes, perform all validation the connector can support and explicitly list local-only validation that remains pending. Do not unnecessarily escalate to Codex solely to satisfy a validation item that can safely wait for a dedicated local/runtime validation pass.
 
 As automated tests are added, make them authoritative and record exact commands in `docs/NEXT_CODEX_RUN.md`.
 
@@ -180,6 +194,6 @@ As automated tests are added, make them authoritative and record exact commands 
 
 - Keep `Readme.md` human-readable and current.
 - Keep architecture and durable decisions in `docs/ARCHITECTURE.md` rather than duplicating them in transient prompts.
-- Use `docs/NEXT_CODEX_RUN.md` as the rolling current execution handoff.
+- Use `docs/NEXT_CODEX_RUN.md` as the rolling current execution handoff; the filename is retained for continuity even when the actual implementation is connector-first.
 - When a run is completed, record what was actually implemented, validation performed, unresolved risks, and relevant commit SHAs before setting the run status to `COMPLETED`.
 - If a new blocker/follow-up is discovered, update the rolling handoff back to `ACTIVE` rather than creating scattered competing instructions.
