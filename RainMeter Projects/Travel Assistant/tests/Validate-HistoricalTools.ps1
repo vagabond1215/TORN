@@ -13,6 +13,7 @@ $toolFiles = @(
     'tools\Build-CyclesFromObservations.ps1',
     'tools\Import-SeedHistory.ps1',
     'tools\Import-TravelPlannerHistory.ps1',
+    'tools\Analyze-History.ps1',
     'tools\Validate-LiveEnvironment.ps1'
 )
 
