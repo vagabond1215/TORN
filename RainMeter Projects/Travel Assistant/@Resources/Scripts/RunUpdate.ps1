@@ -17,8 +17,10 @@ try {
     $acquired = $mutex.WaitOne(0)
     if (-not $acquired) { exit 0 }
 
+    # UpdateTracker.ps1 uses terminating errors under ErrorActionPreference=Stop.
+    # If it returns normally, the run succeeded; avoid relying on LASTEXITCODE,
+    # which is only meaningful after native-process execution.
     & $Updater -Action $Action
-    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     exit 0
 } finally {
     if ($acquired) {
