@@ -5,6 +5,12 @@
     { "id": "standard", "label": "Standard", "shortLabel": "STD", "enabled": true },
     { "id": "airstrip", "label": "Airstrip", "shortLabel": "AIR", "enabled": true },
     { "id": "wlt", "label": "WLT", "shortLabel": "WLT", "enabled": true },
-    { "id": "business", "label": "Business", "shortLabel": "BIZ", "enabled": true }
+    {
+      "id": "business",
+      "label": "Business",
+      "shortLabel": "BIZ",
+      "enabled": false,
+      "disabledReason": "Business Class Ticket cost/free-Lingerie handling is not yet included in trip-profit gating. Keep disabled rather than issue a potentially unprofitable departure recommendation."
+    }
   ]
 }
