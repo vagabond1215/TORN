@@ -2,29 +2,74 @@
 
 These fixtures are **synthetic validation data**, not historical evidence and not seed/training data.
 
-They exist so provider normalization, history deduplication, profitability gating, recommendation behavior, and historical tooling can be checked without depending exclusively on live web services.
+They exist so provider normalization, history deduplication, profitability gating, recommendation behavior, seed import behavior, and historical tooling can be checked without depending exclusively on live web services.
 
 ## Fixtures
 
 - `fixtures/yata-export.sample.json` — representative YATA-style UK/Japan Xanax stock payload.
 - `fixtures/cycles-safe.jsonl` — synthetic high-price/long-availability UK cycles with a conservative Airstrip overlap.
 - `fixtures/cycles-fast.jsonl` — synthetic low-price/fast-depletion UK cycles designed to have no conservative overlap and require best-odds timing.
+- `fixtures/normalized-observations.sample.jsonl` — normalized UK Xanax observations containing two observed restock/sellout cycles for the historical pipeline tests.
 
 Do **not** copy fixture data into `data/seed/` or runtime history.
 
-## Static validation
+## Run all deterministic/static tests
 
 From `RainMeter Projects/Travel Assistant/` on Windows PowerShell:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
+```
+
+The runner currently executes:
+
+1. `Validate-TravelAssistant.ps1`
+2. `Validate-HistoricalTools.ps1`
+3. `Run-HistoricalPipelineTests.ps1`
+4. `Run-SeedImporterTests.ps1`
+5. `Run-ModelTests.ps1`
+
+No test in this sequence is intended to require a live web provider.
+
+## Static validation
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-TravelAssistant.ps1
 ```
 
-This checks JSON contracts, JSONL parseability, required project files, travel-mode configuration, PowerShell parser errors, and basic Rainmeter skin structure. It does not prove that Rainmeter can load/run the skin or that live provider calls succeed.
+This checks JSON contracts, JSONL parseability, required project files, travel-mode/economics configuration, PowerShell parser errors, basic Rainmeter skin structure, serialized updater routing, and runtime/generated Git ignore rules. It does not prove that Rainmeter can load/run the skin or that live provider calls succeed.
+
+## Historical observation pipeline
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-HistoricalPipelineTests.ps1
+```
+
+This executes the production `tools/Build-CyclesFromObservations.ps1` against a normalized synthetic observation history in an isolated temporary directory and verifies that:
+
+- observed `0 -> positive` becomes a restock;
+- observed `positive -> 0` becomes an actual sellout;
+- availability duration uses observed timestamps;
+- the next completed cycle carries the previous actual sellout -> restock delay;
+- the foreign purchase price from the restock observation is retained.
+
+## Seed importer tests
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-SeedImporterTests.ps1
+```
+
+This copies the production seed importer plus item/country config into a temporary isolated project tree. It verifies:
+
+- normalized observations/cycles import successfully;
+- metadata coverage matches the imported files;
+- repeated identical imports do not duplicate seed observations/cycles;
+- synthetic/test provenance is rejected by default;
+- a rejected import does not mutate the isolated seed truth.
+
+It does **not** modify the repository's real `data/seed/` directory.
 
 ## Production-model fixture tests
-
-Run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ModelTests.ps1
@@ -43,11 +88,7 @@ Current scenarios cover:
 - travel-mode-dependent departure timing;
 - current-cycle fast depletion closing an otherwise historically safe live opportunity.
 
-These tests are deterministic and make no network calls. They still require a local PowerShell execution pass before their results can be recorded as passing.
-
 ## Historical-tool validation
-
-Run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-HistoricalTools.ps1
@@ -55,8 +96,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-Histori
 
 This checks:
 
-- PowerShell parsing for the DroqsDB probe, generic cycle builder, and seed importer;
+- PowerShell parsing for historical/bootstrap/analysis/local-validation tools;
 - seed JSON/JSONL parseability;
+- required normalized observation `sourceTimestamp` semantics;
 - seed metadata coverage counts against the actual committed files;
 - completed-cycle timestamp/availability consistency;
 - that committed seed provenance does not identify synthetic/test sources.
@@ -71,7 +113,9 @@ Use `-SaveProbe` only when a runtime-only capture under `data/runtime/provider-p
 
 ## Runtime validation boundary
 
-A release-quality validation pass still needs Windows/Rainmeter because connector-only work cannot establish:
+These tests are deterministic/static assets authored through the connector. Their results must not be described as passing until they have actually executed under Windows PowerShell.
+
+A release-quality validation pass additionally needs Windows/Rainmeter because connector-only work cannot establish:
 
 - that Rainmeter loads the `.ini` without log errors;
 - RunCommand/Lua interaction on the installed Rainmeter build;
@@ -80,3 +124,5 @@ A release-quality validation pass still needs Windows/Rainmeter because connecto
 - live historical-provider endpoint behavior from the user's network;
 - junction installation behavior;
 - actual CPU/RAM/disk usage over time.
+
+See `../docs/WINDOWS_VALIDATION.md` for the smallest required local pass.
