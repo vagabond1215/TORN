@@ -15,7 +15,11 @@ function Read-JsonFile {
 
 function Write-ProbeFailure {
     param([string]$Label, [object]$Result)
-    Write-Host ('{0}: UNAVAILABLE (HTTP {1}) - {2}' -f $Label, [int]$Result.HttpStatus, [string]$Result.Error) -ForegroundColor Yellow
+    $codeText = ''
+    if ($null -ne $Result -and $Result.PSObject.Properties['ApiErrorCode'] -and [int]$Result.ApiErrorCode -gt 0) {
+        $codeText = (' / Torn code {0}' -f [int]$Result.ApiErrorCode)
+    }
+    Write-Host ('{0}: UNAVAILABLE (HTTP {1}{2}) - {3}' -f $Label, [int]$Result.HttpStatus, $codeText, [string]$Result.Error) -ForegroundColor Yellow
 }
 
 function Get-ShapeTypeName {
@@ -152,7 +156,7 @@ if ($faction.Success) {
     }
 } else {
     Write-ProbeFailure -Label 'FACTION UPGRADES' -Result $faction
-    Write-Host '  This endpoint specifically requires faction API access permission.' -ForegroundColor DarkYellow
+    Write-Host '  Torn returned an API error envelope instead of faction-upgrade data. A high-access key does not necessarily imply faction API permission.' -ForegroundColor DarkYellow
 }
 
 Write-Host ''
