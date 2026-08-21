@@ -48,9 +48,11 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     }
     if (-not $wrapper.Contains("`$Action -eq 'Update'")) { Fail 'Broad resale queue must not run for CycleTravelMode actions.' }
 
-    $heartbeatIndex = $wrapper.IndexOf('Write-UpdateHeartbeat')
-    $queueCallIndex = $wrapper.IndexOf('& $ResaleQueue')
-    if ($heartbeatIndex -lt 0 -or $queueCallIndex -lt 0 -or $heartbeatIndex -gt $queueCallIndex) {
+    $heartbeatCalls = [regex]::Matches($wrapper, '(?m)^\s*Write-UpdateHeartbeat\s*$')
+    $queueCalls = [regex]::Matches($wrapper, '(?m)^\s*&\s+\$ResaleQueue\s*$')
+    if ($heartbeatCalls.Count -ne 1) { Fail "RunUpdate.ps1 must contain one production heartbeat call; found $($heartbeatCalls.Count)." }
+    if ($queueCalls.Count -ne 1) { Fail "RunUpdate.ps1 must contain one production resale queue call; found $($queueCalls.Count)." }
+    if ($heartbeatCalls.Count -eq 1 -and $queueCalls.Count -eq 1 -and $heartbeatCalls[0].Index -gt $queueCalls[0].Index) {
         Fail 'Visible heartbeat must be written before the broad resale queue runs.'
     }
 }
