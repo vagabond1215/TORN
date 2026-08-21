@@ -287,14 +287,14 @@ if ($MinimumPollIntervalSeconds -lt 60) { $MinimumPollIntervalSeconds = 60 }
 $now = Get-NowEpoch
 $engineState = Get-EngineState
 $lastPollAt = [long]$engineState.shadowCollection.lastPollAt
-if (-not $Force -and $lastPollAt -gt 0 -and ($now - $lastPollAt) -lt $MinimumPollIntervalSeconds) { exit 0 }
+if (-not $Force -and $lastPollAt -gt 0 -and ($now - $lastPollAt) -lt $MinimumPollIntervalSeconds) { return }
 
 $itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
 $countriesConfig = Read-JsonFile (Join-Path $ConfigDir 'countries.json')
 if ($null -eq $itemsConfig -or $null -eq $countriesConfig) {
     Write-ShadowError -EngineState $engineState -Now $now -Message 'Shadow collection configuration is missing.'
     Write-JsonAtomic -Path $EngineStateFile -Value $engineState
-    exit 0
+    return
 }
 
 $primaryItemIds = New-Object 'System.Collections.Generic.HashSet[int]'
@@ -348,9 +348,9 @@ try {
     $engineState.shadowCollection.lastError = ''
     if (Test-Path -LiteralPath $ErrorFile) { Remove-Item -LiteralPath $ErrorFile -Force -ErrorAction SilentlyContinue }
     Write-JsonAtomic -Path $EngineStateFile -Value $engineState
-    exit 0
+    return
 } catch {
     Write-ShadowError -EngineState $engineState -Now $now -Message $_.Exception.Message
     Write-JsonAtomic -Path $EngineStateFile -Value $engineState
-    exit 0
+    return
 }
