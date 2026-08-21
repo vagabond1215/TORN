@@ -18,6 +18,42 @@ function Write-ProbeFailure {
     Write-Host ('{0}: UNAVAILABLE (HTTP {1}) - {2}' -f $Label, [int]$Result.HttpStatus, [string]$Result.Error) -ForegroundColor Yellow
 }
 
+function Write-FactionBranchDiagnostic {
+    param([object]$Payload, [ValidateSet('peace','war')][string]$BranchName)
+
+    if ($null -eq $Payload -or -not $Payload.PSObject.Properties['upgrades'] -or $null -eq $Payload.upgrades) {
+        Write-Host ('  {0} raw: upgrades object unavailable' -f $BranchName) -ForegroundColor Yellow
+        return
+    }
+
+    $prop = $Payload.upgrades.PSObject.Properties[$BranchName]
+    if ($null -eq $prop) {
+        Write-Host ('  {0} raw: property missing' -f $BranchName) -ForegroundColor Yellow
+        return
+    }
+
+    $branches = @($prop.Value)
+    Write-Host ('  {0} raw: {1} branch(es)' -f $BranchName, $branches.Count)
+    foreach ($branch in $branches) {
+        if ($null -eq $branch) { continue }
+        $name = if ($branch.PSObject.Properties['name']) { [string]$branch.name } else { '(unnamed)' }
+        $rows = if ($branch.PSObject.Properties['upgrades']) { @($branch.upgrades) } else { @() }
+        Write-Host ('    {0}: {1} upgrade row(s)' -f $name, $rows.Count)
+
+        $interesting = @($rows | Where-Object {
+            $upgradeName = if ($_.PSObject.Properties['name']) { [string]$_.name } else { '' }
+            $ability = if ($_.PSObject.Properties['ability']) { [string]$_.ability } else { '' }
+            $name -match '(?i)excursion|travel' -or (($upgradeName + ' ' + $ability) -match '(?i)travel|abroad|capacity|fee')
+        })
+        foreach ($row in $interesting) {
+            $upgradeName = if ($row.PSObject.Properties['name']) { [string]$row.name } else { '(unnamed)' }
+            $level = if ($row.PSObject.Properties['level']) { [string]$row.level } else { '?' }
+            $ability = if ($row.PSObject.Properties['ability']) { [string]$row.ability } else { '' }
+            Write-Host ('      {0} | level {1} | {2}' -f $upgradeName, $level, $ability)
+        }
+    }
+}
+
 $settings = Read-JsonFile $SettingsPath
 if ($null -eq $settings -or -not $settings.PSObject.Properties['tornApiKey'] -or [string]::IsNullOrWhiteSpace([string]$settings.tornApiKey)) {
     Write-Host 'No Torn API key is present in config\settings.local.json.' -ForegroundColor Red
@@ -54,11 +90,19 @@ if ($job.Success) {
 $faction = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/faction/upgrades?comment=TravelAssistantProfileProbe' -ApiKey $apiKey
 if ($faction.Success) {
     $profile = Get-TornFactionTravelProfile -FactionPayload $faction.Payload
+    $rawState = if ($faction.Payload.PSObject.Properties['state']) { [string]$faction.Payload.state } else { '(missing)' }
     Write-Host 'FACTION UPGRADES: OK' -ForegroundColor Green
+    Write-Host ('  API state: {0}' -f $rawState)
     Write-Host ('  Mode:   {0}' -f ([string]$profile.State).ToUpperInvariant())
     Write-Host ('  Active: capacity {0}/10 | cost {1}/5' -f [int]$profile.ExcursionLevel, [int]$profile.TravelCostLevel)
     Write-Host ('  Peace:  capacity {0}/10 | cost {1}/5' -f [int]$profile.PeaceExcursionLevel, [int]$profile.PeaceTravelCostLevel)
     Write-Host ('  War:    capacity {0}/10 | cost {1}/5' -f [int]$profile.WarExcursionLevel, [int]$profile.WarTravelCostLevel)
+
+    if ([int]$profile.PeaceExcursionLevel -eq 0 -and [int]$profile.WarExcursionLevel -eq 0) {
+        Write-Host '  No travel-capacity row was recognized; showing redacted branch structure:' -ForegroundColor Yellow
+        Write-FactionBranchDiagnostic -Payload $faction.Payload -BranchName 'peace'
+        Write-FactionBranchDiagnostic -Payload $faction.Payload -BranchName 'war'
+    }
     if (-not [bool]$profile.Resolved) {
         Write-Host '  Active mode was not recognized; no active faction perks should be assumed.' -ForegroundColor Yellow
     }
