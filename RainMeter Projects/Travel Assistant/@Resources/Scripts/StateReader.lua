@@ -84,6 +84,18 @@ local function setVariable(name, value)
     SKIN:Bang('!SetVariable', name, tostring(value or ''))
 end
 
+local function setRestockVisibility(prefix, visible)
+    local iconMeter = 'Meter' .. prefix .. 'RestockIcon'
+    local textMeter = 'Meter' .. prefix .. 'Restock'
+    if visible then
+        SKIN:Bang('!ShowMeter', iconMeter)
+        SKIN:Bang('!ShowMeter', textMeter)
+    else
+        SKIN:Bang('!HideMeter', iconMeter)
+        SKIN:Bang('!HideMeter', textMeter)
+    end
+end
+
 local function providerLabel(provider)
     if provider == 'prometheus' then return 'Prometheus' end
     if provider == 'yata' then return 'YATA' end
@@ -163,15 +175,24 @@ local function updateDestination(data, prefix)
         setVariable(prefix .. 'StockHeaderText', 'Out of Stock')
     end
 
+    local restockText = 'learning'
+    local restockEta = 0
     if stock > 0 and restockAt > 0 and restockAt <= now then
-        setVariable(prefix .. 'RestockText', 'live +' .. formatDuration(now - restockAt))
+        restockText = 'live +' .. formatDuration(now - restockAt)
     elseif restockAt > now then
-        setVariable(prefix .. 'RestockText', '~' .. formatDuration(restockAt - now))
+        restockEta = restockAt - now
+        restockText = '~' .. formatDuration(restockEta)
     elseif restockAt > 0 then
-        setVariable(prefix .. 'RestockText', 'due / variable')
-    else
-        setVariable(prefix .. 'RestockText', 'learning')
+        restockText = 'due / variable'
     end
+    setVariable(prefix .. 'RestockText', restockText)
+
+    -- Raw restock timing is only directly actionable before departure when the
+    -- predicted restock lies farther away than the flight itself. Once stock is
+    -- live, or the restock is expected before arrival, the modeled departure /
+    -- safe-window result is the cleaner primary signal.
+    local showRestock = stock <= 0 and restockEta > 0 and travelSeconds > 0 and restockEta > travelSeconds
+    setRestockVisibility(prefix, showRestock)
 
     local decision = message
     if status == 'SAFE_WINDOW' then
@@ -202,6 +223,23 @@ local function updateDestination(data, prefix)
     end
 
     setVariable(prefix .. 'DecisionText', decision)
+
+    local tooltip = { decision }
+    if travelSeconds > 0 then
+        table.insert(tooltip, 'Flight ' .. formatDuration(travelSeconds))
+    end
+    if restockAt > now then
+        table.insert(tooltip, 'Restock estimate ' .. formatDuration(restockAt - now) .. ' (' .. os.date('%H:%M', restockAt) .. ')')
+    elseif stock > 0 and restockAt > 0 then
+        table.insert(tooltip, 'Current restock began ' .. formatShortElapsed(now - restockAt) .. ' ago (' .. os.date('%H:%M', restockAt) .. ')')
+    elseif restockAt > 0 then
+        table.insert(tooltip, 'Restock estimate due / variable (' .. os.date('%H:%M', restockAt) .. ')')
+    end
+    if stock <= 0 and lastSoldOutAt > 0 then
+        table.insert(tooltip, 'Sold out ' .. formatShortElapsed(now - lastSoldOutAt) .. ' ago (' .. os.date('%H:%M', lastSoldOutAt) .. ')')
+    end
+    table.insert(tooltip, 'Departure/window timing uses retained availability and depletion history')
+    setVariable(prefix .. 'DecisionTooltipText', table.concat(tooltip, ' | '))
 end
 
 local function oldestSourceTimestamp(data)
