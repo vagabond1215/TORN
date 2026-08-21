@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-08-21",
+  "itemOverrides": {
+    "21": {
+      "name": "Dual 92G Berettas",
+      "category": "Secondary",
+      "source": "torn_wiki_item",
+      "sourceUrl": "https://wiki.torn.com/wiki/Dual_92G_Berettas"
+    },
+    "232": {
+      "name": "SIG 550",
+      "category": "Primary",
+      "source": "torn_wiki_item",
+      "sourceUrl": "https://wiki.torn.com/wiki/SIG_550"
+    },
+    "327": {
+      "name": "Blank Casino Chips",
+      "aliases": ["Blank Tokens"],
+      "category": "Material",
+      "source": "torn_wiki_item",
+      "sourceUrl": "https://wiki.torn.com/wiki/Blank_Casino_Chips"
+    },
+    "383": {
+      "name": "Digital Organizer",
+      "aliases": ["Platinum PDA"],
+      "category": "Miscellaneous",
+      "source": "torn_wiki_item",
+      "sourceUrl": "https://wiki.torn.com/wiki/Digital_Organizer"
+    },
+    "440": {
+      "name": "Pillow",
+      "category": "Melee",
+      "source": "torn_wiki_item",
+      "sourceUrl": "https://wiki.torn.com/wiki/Pillow"
+    }
+  },
+  "marketOverrides": {
+    "mexico:21": {
+      "active": false,
+      "status": "legacy_removed",
+      "reason": "Dual 92G Berettas were removed from Mexico in 2016.",
+      "sourceUrl": "https://wiki.torn.com/wiki/Dual_92G_Berettas"
+    },
+    "mexico:232": {
+      "active": false,
+      "status": "legacy_removed",
+      "reason": "SIG 550 is absent from the current Mexico shop list; its item history says it has most likely not been sold there since 2021.",
+      "sourceUrl": "https://wiki.torn.com/wiki/SIG_550"
+    },
+    "mexico:327": {
+      "active": false,
+      "status": "legacy_removed",
+      "reason": "Blank Tokens were removed from Mexico on 2025-10-02; item 327 is now Blank Casino Chips.",
+      "sourceUrl": "https://wiki.torn.com/wiki/Blank_Casino_Chips"
+    },
+    "united_arab_emirates:383": {
+      "active": false,
+      "status": "legacy_removed",
+      "reason": "Platinum PDA became Digital Organizer and was made no longer purchasable in UAE on 2024-12-13.",
+      "sourceUrl": "https://wiki.torn.com/wiki/Digital_Organizer"
+    },
+    "united_arab_emirates:440": {
+      "active": false,
+      "status": "legacy_removed",
+      "reason": "Pillow was removed from the UAE shop on 2025-09-25.",
+      "sourceUrl": "https://wiki.torn.com/wiki/Pillow"
+    }
+  }
+}
