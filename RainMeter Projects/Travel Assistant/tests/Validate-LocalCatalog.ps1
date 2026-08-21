@@ -23,7 +23,7 @@ if (-not (Test-Path -LiteralPath $catalogPath)) {
         if (-not $text.Contains($token)) { Fail "Local catalog contract is missing '$token'." }
     }
     if ($text -match '(?i)https?://|Invoke-RestMethod|curl\.exe') { Fail 'Local catalog enrichment must not perform network access.' }
-    if (-not $text.Contains("[string]$Existing.source -ne 'torn_items_bulk'")) { Fail 'Local catalog must preserve richer manually fetched Torn metadata.' }
+    if (-not $text.Contains('[string]$Existing.source -ne ''torn_items_bulk''')) { Fail 'Local catalog must preserve richer manually fetched Torn metadata.' }
     if (-not $text.Contains('Get-LocalCatalogSignature')) { Fail 'Local catalog must avoid needless rewrites through a stable signature.' }
 }
 
