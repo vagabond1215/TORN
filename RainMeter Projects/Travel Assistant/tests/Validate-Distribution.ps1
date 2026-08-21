@@ -29,7 +29,7 @@ if (-not (Test-Path -LiteralPath $BuilderPath)) {
     )) {
         if (-not $text.Contains($required)) { Fail "Build-Rmskin.ps1 is missing distribution contract text: $required" }
     }
-    if ($text -match "Copy-Item[^\r\n]+\$ProjectRoot[^\r\n]+-Recurse") {
+    if ($text -match 'Copy-Item[^\r\n]+\$ProjectRoot[^\r\n]+-Recurse') {
         Fail 'Build-Rmskin.ps1 must not recursively package the whole project root.'
     }
 }
