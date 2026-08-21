@@ -6,9 +6,9 @@
 
 ## Current repository / validation checkpoint
 
-Travel Assistant v1 is implemented for **Xanax in the United Kingdom and Japan** with generic item/country/provider internals. The connector-side implementation, deterministic Windows validation, bounded live provider/updater validation, graph generation, Rainmeter junction installation, direct skin rendering, live Torn Item Market use, and automatic Rainmeter polling have now succeeded.
+Travel Assistant v1 is implemented for **Xanax in the United Kingdom and Japan** with generic item/country/provider internals. The connector-side implementation, deterministic Windows validation, bounded live provider/updater validation, graph generation, Rainmeter junction installation, direct skin rendering, live Torn Item Market use, automatic Rainmeter polling, Rainmeter log check, and lightweight process/storage sanity check have now succeeded.
 
-The remaining acceptance boundary is narrow: travel-mode interaction, external-link interaction, Rainmeter log cleanliness, and lightweight resource/storage sanity.
+The remaining acceptance boundary is now only direct interaction: travel-mode cycling and external-link behavior.
 
 ## Validation evidence
 
@@ -105,9 +105,20 @@ Confirmed:
 - Rainmeter automatic polling initially failed because the RunCommand measures were declared as `Measure=RunCommand` instead of the documented plugin form;
 - both updater measures were corrected to `Measure=Plugin` / `Plugin=RunCommand`;
 - `tests/Validate-RainmeterSkin.ps1` was added and passed on the target machine;
-- after the fix, the skin refreshed to current live state and continued to show a current heartbeat / countdown instead of remaining frozen for hours.
+- after the fix, Rainmeter completed additional automatic production polls without manual PowerShell, advancing the heartbeat and live state.
 
 The principal polling defect is resolved. A silent long-running stale skin is now also surfaced visibly as `UPDATE STALE`.
+
+### Rainmeter log / resource sanity — PASS
+
+The Rainmeter log retained historical pre-fix warnings/errors at approximately `10:54`-`10:55` for the invalid `Measure=RunCommand` declaration and missing `MeasureUpdate`. After the corrected skin was refreshed at approximately `10:55:42` and `10:56:49`, no new Travel Assistant warnings or errors were observed while automatic polling continued through at least `10:59:54`.
+
+A process/storage snapshot between polls confirmed:
+
+- no continuously running `powershell.exe` process with a Travel Assistant command line;
+- runtime plus generated storage contained `7` files totaling only `6,835` bytes;
+- generated output contained only the expected files: `uk-stock.png`, `jp-stock.png`, `state.kv`, and `last-update.txt`;
+- graph/output files were being replaced in place rather than accumulating.
 
 ## Implemented behavior
 
@@ -136,11 +147,7 @@ The principal polling defect is resolved. A silent long-running stale skin is no
 Only the following still need direct observation before the active run can be marked complete:
 
 - travel mode cycles through `Airstrip -> WLT -> Standard -> Airstrip` and never offers Business;
-- external verification opens Weav3r Travel Stock;
-- Rainmeter log has no material Travel Assistant Lua, RunCommand, missing-image, PowerShell, timeout, or unsupported-option errors after the corrected RunCommand configuration is loaded;
-- no continuously running Travel Assistant PowerShell process is present between polls;
-- runtime/generated storage remains small and graph files do not accumulate;
-- Rainmeter remains responsive during normal polling.
+- external verification opens Weav3r Travel Stock.
 
 Do not wait for or manufacture additional restock/sellout cycles merely to complete acceptance; one real cycle transition has already been observed and normal long-term learning may continue after v1 acceptance.
 
