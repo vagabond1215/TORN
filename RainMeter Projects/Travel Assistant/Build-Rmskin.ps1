@@ -120,6 +120,8 @@ foreach ($relative in @(
     'config\countries.json',
     'config\items.json',
     'config\providers.json',
+    'config\foreign-item-categories.json',
+    'config\foreign-market-overrides.json',
     'config\settings.example.json',
     'config\settings.local.example.json',
     'config\travel-modes.json',
