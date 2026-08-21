@@ -3,9 +3,55 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $catalogPath = Join-Path $ProjectRoot '@Resources\Scripts\LocalCatalog.ps1'
+$categoryPath = Join-Path $ProjectRoot 'config\foreign-item-categories.json'
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
+
+if (-not (Test-Path -LiteralPath $categoryPath)) {
+    Fail 'Missing config\foreign-item-categories.json.'
+} else {
+    try {
+        $categoryConfig = Get-Content -LiteralPath $categoryPath -Raw | ConvertFrom-Json
+        if ([int]$categoryConfig.schemaVersion -ne 1) { Fail 'Offline foreign-item category snapshot schemaVersion must be 1.' }
+        if ($null -eq $categoryConfig.source -or [string]$categoryConfig.source.id -ne 'yata_abroad_snapshot') { Fail 'Offline category snapshot must retain yata_abroad_snapshot provenance.' }
+        if ([int]$categoryConfig.source.entryCount -ne 197) { Fail 'Offline category snapshot provenance must record 197 source entries.' }
+        $categoryRows = @($categoryConfig.categoriesByItemId.PSObject.Properties)
+        if ($categoryRows.Count -ne 197) { Fail "Expected 197 offline category entries, found $($categoryRows.Count)." }
+        if ([string]$categoryConfig.normalization.Defensive -ne 'Armor') { Fail 'Defensive categories must normalize to Armor.' }
+        if ([string]$categoryConfig.normalization.Other -ne 'Miscellaneous') { Fail 'Other categories must normalize to Miscellaneous.' }
+
+        $expectedCategories = @('Alcohol','Artifact','Armor','Clothing','Drug','Enhancer','Flower','Material','Medical','Melee','Miscellaneous','Plushie','Primary','Secondary','Temporary','Tool')
+        $actualCategories = @($categoryRows | ForEach-Object { [string]$_.Value } | Sort-Object -Unique)
+        foreach ($category in $expectedCategories) {
+            if ($actualCategories -notcontains $category) { Fail "Offline category snapshot is missing canonical category '$category'." }
+        }
+        foreach ($category in $actualCategories) {
+            if ($expectedCategories -notcontains $category) { Fail "Offline category snapshot contains unexpected category '$category'." }
+        }
+
+        $spotChecks = [ordered]@{
+            '206' = 'Drug'
+            '266' = 'Plushie'
+            '277' = 'Flower'
+            '50' = 'Armor'
+            '259' = 'Miscellaneous'
+            '419' = 'Enhancer'
+            '159' = 'Tool'
+            '361' = 'Medical'
+            '1246' = 'Material'
+            '1499' = 'Artifact'
+        }
+        foreach ($itemId in $spotChecks.Keys) {
+            $property = $categoryConfig.categoriesByItemId.PSObject.Properties[[string]$itemId]
+            if ($null -eq $property -or [string]$property.Value -ne [string]$spotChecks[$itemId]) {
+                Fail "Offline category snapshot item $itemId must resolve to '$($spotChecks[$itemId])'."
+            }
+        }
+    } catch {
+        Fail ('Offline category snapshot JSON validation failed: ' + $_.Exception.Message)
+    }
+}
 
 if (-not (Test-Path -LiteralPath $catalogPath)) {
     Fail 'Missing @Resources\Scripts\LocalCatalog.ps1.'
@@ -16,10 +62,10 @@ if (-not (Test-Path -LiteralPath $catalogPath)) {
     [void][System.Management.Automation.Language.Parser]::ParseFile($catalogPath, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in LocalCatalog.ps1: $($parseError.Message)" }
 
-    foreach ($functionName in @('Get-ObservedItemGroups','Get-SeedIndex','New-LocalCatalogEntry','Get-LocalCatalogSignature','Merge-RicherMetadata')) {
+    foreach ($functionName in @('Get-ObservedItemGroups','Get-SeedIndex','Get-CategoryIndex','New-LocalCatalogEntry','Get-LocalCatalogSignature','Merge-RicherMetadata')) {
         if ($text -notmatch ('(?m)^function\s+' + [regex]::Escape($functionName) + '\s*\{')) { Fail "Missing local catalog function $functionName." }
     }
-    foreach ($token in @('providerName','providerNames','nameConflict','countries','categoryResolved','localCatalog','config_seed','provider_name')) {
+    foreach ($token in @('providerName','providerNames','nameConflict','countries','categoryResolved','categorySource','localCatalog','config_seed','offline_yata_category','provider_name','foreign-item-categories.json','offlineCategoryEntries','offlineMatchedItems')) {
         if (-not $text.Contains($token)) { Fail "Local catalog contract is missing '$token'." }
     }
     if ($text -match '(?i)https?://|Invoke-RestMethod|curl\.exe') { Fail 'Local catalog enrichment must not perform network access.' }
@@ -50,5 +96,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Local catalog configuration validation passed.' -ForegroundColor Green
-Write-Host 'Observed provider names become local metadata without adding catalog network work to the Rainmeter heartbeat.'
+Write-Host 'The 197-ID offline category snapshot enriches only observed items; unmatched items remain explicitly unresolved.'
 exit 0
