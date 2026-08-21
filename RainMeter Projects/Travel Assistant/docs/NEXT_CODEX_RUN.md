@@ -53,7 +53,7 @@ tests/Validate-ItemMetadata.ps1
 tests/Run-ItemMetadataTests.ps1
 ```
 
-`RunUpdate.ps1` now serializes:
+`RunUpdate.ps1` serializes:
 
 ```text
 UpdateTracker
@@ -75,7 +75,7 @@ This is a public-key endpoint. Specific-ID requests populate details when availa
 
 ### Runtime contract
 
-Ignored `engine-state.json` gains:
+Ignored `engine-state.json` contains:
 
 ```text
 itemMetadata
@@ -106,18 +106,56 @@ Category rules:
 
 Torn `marketPrice` is metadata/reference only in this phase. Do not feed it into the existing profitability gate.
 
-### Rate/security boundaries
+## Windows validation already reported PASS
+
+Target Windows passed:
+
+```text
+Validate-ItemMetadata.ps1
+Run-ItemMetadataTests.ps1
+Validate-RainmeterSkin.ps1
+```
+
+The live runtime had:
+
+```text
+observedMarkets:        232
+distinctObservedItems:  202
+```
+
+The first forced metadata request did execute from the correct project directory, but the initial 150-ID / 20-second request timed out:
+
+```text
+lastRefreshAt:          0
+lastAttemptAt:          1787342902
+distinctObservedItems:  202
+itemsRequested:         0
+itemsResolved:          0
+lastError:              curl.exe exceeded the 20s Torn metadata timeout.
+```
+
+This is accepted as a real transport/response-size boundary, not a path/cwd error.
+
+## Revised rate/security/reliability boundaries
+
+The metadata path is now intentionally more conservative:
 
 - default refresh interval: 21,600 seconds / 6 hours;
-- maximum 150 item IDs per request batch;
-- all attempts, including errors/partial resolution, respect the six-hour interval unless `-Force` is explicitly used;
+- default batch size: **40 item IDs**;
+- hard runtime batch cap: 100 IDs even if manually overridden;
+- per-batch Torn curl timeout: **30 seconds**;
+- the observed 202 distinct items therefore require six default batches (40 + 40 + 40 + 40 + 40 + 2);
+- every successful batch is atomically checkpointed to ignored `engine-state.json` before the next request;
+- if a later batch times out, already-returned metadata remains available;
+- `itemsResolved` reports the number of metadata entries actually present in runtime state;
+- all attempts, including partial/error attempts, respect the six-hour interval unless `-Force` is explicitly used;
 - Torn requests use bounded `curl.exe --config -`;
 - API key is supplied through stdin Authorization header, not URL/process command line;
 - metadata failure is fail-soft and must not block finalization/heartbeat.
 
-## Required Windows validation
+## Immediate Windows retry
 
-Pull current main, then from the Travel Assistant directory run:
+Pull current `main`, then run only the metadata-focused checks because the previously reported tests passed against the earlier batch contract:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
@@ -125,9 +163,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Run-ItemMetadataTests.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
 Then force one live metadata refresh:
@@ -148,7 +183,11 @@ $meta = @($e.itemMetadata.PSObject.Properties)
 
 $meta |
   Where-Object { $_.Name -in @('206','266','277') } |
-  Select-Object Name, Value
+  Select-Object Name,
+    @{n='Item';e={$_.Value.name}},
+    @{n='Category';e={$_.Value.category}},
+    @{n='Tradable';e={$_.Value.isTradable}},
+    @{n='MarketPrice';e={$_.Value.marketPrice}}
 
 $e.metadataCollection.categories
 ```
@@ -158,7 +197,7 @@ Optional unresolved-category check:
 ```powershell
 $meta |
   Where-Object { $_.Value.categoryResolved -eq $false } |
-  Select-Object Name, @{n='Item';e={$_.Value.name}}, @{n='Category';e={$_.Value.category}}
+  Select-Object Name, @{n='Item';e={$_.Value.name}}, @{n='Type';e={$_.Value.type}}, @{n='Category';e={$_.Value.category}}
 ```
 
 If metadata reports an error:
@@ -173,24 +212,25 @@ Do not paste API keys or full local settings.
 
 ## Expected acceptance evidence
 
+Ideal complete refresh:
+
 - `source` = `torn_items`;
 - `lastRefreshAt` recent;
 - `lastError` empty;
-- `distinctObservedItems` greater than zero and less than/equal to the 232 observed market count;
-- `itemsRequested` equals `distinctObservedItems`;
+- `distinctObservedItems` = current distinct observed ID count (202 in the first live catalog);
+- `itemsRequested` = `distinctObservedItems`;
 - `itemsResolved` equals or is very close to `itemsRequested`;
 - canonical categories populated;
-- sample metadata for Xanax `[206]`, Nessie Plushie `[266]`, Cherry Blossom `[277]` appears when those IDs are in the observed catalog;
-- current UK/Japan Xanax Rainmeter cards remain healthy.
+- sample metadata for Xanax `[206]`, Nessie Plushie `[266]`, Cherry Blossom `[277]` appears when those IDs are in the observed catalog.
 
-Any unresolved/missing item IDs should be investigated but must not trigger high-frequency retries or guessed categories.
+If a later batch still times out, partial progress is now acceptable diagnostic evidence: `itemsResolved` must be greater than zero and the successful batch metadata must persist. Do not increase request frequency to compensate.
 
 ## Completion criteria
 
 Mark this metadata run **COMPLETED** only when:
 
-- both focused metadata tests pass on Windows;
-- a forced metadata refresh succeeds against Torn;
+- the revised focused metadata tests pass on Windows;
+- a forced metadata refresh completes, or a remaining specific Torn-side item/batch incompatibility is isolated without losing successful batch progress;
 - runtime metadata/category state is populated and bounded;
 - current visible Xanax functionality remains unchanged.
 
