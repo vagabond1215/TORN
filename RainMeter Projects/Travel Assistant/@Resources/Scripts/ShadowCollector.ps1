@@ -67,6 +67,7 @@ function Get-EngineState {
                 lastProvider = ''
                 countriesSeen = 0
                 marketsSeen = 0
+                legacyMarketsSeen = 0
                 observationsWritten = 0
                 cyclesCompleted = 0
                 lastErrorAt = 0
@@ -83,13 +84,14 @@ function Get-EngineState {
             lastProvider = ''
             countriesSeen = 0
             marketsSeen = 0
+            legacyMarketsSeen = 0
             observationsWritten = 0
             cyclesCompleted = 0
             lastErrorAt = 0
             lastError = ''
         })
     }
-    foreach ($name in @('lastPollAt','lastProvider','countriesSeen','marketsSeen','observationsWritten','cyclesCompleted','lastErrorAt','lastError')) {
+    foreach ($name in @('lastPollAt','lastProvider','countriesSeen','marketsSeen','legacyMarketsSeen','observationsWritten','cyclesCompleted','lastErrorAt','lastError')) {
         if (-not $state.shadowCollection.PSObject.Properties[$name]) {
             $default = if ($name -in @('lastProvider','lastError')) { '' } else { 0 }
             $state.shadowCollection | Add-Member NoteProperty $name $default
@@ -253,6 +255,19 @@ function Test-IsPrimaryMarket {
     return ($PrimaryCountryIds.Contains($CountryId) -and $PrimaryItemIds.Contains($ItemId))
 }
 
+function Get-InactiveMarketIndex {
+    param([object]$OverrideConfig)
+    $index = @{}
+    if ($null -eq $OverrideConfig -or -not $OverrideConfig.PSObject.Properties['marketOverrides']) { return $index }
+    foreach ($property in @($OverrideConfig.marketOverrides.PSObject.Properties)) {
+        if ($null -eq $property.Value -or -not $property.Value.PSObject.Properties['active']) { continue }
+        if ([bool]$property.Value.active) { continue }
+        $key = ([string]$property.Name).Trim().ToLowerInvariant()
+        if (-not [string]::IsNullOrWhiteSpace($key)) { $index[$key] = $true }
+    }
+    return $index
+}
+
 function Test-ObservationChanged {
     param([object]$DestState, [object]$Observation)
     if ([int]$DestState.lastStock -ne [int]$Observation.stock) { return $true }
@@ -316,6 +331,7 @@ if (-not $Force -and $lastPollAt -gt 0 -and ($now - $lastPollAt) -lt $MinimumPol
 
 $itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
 $countriesConfig = Read-JsonFile (Join-Path $ConfigDir 'countries.json')
+$marketOverrideConfig = Read-JsonFile (Join-Path $ConfigDir 'foreign-market-overrides.json')
 if ($null -eq $itemsConfig -or $null -eq $countriesConfig) {
     Write-ShadowError -EngineState $engineState -Now $now -Message 'Shadow collection configuration is missing.'
     Write-JsonAtomic -Path $EngineStateFile -Value $engineState
@@ -327,11 +343,13 @@ foreach ($item in @($itemsConfig.items | Where-Object { $_.enabled -eq $true }))
 $primaryCountryIds = New-Object 'System.Collections.Generic.HashSet[string]'
 foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -eq $true })) { [void]$primaryCountryIds.Add([string]$country.id) }
 $collectionCountries = @($countriesConfig.countries | Where-Object { $_.PSObject.Properties['collect'] -and $_.collect -eq $true })
+$inactiveMarketIndex = Get-InactiveMarketIndex -OverrideConfig $marketOverrideConfig
 
 try {
     $live = Get-LiveStockPayload
     $countriesSeen = 0
     $marketsSeen = 0
+    $legacyMarketsSeen = 0
     $observationsWritten = 0
     $cyclesCompleted = 0
 
@@ -343,11 +361,16 @@ try {
             Update-ObservedMarketMetadata -EngineState $engineState -Observation $observation -Now $now
             $marketsSeen++
 
+            $key = (([string]$observation.country) + ':' + ([string]$observation.itemId)).ToLowerInvariant()
+            if ($inactiveMarketIndex.ContainsKey($key)) {
+                $legacyMarketsSeen++
+                continue
+            }
+
             if (Test-IsPrimaryMarket -CountryId ([string]$observation.country) -ItemId ([int]$observation.itemId) -PrimaryCountryIds $primaryCountryIds -PrimaryItemIds $primaryItemIds) {
                 continue
             }
 
-            $key = ([string]$observation.country) + ':' + ([string]$observation.itemId)
             $destState = Get-DestinationState -EngineState $engineState -Key $key
             if (-not (Test-ObservationChanged -DestState $destState -Observation $observation)) {
                 $destState.lastSourceTimestamp = [long]$observation.sourceTimestamp
@@ -368,6 +391,7 @@ try {
     $engineState.shadowCollection.lastProvider = [string]$live.source
     $engineState.shadowCollection.countriesSeen = $countriesSeen
     $engineState.shadowCollection.marketsSeen = $marketsSeen
+    $engineState.shadowCollection.legacyMarketsSeen = $legacyMarketsSeen
     $engineState.shadowCollection.observationsWritten = $observationsWritten
     $engineState.shadowCollection.cyclesCompleted = $cyclesCompleted
     $engineState.shadowCollection.lastErrorAt = 0
