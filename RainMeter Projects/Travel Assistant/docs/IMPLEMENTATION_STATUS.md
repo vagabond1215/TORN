@@ -2,21 +2,19 @@
 
 **Checkpoint:** 2026-08-21
 
-**Active run:** `NEXT_CODEX_RUN.md` remains **ACTIVE** because the newly requested Settings/travel-profile extension still needs narrow target-Windows validation.
+**Active run:** `NEXT_CODEX_RUN.md` remains **ACTIVE** because the Settings/travel-profile extension still needs final Rainmeter interaction validation.
 
 ## Stable baseline — previously validated
 
 Before the Settings extension, the target machine had already validated the important operational path:
 
 - deterministic model/history/finalizer suite passed on the earlier baseline;
-- bounded YATA live request and production updater pass succeeded;
 - Rainmeter junction installation succeeded;
 - UK/Japan panels and both generated graphs rendered;
-- live stock/foreign prices rendered plausibly;
 - mojibake/encoding defects were fixed;
 - local Torn API key was configured in ignored settings;
 - direct Torn v2 Item Market `curl.exe` returned HTTP 200;
-- Windows PowerShell `Invoke-RestMethod` against `api.torn.com` hung on this target, so production Torn requests were safely moved to bounded `curl.exe` while YATA stayed unchanged;
+- Windows PowerShell `Invoke-RestMethod` against `api.torn.com` hung on this target, so production Torn requests use bounded `curl.exe` only for Torn Item Market;
 - production updater/finalizer consumed a fresh `torn_itemmarket` cache;
 - Rainmeter RunCommand declarations were corrected to `Measure=Plugin` / `Plugin=RunCommand`;
 - one-minute automatic polling and heartbeat/stale detection were directly observed working;
@@ -28,22 +26,41 @@ Before the Settings extension, the target machine had already validated the impo
 
 Those results remain valid and should not be discarded or needlessly repeated.
 
-## Current extension — implemented in repository, local validation pending
+## Live-stock provider status
 
-The user requested that the laggy main-skin travel-mode click be replaced with a Settings interface and that user travel perks be represented.
+YATA later returned HTTP 502 from both native PowerShell and `curl.exe`, proving the failure was provider-side rather than Rainmeter/PowerShell transport.
 
-### Main-skin change
+Prometheus (`https://api.prombot.co.uk/api/travel`) was then probed directly on the target machine and returned valid structured UK/Japan Xanax data in about one second.
 
-`TravelAssistant.ini` now:
+Production now uses:
 
-- keeps the proven `MeasureUpdate` polling path unchanged;
-- removes the main `MeasureCycleMode` interaction;
-- replaces the top-right mode selector with `SETTINGS >`;
-- launches `@Resources/Scripts/OpenSettings.ps1` as a short-lived local Windows Forms dialog.
+```text
+Prometheus
+   ↓ unavailable
+YATA
+   ↓ unavailable
+cached state + STALE_DATA
+```
 
-This removes the old UX where a simple mode click waited on a full network/updater/finalizer pass.
+Provider provenance is retained in normalized observations.
 
-### Settings interface
+Target-Windows validation on commit `eab8e25125509d70d992199199830fad6ef3874d`:
+
+- `Validate-TravelAssistant.ps1` passed;
+- `Validate-RainmeterSkin.ps1` passed;
+- `Run-LiveProviderTests.ps1` passed all Prometheus/YATA normalization and provenance checks;
+- one production updater pass exited `0` in **1.16 s**;
+- generated state selected `LiveProvider=prometheus`;
+- UK source timestamp `1787327669` and Japan source timestamp `1787327663` corresponded to approximately 11:54:29 and 11:54:23 local time, demonstrating near-current provider freshness during the validation;
+- UK Xanax state: stock `0`, foreign price `$767,135`;
+- Japan Xanax state: stock `0`, foreign price `$678,528`;
+- both destinations correctly remained `INSUFFICIENT_HISTORY` rather than stale-provider fallback.
+
+The Rainmeter header now includes provider name/source-age information so scheduler latency can be distinguished from provider latency.
+
+## Settings / travel-profile extension
+
+The laggy main-skin travel-mode click has been replaced by a top-right `SETTINGS >` control.
 
 `OpenSettings.ps1` exposes:
 
@@ -56,18 +73,20 @@ This removes the old UX where a simple mode click waited on a full network/updat
 - derived travel-perk preview;
 - Business only when the selected profile establishes free Business Class.
 
-Save writes only ignored/local state:
+The Rainmeter Settings launcher now uses a dedicated `RunCommand` measure instead of fragile nested command-line quoting. The PowerShell console is hidden. If the dialog script fails, it writes the exact error to ignored `data/runtime/settings-error.txt` and attempts to show a message box.
+
+Saving settings writes only ignored/local state:
 
 ```text
 config/settings.local.json
 data/runtime/preferences.json
 ```
 
-The key is not embedded in the Rainmeter `.ini` or action command line.
+and starts a hidden asynchronous updater pass so mode/profile changes do not wait for the next one-minute poll.
 
 ### Travel-profile model
 
-New `config/travel-perks.json` + `TravelProfile.ps1` model:
+`config/travel-perks.json` + `TravelProfile.ps1` model:
 
 - Lingerie Store 3-star +2 general travel items;
 - Lingerie Store 10-star free Business Class;
@@ -84,7 +103,7 @@ Flower/Toy item-specific capacity is category-gated and therefore does **not** i
 
 ### Final economics integration
 
-`FinalizeState.ps1` now applies the travel profile only at the final economics layer. It does not modify observations or cycle history.
+`FinalizeState.ps1` applies the travel profile only at the final economics layer. It does not modify observations or cycle history.
 
 Capacity precedence:
 
@@ -109,46 +128,37 @@ Business handling:
 
 This preserves the invariant that unknown economics are not treated as zero-cost economics.
 
-## Regression coverage added/updated
+## Validation already passed for the extension
 
-- `tests/Run-TravelProfileTests.ps1` — pure profile/economics tests.
-- `tests/Run-FinalizeStateTests.ps1` — final integration including qualified/unqualified Business and faction/company capacity/cost.
-- `tests/Validate-RainmeterSkin.ps1` — Settings-button structure and RunCommand guard.
-- `tests/Validate-TravelAssistant.ps1` — new config/scripts/profile contract and ignored local settings.
-- `tests/Run-All.ps1` — now includes travel-profile tests.
+On the target Windows machine:
 
-These tests have been authored connector-side but the new versions have **not yet been claimed as passing on the target Windows machine**.
+- `Run-TravelProfileTests.ps1` passed all 19 profile/economics checks;
+- `Run-FinalizeStateTests.ps1` passed all profile-integrated finalizer checks;
+- `Validate-TravelAssistant.ps1` now passes after a validator-only parser defect was corrected;
+- `Validate-RainmeterSkin.ps1` passes;
+- `Run-LiveProviderTests.ps1` passes.
 
-## Immediate validation boundary
+## Immediate remaining validation boundary
 
-Run only the changed-boundary checks first:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-TravelAssistant.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-TravelProfileTests.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-FinalizeStateTests.ps1
-```
-
-Then refresh Rainmeter and directly validate:
+Refresh Rainmeter and directly validate:
 
 - `SETTINGS >` appears;
-- Settings launches and closes normally;
+- Settings launches without a transient console/error;
 - API key remains masked/preserved;
 - normal mode choices are Standard/Airstrip/WLT;
 - company/star/faction controls render;
 - Business is hidden for unqualified profiles;
 - Lingerie Store 10-star exposes free Business;
-- Flower/Toy do not increase Xanax-specific capacity;
-- saving applies on the next normal poll;
-- automatic polling/heartbeat/history remain healthy;
+- saving applies promptly through the hidden updater;
+- automatic polling/heartbeat/history remain healthy after saving;
 - no new Rainmeter/PowerShell/resource regression appears.
+
+If Settings fails to open, inspect ignored `data/runtime/settings-error.txt` rather than trying to capture a disappearing console.
 
 ## Known follow-up / not part of current completion gate
 
 - committed historical bootstrap remains intentionally empty;
 - price similarity is still a bounded cohort rather than continuous weighting;
-- no enabled secondary live-provider cross-check;
 - first launch during an already-live restock cannot reconstruct an unseen restock start;
 - profitability thresholds remain provisional calibration inputs;
 - ticket-funded Business economics are still unresolved;
