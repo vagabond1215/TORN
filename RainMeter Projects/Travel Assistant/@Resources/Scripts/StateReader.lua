@@ -42,9 +42,7 @@ local function formatDuration(seconds)
     local h = math.floor(seconds / 3600)
     local m = math.floor((seconds % 3600) / 60)
     local s = seconds % 60
-    if h > 0 then
-        return string.format('%d:%02d:%02d', h, m, s)
-    end
+    if h > 0 then return string.format('%d:%02d:%02d', h, m, s) end
     return string.format('%02d:%02d', m, s)
 end
 
@@ -104,6 +102,13 @@ local function setRestockVisibility(prefix, visible)
     end
 end
 
+local function setSecondaryVisibility(prefix, visible)
+    for _, suffix in ipairs({ 'SecondaryTitle', 'SecondaryPrice', 'SecondaryStockHeader' }) do
+        local meter = 'Meter' .. prefix .. suffix
+        if visible then SKIN:Bang('!ShowMeter', meter) else SKIN:Bang('!HideMeter', meter) end
+    end
+end
+
 local function providerLabel(provider)
     if provider == 'prometheus' then return 'Prometheus' end
     if provider == 'yata' then return 'YATA' end
@@ -114,9 +119,7 @@ end
 local function getStatusPresentation(status)
     if status == 'SAFE_WINDOW' then
         return '86,190,116,255', ''
-    elseif status == 'BEST_ODDS' then
-        return '232,178,72,255', ''
-    elseif status == 'LOW_MARGIN' then
+    elseif status == 'BEST_ODDS' or status == 'LOW_MARGIN' then
         return '232,178,72,255', ''
     elseif status == 'UNPROFITABLE' or status == 'WINDOW_CLOSED' then
         return '224,90,90,255', ''
@@ -138,7 +141,6 @@ local function getPriceColor(data, prefix, status)
     local profitRaw = data[prefix .. 'TripProfit']
     local marginRaw = data[prefix .. 'TripMarginPercent']
     local hasEconomics = profitRaw ~= nil and profitRaw ~= '' and marginRaw ~= nil and marginRaw ~= ''
-
     if hasEconomics then
         local profit = number(profitRaw)
         local margin = number(marginRaw)
@@ -146,10 +148,62 @@ local function getPriceColor(data, prefix, status)
         if status == 'LOW_MARGIN' then return '232,178,72,255' end
         return '86,190,116,255'
     end
-
     if status == 'UNPROFITABLE' then return '224,90,90,255' end
     if status == 'LOW_MARGIN' then return '232,178,72,255' end
     return '145,152,164,255'
+end
+
+local function secondaryPriceColor(priceClass)
+    if priceClass == 'GOOD' then return '86,190,116,255' end
+    if priceClass == 'LOW_MARGIN' then return '232,178,72,255' end
+    if priceClass == 'UNPROFITABLE' then return '224,90,90,255' end
+    return '145,152,164,255'
+end
+
+local function updateSecondaryItem(data, prefix)
+    local visible = number(data[prefix .. 'SecondaryVisible']) == 1
+    setSecondaryVisibility(prefix, visible)
+    if not visible then return end
+
+    local now = os.time()
+    local name = safeText(data[prefix .. 'SecondaryName'], 'Item')
+    local category = safeText(data[prefix .. 'SecondaryCategory'], '')
+    local stock = number(data[prefix .. 'SecondaryStock'])
+    local foreignPrice = number(data[prefix .. 'SecondaryForeignPrice'])
+    local marketValue = number(data[prefix .. 'SecondaryMarketValue'])
+    local marketFetchedAt = number(data[prefix .. 'SecondaryMarketValueFetchedAt'])
+    local sourceTimestamp = number(data[prefix .. 'SecondarySourceTimestamp'])
+    local lastSoldOutAt = number(data[prefix .. 'SecondaryLastSoldOutAt'])
+    local capacity = number(data[prefix .. 'SecondaryCapacity'])
+    local tripProfit = number(data[prefix .. 'SecondaryTripProfit'])
+    local priceClass = safeText(data[prefix .. 'SecondaryPriceClass'], 'UNKNOWN')
+
+    setVariable(prefix .. 'SecondaryName', name)
+    setVariable(prefix .. 'SecondaryPriceText', formatMoney(foreignPrice))
+    setVariable(prefix .. 'SecondaryMarketValueText', formatMoney(marketValue))
+    setVariable(prefix .. 'SecondaryPriceColor', secondaryPriceColor(priceClass))
+
+    if stock > 0 then
+        setVariable(prefix .. 'SecondaryStockHeaderText', 'Stock: ' .. formatInteger(stock))
+    elseif lastSoldOutAt > 0 then
+        setVariable(prefix .. 'SecondaryStockHeaderText', 'Out of Stock for ' .. formatHoursMinutes(now - lastSoldOutAt) .. ' since ' .. os.date('%H:%M', lastSoldOutAt))
+    else
+        setVariable(prefix .. 'SecondaryStockHeaderText', 'Out of Stock')
+    end
+
+    local tooltip = { name }
+    if category ~= '' then table.insert(tooltip, category) end
+    table.insert(tooltip, 'Foreign ' .. formatMoney(foreignPrice))
+    if marketValue > 0 then
+        local age = marketFetchedAt > 0 and formatShortElapsed(now - marketFetchedAt) or 'unknown age'
+        table.insert(tooltip, 'Torn market ' .. formatMoney(marketValue) .. ' (' .. age .. ')')
+    else
+        table.insert(tooltip, 'Torn market value pending background pricing')
+    end
+    if capacity > 0 then table.insert(tooltip, 'Capacity ' .. formatInteger(capacity)) end
+    if priceClass ~= 'UNKNOWN' then table.insert(tooltip, 'Trip net ' .. formatMoney(tripProfit)) end
+    if sourceTimestamp > 0 then table.insert(tooltip, 'Stock source ' .. formatShortElapsed(now - sourceTimestamp) .. ' old') end
+    setVariable(prefix .. 'SecondaryTooltipText', table.concat(tooltip, ' | '))
 end
 
 local function updateDestination(data, prefix)
@@ -157,6 +211,7 @@ local function updateDestination(data, prefix)
     local travelSeconds = number(data[prefix .. 'TravelSeconds'])
     local stock = number(data[prefix .. 'Stock'])
     local foreignPrice = number(data[prefix .. 'ForeignPrice'])
+    local marketValue = number(data[prefix .. 'MarketValue'])
     local lastSoldOutAt = number(data[prefix .. 'LastSoldOutAt'])
     local restockAt = number(data[prefix .. 'RestockEstimateAt'])
     local windowOpenAt = number(data[prefix .. 'WindowOpenAt'])
@@ -170,6 +225,7 @@ local function updateDestination(data, prefix)
     setVariable(prefix .. 'TravelText', formatDuration(travelSeconds))
     setVariable(prefix .. 'StockText', formatInteger(stock))
     setVariable(prefix .. 'PriceText', formatMoney(foreignPrice))
+    setVariable(prefix .. 'MarketValueText', formatMoney(marketValue))
     setVariable(prefix .. 'PriceColor', getPriceColor(data, prefix, status))
     setVariable(prefix .. 'StatusText', status:gsub('_', ' '))
     setVariable(prefix .. 'StatusColor', statusColor)
@@ -195,10 +251,6 @@ local function updateDestination(data, prefix)
     end
     setVariable(prefix .. 'RestockText', restockText)
 
-    -- Raw restock timing is only directly actionable before departure when the
-    -- predicted restock lies farther away than the flight itself. Once stock is
-    -- live, or the restock is expected before arrival, the modeled departure /
-    -- safe-window result is the cleaner primary signal.
     local showRestock = stock <= 0 and restockEta > 0 and travelSeconds > 0 and restockEta > travelSeconds
     setRestockVisibility(prefix, showRestock)
 
@@ -219,9 +271,7 @@ local function updateDestination(data, prefix)
         else
             decision = message ~= '' and message or 'Best window passed'
         end
-        if hitRate > 0 then
-            decision = decision .. string.format(' | %.0f%% hist.', hitRate * 100)
-        end
+        if hitRate > 0 then decision = decision .. string.format(' | %.0f%% hist.', hitRate * 100) end
     elseif status == 'LOW_MARGIN' or status == 'UNPROFITABLE' then
         decision = message ~= '' and message or 'No departure recommendation'
     elseif status == 'STALE_DATA' then
@@ -233,9 +283,8 @@ local function updateDestination(data, prefix)
     setVariable(prefix .. 'DecisionText', decision)
 
     local tooltip = { decision }
-    if travelSeconds > 0 then
-        table.insert(tooltip, 'Flight ' .. formatDuration(travelSeconds))
-    end
+    if travelSeconds > 0 then table.insert(tooltip, 'Flight ' .. formatDuration(travelSeconds)) end
+    if marketValue > 0 then table.insert(tooltip, 'Torn market reference ' .. formatMoney(marketValue)) end
     if restockAt > now then
         table.insert(tooltip, 'Restock estimate ' .. formatDuration(restockAt - now) .. ' (' .. os.date('%H:%M', restockAt) .. ')')
     elseif stock > 0 and restockAt > 0 then
@@ -262,19 +311,16 @@ end
 local function updateHeartbeatText(data, now)
     local remaining = 0
     if nextPollAt ~= nil then remaining = math.max(0, nextPollAt - now) end
-
     local sourceStatus = safeText(data.UpdatedText, '')
     if sourceStatus:find('failed', 1, true) then
         setVariable('UpdatedText', sourceStatus .. string.format(' | retry %ds', remaining))
         return
     end
-
     local heartbeat = readEpochFile(heartbeatPath)
     if heartbeat <= 0 then
         setVariable('UpdatedText', string.format('Waiting for first update | next poll %ds', remaining))
         return
     end
-
     local provider = providerLabel(safeText(data.LiveProvider, ''))
     local sourceTimestamp = oldestSourceTimestamp(data)
     local sourceText = ''
@@ -283,7 +329,6 @@ local function updateHeartbeatText(data, now)
     elseif provider ~= '' then
         sourceText = ' | ' .. provider
     end
-
     local age = math.max(0, now - heartbeat)
     if age > (pollInterval * 2) then
         setVariable('UpdatedText', string.format('UPDATE STALE - last %s (%ds ago)%s | retry %ds', os.date('%H:%M:%S', heartbeat), age, sourceText, remaining))
@@ -300,7 +345,6 @@ function Initialize()
     if configuredPoll < 15 then configuredPoll = 15 end
     if configuredFailureRetry < 5 then configuredFailureRetry = 5 end
     if configuredFailureRetry > configuredPoll then configuredFailureRetry = configuredPoll end
-
     statePath = SKIN:MakePathAbsolute(configured)
     heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
     pollInterval = math.floor(configuredPoll)
@@ -314,11 +358,7 @@ function Update()
     local data = readState()
     local sourceStatus = safeText(data.UpdatedText, '')
     local sourceFailed = sourceStatus:find('failed', 1, true) ~= nil
-
     if nextPollAt == nil then nextPollAt = now + pollInterval end
-
-    -- One early retry per failure episode. If that retry also fails, retain the
-    -- normal cadence until a successful pass clears the failure state.
     if sourceFailed and not failureRetryArmed then
         local retryAt = now + failureRetryInterval
         if retryAt < nextPollAt then nextPollAt = retryAt end
@@ -326,15 +366,15 @@ function Update()
     elseif not sourceFailed then
         failureRetryArmed = false
     end
-
     if now >= nextPollAt then
         nextPollAt = now + pollInterval
         SKIN:Bang('!CommandMeasure', 'MeasureUpdate', 'Run')
     end
-
     setVariable('TravelModeText', safeText(data.TravelModeLabel, 'Airstrip'))
     updateHeartbeatText(data, now)
     updateDestination(data, 'UK')
+    updateSecondaryItem(data, 'UK')
     updateDestination(data, 'JP')
+    updateSecondaryItem(data, 'JP')
     return 0
 end
