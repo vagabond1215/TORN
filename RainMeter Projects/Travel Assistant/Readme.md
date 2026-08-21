@@ -2,21 +2,23 @@
 
 Rainmeter-based Torn foreign-market travel decision assistant.
 
-The currently validated visible UI remains focused on **Xanax in the United Kingdom and Japan**, while the data layer now background-collects the full provider-observed foreign market and is beginning canonical item/category enrichment before broader UI or route optimization.
+The currently validated visible UI remains focused on **Xanax in the United Kingdom and Japan**, while the data layer now observes the full provider-reported foreign market, filters verified legacy shop rows, maintains a complete local category catalog for the current dataset, and is beginning staggered resale-price population before broader UI or route optimization.
 
 ## Current direction
 
 Travel Assistant separates:
 
 ```text
-COLLECTED opportunities
+COLLECTED provider rows
+        !=
+ACTIVE market candidates
         !=
 VISIBLE opportunities
         !=
 OPTIMIZER candidates
 ```
 
-The application can learn foreign-market stock cycles broadly without forcing unfinished categories/economics into the visible UI or future `Optimal` mode.
+The application can learn foreign-market stock cycles broadly without forcing unfinished economics into the visible UI or future `Optimal` mode.
 
 ## Current visible UI
 
@@ -35,9 +37,9 @@ The skin currently shows UK and Japan Xanax cards with:
 
 Current visible behavior remains deliberately conservative: stale, unsupported, unresolved or unprofitable opportunities do not receive departure recommendations.
 
-## Full-market shadow collection
+## Full-market background observation
 
-The expansion background-collects all 11 Torn foreign destinations:
+The expansion observes all 11 Torn foreign destinations:
 
 ```text
 Mexico
@@ -53,44 +55,86 @@ United Arab Emirates
 South Africa
 ```
 
-Every valid item row returned by Prometheus/YATA is normalized to the existing observation schema and can accumulate restock/sellout history by `country + itemId`.
+Every valid item row returned by Prometheus/YATA is normalized by `country + itemId`. Provider presence is retained as provenance, but it is not blindly treated as proof that a shop relationship is still current.
 
-The shadow pass runs no more frequently than every 120 seconds and is isolated from the current UK/Japan Xanax primary markets. Raw history is written only when stock or foreign price changes; provider timestamp changes still update freshness metadata without creating another raw sample.
-
-Target-Windows acceptance on 2026-08-21 confirmed:
+Latest target-Windows baseline:
 
 ```text
 Prometheus
 11 countries
-232 observed country-item markets
-51 changed observations on the forced acceptance pass
+232 provider country-item rows
+232 / 232 rows with provider names
+202 distinct item IDs
+5 verified legacy provider rows
+227 active country-item markets
 no shadow error
 ```
 
-The background collector tracks observed markets in ignored `data/runtime/engine-state.json` and uses the same bounded raw/cycle history stores as the existing model.
-
-## Canonical item metadata
-
-`ItemMetadata.ps1` enriches the **distinct observed item IDs** using Torn API v2 specific-item metadata.
-
-It records canonical:
+Verified legacy rows remain visible in ignored runtime metadata but are excluded before new learning/history/resale work:
 
 ```text
-name
-type / category
-weapon category detail where available
-tradability
-Torn market-price reference
-shop locations/prices
+mexico:21
+mexico:232
+mexico:327
+united_arab_emirates:383
+united_arab_emirates:440
 ```
 
-Metadata defaults to a six-hour cadence and requests at most 150 item IDs per batch. It uses bounded `curl.exe --config -`, passing the API key through stdin Authorization configuration rather than the URL or process command line.
+The shadow pass runs no more frequently than every 120 seconds. Raw history is written only when stock or foreign price changes; provider timestamp changes still update freshness metadata without creating another raw sample.
 
-Weapon items retain Torn's detailed `Primary`, `Secondary`, `Melee`, or `Temporary` category when available. Missing details remain unresolved `Weapon` rather than being guessed.
+## Complete local item/category catalog
 
-Torn `market_price` is **informational metadata only** at this stage. It does not replace the current Item Market profitability gate.
+Normal Rainmeter operation does **not** depend on Torn catalog metadata requests. The target Windows machine repeatedly timed out on attempted bulk/specific Torn catalog transports, so item/category metadata is packaged locally instead.
 
-Metadata failures are fail-soft and cannot block the established Xanax finalizer/heartbeat.
+Committed references:
+
+```text
+config/foreign-item-categories.json
+config/foreign-market-overrides.json
+```
+
+The current live catalog is fully category-resolved locally:
+
+```text
+202 observed item IDs
+202 metadata rows
+202 categories resolved
+0 unresolved
+0 provider-name conflicts
+```
+
+The 197-ID foreign category snapshot is supplemented by five individually verified overrides. Two provider aliases are corrected canonically while retaining the provider name separately:
+
+```text
+Blank Tokens  -> Blank Casino Chips | Material
+Platinum PDA  -> Digital Organizer  | Miscellaneous
+```
+
+`ItemMetadata.ps1` remains an explicit/manual maintenance tool only; it is not part of the Rainmeter heartbeat.
+
+## Broad resale-price population
+
+`ResaleQueue.ps1` gradually fills the shared Torn Item Market resale cache for active observed items.
+
+It is intentionally bounded:
+
+```text
+maximum broad requests per update: 1
+minimum attempt interval:          60 seconds
+broad cache freshness target:       6 hours
+failed-item backoff:                 1 hour
+request timeout:                     6 seconds
+```
+
+The queue runs **after** the established visible finalizer and heartbeat. Therefore a lower-priority broad pricing miss cannot make the current UK/Japan skin look stale or broken.
+
+Only items with at least one active market relationship are eligible. Verified `catalogActive=false` / `legacy_removed` markets do not receive broad valuation work.
+
+The queue prioritizes never-priced eligible items, then stale cache rows. Failed items back off instead of blocking the rest of the catalog.
+
+On the current roughly 197-active-item set, one successful request/minute can populate an initially empty broad resale cache in about 3.3 hours while the skin is loaded. This six-hour target is for broad population/reference data; current visible Xanax keeps its existing independent/fresher resale behavior.
+
+Torn Item Market requests use bounded `curl.exe --config -` on the validated Windows host, with the API key supplied through an Authorization header on stdin rather than in the URL or process arguments.
 
 ## First multi-item seeds
 
@@ -103,24 +147,6 @@ Committed item configuration includes:
 ```
 
 Nessie and Cherry remain hidden and not optimizer-eligible during the data-layer rollout.
-
-The collector does **not** use this short list as a whitelist. Unknown provider-observed IDs are collected first and enriched from Torn metadata later.
-
-## Live sources
-
-Preferred foreign-stock source:
-
-```text
-Prometheus
-    ↓ unavailable
-YATA
-```
-
-Foreign stock is crowd-sourced. Static Wiki shop tables are useful documentation, but the live provider payload determines which market rows are actually being observed.
-
-A Torn API key enables metadata/resale/economics features and remains local/ignored. On the validated Windows machine, Torn API calls that hang under native Windows PowerShell use bounded `curl.exe` transport.
-
-Never commit a limited/full-authority key.
 
 ## Current capacity/economics
 
@@ -164,15 +190,14 @@ The live stale threshold is a recommendation-safety guard, not a history-expiry 
 
 ## Future expansion sequence
 
-After canonical metadata is accepted on Windows:
+After broad resale population is accepted on Windows:
 
-1. add a bounded/staggered Torn Item Market resale-price queue;
-2. generalize category-specific capacity/economics;
-3. expose Nessie + Cherry as the first multi-item UI proof;
-4. add country/category filters;
-5. add Torn travel-state destination filtering and arrival countdown;
-6. populate full-country economics;
-7. build `Optimal` as a bounded route scheduler comparing short, long and mixed-country trip sequences.
+1. generalize category-specific capacity/economics;
+2. expose Nessie + Cherry as the first multi-item UI proof;
+3. add country/category filters;
+4. add Torn travel-state destination filtering and arrival countdown;
+5. populate full-country economics;
+6. build `Optimal` as a bounded route scheduler comparing short, long and mixed-country trip sequences.
 
 `Optimal` will not simply sort by profit/item or profit/trip. It must eventually consider travel time, return time, capacity, stock survival, restock/depletion evidence, fees/costs, confidence and opportunity cost across a planning horizon.
 
@@ -198,15 +223,15 @@ Travel Assistant\TravelAssistant.ini
 
 Because the installed skin is a junction to the repository source, later pulls normally require only a Rainmeter refresh.
 
+A whitelist-based `.rmskin` builder also exists for sharing the skin without sharing local API settings/history. Recipient-local `settings.local.json` is not packaged.
+
 ## Validation
 
 Focused current expansion checks:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-ShadowCollection.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ShadowCollectionTests.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-ItemMetadata.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ItemMetadataTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-ResaleQueue.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ResaleQueueTests.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
