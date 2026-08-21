@@ -1,6 +1,8 @@
 local statePath = nil
 local heartbeatPath = nil
 local pollInterval = 60
+local failureRetryInterval = 15
+local failureRetryArmed = false
 local nextPollAt = nil
 
 local function trim(s)
@@ -189,24 +191,42 @@ function Initialize()
     local configured = SELF:GetOption('StateFile', '#@#Generated\\state.kv')
     local heartbeatConfigured = SELF:GetOption('HeartbeatFile', '#@#Generated\\last-update.txt')
     local configuredPoll = tonumber(SELF:GetOption('PollInterval', '60')) or 60
+    local configuredFailureRetry = tonumber(SELF:GetOption('FailureRetryInterval', '15')) or 15
     if configuredPoll < 15 then configuredPoll = 15 end
+    if configuredFailureRetry < 5 then configuredFailureRetry = 5 end
+    if configuredFailureRetry > configuredPoll then configuredFailureRetry = configuredPoll end
 
     statePath = SKIN:MakePathAbsolute(configured)
     heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
     pollInterval = math.floor(configuredPoll)
+    failureRetryInterval = math.floor(configuredFailureRetry)
+    failureRetryArmed = false
     nextPollAt = os.time() + pollInterval
 end
 
 function Update()
     local now = os.time()
+    local data = readState()
+    local sourceStatus = safeText(data.UpdatedText, '')
+    local sourceFailed = sourceStatus:find('failed', 1, true) ~= nil
 
     if nextPollAt == nil then nextPollAt = now + pollInterval end
+
+    -- One early retry per failure episode. If that retry also fails, retain the
+    -- normal cadence until a successful pass clears the failure state.
+    if sourceFailed and not failureRetryArmed then
+        local retryAt = now + failureRetryInterval
+        if retryAt < nextPollAt then nextPollAt = retryAt end
+        failureRetryArmed = true
+    elseif not sourceFailed then
+        failureRetryArmed = false
+    end
+
     if now >= nextPollAt then
         nextPollAt = now + pollInterval
         SKIN:Bang('!CommandMeasure', 'MeasureUpdate', 'Run')
     end
 
-    local data = readState()
     setVariable('TravelModeText', safeText(data.TravelModeLabel, 'Airstrip'))
     updateHeartbeatText(data, now)
     updateDestination(data, 'UK')
