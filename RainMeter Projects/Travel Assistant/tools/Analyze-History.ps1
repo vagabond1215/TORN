@@ -39,7 +39,7 @@ function Read-Cycles {
             if ($seen.Add($key)) { $rows.Add($row) }
         }
     }
-    return @($rows)
+    return $rows.ToArray()
 }
 
 function Get-Median {
@@ -107,33 +107,34 @@ foreach ($identity in ($cycles | Group-Object { ('{0}|{1}' -f [string]$_.country
         country = $parts[0]
         itemId = [int]$parts[1]
         overall = New-Summary -Rows $rows
-        priceBuckets = @($priceGroups)
-        restockUtcHours = @($hourGroups)
+        priceBuckets = $priceGroups.ToArray()
+        restockUtcHours = $hourGroups.ToArray()
         newestSoldOutAt = [long](($rows | Measure-Object soldOutAt -Maximum).Maximum)
         oldestSoldOutAt = [long](($rows | Measure-Object soldOutAt -Minimum).Minimum)
     })
 }
 
+$reportRows = $reports.ToArray()
 $report = [pscustomobject]@{
     schemaVersion = 1
     generatedAt = [DateTimeOffset]::UtcNow.ToString('o')
     priceBucketSize = $PriceBucketSize
     minimumSamples = $MinimumSamples
     cycleCount = $cycles.Count
-    reports = @($reports)
+    reports = $reportRows
 }
 
-foreach ($entry in $reports) {
+foreach ($entry in $reportRows) {
     Write-Host ''
-    Write-Host ("{0} / item {1} — {2} cycle(s)" -f $entry.country, $entry.itemId, $entry.overall.samples) -ForegroundColor Cyan
-    Write-Host ("  availability median {0}s; range {1}s–{2}s" -f $entry.overall.medianAvailabilitySeconds, $entry.overall.fastestSelloutSeconds, $entry.overall.slowestSelloutSeconds)
+    Write-Host ("{0} / item {1} - {2} cycle(s)" -f $entry.country, $entry.itemId, $entry.overall.samples) -ForegroundColor Cyan
+    Write-Host ("  availability median {0}s; range {1}s-{2}s" -f $entry.overall.medianAvailabilitySeconds, $entry.overall.fastestSelloutSeconds, $entry.overall.slowestSelloutSeconds)
     if ($null -ne $entry.overall.medianRestockDelaySeconds) {
-        Write-Host ("  restock delay median {0}s; range {1}s–{2}s" -f $entry.overall.medianRestockDelaySeconds, $entry.overall.minRestockDelaySeconds, $entry.overall.maxRestockDelaySeconds)
+        Write-Host ("  restock delay median {0}s; range {1}s-{2}s" -f $entry.overall.medianRestockDelaySeconds, $entry.overall.minRestockDelaySeconds, $entry.overall.maxRestockDelaySeconds)
     }
     if (@($entry.priceBuckets).Count -gt 0) {
         Write-Host '  trained price buckets:'
         foreach ($bucket in @($entry.priceBuckets)) {
-            Write-Host ('    {0:C0}–{1:C0}: n={2}, median availability={3}s' -f $bucket.priceMin, ($bucket.priceMaxExclusive - 1), $bucket.summary.samples, $bucket.summary.medianAvailabilitySeconds)
+            Write-Host ('    {0:C0}-{1:C0}: n={2}, median availability={3}s' -f $bucket.priceMin, ($bucket.priceMaxExclusive - 1), $bucket.summary.samples, $bucket.summary.medianAvailabilitySeconds)
         }
     }
     if (@($entry.restockUtcHours).Count -gt 0) {
