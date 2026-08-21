@@ -15,90 +15,71 @@ Before changing code, read:
 
 ## Current checkpoint
 
-Travel Assistant v1 is implemented for **Xanax in the United Kingdom and Japan**. YATA is the live foreign stock/price source. Torn Item Market is the optional resale reference when a local API key is configured. The Rainmeter UI, history/cycle engine, price-aware recommendation model, profitability/trip-economics guards, generated graphs, installer, historical tooling, and deterministic tests are present.
+Travel Assistant v1 is implemented for **Xanax in the United Kingdom and Japan**. YATA is the live foreign stock/price source. Torn Item Market is the resale reference when a local API key is configured. The Rainmeter UI, history/cycle engine, price-aware recommendation model, profitability/trip-economics guards, generated graphs, installer, historical tooling, and deterministic tests are present.
 
 Business remains configured but intentionally disabled until its ticket/free-company economics are explicitly modeled. The committed historical seed remains intentionally empty until a trustworthy structured source is verified.
 
 ### Deterministic Windows validation — PASS
 
-The target Windows machine ran:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
-```
-
-from commit `368562c9257d8defef9b3c55f44bbf34e5e2ea4a` with all deterministic/static tests passing, including historical tooling/cycle reconstruction, seed importer/provenance tests, 19 production recommendation-model checks, final profitability/restock guards, and independent restock-display checks.
-
-Do not rerun that suite unless a later functional source/config change requires it.
+The target Windows machine ran the deterministic suite from commit `368562c9257d8defef9b3c55f44bbf34e5e2ea4a` with all previously documented checks passing. Do not rerun that broad suite unless a later functional source/config change specifically requires it.
 
 ### Bounded live environment validation — PASS
 
-The target Windows machine ran:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1 -SkipTests
-```
-
-from commit `03d02f045ef97aafffa5855620abf39dea709489`.
-
-Observed evidence:
-
-- YATA succeeded in about 3.5 seconds;
-- UK Xanax: stock `0`, foreign price `$763,144`, source timestamp `1787286888`;
-- Japan Xanax: stock `9`, foreign price `$679,492`, source timestamp `1787286887`;
-- Torn Item Market intentionally skipped because no local API key was configured; this is permitted;
-- serialized production updater/finalizer exited `0` in about 1.7 seconds;
-- runtime storage grew from `0 B` to `1.37 KiB`;
-- generated storage grew from `0 B` to `1.96 KiB`, confirming production graph generation;
-- Rainmeter was running at about `38.58 MiB` whole-process working set.
-
-Do not repeat this live pass unless a later defect specifically requires another provider/updater check.
+The target machine completed the bounded YATA/updater/graph/storage validation from commit `03d02f045ef97aafffa5855620abf39dea709489`. Do not repeat that broad live pass unless a later defect specifically requires it.
 
 ### Installation — PASS
 
-The target Windows machine pulled repository head `80c4711` and ran:
+`Install.ps1` created ignored local settings and successfully linked the Rainmeter skin directory to the repository source. No reinstall is required; the installed skin is a junction.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
-```
+### Torn Item Market / local API key — PASS
 
-Observed evidence:
+A local Torn API key is now configured in ignored `config/settings.local.json`.
 
-- ignored `config/settings.local.json` was created from the example template;
-- `C:\Users\vagab\OneDrive\Documents\Rainmeter\Skins\Travel Assistant` was successfully linked to `C:\Codex\TORN\RainMeter Projects\Travel Assistant`;
-- installer completed normally.
+Observed:
 
-The installer exposed one cosmetic Windows PowerShell encoding issue: its Unicode arrow rendered as `â†’`. The connector replaced that output literal with ASCII `->` in commit `3585d0995a302855cee68939a5437977e2fbc739`. This did not affect junction creation or runtime behavior.
+- Torn Item Market returned HTTP `200` through `curl.exe`;
+- Windows PowerShell `Invoke-RestMethod` hung specifically against `api.torn.com` on this target machine;
+- production Torn Item Market requests were rerouted through bounded `curl.exe` while YATA stayed unchanged;
+- production updater/finalizer exits `0` and writes a fresh `torn_itemmarket` resale cache;
+- Rainmeter now consumes profitability-aware state instead of the no-key fallback.
+
+### Rainmeter rendering / polling — PASS
+
+Direct target-machine evidence now confirms:
+
+- UK renders above Japan;
+- both graphs render and align;
+- live stock and foreign prices render;
+- encoding/mojibake is fixed;
+- sparse history remains conservative with no invented departure timing;
+- observed sellout history persists and renders;
+- Japan retained its observed `Last Sold Out` around `01:06`;
+- UK subsequently observed a real live restock and sellout transition;
+- the visible header shows last successful update plus next-poll countdown and reports stale state if polling stops;
+- manual updater/heartbeat output is correct;
+- the initial Rainmeter polling failure was isolated to incorrect RunCommand measure declaration (`Measure=RunCommand`);
+- both measures now use documented `Measure=Plugin` / `Plugin=RunCommand` configuration;
+- `tests/Validate-RainmeterSkin.ps1` passes on the target machine;
+- after the fix, the skin refreshes to current live data and the polling heartbeat is active.
+
+Do not wait for additional real restock/sellout cycles merely to complete acceptance.
 
 ## Immediate next task
 
-Pull current `main`, then refresh Rainmeter and load:
+Do **not** rerun broad deterministic/live validation. Pull current `main` only if needed, then perform the final narrow Rainmeter acceptance checks:
 
-```text
-Travel Assistant\TravelAssistant.ini
-```
-
-No reinstall is required because the installed skin is a junction to the repository source.
-
-Validate only the remaining Rainmeter acceptance criteria:
-
-- UK above Japan;
-- both graphs render and align;
-- live stock and foreign prices appear plausibly;
-- `Last Sold Out` contains only observed history;
-- sparse history produces learning/check-external behavior rather than invented departure timing;
-- travel mode cycles `Standard -> Airstrip -> WLT`, with Airstrip default on a clean preference state;
-- Business is not offered;
-- external verification opens Weav3r Travel Stock;
-- Rainmeter log is free of material Travel Assistant Lua, RunCommand, missing-image, PowerShell, or unsupported-option errors;
-- no continuously running Travel Assistant PowerShell process or abnormal runtime/generated storage growth is observed;
-- Rainmeter remains responsive.
-
-Do not wait for or manufacture an actual restock/sellout to complete this run. Actual-cycle observation may remain follow-up work.
+1. Click the mode selector repeatedly and confirm the visible sequence is `Airstrip -> WLT -> Standard -> Airstrip`; Business must never appear.
+2. Click a timing/status/external-verification area and confirm Weav3r Travel Stock opens.
+3. Inspect Rainmeter `About -> Log` after at least one automatic poll and one mode change. There must be no material Travel Assistant Lua, RunCommand, missing-image, PowerShell, timeout, or unsupported-option errors.
+4. Run a lightweight process/storage sanity check while the skin is idle between polls:
+   - no continuously running Travel Assistant PowerShell process;
+   - runtime/generated directories remain small;
+   - only the expected small graph/output files exist and graph images do not accumulate;
+   - Rainmeter remains responsive.
 
 ## Defect handling
 
-When a local/Rainmeter defect appears, capture exact console output or relevant Rainmeter log lines without secrets. Fix repository code through the GitHub connector where practical and rerun only the narrowest relevant local check.
+If any final local/Rainmeter defect appears, capture only the exact relevant output/log lines and fix repository code through the GitHub connector. Rerun only the narrowest check for that defect.
 
 ## Safety/model invariants
 
@@ -115,6 +96,6 @@ Preserve every invariant in `AGENTS.md`, especially:
 
 ## Completion criteria
 
-Mark this run `COMPLETED` only after the installed skin is actually loaded in Rainmeter and the remaining rendering, selector, live-value, log, and resource checks above are truthfully observed.
+Mark this run `COMPLETED` only after the remaining selector, external-link, log, and resource checks above are truthfully observed.
 
-Historical backfill, optional Torn Item Market validation with a local key, actual restock/sellout shadow observation, and longer-term calibration may remain follow-up work after v1 operational acceptance.
+Historical backfill, further real-cycle learning, longer-term profitability calibration, and Business economics may remain follow-up work after v1 operational acceptance.
