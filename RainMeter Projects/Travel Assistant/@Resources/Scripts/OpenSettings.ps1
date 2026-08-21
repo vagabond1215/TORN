@@ -5,6 +5,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 . (Join-Path $PSScriptRoot 'TravelProfile.ps1')
+. (Join-Path $PSScriptRoot 'TornProfileSync.ps1')
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
@@ -92,7 +93,7 @@ if ($null -ne $prefs -and $prefs.PSObject.Properties['travelMode']) { $currentMo
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Travel Assistant Settings'
-$form.Size = New-Object System.Drawing.Size(520, 555)
+$form.Size = New-Object System.Drawing.Size(520, 625)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -172,8 +173,6 @@ $stars.Value = [decimal][int]$profile.companyStars
 Style-Input $stars
 $form.Controls.Add($stars)
 
-# Keep the label clear of the NumericUpDown. The previous 180px width extended
-# eight pixels over the control and painted across its left edge on Windows.
 New-Label -Text 'Faction: Excursion capacity' -X 18 -Y 230 -W 168 | Out-Null
 $excursion = New-Object System.Windows.Forms.NumericUpDown
 $excursion.Location = New-Object System.Drawing.Point(190,227)
@@ -196,15 +195,28 @@ Style-Input $travelCostLevel
 $form.Controls.Add($travelCostLevel)
 New-Label -Text '(-15% fee per level)' -X 290 -Y 273 -W 170 | Out-Null
 
-$summaryTitle = New-Label -Text 'Effective travel perks' -X 18 -Y 319 -W 240
+$sync = New-Object System.Windows.Forms.Button
+$sync.Text = 'Sync from Torn'
+$sync.Location = New-Object System.Drawing.Point(18,316)
+$sync.Size = New-Object System.Drawing.Size(110,30)
+$form.Controls.Add($sync)
+
+$syncStatus = New-Object System.Windows.Forms.Label
+$syncStatus.Location = New-Object System.Drawing.Point(140,312)
+$syncStatus.Size = New-Object System.Drawing.Size(352,44)
+$syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
+$syncStatus.Text = 'Populate company/stars and faction travel levels. Save remains explicit.'
+$form.Controls.Add($syncStatus)
+
+$summaryTitle = New-Label -Text 'Effective travel perks' -X 18 -Y 365 -W 240
 $summaryTitle.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
 $summary = New-Object System.Windows.Forms.Label
-$summary.Location = New-Object System.Drawing.Point(18,344)
+$summary.Location = New-Object System.Drawing.Point(18,390)
 $summary.Size = New-Object System.Drawing.Size(475,74)
 $summary.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 $form.Controls.Add($summary)
 
-$note = New-Label -Text 'Flower/Toy +5 capacity is item-specific and does not increase Xanax capacity.' -X 18 -Y 424 -W 475 -H 24
+$note = New-Label -Text 'Flower/Toy +5 capacity is item-specific and does not increase Xanax capacity.' -X 18 -Y 470 -W 475 -H 24
 $note.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72)
 
 $script:modeIds = @()
@@ -250,9 +262,62 @@ $excursion.Add_ValueChanged({ Update-ProfilePreview })
 $travelCostLevel.Add_ValueChanged({ Update-ProfilePreview })
 Update-ProfilePreview
 
+$sync.Add_Click({
+    $sync.Enabled = $false
+    $sync.Text = 'Syncing...'
+    $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
+    $syncStatus.Text = 'Reading Torn job and faction upgrades...'
+    [System.Windows.Forms.Application]::DoEvents()
+
+    try {
+        $apiKey = [string]$keyBox.Text.Trim()
+        if ([string]::IsNullOrWhiteSpace($apiKey)) { throw 'Enter a Torn API key before syncing.' }
+
+        $result = Get-TornTravelProfileSync -ApiKey $apiKey -PerksConfig $perks
+        $partial = $false
+
+        if ($result.CompanyResolved) {
+            $companySyncIndex = -1
+            for ($i = 0; $i -lt $companyRows.Count; $i++) {
+                if ([string]$companyRows[$i].id -eq [string]$result.CompanyType) { $companySyncIndex = $i; break }
+            }
+            if ($companySyncIndex -ge 0) {
+                $companyCombo.SelectedIndex = $companySyncIndex
+                $stars.Value = [decimal][int]$result.CompanyStars
+            } else {
+                $partial = $true
+            }
+        } else {
+            $partial = $true
+        }
+
+        if ($result.FactionResolved) {
+            $excursion.Value = [decimal][int]$result.FactionExcursionLevel
+            $travelCostLevel.Value = [decimal][int]$result.FactionTravelCostLevel
+        } else {
+            $partial = $true
+        }
+
+        Update-ProfilePreview
+        $syncStatus.Text = ([string]$result.CompanySummary + ' | ' + [string]$result.FactionSummary)
+        if ($partial) {
+            $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72)
+        } else {
+            $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(86,190,116)
+        }
+    } catch {
+        Write-SettingsError $_
+        $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(224,90,90)
+        $syncStatus.Text = $_.Exception.Message
+    } finally {
+        $sync.Text = 'Sync from Torn'
+        $sync.Enabled = $true
+    }
+})
+
 $save = New-Object System.Windows.Forms.Button
 $save.Text = 'Save'
-$save.Location = New-Object System.Drawing.Point(318,466)
+$save.Location = New-Object System.Drawing.Point(318,525)
 $save.Size = New-Object System.Drawing.Size(82,30)
 $save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255)
 $save.ForeColor = [System.Drawing.Color]::Black
@@ -260,7 +325,7 @@ $form.Controls.Add($save)
 
 $cancel = New-Object System.Windows.Forms.Button
 $cancel.Text = 'Cancel'
-$cancel.Location = New-Object System.Drawing.Point(410,466)
+$cancel.Location = New-Object System.Drawing.Point(410,525)
 $cancel.Size = New-Object System.Drawing.Size(82,30)
 $form.Controls.Add($cancel)
 $cancel.Add_Click({ $form.Close() })
