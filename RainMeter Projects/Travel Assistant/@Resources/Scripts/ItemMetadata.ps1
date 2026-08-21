@@ -1,6 +1,6 @@
 param(
     [int]$RefreshIntervalSeconds = 21600,
-    [int]$MaxIdsPerRequest = 40,
+    [int]$TimeoutSec = 12,
     [switch]$Force
 )
 
@@ -108,88 +108,58 @@ function Get-ObservedItemIds {
     return @($set | Sort-Object)
 }
 
-function Split-ItemIds {
-    param([int[]]$ItemIds, [int]$Maximum = 40)
-    if ($Maximum -lt 1) { $Maximum = 40 }
-    $chunks = New-Object System.Collections.Generic.List[object]
-    $current = New-Object System.Collections.Generic.List[int]
-    foreach ($id in @($ItemIds)) {
-        if ([int]$id -le 0) { continue }
-        $current.Add([int]$id)
-        if ($current.Count -ge $Maximum) {
-            $chunks.Add([pscustomobject]@{ ids = [int[]]$current.ToArray() })
-            $current = New-Object System.Collections.Generic.List[int]
-        }
-    }
-    if ($current.Count -gt 0) { $chunks.Add([pscustomobject]@{ ids = [int[]]$current.ToArray() }) }
-    return $chunks.ToArray()
-}
-
 function Get-CanonicalCategory {
     param([object]$Item)
     $type = if ($null -ne $Item -and $Item.PSObject.Properties['type']) { [string]$Item.type } else { '' }
-    if ($type -eq 'Weapon') {
-        $details = if ($Item.PSObject.Properties['details']) { $Item.details } else { $null }
-        if ($null -ne $details -and $details.PSObject.Properties['category'] -and -not [string]::IsNullOrWhiteSpace([string]$details.category)) {
-            return [pscustomobject]@{ category = [string]$details.category; resolved = $true }
-        }
-        return [pscustomobject]@{ category = 'Weapon'; resolved = $false }
+    if ([string]::IsNullOrWhiteSpace($type)) {
+        return [pscustomobject]@{ category = 'Unknown'; resolved = $false }
     }
-    if ([string]::IsNullOrWhiteSpace($type)) { return [pscustomobject]@{ category = 'Unknown'; resolved = $false } }
     return [pscustomobject]@{ category = $type; resolved = $true }
 }
 
-function Convert-TornItemMetadata {
-    param([object]$Item, [long]$Now)
-    if ($null -eq $Item -or -not $Item.PSObject.Properties['id'] -or -not $Item.PSObject.Properties['name']) { return $null }
-    $id = [int]$Item.id
-    if ($id -le 0) { return $null }
+function Convert-TornBulkItemMetadata {
+    param([int]$ItemId, [object]$Item, [long]$Now)
+    if ($ItemId -le 0 -or $null -eq $Item -or -not $Item.PSObject.Properties['name']) { return $null }
 
     $categoryResult = Get-CanonicalCategory -Item $Item
     $marketPrice = 0L
-    $shops = New-Object System.Collections.Generic.List[object]
-    if ($Item.PSObject.Properties['value'] -and $null -ne $Item.value) {
-        if ($Item.value.PSObject.Properties['market_price']) { $marketPrice = [long]$Item.value.market_price }
-        if ($Item.value.PSObject.Properties['shops']) {
-            foreach ($shop in @($Item.value.shops)) {
-                if ($null -eq $shop) { continue }
-                $shops.Add([pscustomobject]@{
-                    country = if ($shop.PSObject.Properties['country']) { [string]$shop.country } else { '' }
-                    shop = if ($shop.PSObject.Properties['shop']) { [string]$shop.shop } else { '' }
-                    buyPrice = if ($shop.PSObject.Properties['buy_price'] -and $null -ne $shop.buy_price) { [long]$shop.buy_price } else { $null }
-                    sellPrice = if ($shop.PSObject.Properties['sell_price'] -and $null -ne $shop.sell_price) { [long]$shop.sell_price } else { $null }
-                })
-            }
+    if ($Item.PSObject.Properties['market_value'] -and $null -ne $Item.market_value) { $marketPrice = [long]$Item.market_value }
+
+    $tradabilityKnown = $false
+    $isTradable = $null
+    foreach ($field in @('tradeable','tradable','is_tradable')) {
+        if ($Item.PSObject.Properties[$field] -and $null -ne $Item.$field) {
+            $tradabilityKnown = $true
+            $isTradable = [bool]$Item.$field
+            break
         }
     }
 
     return [pscustomobject]@{
         schemaVersion = 1
-        itemId = $id
+        itemId = $ItemId
         name = [string]$Item.name
         type = if ($Item.PSObject.Properties['type']) { [string]$Item.type } else { '' }
-        subType = if ($Item.PSObject.Properties['sub_type'] -and $null -ne $Item.sub_type) { [string]$Item.sub_type } else { '' }
+        weaponType = if ($Item.PSObject.Properties['weapon_type'] -and $null -ne $Item.weapon_type) { [string]$Item.weapon_type } else { '' }
         category = [string]$categoryResult.category
         categoryResolved = [bool]$categoryResult.resolved
-        isTradable = if ($Item.PSObject.Properties['is_tradable']) { [bool]$Item.is_tradable } else { $false }
+        tradabilityKnown = $tradabilityKnown
+        isTradable = $isTradable
         marketPrice = $marketPrice
-        shops = $shops.ToArray()
         fetchedAt = $Now
-        source = 'torn_items'
+        source = 'torn_items_bulk'
     }
 }
 
-function Invoke-TornItemsJsonWithCurl {
-    param([int[]]$ItemIds, [string]$ApiKey, [int]$TimeoutSec = 30)
-    if ($null -eq $ItemIds -or $ItemIds.Count -eq 0) { return $null }
+function Invoke-TornBulkItemsJsonWithCurl {
+    param([string]$ApiKey, [int]$RequestTimeoutSec = 12)
     if ([string]::IsNullOrWhiteSpace($ApiKey)) { throw 'A local Torn API key is required for item metadata enrichment.' }
 
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($null -eq $curl) { throw 'curl.exe is required for Torn item metadata requests on this Windows environment.' }
-    if ($TimeoutSec -lt 1) { $TimeoutSec = 30 }
-    $connectTimeout = [Math]::Min(5, $TimeoutSec)
-    $ids = (@($ItemIds | ForEach-Object { [int]$_ }) -join ',')
-    $uri = "https://api.torn.com/v2/torn/$ids/items?sort=ASC"
+    if ($RequestTimeoutSec -lt 1) { $RequestTimeoutSec = 12 }
+    $connectTimeout = [Math]::Min(5, $RequestTimeoutSec)
+    $uri = 'https://api.torn.com/torn/?selections=items'
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $curl.Source
@@ -208,26 +178,32 @@ function Invoke-TornItemsJsonWithCurl {
         $process.StandardInput.WriteLine('show-error')
         $process.StandardInput.WriteLine('fail')
         $process.StandardInput.WriteLine(('connect-timeout = {0}' -f $connectTimeout))
-        $process.StandardInput.WriteLine(('max-time = {0}' -f $TimeoutSec))
+        $process.StandardInput.WriteLine(('max-time = {0}' -f $RequestTimeoutSec))
         $process.StandardInput.WriteLine(('url = "{0}"' -f $uri))
         $process.StandardInput.WriteLine('header = "Accept: application/json"')
+        $process.StandardInput.WriteLine('header = "User-Agent: TravelAssistant-Rainmeter/1.0"')
         $safeKey = $ApiKey.Replace("`r", '').Replace("`n", '').Replace('"', '\"')
         $process.StandardInput.WriteLine(('header = "Authorization: ApiKey {0}"' -f $safeKey))
         $process.StandardInput.Close()
 
-        $waitMs = [Math]::Max(3000, ($TimeoutSec + 2) * 1000)
+        $waitMs = [Math]::Max(3000, ($RequestTimeoutSec + 2) * 1000)
         if (-not $process.WaitForExit($waitMs)) {
             try { $process.Kill() } catch { }
-            throw ('curl.exe exceeded the {0}s Torn metadata timeout.' -f $TimeoutSec)
+            throw ('curl.exe exceeded the {0}s Torn bulk metadata timeout.' -f $RequestTimeoutSec)
         }
         $stdout = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
         if ($process.ExitCode -ne 0) {
             if ([string]::IsNullOrWhiteSpace($stderr)) { $stderr = 'curl.exe returned a non-zero exit code.' }
-            throw ('Torn metadata request failed: {0}' -f $stderr.Trim())
+            throw ('Torn bulk metadata request failed: {0}' -f $stderr.Trim())
         }
-        if ([string]::IsNullOrWhiteSpace($stdout)) { throw 'Torn metadata request returned an empty response.' }
-        return ($stdout | ConvertFrom-Json)
+        if ([string]::IsNullOrWhiteSpace($stdout)) { throw 'Torn bulk metadata request returned an empty response.' }
+        $payload = $stdout | ConvertFrom-Json
+        if ($null -ne $payload -and $payload.PSObject.Properties['error']) {
+            $message = if ($payload.error.PSObject.Properties['error']) { [string]$payload.error.error } else { 'Torn returned an error envelope.' }
+            throw ('Torn bulk metadata request returned an API error: {0}' -f $message)
+        }
+        return $payload
     } finally {
         $process.Dispose()
     }
@@ -258,8 +234,8 @@ function Write-MetadataError {
 }
 
 if ($RefreshIntervalSeconds -lt 3600) { $RefreshIntervalSeconds = 3600 }
-if ($MaxIdsPerRequest -lt 1) { $MaxIdsPerRequest = 40 }
-if ($MaxIdsPerRequest -gt 100) { $MaxIdsPerRequest = 100 }
+if ($TimeoutSec -lt 5) { $TimeoutSec = 5 }
+if ($TimeoutSec -gt 30) { $TimeoutSec = 30 }
 
 $now = Get-NowEpoch
 $engineState = Get-EngineState
@@ -272,7 +248,7 @@ if (-not $Force -and $lastAttemptAt -gt 0 -and ($now - $lastAttemptAt) -lt $Refr
 
 $engineState.metadataCollection.lastAttemptAt = $now
 $engineState.metadataCollection.distinctObservedItems = $itemIds.Count
-$engineState.metadataCollection.itemsRequested = 0
+$engineState.metadataCollection.itemsRequested = $itemIds.Count
 $engineState.metadataCollection.itemsResolved = @($engineState.itemMetadata.PSObject.Properties).Count
 $apiKey = Get-ApiKey
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
@@ -282,33 +258,26 @@ if ([string]::IsNullOrWhiteSpace($apiKey)) {
 }
 
 try {
-    $requested = 0
-    foreach ($batch in @(Split-ItemIds -ItemIds ([int[]]$itemIds) -Maximum $MaxIdsPerRequest)) {
-        $chunk = [int[]]$batch.ids
-        $requested += $chunk.Count
-        $engineState.metadataCollection.itemsRequested = $requested
+    $payload = Invoke-TornBulkItemsJsonWithCurl -ApiKey $apiKey -RequestTimeoutSec $TimeoutSec
+    if ($null -eq $payload -or -not $payload.PSObject.Properties['items'] -or $null -eq $payload.items) {
+        throw 'Torn bulk item metadata response does not contain items.'
+    }
 
-        $payload = Invoke-TornItemsJsonWithCurl -ItemIds $chunk -ApiKey $apiKey -TimeoutSec 30
-        if ($null -eq $payload -or -not $payload.PSObject.Properties['items']) { throw 'Torn item metadata response does not contain items.' }
-        foreach ($item in @($payload.items)) {
-            $metadata = Convert-TornItemMetadata -Item $item -Now $now
-            if ($null -eq $metadata) { continue }
-            Set-DynamicProperty $engineState.itemMetadata ([string]$metadata.itemId) $metadata
-        }
-
-        # Checkpoint after each successful batch. A later timeout must not erase
-        # canonical metadata already returned by Torn during this attempt.
-        $engineState.metadataCollection.source = 'torn_items'
-        $engineState.metadataCollection.itemsResolved = @($engineState.itemMetadata.PSObject.Properties).Count
-        $engineState.metadataCollection.categories = @(Get-MetadataCategories -EngineState $engineState)
-        Write-JsonAtomic -Path $EngineStateFile -Value $engineState
+    $resolved = 0
+    foreach ($itemId in $itemIds) {
+        $item = Get-DynamicProperty $payload.items ([string]$itemId)
+        if ($null -eq $item) { continue }
+        $metadata = Convert-TornBulkItemMetadata -ItemId ([int]$itemId) -Item $item -Now $now
+        if ($null -eq $metadata) { continue }
+        Set-DynamicProperty $engineState.itemMetadata ([string]$itemId) $metadata
+        $resolved++
     }
 
     $engineState.metadataCollection.lastRefreshAt = $now
     $engineState.metadataCollection.lastAttemptAt = $now
-    $engineState.metadataCollection.source = 'torn_items'
+    $engineState.metadataCollection.source = 'torn_items_bulk'
     $engineState.metadataCollection.distinctObservedItems = $itemIds.Count
-    $engineState.metadataCollection.itemsRequested = $requested
+    $engineState.metadataCollection.itemsRequested = $itemIds.Count
     $engineState.metadataCollection.itemsResolved = @($engineState.itemMetadata.PSObject.Properties).Count
     $engineState.metadataCollection.categories = @(Get-MetadataCategories -EngineState $engineState)
     $engineState.metadataCollection.lastErrorAt = 0
