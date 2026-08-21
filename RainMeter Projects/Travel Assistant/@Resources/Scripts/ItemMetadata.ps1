@@ -253,9 +253,8 @@ if ($null -eq $engineState) { return }
 $itemIds = @(Get-ObservedItemIds -EngineState $engineState)
 if ($itemIds.Count -eq 0) { return }
 
-$missingIds = @($itemIds | Where-Object { $null -eq (Get-DynamicProperty $engineState.itemMetadata ([string]$_)) })
-$lastRefreshAt = [long]$engineState.metadataCollection.lastRefreshAt
-if (-not $Force -and $missingIds.Count -eq 0 -and $lastRefreshAt -gt 0 -and ($now - $lastRefreshAt) -lt $RefreshIntervalSeconds) { return }
+$lastAttemptAt = [long]$engineState.metadataCollection.lastAttemptAt
+if (-not $Force -and $lastAttemptAt -gt 0 -and ($now - $lastAttemptAt) -lt $RefreshIntervalSeconds) { return }
 
 $engineState.metadataCollection.lastAttemptAt = $now
 $engineState.metadataCollection.distinctObservedItems = $itemIds.Count
