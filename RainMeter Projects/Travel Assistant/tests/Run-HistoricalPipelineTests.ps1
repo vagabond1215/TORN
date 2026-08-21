@@ -9,7 +9,7 @@ $tempCycles = Join-Path $tempRoot 'cycles.jsonl'
 
 function Assert-Equal {
     param([string]$Name, $Actual, $Expected)
-    if ($Actual -ne $Expected) { throw "$Name — expected '$Expected', got '$Actual'." }
+    if ($Actual -ne $Expected) { throw "$Name - expected '$Expected', got '$Actual'." }
     Write-Host "PASS $Name" -ForegroundColor DarkGreen
 }
 
