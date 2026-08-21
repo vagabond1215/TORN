@@ -4,6 +4,7 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $SettingsPath = Join-Path $ProjectRoot 'config\settings.local.json'
 . (Join-Path $ProjectRoot '@Resources\Scripts\TornProfileSync.ps1')
+. (Join-Path $ProjectRoot '@Resources\Scripts\CurrentCapacity.ps1')
 
 function Read-JsonFile {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -22,94 +23,30 @@ function Write-ProbeFailure {
     Write-Host ('{0}: UNAVAILABLE (HTTP {1}{2}) - {3}' -f $Label, [int]$Result.HttpStatus, $codeText, [string]$Result.Error) -ForegroundColor Yellow
 }
 
-function Get-ShapeTypeName {
-    param([object]$Value)
-    if ($null -eq $Value) { return 'null' }
-    if ($Value -is [string]) { return 'string' }
-    if ($Value -is [System.Collections.IDictionary]) { return 'dictionary' }
-    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [pscustomobject])) {
-        try { return ('array[{0}]' -f @($Value).Count) } catch { return 'enumerable' }
-    }
-    return $Value.GetType().Name
-}
-
-function Write-ObjectShape {
-    param([string]$Label, [object]$Value, [int]$Indent = 2)
-    $pad = ' ' * $Indent
-    if ($null -eq $Value) {
-        Write-Host ($pad + $Label + ': null')
-        return
-    }
-
-    $typeName = Get-ShapeTypeName -Value $Value
-    Write-Host ($pad + $Label + ': ' + $typeName)
-
-    if ($Value -is [pscustomobject]) {
-        foreach ($property in @($Value.PSObject.Properties)) {
-            Write-Host ($pad + '  .' + $property.Name + ' = ' + (Get-ShapeTypeName -Value $property.Value))
-        }
-    }
-}
-
-function Write-FactionBranchDiagnostic {
-    param([object]$Payload, [ValidateSet('peace','war')][string]$BranchName)
-
-    if ($null -eq $Payload -or -not $Payload.PSObject.Properties['upgrades'] -or $null -eq $Payload.upgrades) {
-        Write-Host ('  {0} raw: upgrades object unavailable' -f $BranchName) -ForegroundColor Yellow
-        return
-    }
-
-    $prop = $Payload.upgrades.PSObject.Properties[$BranchName]
-    if ($null -eq $prop) {
-        Write-Host ('  {0} raw: property missing' -f $BranchName) -ForegroundColor Yellow
-        return
-    }
-
-    $branches = @($prop.Value)
-    Write-Host ('  {0} raw: {1} branch(es)' -f $BranchName, $branches.Count)
-    foreach ($branch in $branches) {
-        if ($null -eq $branch) { continue }
-        $name = if ($branch.PSObject.Properties['name']) { [string]$branch.name } else { '(unnamed)' }
-        $rows = if ($branch.PSObject.Properties['upgrades']) { @($branch.upgrades) } else { @() }
-        Write-Host ('    {0}: {1} upgrade row(s)' -f $name, $rows.Count)
-
-        $interesting = @($rows | Where-Object {
-            $upgradeName = if ($_.PSObject.Properties['name']) { [string]$_.name } else { '' }
-            $ability = if ($_.PSObject.Properties['ability']) { [string]$_.ability } else { '' }
-            $name -match '(?i)excursion|travel' -or (($upgradeName + ' ' + $ability) -match '(?i)travel|abroad|capacity|fee')
-        })
-        foreach ($row in $interesting) {
-            $upgradeName = if ($row.PSObject.Properties['name']) { [string]$row.name } else { '(unnamed)' }
-            $level = if ($row.PSObject.Properties['level']) { [string]$row.level } else { '?' }
-            $ability = if ($row.PSObject.Properties['ability']) { [string]$row.ability } else { '' }
-            Write-Host ('      {0} | level {1} | {2}' -f $upgradeName, $level, $ability)
-        }
-    }
-}
-
 $settings = Read-JsonFile $SettingsPath
 if ($null -eq $settings -or -not $settings.PSObject.Properties['tornApiKey'] -or [string]::IsNullOrWhiteSpace([string]$settings.tornApiKey)) {
     Write-Host 'No Torn API key is present in config\settings.local.json.' -ForegroundColor Red
     exit 1
 }
 $apiKey = [string]$settings.tornApiKey
+$travelMode = if ($settings.PSObject.Properties['travelMode'] -and -not [string]::IsNullOrWhiteSpace([string]$settings.travelMode)) { [string]$settings.travelMode } else { 'airstrip' }
 
-Write-Host 'Travel Assistant - Torn profile probe' -ForegroundColor Cyan
+Write-Host 'Travel Assistant - effective capacity probe' -ForegroundColor Cyan
 Write-Host 'API KEY: PRESENT (not displayed)'
+Write-Host ('Selected travel mode: {0}' -f $travelMode)
 Write-Host ''
 
-$basic = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/basic?comment=TravelAssistantProfileProbe' -ApiKey $apiKey
+$basic = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/basic?comment=TravelAssistantCapacityProbe' -ApiKey $apiKey
 if ($basic.Success) {
     $row = if ($basic.Payload.PSObject.Properties['profile']) { $basic.Payload.profile } else { $null }
     if ($null -ne $row) {
         $name = if ($row.PSObject.Properties['name']) { [string]$row.name } else { '(unknown)' }
         $id = if ($row.PSObject.Properties['id']) { [string]$row.id } else { '?' }
-        $level = if ($row.PSObject.Properties['level']) { [string]$row.level } else { '?' }
-        Write-Host ('BASIC: OK - {0} [{1}], level {2}' -f $name, $id, $level) -ForegroundColor Green
-    } else { Write-Host 'BASIC: OK - no expected profile object' -ForegroundColor Yellow }
-} else { Write-ProbeFailure -Label 'BASIC' -Result $basic }
+        Write-Host ('USER: OK - {0} [{1}]' -f $name, $id) -ForegroundColor Green
+    } else { Write-Host 'USER: OK - profile object unavailable' -ForegroundColor Yellow }
+} else { Write-ProbeFailure -Label 'USER' -Result $basic }
 
-$job = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/job?comment=TravelAssistantProfileProbe' -ApiKey $apiKey
+$job = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/job?comment=TravelAssistantCapacityProbe' -ApiKey $apiKey
 if ($job.Success) {
     $row = if ($job.Payload.PSObject.Properties['job']) { $job.Payload.job } else { $null }
     if ($null -eq $row) { Write-Host 'JOB: OK - no current job/company' -ForegroundColor Green }
@@ -120,43 +57,43 @@ if ($job.Success) {
     }
 } else { Write-ProbeFailure -Label 'JOB' -Result $job }
 
-$faction = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/faction/upgrades?comment=TravelAssistantProfileProbe' -ApiKey $apiKey
-if ($faction.Success) {
-    $profile = Get-TornFactionTravelProfile -FactionPayload $faction.Payload
-    $rawState = if ($faction.Payload.PSObject.Properties['state']) { [string]$faction.Payload.state } else { '(missing)' }
-    Write-Host 'FACTION UPGRADES: OK' -ForegroundColor Green
-    Write-Host ('  API state: {0}' -f $rawState)
-    Write-Host ('  Mode:   {0}' -f ([string]$profile.State).ToUpperInvariant())
-    Write-Host ('  Active: capacity {0}/10 | cost {1}/5' -f [int]$profile.ExcursionLevel, [int]$profile.TravelCostLevel)
-    Write-Host ('  Peace:  capacity {0}/10 | cost {1}/5' -f [int]$profile.PeaceExcursionLevel, [int]$profile.PeaceTravelCostLevel)
-    Write-Host ('  War:    capacity {0}/10 | cost {1}/5' -f [int]$profile.WarExcursionLevel, [int]$profile.WarTravelCostLevel)
+$perks = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/perks?comment=TravelAssistantCapacityProbe' -ApiKey $apiKey
+$inventory = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/inventory?limit=250&comment=TravelAssistantCapacityProbe' -ApiKey $apiKey
 
-    if ([int]$profile.PeaceExcursionLevel -eq 0 -and [int]$profile.WarExcursionLevel -eq 0) {
-        Write-Host '  No travel-capacity row was recognized; showing redacted response shape:' -ForegroundColor Yellow
-        Write-ObjectShape -Label 'exact endpoint payload' -Value $faction.Payload
-        if ($faction.Payload.PSObject.Properties['upgrades']) {
-            Write-ObjectShape -Label 'exact endpoint .upgrades' -Value $faction.Payload.upgrades -Indent 4
+if (-not $perks.Success) { Write-ProbeFailure -Label 'CURRENT PERKS' -Result $perks }
+if (-not $inventory.Success) { Write-ProbeFailure -Label 'INVENTORY' -Result $inventory }
+
+if ($perks.Success -and $inventory.Success) {
+    $capacity = Get-TornEffectiveXanaxCapacity -TravelMode $travelMode -PerksPayload $perks.Payload -InventoryPayload $inventory.Payload
+    Write-Host ''
+    Write-Host 'CURRENT XANAX CAPACITY' -ForegroundColor Cyan
+    Write-Host ('  Base ({0}): {1}' -f $capacity.TravelMode, [int]$capacity.BaseCapacity)
+    Write-Host ('  Suitcase:      +{0}  ({1})' -f [int]$capacity.SuitcaseBonus, [string]$capacity.SuitcaseSummary)
+    Write-Host ('  Active perks:  +{0}' -f [int]$capacity.ActivePerkBonus)
+
+    if (@($capacity.RecognizedPerks).Count -gt 0) {
+        Write-Host '  Recognized current capacity perks:'
+        foreach ($row in @($capacity.RecognizedPerks)) {
+            Write-Host ('    {0}: +{1} | {2}' -f [string]$row.Bucket, [int]$row.Bonus, [string]$row.Text)
         }
-        Write-FactionBranchDiagnostic -Payload $faction.Payload -BranchName 'peace'
-        Write-FactionBranchDiagnostic -Payload $faction.Payload -BranchName 'war'
+    } else {
+        Write-Host '  Recognized current capacity perks: none'
+    }
 
-        Write-Host '  Probing generic v2 faction selection shape...' -ForegroundColor DarkYellow
-        $genericFaction = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/faction?selections=upgrades&comment=TravelAssistantProfileProbe' -ApiKey $apiKey
-        if ($genericFaction.Success) {
-            Write-ObjectShape -Label 'generic faction payload' -Value $genericFaction.Payload
-            if ($genericFaction.Payload.PSObject.Properties['upgrades']) {
-                Write-ObjectShape -Label 'generic faction .upgrades' -Value $genericFaction.Payload.upgrades -Indent 4
-            }
-        } else {
-            Write-ProbeFailure -Label 'GENERIC FACTION UPGRADES' -Result $genericFaction
+    if (@($capacity.UnparsedPerks).Count -gt 0) {
+        Write-Host '  UNPARSED travel-capacity strings:' -ForegroundColor Yellow
+        foreach ($row in @($capacity.UnparsedPerks)) {
+            Write-Host ('    {0}: {1}' -f [string]$row.Bucket, [string]$row.Text) -ForegroundColor Yellow
         }
     }
-    if (-not [bool]$profile.Resolved) {
-        Write-Host '  Active mode was not recognized; no active faction perks should be assumed.' -ForegroundColor Yellow
+
+    if ($capacity.Resolved) {
+        Write-Host ('  EFFECTIVE CAPACITY: {0} items' -f [int]$capacity.Capacity) -ForegroundColor Green
+        Write-Host '  This value uses only currently active perks; no faction-upgrades permission is required.' -ForegroundColor DarkGreen
+    } else {
+        Write-Host ('  TENTATIVE CAPACITY: {0} items (not authoritative yet)' -f [int]$capacity.Capacity) -ForegroundColor Yellow
+        Write-Host '  One or more current travel-capacity strings were not recognized, so Settings should not auto-save this value yet.' -ForegroundColor Yellow
     }
-} else {
-    Write-ProbeFailure -Label 'FACTION UPGRADES' -Result $faction
-    Write-Host '  Torn returned an API error envelope instead of faction-upgrade data. A high-access key does not necessarily imply faction API permission.' -ForegroundColor DarkYellow
 }
 
 Write-Host ''
