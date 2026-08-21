@@ -76,7 +76,7 @@ try {
             source = 'synthetic-restock-display'
         })
     }
-    Write-JsonLinesNoBom -Path (Join-Path $runtimeDir 'cycles.jsonl') -Rows @($cycles)
+    Write-JsonLinesNoBom -Path (Join-Path $runtimeDir 'cycles.jsonl') -Rows $cycles.ToArray()
 
     $engine = [pscustomobject]@{
         schemaVersion = 1
