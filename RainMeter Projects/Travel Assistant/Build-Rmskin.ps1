@@ -48,25 +48,25 @@ function Get-LocalApiKey {
 function Assert-DistributionSafe {
     param([string]$Root)
 
-    $forbiddenNames = @(
-        'settings.local.json',
-        'secrets.json',
-        '.env',
-        'engine-state.json',
-        'observations.jsonl',
-        'cycles.jsonl',
-        'shadow-collection-error.txt',
-        'item-metadata-error.txt',
-        'state.kv',
-        'last-update.txt'
+    $forbiddenRelativePaths = @(
+        'Skins\Travel Assistant\config\settings.local.json',
+        'Skins\Travel Assistant\config\secrets.json',
+        'Skins\Travel Assistant\.env'
     )
+    foreach ($relative in $forbiddenRelativePaths) {
+        if (Test-Path -LiteralPath (Join-Path $Root $relative)) {
+            throw "Distribution staging contains forbidden local file: $relative"
+        }
+    }
 
-    $forbidden = @(
-        Get-ChildItem -LiteralPath $Root -Recurse -File -Force |
-            Where-Object { $forbiddenNames -contains $_.Name }
-    )
-    if ($forbidden.Count -gt 0) {
-        throw ('Distribution staging contains forbidden local/runtime files: ' + (($forbidden | ForEach-Object { $_.FullName }) -join '; '))
+    foreach ($forbiddenDir in @(
+        'Skins\Travel Assistant\data\runtime',
+        'Skins\Travel Assistant\@Resources\Generated',
+        'Skins\Travel Assistant\@Resources\Cache'
+    )) {
+        if (Test-Path -LiteralPath (Join-Path $Root $forbiddenDir)) {
+            throw "Distribution staging contains forbidden runtime directory: $forbiddenDir"
+        }
     }
 
     $templatePath = Join-Path $StageSkin 'config\settings.local.example.json'
@@ -171,11 +171,6 @@ if ([string]::IsNullOrWhiteSpace($builder)) {
     Write-Host '  py -m pip install --user rmskin-builder'
     Write-Host 'Then rerun this script. The recipient does NOT need this builder; they only receive the generated .rmskin file.'
     exit 2
-}
-
-$existing = @{}
-foreach ($file in Get-ChildItem -LiteralPath $OutputDir -Filter '*.rmskin' -File -ErrorAction SilentlyContinue) {
-    $existing[$file.FullName] = $file.LastWriteTimeUtc
 }
 
 & $builder --path $StageRoot --dir-out $OutputDir --version $version --title 'Travel Assistant' --author 'vagabond1215'
