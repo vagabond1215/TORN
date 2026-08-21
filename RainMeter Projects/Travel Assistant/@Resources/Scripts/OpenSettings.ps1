@@ -172,7 +172,9 @@ $stars.Value = [decimal][int]$profile.companyStars
 Style-Input $stars
 $form.Controls.Add($stars)
 
-New-Label -Text 'Faction: Excursion capacity' -X 18 -Y 230 -W 180 | Out-Null
+# Keep the label clear of the NumericUpDown. The previous 180px width extended
+# eight pixels over the control and painted across its left edge on Windows.
+New-Label -Text 'Faction: Excursion capacity' -X 18 -Y 230 -W 168 | Out-Null
 $excursion = New-Object System.Windows.Forms.NumericUpDown
 $excursion.Location = New-Object System.Drawing.Point(190,227)
 $excursion.Size = New-Object System.Drawing.Size(90,24)
