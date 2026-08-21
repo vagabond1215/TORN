@@ -5,7 +5,7 @@
   "staleAfterSeconds": 300,
   "highResolutionRetentionHours": 48,
   "cycleRetentionDays": 90,
-  "graphWindowHours": 12,
+  "graphWindowHours": 8,
   "travelProfile": {
     "companyType": "none",
     "companyStars": 0,
