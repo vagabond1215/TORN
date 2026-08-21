@@ -4,11 +4,13 @@
     {
       "id": "none",
       "label": "None / Other",
+      "tornCompanyTypeId": null,
       "effects": []
     },
     {
       "id": "lingerie_store",
       "label": "Lingerie Store",
+      "tornCompanyTypeId": 32,
       "effects": [
         { "stars": 3, "generalCapacityBonus": 2, "label": "+2 travel item capacity" },
         { "stars": 10, "freeBusinessClass": true, "label": "Free Business Class travel" }
@@ -17,6 +19,7 @@
     {
       "id": "cruise_line",
       "label": "Cruise Line",
+      "tornCompanyTypeId": 15,
       "effects": [
         { "stars": 3, "generalCapacityBonus": 2, "label": "+2 travel item capacity" },
         { "stars": 7, "informational": "Destination stock report", "label": "Destination stock report" },
@@ -26,6 +29,7 @@
     {
       "id": "flower_shop",
       "label": "Flower Shop",
+      "tornCompanyTypeId": 3,
       "effects": [
         { "stars": 7, "itemCategory": "Flower", "itemCapacityBonus": 5, "label": "+5 flowers abroad" },
         { "stars": 10, "informational": "Flower stock analysis", "label": "Flower stock analysis" }
@@ -34,6 +38,7 @@
     {
       "id": "toy_shop",
       "label": "Toy Shop",
+      "tornCompanyTypeId": 9,
       "effects": [
         { "stars": 7, "itemCategory": "Plushie", "itemCapacityBonus": 5, "label": "+5 plushies abroad" },
         { "stars": 10, "informational": "Plushie stock analysis", "label": "Plushie stock analysis" }
@@ -42,6 +47,7 @@
     {
       "id": "logistics_management",
       "label": "Logistics Management",
+      "tornCompanyTypeId": 40,
       "effects": [
         { "stars": 5, "informational": "Can return to Torn while hospitalized", "label": "Return while hospitalized" }
       ]
@@ -49,6 +55,7 @@
     {
       "id": "theater",
       "label": "Theater",
+      "tornCompanyTypeId": 13,
       "effects": [
         { "stars": 10, "informational": "Hidden traveling status and destination", "label": "Hidden travel status / destination" }
       ]
