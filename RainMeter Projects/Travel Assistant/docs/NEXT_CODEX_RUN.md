@@ -33,7 +33,7 @@ The target machine completed the bounded YATA/updater/graph/storage validation f
 
 ### Torn Item Market / local API key — PASS
 
-A local Torn API key is now configured in ignored `config/settings.local.json`.
+A local Torn API key is configured in ignored `config/settings.local.json`.
 
 Observed:
 
@@ -41,11 +41,11 @@ Observed:
 - Windows PowerShell `Invoke-RestMethod` hung specifically against `api.torn.com` on this target machine;
 - production Torn Item Market requests were rerouted through bounded `curl.exe` while YATA stayed unchanged;
 - production updater/finalizer exits `0` and writes a fresh `torn_itemmarket` resale cache;
-- Rainmeter now consumes profitability-aware state instead of the no-key fallback.
+- Rainmeter consumes profitability-aware state instead of the no-key fallback.
 
 ### Rainmeter rendering / polling — PASS
 
-Direct target-machine evidence now confirms:
+Direct target-machine evidence confirms:
 
 - UK renders above Japan;
 - both graphs render and align;
@@ -60,26 +60,33 @@ Direct target-machine evidence now confirms:
 - the initial Rainmeter polling failure was isolated to incorrect RunCommand measure declaration (`Measure=RunCommand`);
 - both measures now use documented `Measure=Plugin` / `Plugin=RunCommand` configuration;
 - `tests/Validate-RainmeterSkin.ps1` passes on the target machine;
-- after the fix, the skin refreshes to current live data and the polling heartbeat is active.
+- after the fix, Rainmeter completes automatic production polls without manual PowerShell and advances the heartbeat/live state.
+
+### Rainmeter log / resource sanity — PASS
+
+Historical log entries before the RunCommand fix showed invalid-measure and missing-`MeasureUpdate` errors. After the corrected skin was refreshed at approximately `10:55:42` and `10:56:49`, no new Travel Assistant warnings/errors were observed while automatic polling continued through at least `10:59:54`.
+
+A between-polls process/storage snapshot confirmed:
+
+- no continuously running Travel Assistant PowerShell process;
+- runtime plus generated storage: `7` files / `6,835` bytes total;
+- generated directory contains only `uk-stock.png`, `jp-stock.png`, `state.kv`, and `last-update.txt`;
+- generated graph/output files update in place instead of accumulating.
 
 Do not wait for additional real restock/sellout cycles merely to complete acceptance.
 
 ## Immediate next task
 
-Do **not** rerun broad deterministic/live validation. Pull current `main` only if needed, then perform the final narrow Rainmeter acceptance checks:
+Do **not** rerun broad deterministic/live validation. Only two direct interaction checks remain:
 
 1. Click the mode selector repeatedly and confirm the visible sequence is `Airstrip -> WLT -> Standard -> Airstrip`; Business must never appear.
 2. Click a timing/status/external-verification area and confirm Weav3r Travel Stock opens.
-3. Inspect Rainmeter `About -> Log` after at least one automatic poll and one mode change. There must be no material Travel Assistant Lua, RunCommand, missing-image, PowerShell, timeout, or unsupported-option errors.
-4. Run a lightweight process/storage sanity check while the skin is idle between polls:
-   - no continuously running Travel Assistant PowerShell process;
-   - runtime/generated directories remain small;
-   - only the expected small graph/output files exist and graph images do not accumulate;
-   - Rainmeter remains responsive.
+
+If both pass, mark this run `COMPLETED` and update the status/handoff documents. No further local tests are required unless one of those interactions exposes a defect.
 
 ## Defect handling
 
-If any final local/Rainmeter defect appears, capture only the exact relevant output/log lines and fix repository code through the GitHub connector. Rerun only the narrowest check for that defect.
+If either final interaction fails, capture only the exact visible behavior or relevant new Rainmeter log line and fix repository code through the GitHub connector. Rerun only the narrowest check for that defect.
 
 ## Safety/model invariants
 
@@ -96,6 +103,6 @@ Preserve every invariant in `AGENTS.md`, especially:
 
 ## Completion criteria
 
-Mark this run `COMPLETED` only after the remaining selector, external-link, log, and resource checks above are truthfully observed.
+Mark this run `COMPLETED` only after the remaining selector and external-link checks above are truthfully observed.
 
 Historical backfill, further real-cycle learning, longer-term profitability calibration, and Business economics may remain follow-up work after v1 operational acceptance.
