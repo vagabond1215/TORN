@@ -8,10 +8,12 @@ Set-StrictMode -Version 2.0
 
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
+$ItemMetadata = Join-Path $PSScriptRoot 'ItemMetadata.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
+$MetadataErrorFile = Join-Path $RuntimeDir 'item-metadata-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
@@ -149,6 +151,16 @@ function Write-ShadowFailure {
     } catch { }
 }
 
+function Write-MetadataFailure {
+    param([string]$Message)
+    try {
+        New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+        $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
+        if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
+        [System.IO.File]::WriteAllText($MetadataErrorFile, $clean, [System.Text.UTF8Encoding]::new($false))
+    } catch { }
+}
+
 try {
     # Rainmeter can fire an initial refresh and a scheduled poll close together.
     # Skip a redundant overlapping run instead of creating concurrent network,
@@ -167,6 +179,15 @@ try {
     if (Test-Path -LiteralPath $ShadowCollector) {
         try { & $ShadowCollector }
         catch { Write-ShadowFailure -Message $_.Exception.Message }
+    }
+
+    # Canonical Torn item metadata is also fail-soft and low-frequency. It reads
+    # the distinct item IDs discovered by shadow collection and enriches runtime
+    # state with canonical names/categories/shop metadata. It does not change
+    # current recommendation economics or visible selection in this phase.
+    if (Test-Path -LiteralPath $ItemMetadata) {
+        try { & $ItemMetadata }
+        catch { Write-MetadataFailure -Message $_.Exception.Message }
     }
 
     # FinalizeState.ps1 applies independent restock-display, resale-freshness,
