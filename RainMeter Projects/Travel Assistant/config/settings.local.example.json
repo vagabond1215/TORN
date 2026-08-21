@@ -5,8 +5,13 @@
   "travelProfile": {
     "companyType": "none",
     "companyStars": 0,
+    "factionState": "manual",
     "factionExcursionLevel": 0,
-    "factionTravelCostLevel": 0
+    "factionTravelCostLevel": 0,
+    "factionPeaceExcursionLevel": 0,
+    "factionPeaceTravelCostLevel": 0,
+    "factionWarExcursionLevel": 0,
+    "factionWarTravelCostLevel": 0
   },
   "profitability": {
     "sellTarget": "item_market",
