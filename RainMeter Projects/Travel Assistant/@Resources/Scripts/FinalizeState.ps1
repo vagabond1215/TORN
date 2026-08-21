@@ -1,6 +1,8 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
+. (Join-Path $PSScriptRoot 'TravelProfile.ps1')
+
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
@@ -109,12 +111,14 @@ function Clear-DepartureTiming {
 }
 
 $settings = Read-JsonFile (Join-Path $ConfigDir 'settings.example.json')
+$localSettings = Read-JsonFile (Join-Path $ConfigDir 'settings.local.json')
 $itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
 $countriesConfig = Read-JsonFile (Join-Path $ConfigDir 'countries.json')
+$perksConfig = Read-JsonFile (Join-Path $ConfigDir 'travel-perks.json')
 $engineState = Read-JsonFile $EngineStateFile
 $state = Read-StateKv $StateKvFile
 
-if ($null -eq $settings -or $null -eq $itemsConfig -or $null -eq $countriesConfig -or $null -eq $engineState -or $state.Count -eq 0) {
+if ($null -eq $settings -or $null -eq $itemsConfig -or $null -eq $countriesConfig -or $null -eq $perksConfig -or $null -eq $engineState -or $state.Count -eq 0) {
     return
 }
 
@@ -124,8 +128,18 @@ $item = $enabledItem[0]
 $itemId = [int]$item.itemId
 $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $profitability = Get-ProfitabilitySettings
+$travelProfile = Get-TravelProfile -BaseSettings $settings -LocalSettings $localSettings
+$travelEffects = Get-TravelProfileEffects -Profile $travelProfile -PerksConfig $perksConfig -Item $item
 $mode = [string]$state['TravelMode']
 if ([string]::IsNullOrWhiteSpace($mode)) { $mode = [string]$settings.travelMode }
+
+$state['ProfileCompany'] = [string]$travelProfile.companyType
+$state['ProfileCompanyStars'] = [int]$travelProfile.companyStars
+$state['ProfileFactionCapacityBonus'] = [int]$travelEffects.factionCapacityBonus
+$state['ProfileGeneralCapacityBonus'] = [int]$travelEffects.generalCapacityBonus
+$state['ProfileItemCapacityBonus'] = [int]$travelEffects.itemCapacityBonus
+$state['ProfileTravelCostReductionPercent'] = [int]$travelEffects.travelCostReductionPercent
+$state['ProfileFreeBusinessClass'] = if ([bool]$travelEffects.freeBusinessClass) { 1 } else { 0 }
 
 $resale = Get-DynamicProperty $engineState.resaleCache ([string]$itemId)
 $resalePrice = 0L
@@ -190,11 +204,10 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
     $status = [string]$state[$prefix + 'Status']
     if ($hardDataStatuses -contains $status) { continue }
 
-    $travelCostValue = Get-DynamicProperty $country.travelCosts $mode
-    $capacityValue = Get-DynamicProperty $country.baseTravelCapacity $mode
-    $travelCostKnown = ($null -ne $travelCostValue)
-    $travelCost = if ($travelCostKnown) { [long]$travelCostValue } else { 0L }
-    $capacity = if ($capacityOverride -gt 0) { $capacityOverride } elseif ($null -ne $capacityValue) { [int]$capacityValue } else { 0 }
+    $economics = Get-EffectiveTravelEconomics -Country $country -TravelMode $mode -Effects $travelEffects -CapacityOverride $capacityOverride
+    $travelCostKnown = [bool]$economics.travelCostKnown
+    $travelCost = [long]$economics.travelCost
+    $capacity = [int]$economics.capacity
 
     $state[$prefix + 'TravelCost'] = if ($travelCostKnown) { $travelCost } else { -1 }
     $state[$prefix + 'Capacity'] = $capacity
@@ -209,7 +222,11 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
 
     if (($timingStatuses -contains $status) -and (-not $travelCostKnown -or $capacity -le 0)) {
         $state[$prefix + 'Status'] = 'CHECK_EXTERNAL'
-        $state[$prefix + 'Message'] = 'Travel-mode economics are unresolved - no departure recommendation'
+        if ($mode -eq 'business' -and -not [bool]$travelEffects.freeBusinessClass) {
+            $state[$prefix + 'Message'] = 'Business travel requires modeled ticket cost or free 10-star Lingerie travel'
+        } else {
+            $state[$prefix + 'Message'] = 'Travel-mode economics are unresolved - no departure recommendation'
+        }
         Clear-DepartureTiming -State $state -Prefix $prefix
         continue
     }
