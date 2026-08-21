@@ -8,6 +8,8 @@ Set-StrictMode -Version 2.0
 
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
+$GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
+$HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
 $acquired = $false
 
@@ -98,6 +100,14 @@ function Invoke-RestMethod {
     return Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
 }
 
+function Write-UpdateHeartbeat {
+    New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
+    $tmp = $HeartbeatFile + '.tmp'
+    $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    [System.IO.File]::WriteAllText($tmp, $epoch, [System.Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $tmp -Destination $HeartbeatFile -Force
+}
+
 try {
     # Rainmeter can fire an initial refresh and a scheduled poll close together.
     # Skip a redundant overlapping run instead of creating concurrent network,
@@ -113,6 +123,10 @@ try {
 
     & $Finalizer
     if (-not $?) { exit 1 }
+
+    # Write a tiny local heartbeat only after the serialized production pass
+    # completes. Rainmeter uses this to make polling health visible.
+    Write-UpdateHeartbeat
 
     exit 0
 } finally {
