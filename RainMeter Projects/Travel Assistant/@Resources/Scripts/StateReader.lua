@@ -61,6 +61,14 @@ local function formatShortElapsed(seconds)
     return string.format('%dd', math.floor(seconds / 86400))
 end
 
+local function formatHoursMinutes(seconds)
+    seconds = math.max(0, math.floor(number(seconds)))
+    local totalMinutes = math.floor(seconds / 60)
+    local h = math.floor(totalMinutes / 60)
+    local m = totalMinutes % 60
+    return string.format('%d:%02d', h, m)
+end
+
 local function formatInteger(value)
     local s = tostring(math.floor(number(value) + 0.5))
     local sign, digits = s:match('^([%-]?)(%d+)$')
@@ -170,7 +178,7 @@ local function updateDestination(data, prefix)
     if stock > 0 then
         setVariable(prefix .. 'StockHeaderText', 'Stock: ' .. formatInteger(stock))
     elseif lastSoldOutAt > 0 then
-        setVariable(prefix .. 'StockHeaderText', 'Out of Stock: ' .. formatShortElapsed(now - lastSoldOutAt) .. ' (' .. os.date('%H:%M', lastSoldOutAt) .. ')')
+        setVariable(prefix .. 'StockHeaderText', 'Out of Stock for ' .. formatHoursMinutes(now - lastSoldOutAt) .. ' since ' .. os.date('%H:%M', lastSoldOutAt))
     else
         setVariable(prefix .. 'StockHeaderText', 'Out of Stock')
     end
