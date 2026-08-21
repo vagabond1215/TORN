@@ -25,7 +25,11 @@ Assert-Equal 'Business base capacity is 15' (Get-TornTravelModeBaseCapacity -Tra
 $perks = [pscustomobject]@{
     perks = [pscustomobject]@{
         faction = @('Increases maximum traveling capacity by 10')
-        job = @('Increases travel item capacity by 2', 'Able to carry 5 additional flowers when traveling')
+        job = @(
+            'Increases travel item capacity by 2',
+            'Able to carry 5 additional flowers when traveling',
+            'Able to carry 5 additional plushies when traveling'
+        )
         book = @('Increases travel items by 10 for 31 days')
         enhancer = @('Increases travel capacity by +1', 'Increases travel capacity by +3')
         property = @('Provides access to an airstrip and pilot')
@@ -42,13 +46,31 @@ $active = Get-TornActiveTravelCapacityPerks -PerksPayload $perks
 Assert-True 'Known current travel perk strings resolve' ([bool]$active.Resolved)
 Assert-Equal 'Faction company and book capacity stack' ([int]$active.Bonus) 22
 Assert-Equal 'Only general Xanax-applicable additive perks are counted' @($active.Recognized).Count 3
-Assert-Equal 'Flower-specific company perk is excluded' @($active.Unparsed).Count 0
+Assert-Equal 'Category-specific company perks do not become general parse failures' @($active.Unparsed).Count 0
+
+$categoryPerks = Get-TornCategoryTravelCapacityPerks -PerksPayload $perks
+Assert-True 'Flower category capacity resolves' ([bool]$categoryPerks.Resolved.Flower)
+Assert-True 'Plushie category capacity resolves' ([bool]$categoryPerks.Resolved.Plushie)
+Assert-Equal 'Flower category bonus parses separately' ([int]$categoryPerks.Bonuses.Flower) 5
+Assert-Equal 'Plushie category bonus parses separately' ([int]$categoryPerks.Bonuses.Plushie) 5
+Assert-Equal 'Both category-specific perks are retained as recognized evidence' @($categoryPerks.Recognized).Count 2
 
 $capacity = Get-TornEffectiveXanaxCapacity -TravelMode 'airstrip' -PerksPayload $perks
-Assert-True 'Effective capacity resolves with known current perks' ([bool]$capacity.Resolved)
-Assert-Equal 'Airstrip effective capacity combines base suitcase and active perks' ([int]$capacity.Capacity) 40
+Assert-True 'Effective Xanax capacity resolves with known current perks' ([bool]$capacity.Resolved)
+Assert-Equal 'Airstrip Xanax capacity combines base suitcase and general perks only' ([int]$capacity.Capacity) 40
 Assert-Equal 'Stock/property method perks are not double counted' ([int]$capacity.ActivePerkBonus) 22
 Assert-Equal 'Suitcase is exposed separately from additive perks' ([int]$capacity.SuitcaseBonus) 3
+Assert-Equal 'Flower/Plushie perks never increase Xanax capacity' ([int]$capacity.CategoryCapacityBonus) 0
+
+$flowerCapacity = Get-TornEffectiveItemCapacity -TravelMode 'airstrip' -PerksPayload $perks -ItemCategory 'Flower'
+Assert-True 'Flower effective capacity resolves' ([bool]$flowerCapacity.Resolved)
+Assert-Equal 'Flower effective capacity adds only the Flower-specific bonus' ([int]$flowerCapacity.Capacity) 45
+Assert-Equal 'Flower effective category bonus is five' ([int]$flowerCapacity.CategoryCapacityBonus) 5
+
+$plushieCapacity = Get-TornEffectiveItemCapacity -TravelMode 'airstrip' -PerksPayload $perks -ItemCategory 'Plushie'
+Assert-True 'Plushie effective capacity resolves' ([bool]$plushieCapacity.Resolved)
+Assert-Equal 'Plushie effective capacity adds only the Plushie-specific bonus' ([int]$plushieCapacity.Capacity) 45
+Assert-Equal 'Plushie effective category bonus is five' ([int]$plushieCapacity.CategoryCapacityBonus) 5
 
 $unknownPerks = [pscustomobject]@{
     perks = [pscustomobject]@{
@@ -68,6 +90,19 @@ $unknownEnhancer = [pscustomobject]@{
 $unknownSuitcase = Get-TornSuitcaseCapacityFromPerks -PerksPayload $unknownEnhancer
 Assert-True 'Unparsed enhancer capacity remains unresolved' (-not [bool]$unknownSuitcase.Resolved)
 Assert-Equal 'Unparsed enhancer capacity is surfaced' @($unknownSuitcase.Unparsed).Count 1
+
+$unknownFlowerPerks = [pscustomobject]@{
+    perks = [pscustomobject]@{
+        faction = @(); job = @('Able to carry additional flowers when traveling'); book = @(); enhancer = @(); property = @(); stock = @(); education = @(); merit = @()
+    }
+}
+$unknownCategories = Get-TornCategoryTravelCapacityPerks -PerksPayload $unknownFlowerPerks
+Assert-True 'Unparsed Flower capacity is marked unresolved' (-not [bool]$unknownCategories.Resolved.Flower)
+Assert-True 'Unrelated Plushie capacity remains resolved at zero' ([bool]$unknownCategories.Resolved.Plushie)
+$drugWithUnknownFlower = Get-TornEffectiveItemCapacity -TravelMode 'airstrip' -PerksPayload $unknownFlowerPerks -ItemCategory 'Drug'
+Assert-True 'Unknown Flower perk does not make Drug capacity unresolved' ([bool]$drugWithUnknownFlower.Resolved)
+$flowerWithUnknownFlower = Get-TornEffectiveItemCapacity -TravelMode 'airstrip' -PerksPayload $unknownFlowerPerks -ItemCategory 'Flower'
+Assert-True 'Unknown Flower perk does make Flower capacity unresolved' (-not [bool]$flowerWithUnknownFlower.Resolved)
 
 foreach ($name in $passes) { Write-Host "PASS $name" -ForegroundColor DarkGreen }
 if ($failures.Count -gt 0) {
