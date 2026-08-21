@@ -95,6 +95,34 @@ if ($ini -match '(?im)^Text=UNITED KINGDOM - XANAX\s*$' -or $ini -match '(?im)^T
     Fail 'Destination headings must use flag icons rather than country-name text.'
 }
 
+foreach ($prefix in @('UK','JP')) {
+    foreach ($sectionName in @("Meter${prefix}Plane", "Meter${prefix}Price", "Meter${prefix}StockHeader")) {
+        if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($sectionName) + '\]\s*$')) {
+            Fail "Missing [$sectionName] compact card-header meter."
+        }
+    }
+    $priceMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'Price\]\s*(.*?)(?=^\[|\z)')
+    if ($priceMatch.Success) {
+        $priceBody = $priceMatch.Groups[1].Value
+        if ($priceBody -notmatch ('(?im)^Text=#' + $prefix + 'PriceText#\s*$')) { Fail "[$($priceMatch.Value.Split([Environment]::NewLine)[0].Trim('[]'))] must display price without a label." }
+        if ($priceBody -notmatch ('(?im)^FontColor=#' + $prefix + 'PriceColor#\s*$')) { Fail "Meter${prefix}Price must use dynamic profitability color." }
+    }
+    $stockMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'StockHeader\]\s*(.*?)(?=^\[|\z)')
+    if ($stockMatch.Success -and $stockMatch.Groups[1].Value -notmatch ('(?im)^Text=#' + $prefix + 'StockHeaderText#\s*$')) {
+        Fail "Meter${prefix}StockHeader must use the compact stock/out-of-stock text variable."
+    }
+}
+
+if ($ini -match '(?im)^Text=Travel:\s*#(?:UK|JP)TravelText#\s*$') {
+    Fail 'Travel label should be replaced by the plane icon.'
+}
+if ($ini -match '(?m)^\[MeterUKStock\]\s*$' -or $ini -match '(?m)^\[MeterJPStock\]\s*$') {
+    Fail 'Legacy body stock meters must be removed; stock belongs in the item header.'
+}
+if ($ini -match '(?im)^Text=Price:\s*#(?:UK|JP)PriceText#\s*$') {
+    Fail 'Legacy labeled body price text must be removed; price belongs in the item header.'
+}
+
 if ($errors.Count -gt 0) {
     foreach ($errorMessage in $errors) { Write-Host "FAIL: $errorMessage" -ForegroundColor Red }
     Write-Host "Rainmeter skin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
