@@ -96,9 +96,9 @@ if ($ini -match '(?im)^Text=UNITED KINGDOM - XANAX\s*$' -or $ini -match '(?im)^T
 }
 
 foreach ($prefix in @('UK','JP')) {
-    foreach ($sectionName in @("Meter${prefix}Plane", "Meter${prefix}Price", "Meter${prefix}StockHeader")) {
+    foreach ($sectionName in @("Meter${prefix}Plane", "Meter${prefix}RestockIcon", "Meter${prefix}Price", "Meter${prefix}StockHeader")) {
         if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($sectionName) + '\]\s*$')) {
-            Fail "Missing [$sectionName] compact card-header meter."
+            Fail "Missing [$sectionName] compact card meter."
         }
     }
     $priceMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'Price\]\s*(.*?)(?=^\[|\z)')
@@ -111,10 +111,25 @@ foreach ($prefix in @('UK','JP')) {
     if ($stockMatch.Success -and $stockMatch.Groups[1].Value -notmatch ('(?im)^Text=#' + $prefix + 'StockHeaderText#\s*$')) {
         Fail "Meter${prefix}StockHeader must use the compact stock/out-of-stock text variable."
     }
+    $restockMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'Restock\]\s*(.*?)(?=^\[|\z)')
+    if (-not $restockMatch.Success) {
+        Fail "Missing [Meter${prefix}Restock]."
+    } else {
+        $restockBody = $restockMatch.Groups[1].Value
+        if ($restockBody -notmatch ('(?im)^Text=#' + $prefix + 'RestockText#\s*$')) {
+            Fail "Meter${prefix}Restock must display only the restock value without a label."
+        }
+        if ($restockBody -notmatch '(?im)^X=40\s*$') {
+            Fail "Meter${prefix}Restock must align with the flight-time text at X=40."
+        }
+    }
 }
 
 if ($ini -match '(?im)^Text=Travel:\s*#(?:UK|JP)TravelText#\s*$') {
     Fail 'Travel label should be replaced by the plane icon.'
+}
+if ($ini -match '(?im)^Text=Restock:\s*#(?:UK|JP)RestockText#\s*$') {
+    Fail 'Restock label should be replaced by the hand-truck icon.'
 }
 if ($ini -match '(?m)^\[MeterUKStock\]\s*$' -or $ini -match '(?m)^\[MeterJPStock\]\s*$') {
     Fail 'Legacy body stock meters must be removed; stock belongs in the item header.'
