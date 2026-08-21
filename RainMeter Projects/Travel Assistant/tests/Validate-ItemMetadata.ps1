@@ -14,12 +14,22 @@ if (-not (Test-Path -LiteralPath $metadataPath)) {
     $text = Get-Content -LiteralPath $metadataPath -Raw
     $tokens = $null
     $parseErrors = $null
-    [void][System.Management.Automation.Language.Parser]::ParseFile($metadataPath, [ref]$tokens, [ref]$parseErrors)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($metadataPath, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in ItemMetadata.ps1: $($parseError.Message)" }
 
     if ($text -notmatch '(?m)^\s*\[int\]\$RefreshIntervalSeconds\s*=\s*21600') { Fail 'Item metadata default refresh interval must be 6 hours.' }
     if ($text -notmatch '(?m)^\s*\[int\]\$MaxIdsPerRequest\s*=\s*40') { Fail 'Item metadata requests must default to bounded 40-ID batches.' }
-    if ($text -notmatch '(?m)Invoke-TornItemsJsonWithCurl[^\r\n]+TimeoutSec\s*=\s*30') { Fail 'Item metadata curl helper must default to a bounded 30-second timeout.' }
+
+    $curlFunction = @($ast.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-TornItemsJsonWithCurl'
+    }, $true) | Select-Object -First 1)
+    if ($curlFunction.Count -ne 1) {
+        Fail 'Could not locate Invoke-TornItemsJsonWithCurl for timeout validation.'
+    } elseif ([string]$curlFunction[0].Extent.Text -notmatch '(?s)param\s*\(.*?\[int\]\$TimeoutSec\s*=\s*30(?:\s*[,\)])') {
+        Fail 'Item metadata curl helper must default to a bounded 30-second timeout.'
+    }
+
     if (-not $text.Contains('https://api.torn.com/v2/torn/$ids/items?sort=ASC')) { Fail 'Item metadata must use Torn v2 specific-items endpoint.' }
     if (-not $text.Contains('$psi.Arguments = ''-q --config -''')) { Fail 'Torn item metadata curl must receive its config through stdin.' }
     if (-not $text.Contains('Authorization: ApiKey {0}')) { Fail 'Torn item metadata must authenticate through an Authorization header.' }
