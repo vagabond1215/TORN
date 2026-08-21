@@ -51,11 +51,11 @@ Assert-Equal 'Observed IDs sort ascending first' $ids[0] 206
 Assert-Equal 'Observed IDs include Nessie' $ids[1] 266
 Assert-Equal 'Observed IDs include Cherry Blossom' $ids[2] 277
 
-$chunks = @(Split-ItemIds -ItemIds ([int[]](1..305)) -Maximum 150)
-Assert-Equal 'Metadata requests are bounded into three chunks' $chunks.Count 3
-Assert-Equal 'First metadata chunk size' @($chunks[0]).Count 150
-Assert-Equal 'Second metadata chunk size' @($chunks[1]).Count 150
-Assert-Equal 'Final metadata chunk size' @($chunks[2]).Count 5
+$batches = @(Split-ItemIds -ItemIds ([int[]](1..305)) -Maximum 150)
+Assert-Equal 'Metadata requests are bounded into three batches' $batches.Count 3
+Assert-Equal 'First metadata batch size' @($batches[0].ids).Count 150
+Assert-Equal 'Second metadata batch size' @($batches[1].ids).Count 150
+Assert-Equal 'Final metadata batch size' @($batches[2].ids).Count 5
 
 $flower = [pscustomobject]@{
     id = 277
