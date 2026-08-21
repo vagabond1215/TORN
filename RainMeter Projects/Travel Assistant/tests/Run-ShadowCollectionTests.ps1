@@ -23,7 +23,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ShadowCollector.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Get-LiveStockObservationsForCountry','Update-CycleState','Test-IsPrimaryMarket')
+$wanted = @('Get-DynamicProperty','Get-LiveStockObservationsForCountry','Update-CycleState','Test-IsPrimaryMarket','Test-ObservationChanged')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -71,6 +71,24 @@ $primaryItems = New-Object 'System.Collections.Generic.HashSet[int]'
 Assert-True 'UK Xanax is protected primary market' (Test-IsPrimaryMarket -CountryId 'united_kingdom' -ItemId 206 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems)
 Assert-Equal 'UK Nessie remains shadow-collected' (Test-IsPrimaryMarket -CountryId 'united_kingdom' -ItemId 266 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems) $false
 Assert-Equal 'Non-primary country Xanax remains shadow-collected' (Test-IsPrimaryMarket -CountryId 'mexico' -ItemId 206 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems) $false
+
+$unchangedState = [pscustomobject]@{
+    lastStock = 450
+    lastForeignPrice = 200
+    lastSourceTimestamp = 100
+    lastSellOutAt = 0
+    activeCycle = $null
+}
+$timestampOnlyRefresh = [pscustomobject]@{
+    stock = 450
+    foreignPrice = 200
+    sourceTimestamp = 200
+}
+Assert-Equal 'Provider timestamp alone does not create raw history' (Test-ObservationChanged -DestState $unchangedState -Observation $timestampOnlyRefresh) $false
+$stockChange = [pscustomobject]@{ stock = 449; foreignPrice = 200; sourceTimestamp = 200 }
+Assert-True 'Stock change creates raw history' (Test-ObservationChanged -DestState $unchangedState -Observation $stockChange)
+$priceChange = [pscustomobject]@{ stock = 450; foreignPrice = 250; sourceTimestamp = 200 }
+Assert-True 'Foreign-price change creates raw history' (Test-ObservationChanged -DestState $unchangedState -Observation $priceChange)
 
 $destState = [pscustomobject]@{
     lastStock = 0
