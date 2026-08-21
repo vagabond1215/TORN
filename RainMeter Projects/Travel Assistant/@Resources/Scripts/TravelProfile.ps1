@@ -9,6 +9,11 @@ function Get-TravelProfile {
     $profile = [pscustomobject]@{
         companyType = 'none'
         companyStars = 0
+        currentCapacityKnown = $false
+        currentCapacityMode = ''
+        currentCapacity = 0
+        currentCapacityBonus = 0
+        currentCapacitySyncedAt = 0
         factionState = 'manual'
         factionExcursionLevel = 0
         factionTravelCostLevel = 0
@@ -19,8 +24,9 @@ function Get-TravelProfile {
     }
 
     $fieldNames = @(
-        'companyType','companyStars','factionState',
-        'factionExcursionLevel','factionTravelCostLevel',
+        'companyType','companyStars',
+        'currentCapacityKnown','currentCapacityMode','currentCapacity','currentCapacityBonus','currentCapacitySyncedAt',
+        'factionState','factionExcursionLevel','factionTravelCostLevel',
         'factionPeaceExcursionLevel','factionPeaceTravelCostLevel',
         'factionWarExcursionLevel','factionWarTravelCostLevel'
     )
@@ -37,6 +43,16 @@ function Get-TravelProfile {
     if ([string]::IsNullOrWhiteSpace($profile.companyType)) { $profile.companyType = 'none' }
     $profile.companyStars = [Math]::Max(0, [Math]::Min(10, [int]$profile.companyStars))
 
+    $profile.currentCapacityKnown = [bool]$profile.currentCapacityKnown
+    $profile.currentCapacityMode = ([string]$profile.currentCapacityMode).Trim().ToLowerInvariant()
+    if ($profile.currentCapacityMode -notin @('standard','airstrip','wlt','business')) { $profile.currentCapacityMode = '' }
+    $profile.currentCapacity = [Math]::Max(0, [Math]::Min(99, [int]$profile.currentCapacity))
+    $profile.currentCapacityBonus = [Math]::Max(0, [Math]::Min(50, [int]$profile.currentCapacityBonus))
+    $profile.currentCapacitySyncedAt = [Math]::Max(0L, [long]$profile.currentCapacitySyncedAt)
+    if ($profile.currentCapacityKnown -and $profile.currentCapacity -le 0 -and $profile.currentCapacityBonus -le 0) {
+        $profile.currentCapacityKnown = $false
+    }
+
     $state = ([string]$profile.factionState).ToLowerInvariant()
     if ($state -notin @('peace','war','manual')) { $state = 'manual' }
     $profile.factionState = $state
@@ -46,9 +62,9 @@ function Get-TravelProfile {
     $profile.factionWarExcursionLevel = [Math]::Max(0, [Math]::Min(10, [int]$profile.factionWarExcursionLevel))
     $profile.factionWarTravelCostLevel = [Math]::Max(0, [Math]::Min(5, [int]$profile.factionWarTravelCostLevel))
 
-    # The legacy active fields remain the economics contract. New synced profiles
-    # derive them from the currently active Torn faction loadout; older/manual
-    # local files continue to use their existing single pair of values.
+    # Legacy faction fields remain readable for old local settings. When a
+    # current-capacity sync is available, capacity economics no longer infer
+    # additive slots from these fields, avoiding double-counting current perks.
     if ($state -eq 'peace') {
         $profile.factionExcursionLevel = [int]$profile.factionPeaceExcursionLevel
         $profile.factionTravelCostLevel = [int]$profile.factionPeaceTravelCostLevel
@@ -73,6 +89,7 @@ function Get-TravelProfileEffects {
     $itemCapacityBonus = 0
     $freeBusinessClass = $false
     $notes = New-Object System.Collections.Generic.List[string]
+    $hasCurrentCapacity = ($Profile.PSObject.Properties['currentCapacityKnown'] -and [bool]$Profile.currentCapacityKnown)
 
     $company = @($PerksConfig.companies | Where-Object { [string]$_.id -eq [string]$Profile.companyType } | Select-Object -First 1)
     if ($company.Count -gt 0) {
@@ -81,20 +98,32 @@ function Get-TravelProfileEffects {
             if ($effect.PSObject.Properties['stars']) { $requiredStars = [int]$effect.stars }
             if ([int]$Profile.companyStars -lt $requiredStars) { continue }
 
-            if ($effect.PSObject.Properties['generalCapacityBonus']) { $generalCapacityBonus += [int]$effect.generalCapacityBonus }
-            if ($effect.PSObject.Properties['freeBusinessClass'] -and [bool]$effect.freeBusinessClass) { $freeBusinessClass = $true }
-            if ($null -ne $Item -and $effect.PSObject.Properties['itemCategory'] -and $effect.PSObject.Properties['itemCapacityBonus']) {
-                $itemCategory = ''
-                if ($Item.PSObject.Properties['category']) { $itemCategory = [string]$Item.category }
-                if ([string]$effect.itemCategory -eq $itemCategory) { $itemCapacityBonus += [int]$effect.itemCapacityBonus }
+            # Company identity is still authoritative for non-capacity effects,
+            # especially free Business Class. Capacity is sourced from current
+            # /user/perks after a successful current-capacity sync.
+            if (-not $hasCurrentCapacity) {
+                if ($effect.PSObject.Properties['generalCapacityBonus']) { $generalCapacityBonus += [int]$effect.generalCapacityBonus }
+                if ($null -ne $Item -and $effect.PSObject.Properties['itemCategory'] -and $effect.PSObject.Properties['itemCapacityBonus']) {
+                    $itemCategory = ''
+                    if ($Item.PSObject.Properties['category']) { $itemCategory = [string]$Item.category }
+                    if ([string]$effect.itemCategory -eq $itemCategory) { $itemCapacityBonus += [int]$effect.itemCapacityBonus }
+                }
             }
+            if ($effect.PSObject.Properties['freeBusinessClass'] -and [bool]$effect.freeBusinessClass) { $freeBusinessClass = $true }
             if ($effect.PSObject.Properties['label'] -and -not [string]::IsNullOrWhiteSpace([string]$effect.label)) { $notes.Add([string]$effect.label) }
         }
     }
 
     $factionCapacity = 0
     $travelCostReductionPercent = 0
-    if ($PerksConfig.PSObject.Properties['faction'] -and $null -ne $PerksConfig.faction) {
+    if ($hasCurrentCapacity) {
+        $generalCapacityBonus = [Math]::Max(0, [Math]::Min(50, [int]$Profile.currentCapacityBonus))
+        if ($generalCapacityBonus -gt 0) { $notes.Add(('Current active travel capacity +{0}' -f $generalCapacityBonus)) }
+        # We intentionally do not infer a faction travel-fee reduction from an
+        # inaccessible/stale faction loadout. Zero is conservative for Standard
+        # travel and irrelevant to zero-cost Airstrip/WLT modes.
+        $travelCostReductionPercent = 0
+    } elseif ($PerksConfig.PSObject.Properties['faction'] -and $null -ne $PerksConfig.faction) {
         if ($PerksConfig.faction.PSObject.Properties['excursionCapacity']) {
             $perLevel = [int]$PerksConfig.faction.excursionCapacity.capacityPerLevel
             $maxLevel = [int]$PerksConfig.faction.excursionCapacity.maxLevel
@@ -120,6 +149,7 @@ function Get-TravelProfileEffects {
         totalCapacityBonus = ($generalCapacityBonus + $itemCapacityBonus + $factionCapacity)
         travelCostReductionPercent = $travelCostReductionPercent
         freeBusinessClass = $freeBusinessClass
+        currentCapacityKnown = $hasCurrentCapacity
         notes = $notes.ToArray()
     }
 }
