@@ -2,7 +2,7 @@
 
 **Checkpoint:** 2026-08-21
 
-**Active run:** offline full item catalog enrichment. See `docs/NEXT_CODEX_RUN.md`.
+**Active run:** offline foreign-item category resolution. See `docs/NEXT_CODEX_RUN.md`.
 
 ## Stable visible baseline
 
@@ -19,39 +19,17 @@ Data-layer expansion must not change this visible behavior until a later explici
 
 ## Full-market shadow collection — ACCEPTED
 
-All 11 Torn foreign destinations collect in the background while only UK/Japan remain visible/model-enabled.
-
-Accepted live baseline:
+Current accepted target-Windows baseline:
 
 ```text
-lastProvider:         prometheus
-countriesSeen:        11
-marketsSeen:          232
-observedMarkets:      232
-observationsWritten:  51 on the forced acceptance pass
-lastError:            empty
+11 countries
+232 observed country-item markets
+232 / 232 markets with provider names
+Prometheus healthy
+no shadow error
 ```
 
-History identity remains `country + itemId`, primary UK/Japan Xanax writes are protected from shadow duplication, and raw history is written only for stock/foreign-price changes.
-
-## Provider-name enrichment — ACCEPTED
-
-Target Windows passed:
-
-```text
-Validate-ShadowCollection.ps1
-Run-ShadowCollectionTests.ps1
-Validate-RainmeterSkin.ps1
-```
-
-A subsequent forced live pass reported:
-
-```text
-Observed markets: 232
-Markets with provider names: 232
-```
-
-Provider names are now accepted discovery/cross-check metadata for the whole currently observed market. They do not replace item IDs as durable identity and they do not determine category/economics by themselves.
+History identity remains `country + itemId`, current primary UK/Japan Xanax writes are protected from shadow duplication, and raw history is written only for stock/foreign-price changes.
 
 ## Torn catalog transport — REJECTED FOR HEARTBEAT USE
 
@@ -63,11 +41,29 @@ v2 /torn/{ids}/items |  40 IDs | 30s | 0 resolved
 classic torn/items    | bulk   | 12s | 0 resolved
 ```
 
-`ItemMetadata.ps1` remains manual/maintenance-only. Catalog network latency must not delay the skin.
+`ItemMetadata.ps1` remains manual/maintenance-only. Runtime catalog knowledge must not depend on those requests.
 
-## Committed metadata fallback — ACCEPTED
+## Local catalog — ACCEPTED
 
-Target Windows validated and confirmed:
+Target Windows passed:
+
+```text
+Validate-LocalCatalog.ps1
+Run-LocalCatalogTests.ps1
+Validate-RainmeterSkin.ps1
+```
+
+The live local catalog reported:
+
+```text
+observedItems:      202
+metadataItems:      202
+categoriesResolved: 3
+unresolvedItems:    199
+nameConflicts:      0
+```
+
+Accepted seed rows:
 
 ```text
 206 Xanax          Drug     config_seed
@@ -75,58 +71,77 @@ Target Windows validated and confirmed:
 277 Cherry Blossom Flower   config_seed
 ```
 
-Seed metadata intentionally keeps market value/tradability unknown unless richer metadata exists.
+`LocalCatalog.ps1` is local-only and collapses observed country-item markets into one item metadata row per distinct item ID while retaining provider-name and country context.
 
-## Local offline catalog — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+## Offline category snapshot — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-New:
-
-```text
-@Resources/Scripts/LocalCatalog.ps1
-tests/Validate-LocalCatalog.ps1
-tests/Run-LocalCatalogTests.ps1
-```
-
-`RunUpdate.ps1` now serializes:
+New committed data:
 
 ```text
-UpdateTracker
-ShadowCollector (fail-soft)
-LocalCatalog (fail-soft / local only)
-FinalizeState
-heartbeat
+config/foreign-item-categories.json
 ```
 
-`LocalCatalog.ps1` performs **no network access**. It collapses the provider-observed market table by `itemId`, retains provider names/country membership, and builds `engine-state.json -> itemMetadata` for every distinct observed item.
+It vendors a 197-ID category snapshot from the public `KNOWN_FOREIGN_ITEMS` table in `kgensorealk-sudo/MyTORNHelper` at commit `a3e957929ce6a4cd253c733467ad1dded74f8791`. The upstream table documents itself as a comprehensive known foreign-item table using exact YATA categories.
 
-Current category policy:
+The snapshot is metadata only. It does **not** create opportunities. `ShadowCollector.ps1` remains the authority for which country-item markets are currently observed.
 
-- committed items use their verified `config/items.json` name/category with `source=config_seed` and `categoryResolved=true`;
-- unclassified provider-observed items use their provider name with `source=provider_name`, `category=Unknown`, `categoryResolved=false`;
-- multiple provider names for one item ID are retained as `nameConflict=true` instead of silently choosing a new identity;
-- richer manually acquired `source=torn_items_bulk` rows are preserved and only augmented with provider/country context.
-
-A deterministic SHA-256 signature prevents needless runtime-state rewrites when provider names/country membership and committed seed metadata have not changed.
-
-Runtime health is stored under:
+Travel Assistant normalizes:
 
 ```text
-engine-state.json -> localCatalog
+Defensive -> Armor
+Other     -> Miscellaneous
 ```
 
-with:
+and otherwise retains the source category. The resulting category vocabulary is:
 
 ```text
-signature
-lastBuildAt
-observedItems
-metadataItems
-categoriesResolved
-unresolvedItems
-nameConflicts
+Alcohol
+Artifact
+Armor
+Clothing
+Drug
+Enhancer
+Flower
+Material
+Medical
+Melee
+Miscellaneous
+Plushie
+Primary
+Secondary
+Temporary
+Tool
 ```
 
-## Remaining acceptance for local catalog
+`LocalCatalog.ps1` now applies metadata precedence:
+
+```text
+richer manual Torn metadata
+    > explicit config seed
+    > offline YATA category snapshot
+    > provider name + Unknown
+```
+
+Snapshot-resolved rows use:
+
+```text
+source=offline_yata_category
+categorySource=yata_abroad_snapshot
+categoryResolved=true
+```
+
+An observed item absent from the static snapshot remains `Unknown` / unresolved instead of being guessed.
+
+`engine-state.json -> localCatalog` now also records:
+
+```text
+offlineCategoryEntries
+offlineMatchedItems
+```
+
+The deterministic catalog signature includes the offline category/source data so committed category updates cause a local rebuild without network activity.
+
+## Focused acceptance still required
 
 Run on target Windows:
 
@@ -136,34 +151,26 @@ Run-LocalCatalogTests.ps1
 Validate-RainmeterSkin.ps1
 ```
 
-Then run `LocalCatalog.ps1` once and inspect `localCatalog` plus `itemMetadata`.
+Then run `LocalCatalog.ps1` and inspect the actual counts.
 
-Expected current scale:
+Expected boundaries, not an assumed exact outcome:
 
-```text
-observedItems:      ~202
-metadataItems:      >= observedItems
-categoriesResolved: >= 3
-nameConflicts:      ideally 0
-```
+- `offlineCategoryEntries = 197`;
+- current `observedItems` remains around 202;
+- a large majority of observed IDs should match the snapshot;
+- `categoriesResolved` should rise sharply from 3;
+- unmatched current IDs remain explicitly unresolved;
+- current visible Xanax cards remain unchanged.
 
-No network call should occur during that test.
-
-## Active next goal: verified offline categories
-
-After local-catalog acceptance, add verified category overrides for the remaining observed IDs using static/offline Torn-derived evidence. The official Torn Wiki item taxonomy currently documents the relevant categories, including Alcohol, Artifact, Clothing, Defensive, Drug, Enhancer, Flower, Medical, Melee, Other, Plushie, Primary, Secondary, Temporary, plus Tool and Material classifications.
-
-Never infer category purely from item naming. Every observed item should eventually be resolved or explicitly left unresolved with provenance retained.
-
-The resulting catalog must be suitable for inclusion in the eventual `.rmskin`, so recipients do not need Torn catalog access just to know item names/categories.
+Once the actual unresolved IDs are known, verify those individually and extend the committed map only with supported categories.
 
 ## Distribution work
 
-A whitelist-based `.rmskin` package-builder path exists for future sharing. Distribution must exclude local API settings, runtime history/state, generated output and credentials. Recipient-local settings should survive package upgrades. Windows package-builder validation remains outstanding before publication.
+A whitelist-based `.rmskin` package-builder path exists. Distribution excludes local API settings, runtime history/state, generated output and credentials. Recipient-local settings are intended to survive package upgrades. Windows package-builder validation remains outstanding before publication.
 
 ## Later phases
 
-After offline categories are sufficiently complete:
+After current categories are sufficiently complete:
 
 1. bounded/staggered Item Market resale-price queue;
 2. category-aware effective carrying capacity;
