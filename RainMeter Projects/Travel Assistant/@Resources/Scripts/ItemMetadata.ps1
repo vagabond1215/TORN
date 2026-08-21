@@ -108,6 +108,41 @@ function Get-ObservedItemIds {
     return @($set | Sort-Object)
 }
 
+function Import-ConfiguredMetadataSeeds {
+    param([object]$EngineState, [object]$ItemsConfig, [long]$Now)
+    if ($null -eq $EngineState -or $null -eq $ItemsConfig -or -not $ItemsConfig.PSObject.Properties['items']) { return 0 }
+
+    $written = 0
+    foreach ($item in @($ItemsConfig.items)) {
+        if ($null -eq $item -or -not $item.PSObject.Properties['itemId'] -or -not $item.PSObject.Properties['name']) { continue }
+        $itemId = [int]$item.itemId
+        $name = [string]$item.name
+        $category = if ($item.PSObject.Properties['category']) { [string]$item.category } else { '' }
+        if ($itemId -le 0 -or [string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($category)) { continue }
+
+        $existing = Get-DynamicProperty $EngineState.itemMetadata ([string]$itemId)
+        if ($null -ne $existing -and $existing.PSObject.Properties['source'] -and [string]$existing.source -ne 'config_seed') { continue }
+
+        $metadata = [pscustomobject]@{
+            schemaVersion = 1
+            itemId = $itemId
+            name = $name
+            type = $category
+            weaponType = ''
+            category = $category
+            categoryResolved = $true
+            tradabilityKnown = $false
+            isTradable = $null
+            marketPrice = 0
+            fetchedAt = $Now
+            source = 'config_seed'
+        }
+        Set-DynamicProperty $EngineState.itemMetadata ([string]$itemId) $metadata
+        $written++
+    }
+    return $written
+}
+
 function Get-CanonicalCategory {
     param([object]$Item)
     $type = if ($null -ne $Item -and $Item.PSObject.Properties['type']) { [string]$Item.type } else { '' }
@@ -181,7 +216,7 @@ function Invoke-TornBulkItemsJsonWithCurl {
         $process.StandardInput.WriteLine(('max-time = {0}' -f $RequestTimeoutSec))
         $process.StandardInput.WriteLine(('url = "{0}"' -f $uri))
         $process.StandardInput.WriteLine('header = "Accept: application/json"')
-        $process.StandardInput.WriteLine('header = "User-Agent: TravelAssistant-Rainmeter/1.0"')
+        $process.StandardInput.WriteLine('header = "User-Agent: TravelAssistant-MetadataMaintenance/1.0"')
         $safeKey = $ApiKey.Replace("`r", '').Replace("`n", '').Replace('"', '\"')
         $process.StandardInput.WriteLine(('header = "Authorization: ApiKey {0}"' -f $safeKey))
         $process.StandardInput.Close()
@@ -243,16 +278,24 @@ if ($null -eq $engineState) { return }
 $itemIds = @(Get-ObservedItemIds -EngineState $engineState)
 if ($itemIds.Count -eq 0) { return }
 
+$itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
+$seedCount = Import-ConfiguredMetadataSeeds -EngineState $engineState -ItemsConfig $itemsConfig -Now $now
+$engineState.metadataCollection.distinctObservedItems = $itemIds.Count
+$engineState.metadataCollection.itemsRequested = $itemIds.Count
+$engineState.metadataCollection.itemsResolved = @($engineState.itemMetadata.PSObject.Properties).Count
+$engineState.metadataCollection.categories = @(Get-MetadataCategories -EngineState $engineState)
+if ($seedCount -gt 0 -and [string]::IsNullOrWhiteSpace([string]$engineState.metadataCollection.source)) {
+    $engineState.metadataCollection.source = 'config_seed'
+}
+Write-JsonAtomic -Path $EngineStateFile -Value $engineState
+
 $lastAttemptAt = [long]$engineState.metadataCollection.lastAttemptAt
 if (-not $Force -and $lastAttemptAt -gt 0 -and ($now - $lastAttemptAt) -lt $RefreshIntervalSeconds) { return }
 
 $engineState.metadataCollection.lastAttemptAt = $now
-$engineState.metadataCollection.distinctObservedItems = $itemIds.Count
-$engineState.metadataCollection.itemsRequested = $itemIds.Count
-$engineState.metadataCollection.itemsResolved = @($engineState.itemMetadata.PSObject.Properties).Count
 $apiKey = Get-ApiKey
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
-    Write-MetadataError -EngineState $engineState -Now $now -Message 'No local Torn API key is available for public item metadata enrichment.'
+    Write-MetadataError -EngineState $engineState -Now $now -Message 'No local Torn API key is available for optional item metadata maintenance.'
     Write-JsonAtomic -Path $EngineStateFile -Value $engineState
     return
 }
@@ -263,14 +306,12 @@ try {
         throw 'Torn bulk item metadata response does not contain items.'
     }
 
-    $resolved = 0
     foreach ($itemId in $itemIds) {
         $item = Get-DynamicProperty $payload.items ([string]$itemId)
         if ($null -eq $item) { continue }
         $metadata = Convert-TornBulkItemMetadata -ItemId ([int]$itemId) -Item $item -Now $now
         if ($null -eq $metadata) { continue }
         Set-DynamicProperty $engineState.itemMetadata ([string]$itemId) $metadata
-        $resolved++
     }
 
     $engineState.metadataCollection.lastRefreshAt = $now
