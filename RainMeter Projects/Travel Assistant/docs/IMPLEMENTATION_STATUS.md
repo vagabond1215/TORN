@@ -2,27 +2,17 @@
 
 **Checkpoint:** 2026-08-21
 
-**Active run:** [`NEXT_CODEX_RUN.md`](./NEXT_CODEX_RUN.md) remains **ACTIVE**. This file records progress only; it does not replace the active scope or `AGENTS.md` invariants.
+**Active run:** [`NEXT_CODEX_RUN.md`](./NEXT_CODEX_RUN.md) remains **ACTIVE**. This file records progress and validation evidence only; it does not replace the active scope or `AGENTS.md` invariants.
 
-## Connector-first checkpoint
+## Current repository / validation checkpoint
 
-Starting implementation SHA:
+Travel Assistant v1 remains confined to `RainMeter Projects/Travel Assistant/` and is implemented for **Xanax in the United Kingdom and Japan** with generic item/country/provider internals.
 
-```text
-bb1ed84bd81a6021beaae7ed2c048e9974b71cab
-```
+The connector-first implementation is complete enough for operational Rainmeter acceptance testing. The remaining boundary is installation, Rainmeter rendering/interaction/log validation, and short real-world resource sanity observation.
 
-Latest repository head represented by this status update:
+### Deterministic Windows validation
 
-```text
-368562c9257d8defef9b3c55f44bbf34e5e2ea4a
-```
-
-All implementation changes in this checkpoint are confined to `RainMeter Projects/Travel Assistant/`.
-
-## Local validation evidence
-
-The target Windows machine executed the deterministic/static suite from repository commit:
+The target Windows machine executed the complete deterministic/static suite from repository commit:
 
 ```text
 368562c9257d8defef9b3c55f44bbf34e5e2ea4a
@@ -46,36 +36,66 @@ Confirmed locally:
 - `Run-FinalizeStateTests.ps1` passed trip-economics, stale-resale, Business-gating, capacity, and restock-retention checks;
 - `Run-RestockDisplayTests.ps1` passed independent informational restock-display checks.
 
-During this local pass, several Windows PowerShell compatibility defects were found and fixed through the connector before the suite became clean: UTF-8 punctuation in execution-critical `.ps1` strings and direct `@($genericList)` conversion of `System.Collections.Generic.List[T]` values.
+Several Windows PowerShell compatibility defects were found and fixed through the connector before the suite became clean, including execution-critical UTF-8 punctuation and direct `@($genericList)` conversion of `System.Collections.Generic.List[T]` values.
 
-This validates the deterministic PowerShell contracts on the target machine. It does **not** yet validate live provider access, `System.Drawing` graph generation, the Rainmeter junction/install path, Rainmeter parsing/rendering, or live resource behavior.
+Do not rerun this suite unless later source/config changes require it.
+
+### Bounded live environment validation
+
+The target Windows machine then executed the bounded live/provider pass from repository commit:
+
+```text
+03d02f045ef97aafffa5855620abf39dea709489
+```
+
+Command:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1 -SkipTests
+```
+
+Result: **PASS for the required bounded live/provider/updater checks**.
+
+Observed evidence:
+
+- repository was synchronized and `HEAD` was `03d02f0`;
+- YATA request succeeded in approximately `3,498 ms`;
+- United Kingdom Xanax returned stock `0`, foreign price `$763,144`, source timestamp `1787286888`;
+- Japan Xanax returned stock `9`, foreign price `$679,492`, source timestamp `1787286887`;
+- Torn Item Market request was intentionally skipped because no local API key was configured; this is permitted by the validation contract and is not a failure;
+- one serialized production updater/finalizer pass exited `0` in approximately `1,722 ms`;
+- runtime data grew from `0 B` to `1.37 KiB`;
+- generated output grew from `0 B` to `1.96 KiB`, demonstrating successful bounded graph/output generation on the target Windows machine;
+- Rainmeter was running with a total working set of approximately `38.58 MiB`; this is whole-process memory rather than Travel Assistant-only attribution;
+- the Travel Assistant Rainmeter skin path did not yet exist, which is expected before `Install.ps1` is run.
+
+No repository-side defect was identified by this live pass. Live YATA access, production updater/finalizer execution, Windows graph generation, and bounded initial runtime/generated storage are therefore validated on the target machine.
 
 ## Implemented
 
 ### Configuration / expansion foundation
 
 - schema-versioned generic item configuration;
-- Xanax item ID 206 enabled for v1;
+- Xanax item ID `206` enabled for v1;
 - schema-versioned UK/Japan destination configuration;
-- Standard, Airstrip, WLT, and Business travel-time metadata with Airstrip default;
-- Standard/Airstrip/WLT currently selectable; Business remains configured-but-disabled until Business Class Ticket/free-company travel economics are safely resolved;
-- destination travel-economics metadata includes Standard cash cost, explicitly free Airstrip/WLT cost, and conservative base carrying capacity by mode;
-- provider registry with enabled live/resale providers and disabled bootstrap/cross-check candidates;
-- local settings template;
-- Item Market fee, minimum profit/item, minimum margin, minimum total-trip profit, capacity override, and resale-reference freshness are configurable;
-- runtime/generated state and secrets are ignored by Git.
+- Standard, Airstrip, WLT, and Business travel metadata with Airstrip default;
+- Standard/Airstrip/WLT selectable now;
+- Business configured but disabled until Business Class Ticket/free-company economics are modeled safely;
+- destination/mode travel cost and conservative base capacity metadata;
+- local settings template and ignored local credential support;
+- configurable Item Market fee, minimum profit/item, minimum margin, minimum total-trip profit, capacity override, and resale freshness.
 
 ### Live collection / persistence
 
-- YATA structured travel-export adapter for stock and foreign price;
-- normalized generic observation records;
-- append-only runtime observation JSONL with duplicate source/value suppression;
-- observed zero -> positive restock detection;
-- observed positive -> zero actual sellout detection;
-- compact completed-cycle JSONL records;
-- cached destination state retained for display when the live stock request fails;
+- YATA structured travel-export adapter for stock and foreign purchase price;
+- normalized generic observation records with provenance/source timestamps;
+- bounded append-only runtime observation JSONL;
+- observed `0 -> positive` restock detection;
+- observed `positive -> 0` actual sellout detection;
+- compact completed-cycle JSONL;
+- cached display state on live-source failure;
 - automatic pruning of high-resolution observations and completed cycles;
-- immutable `data/seed/` observations/cycles are merged into graph/model reads and deduplicated against runtime data without copying them into mutable runtime state.
+- immutable seed data merged into reads without copying into mutable runtime history.
 
 ### Recommendation / profitability engine
 
@@ -84,17 +104,15 @@ This validates the deterministic PowerShell contracts on the target machine. It 
 - price-regime confidence downgrade;
 - conservative all-cycle overlap for `SAFE_WINDOW`;
 - candidate-departure historical hit testing for `BEST_ODDS`;
-- exact last observed sellout retained separately from estimates;
-- when a restock is currently live, exact observed restock time is used;
-- current live depletion can shorten a conservative availability limit but never extend it beyond historical safety evidence;
-- live-stock arrival odds may downgrade a current trip to best-odds or window-closed;
-- optional Torn v2 Item Market resale lookup via local API key or `TORN_API_KEY`;
-- Item Market resale reference reduced by configured selling fee before initial per-item profit/margin checks;
-- `LOW_MARGIN` / `UNPROFITABLE` suppress departure advice while observation/history collection continues.
+- exact observed sellout/restock history kept distinct from forecasts;
+- live-cycle depletion may shorten but never expand conservative safety;
+- optional Torn v2 Item Market resale lookup through local credentials;
+- fee-adjusted per-item profitability checks;
+- `LOW_MARGIN` / `UNPROFITABLE` suppression of departure advice while useful stock/history continues.
 
-### Final state / trip-economics guard
+### Final state / trip economics
 
-`RunUpdate.ps1` now serializes and executes:
+`RunUpdate.ps1` serializes:
 
 ```text
 UpdateTracker.ps1
@@ -103,125 +121,108 @@ UpdateTracker.ps1
 FinalizeState.ps1
 ```
 
-The finalizer makes no extra network request and adds these protections:
+The finalizer performs no additional web request and enforces:
 
-- **restock display is independent of profitability** - low-margin/unprofitable opportunities can still show actual/estimated restock timing;
-- an active observed restock is retained exactly and the UI can render elapsed live time such as `live +04:12`;
-- otherwise, enough completed restock-delay samples can produce a median informational restock estimate even when departure timing is suppressed;
-- a cached resale reference older than `resaleStaleAfterSeconds` cannot keep `SAFE_WINDOW`/`BEST_ODDS` timing alive;
-- trip net is calculated from net profit/item x usable capacity minus mode travel cost;
-- Standard cash travel cost participates in final profitability;
-- Airstrip/WLT zero-cost economics are explicit;
-- `capacityOverride` can replace the conservative base capacity;
-- `minimumTotalTripProfit` can impose a whole-trip floor in addition to the scaled per-item requirement;
-- unresolved travel-mode economics suppress timing with `CHECK_EXTERNAL` rather than assuming zero cost;
-- final economics failures clear departure/window fields without erasing actual sellout/restock information.
+- restock display independence from profitability;
+- observed live-restock elapsed display support;
+- median informational restock estimate only when enough completed-cycle evidence exists;
+- stale resale-reference suppression of `SAFE_WINDOW` / `BEST_ODDS`;
+- trip economics using usable capacity and mode cost;
+- Standard cash cost participation;
+- explicit zero-cost Airstrip/WLT economics;
+- local `capacityOverride` support;
+- minimum whole-trip profit floor;
+- unresolved Business economics suppression rather than zero-cost assumption;
+- clearing departure fields on final gate failure without erasing actual sellout/restock information.
 
 ### Rainmeter UI
 
 - single dark/charcoal skin;
 - UK above Japan;
-- equal graph width and vertical alignment;
+- equal graph width/alignment;
 - inline Travel / Leave-or-window row;
 - inline Restock / Last Sold Out row;
 - inline Stock / Foreign Price row;
-- relative countdowns updated through a lightweight Lua measure;
-- observed live-restock elapsed-time display;
-- clickable travel-mode cycle;
-- clickable timing/status field opens Weav3r Travel Stock for verification;
-- generated 24-hour step graphs with restock/sellout markers;
-- state-aware status colors;
-- graph-area warning overlays for learning, stale, source-disagreement, unverified-price-regime, and check-external states;
-- mode tooltip states that Business is gated pending trip-economics support.
+- lightweight one-second Lua countdown/state presentation;
+- observed live-restock elapsed display;
+- clickable Standard/Airstrip/WLT travel-mode cycle;
+- clickable external verification action;
+- generated 24-hour stock graphs with event markers;
+- state-aware warning/status presentation;
+- Business remains unavailable in the selector by design.
 
-### Process/resource safety
+### Process / resource safety
 
-- one-second Rainmeter path is limited to local Lua state parsing/countdown formatting;
-- network/model/graph/final-state update is scheduled at minute scale rather than one-second scale;
-- `RunUpdate.ps1` uses a local mutex so refresh/poll overlap cannot concurrently write observations, engine state, finalized state, or graph files;
-- `FinalizeState.ps1` performs local computation only;
-- generated graphs/runtime history are ignored and bounded;
-- historical probes/import previews/analysis output are written under ignored runtime storage rather than continuously committed.
+- one-second Rainmeter path is local and inexpensive;
+- network/model/graph work occurs at minute-scale polling rather than every second;
+- updater runs are serialized by a local mutex;
+- finalizer is local-only;
+- runtime history and generated graphs are ignored and bounded;
+- probe/import/analysis output remains local/ignored;
+- bounded live validation produced only about `1.37 KiB` runtime data and `1.96 KiB` generated output on first pass.
 
 ### Historical/bootstrap tooling
 
-- immutable seed contract and provenance rules documented in `data/seed/README.md`;
-- normalized seed observations require explicit `sourceTimestamp` semantics;
-- `tools/Probe-DroqsDb.ps1` performs bounded metadata/current-endpoint discovery without guessing history URLs or altering seed data;
-- `tools/Build-CyclesFromObservations.ps1` converts normalized observation history to completed cycles using observed transitions only;
-- `tools/Import-SeedHistory.ps1` validates, deduplicates, provenance-tags, and atomically merges verified history into `data/seed/`;
-- `tools/Import-TravelPlannerHistory.ps1` supports a documented read-only `/api/history/:country/:itemId?hours=...` snapshot shape used by an open-source YATA-backed travel planner, but requires an explicit verified deployment host and is preview-only by default;
-- the compatible history adapter caps each requested window at 720 hours and only targets UK/Japan Xanax in v1;
-- provider safe-window/forecast outputs are deliberately not converted into historical truth;
-- `tools/Analyze-History.ps1` reads seed + runtime completed cycles offline and reports availability/restock distributions plus sufficiently sampled price/UTC-hour cohorts without changing recommendation rules.
+- immutable provenance-aware seed contract;
+- bounded DroqsDB contract probe;
+- normalized observation -> completed cycle builder;
+- validated seed importer with dedup/provenance checks;
+- preview-first compatible travel-planner history importer requiring an explicit verified deployment;
+- offline descriptive history analyzer;
+- provider forecasts are not converted into historical truth.
 
-### Tooling / validation assets
-
-- non-destructive `Install.ps1` junction installer;
-- synthetic YATA/provider fixture;
-- synthetic safe-window and fast-depletion cycle fixtures;
-- synthetic normalized-observation fixture for historical pipeline replay;
-- `tests/Validate-TravelAssistant.ps1` checks JSON/JSONL/schema contracts, required files, finalizer settings, travel modes/economics metadata, PowerShell parser status, basic skin structure, wrapper/finalizer routing, and Git ignore rules;
-- `tests/Validate-HistoricalTools.ps1` checks historical/local tool parsing, seed metadata coverage, `sourceTimestamp`, and seed-truth/provenance constraints;
-- `tests/Run-HistoricalPipelineTests.ps1` executes the production cycle builder against synthetic normalized observations and verifies observed transition timestamps/durations;
-- `tests/Run-SeedImporterTests.ps1` exercises the production seed importer in an isolated temporary project, including deduplication and synthetic-data rejection;
-- `tests/Run-ModelTests.ps1` extracts actual production functions from `UpdateTracker.ps1` through the PowerShell AST and runs deterministic synthetic model scenarios without duplicating the production recommendation implementation;
-- `tests/Run-FinalizeStateTests.ps1` runs the production finalizer in an isolated temporary project and checks restock independence, stale resale suppression, Standard trip cost/capacity, zero-cost Airstrip, and unresolved Business economics;
-- `tests/Run-All.ps1` is the single deterministic/static validation entry point;
-- `tools/Validate-LiveEnvironment.ps1` provides a bounded first Windows pass: deterministic tests, one YATA request, one optional Torn Item Market request, one serialized updater/finalizer pass, disk-size reporting, Rainmeter install check, and whole-process Rainmeter memory observation;
-- `docs/WINDOWS_VALIDATION.md` records the exact local/Rainmeter validation sequence and evidence to retain.
-
-## Historical bootstrap
-
-The committed seed is intentionally empty.
-
-A useful bootstrap candidate has been identified at the **contract** level: the public `shab00m/torn-travel-planner` repository documents a read-only snapshot-history API whose points contain YATA timestamp, quantity, and foreign cost. Those fields map directly to Travel Assistant's normalized observations, and a bounded compatible importer is in the repository.
-
-Travel Assistant does **not** assume a deployment URL or permission for an arbitrary deployment. Real seed history is still withheld until a specific live host and its external-use expectations are verified. DroqsDB likewise remains disabled for historical use until its live contract is verified from the user's machine.
-
-The model and graphs already consume `data/seed/` alongside runtime history, so adding a verified real seed later does not require changing persistence/model contracts.
-
-Do not replace the empty bootstrap with synthetic fixtures or provider forecasts.
+The committed historical seed remains intentionally empty until a trustworthy structured history source/deployment is verified for bounded external use.
 
 ## Current connector boundary
 
-Repository-side deterministic validation is now complete on the target machine. The next evidence needed is machine-specific live/runtime behavior:
+The connector and target Windows machine have now established:
 
-- make live YATA/Torn calls from the target network;
-- exercise `System.Drawing` graph generation through one production updater pass;
-- create/verify the Rainmeter junction;
-- load the skin in the installed Rainmeter build and inspect its log;
-- measure actual runtime/disk behavior.
+- deterministic/static correctness on Windows PowerShell;
+- live YATA connectivity and plausible UK/Japan payloads;
+- one successful production updater/finalizer pass;
+- successful bounded generated graph/output creation through the production path;
+- small first-pass runtime/generated storage;
+- Rainmeter is installed/running on the machine.
 
-Those facts cannot be truthfully established by repository inspection alone, so the active run remains open.
+The facts still requiring direct local observation are:
 
-## Known implementation gaps / next work
+- `Install.ps1` creates/verifies the Rainmeter junction safely;
+- `Travel Assistant\TravelAssistant.ini` loads in the installed Rainmeter build;
+- UK/Japan panels and graphs render correctly;
+- Standard/Airstrip/WLT cycling works with Airstrip default;
+- Business remains unavailable;
+- clickable external verification behaves correctly;
+- live values/low-confidence states render plausibly and conservatively;
+- Rainmeter logs remain free of material Travel Assistant Lua/RunCommand/image/PowerShell/config errors;
+- normal idle behavior has no continuously running Travel Assistant PowerShell process or abnormal storage/resource growth.
 
-1. **Live Windows/Rainmeter validation is required next.** Deterministic PowerShell tests pass, but Rainmeter, the installer junction, `System.Drawing`, and live YATA/Torn behavior have not yet been validated on the target machine.
-2. **Price similarity is currently a bounded cohort, not a continuously weighted regression.** This is intentionally simple until real observations calibrate more sophisticated weighting; the present safe-window intersection remains conservative within its selected cohort.
-3. **Time-of-day/day-of-week pattern detection is not active in production yet.** `Analyze-History.ps1` can expose adequately sampled cohorts without automatically promoting them into model rules.
-4. **Cross-provider disagreement logic has statuses/contracts but no enabled secondary live provider yet.**
-5. **First launch in the middle of an already-live restock cannot know that cycle's exact restock timestamp.** Live-cycle depletion behavior becomes strongest after the tracker has observed its own 0 -> positive transition.
-6. **Resource limits are designed but not measured.** CPU/RAM/disk measurements require the real Windows/Rainmeter pass.
-7. **No Windows Clock alarm integration.** This remains intentionally deferred because reliable programmatic alarm creation has not been established.
-8. **Initial profitability thresholds are provisional defaults.** The current 50k net profit/item and 5% net-margin floors should be calibrated after live validation; users with additional carrying capacity should set `capacityOverride` so trip economics reflect their actual capacity.
-9. **Business travel remains intentionally disabled.** Re-enable only after the engine can resolve either current Business Class Ticket opportunity cost or an explicit free-Business company perk.
-10. **Historical provider bootstrap is contract-ready but live-host verification remains unresolved.** Preserve low-confidence startup rather than manufacturing data.
+Those are the only remaining acceptance boundaries for the current active run.
 
-## Next steps
+## Known intentional limitations / follow-up work
 
-Because the deterministic/static suite has just passed on the target machine, the immediate next command can skip re-running it:
+1. **No committed historical seed yet.** Preserve conservative `INSUFFICIENT_HISTORY` / `CHECK_EXTERNAL` behavior until real history is earned or a trustworthy bounded source is verified.
+2. **Price similarity remains a bounded cohort model.** Continuous weighting can be considered only after sufficient real history supports it.
+3. **Time-of-day/day-of-week cohorts remain descriptive only.** Do not promote sparse patterns into recommendations.
+4. **No enabled secondary live provider disagreement check yet.** Status/contracts exist for future use.
+5. **First launch during an already-live restock cannot recover the exact unseen restock start.** Exact live-cycle timing becomes available after Travel Assistant observes its own transition.
+6. **Whole-process Rainmeter memory is not Travel Assistant attribution.** The observed `38.58 MiB` is only a sanity baseline; deeper profiling is unnecessary unless local behavior indicates a problem.
+7. **No Windows Clock alarm integration.** Intentionally deferred.
+8. **Profitability defaults remain provisional.** Calibration should follow live usage; `capacityOverride` can reflect actual carrying capacity.
+9. **Business travel remains intentionally disabled.** Re-enable only after Business Class Ticket/free-company economics are explicit.
+10. **Torn Item Market live validation remains optional until a local key is configured.** Absence of a key must keep money-sensitive recommendations conservative, not fabricate resale economics.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1 -SkipTests
-```
+## Immediate next step
 
-Then run:
+From the Travel Assistant directory, run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
 ```
 
-Load `Travel Assistant\TravelAssistant.ini` in Rainmeter and inspect rendering/log behavior.
+Capture the complete installer output. After a successful install, refresh Rainmeter and load:
 
-Any runtime defect should be fed back through the GitHub connector where practical. A broad Codex pass is still unnecessary unless a concrete local-only debugging operation cannot be performed otherwise.
+```text
+Travel Assistant\TravelAssistant.ini
+```
+
+Then perform only the remaining visual/interaction/log/resource checks in [`WINDOWS_VALIDATION.md`](./WINDOWS_VALIDATION.md). Feed any exact installer output or Rainmeter log errors back through the connector so only the narrowest relevant fix/check is repeated.
