@@ -22,6 +22,7 @@ config/secrets.json
 Thumbs.db
 Desktop.ini
 
-# Test / scratch output
+# Test / scratch / local distribution output
 coverage/
 test-output/
+dist/
