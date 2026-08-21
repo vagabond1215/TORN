@@ -20,6 +20,15 @@
       "notes": "Structured public abroad-stock export retained as fallback. Target-machine validation observed HTTP 502 responses on 2026-08-21, so do not make YATA availability a single point of failure."
     },
     {
+      "id": "torn_items",
+      "role": ["itemMetadata", "catalogMetadata"],
+      "enabled": true,
+      "endpointTemplate": "https://api.torn.com/v2/torn/{ids}/items?sort=ASC",
+      "minimumPollSeconds": 21600,
+      "requiresApiKey": true,
+      "notes": "Public-key Torn v2 metadata source for provider-observed item IDs. Specific-ID requests populate details when available, allowing weapon rows to retain Primary/Secondary/Melee/Temporary category identity. Store canonical names, types/categories, tradability, market-price reference and shop metadata in ignored runtime state. market_price is informational in this phase and must not replace the existing Item Market profitability gate."
+    },
+    {
       "id": "torn_itemmarket",
       "role": ["resalePrice"],
       "enabled": true,
