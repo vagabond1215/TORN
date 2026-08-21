@@ -28,7 +28,8 @@
     "candidateStepSeconds": 30
   },
   "providers": {
-    "liveStock": "yata",
+    "liveStock": "prometheus",
+    "liveStockFallback": "yata",
     "historicalBootstrap": "none",
     "resalePrice": "torn_itemmarket"
   },
