@@ -108,8 +108,19 @@ foreach ($prefix in @('UK','JP')) {
         if ($priceBody -notmatch ('(?im)^FontColor=#' + $prefix + 'PriceColor#\s*$')) { Fail "Meter${prefix}Price must use dynamic profitability color." }
     }
     $stockMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'StockHeader\]\s*(.*?)(?=^\[|\z)')
-    if ($stockMatch.Success -and $stockMatch.Groups[1].Value -notmatch ('(?im)^Text=#' + $prefix + 'StockHeaderText#\s*$')) {
-        Fail "Meter${prefix}StockHeader must use the compact stock/out-of-stock text variable."
+    if (-not $stockMatch.Success) {
+        Fail "Missing [Meter${prefix}StockHeader]."
+    } else {
+        $stockBody = $stockMatch.Groups[1].Value
+        if ($stockBody -notmatch ('(?im)^Text=#' + $prefix + 'StockHeaderText#\s*$')) {
+            Fail "Meter${prefix}StockHeader must use the compact stock/out-of-stock text variable."
+        }
+        if ($stockBody -notmatch '(?im)^InlineSetting=Color\s*\|\s*#Bad#\s*$') {
+            Fail "Meter${prefix}StockHeader must color the out-of-stock warning with #Bad#."
+        }
+        if ($stockBody -notmatch '(?im)^InlinePattern=Out of Stock\s*$') {
+            Fail "Meter${prefix}StockHeader must apply warning color only to the words Out of Stock."
+        }
     }
     $restockIconMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'RestockIcon\]\s*(.*?)(?=^\[|\z)')
     if (-not $restockIconMatch.Success) {
