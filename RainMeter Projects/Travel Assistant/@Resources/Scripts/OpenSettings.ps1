@@ -207,7 +207,7 @@ function Update-ProfilePreview {
     if ($selectIndex -ge 0) { $modeCombo.SelectedIndex = $selectIndex }
 
     $businessText = if ([bool]$effects.freeBusinessClass) { 'Business: FREE / available' } else { 'Business: locked (10-star Lingerie)' }
-    $summary.Text = ('General capacity +{0}   |   Xanax-specific +{1}`r`nFaction capacity +{2}   |   Travel fees -{3}%`r`n{4}' -f [int]$effects.generalCapacityBonus, [int]$effects.itemCapacityBonus, [int]$effects.factionCapacityBonus, [int]$effects.travelCostReductionPercent, $businessText)
+    $summary.Text = ('General capacity +{0}   |   Xanax-specific +{1}' -f [int]$effects.generalCapacityBonus, [int]$effects.itemCapacityBonus) + [Environment]::NewLine + ('Faction capacity +{0}   |   Travel fees -{1}%' -f [int]$effects.factionCapacityBonus, [int]$effects.travelCostReductionPercent) + [Environment]::NewLine + $businessText
 }
 
 $companyCombo.Add_SelectedIndexChanged({ Update-ProfilePreview })
