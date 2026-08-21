@@ -1,104 +1,191 @@
-# Next Codex Run: Travel Assistant Settings / Current Capacity Validation
+# Next Codex Run: Full Foreign-Market Shadow Collection
 
 **Status: ACTIVE**
 
 This is the authoritative execution handoff for `RainMeter Projects/Travel Assistant/`.
 
-## Do not repeat the stable baseline
+## Goal
 
-Already validated on the target Windows/Rainmeter machine:
+Start collecting useful history for the entire Torn foreign market **without changing the validated UK/Japan Xanax presentation or recommendation behavior**.
 
-- installation/junction, UK/Japan render, equal-width graphs, encoding fixes;
-- Torn Item Market via bounded curl and ignored local API key;
-- automatic one-minute Rainmeter polling, heartbeat/stale detection, real restock/sellout history collection;
-- clean post-fix Rainmeter log, no persistent Travel Assistant PowerShell process, bounded generated/runtime storage;
-- Prometheus preferred live stock with YATA fallback;
-- production Prometheus pass around 1.16 s with current stock/price/source timestamps.
-
-## Current Settings design
-
-The top-right main-skin control is `SETTINGS >`.
-
-Settings now centers on:
-
-- masked Torn API key;
-- Standard / Airstrip / WLT;
-- company + stars for non-capacity effects such as free Business Class;
-- **Current Xanax capacity**;
-- `Sync from Torn` as a populate-only action;
-- explicit Save followed by a hidden asynchronous update.
-
-Legacy faction/loadout fields remain readable for old local settings but are no longer the preferred user-facing capacity source.
-
-## Current-capacity authority
-
-Do not query faction upgrades to determine usable Xanax carrying capacity.
-
-Use current `/user/perks` instead:
-
-- mode supplies base capacity: Standard `10`; Airstrip/WLT/qualified Business `15`;
-- `perks.enhancer` supplies the current non-stacking suitcase bonus;
-- `perks.faction`, `perks.job`, and `perks.book` supply currently active additive general travel-capacity bonuses;
-- property/stock method perks are excluded from additive capacity to avoid double-counting the selected 10/15 base;
-- Flower/Toy item-specific bonuses do not increase Xanax capacity;
-- unknown relevant perk text keeps the result unresolved rather than guessing.
-
-A successfully synced current-capacity bonus is authoritative and replaces inferred company/faction capacity slots in economics.
-
-### Live target validation
-
-While the user was actively traveling, `Probe-TornTravelProfile.ps1` resolved:
+The expansion rule is now:
 
 ```text
-Mode: Airstrip
-Base: 15
-Large Suitcase/enhancer: +3
-Other active perks: +0
-Effective capacity: 18
+collect broadly
+show narrowly
+optimize only after evidence/economics are ready
 ```
 
-`Run-CurrentCapacityTests.ps1` passed all current parser/enhancer/exclusion/unresolved cases.
+## Implemented in repository
 
-`Run-TravelProfileTests.ps1` passed all existing economics tests plus:
+### All-country collection configuration
 
-- synced current capacity retained;
-- current bonus retained;
-- current capacity replaces inferred company/faction slots;
-- no faction double-counting;
-- conservative zero faction fee reduction when current capacity is authoritative;
-- 10-star Lingerie Business unlock still preserved;
-- current `+3` yields Airstrip `18`, Standard `13`, qualified Business `18`.
+`config/countries.json` now distinguishes visible/primary countries from collection countries:
 
-`Validate-TravelAssistant.ps1` also passed.
+- United Kingdom and Japan remain `enabled: true` for the current UI/model path;
+- all 11 Torn foreign destinations have `collect: true` and Prometheus/YATA country codes;
+- the other nine destinations remain `enabled: false` for this release.
 
-### Live generated-state economics pass
-
-After saving Airstrip with the synced current `+3` bonus, the target Windows machine produced:
+Collection country/provider codes:
 
 ```text
-JPCapacity=18
-ProfileFactionCapacityBonus=0
-ProfileGeneralCapacityBonus=3
-TravelMode=airstrip
-UKCapacity=18
+mexico               mex
+cayman_islands       cay
+canada                can
+hawaii                haw
+united_kingdom        uni
+argentina             arg
+switzerland           swi
+japan                 jap
+china                 chi
+united_arab_emirates  uae
+south_africa          sou
 ```
 
-This confirms the final generated state uses the current-capacity authority and does not add inferred faction capacity on top.
+### Initial item metadata seeds
 
-## Immediate remaining validation
+`config/items.json` now explicitly separates collection/visibility/optimizer intent.
 
-Do not add more code unless one of these checks fails.
+Current primary item:
 
-1. Confirm the simplified Settings UI shows **Current Xanax capacity** and no longer asks the user to manage faction Peace/War loadouts.
-2. Click **Sync from Torn**. With the same active perks, expected Airstrip capacity is `18` (`15 + 3`).
-3. Before saving, change Airstrip → Standard and confirm the displayed capacity recalculates to `13`; switch back to Airstrip and confirm `18`.
-4. Confirm Sync is populate-only: Cancel/reopen should retain the previously saved values.
-5. Manually choose Lingerie Store + 10 stars and confirm Business appears; switch back to an unqualified profile and confirm Business disappears.
-6. Allow a normal automatic poll after the successful Save and confirm Prometheus/source freshness remains healthy.
-7. Check for new material Rainmeter/PowerShell errors only if behavior suggests a regression.
+```text
+206 Xanax | Drug | visible | optimizer-eligible
+```
 
-The generated-state capacity/economics check has already passed and should not be repeated unless a later change touches that path.
+First hidden multi-item proof metadata:
 
-## Completion criteria
+```text
+266 Nessie Plushie  | Plushie | United Kingdom | hidden | not optimizer-eligible yet
+277 Cherry Blossom  | Flower  | Japan          | hidden | not optimizer-eligible yet
+```
 
-Mark **COMPLETED** only when the live Settings sync/recalculation/Business-gating/populate-only checks above pass and the next normal automatic poll remains healthy.
+The live shadow collector does **not** depend on this three-item list to decide what to collect. It normalizes every valid item row returned by the foreign-stock provider.
+
+### Fail-soft shadow collector
+
+`@Resources/Scripts/ShadowCollector.ps1`:
+
+- defaults to a 120-second background polling interval;
+- queries Prometheus with YATA fallback using the same provider contract as the existing updater;
+- iterates all configured `collect: true` countries;
+- normalizes every valid provider item row to the existing observation schema;
+- tracks every observed `country:itemId` market in ignored `engine-state.json -> observedMarkets`;
+- writes changed observations to the existing bounded `observations.jsonl`;
+- detects and writes completed cycles using the existing cycle schema;
+- skips current primary markets (enabled country + enabled item) so UK/Japan Xanax is not double-written by the shadow pass;
+- stores collection health counters in `engine-state.json -> shadowCollection`;
+- records errors in ignored `data/runtime/shadow-collection-error.txt`;
+- returns fail-soft so background expansion cannot block current visible functionality.
+
+`RunUpdate.ps1` now executes:
+
+```text
+existing UpdateTracker
+        ↓
+fail-soft ShadowCollector
+        ↓
+existing FinalizeState
+        ↓
+heartbeat
+```
+
+The separate shadow fetch is an intentional migration bridge. A future refactor should share one live provider payload between visible and shadow collection after behavior is proven equivalent.
+
+## New focused validation
+
+```powershell
+.\tests\Validate-ShadowCollection.ps1
+.\tests\Run-ShadowCollectionTests.ps1
+```
+
+The tests verify:
+
+- exactly 11 collection countries/provider codes;
+- only UK/Japan remain visible/enabled countries;
+- Xanax remains the only enabled primary item;
+- Nessie/Cherry metadata and hidden/optimizer flags;
+- valid multi-item provider-row normalization;
+- malformed provider rows are ignored;
+- UK/Japan Xanax is classified as protected primary market;
+- Nessie and non-primary-country Xanax remain shadow markets;
+- cycle completion retains country/item identity and timing isolation.
+
+Both tests are included in `tests/Run-All.ps1`.
+
+## Required target-Windows validation
+
+Do **not** broaden the UI or enable optimizer economics until this passes.
+
+From the Travel Assistant directory:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-ShadowCollection.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ShadowCollectionTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
+```
+
+Then allow at least one normal Rainmeter update and one shadow interval (roughly two minutes).
+
+Inspect only non-secret runtime state:
+
+```powershell
+$e = Get-Content .\data\runtime\engine-state.json -Raw | ConvertFrom-Json
+$e.shadowCollection | Format-List
+@($e.observedMarkets.PSObject.Properties).Count
+```
+
+Expected:
+
+- `lastPollAt` is current/recent;
+- `lastProvider` is `prometheus` normally, or `yata` if fallback is required;
+- `countriesSeen` should be up to 11 when the provider payload contains all configured destinations;
+- `marketsSeen` should be substantially greater than the current two Xanax markets;
+- `lastError` should be empty on a successful pass;
+- observed-market count should grow to the provider's current foreign-market set;
+- current UK/Japan Xanax cards, graphs, profitability colors, stock headers and recommendations remain healthy.
+
+Optional proof that the first hidden items are already being seen when present in the provider payload:
+
+```powershell
+$e.observedMarkets.PSObject.Properties |
+  Where-Object { $_.Name -in @('united_kingdom:266','japan:277') } |
+  Select-Object Name, Value
+```
+
+Do not paste API keys or full local settings.
+
+## What is deliberately not implemented yet
+
+- canonical name/category enrichment for every observed item ID;
+- resale-price queue for the whole observed catalog;
+- category-specific Flower/Plushie capacity economics for multi-item recommendations;
+- Cherry/Nessie visible cards;
+- country/category UI filters;
+- Torn `/user/travel` destination/arrival-aware presentation;
+- full country travel economics;
+- `Optimal` route scheduling.
+
+Those depend on proving the collection foundation first.
+
+## Next implementation after shadow validation
+
+1. Add canonical item metadata/category enrichment for observed item IDs rather than maintaining a static foreign-shop whitelist.
+2. Add a bounded/staggered resale-price cache queue per distinct item ID.
+3. Generalize capacity into general + category-specific bonuses.
+4. Promote Nessie and Cherry as the first hidden-to-visible multi-item UI proof.
+5. Add country/category filters.
+6. Add travel-state filtering/arrival countdown.
+7. Populate full opportunity economics before enabling `Optimal` mode.
+
+## Existing validation debt retained
+
+The earlier Settings/current-capacity interaction checks (populate-only Sync, 18/13 mode flip, Business gating, healthy next poll) remain useful Windows acceptance evidence. They are not erased by this expansion, but they are no longer the sole active implementation scope.
+
+## Completion criteria for this run
+
+Mark this shadow-collection run **COMPLETED** only after:
+
+- both new focused tests pass on Windows;
+- normal Rainmeter Xanax behavior remains unchanged;
+- at least one successful shadow poll records multiple hidden markets without blocking the heartbeat;
+- runtime storage/error behavior remains bounded/ignored.
