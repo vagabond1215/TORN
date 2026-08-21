@@ -124,6 +124,19 @@ function Get-ActiveObservedItems {
     }
 }
 
+function Get-VisibleResalePriorityIds {
+    param([object]$ItemsConfig)
+    $ids = New-Object 'System.Collections.Generic.HashSet[int]'
+    if ($null -eq $ItemsConfig -or -not $ItemsConfig.PSObject.Properties['items']) { return @() }
+    foreach ($item in @($ItemsConfig.items)) {
+        if ($null -eq $item -or -not $item.PSObject.Properties['itemId']) { continue }
+        if (-not $item.PSObject.Properties['visible'] -or $item.visible -ne $true) { continue }
+        $itemId = [int]$item.itemId
+        if ($itemId -gt 0) { [void]$ids.Add($itemId) }
+    }
+    return @($ids | Sort-Object)
+}
+
 function Get-ItemAttemptState {
     param([object]$QueueState, [int]$ItemId, [switch]$Create)
     $key = [string]$ItemId
@@ -147,10 +160,16 @@ function Get-ResaleQueueCandidate {
         [object]$EngineState,
         [object]$QueueState,
         [int[]]$ItemIds,
+        [int[]]$PriorityItemIds = @(),
         [long]$Now,
         [int]$FreshSeconds,
         [int]$BackoffSeconds
     )
+
+    $prioritySet = New-Object 'System.Collections.Generic.HashSet[int]'
+    foreach ($priorityId in @($PriorityItemIds)) {
+        if ([int]$priorityId -gt 0) { [void]$prioritySet.Add([int]$priorityId) }
+    }
 
     $eligible = New-Object System.Collections.Generic.List[object]
     foreach ($itemId in @($ItemIds)) {
@@ -178,6 +197,7 @@ function Get-ResaleQueueCandidate {
 
         $eligible.Add([pscustomobject]@{
             itemId = [int]$itemId
+            priority = if ($prioritySet.Contains([int]$itemId)) { 0 } else { 1 }
             eligibleAt = [long]$eligibleAt
             fetchedAt = [long]$fetchedAt
             lastAttemptAt = [long]$lastAttemptAt
@@ -185,7 +205,7 @@ function Get-ResaleQueueCandidate {
     }
 
     if ($eligible.Count -eq 0) { return $null }
-    return @($eligible | Sort-Object eligibleAt, fetchedAt, lastAttemptAt, itemId | Select-Object -First 1)[0]
+    return @($eligible | Sort-Object priority, eligibleAt, fetchedAt, lastAttemptAt, itemId | Select-Object -First 1)[0]
 }
 
 function Get-ResaleQueueMetrics {
@@ -239,7 +259,6 @@ function Invoke-TornItemMarketCurl {
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
-
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $psi
     try {
@@ -252,7 +271,7 @@ function Invoke-TornItemMarketCurl {
         $process.StandardInput.WriteLine(('url = "{0}"' -f $uri))
         $process.StandardInput.WriteLine('header = "Accept: application/json"')
         $process.StandardInput.WriteLine(('header = "Authorization: ApiKey {0}"' -f $ApiKey.Replace('"', '')))
-        $process.StandardInput.WriteLine('header = "User-Agent: TornTravelAssistant/0.2"')
+        $process.StandardInput.WriteLine('header = "User-Agent: TornTravelAssistant/0.3"')
         $process.StandardInput.Close()
 
         $waitMs = [Math]::Max(3000, ($TimeoutSec + 2) * 1000)
@@ -348,7 +367,9 @@ if ([string]::IsNullOrWhiteSpace($apiKey)) {
     return
 }
 
-$candidate = Get-ResaleQueueCandidate -EngineState $engineState -QueueState $queue -ItemIds $itemIds -Now $now -FreshSeconds $CacheFreshSeconds -BackoffSeconds $FailureBackoffSeconds
+$itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
+$priorityItemIds = [int[]]@(Get-VisibleResalePriorityIds -ItemsConfig $itemsConfig)
+$candidate = Get-ResaleQueueCandidate -EngineState $engineState -QueueState $queue -ItemIds $itemIds -PriorityItemIds $priorityItemIds -Now $now -FreshSeconds $CacheFreshSeconds -BackoffSeconds $FailureBackoffSeconds
 if ($null -eq $candidate) {
     $queue.status = 'IDLE_FRESH_OR_BACKOFF'
     $queue.lastError = ''
