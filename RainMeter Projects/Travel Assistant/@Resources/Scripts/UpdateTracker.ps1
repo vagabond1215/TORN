@@ -290,7 +290,7 @@ function Load-Cycles {
             } catch { }
         }
     }
-    return @($rows)
+    return $rows.ToArray()
 }
 
 function Get-LiveStockoutEstimate {
@@ -324,7 +324,7 @@ function Get-Recommendation {
 
     $result = [ordered]@{
         Status = 'INSUFFICIENT_HISTORY'
-        Message = 'Learning — no departure recommendation'
+        Message = 'Learning - no departure recommendation'
         RestockEstimateAt = 0
         WindowOpenAt = 0
         WindowCloseAt = 0
@@ -335,7 +335,7 @@ function Get-Recommendation {
     $sourceTs = [long]$Observation.sourceTimestamp
     if ($sourceTs -gt 0 -and ($Now - $sourceTs) -gt [long]$Settings.staleAfterSeconds) {
         $result.Status = 'STALE_DATA'
-        $result.Message = 'Stock source is stale — check Weav3r'
+        $result.Message = 'Stock source is stale - check Weav3r'
         return [pscustomobject]$result
     }
 
@@ -360,7 +360,7 @@ function Get-Recommendation {
     }
     if ($profit -lt [double]$Settings.profitability.minimumProfitPerItem -or $margin -lt [double]$Settings.profitability.minimumMarginPercent) {
         $result.Status = 'LOW_MARGIN'
-        $result.Message = ('Net margin too low: ${0:N0}/ea · {1:N1}%' -f $profit, $margin)
+        $result.Message = ('Net margin too low: ${0:N0}/ea | {1:N1}%' -f $profit, $margin)
         return [pscustomobject]$result
     }
 
@@ -384,8 +384,6 @@ function Get-Recommendation {
     if ($travelSeconds -le 0) { return [pscustomobject]$result }
     $buffer = [long]$Settings.recommendation.arrivalBufferSeconds
 
-    # If a restock is currently live, exact restock timing is known. In this state,
-    # current depletion can only shorten a historical safe window; it never extends one.
     if ([int]$Observation.stock -gt 0 -and $null -ne $DestState.activeCycle) {
         $activeRestockAt = [long]$DestState.activeCycle.restockAt
         if ($activeRestockAt -gt 0) {
@@ -636,7 +634,7 @@ $engineState = Get-EngineState
 $stateValues = @{
     TravelMode = $travelMode
     TravelModeLabel = $modeLabel
-    UpdatedText = 'YATA live stock · 60s polling'
+    UpdatedText = 'YATA live stock - 60s polling'
 }
 
 $yataPayload = $null
