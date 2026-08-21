@@ -160,9 +160,15 @@ function Get-LiveStockObservationsForCountry {
 
     foreach ($row in @($countryObj.stocks)) {
         if ($null -eq $row) { continue }
+        $validRow = $true
         foreach ($required in @('id','quantity','cost')) {
-            if (-not $row.PSObject.Properties[$required]) { continue }
+            if (-not $row.PSObject.Properties[$required]) {
+                $validRow = $false
+                break
+            }
         }
+        if (-not $validRow) { continue }
+
         $itemId = [int]$row.id
         $stock = [int]$row.quantity
         $foreignPrice = [long]$row.cost
