@@ -58,18 +58,15 @@ if ($job.Success) {
 } else { Write-ProbeFailure -Label 'JOB' -Result $job }
 
 $perks = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/perks?comment=TravelAssistantCapacityProbe' -ApiKey $apiKey
-$inventory = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/inventory?limit=250&comment=TravelAssistantCapacityProbe' -ApiKey $apiKey
-
 if (-not $perks.Success) { Write-ProbeFailure -Label 'CURRENT PERKS' -Result $perks }
-if (-not $inventory.Success) { Write-ProbeFailure -Label 'INVENTORY' -Result $inventory }
 
-if ($perks.Success -and $inventory.Success) {
-    $capacity = Get-TornEffectiveXanaxCapacity -TravelMode $travelMode -PerksPayload $perks.Payload -InventoryPayload $inventory.Payload
+if ($perks.Success) {
+    $capacity = Get-TornEffectiveXanaxCapacity -TravelMode $travelMode -PerksPayload $perks.Payload
     Write-Host ''
     Write-Host 'CURRENT XANAX CAPACITY' -ForegroundColor Cyan
     Write-Host ('  Base ({0}): {1}' -f $capacity.TravelMode, [int]$capacity.BaseCapacity)
-    Write-Host ('  Suitcase:      +{0}  ({1})' -f [int]$capacity.SuitcaseBonus, [string]$capacity.SuitcaseSummary)
-    Write-Host ('  Active perks:  +{0}' -f [int]$capacity.ActivePerkBonus)
+    Write-Host ('  Suitcase/enhancer: +{0}  ({1})' -f [int]$capacity.SuitcaseBonus, [string]$capacity.SuitcaseSummary)
+    Write-Host ('  Other active perks: +{0}' -f [int]$capacity.ActivePerkBonus)
 
     if (@($capacity.RecognizedPerks).Count -gt 0) {
         Write-Host '  Recognized current capacity perks:'
@@ -89,7 +86,7 @@ if ($perks.Success -and $inventory.Success) {
 
     if ($capacity.Resolved) {
         Write-Host ('  EFFECTIVE CAPACITY: {0} items' -f [int]$capacity.Capacity) -ForegroundColor Green
-        Write-Host '  This value uses only currently active perks; no faction-upgrades permission is required.' -ForegroundColor DarkGreen
+        Write-Host '  Uses current /user/perks only, so it remains available while traveling and does not need faction API permission.' -ForegroundColor DarkGreen
     } else {
         Write-Host ('  TENTATIVE CAPACITY: {0} items (not authoritative yet)' -f [int]$capacity.Capacity) -ForegroundColor Yellow
         Write-Host '  One or more current travel-capacity strings were not recognized, so Settings should not auto-save this value yet.' -ForegroundColor Yellow
