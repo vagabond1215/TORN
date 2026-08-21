@@ -1,4 +1,4 @@
-# Next Codex Run: Category-Aware Carrying Capacity
+# Next Codex Run: First Visible Multi-Item Release
 
 **Status: ACTIVE**
 
@@ -10,155 +10,217 @@ show narrowly
 optimize only after evidence/economics are ready
 ```
 
-## Accepted baseline
+## Accepted prerequisites
 
-Target Windows has accepted the current catalog/market-validity layer:
+Target Windows has accepted:
 
 ```text
-provider:                     prometheus
-countriesSeen:                11
-provider country-item rows:   232
-legacy provider rows:           5
-active candidate markets:     227
-observed item IDs:             202
-metadata rows:                 202
-categoriesResolved:            202
-unresolvedItems:                 0
-nameConflicts:                   0
+11 foreign countries
+232 provider country-item rows
+5 verified legacy/inactive provider rows
+227 active country-item markets
+202 distinct observed item IDs
+202 / 202 categories resolved
+0 unresolved
+0 name conflicts
 ```
 
-The broad resale queue also completed a clean live request:
+Broad resale pricing is also accepted live:
 
 ```text
 activeMarkets: 227
 activeItems:   197
-pricedItems:     2
-freshItems:      2
-staleItems:    195
-successCount:    1
-failureCount:    0
-status:          OK
-lastItemId:       4
+status: OK
+one bounded Torn Item Market request succeeded
 ```
 
-The successful row used the established `torn_itemmarket` cache schema. The visible UI remains UK/Japan Xanax only.
+Category-aware carrying capacity passed target-Windows focused tests:
 
-## Current production runtime
+```text
+synced Airstrip general/Xanax capacity = 18
+synced Standard general/Xanax capacity = 13
+Flower Shop 7★: Flower +5 only
+Toy Shop 7★: Plushie +5 only
+```
+
+Therefore with current general `+3`:
+
+```text
+Airstrip Flower/Plushie with matching 7★ company = 23
+Standard Flower/Plushie with matching 7★ company = 18
+Xanax remains 18 Airstrip / 13 Standard
+```
+
+## Implemented UI release pending Windows acceptance
+
+Skin version:
+
+```text
+0.3.0
+```
+
+Visible destination rows are now:
+
+```text
+United Kingdom
+  Xanax
+  Nessie Plushie
+
+Japan
+  Xanax
+  Cherry Blossom
+```
+
+Nessie and Cherry are deliberately:
+
+```text
+visible=true
+enabled=false
+optimizerEligible=false
+```
+
+They therefore do not replace or broaden the established primary Xanax collector/model path.
+
+### Price display
+
+Every visible item row displays:
+
+```text
+FOREIGN SHOP PRICE (TORN ITEM MARKET REFERENCE)
+```
+
+The foreign shop price remains the primary value and keeps profitability coloring.
+The parenthesized Torn market reference is muted and rendered slightly smaller.
+
+Examples:
+
+```text
+XANAX          $830,000 ($842,500)
+Nessie Plushie  $10,000  ($64,000)
+```
+
+Missing resale data displays as `(-)` until the bounded resale queue populates it. A stale broad-market reference may remain visible for context but does not drive green/yellow/red profitability classification.
+
+### Resale priority
+
+The broad queue remains bounded to **one request per normal update**. It now prioritizes configured `visible=true` items among otherwise eligible stale/unpriced items. This lets Nessie/Cherry receive market references before hidden catalog items without increasing request frequency.
+
+Xanax continues to use its existing independent/fresher resale path.
+
+## Presentation architecture
+
+New local-only script:
+
+```text
+@Resources/Scripts/VisibleItems.ps1
+```
+
+Runtime order:
 
 ```text
 UpdateTracker
 ShadowCollector (fail-soft)
 LocalCatalog (fail-soft / local-only)
 FinalizeState
+VisibleItems (fail-soft / local-only)
 visible heartbeat
-ResaleQueue (fail-soft, max one request/run)
+ResaleQueue (fail-soft / max one request)
 ```
 
-Catalog metadata network maintenance remains outside the heartbeat.
+`VisibleItems.ps1` performs **no network calls**. It consumes already-existing:
 
-## Implemented category-aware capacity
+- `observedMarkets` stock/foreign price;
+- market-validity flags;
+- local canonical metadata;
+- `resaleCache`;
+- saved travel profile/company stars;
+- category-aware capacity/economics.
 
-The accepted current-capacity model remains the authority for **general/Xanax** carrying capacity:
+A VisibleItems failure must leave the existing Xanax state intact.
 
-```text
-base travel capacity
-+ current suitcase/general active bonus
-```
+## Current first-release limitations
 
-For the currently synced example:
+This is intentionally a narrow UI proof:
 
-```text
-Airstrip general/Xanax capacity = 18
-Standard general/Xanax capacity = 13
-```
+- existing 8-hour graphs remain **Xanax graphs**;
+- existing departure/restock recommendation row remains **Xanax timing**;
+- secondary rows show current stock, foreign price, Torn market reference and profitability/capacity context via tooltip;
+- Nessie/Cherry remain non-optimizer-eligible;
+- no country/category filters yet.
 
-Category-specific company perks are now modeled separately from that general number.
-
-### Important non-double-counting rule
-
-`currentCapacity` / `currentCapacityBonus` represent the general/Xanax capacity and intentionally excluded Flower/Toy category-specific capacity from the original `/user/perks` parser.
-
-Therefore after a current-capacity sync:
-
-- general company/faction capacity is **not inferred again**;
-- a matching item-specific company bonus **is** allowed on top, because it was never included in the Xanax/general number.
-
-Current known category effects:
-
-```text
-Flower Shop 7★ -> +5 only for Flower items
-Toy Shop    7★ -> +5 only for Plushie items
-```
-
-Examples with a general Airstrip capacity of 18:
-
-```text
-Xanax at Flower Shop 7★       = 18
-Cherry Blossom at Flower 7★   = 23
-Xanax at Toy Shop 7★          = 18
-Nessie Plushie at Toy Shop 7★ = 23
-```
-
-Standard mode with the same active general `+3` and matching category `+5` produces 18 slots (`10 + 3 + 5`).
-
-A positive explicit `profitability.capacityOverride` remains authoritative and exact.
-
-## CurrentCapacity parser cross-check
-
-`CurrentCapacity.ps1` now also parses category-specific Flower/Plushie perk strings independently from general capacity.
-
-New production helpers include:
-
-```text
-Get-TornTravelCapacityCategoryFromPerkText
-Get-TornCategoryTravelCapacityBonusFromPerkText
-Get-TornCategoryTravelCapacityPerks
-Get-TornEffectiveItemCapacity
-```
-
-`Get-TornEffectiveXanaxCapacity` remains a backward-compatible Drug wrapper. Category-specific perks may be recognized/exposed by the parser but never increase Xanax capacity.
-
-An unparseable Flower-specific perk can make a direct Flower parser result unresolved without making unrelated Drug capacity unresolved.
-
-The normal TravelProfile economics path derives the category bonus from the already-synced company type/star profile, avoiding new persisted settings fields and avoiding another runtime API dependency.
+Do not imply secondary rows have independent trained departure timing until that modeling/presentation layer is deliberately added.
 
 ## Focused Windows acceptance
 
-Run only:
+Pull current `main`, then run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-CurrentCapacityTests.ps1
+  -File .\tests\Validate-VisibleItems.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-TravelProfileTests.ps1
+  -File .\tests\Run-VisibleItemsTests.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Validate-ResaleQueue.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-ResaleQueueTests.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-The focused capacity tests must prove:
+Then run one normal production pass:
 
-- Xanax remains unchanged by Flower/Plushie bonuses;
-- category perk text parses separately from general travel capacity;
-- Flower +5 applies only to Flower;
-- Plushie +5 applies only to Plushie;
-- current general `+3` plus category `+5` gives Airstrip 23 / Standard 18;
-- current general company/faction capacity remains non-double-counted;
-- a positive explicit capacity override remains authoritative.
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
+```
 
-No full suite is required unless these changes expose an unrelated regression.
+Inspect generated state without exposing local settings/API key:
+
+```powershell
+$state = @{}
+Get-Content .\@Resources\Generated\state.kv | ForEach-Object {
+  $i = $_.IndexOf('=')
+  if ($i -gt 0) { $state[$_.Substring(0,$i)] = $_.Substring($i + 1) }
+}
+
+@(
+  'UKMarketValue',
+  'UKSecondaryName','UKSecondaryForeignPrice','UKSecondaryMarketValue','UKSecondaryStock','UKSecondaryCapacity','UKSecondaryPriceClass',
+  'JPMarketValue',
+  'JPSecondaryName','JPSecondaryForeignPrice','JPSecondaryMarketValue','JPSecondaryStock','JPSecondaryCapacity','JPSecondaryPriceClass'
+) | ForEach-Object { '{0}={1}' -f $_, $state[$_] }
+```
+
+Expected identities:
+
+```text
+UKSecondaryName=Nessie Plushie
+JPSecondaryName=Cherry Blossom
+```
+
+Market values may initially be `0`/display `-` if those items have not yet reached the bounded resale queue. Do not force repeated API calls merely to fill the display; normal one-minute updates now prioritize visible missing/stale prices.
+
+Finally refresh Rainmeter and visually verify:
+
+- no price/stock overlap;
+- long out-of-stock text remains uncut;
+- parenthesized market reference is visibly smaller/muted;
+- Nessie appears only under UK;
+- Cherry appears only under Japan;
+- existing Xanax timing/graphs remain intact.
+
+A screenshot is useful for layout acceptance because static tests cannot prove Rainmeter text geometry.
 
 ## After acceptance
 
-Promote **Nessie Plushie** and **Cherry Blossom** as the first visible multi-item proof while keeping the current Xanax cards/functionality intact.
+Next phases:
 
-That UI/model phase should consume:
-
-- active-market validity;
-- local canonical category/name metadata;
-- broad resale cache;
-- category-aware carrying capacity;
-- existing country/item history isolation.
-
-Then proceed to country/category filters, travel-state destination filtering/arrival countdown, full-country economics and finally `Optimal` scheduling after sufficient evidence exists.
+1. country/category presentation filters;
+2. travel-state target-country filtering and arrival countdown;
+3. broader per-item timing/economics presentation as evidence matures;
+4. full-country opportunity matrix;
+5. `Optimal` bounded route scheduler only after sufficient availability/economic evidence exists.
