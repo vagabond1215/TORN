@@ -6,27 +6,27 @@ This directory separates **durable architecture** from the **current implementat
 
 For any change under `RainMeter Projects/Travel Assistant/`:
 
-1. [`../AGENTS.md`](../AGENTS.md) — always first. Subtree scope, safety, data/recommendation invariants, performance/storage bounds, and workflow rules.
-2. [`NEXT_CODEX_RUN.md`](./NEXT_CODEX_RUN.md) — when marked **ACTIVE**, the authoritative current implementation scope and acceptance criteria. The filename is historical; it also governs connector-first work.
-3. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — durable provider, data, analytics, recommendation, retention, economics, and expansion design.
-4. [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md) — current connector-first implementation checkpoint, completed pieces, and remaining local/runtime boundaries.
-5. [`PROVIDER_DISCOVERY.md`](./PROVIDER_DISCOVERY.md) — current live/provider choices and endpoint boundaries.
+1. [`../AGENTS.md`](../AGENTS.md) — always first. Subtree scope, safety, collection/visibility/optimizer separation, performance/storage bounds, and workflow rules.
+2. [`NEXT_CODEX_RUN.md`](./NEXT_CODEX_RUN.md) — when marked **ACTIVE**, the authoritative current implementation scope. The filename is historical; it also governs connector-first work.
+3. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — durable provider, observation/cycle, economics, collection, presentation, travel-context, retention, and optimizer design.
+4. [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md) — current implementation checkpoint and remaining live/Windows validation boundary.
+5. [`PROVIDER_DISCOVERY.md`](./PROVIDER_DISCOVERY.md) — live/provider choices and endpoint boundaries.
 6. [`HISTORICAL_BOOTSTRAP.md`](./HISTORICAL_BOOTSTRAP.md) — historical-source discovery, seed-truth rules, and bounded import workflow.
-7. [`WINDOWS_VALIDATION.md`](./WINDOWS_VALIDATION.md) — smallest required Windows/Rainmeter validation pass and evidence to record before v1 can be called operationally validated.
+7. [`WINDOWS_VALIDATION.md`](./WINDOWS_VALIDATION.md) — target Windows/Rainmeter validation procedure.
 8. [`../Readme.md`](../Readme.md) — human-facing project overview.
 
 ## Instruction precedence
 
 If documents disagree:
 
-- `AGENTS.md` invariants and safety boundaries always apply.
-- An **ACTIVE** `NEXT_CODEX_RUN.md` controls the current implementation scope.
-- `ARCHITECTURE.md` controls durable structural intent unless an active run explicitly includes an approved architecture change; if architecture changes, update `ARCHITECTURE.md` in the same pass.
-- provider/bootstrap documents record source-specific facts and workflows but do not override safety/architecture rules;
+- `AGENTS.md` invariants and safety boundaries always apply;
+- an **ACTIVE** `NEXT_CODEX_RUN.md` controls the current implementation scope;
+- `ARCHITECTURE.md` controls durable structural intent unless the active run explicitly changes architecture, in which case update it in the same pass;
+- provider/bootstrap documents record source-specific facts but do not override safety/architecture rules;
 - `IMPLEMENTATION_STATUS.md` records progress/evidence and known gaps but does not replace the active run;
-- `WINDOWS_VALIDATION.md` defines the local evidence-gathering procedure but does not relax model/provider safety requirements;
-- `Readme.md` is the project entry point and should summarize current behavior, not override implementation instructions;
-- historical conversation/context is useful background but must not silently override current repository instructions.
+- `WINDOWS_VALIDATION.md` defines local evidence gathering but does not relax model/provider safety;
+- `Readme.md` summarizes current behavior and does not override implementation instructions;
+- historical conversation is background only and must not silently override current repository instructions.
 
 ## Document lifecycle
 
@@ -34,35 +34,37 @@ If documents disagree:
 
 Rolling handoff with explicit status:
 
-- **ACTIVE** — there is a concrete implementation pass to execute.
-- **COMPLETED** — the defined scope has been implemented/validated and the result section records evidence and remaining risks.
+- **ACTIVE** — concrete implementation/validation pass in progress;
+- **COMPLETED** — defined scope implemented and validated with evidence recorded.
 
-When new work is requested after a completed run, update/rewrite the actionable scope and set the status back to **ACTIVE** instead of creating competing task documents.
+When new work is requested after a completed or superseded run, update this rolling handoff rather than creating competing task documents.
 
 ### `ARCHITECTURE.md`
 
-Durable technical decisions and expansion strategy. Update it whenever persistent data contracts, provider boundaries, recommendation semantics, travel economics, retention rules, or core module responsibilities change.
+Durable technical decisions: provider boundaries, collection/visibility/optimizer separation, observation/cycle identity, travel economics, capacity, retention, UI/runtime responsibilities, and future route scheduling.
 
 ### `IMPLEMENTATION_STATUS.md`
 
-Rolling implementation checkpoint. Use it to record connector-safe progress, local validation still required, known limitations, and concrete next tasks without falsely marking the active implementation run complete.
+Factual checkpoint: what exists in the connector-authored repository, what has actually run on Windows, known limitations, and next validation/implementation tasks.
 
 ### `PROVIDER_DISCOVERY.md`
 
-Provider-specific implementation record. Update it when the live stock, resale-price, historical bootstrap, or cross-check provider contract changes.
+Provider-specific record. Update when live stock, resale, historical bootstrap, travel-state, or cross-check contracts change.
 
 ### `HISTORICAL_BOOTSTRAP.md`
 
-Historical-data truth/provenance rules and the current bounded bootstrap procedure. Keep it synchronized with `data/seed/README.md` and the tools under `tools/`.
+Historical truth/provenance rules and bounded bootstrap procedure. Keep synchronized with `data/seed/README.md` and tools under `tools/`.
 
 ### `WINDOWS_VALIDATION.md`
 
-Operational validation checklist for the target Windows/Rainmeter environment. Keep it synchronized with `tests/Run-All.ps1`, `tools/Validate-LiveEnvironment.ps1`, the installer, and the currently enabled travel modes.
+Operational validation checklist. Keep synchronized with focused tests, `tests/Run-All.ps1`, provider validation, installer behavior, and the current visible/collection scopes.
 
 ### `Readme.md`
 
-Human-readable summary: what the tool is, current scope, major behavior, repository location, installation/testing entry points, and how to navigate the docs.
+Human-readable summary of current visible behavior, background expansion, installation/testing entry points, and documentation navigation.
 
 ## Project state
 
-Travel Assistant is currently pre-use and under active implementation. The repository contains an initial Rainmeter skin, configuration/economics contracts, live-stock updater, local history/cycle engine, price/profitability-aware recommendation model, provider registry, installer, synthetic fixtures, production-function replay tests, historical pipeline/analyzer tooling, bounded seed/bootstrap tooling, and static validators. Version 1 remains focused on UK/Japan Xanax while retaining generic internal item/country/provider abstractions for future expansion.
+Travel Assistant is pre-use and under active expansion.
+
+The **visible** Rainmeter UI still uses the established UK/Japan Xanax proof. The data layer now includes a fail-soft all-country shadow collector that can learn every valid provider-observed `country + itemId` market while keeping those new markets hidden and non-optimizer-eligible until metadata, category-specific capacity, resale economics, filtering and confidence rules are implemented and validated.
