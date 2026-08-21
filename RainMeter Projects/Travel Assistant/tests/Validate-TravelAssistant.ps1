@@ -28,10 +28,13 @@ $required = @(
     '@Resources\Scripts\FinalizeState.ps1',
     '@Resources\Scripts\TravelProfile.ps1',
     '@Resources\Scripts\TornProfileSync.ps1',
+    '@Resources\Scripts\CurrentCapacity.ps1',
+    '@Resources\Scripts\LaunchSettings.ps1',
     '@Resources\Scripts\OpenSettings.ps1',
     '@Resources\Scripts\StateReader.lua',
     'tests\Run-ModelTests.ps1',
     'tests\Run-LiveProviderTests.ps1',
+    'tests\Run-CurrentCapacityTests.ps1',
     'tests\Run-TravelProfileTests.ps1',
     'tests\Run-TornProfileSyncTests.ps1',
     'tests\Run-FinalizeStateTests.ps1',
@@ -81,9 +84,15 @@ if ($null -ne $settings) {
     if (-not $settings.PSObject.Properties['travelProfile'] -or $null -eq $settings.travelProfile) {
         Fail 'settings.example.json must contain travelProfile settings.'
     } else {
-        foreach ($field in @('companyType','companyStars','factionExcursionLevel','factionTravelCostLevel')) {
+        foreach ($field in @(
+            'companyType','companyStars',
+            'currentCapacityKnown','currentCapacityMode','currentCapacity','currentCapacityBonus','currentCapacitySyncedAt',
+            'factionExcursionLevel','factionTravelCostLevel'
+        )) {
             if (-not $settings.travelProfile.PSObject.Properties[$field]) { Fail "settings.example.json travelProfile is missing '$field'." }
         }
+        if ([int]$settings.travelProfile.currentCapacity -lt 0) { Fail 'currentCapacity cannot be negative.' }
+        if ([int]$settings.travelProfile.currentCapacityBonus -lt 0) { Fail 'currentCapacityBonus cannot be negative.' }
     }
 
     if (-not $settings.PSObject.Properties['profitability'] -or $null -eq $settings.profitability) {
@@ -100,6 +109,13 @@ if ($null -ne $settings) {
         if ($settings.profitability.PSObject.Properties['resaleStaleAfterSeconds'] -and [long]$settings.profitability.resaleStaleAfterSeconds -lt 60) {
             Fail 'resaleStaleAfterSeconds must be at least 60 seconds.'
         }
+    }
+}
+
+$localTemplate = $config['config\settings.local.example.json']
+if ($null -ne $localTemplate -and $localTemplate.PSObject.Properties['travelProfile']) {
+    foreach ($field in @('currentCapacityKnown','currentCapacityMode','currentCapacity','currentCapacityBonus','currentCapacitySyncedAt')) {
+        if (-not $localTemplate.travelProfile.PSObject.Properties[$field]) { Fail "settings.local.example.json travelProfile is missing '$field'." }
     }
 }
 
@@ -123,9 +139,6 @@ if ($null -ne $perks) {
         if (@($lingerie[0].effects | Where-Object { [int]$_.stars -eq 10 -and $_.freeBusinessClass -eq $true }).Count -ne 1) {
             Fail '10-star Lingerie Store must grant free Business Class in travel-perks.json.'
         }
-    }
-    if (-not $perks.PSObject.Properties['faction'] -or -not $perks.faction.PSObject.Properties['excursionCapacity']) {
-        Fail 'travel-perks.json must define faction Excursion capacity.'
     }
 }
 
@@ -195,6 +208,8 @@ $scriptFiles = @(
     '@Resources\Scripts\FinalizeState.ps1',
     '@Resources\Scripts\TravelProfile.ps1',
     '@Resources\Scripts\TornProfileSync.ps1',
+    '@Resources\Scripts\CurrentCapacity.ps1',
+    '@Resources\Scripts\LaunchSettings.ps1',
     '@Resources\Scripts\OpenSettings.ps1',
     'tools\Probe-TornTravelProfile.ps1',
     'tests\Validate-TravelAssistant.ps1',
@@ -204,6 +219,7 @@ $scriptFiles = @(
     'tests\Run-SeedImporterTests.ps1',
     'tests\Run-ModelTests.ps1',
     'tests\Run-LiveProviderTests.ps1',
+    'tests\Run-CurrentCapacityTests.ps1',
     'tests\Run-TravelProfileTests.ps1',
     'tests\Run-TornProfileSyncTests.ps1',
     'tests\Run-FinalizeStateTests.ps1',
@@ -218,6 +234,14 @@ foreach ($relative in $scriptFiles) {
     $parseErrors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in ${relative}: $($parseError.Message)" }
+}
+
+$settingsUiPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenSettings.ps1'
+if (Test-Path -LiteralPath $settingsUiPath) {
+    $settingsUi = Get-Content -LiteralPath $settingsUiPath -Raw
+    if (-not $settingsUi.Contains('Current Xanax capacity')) { Fail 'Settings must expose Current Xanax capacity.' }
+    if (-not $settingsUi.Contains('/v2/user/perks')) { Fail 'Settings Sync from Torn must use current user perks.' }
+    if ($settingsUi.Contains('/v2/faction/upgrades')) { Fail 'Settings must not require faction-upgrades API access for current capacity.' }
 }
 
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
@@ -236,7 +260,7 @@ if (Test-Path -LiteralPath $iniPath) {
     if (-not $ini.Contains('@#Scripts\RunUpdate.ps1') -and -not $ini.Contains('#@#Scripts\RunUpdate.ps1')) {
         Fail 'Rainmeter skin does not route updater calls through RunUpdate.ps1.'
     }
-    if (-not $ini.Contains('OpenSettings.ps1')) { Fail 'Rainmeter skin does not expose OpenSettings.ps1.' }
+    if (-not $ini.Contains('LaunchSettings.ps1')) { Fail 'Rainmeter skin does not expose the detached Settings launcher.' }
 }
 
 $git = Get-Command git -ErrorAction SilentlyContinue
