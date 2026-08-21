@@ -16,6 +16,7 @@ $required = @(
     'config\items.json',
     'config\countries.json',
     'config\travel-modes.json',
+    'config\travel-perks.json',
     'config\settings.example.json',
     'config\settings.local.example.json',
     'config\providers.json',
@@ -25,10 +26,13 @@ $required = @(
     '@Resources\Scripts\RunUpdate.ps1',
     '@Resources\Scripts\UpdateTracker.ps1',
     '@Resources\Scripts\FinalizeState.ps1',
+    '@Resources\Scripts\TravelProfile.ps1',
+    '@Resources\Scripts\OpenSettings.ps1',
     '@Resources\Scripts\StateReader.lua',
     'tests\Run-ModelTests.ps1',
     'tests\Run-FinalizeStateTests.ps1',
-    'tests\Run-RestockDisplayTests.ps1'
+    'tests\Run-RestockDisplayTests.ps1',
+    'tests\Validate-RainmeterSkin.ps1'
 )
 
 foreach ($relative in $required) {
@@ -40,6 +44,7 @@ $configFiles = @(
     'config\items.json',
     'config\countries.json',
     'config\travel-modes.json',
+    'config\travel-perks.json',
     'config\settings.example.json',
     'config\settings.local.example.json',
     'config\providers.json',
@@ -69,6 +74,14 @@ if ($null -ne $items) {
 
 $settings = $config['config\settings.example.json']
 if ($null -ne $settings) {
+    if (-not $settings.PSObject.Properties['travelProfile'] -or $null -eq $settings.travelProfile) {
+        Fail 'settings.example.json must contain travelProfile settings.'
+    } else {
+        foreach ($field in @('companyType','companyStars','factionExcursionLevel','factionTravelCostLevel')) {
+            if (-not $settings.travelProfile.PSObject.Properties[$field]) { Fail "settings.example.json travelProfile is missing '$field'." }
+        }
+    }
+
     if (-not $settings.PSObject.Properties['profitability'] -or $null -eq $settings.profitability) {
         Fail 'settings.example.json must contain profitability settings.'
     } else {
@@ -86,6 +99,24 @@ if ($null -ne $settings) {
     }
 }
 
+$perks = $config['config\travel-perks.json']
+if ($null -ne $perks) {
+    foreach ($companyId in @('none','lingerie_store','cruise_line','flower_shop','toy_shop','logistics_management')) {
+        if (@($perks.companies | Where-Object { [string]$_.id -eq $companyId }).Count -ne 1) {
+            Fail "travel-perks.json must contain company '$companyId'."
+        }
+    }
+    $lingerie = @($perks.companies | Where-Object { [string]$_.id -eq 'lingerie_store' | Select-Object -First 1)
+    if ($lingerie.Count -eq 1) {
+        if (@($lingerie[0].effects | Where-Object { [int]$_.stars -eq 10 -and $_.freeBusinessClass -eq $true }).Count -ne 1) {
+            Fail '10-star Lingerie Store must grant free Business Class in travel-perks.json.'
+        }
+    }
+    if (-not $perks.PSObject.Properties['faction'] -or -not $perks.faction.PSObject.Properties['excursionCapacity']) {
+        Fail 'travel-perks.json must define faction Excursion capacity.'
+    }
+}
+
 $modes = $config['config\travel-modes.json']
 $countries = $config['config\countries.json']
 if ($null -ne $modes -and $null -ne $countries) {
@@ -95,18 +126,20 @@ if ($null -ne $modes -and $null -ne $countries) {
     foreach ($requiredMode in @('standard','airstrip','wlt','business')) {
         if ($allModeIds -notcontains $requiredMode) { Fail "Missing configured travel mode: $requiredMode" }
     }
-    foreach ($requiredEnabledMode in @('standard','airstrip','wlt')) {
+    foreach ($requiredEnabledMode in @('standard','airstrip','wlt','business')) {
         if ($enabledModeIds -notcontains $requiredEnabledMode) { Fail "Missing enabled travel mode: $requiredEnabledMode" }
     }
     if ([string]$modes.defaultMode -ne 'airstrip') { Fail 'Default travel mode must be airstrip.' }
 
     $business = @($modes.modes | Where-Object { [string]$_.id -eq 'business' } | Select-Object -First 1)
-    if ($business.Count -eq 1 -and $business[0].enabled -ne $true) {
-        if (-not $business[0].PSObject.Properties['disabledReason'] -or [string]::IsNullOrWhiteSpace([string]$business[0].disabledReason)) {
-            Fail 'Disabled Business mode must explain why it is gated.'
-        } else {
-            Note 'Business mode is configured but intentionally disabled until Business Class Ticket/free-Lingerie trip economics are included in profitability gating.'
+    if ($business.Count -eq 1) {
+        if (-not $business[0].PSObject.Properties['settingsOnly'] -or $business[0].settingsOnly -ne $true) {
+            Fail 'Business mode must remain settings-only.'
         }
+        if (-not $business[0].PSObject.Properties['requiresFreeBusinessClass'] -or $business[0].requiresFreeBusinessClass -ne $true) {
+            Fail 'Business mode must require established free Business Class economics.'
+        }
+        Note 'Business is selectable only through Settings when free Business Class is established; ticket-funded Business remains suppressed.'
     }
 
     foreach ($countryId in @('united_kingdom','japan')) {
@@ -127,6 +160,8 @@ if ($null -ne $modes -and $null -ne $countries) {
         }
         $standardCost = $row[0].travelCosts.PSObject.Properties['standard']
         if ($null -eq $standardCost -or [long]$standardCost.Value -le 0) { Fail "$countryId standard travel cost must be positive." }
+        $businessCost = $row[0].travelCosts.PSObject.Properties['business']
+        if ($null -eq $businessCost) { Fail "$countryId must explicitly configure the unresolved Business cost field." }
     }
 }
 
@@ -146,7 +181,10 @@ $scriptFiles = @(
     '@Resources\Scripts\RunUpdate.ps1',
     '@Resources\Scripts\UpdateTracker.ps1',
     '@Resources\Scripts\FinalizeState.ps1',
+    '@Resources\Scripts\TravelProfile.ps1',
+    '@Resources\Scripts\OpenSettings.ps1',
     'tests\Validate-TravelAssistant.ps1',
+    'tests\Validate-RainmeterSkin.ps1',
     'tests\Validate-HistoricalTools.ps1',
     'tests\Run-HistoricalPipelineTests.ps1',
     'tests\Run-SeedImporterTests.ps1',
@@ -174,12 +212,14 @@ if (Test-Path -LiteralPath $wrapperPath) {
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 if (Test-Path -LiteralPath $iniPath) {
     $ini = Get-Content -LiteralPath $iniPath -Raw
-    foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureCycleMode]','[MeasureState]','[MeterUKGraph]','[MeterJPGraph]')) {
+    foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureState]','[MeterSettings]','[MeterUKGraph]','[MeterJPGraph]')) {
         if (-not $ini.Contains($section)) { Fail "Rainmeter skin missing expected section $section" }
     }
+    if ($ini.Contains('[MeasureCycleMode]')) { Fail 'Travel mode should be configured from Settings rather than the main skin.' }
     if (-not $ini.Contains('@#Scripts\RunUpdate.ps1') -and -not $ini.Contains('#@#Scripts\RunUpdate.ps1')) {
         Fail 'Rainmeter skin does not route updater calls through RunUpdate.ps1.'
     }
+    if (-not $ini.Contains('OpenSettings.ps1')) { Fail 'Rainmeter skin does not expose OpenSettings.ps1.' }
 }
 
 $git = Get-Command git -ErrorAction SilentlyContinue
@@ -190,6 +230,8 @@ if ($null -ne $git) {
         if ([string]::IsNullOrWhiteSpace(($ignoredRuntime | Out-String))) { Fail 'data/runtime is not ignored by Git.' }
         $ignoredGenerated = & git check-ignore '@Resources/Generated/probe.tmp' 2>$null
         if ([string]::IsNullOrWhiteSpace(($ignoredGenerated | Out-String))) { Fail '@Resources/Generated is not ignored by Git.' }
+        $ignoredLocalSettings = & git check-ignore 'config/settings.local.json' 2>$null
+        if ([string]::IsNullOrWhiteSpace(($ignoredLocalSettings | Out-String))) { Fail 'config/settings.local.json is not ignored by Git.' }
     } finally { Pop-Location }
 } else {
     Note 'Git executable not available; ignore-rule checks skipped.'
