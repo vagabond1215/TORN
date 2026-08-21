@@ -2,7 +2,7 @@
 
 **Checkpoint:** 2026-08-21
 
-**Active run:** bounded/staggered active-item resale-price queue. See `docs/NEXT_CODEX_RUN.md`.
+**Active run:** category-aware carrying capacity. See `docs/NEXT_CODEX_RUN.md`.
 
 ## Stable visible baseline
 
@@ -19,57 +19,36 @@ Data-layer expansion must not change this visible behavior until a later explici
 
 ## Full-market shadow collection / catalog — ACCEPTED
 
-Latest target-Windows acceptance:
+Latest target-Windows baseline:
 
 ```text
-lastProvider:                  prometheus
+provider:                      prometheus
 countriesSeen:                 11
-marketsSeen:                   232
+provider marketsSeen:          232
 legacyMarketsSeen:               5
-observationsWritten:            41 on the acceptance pass
-cyclesCompleted:                 0 on that pass
-lastError:                      empty
-
-observedItems:                 202
-metadataItems:                 202
-categoriesResolved:            202
-unresolvedItems:                 0
-nameConflicts:                   0
-offlineCategoryEntries:        197
-offlineMatchedItems:            197
-verifiedItemOverrides:            5
-marketOverrides:                  5
-inactiveObservedMarkets:          5
+active candidate markets:      227
+observed item IDs:              202
+metadata rows:                  202
+categoriesResolved:             202
+unresolvedItems:                  0
+nameConflicts:                    0
 ```
 
-Current inferred active-market split for that provider snapshot:
+The five verified legacy provider rows remain observable for provenance but are skipped before new history/cycle/resale work.
+
+Committed catalog data:
 
 ```text
-232 provider rows
-- 5 verified legacy rows
-= 227 active country-item markets
+config/foreign-item-categories.json
+config/foreign-market-overrides.json
 ```
 
-These counts are live baseline values, not timeless constants.
-
-Accepted canonical repairs:
+The current canonical corrections include:
 
 ```text
-327 Blank Casino Chips | provider still says Blank Tokens | Material | verified_override
-383 Digital Organizer  | provider still says Platinum PDA | Miscellaneous | verified_override
+327 Blank Casino Chips | provider alias Blank Tokens | Material
+383 Digital Organizer  | provider alias Platinum PDA | Miscellaneous
 ```
-
-Accepted legacy provider rows:
-
-```text
-mexico:21
-mexico:232
-mexico:327
-united_arab_emirates:383
-united_arab_emirates:440
-```
-
-They remain in `observedMarkets` for provenance but are annotated inactive and skipped before new shadow observation/cycle writes.
 
 ## Torn catalog transport — REJECTED FOR HEARTBEAT USE
 
@@ -83,46 +62,39 @@ classic torn/items    | bulk   | 12s | 0 resolved
 
 `ItemMetadata.ps1` remains manual/maintenance-only. Runtime catalog knowledge comes from committed local data plus provider names/verified overrides.
 
-## Offline reference files — ACCEPTED
+## Broad resale queue — LIVE REQUEST ACCEPTED
+
+The current broad queue is implemented as a post-heartbeat, fail-soft, one-request-at-a-time population path.
+
+Target Windows live result:
 
 ```text
-config/foreign-item-categories.json
-config/foreign-market-overrides.json
+lastAttemptAt : 1787351181
+lastSuccessAt : 1787351181
+lastItemId    : 4
+activeMarkets : 227
+activeItems   : 197
+pricedItems   : 2
+freshItems    : 2
+staleItems    : 195
+successCount  : 1
+failureCount  : 0
+status        : OK
+lastError     : empty
 ```
 
-The category snapshot covers 197 current observed IDs; five individually verified overrides complete the current 202/202 category set and also mark stale country-item relationships inactive.
-
-The `.rmskin` whitelist includes both files while continuing to exclude API keys, local settings and runtime data.
-
-## Broad resale queue — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
-
-New:
+The new cache row was structurally valid:
 
 ```text
-@Resources/Scripts/ResaleQueue.ps1
-tests/Validate-ResaleQueue.ps1
-tests/Run-ResaleQueueTests.ps1
+price     : 500
+lowest    : 500
+average   : 234
+source    : torn_itemmarket
 ```
 
-`RunUpdate.ps1` now completes the established visible pass first:
+This is live transport acceptance. Do not claim the focused resale PowerShell tests passed unless their output is separately reported.
 
-```text
-UpdateTracker
-ShadowCollector
-LocalCatalog
-FinalizeState
-visible heartbeat
-```
-
-Then, only for normal `Update` actions, it runs the new queue fail-soft:
-
-```text
-ResaleQueue
-```
-
-This ordering protects visible polling health from broad resale latency.
-
-### Queue defaults
+Queue defaults remain:
 
 ```text
 minimum attempt interval: 60s
@@ -132,49 +104,76 @@ request timeout:            6s
 broad requests/run path:    1
 ```
 
-The queue:
+The existing visible Xanax pricing path remains independently fresher.
 
-- collapses active `observedMarkets` to distinct item IDs;
-- excludes `catalogActive=false` and `legacy_removed` rows;
-- skips fresh cache entries;
-- backs off failed items instead of retrying them every minute;
-- prioritizes never-priced eligible items;
-- writes the same `resaleCache` schema already consumed by current economics;
-- never interprets a missing/zero price as real economics;
-- uses `curl.exe --config -` with the key in the Authorization header through stdin, not URL/process arguments.
+## Category-aware carrying capacity — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-At the current scale, one request/minute can populate an initially empty ~197-active-item catalog in about 3.3 hours of loaded-skin runtime if requests succeed. The existing visible Xanax resale path remains independently fresher and unchanged.
+`CurrentCapacity.ps1` now separates category-specific travel-capacity perk parsing from general/Xanax capacity.
 
-Runtime health is stored under:
+New helpers:
 
 ```text
-engine-state.json -> resaleQueue
+Get-TornTravelCapacityCategoryFromPerkText
+Get-TornCategoryTravelCapacityBonusFromPerkText
+Get-TornCategoryTravelCapacityPerks
+Get-TornEffectiveItemCapacity
 ```
 
-including active item/market counts, priced/fresh/stale counts, cumulative successes/failures, last item, status/error, and per-item attempt/backoff state.
+`Get-TornEffectiveXanaxCapacity` remains a backward-compatible Drug wrapper and cannot receive Flower/Plushie capacity.
 
-## Focused acceptance still required
-
-On target Windows:
+The main TravelProfile economics path uses the already-synced company type/star profile for the two currently known category-specific company effects:
 
 ```text
-Validate-ResaleQueue.ps1
-Run-ResaleQueueTests.ps1
+Flower Shop 7★ -> +5 Flower slots only
+Toy Shop    7★ -> +5 Plushie slots only
+```
+
+This is intentionally applied even when current general capacity is known, because the accepted general/Xanax capacity parser excluded those category-specific bonuses by design. General company/faction capacity remains suppressed after a current-capacity sync, preventing double counting.
+
+With current general Airstrip capacity `18` (`15 + 3`):
+
+```text
+Xanax                       18
+Flower at Flower Shop 7★    23
+Plushie at Toy Shop 7★      23
+```
+
+With Standard mode and the same general `+3`:
+
+```text
+matching Flower/Plushie     18  (10 + 3 + 5)
+```
+
+A positive explicit `profitability.capacityOverride` remains exact/authoritative.
+
+Updated focused tests:
+
+```text
+tests/Run-CurrentCapacityTests.ps1
+tests/Run-TravelProfileTests.ps1
+```
+
+Windows acceptance is still required before promoting Nessie/Cherry into visible economics.
+
+## Focused acceptance now required
+
+Run:
+
+```text
+Run-CurrentCapacityTests.ps1
+Run-TravelProfileTests.ps1
 Validate-RainmeterSkin.ps1
 ```
-
-Then force exactly one queue attempt and inspect `engine-state.json -> resaleQueue` plus the last attempted `resaleCache` row.
 
 Do not run the broad suite unless a focused failure indicates a wider regression.
 
 ## Next phase after acceptance
 
-1. category-aware effective carrying capacity;
-2. promote Nessie Plushie and Cherry Blossom as the first visible multi-item proof;
-3. country/category filters;
-4. Torn travel-state destination filtering and arrival countdown;
-5. full-country economics population;
-6. `Optimal` route scheduling after sufficient availability/economic evidence exists.
+1. promote Nessie Plushie and Cherry Blossom as the first visible multi-item proof;
+2. country/category filters;
+3. Torn travel-state destination filtering and arrival countdown;
+4. full-country economics population;
+5. `Optimal` route scheduling after sufficient availability/economic evidence exists.
 
 ## Existing validation debt retained
 
