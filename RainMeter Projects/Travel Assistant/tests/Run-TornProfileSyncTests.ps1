@@ -35,8 +35,8 @@ $unknownProfile = Get-TornCompanyTravelProfile -JobPayload $unknownCompany -Perk
 Assert-True 'Unknown company type remains unresolved' (-not [bool]$unknownProfile.Resolved)
 
 $factionPayload = [pscustomobject]@{
+    state = 'war'
     upgrades = [pscustomobject]@{
-        state = 'war'
         core = [pscustomobject]@{ upgrades = @() }
         peace = @([pscustomobject]@{
             name = 'Excursion'
@@ -50,7 +50,7 @@ $factionPayload = [pscustomobject]@{
 }
 $factionProfile = Get-TornFactionTravelProfile -FactionPayload $factionPayload
 Assert-True 'War-mode faction profile resolves' ([bool]$factionProfile.Resolved)
-Assert-Equal 'Faction active mode parses as war' ([string]$factionProfile.State) 'war'
+Assert-Equal 'Top-level faction state parses as war' ([string]$factionProfile.State) 'war'
 Assert-Equal 'War active Travel capacity is zero' ([int]$factionProfile.ExcursionLevel) 0
 Assert-Equal 'War active Travel cost is zero' ([int]$factionProfile.TravelCostLevel) 0
 Assert-Equal 'Inactive Peace Travel capacity is preserved' ([int]$factionProfile.PeaceExcursionLevel) 10
@@ -58,8 +58,8 @@ Assert-Equal 'Inactive Peace Travel cost is preserved' ([int]$factionProfile.Pea
 Assert-Equal 'War loadout Travel capacity is preserved separately' ([int]$factionProfile.WarExcursionLevel) 0
 
 $peacePayload = [pscustomobject]@{
+    state = 'peace'
     upgrades = [pscustomobject]@{
-        state = 'peace'
         core = [pscustomobject]@{ upgrades = @() }
         peace = $factionPayload.upgrades.peace
         war = @([pscustomobject]@{
@@ -72,6 +72,17 @@ $peaceProfile = Get-TornFactionTravelProfile -FactionPayload $peacePayload
 Assert-Equal 'Peace active Travel capacity uses Peace branch' ([int]$peaceProfile.ExcursionLevel) 10
 Assert-Equal 'Peace active Travel cost uses Peace branch' ([int]$peaceProfile.TravelCostLevel) 5
 Assert-Equal 'Inactive War Travel capacity remains visible' ([int]$peaceProfile.WarExcursionLevel) 2
+
+$legacyNestedState = [pscustomobject]@{
+    upgrades = [pscustomobject]@{
+        state = 'war'
+        core = [pscustomobject]@{ upgrades = @() }
+        peace = $factionPayload.upgrades.peace
+        war = @()
+    }
+}
+$legacyProfile = Get-TornFactionTravelProfile -FactionPayload $legacyNestedState
+Assert-Equal 'Legacy nested faction state remains readable' ([string]$legacyProfile.State) 'war'
 
 $unknownState = [pscustomobject]@{
     upgrades = [pscustomobject]@{
