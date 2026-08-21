@@ -116,10 +116,36 @@ function Get-CategoryIndex {
     return $index
 }
 
+function Get-VerifiedItemIndex {
+    param([object]$OverrideConfig)
+    $index = @{}
+    if ($null -eq $OverrideConfig -or -not $OverrideConfig.PSObject.Properties['itemOverrides']) { return $index }
+    foreach ($property in @($OverrideConfig.itemOverrides.PSObject.Properties)) {
+        $itemId = 0
+        if (-not [int]::TryParse([string]$property.Name, [ref]$itemId) -or $itemId -le 0) { continue }
+        if ($null -eq $property.Value) { continue }
+        $index[[string]$itemId] = $property.Value
+    }
+    return $index
+}
+
+function Get-MarketOverrideIndex {
+    param([object]$OverrideConfig)
+    $index = @{}
+    if ($null -eq $OverrideConfig -or -not $OverrideConfig.PSObject.Properties['marketOverrides']) { return $index }
+    foreach ($property in @($OverrideConfig.marketOverrides.PSObject.Properties)) {
+        $key = ([string]$property.Name).Trim().ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($key) -or $null -eq $property.Value) { continue }
+        $index[$key] = $property.Value
+    }
+    return $index
+}
+
 function New-LocalCatalogEntry {
     param(
         [object]$Group,
         [object]$Seed,
+        [object]$VerifiedItem,
         [string]$OfflineCategory,
         [string]$OfflineCategorySource,
         [long]$Now
@@ -137,7 +163,18 @@ function New-LocalCatalogEntry {
         if ($Seed.PSObject.Properties['category']) { $seedCategory = ([string]$Seed.category).Trim() }
     }
 
-    $name = if (-not [string]::IsNullOrWhiteSpace($seedName)) { $seedName } elseif (-not [string]::IsNullOrWhiteSpace($providerName)) { $providerName } else { 'Item ' + [string]$Group.itemId }
+    $verifiedName = ''
+    $verifiedCategory = ''
+    $verifiedSource = 'verified_override'
+    $aliases = @()
+    if ($null -ne $VerifiedItem) {
+        if ($VerifiedItem.PSObject.Properties['name']) { $verifiedName = ([string]$VerifiedItem.name).Trim() }
+        if ($VerifiedItem.PSObject.Properties['category']) { $verifiedCategory = ([string]$VerifiedItem.category).Trim() }
+        if ($VerifiedItem.PSObject.Properties['source'] -and -not [string]::IsNullOrWhiteSpace([string]$VerifiedItem.source)) { $verifiedSource = ([string]$VerifiedItem.source).Trim() }
+        if ($VerifiedItem.PSObject.Properties['aliases']) { $aliases = @($VerifiedItem.aliases | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) }
+    }
+
+    $name = if (-not [string]::IsNullOrWhiteSpace($seedName)) { $seedName } elseif (-not [string]::IsNullOrWhiteSpace($verifiedName)) { $verifiedName } elseif (-not [string]::IsNullOrWhiteSpace($providerName)) { $providerName } else { 'Item ' + [string]$Group.itemId }
 
     $category = 'Unknown'
     $categoryResolved = $false
@@ -148,6 +185,11 @@ function New-LocalCatalogEntry {
         $categoryResolved = $true
         $source = 'config_seed'
         $categorySource = 'config_seed'
+    } elseif (-not [string]::IsNullOrWhiteSpace($verifiedCategory)) {
+        $category = $verifiedCategory
+        $categoryResolved = $true
+        $source = 'verified_override'
+        $categorySource = $verifiedSource
     } elseif (-not [string]::IsNullOrWhiteSpace($OfflineCategory)) {
         $category = $OfflineCategory.Trim()
         $categoryResolved = $true
@@ -159,6 +201,7 @@ function New-LocalCatalogEntry {
         schemaVersion = 1
         itemId = [int]$Group.itemId
         name = $name
+        aliases = @($aliases)
         providerName = $providerName
         providerNames = @($names)
         nameConflict = $nameConflict
@@ -182,6 +225,8 @@ function Get-LocalCatalogSignature {
         [object[]]$Groups,
         [hashtable]$SeedIndex,
         [hashtable]$CategoryIndex,
+        [hashtable]$VerifiedItemIndex,
+        [hashtable]$MarketOverrideIndex,
         [string]$CategorySourceId
     )
     $parts = New-Object System.Collections.Generic.List[string]
@@ -191,15 +236,33 @@ function Get-LocalCatalogSignature {
         $countries = @($group.countries) -join ','
         $seedName = ''
         $seedCategory = ''
+        $verifiedName = ''
+        $verifiedCategory = ''
+        $verifiedAliases = ''
         $offlineCategory = ''
         $seed = $null
-        if ($SeedIndex.ContainsKey([string]$group.itemId)) { $seed = $SeedIndex[[string]$group.itemId] }
+        $verified = $null
+        $key = [string]$group.itemId
+        if ($SeedIndex.ContainsKey($key)) { $seed = $SeedIndex[$key] }
         if ($null -ne $seed) {
             if ($seed.PSObject.Properties['name']) { $seedName = [string]$seed.name }
             if ($seed.PSObject.Properties['category']) { $seedCategory = [string]$seed.category }
         }
-        if ($CategoryIndex.ContainsKey([string]$group.itemId)) { $offlineCategory = [string]$CategoryIndex[[string]$group.itemId] }
-        $parts.Add(('{0}|{1}|{2}|{3}|{4}|{5}' -f [int]$group.itemId, $names, $countries, $seedName, $seedCategory, $offlineCategory))
+        if ($VerifiedItemIndex.ContainsKey($key)) { $verified = $VerifiedItemIndex[$key] }
+        if ($null -ne $verified) {
+            if ($verified.PSObject.Properties['name']) { $verifiedName = [string]$verified.name }
+            if ($verified.PSObject.Properties['category']) { $verifiedCategory = [string]$verified.category }
+            if ($verified.PSObject.Properties['aliases']) { $verifiedAliases = @($verified.aliases) -join ',' }
+        }
+        if ($CategoryIndex.ContainsKey($key)) { $offlineCategory = [string]$CategoryIndex[$key] }
+        $parts.Add(('{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}' -f [int]$group.itemId, $names, $countries, $seedName, $seedCategory, $verifiedName, $verifiedCategory, $verifiedAliases, $offlineCategory))
+    }
+    foreach ($marketKey in @($MarketOverrideIndex.Keys | Sort-Object)) {
+        $override = $MarketOverrideIndex[$marketKey]
+        $active = if ($override.PSObject.Properties['active']) { [string][bool]$override.active } else { '' }
+        $status = if ($override.PSObject.Properties['status']) { [string]$override.status } else { '' }
+        $reason = if ($override.PSObject.Properties['reason']) { [string]$override.reason } else { '' }
+        $parts.Add(('market|{0}|{1}|{2}|{3}' -f $marketKey, $active, $status, $reason))
     }
 
     $text = $parts -join "`n"
@@ -224,6 +287,29 @@ function Merge-RicherMetadata {
     return $Existing
 }
 
+function Apply-MarketOverrides {
+    param([object]$ObservedMarkets, [hashtable]$MarketOverrideIndex, [string]$ReviewedAt)
+    $inactiveObserved = 0
+    foreach ($marketKey in @($MarketOverrideIndex.Keys)) {
+        $entry = Get-DynamicProperty $ObservedMarkets $marketKey
+        if ($null -eq $entry) { continue }
+        $override = $MarketOverrideIndex[$marketKey]
+        $active = $true
+        if ($override.PSObject.Properties['active']) { $active = [bool]$override.active }
+        $status = if ($override.PSObject.Properties['status']) { ([string]$override.status).Trim() } else { if ($active) { 'verified_active' } else { 'legacy_removed' } }
+        $reason = if ($override.PSObject.Properties['reason']) { ([string]$override.reason).Trim() } else { '' }
+        $sourceUrl = if ($override.PSObject.Properties['sourceUrl']) { ([string]$override.sourceUrl).Trim() } else { '' }
+        Set-DynamicProperty $entry 'catalogActive' $active
+        Set-DynamicProperty $entry 'catalogStatus' $status
+        Set-DynamicProperty $entry 'catalogStatusSource' 'verified_override'
+        Set-DynamicProperty $entry 'catalogStatusReason' $reason
+        Set-DynamicProperty $entry 'catalogStatusSourceUrl' $sourceUrl
+        Set-DynamicProperty $entry 'catalogStatusReviewedAt' $ReviewedAt
+        if (-not $active) { $inactiveObserved++ }
+    }
+    return $inactiveObserved
+}
+
 $engineState = Read-JsonFile $EngineStateFile
 if ($null -eq $engineState -or -not $engineState.PSObject.Properties['observedMarkets']) { return }
 if (-not $engineState.PSObject.Properties['itemMetadata']) { $engineState | Add-Member NoteProperty itemMetadata ([pscustomobject]@{}) }
@@ -238,9 +324,12 @@ if (-not $engineState.PSObject.Properties['localCatalog']) {
         nameConflicts = 0
         offlineCategoryEntries = 0
         offlineMatchedItems = 0
+        verifiedItemOverrides = 0
+        marketOverrides = 0
+        inactiveObservedMarkets = 0
     })
 }
-foreach ($name in @('signature','lastBuildAt','observedItems','metadataItems','categoriesResolved','unresolvedItems','nameConflicts','offlineCategoryEntries','offlineMatchedItems')) {
+foreach ($name in @('signature','lastBuildAt','observedItems','metadataItems','categoriesResolved','unresolvedItems','nameConflicts','offlineCategoryEntries','offlineMatchedItems','verifiedItemOverrides','marketOverrides','inactiveObservedMarkets')) {
     if (-not $engineState.localCatalog.PSObject.Properties[$name]) {
         $default = if ($name -eq 'signature') { '' } else { 0 }
         $engineState.localCatalog | Add-Member NoteProperty $name $default
@@ -249,16 +338,21 @@ foreach ($name in @('signature','lastBuildAt','observedItems','metadataItems','c
 
 $itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
 $categoryConfig = Read-JsonFile (Join-Path $ConfigDir 'foreign-item-categories.json')
+$overrideConfig = Read-JsonFile (Join-Path $ConfigDir 'foreign-market-overrides.json')
 $groups = @(Get-ObservedItemGroups -ObservedMarkets $engineState.observedMarkets)
 if ($groups.Count -eq 0) { return }
 $seedIndex = Get-SeedIndex -ItemsConfig $itemsConfig
 $categoryIndex = Get-CategoryIndex -CategoryConfig $categoryConfig
+$verifiedItemIndex = Get-VerifiedItemIndex -OverrideConfig $overrideConfig
+$marketOverrideIndex = Get-MarketOverrideIndex -OverrideConfig $overrideConfig
 $categorySourceId = 'offline_snapshot'
 if ($null -ne $categoryConfig -and $categoryConfig.PSObject.Properties['source'] -and $null -ne $categoryConfig.source -and $categoryConfig.source.PSObject.Properties['id']) {
     $candidateSourceId = ([string]$categoryConfig.source.id).Trim()
     if (-not [string]::IsNullOrWhiteSpace($candidateSourceId)) { $categorySourceId = $candidateSourceId }
 }
-$signature = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex -CategoryIndex $categoryIndex -CategorySourceId $categorySourceId
+$reviewedAt = ''
+if ($null -ne $overrideConfig -and $overrideConfig.PSObject.Properties['reviewedAt']) { $reviewedAt = ([string]$overrideConfig.reviewedAt).Trim() }
+$signature = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex -CategoryIndex $categoryIndex -VerifiedItemIndex $verifiedItemIndex -MarketOverrideIndex $marketOverrideIndex -CategorySourceId $categorySourceId
 
 $existingMetadataCount = @($engineState.itemMetadata.PSObject.Properties).Count
 if ([string]$engineState.localCatalog.signature -eq $signature -and $existingMetadataCount -ge $groups.Count) { return }
@@ -272,12 +366,14 @@ foreach ($group in $groups) {
     $key = [string]$group.itemId
     $seed = $null
     if ($seedIndex.ContainsKey($key)) { $seed = $seedIndex[$key] }
+    $verifiedItem = $null
+    if ($verifiedItemIndex.ContainsKey($key)) { $verifiedItem = $verifiedItemIndex[$key] }
     $offlineCategory = ''
     if ($categoryIndex.ContainsKey($key)) {
         $offlineCategory = [string]$categoryIndex[$key]
         $offlineMatched++
     }
-    $localEntry = New-LocalCatalogEntry -Group $group -Seed $seed -OfflineCategory $offlineCategory -OfflineCategorySource $categorySourceId -Now $now
+    $localEntry = New-LocalCatalogEntry -Group $group -Seed $seed -VerifiedItem $verifiedItem -OfflineCategory $offlineCategory -OfflineCategorySource $categorySourceId -Now $now
     if ($null -eq $localEntry) { continue }
 
     $existing = Get-DynamicProperty $engineState.itemMetadata $key
@@ -288,6 +384,8 @@ foreach ($group in $groups) {
     if ($entry.PSObject.Properties['nameConflict'] -and [bool]$entry.nameConflict) { $conflicts++ }
 }
 
+$inactiveObserved = Apply-MarketOverrides -ObservedMarkets $engineState.observedMarkets -MarketOverrideIndex $marketOverrideIndex -ReviewedAt $reviewedAt
+
 $engineState.localCatalog.signature = $signature
 $engineState.localCatalog.lastBuildAt = $now
 $engineState.localCatalog.observedItems = $groups.Count
@@ -297,4 +395,7 @@ $engineState.localCatalog.unresolvedItems = $unresolved
 $engineState.localCatalog.nameConflicts = $conflicts
 $engineState.localCatalog.offlineCategoryEntries = $categoryIndex.Count
 $engineState.localCatalog.offlineMatchedItems = $offlineMatched
+$engineState.localCatalog.verifiedItemOverrides = $verifiedItemIndex.Count
+$engineState.localCatalog.marketOverrides = $marketOverrideIndex.Count
+$engineState.localCatalog.inactiveObservedMarkets = $inactiveObserved
 Write-JsonAtomic -Path $EngineStateFile -Value $engineState
