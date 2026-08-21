@@ -111,6 +111,15 @@ foreach ($prefix in @('UK','JP')) {
     if ($stockMatch.Success -and $stockMatch.Groups[1].Value -notmatch ('(?im)^Text=#' + $prefix + 'StockHeaderText#\s*$')) {
         Fail "Meter${prefix}StockHeader must use the compact stock/out-of-stock text variable."
     }
+    $restockIconMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'RestockIcon\]\s*(.*?)(?=^\[|\z)')
+    if (-not $restockIconMatch.Success) {
+        Fail "Missing [Meter${prefix}RestockIcon]."
+    } else {
+        $iconBody = $restockIconMatch.Groups[1].Value
+        if ($iconBody -notmatch '(?im)^Shape=Rectangle\s+1,3,10,7,1') { Fail "Meter${prefix}RestockIcon should render the delivery-truck cargo body." }
+        if ($iconBody -notmatch '(?im)^Shape5=Ellipse\s+5,12,2,2') { Fail "Meter${prefix}RestockIcon should render delivery-truck wheels." }
+        if ($iconBody -notmatch '(?im)^Hidden=1\s*$') { Fail "Meter${prefix}RestockIcon should default hidden until restock timing is actionable." }
+    }
     $restockMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'Restock\]\s*(.*?)(?=^\[|\z)')
     if (-not $restockMatch.Success) {
         Fail "Missing [Meter${prefix}Restock]."
@@ -119,9 +128,16 @@ foreach ($prefix in @('UK','JP')) {
         if ($restockBody -notmatch ('(?im)^Text=#' + $prefix + 'RestockText#\s*$')) {
             Fail "Meter${prefix}Restock must display only the restock value without a label."
         }
-        if ($restockBody -notmatch '(?im)^X=40\s*$') {
-            Fail "Meter${prefix}Restock must align with the flight-time text at X=40."
+        if ($restockBody -notmatch '(?im)^X=146\s*$') {
+            Fail "Meter${prefix}Restock must sit inline with the flight-time row at X=146."
         }
+        if ($restockBody -notmatch '(?im)^Hidden=1\s*$') {
+            Fail "Meter${prefix}Restock should default hidden until timing is actionable."
+        }
+    }
+    $decisionMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'Decision\]\s*(.*?)(?=^\[|\z)')
+    if ($decisionMatch.Success -and $decisionMatch.Groups[1].Value -notmatch ('(?im)^ToolTipText=#' + $prefix + 'DecisionTooltipText#\s*$')) {
+        Fail "Meter${prefix}Decision must expose timing context through the detailed tooltip variable."
     }
 }
 
@@ -129,7 +145,7 @@ if ($ini -match '(?im)^Text=Travel:\s*#(?:UK|JP)TravelText#\s*$') {
     Fail 'Travel label should be replaced by the plane icon.'
 }
 if ($ini -match '(?im)^Text=Restock:\s*#(?:UK|JP)RestockText#\s*$') {
-    Fail 'Restock label should be replaced by the hand-truck icon.'
+    Fail 'Restock label should be replaced by the delivery-truck icon.'
 }
 if ($ini -match '(?m)^\[MeterUKStock\]\s*$' -or $ini -match '(?m)^\[MeterJPStock\]\s*$') {
     Fail 'Legacy body stock meters must be removed; stock belongs in the item header.'
@@ -151,6 +167,15 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
     }
     if (-not $stateReader.Contains("os.date('%H:%M', lastSoldOutAt)")) {
         Fail 'StateReader.lua must append the sold-out clock time to the out-of-stock header.'
+    }
+    if (-not $stateReader.Contains('restockEta > travelSeconds')) {
+        Fail 'StateReader.lua must show restock timing only when the ETA exceeds flight time.'
+    }
+    if (-not $stateReader.Contains('setRestockVisibility(prefix, showRestock)')) {
+        Fail 'StateReader.lua must dynamically hide/show the restock truck and text.'
+    }
+    if (-not $stateReader.Contains("'Departure/window timing uses retained availability and depletion history'")) {
+        Fail 'StateReader.lua must retain hidden restock/model context in the decision tooltip.'
     }
 }
 
