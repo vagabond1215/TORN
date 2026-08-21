@@ -13,16 +13,17 @@ $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
 $acquired = $false
 
-function Invoke-TornJsonWithCurl {
+function Invoke-JsonWithCurl {
     param(
         [Parameter(Mandatory = $true)][string]$Uri,
         [hashtable]$Headers,
-        [int]$TimeoutSec = 15
+        [int]$TimeoutSec = 15,
+        [string]$RequestLabel = 'HTTP'
     )
 
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($null -eq $curl) {
-        throw 'curl.exe is required for Torn Item Market requests on this Windows environment.'
+        throw 'curl.exe is required for Travel Assistant live requests on this Windows environment.'
     }
 
     if ($TimeoutSec -lt 1) { $TimeoutSec = 15 }
@@ -62,16 +63,16 @@ function Invoke-TornJsonWithCurl {
         $waitMs = [Math]::Max(2000, ($TimeoutSec + 2) * 1000)
         if (-not $process.WaitForExit($waitMs)) {
             try { $process.Kill() } catch { }
-            throw ('curl.exe exceeded the {0}s Torn request timeout.' -f $TimeoutSec)
+            throw ('curl.exe exceeded the {0}s {1} request timeout.' -f $TimeoutSec, $RequestLabel)
         }
 
         $stdout = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
         if ($process.ExitCode -ne 0) {
             if ([string]::IsNullOrWhiteSpace($stderr)) { $stderr = 'curl.exe returned a non-zero exit code.' }
-            throw ('Torn request failed: {0}' -f $stderr.Trim())
+            throw ('{0} request failed: {1}' -f $RequestLabel, $stderr.Trim())
         }
-        if ([string]::IsNullOrWhiteSpace($stdout)) { throw 'Torn request returned an empty response.' }
+        if ([string]::IsNullOrWhiteSpace($stdout)) { throw ('{0} request returned an empty response.' -f $RequestLabel) }
 
         return ($stdout | ConvertFrom-Json)
     } finally {
@@ -79,11 +80,34 @@ function Invoke-TornJsonWithCurl {
     }
 }
 
-# Windows PowerShell 5.1 on the target machine can hang in Invoke-RestMethod
-# specifically against api.torn.com even though curl.exe completes immediately.
-# Keep YATA and any other requests on the native cmdlet, but route only Torn
-# Item Market calls through a bounded curl transport. The API key is supplied
-# over curl stdin rather than on its process command line.
+function Invoke-YataJsonWithCurl {
+    param(
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [hashtable]$Headers,
+        [int]$TimeoutSec = 15
+    )
+
+    # A live-stock miss can consume a meaningful part of a short foreign restock.
+    # Keep normal polling at 60s, but make a single bounded transport retry before
+    # returning cached/stale state. This is deliberately not an unbounded retry loop.
+    $attemptTimeout = [Math]::Min([Math]::Max($TimeoutSec, 1), 7)
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        try {
+            return Invoke-JsonWithCurl -Uri $Uri -Headers $Headers -TimeoutSec $attemptTimeout -RequestLabel 'YATA live-stock'
+        } catch {
+            $lastError = $_
+            if ($attempt -lt 2) { Start-Sleep -Milliseconds 750 }
+        }
+    }
+    if ($null -ne $lastError) { throw $lastError }
+    throw 'YATA live-stock request failed.'
+}
+
+# Windows PowerShell 5.1 has shown unreliable native HTTP behavior on this
+# target machine. Route both critical JSON providers through bounded curl.exe.
+# The Torn API key is supplied over curl stdin rather than on its process
+# command line. Non-provider requests can still use the native cmdlet.
 function Invoke-RestMethod {
     [CmdletBinding()]
     param(
@@ -94,7 +118,10 @@ function Invoke-RestMethod {
     )
 
     if ($Method -eq 'Get' -and $Uri -like 'https://api.torn.com/v2/market/*/itemmarket*') {
-        return Invoke-TornJsonWithCurl -Uri $Uri -Headers $Headers -TimeoutSec $TimeoutSec
+        return Invoke-JsonWithCurl -Uri $Uri -Headers $Headers -TimeoutSec $TimeoutSec -RequestLabel 'Torn Item Market'
+    }
+    if ($Method -eq 'Get' -and $Uri -eq 'https://yata.yt/api/v1/travel/export/') {
+        return Invoke-YataJsonWithCurl -Uri $Uri -Headers $Headers -TimeoutSec $TimeoutSec
     }
 
     return Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
