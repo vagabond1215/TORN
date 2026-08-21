@@ -162,8 +162,11 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
     Fail 'Missing StateReader.lua.'
 } else {
     $stateReader = Get-Content -LiteralPath $stateReaderPath -Raw
-    if (-not $stateReader.Contains("'Out of Stock: ' .. formatShortElapsed(now - lastSoldOutAt)")) {
-        Fail 'StateReader.lua must show elapsed sellout age in the out-of-stock header.'
+    if (-not $stateReader.Contains("local function formatHoursMinutes(seconds)")) {
+        Fail 'StateReader.lua must format out-of-stock elapsed time as h:mm.'
+    }
+    if (-not $stateReader.Contains("'Out of Stock for ' .. formatHoursMinutes(now - lastSoldOutAt) .. ' since '")) {
+        Fail 'StateReader.lua must render the out-of-stock header as "Out of Stock for h:mm since HH:mm".'
     }
     if (-not $stateReader.Contains("os.date('%H:%M', lastSoldOutAt)")) {
         Fail 'StateReader.lua must append the sold-out clock time to the out-of-stock header.'
