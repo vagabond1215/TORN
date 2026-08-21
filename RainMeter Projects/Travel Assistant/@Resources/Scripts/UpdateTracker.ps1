@@ -150,15 +150,48 @@ function Get-DestinationState {
     return $dest
 }
 
-function Get-YataPayload {
-    $uri = 'https://yata.yt/api/v1/travel/export/'
-    return Invoke-RestMethod -Method Get -Uri $uri -Headers @{ Accept = 'application/json' } -TimeoutSec 15
+function Get-LiveStockPayload {
+    $providers = @(
+        [pscustomobject]@{ id = 'prometheus'; uri = 'https://api.prombot.co.uk/api/travel' },
+        [pscustomobject]@{ id = 'yata'; uri = 'https://yata.yt/api/v1/travel/export/' }
+    )
+    $errors = New-Object System.Collections.Generic.List[string]
+
+    foreach ($provider in $providers) {
+        try {
+            $payload = Invoke-RestMethod -Method Get -Uri ([string]$provider.uri) -Headers @{ Accept = 'application/json' } -TimeoutSec 8
+            if ($null -eq $payload -or $null -eq $payload.stocks) {
+                throw 'response does not contain stocks'
+            }
+            return [pscustomobject]@{
+                source = [string]$provider.id
+                payload = $payload
+            }
+        } catch {
+            $errors.Add(('{0}: {1}' -f [string]$provider.id, $_.Exception.Message))
+        }
+    }
+
+    throw ('All live stock providers failed: ' + ($errors -join ' | '))
 }
 
-function Get-YataObservation {
-    param([object]$Payload, [object]$Country, [object]$Item, [long]$Now)
+function Get-LiveStockObservation {
+    param(
+        [object]$Payload,
+        [object]$Country,
+        [object]$Item,
+        [long]$Now,
+        [string]$Source
+    )
     if ($null -eq $Payload -or $null -eq $Payload.stocks) { return $null }
-    $code = [string]$Country.providerCodes.yata
+    if ([string]::IsNullOrWhiteSpace($Source)) { return $null }
+
+    $code = [string](Get-DynamicProperty $Country.providerCodes $Source)
+    if ([string]::IsNullOrWhiteSpace($code) -and $Source -eq 'prometheus') {
+        $code = [string](Get-DynamicProperty $Country.providerCodes 'yata')
+    }
+    if ([string]::IsNullOrWhiteSpace($code)) { return $null }
+
     $countryObj = Get-DynamicProperty $Payload.stocks $code
     if ($null -eq $countryObj) { return $null }
     $row = @($countryObj.stocks | Where-Object { [int]$_.id -eq [int]$Item.itemId } | Select-Object -First 1)
@@ -175,9 +208,14 @@ function Get-YataObservation {
         itemId = [int]$Item.itemId
         stock = [int]$row.quantity
         foreignPrice = [long]$row.cost
-        source = 'yata'
+        source = $Source
         sourceTimestamp = $sourceTimestamp
     }
+}
+
+function Get-YataObservation {
+    param([object]$Payload, [object]$Country, [object]$Item, [long]$Now)
+    return Get-LiveStockObservation -Payload $Payload -Country $Country -Item $Item -Now $Now -Source 'yata'
 }
 
 function Get-TornResalePrice {
@@ -634,12 +672,19 @@ $engineState = Get-EngineState
 $stateValues = @{
     TravelMode = $travelMode
     TravelModeLabel = $modeLabel
-    UpdatedText = 'YATA live stock - 60s polling'
+    LiveProvider = 'none'
+    UpdatedText = 'Live stock - 60s polling'
 }
 
-$yataPayload = $null
-$yataError = $null
-try { $yataPayload = Get-YataPayload } catch { $yataError = $_.Exception.Message }
+$liveResult = $null
+$liveError = $null
+try {
+    $liveResult = Get-LiveStockPayload
+    $stateValues.LiveProvider = [string]$liveResult.source
+    $stateValues.UpdatedText = ('{0} live stock' -f [string]$liveResult.source)
+} catch {
+    $liveError = $_.Exception.Message
+}
 
 $enabledItem = @($itemsConfig.items | Where-Object { $_.enabled -eq $true } | Select-Object -First 1)
 if ($enabledItem.Count -eq 0) { throw 'No enabled item is configured.' }
@@ -654,6 +699,7 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
     $stateValues[$prefix + 'TravelSeconds'] = $travelSeconds
     $stateValues[$prefix + 'Stock'] = 0
     $stateValues[$prefix + 'ForeignPrice'] = 0
+    $stateValues[$prefix + 'SourceTimestamp'] = 0
     $stateValues[$prefix + 'LastSoldOutAt'] = 0
     $stateValues[$prefix + 'RestockEstimateAt'] = 0
     $stateValues[$prefix + 'WindowOpenAt'] = 0
@@ -669,10 +715,11 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
     if ($cachedStock -lt 0) { $cachedStock = 0 }
     $stateValues[$prefix + 'Stock'] = $cachedStock
     $stateValues[$prefix + 'ForeignPrice'] = [long]$destState.lastForeignPrice
+    $stateValues[$prefix + 'SourceTimestamp'] = [long]$destState.lastSourceTimestamp
     $stateValues[$prefix + 'LastSoldOutAt'] = [long]$destState.lastSellOutAt
 
-    if ($null -eq $yataPayload) { continue }
-    $observation = Get-YataObservation -Payload $yataPayload -Country $country -Item $item -Now $now
+    if ($null -eq $liveResult) { continue }
+    $observation = Get-LiveStockObservation -Payload $liveResult.payload -Country $country -Item $item -Now $now -Source ([string]$liveResult.source)
     if ($null -eq $observation) {
         $stateValues[$prefix + 'Status'] = 'SOURCE_DISAGREEMENT'
         $stateValues[$prefix + 'Message'] = 'Xanax row missing from live stock export; showing cached values'
@@ -681,6 +728,7 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
 
     $stateValues[$prefix + 'Stock'] = [int]$observation.stock
     $stateValues[$prefix + 'ForeignPrice'] = [long]$observation.foreignPrice
+    $stateValues[$prefix + 'SourceTimestamp'] = [long]$observation.sourceTimestamp
 
     $sameSource = ([long]$destState.lastSourceTimestamp -eq [long]$observation.sourceTimestamp -and [long]$observation.sourceTimestamp -gt 0)
     $sameValues = ([int]$destState.lastStock -eq [int]$observation.stock -and [long]$destState.lastForeignPrice -eq [long]$observation.foreignPrice)
@@ -707,7 +755,7 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
     try { Write-StockGraph -Rows $graphRows -Path $graphPath -Now $now -WindowHours ([int]$settings.graphWindowHours) } catch { }
 }
 
-if ($null -ne $yataError) { $stateValues.UpdatedText = 'Live stock request failed; showing cached/local state where available' }
+if ($null -ne $liveError) { $stateValues.UpdatedText = 'Live stock request failed; showing cached/local state where available' }
 Prune-RuntimeData -Settings $settings -EngineState $engineState -Now $now
 Write-JsonAtomic -Path $EngineStateFile -Value $engineState
 Write-StateKv -Values $stateValues
