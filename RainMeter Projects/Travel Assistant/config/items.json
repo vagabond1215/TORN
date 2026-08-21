@@ -7,6 +7,42 @@
       "name": "Xanax",
       "category": "Drug",
       "enabled": true,
+      "collect": true,
+      "visible": true,
+      "optimizerEligible": true,
+      "countries": ["united_kingdom", "japan"],
+      "resalePricing": {
+        "preferredSource": "torn_itemmarket",
+        "fallbackSources": ["provider_market_value"],
+        "useLowestListingWhenAvailable": true
+      }
+    },
+    {
+      "itemId": 266,
+      "slug": "nessie_plushie",
+      "name": "Nessie Plushie",
+      "category": "Plushie",
+      "enabled": false,
+      "collect": true,
+      "visible": false,
+      "optimizerEligible": false,
+      "countries": ["united_kingdom"],
+      "resalePricing": {
+        "preferredSource": "torn_itemmarket",
+        "fallbackSources": ["provider_market_value"],
+        "useLowestListingWhenAvailable": true
+      }
+    },
+    {
+      "itemId": 277,
+      "slug": "cherry_blossom",
+      "name": "Cherry Blossom",
+      "category": "Flower",
+      "enabled": false,
+      "collect": true,
+      "visible": false,
+      "optimizerEligible": false,
+      "countries": ["japan"],
       "resalePricing": {
         "preferredSource": "torn_itemmarket",
         "fallbackSources": ["provider_market_value"],
