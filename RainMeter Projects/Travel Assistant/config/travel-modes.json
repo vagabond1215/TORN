@@ -9,8 +9,10 @@
       "id": "business",
       "label": "Business",
       "shortLabel": "BIZ",
-      "enabled": false,
-      "disabledReason": "Business Class Ticket cost/free-Lingerie handling is not yet included in trip-profit gating. Keep disabled rather than issue a potentially unprofitable departure recommendation."
+      "enabled": true,
+      "settingsOnly": true,
+      "requiresFreeBusinessClass": true,
+      "disabledReason": "Only available from Settings when free Business Class is established (currently 10-star Lingerie Store). Ticket-funded Business travel remains unresolved and is suppressed."
     }
   ]
 }
