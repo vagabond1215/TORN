@@ -15,21 +15,9 @@ The Rainmeter presentation remains UK/Japan Xanax with the validated operational
 - current-capacity economics using `/user/perks` authority;
 - compact cards with profit-colored prices, conditional restock indicator, and 8-hour graphs.
 
-Data-layer expansion must not change this visible behavior until a later explicit UI phase.
-
 ## Full-market shadow collection — ACCEPTED
 
-All 11 Torn foreign destinations collect in the background while only UK/Japan remain visible/model-enabled.
-
-Focused Windows tests reported PASS:
-
-```text
-Validate-ShadowCollection.ps1
-Run-ShadowCollectionTests.ps1
-Validate-RainmeterSkin.ps1
-```
-
-Live forced shadow pass:
+Live target-Windows evidence:
 
 ```text
 lastProvider:         prometheus
@@ -38,112 +26,68 @@ marketsSeen:          232
 observedMarkets:      232
 observationsWritten:  51
 cyclesCompleted:      0
-lastErrorAt:          0
 lastError:            empty
 ```
 
-This is the accepted operational baseline for broad background collection.
+The first live catalog contained 202 distinct item IDs.
 
-## Canonical item metadata — ACTIVE
+## Canonical item metadata — TRANSPORT BLOCKED, RUNTIME ISOLATED
 
-The first live catalog contained 202 distinct item IDs across the 232 country-item markets.
-
-### v2 multi-ID approach rejected on target Windows host
-
-The original v2 metadata strategy passed its static/unit tests but failed twice in real transport:
+Static/unit metadata tests passed, but all live Torn catalog requests on the target Windows host timed out before returning metadata:
 
 ```text
-150 IDs / 20s -> 0 resolved -> timeout
-40 IDs / 30s  -> 0 resolved -> timeout
+v2 /torn/{ids}/items | 150 IDs | 20s | 0 resolved
+v2 /torn/{ids}/items |  40 IDs | 30s | 0 resolved
+classic torn/items    | bulk   | 12s | 0 resolved
 ```
 
-The second failure occurred on the first 40-ID batch, so the issue is not just an oversized 150-ID response. Do not continue increasing timeout/batch size for this path.
+Do not keep increasing metadata timeout/batch size.
 
-### Current bulk metadata approach
+### Heartbeat safety fix
 
-`@Resources/Scripts/ItemMetadata.ps1` now uses the classic Torn bulk items selection:
+`ItemMetadata.ps1` is no longer invoked by `RunUpdate.ps1`.
 
-```text
-GET https://api.torn.com/torn/?selections=items
-Authorization: ApiKey <local key>
-```
-
-The response is filtered locally to observed item IDs.
-
-Behavior:
-
-- one metadata request per refresh attempt;
-- 6-hour default refresh cadence;
-- 12-second default timeout;
-- custom Travel Assistant User-Agent;
-- key supplied through stdin Authorization header, never URL/process command line;
-- canonical item `type` becomes the category (Drug, Flower, Plushie, Primary, Secondary, Melee, Temporary, Defensive, etc.);
-- weapon subtype is retained separately as `weaponType`;
-- unknown/missing type remains unresolved rather than guessed;
-- market value is metadata/reference only and does not replace Item Market profitability logic;
-- failures remain fail-soft and must not block the established updater/finalizer/heartbeat.
-
-Runtime metadata fields:
-
-```text
-itemId
-name
-type
-weaponType
-category
-categoryResolved
-tradabilityKnown
-isTradable
-marketPrice
-fetchedAt
-source=torn_items_bulk
-```
-
-`RunUpdate.ps1` still serializes:
+Current production runtime order:
 
 ```text
 UpdateTracker
 ShadowCollector (fail-soft)
-ItemMetadata (fail-soft / low-frequency)
 FinalizeState
 heartbeat
 ```
 
-## Remaining acceptance for metadata phase
+This prevents catalog maintenance from delaying the one-minute Rainmeter update path.
 
-Run revised bulk metadata tests on Windows, then force one metadata refresh and inspect:
+### Committed metadata fallback
+
+`ItemMetadata.ps1` remains available as an explicit/manual maintenance tool. Before any optional Torn network attempt it imports the committed rows from `config/items.json` into runtime metadata with `source=config_seed`.
+
+Current committed seed metadata:
 
 ```text
-engine-state.json -> metadataCollection
-engine-state.json -> itemMetadata
+206 Xanax          | Drug
+266 Nessie Plushie | Plushie
+277 Cherry Blossom | Flower
 ```
 
-Success requires:
+Seed rows deliberately keep `marketPrice=0` and `tradabilityKnown=false`; unknown live economics are not inferred.
 
-- `source=torn_items_bulk`;
-- recent `lastRefreshAt`;
-- no metadata error;
-- `itemsRequested` equals the distinct observed item count;
-- `itemsResolved` equals or is very close to requested;
-- populated canonical category list;
-- correct sample metadata for Xanax, Nessie Plushie and Cherry Blossom when observed;
-- current UK/Japan Xanax Rainmeter behavior unchanged.
+A later successful catalog refresh may replace seed rows with richer metadata, but a network timeout must not leave the known seed catalog empty.
 
-## Distribution work also implemented
+## Distribution work implemented
 
-A whitelist-based `Build-Rmskin.ps1` and distribution validation now exist for future sharing. The package staging explicitly excludes local API settings, runtime history/state, generated output and credentials. Recipient-local settings are intended to survive package upgrades via Rainmeter skin merge semantics. This distribution path still requires Windows package-builder validation before a `.rmskin` should be published.
+`Build-Rmskin.ps1` uses whitelist-based staging and explicitly excludes local API settings, runtime history/state, generated output, and credentials. Recipient-local settings are preserved on package updates through Rainmeter merge semantics. Windows staging/package validation is still required before publishing a `.rmskin`.
 
 ## Next planned phases
 
-After metadata acceptance:
-
-1. bounded/staggered Item Market resale-price queue for the observed catalog;
-2. category-aware effective carrying capacity (general + Flower/Plushie-specific effects);
-3. promote Nessie Plushie and Cherry Blossom as the first visible multi-item proof;
-4. country/category filters;
-5. Torn travel-state destination filtering and arrival countdown;
-6. full-country economics population;
-7. `Optimal` route scheduling only after sufficient availability/economic evidence exists.
+1. establish a committed/offline full item metadata catalog refreshed outside the Rainmeter heartbeat;
+2. bounded/staggered Item Market resale-price queue;
+3. category-aware capacity (general + Flower/Plushie-specific effects);
+4. visible Nessie/Cherry proof;
+5. country/category filters;
+6. travel-state destination filtering and arrival countdown;
+7. full-country economics;
+8. `Optimal` route scheduling after sufficient evidence exists.
 
 ## Existing validation debt retained
 
