@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath $metadataPath)) {
     if ($text -notmatch '(?m)^\s*\[int\]\$RefreshIntervalSeconds\s*=\s*21600') { Fail 'Item metadata default refresh interval must be 6 hours.' }
     if ($text -notmatch '(?m)^\s*\[int\]\$MaxIdsPerRequest\s*=\s*150') { Fail 'Item metadata requests must default to bounded 150-ID chunks.' }
     if (-not $text.Contains('https://api.torn.com/v2/torn/$ids/items?sort=ASC')) { Fail 'Item metadata must use Torn v2 specific-items endpoint.' }
-    if (-not $text.Contains("$psi.Arguments = '-q --config -'")) { Fail 'Torn item metadata curl must receive its config through stdin.' }
+    if (-not $text.Contains('$psi.Arguments = ''-q --config -''')) { Fail 'Torn item metadata curl must receive its config through stdin.' }
     if (-not $text.Contains('Authorization: ApiKey {0}')) { Fail 'Torn item metadata must authenticate through an Authorization header.' }
     if ($text -match '(?i)[?&]key=') { Fail 'Torn API key must never be placed in the metadata request URL.' }
     foreach ($functionName in @('Get-ObservedItemIds','Split-ItemIds','Get-CanonicalCategory','Convert-TornItemMetadata')) {
@@ -29,9 +29,10 @@ if (-not (Test-Path -LiteralPath $metadataPath)) {
     foreach ($stateField in @('itemMetadata','metadataCollection','categoryResolved','marketPrice','shops')) {
         if (-not $text.Contains($stateField)) { Fail "Item metadata runtime contract is missing '$stateField'." }
     }
-    if (-not $text.Contains("if (`$type -eq 'Weapon')")) { Fail 'Weapon metadata must use detailed category handling.' }
-    if (-not $text.Contains("category = 'Weapon'; resolved = `$false")) { Fail 'Unresolved weapon categories must remain unresolved rather than guessed.' }
+    if ($text -notmatch "if \(\`$type -eq 'Weapon'\)") { Fail 'Weapon metadata must use detailed category handling.' }
+    if ($text -notmatch "category\s*=\s*'Weapon';\s*resolved\s*=\s*\`$false") { Fail 'Unresolved weapon categories must remain unresolved rather than guessed.' }
     if (-not $text.Contains("source = 'torn_items'")) { Fail 'Canonical item metadata must retain Torn provenance.' }
+    if ($text -notmatch '(?m)\$chunks\.Add\(\[pscustomobject\]@\{ ids = \[int\[\]\]') { Fail 'Metadata batches must use explicit ids objects to avoid Windows PowerShell array flattening.' }
 }
 
 if (-not (Test-Path -LiteralPath $wrapperPath)) {
