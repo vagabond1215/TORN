@@ -104,7 +104,7 @@ foreach ($prefix in @('UK','JP')) {
     $priceMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'Price\]\s*(.*?)(?=^\[|\z)')
     if ($priceMatch.Success) {
         $priceBody = $priceMatch.Groups[1].Value
-        if ($priceBody -notmatch ('(?im)^Text=#' + $prefix + 'PriceText#\s*$')) { Fail "[$($priceMatch.Value.Split([Environment]::NewLine)[0].Trim('[]'))] must display price without a label." }
+        if ($priceBody -notmatch ('(?im)^Text=#' + $prefix + 'PriceText#\s*$')) { Fail "Meter${prefix}Price must display price without a label." }
         if ($priceBody -notmatch ('(?im)^FontColor=#' + $prefix + 'PriceColor#\s*$')) { Fail "Meter${prefix}Price must use dynamic profitability color." }
     }
     $stockMatch = [regex]::Match($ini, '(?ms)^\[Meter' + $prefix + 'StockHeader\]\s*(.*?)(?=^\[|\z)')
@@ -121,6 +121,22 @@ if ($ini -match '(?m)^\[MeterUKStock\]\s*$' -or $ini -match '(?m)^\[MeterJPStock
 }
 if ($ini -match '(?im)^Text=Price:\s*#(?:UK|JP)PriceText#\s*$') {
     Fail 'Legacy labeled body price text must be removed; price belongs in the item header.'
+}
+if ($ini -match '(?m)^\[MeterUKSoldOut\]\s*$' -or $ini -match '(?m)^\[MeterJPSoldOut\]\s*$' -or $ini -match '(?im)^Text=Last Sold Out:') {
+    Fail 'Last Sold Out must not occupy a body row; sellout age/time belongs only in the out-of-stock header.'
+}
+
+$stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
+if (-not (Test-Path -LiteralPath $stateReaderPath)) {
+    Fail 'Missing StateReader.lua.'
+} else {
+    $stateReader = Get-Content -LiteralPath $stateReaderPath -Raw
+    if (-not $stateReader.Contains("'Out of Stock: ' .. formatShortElapsed(now - lastSoldOutAt)")) {
+        Fail 'StateReader.lua must show elapsed sellout age in the out-of-stock header.'
+    }
+    if (-not $stateReader.Contains("os.date('%H:%M', lastSoldOutAt)")) {
+        Fail 'StateReader.lua must append the sold-out clock time to the out-of-stock header.'
+    }
 }
 
 if ($errors.Count -gt 0) {
