@@ -24,7 +24,7 @@
       "category": "Plushie",
       "enabled": false,
       "collect": true,
-      "visible": false,
+      "visible": true,
       "optimizerEligible": false,
       "countries": ["united_kingdom"],
       "resalePricing": {
@@ -40,7 +40,7 @@
       "category": "Flower",
       "enabled": false,
       "collect": true,
-      "visible": false,
+      "visible": true,
       "optimizerEligible": false,
       "countries": ["japan"],
       "resalePricing": {
