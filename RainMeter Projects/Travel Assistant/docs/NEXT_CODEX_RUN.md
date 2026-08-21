@@ -1,4 +1,4 @@
-# Next Codex Run: Verify Complete Offline Catalog
+# Next Codex Run: Bounded Resale-Price Queue
 
 **Status: ACTIVE**
 
@@ -10,193 +10,259 @@ show narrowly
 optimize only after evidence/economics are ready
 ```
 
-## Accepted baseline
+## Accepted catalog baseline
 
-Target Windows has already established:
+Target Windows has now accepted the complete current offline catalog and legacy-market filtering:
 
 ```text
-11 foreign countries
-232 provider country-item rows
-232 / 232 provider rows with names
-202 distinct observed item IDs
-202 local metadata rows
-0 provider-name conflicts
+provider:                     prometheus
+countriesSeen:                11
+provider country-item rows:   232
+legacy provider rows:           5
+active candidate markets:     227
+observed item IDs:             202
+metadata rows:                 202
+categoriesResolved:            202
+unresolvedItems:                 0
+nameConflicts:                   0
+```
+
+Accepted legacy rows:
+
+```text
+mexico:21
+mexico:232
+mexico:327
+united_arab_emirates:383
+united_arab_emirates:440
+```
+
+Accepted canonical repairs:
+
+```text
+327 Blank Casino Chips | provider alias Blank Tokens | Material
+383 Digital Organizer  | provider alias Platinum PDA | Miscellaneous
 ```
 
 The visible UI remains UK/Japan Xanax only.
 
-## Category snapshot result
+## Current production runtime
 
-The committed 197-ID YATA-derived category snapshot resolved 197 of the 202 current item IDs.
-
-The five remaining rows reported by target Windows were:
+The established visible/data path remains:
 
 ```text
-21   Dual 92G Berettas | mexico
-232  SIG 550           | mexico
-327  Blank Tokens      | mexico
-383  Platinum PDA      | united_arab_emirates
-440  Pillow            | united_arab_emirates
+UpdateTracker
+ShadowCollector (fail-soft)
+LocalCatalog (fail-soft / local-only)
+FinalizeState
+visible heartbeat
 ```
 
-Their absence from the snapshot exposed a more important issue: all five are legacy provider rows for markets no longer currently sold there.
-
-## Verified repairs now committed
-
-`config/foreign-market-overrides.json` adds canonical item metadata plus per-market status:
+New broad resale population runs **after** the heartbeat:
 
 ```text
-21  Dual 92G Berettas  | Secondary     | mexico inactive
-232 SIG 550            | Primary       | mexico inactive
-327 Blank Casino Chips | Material      | mexico inactive | provider alias Blank Tokens
-383 Digital Organizer  | Miscellaneous | UAE inactive    | provider alias Platinum PDA
-440 Pillow             | Melee         | UAE inactive
+ResaleQueue (fail-soft, max one request/run)
 ```
 
-Evidence was checked against current Torn Wiki item pages and current destination shop listings.
+This ordering is intentional: broad-market resale latency must not make the current visible skin look unhealthy.
 
-Corrected invariant:
+## Implemented resale queue
 
-> A live-provider row is provider evidence that a country-item relationship exists in its dataset. It is not sufficient proof by itself that the item remains currently purchasable in that country.
-
-## Runtime behavior
-
-`LocalCatalog.ps1` now uses precedence:
+New production script:
 
 ```text
-richer manually acquired Torn metadata
-    > config/items.json seed
-    > verified item override
-    > 197-ID offline YATA category snapshot
-    > provider name + Unknown
+@Resources/Scripts/ResaleQueue.ps1
 ```
 
-Verified legacy markets are annotated in `observedMarkets`:
+It reads current `engine-state.json -> observedMarkets` and builds a distinct item set only from active markets.
+
+A market is excluded when:
 
 ```text
 catalogActive=false
+```
+
+or defensively when:
+
+```text
 catalogStatus=legacy_removed
-catalogStatusSource=verified_override
 ```
 
-`ShadowCollector.ps1` still records the provider row in `observedMarkets` and counts it in `marketsSeen`, but it loads the inactive-market override set and skips those pairs before new observation/cycle writes.
+Therefore the five verified legacy provider rows remain observable for provenance but receive no broad resale work.
 
-New health counter:
+### Queue bounds
+
+Defaults:
 
 ```text
-shadowCollection.legacyMarketsSeen
+minimum attempt interval: 60 seconds
+broad cache freshness:     21600 seconds / 6 hours
+failed-item backoff:        3600 seconds / 1 hour
+request timeout:            6 seconds
+requests per run path:      1
 ```
 
-Existing historical rows are retained.
+At the current roughly 197 active distinct-item scale, one successful request/minute can populate an initially empty active catalog in roughly 3.3 hours of loaded-skin runtime without an API burst.
 
-## Expected current split
+This six-hour cache is the broad population/reference cache. The current visible Xanax updater retains its existing independent/fresher resale behavior and is not weakened by this change.
+
+### Candidate selection
+
+The queue skips:
+
+- items whose resale cache is still fresh;
+- verified inactive/legacy-only items;
+- recently failed items still within backoff.
+
+Never-priced eligible items are populated before old stale entries. Stale cached entries re-enter after the broad freshness interval.
+
+### API/key handling
+
+The queue uses the existing specific-item endpoint:
 
 ```text
-provider rows observed: 232
-legacy provider rows:      5
-active candidate rows:   227
-observed item IDs:       202
-categories resolved:     202
-unresolved item IDs:       0
+https://api.torn.com/v2/market/{itemId}/itemmarket?limit=1
 ```
 
-Do not hard-code 232/202 as timeless catalog constants; they are the current live baseline.
+Transport uses bounded `curl.exe --config -` with URL and Authorization header passed through stdin. The API key is never placed in the URL or process arguments.
 
-## Focused Windows acceptance
+A successful cache row keeps the established resale schema:
 
-Pull current `main`, then run:
+```text
+price
+lowest
+average
+fetchedAt
+source=torn_itemmarket
+```
+
+No usable price remains unresolved; zero is never interpreted as real economics.
+
+### Runtime health
+
+`engine-state.json -> resaleQueue` tracks:
+
+```text
+lastRunAt
+lastAttemptAt
+lastSuccessAt
+lastItemId
+activeMarkets
+activeItems
+pricedItems
+freshItems
+staleItems
+successCount
+failureCount
+status
+lastErrorAt
+lastError
+attempts
+```
+
+Per-item attempts retain failure/backoff state without overwriting the last successful resale cache row.
+
+## Focused tests added
+
+```text
+tests/Validate-ResaleQueue.ps1
+tests/Run-ResaleQueueTests.ps1
+```
+
+They are included in `tests/Run-All.ps1`.
+
+The focused tests verify:
+
+- active market rows collapse to distinct item IDs;
+- `catalogActive=false` and `legacy_removed` rows are excluded;
+- fresh caches are skipped;
+- failed items back off instead of blocking the queue;
+- never-priced eligible items are prioritized;
+- the parser prefers the lowest listing and falls back to average price;
+- a zero/no-price response remains unresolved;
+- only one production broad Item Market invocation exists per queue run path;
+- curl/key handling remains stdin/header based;
+- the broad queue runs after the visible heartbeat and only for normal `Update` actions.
+
+## Immediate Windows validation
+
+Pull current `main`, then run only the focused checks:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-ShadowCollection.ps1
+  -File .\tests\Validate-ResaleQueue.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-ShadowCollectionTests.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-LocalCatalog.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-LocalCatalogTests.ps1
+  -File .\tests\Run-ResaleQueueTests.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-Then force one current provider pass and rebuild local metadata:
+Then run one explicit live queue attempt:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\@Resources\Scripts\ShadowCollector.ps1 -Force
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\@Resources\Scripts\LocalCatalog.ps1
+  -File .\@Resources\Scripts\ResaleQueue.ps1 -Force
 ```
 
-Inspect:
+Inspect without exposing the API key:
 
 ```powershell
 $e = Get-Content .\data\runtime\engine-state.json -Raw | ConvertFrom-Json
-$e.shadowCollection | Format-List
-$e.localCatalog | Format-List
+$e.resaleQueue | Format-List
 
-$meta = @($e.itemMetadata.PSObject.Properties)
-"Resolved: $(@($meta | Where-Object { $_.Value.categoryResolved -eq $true }).Count)"
-"Unresolved: $(@($meta | Where-Object { $_.Value.categoryResolved -ne $true }).Count)"
+"Resale cache rows: $(@($e.resaleCache.PSObject.Properties).Count)"
 
-$legacy = @(
-  $e.observedMarkets.PSObject.Properties |
-  Where-Object { $_.Value.PSObject.Properties['catalogActive'] -and $_.Value.catalogActive -eq $false }
-)
-"Inactive observed markets: $($legacy.Count)"
-
-$legacy |
-  Select-Object Name,
-    @{n='ProviderName';e={$_.Value.providerName}},
-    @{n='Status';e={$_.Value.catalogStatus}},
-    @{n='Reason';e={$_.Value.catalogStatusReason}}
+$lastId = [string]$e.resaleQueue.lastItemId
+if (-not [string]::IsNullOrWhiteSpace($lastId) -and $lastId -ne '0') {
+    $e.resaleCache.PSObject.Properties[$lastId].Value | Format-List
+}
 ```
 
-Expected target-Windows result for the current provider dataset:
+Healthy first-run boundaries:
 
 ```text
-shadowCollection.marketsSeen       = 232
-shadowCollection.legacyMarketsSeen = 5
-localCatalog.observedItems          = 202
-localCatalog.categoriesResolved     = 202
-localCatalog.unresolvedItems        = 0
-localCatalog.inactiveObservedMarkets= 5
+activeMarkets: approximately 227 for the current provider dataset
+activeItems: approximately 197 if the five inactive IDs have no other active market
+status: OK, or a bounded ERROR with one item backed off
+lastItemId: one active item ID
 ```
 
-The two renamed canonical metadata rows should be:
+Do not assume these live counts are permanent constants.
 
-```text
-327 Blank Casino Chips | Material      | verified_override
-383 Digital Organizer  | Miscellaneous | verified_override
+If `status=ERROR`, show only:
+
+```powershell
+$e.resaleQueue.lastItemId
+$e.resaleQueue.lastError
 ```
 
-Their provider names should remain available separately for provenance.
+Do not expose the API key or full local settings.
 
-## Distribution
+## Acceptance target
 
-`Build-Rmskin.ps1` now stages both offline catalog files:
+Before advancing:
 
-```text
-config/foreign-item-categories.json
-config/foreign-market-overrides.json
-```
-
-Local API settings/runtime history remain excluded.
+- focused tests pass on Windows;
+- one explicit live queue request completes within the bounded timeout or fails cleanly/backoffs one item;
+- current UK/Japan Xanax UI remains healthy;
+- no verified legacy market receives a resale attempt;
+- repeated normal Rainmeter updates gradually increase `pricedItems` without API bursts.
 
 ## Next implementation after acceptance
 
-Move to the bounded/staggered Item Market resale-price queue for active market candidates only. Legacy `catalogActive=false` markets must not receive valuation/optimizer work.
+Move to category-aware effective carrying capacity:
 
-Then:
+```text
+general travel capacity
++ category-specific capacity when applicable
+```
 
-1. category-aware carrying capacity;
-2. visible Nessie/Cherry multi-item proof;
-3. country/category filters;
-4. travel-state destination filtering and arrival countdown;
-5. full-country economics;
-6. `Optimal` scheduling after sufficient evidence exists.
+Required isolation:
+
+- Flower Shop flower bonus only for Flower items;
+- Toy Shop plushie bonus only for Plushie items;
+- neither may increase Xanax capacity.
+
+Then promote Nessie Plushie / Cherry Blossom as the first visible multi-item proof, followed by filters, travel-state destination behavior, full economics and finally `Optimal` scheduling.
