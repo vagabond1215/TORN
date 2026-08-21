@@ -1,4 +1,4 @@
-# Next Codex Run: Canonical Item Metadata Enrichment
+# Next Codex Run: Offline Full Item Catalog
 
 **Status: ACTIVE**
 
@@ -10,23 +10,25 @@ show narrowly
 optimize only after evidence/economics are ready
 ```
 
-## Accepted prerequisite
+## Accepted prerequisites
 
-Full-market shadow collection is operationally accepted:
+### Full-market shadow collection
+
+Operationally accepted on target Windows:
 
 ```text
+Prometheus healthy
 11 countries
 232 observed country-item markets
 202 distinct item IDs in the first live catalog
-Prometheus healthy
 no shadow error
 ```
 
-Do not repeat shadow acceptance unless collection code changes.
+Do not repeat that acceptance unless collection behavior changes.
 
-## Metadata transport evidence
+### Metadata isolation fallback
 
-The target Windows host has now timed out on all attempted Torn catalog transports before returning any metadata:
+The target Windows host timed out on every attempted Torn catalog transport before returning metadata:
 
 ```text
 v2 /torn/{ids}/items | 150 IDs | 20s | 0 resolved
@@ -34,13 +36,27 @@ v2 /torn/{ids}/items |  40 IDs | 30s | 0 resolved
 classic torn/items    | bulk   | 12s | 0 resolved
 ```
 
-This is a proven host/endpoint boundary. Do not keep increasing timeouts or batch sizes.
+This is a proven host/endpoint boundary. Metadata network maintenance is therefore **not part of the Rainmeter heartbeat path**.
 
-## Current architecture
+Target Windows has now passed:
 
-Metadata network maintenance is no longer part of the Rainmeter heartbeat path.
+```text
+Validate-ItemMetadata.ps1
+Run-ItemMetadataTests.ps1
+Validate-RainmeterSkin.ps1
+```
 
-Production runtime order is again:
+Runtime seed metadata was confirmed:
+
+```text
+206 Xanax          | Drug    | config_seed
+266 Nessie Plushie | Plushie | config_seed
+277 Cherry Blossom | Flower  | config_seed
+```
+
+This fallback is accepted. Do not block further expansion on Torn catalog timeouts.
+
+## Current production runtime
 
 ```text
 UpdateTracker
@@ -49,76 +65,95 @@ FinalizeState
 heartbeat
 ```
 
-`ItemMetadata.ps1` remains an explicit/manual maintenance tool only.
+`ItemMetadata.ps1` is manual/maintenance-only.
 
-### Local committed metadata fallback
+## Current goal
 
-Before any optional network attempt, `ItemMetadata.ps1` imports the explicit committed item metadata from `config/items.json` into ignored runtime `itemMetadata` with:
+Build a committed/offline item catalog for the provider-observed foreign market without changing current visible UK/Japan Xanax behavior.
 
-```text
-source=config_seed
-marketPrice=0
-tradabilityKnown=false
-```
+### Provider-name enrichment now implemented
 
-Current committed seeds:
+The shadow collector now preserves provider-supplied item names when available:
 
 ```text
-206 Xanax          | Drug
-266 Nessie Plushie | Plushie
-277 Cherry Blossom | Flower
+observation.itemName
+engine-state.json -> observedMarkets.<country:itemId>.providerName
 ```
 
-A successful future Torn metadata refresh may replace these seed rows with richer `source=torn_items_bulk` rows. A Torn timeout must not erase or suppress the committed seed metadata.
+This is metadata only. Durable history identity remains:
+
+```text
+country + itemId
+```
+
+Provider names do not change cycle isolation, stock/price-change deduplication, visibility, or optimizer eligibility.
+
+Focused validation was updated to require provider-name preservation:
+
+```text
+tests/Validate-ShadowCollection.ps1
+tests/Run-ShadowCollectionTests.ps1
+```
 
 ## Immediate Windows validation
 
-Pull current `main`, then run:
+Pull current `main`, then run only the focused shadow checks because collection source changed:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-ItemMetadata.ps1
+  -File .\tests\Validate-ShadowCollection.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-ItemMetadataTests.ps1
+  -File .\tests\Run-ShadowCollectionTests.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-Then run the manual metadata tool once. It may still report the already-known Torn timeout; the important acceptance condition is that the committed seed metadata is present anyway:
+Then force one live shadow pass:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\@Resources\Scripts\ItemMetadata.ps1 -Force
+  -File .\@Resources\Scripts\ShadowCollector.ps1 -Force
 
 $e = Get-Content .\data\runtime\engine-state.json -Raw | ConvertFrom-Json
-$e.metadataCollection | Format-List
-$meta = @($e.itemMetadata.PSObject.Properties)
-"Metadata items: $($meta.Count)"
+$markets = @($e.observedMarkets.PSObject.Properties)
 
-$meta |
-  Where-Object { $_.Name -in @('206','266','277') } |
+"Observed markets: $($markets.Count)"
+"Markets with provider names: $(@($markets | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.Value.providerName) }).Count)"
+
+$markets |
+  Where-Object { $_.Name -in @('united_kingdom:266','japan:277') } |
   Select-Object Name,
-    @{n='Item';e={$_.Value.name}},
-    @{n='Category';e={$_.Value.category}},
-    @{n='Source';e={$_.Value.source}}
+    @{n='ProviderName';e={$_.Value.providerName}},
+    @{n='Stock';e={$_.Value.lastStock}},
+    @{n='Price';e={$_.Value.lastForeignPrice}}
 ```
 
-Expected minimum result even if Torn times out:
+Expected:
 
-```text
-Metadata items: >= 3
-206 Xanax          Drug     config_seed
-266 Nessie Plushie Plushie  config_seed
-277 Cherry Blossom Flower   config_seed
-```
+- observed market count remains around the accepted live catalog size;
+- many/most rows have `providerName` when the active provider supplies names;
+- Nessie/Cherry names appear when those rows are in the provider payload;
+- no shadow error;
+- current Rainmeter Xanax cards remain healthy.
 
-## Next implementation direction
+## Offline catalog design
 
-Do not block further expansion on the target machine's Torn catalog timeout. The next catalog step should establish a **committed/offline full item metadata catalog** refreshed outside the Rainmeter heartbeat, then use that local catalog for categories and filtering.
+Next implementation after provider-name acceptance:
 
-After that:
+1. create a committed catalog keyed by `itemId`;
+2. use provider names as discovery/cross-check evidence, not as the durable category authority;
+3. populate canonical categories from verified external/Torn-derived metadata outside the Rainmeter heartbeat;
+4. retain provenance per catalog entry;
+5. validate that every currently observed item ID is either resolved or explicitly unresolved;
+6. never guess a category to make filters/optimizer work.
+
+The local catalog should be packaged with the eventual `.rmskin`, so recipients do not need a successful Torn catalog fetch just to know item names/categories.
+
+## Later phases
+
+After the offline catalog is sufficiently complete:
 
 1. bounded/staggered resale-price refresh;
 2. general + category-specific carrying capacity;
