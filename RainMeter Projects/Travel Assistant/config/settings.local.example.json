@@ -5,6 +5,11 @@
   "travelProfile": {
     "companyType": "none",
     "companyStars": 0,
+    "currentCapacityKnown": false,
+    "currentCapacityMode": "",
+    "currentCapacity": 0,
+    "currentCapacityBonus": 0,
+    "currentCapacitySyncedAt": 0,
     "factionState": "manual",
     "factionExcursionLevel": 0,
     "factionTravelCostLevel": 0,
