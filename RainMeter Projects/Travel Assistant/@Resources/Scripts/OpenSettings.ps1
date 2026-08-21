@@ -6,6 +6,7 @@ Add-Type -AssemblyName System.Drawing
 
 . (Join-Path $PSScriptRoot 'TravelProfile.ps1')
 . (Join-Path $PSScriptRoot 'TornProfileSync.ps1')
+. (Join-Path $PSScriptRoot 'CurrentCapacity.ps1')
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
@@ -88,10 +89,11 @@ $item = if ($enabledItem.Count -gt 0) { $enabledItem[0] } else { $null }
 $currentMode = if ($local.PSObject.Properties['travelMode']) { [string]$local.travelMode } else { [string]$base.travelMode }
 $prefs = Read-JsonFile $PreferencePath
 if ($null -ne $prefs -and $prefs.PSObject.Properties['travelMode']) { $currentMode = [string]$prefs.travelMode }
+if ($currentMode -notin @('standard','airstrip','wlt','business')) { $currentMode = 'airstrip' }
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Travel Assistant Settings'
-$form.Size = New-Object System.Drawing.Size(560, 760)
+$form.Size = New-Object System.Drawing.Size(560, 610)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -117,19 +119,6 @@ function Style-Input {
     $Control.ForeColor = [System.Drawing.Color]::FromArgb(232,235,240)
 }
 
-function New-LevelControl {
-    param([int]$X, [int]$Y, [int]$Maximum, [int]$Value)
-    $control = New-Object System.Windows.Forms.NumericUpDown
-    $control.Location = New-Object System.Drawing.Point($X,$Y)
-    $control.Size = New-Object System.Drawing.Size(70,24)
-    $control.Minimum = 0
-    $control.Maximum = $Maximum
-    $control.Value = [decimal][Math]::Max(0, [Math]::Min($Maximum, $Value))
-    Style-Input $control
-    $form.Controls.Add($control)
-    return $control
-}
-
 $title = New-Label -Text 'TRAVEL ASSISTANT' -X 16 -Y 14 -W 280 -H 28
 $title.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 14)
 
@@ -148,18 +137,21 @@ $showKey.Size = New-Object System.Drawing.Size(60,22)
 $showKey.ForeColor = $form.ForeColor
 $showKey.Add_CheckedChanged({ $keyBox.UseSystemPasswordChar = -not $showKey.Checked })
 $form.Controls.Add($showKey)
+$keyNote = New-Label -Text 'Stored only in ignored local settings; never committed to Git.' -X 190 -Y 80 -W 330 -H 18
+$keyNote.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+$keyNote.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 
-New-Label -Text 'Travel mode' -X 18 -Y 101 | Out-Null
+New-Label -Text 'Travel mode' -X 18 -Y 111 | Out-Null
 $modeCombo = New-Object System.Windows.Forms.ComboBox
-$modeCombo.Location = New-Object System.Drawing.Point(190,98)
+$modeCombo.Location = New-Object System.Drawing.Point(190,108)
 $modeCombo.Size = New-Object System.Drawing.Size(280,24)
 $modeCombo.DropDownStyle = 'DropDownList'
 Style-Input $modeCombo
 $form.Controls.Add($modeCombo)
 
-New-Label -Text 'Company' -X 18 -Y 144 | Out-Null
+New-Label -Text 'Company' -X 18 -Y 154 | Out-Null
 $companyCombo = New-Object System.Windows.Forms.ComboBox
-$companyCombo.Location = New-Object System.Drawing.Point(190,141)
+$companyCombo.Location = New-Object System.Drawing.Point(190,151)
 $companyCombo.Size = New-Object System.Drawing.Size(280,24)
 $companyCombo.DropDownStyle = 'DropDownList'
 Style-Input $companyCombo
@@ -167,169 +159,286 @@ $form.Controls.Add($companyCombo)
 $companyRows = @($perks.companies)
 foreach ($company in $companyRows) { [void]$companyCombo.Items.Add([string]$company.label) }
 $companyIndex = 0
-for ($i = 0; $i -lt $companyRows.Count; $i++) { if ([string]$companyRows[$i].id -eq [string]$profile.companyType) { $companyIndex = $i; break } }
+for ($i = 0; $i -lt $companyRows.Count; $i++) {
+    if ([string]$companyRows[$i].id -eq [string]$profile.companyType) { $companyIndex = $i; break }
+}
 $companyCombo.SelectedIndex = $companyIndex
 
-New-Label -Text 'Company stars' -X 18 -Y 187 | Out-Null
-$stars = New-LevelControl -X 190 -Y 184 -Maximum 10 -Value ([int]$profile.companyStars)
+New-Label -Text 'Company stars' -X 18 -Y 197 | Out-Null
+$stars = New-Object System.Windows.Forms.NumericUpDown
+$stars.Location = New-Object System.Drawing.Point(190,194)
+$stars.Size = New-Object System.Drawing.Size(90,24)
+$stars.Minimum = 0
+$stars.Maximum = 10
+$stars.Value = [decimal][int]$profile.companyStars
+Style-Input $stars
+$form.Controls.Add($stars)
 
-$section = New-Label -Text 'FACTION TRAVEL LOADOUTS' -X 18 -Y 225 -W 260
-$section.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
-
-New-Label -Text 'Faction mode' -X 18 -Y 257 | Out-Null
-$factionStateCombo = New-Object System.Windows.Forms.ComboBox
-$factionStateCombo.Location = New-Object System.Drawing.Point(190,254)
-$factionStateCombo.Size = New-Object System.Drawing.Size(140,24)
-$factionStateCombo.DropDownStyle = 'DropDownList'
-Style-Input $factionStateCombo
-[void]$factionStateCombo.Items.Add('Manual')
-[void]$factionStateCombo.Items.Add('Peace')
-[void]$factionStateCombo.Items.Add('War')
-$factionStateCombo.SelectedIndex = if ([string]$profile.factionState -eq 'peace') { 1 } elseif ([string]$profile.factionState -eq 'war') { 2 } else { 0 }
-$form.Controls.Add($factionStateCombo)
-
-New-Label -Text 'Loadout' -X 18 -Y 295 -W 135 | Out-Null
-New-Label -Text 'Capacity' -X 190 -Y 295 -W 70 | Out-Null
-New-Label -Text 'Cost' -X 290 -Y 295 -W 60 | Out-Null
-New-Label -Text 'Manual active' -X 18 -Y 322 -W 150 | Out-Null
-$manualExcursion = New-LevelControl -X 190 -Y 319 -Maximum 10 -Value ([int]$profile.factionExcursionLevel)
-$manualCost = New-LevelControl -X 290 -Y 319 -Maximum 5 -Value ([int]$profile.factionTravelCostLevel)
-New-Label -Text 'Peace' -X 18 -Y 359 -W 150 | Out-Null
-$peaceExcursion = New-LevelControl -X 190 -Y 356 -Maximum 10 -Value ([int]$profile.factionPeaceExcursionLevel)
-$peaceCost = New-LevelControl -X 290 -Y 356 -Maximum 5 -Value ([int]$profile.factionPeaceTravelCostLevel)
-New-Label -Text 'War' -X 18 -Y 396 -W 150 | Out-Null
-$warExcursion = New-LevelControl -X 190 -Y 393 -Maximum 10 -Value ([int]$profile.factionWarExcursionLevel)
-$warCost = New-LevelControl -X 290 -Y 393 -Maximum 5 -Value ([int]$profile.factionWarTravelCostLevel)
-New-Label -Text 'Capacity: +1 item/level (max 10)' -X 370 -Y 350 -W 170 -H 34 | Out-Null
-New-Label -Text 'Cost: -15%/level (max 5)' -X 370 -Y 391 -W 170 -H 34 | Out-Null
+$capacityTitle = New-Label -Text 'CURRENT TRAVEL CAPACITY' -X 18 -Y 239 -W 260
+$capacityTitle.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
+New-Label -Text 'Current Xanax capacity' -X 18 -Y 270 -W 165 | Out-Null
+$capacity = New-Object System.Windows.Forms.NumericUpDown
+$capacity.Location = New-Object System.Drawing.Point(190,267)
+$capacity.Size = New-Object System.Drawing.Size(90,24)
+$capacity.Minimum = 0
+$capacity.Maximum = 99
+Style-Input $capacity
+$form.Controls.Add($capacity)
+$capacityDetail = New-Object System.Windows.Forms.Label
+$capacityDetail.Location = New-Object System.Drawing.Point(290,263)
+$capacityDetail.Size = New-Object System.Drawing.Size(240,38)
+$capacityDetail.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
+$form.Controls.Add($capacityDetail)
 
 $sync = New-Object System.Windows.Forms.Button
 $sync.Text = 'Sync from Torn'
-$sync.Location = New-Object System.Drawing.Point(18,442)
+$sync.Location = New-Object System.Drawing.Point(18,315)
 $sync.Size = New-Object System.Drawing.Size(112,30)
 $form.Controls.Add($sync)
 $syncStatus = New-Object System.Windows.Forms.Label
-$syncStatus.Location = New-Object System.Drawing.Point(142,438)
-$syncStatus.Size = New-Object System.Drawing.Size(390,50)
+$syncStatus.Location = New-Object System.Drawing.Point(142,309)
+$syncStatus.Size = New-Object System.Drawing.Size(390,48)
 $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
-$syncStatus.Text = 'Populate company/stars, active faction mode, and both faction loadouts. Save remains explicit.'
+$syncStatus.Text = 'Reads current /user/perks and job data. No faction API permission required.'
 $form.Controls.Add($syncStatus)
 
-$summaryTitle = New-Label -Text 'Effective travel perks' -X 18 -Y 500 -W 240
+$summaryTitle = New-Label -Text 'Effective travel profile' -X 18 -Y 370 -W 240
 $summaryTitle.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
 $summary = New-Object System.Windows.Forms.Label
-$summary.Location = New-Object System.Drawing.Point(18,525)
-$summary.Size = New-Object System.Drawing.Size(515,90)
+$summary.Location = New-Object System.Drawing.Point(18,395)
+$summary.Size = New-Object System.Drawing.Size(515,82)
 $summary.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 $form.Controls.Add($summary)
-$note = New-Label -Text 'Flower/Toy +5 capacity is item-specific and does not increase Xanax capacity.' -X 18 -Y 620 -W 515 -H 24
+$note = New-Label -Text 'Current capacity uses active perks only. Flower/Toy item-specific bonuses do not increase Xanax capacity.' -X 18 -Y 481 -W 515 -H 36
 $note.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72)
 
 $script:modeIds = @()
-function Get-SelectedFactionState {
-    if ($factionStateCombo.SelectedIndex -eq 1) { return 'peace' }
-    if ($factionStateCombo.SelectedIndex -eq 2) { return 'war' }
-    return 'manual'
+$script:updatingUi = $false
+$script:capacityKnown = [bool]$profile.currentCapacityKnown
+$script:capacityBonus = [int]$profile.currentCapacityBonus
+$script:capacitySyncedAt = [long]$profile.currentCapacitySyncedAt
+
+function Get-SelectedCompanyId {
+    if ($companyCombo.SelectedIndex -ge 0 -and $companyCombo.SelectedIndex -lt $companyRows.Count) {
+        return [string]$companyRows[$companyCombo.SelectedIndex].id
+    }
+    return 'none'
+}
+
+function Get-SelectedModeId {
+    if ($modeCombo.SelectedIndex -ge 0 -and $modeCombo.SelectedIndex -lt $script:modeIds.Count) {
+        return [string]$script:modeIds[$modeCombo.SelectedIndex]
+    }
+    return $currentMode
 }
 
 function Get-PreviewProfile {
-    $companyId = 'none'
-    if ($companyCombo.SelectedIndex -ge 0 -and $companyCombo.SelectedIndex -lt $companyRows.Count) { $companyId = [string]$companyRows[$companyCombo.SelectedIndex].id }
-    $state = Get-SelectedFactionState
-    $activeExcursion = [int]$manualExcursion.Value
-    $activeCost = [int]$manualCost.Value
-    if ($state -eq 'peace') { $activeExcursion = [int]$peaceExcursion.Value; $activeCost = [int]$peaceCost.Value }
-    elseif ($state -eq 'war') { $activeExcursion = [int]$warExcursion.Value; $activeCost = [int]$warCost.Value }
+    $selectedMode = Get-SelectedModeId
+    $currentValue = if ($script:capacityKnown) { [int]$capacity.Value } else { 0 }
     return [pscustomobject]@{
-        companyType = $companyId; companyStars = [int]$stars.Value; factionState = $state
-        factionExcursionLevel = $activeExcursion; factionTravelCostLevel = $activeCost
-        factionPeaceExcursionLevel = [int]$peaceExcursion.Value; factionPeaceTravelCostLevel = [int]$peaceCost.Value
-        factionWarExcursionLevel = [int]$warExcursion.Value; factionWarTravelCostLevel = [int]$warCost.Value
+        companyType = Get-SelectedCompanyId
+        companyStars = [int]$stars.Value
+        currentCapacityKnown = [bool]$script:capacityKnown
+        currentCapacityMode = if ($script:capacityKnown) { $selectedMode } else { '' }
+        currentCapacity = $currentValue
+        currentCapacityBonus = if ($script:capacityKnown) { [int]$script:capacityBonus } else { 0 }
+        currentCapacitySyncedAt = if ($script:capacityKnown) { [long]$script:capacitySyncedAt } else { 0 }
+        # Preserve legacy fields for backwards compatibility only. Once current
+        # capacity is known, TravelProfile ignores these for slot calculations.
+        factionState = [string]$profile.factionState
+        factionExcursionLevel = [int]$profile.factionExcursionLevel
+        factionTravelCostLevel = [int]$profile.factionTravelCostLevel
+        factionPeaceExcursionLevel = [int]$profile.factionPeaceExcursionLevel
+        factionPeaceTravelCostLevel = [int]$profile.factionPeaceTravelCostLevel
+        factionWarExcursionLevel = [int]$profile.factionWarExcursionLevel
+        factionWarTravelCostLevel = [int]$profile.factionWarTravelCostLevel
     }
 }
 
-function Update-ProfilePreview {
-    $previewProfile = Get-PreviewProfile
-    $effects = Get-TravelProfileEffects -Profile $previewProfile -PerksConfig $perks -Item $item
+function Set-CapacityFromBonus {
+    if (-not $script:capacityKnown) { return }
+    $mode = Get-SelectedModeId
+    $baseCapacity = Get-TornTravelModeBaseCapacity -TravelMode $mode
+    $total = [Math]::Max($baseCapacity, [Math]::Min(99, $baseCapacity + [int]$script:capacityBonus))
+    $script:updatingUi = $true
+    try { $capacity.Value = [decimal]$total } finally { $script:updatingUi = $false }
+}
 
-    $wantedMode = $currentMode
-    if ($modeCombo.SelectedIndex -ge 0 -and $modeCombo.SelectedIndex -lt $script:modeIds.Count) { $wantedMode = [string]$script:modeIds[$modeCombo.SelectedIndex] }
+function Refresh-ModeChoices {
+    $wantedMode = Get-SelectedModeId
+    if ([string]::IsNullOrWhiteSpace($wantedMode)) { $wantedMode = $currentMode }
+
+    $preview = Get-PreviewProfile
+    $effects = Get-TravelProfileEffects -Profile $preview -PerksConfig $perks -Item $item
     $availableIds = @(Get-AvailableTravelModeIds -TravelModes $modes -Effects $effects)
-    $modeCombo.Items.Clear(); $script:modeIds = @()
-    foreach ($id in $availableIds) {
-        $row = @($modes.modes | Where-Object { [string]$_.id -eq $id } | Select-Object -First 1)
-        if ($row.Count -eq 0) { continue }
-        [void]$modeCombo.Items.Add([string]$row[0].label); $script:modeIds += $id
+
+    $script:updatingUi = $true
+    try {
+        $modeCombo.Items.Clear()
+        $script:modeIds = @()
+        foreach ($id in $availableIds) {
+            $row = @($modes.modes | Where-Object { [string]$_.id -eq $id } | Select-Object -First 1)
+            if ($row.Count -eq 0) { continue }
+            [void]$modeCombo.Items.Add([string]$row[0].label)
+            $script:modeIds += $id
+        }
+        $selectIndex = [Array]::IndexOf([string[]]$script:modeIds, [string]$wantedMode)
+        if ($selectIndex -lt 0) { $selectIndex = [Array]::IndexOf([string[]]$script:modeIds, 'airstrip') }
+        if ($selectIndex -lt 0 -and $script:modeIds.Count -gt 0) { $selectIndex = 0 }
+        if ($selectIndex -ge 0) { $modeCombo.SelectedIndex = $selectIndex }
+    } finally { $script:updatingUi = $false }
+
+    Set-CapacityFromBonus
+}
+
+function Update-Summary {
+    $preview = Get-PreviewProfile
+    $effects = Get-TravelProfileEffects -Profile $preview -PerksConfig $perks -Item $item
+    $mode = Get-SelectedModeId
+    $baseCapacity = Get-TornTravelModeBaseCapacity -TravelMode $mode
+
+    if ($script:capacityKnown) {
+        $capacityDetail.Text = ('base {0} + active {1:+0;-0;0}' -f $baseCapacity, [int]$script:capacityBonus)
+    } else {
+        $capacityDetail.Text = 'not synced; enter manually or Sync from Torn'
     }
-    $selectIndex = [Array]::IndexOf([string[]]$script:modeIds, [string]$wantedMode)
-    if ($selectIndex -lt 0) { $selectIndex = [Array]::IndexOf([string[]]$script:modeIds, 'airstrip') }
-    if ($selectIndex -lt 0 -and $script:modeIds.Count -gt 0) { $selectIndex = 0 }
-    if ($selectIndex -ge 0) { $modeCombo.SelectedIndex = $selectIndex }
 
-    $manualEnabled = ([string]$previewProfile.factionState -eq 'manual')
-    $manualExcursion.Enabled = $manualEnabled; $manualCost.Enabled = $manualEnabled
+    $companyLabel = 'None / Other'
+    if ($companyCombo.SelectedIndex -ge 0) { $companyLabel = [string]$companyCombo.SelectedItem }
     $businessText = if ([bool]$effects.freeBusinessClass) { 'Business: FREE / available' } else { 'Business: locked (10-star Lingerie)' }
-    $stateText = ([string]$previewProfile.factionState).ToUpperInvariant()
-    $summary.Text = ('Faction mode {0}: active +{1} capacity | fees -{2}%' -f $stateText, [int]$effects.factionCapacityBonus, [int]$effects.travelCostReductionPercent) + [Environment]::NewLine + ('Peace {0}/10 cap, {1}/5 cost | War {2}/10 cap, {3}/5 cost' -f [int]$peaceExcursion.Value, [int]$peaceCost.Value, [int]$warExcursion.Value, [int]$warCost.Value) + [Environment]::NewLine + ('Company +{0} | Xanax-specific +{1} | {2}' -f [int]$effects.generalCapacityBonus, [int]$effects.itemCapacityBonus, $businessText)
+    $capacityText = if ($script:capacityKnown) { ('Current {0}: {1} items' -f $mode, [int]$capacity.Value) } else { 'Current capacity: unresolved' }
+    $summary.Text = $capacityText + [Environment]::NewLine + ('Company: {0} ({1}*)' -f $companyLabel, [int]$stars.Value) + [Environment]::NewLine + $businessText
 }
 
-foreach ($control in @($companyCombo,$stars,$factionStateCombo,$manualExcursion,$manualCost,$peaceExcursion,$peaceCost,$warExcursion,$warCost)) {
-    if ($control -is [System.Windows.Forms.ComboBox]) { $control.Add_SelectedIndexChanged({ Update-ProfilePreview }) }
-    else { $control.Add_ValueChanged({ Update-ProfilePreview }) }
-}
-Update-ProfilePreview
+$companyCombo.Add_SelectedIndexChanged({
+    if ($script:updatingUi) { return }
+    Refresh-ModeChoices
+    Update-Summary
+})
+$stars.Add_ValueChanged({
+    if ($script:updatingUi) { return }
+    Refresh-ModeChoices
+    Update-Summary
+})
+$modeCombo.Add_SelectedIndexChanged({
+    if ($script:updatingUi) { return }
+    Set-CapacityFromBonus
+    Update-Summary
+})
+$capacity.Add_ValueChanged({
+    if ($script:updatingUi) { return }
+    $mode = Get-SelectedModeId
+    $baseCapacity = Get-TornTravelModeBaseCapacity -TravelMode $mode
+    $entered = [int]$capacity.Value
+    if ($entered -le 0) {
+        $script:capacityKnown = $false
+        $script:capacityBonus = 0
+        $script:capacitySyncedAt = 0
+    } else {
+        if ($entered -lt $baseCapacity) {
+            $script:updatingUi = $true
+            try { $capacity.Value = [decimal]$baseCapacity } finally { $script:updatingUi = $false }
+            $entered = $baseCapacity
+        }
+        $script:capacityKnown = $true
+        $script:capacityBonus = [Math]::Max(0, $entered - $baseCapacity)
+        $script:capacitySyncedAt = 0
+    }
+    Update-Summary
+})
+
+Refresh-ModeChoices
+if ($script:capacityKnown) { Set-CapacityFromBonus } else { $capacity.Value = 0 }
+Update-Summary
 
 $sync.Add_Click({
-    $sync.Enabled = $false; $sync.Text = 'Syncing...'
+    $sync.Enabled = $false
+    $sync.Text = 'Syncing...'
     $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
-    $syncStatus.Text = 'Reading Torn job and faction upgrades...'
+    $syncStatus.Text = 'Reading current Torn job and perks...'
     [System.Windows.Forms.Application]::DoEvents()
+
     try {
         $apiKey = [string]$keyBox.Text.Trim()
         if ([string]::IsNullOrWhiteSpace($apiKey)) { throw 'Enter a Torn API key before syncing.' }
-        $result = Get-TornTravelProfileSync -ApiKey $apiKey -PerksConfig $perks
-        $partial = $false
-        if ($result.CompanyResolved) {
-            $idx = -1
-            for ($i = 0; $i -lt $companyRows.Count; $i++) { if ([string]$companyRows[$i].id -eq [string]$result.CompanyType) { $idx = $i; break } }
-            if ($idx -ge 0) { $companyCombo.SelectedIndex = $idx; $stars.Value = [decimal][int]$result.CompanyStars } else { $partial = $true }
-        } else { $partial = $true }
+        $mode = Get-SelectedModeId
 
-        if ($result.FactionResolved) {
-            $factionStateCombo.SelectedIndex = if ([string]$result.FactionState -eq 'peace') { 1 } elseif ([string]$result.FactionState -eq 'war') { 2 } else { 0 }
-            $peaceExcursion.Value = [decimal][int]$result.FactionPeaceExcursionLevel
-            $peaceCost.Value = [decimal][int]$result.FactionPeaceTravelCostLevel
-            $warExcursion.Value = [decimal][int]$result.FactionWarExcursionLevel
-            $warCost.Value = [decimal][int]$result.FactionWarTravelCostLevel
-            $manualExcursion.Value = [decimal][int]$result.FactionExcursionLevel
-            $manualCost.Value = [decimal][int]$result.FactionTravelCostLevel
-        } else { $partial = $true }
-        Update-ProfilePreview
-        $syncStatus.Text = ([string]$result.CompanySummary + ' | ' + [string]$result.FactionSummary)
-        if ($partial) { $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72) }
-        else { $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(86,190,116) }
+        $jobResult = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/job?comment=TravelAssistantSettingsSync' -ApiKey $apiKey
+        $perksResult = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/perks?comment=TravelAssistantSettingsSync' -ApiKey $apiKey
+        $messages = New-Object System.Collections.Generic.List[string]
+        $partial = $false
+
+        if ($jobResult.Success) {
+            $companyResult = Get-TornCompanyTravelProfile -JobPayload $jobResult.Payload -PerksConfig $perks
+            if ($companyResult.Resolved) {
+                $idx = -1
+                for ($i = 0; $i -lt $companyRows.Count; $i++) {
+                    if ([string]$companyRows[$i].id -eq [string]$companyResult.CompanyType) { $idx = $i; break }
+                }
+                if ($idx -ge 0) {
+                    $companyCombo.SelectedIndex = $idx
+                    $stars.Value = [decimal][int]$companyResult.CompanyStars
+                } else { $partial = $true }
+                $messages.Add([string]$companyResult.Summary)
+            } else {
+                $partial = $true
+                $messages.Add([string]$companyResult.Summary)
+            }
+        } else {
+            $partial = $true
+            $messages.Add(('Job unavailable: {0}' -f [string]$jobResult.Error))
+        }
+
+        if ($perksResult.Success) {
+            $capacityResult = Get-TornEffectiveXanaxCapacity -TravelMode $mode -PerksPayload $perksResult.Payload
+            if ($capacityResult.Resolved) {
+                $script:capacityKnown = $true
+                $script:capacityBonus = [int]$capacityResult.SuitcaseBonus + [int]$capacityResult.ActivePerkBonus
+                $script:capacitySyncedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+                Set-CapacityFromBonus
+                $messages.Add(('Capacity {0}: {1} items (base {2} + active {3})' -f $mode, [int]$capacityResult.Capacity, [int]$capacityResult.BaseCapacity, [int]$script:capacityBonus))
+            } else {
+                $partial = $true
+                $messages.Add(('Capacity unresolved: {0}' -f [string]$capacityResult.PerkSummary))
+            }
+        } else {
+            $partial = $true
+            $messages.Add(('Current perks unavailable: {0}' -f [string]$perksResult.Error))
+        }
+
+        Refresh-ModeChoices
+        Set-CapacityFromBonus
+        Update-Summary
+        $syncStatus.Text = ($messages -join ' | ')
+        $syncStatus.ForeColor = if ($partial) { [System.Drawing.Color]::FromArgb(232,178,72) } else { [System.Drawing.Color]::FromArgb(86,190,116) }
     } catch {
         Write-SettingsError $_
         $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(224,90,90)
         $syncStatus.Text = $_.Exception.Message
     } finally {
-        $sync.Enabled = $true; $sync.Text = 'Sync from Torn'
+        $sync.Enabled = $true
+        $sync.Text = 'Sync from Torn'
     }
 })
 
 $save = New-Object System.Windows.Forms.Button
-$save.Text = 'Save'; $save.Location = New-Object System.Drawing.Point(354,665); $save.Size = New-Object System.Drawing.Size(82,30)
-$save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255); $save.ForeColor = [System.Drawing.Color]::Black
+$save.Text = 'Save'
+$save.Location = New-Object System.Drawing.Point(354,525)
+$save.Size = New-Object System.Drawing.Size(82,30)
+$save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255)
+$save.ForeColor = [System.Drawing.Color]::Black
 $form.Controls.Add($save)
 $cancel = New-Object System.Windows.Forms.Button
-$cancel.Text = 'Cancel'; $cancel.Location = New-Object System.Drawing.Point(446,665); $cancel.Size = New-Object System.Drawing.Size(82,30)
-$form.Controls.Add($cancel); $cancel.Add_Click({ $form.Close() })
+$cancel.Text = 'Cancel'
+$cancel.Location = New-Object System.Drawing.Point(446,525)
+$cancel.Size = New-Object System.Drawing.Size(82,30)
+$form.Controls.Add($cancel)
+$cancel.Add_Click({ $form.Close() })
 
 $save.Add_Click({
     try {
+        $selectedMode = Get-SelectedModeId
         $preview = Get-PreviewProfile
-        $selectedMode = 'airstrip'
-        if ($modeCombo.SelectedIndex -ge 0 -and $modeCombo.SelectedIndex -lt $script:modeIds.Count) { $selectedMode = [string]$script:modeIds[$modeCombo.SelectedIndex] }
         Set-ObjectProperty -Object $local -Name 'schemaVersion' -Value 1
         Set-ObjectProperty -Object $local -Name 'tornApiKey' -Value ([string]$keyBox.Text.Trim())
         Set-ObjectProperty -Object $local -Name 'travelMode' -Value $selectedMode
