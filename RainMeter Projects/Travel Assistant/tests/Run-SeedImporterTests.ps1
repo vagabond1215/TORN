@@ -21,7 +21,7 @@ function Read-JsonLines {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $rows.Add(($line | ConvertFrom-Json))
     }
-    return @($rows)
+    return $rows.ToArray()
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $tempRoot 'tools'), (Join-Path $tempRoot 'config'), (Join-Path $tempRoot 'data\seed'), (Join-Path $tempRoot 'candidate') | Out-Null
