@@ -109,13 +109,15 @@ function Get-AvailableTravelModeIds {
     $ids = New-Object System.Collections.Generic.List[string]
     foreach ($mode in @($TravelModes.modes)) {
         $id = [string]$mode.id
-        if ($mode.enabled -eq $true) {
-            $ids.Add($id)
-            continue
+        if ($mode.enabled -ne $true) { continue }
+
+        $requiresFreeBusiness = $false
+        if ($mode.PSObject.Properties['requiresFreeBusinessClass']) {
+            $requiresFreeBusiness = [bool]$mode.requiresFreeBusinessClass
         }
-        if ($id -eq 'business' -and [bool]$Effects.freeBusinessClass) {
-            $ids.Add($id)
-        }
+        if ($requiresFreeBusiness -and -not [bool]$Effects.freeBusinessClass) { continue }
+
+        $ids.Add($id)
     }
     return $ids.ToArray()
 }
