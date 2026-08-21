@@ -1,21 +1,5 @@
 Set-StrictMode -Version 2.0
 
-function New-TravelCategoryBonusMap {
-    return [pscustomobject]@{ Flower = 0; Plushie = 0 }
-}
-
-function New-TravelCategoryResolvedMap {
-    return [pscustomobject]@{ Flower = $false; Plushie = $false }
-}
-
-function Get-TravelCategoryMapValue {
-    param([object]$Map, [string]$Category, $DefaultValue)
-    if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Category)) { return $DefaultValue }
-    $prop = $Map.PSObject.Properties[$Category]
-    if ($null -eq $prop) { return $DefaultValue }
-    return $prop.Value
-}
-
 function Get-TravelProfile {
     param(
         [object]$BaseSettings,
@@ -29,8 +13,6 @@ function Get-TravelProfile {
         currentCapacityMode = ''
         currentCapacity = 0
         currentCapacityBonus = 0
-        currentCategoryCapacityBonuses = New-TravelCategoryBonusMap
-        currentCategoryCapacityResolved = New-TravelCategoryResolvedMap
         currentCapacitySyncedAt = 0
         factionState = 'manual'
         factionExcursionLevel = 0
@@ -43,8 +25,7 @@ function Get-TravelProfile {
 
     $fieldNames = @(
         'companyType','companyStars',
-        'currentCapacityKnown','currentCapacityMode','currentCapacity','currentCapacityBonus',
-        'currentCategoryCapacityBonuses','currentCategoryCapacityResolved','currentCapacitySyncedAt',
+        'currentCapacityKnown','currentCapacityMode','currentCapacity','currentCapacityBonus','currentCapacitySyncedAt',
         'factionState','factionExcursionLevel','factionTravelCostLevel',
         'factionPeaceExcursionLevel','factionPeaceTravelCostLevel',
         'factionWarExcursionLevel','factionWarTravelCostLevel'
@@ -67,17 +48,6 @@ function Get-TravelProfile {
     if ($profile.currentCapacityMode -notin @('standard','airstrip','wlt','business')) { $profile.currentCapacityMode = '' }
     $profile.currentCapacity = [Math]::Max(0, [Math]::Min(99, [int]$profile.currentCapacity))
     $profile.currentCapacityBonus = [Math]::Max(0, [Math]::Min(50, [int]$profile.currentCapacityBonus))
-
-    $normalizedCategoryBonuses = New-TravelCategoryBonusMap
-    $normalizedCategoryResolved = New-TravelCategoryResolvedMap
-    foreach ($category in @('Flower','Plushie')) {
-        $bonus = [int](Get-TravelCategoryMapValue -Map $profile.currentCategoryCapacityBonuses -Category $category -DefaultValue 0)
-        $normalizedCategoryBonuses.PSObject.Properties[$category].Value = [Math]::Max(0, [Math]::Min(50, $bonus))
-        $normalizedCategoryResolved.PSObject.Properties[$category].Value = [bool](Get-TravelCategoryMapValue -Map $profile.currentCategoryCapacityResolved -Category $category -DefaultValue $false)
-    }
-    $profile.currentCategoryCapacityBonuses = $normalizedCategoryBonuses
-    $profile.currentCategoryCapacityResolved = $normalizedCategoryResolved
-
     $profile.currentCapacitySyncedAt = [Math]::Max(0L, [long]$profile.currentCapacitySyncedAt)
     if ($profile.currentCapacityKnown -and $profile.currentCapacity -le 0 -and $profile.currentCapacityBonus -le 0) {
         $profile.currentCapacityKnown = $false
@@ -122,7 +92,6 @@ function Get-TravelProfileEffects {
     $hasCurrentCapacity = ($Profile.PSObject.Properties['currentCapacityKnown'] -and [bool]$Profile.currentCapacityKnown)
     $itemCategory = ''
     if ($null -ne $Item -and $Item.PSObject.Properties['category']) { $itemCategory = [string]$Item.category }
-    $categoryCapacityKnown = $true
 
     $company = @($PerksConfig.companies | Where-Object { [string]$_.id -eq [string]$Profile.companyType } | Select-Object -First 1)
     if ($company.Count -gt 0) {
@@ -131,15 +100,20 @@ function Get-TravelProfileEffects {
             if ($effect.PSObject.Properties['stars']) { $requiredStars = [int]$effect.stars }
             if ([int]$Profile.companyStars -lt $requiredStars) { continue }
 
-            # Company identity is still authoritative for non-capacity effects,
-            # especially free Business Class. Capacity is sourced from current
-            # /user/perks after a successful current-capacity sync.
-            if (-not $hasCurrentCapacity) {
-                if ($effect.PSObject.Properties['generalCapacityBonus']) { $generalCapacityBonus += [int]$effect.generalCapacityBonus }
-                if ($null -ne $Item -and $effect.PSObject.Properties['itemCategory'] -and $effect.PSObject.Properties['itemCapacityBonus']) {
-                    if ([string]$effect.itemCategory -eq $itemCategory) { $itemCapacityBonus += [int]$effect.itemCapacityBonus }
+            # currentCapacity/currentCapacityBonus represent the general/Xanax
+            # carrying capacity and intentionally exclude Flower/Toy category
+            # bonuses. Therefore general company capacity must not be inferred
+            # after a current-capacity sync, but a matching category-specific
+            # company bonus remains safe to apply on top for that item only.
+            if (-not $hasCurrentCapacity -and $effect.PSObject.Properties['generalCapacityBonus']) {
+                $generalCapacityBonus += [int]$effect.generalCapacityBonus
+            }
+            if ($null -ne $Item -and $effect.PSObject.Properties['itemCategory'] -and $effect.PSObject.Properties['itemCapacityBonus']) {
+                if ([string]$effect.itemCategory -eq $itemCategory) {
+                    $itemCapacityBonus += [int]$effect.itemCapacityBonus
                 }
             }
+
             if ($effect.PSObject.Properties['freeBusinessClass'] -and [bool]$effect.freeBusinessClass) { $freeBusinessClass = $true }
             if ($effect.PSObject.Properties['label'] -and -not [string]::IsNullOrWhiteSpace([string]$effect.label)) { $notes.Add([string]$effect.label) }
         }
@@ -150,22 +124,7 @@ function Get-TravelProfileEffects {
     if ($hasCurrentCapacity) {
         $generalCapacityBonus = [Math]::Max(0, [Math]::Min(50, [int]$Profile.currentCapacityBonus))
         if ($generalCapacityBonus -gt 0) { $notes.Add(('Current active travel capacity +{0}' -f $generalCapacityBonus)) }
-
-        if ($itemCategory -in @('Flower','Plushie')) {
-            $resolved = $false
-            if ($Profile.PSObject.Properties['currentCategoryCapacityResolved']) {
-                $resolved = [bool](Get-TravelCategoryMapValue -Map $Profile.currentCategoryCapacityResolved -Category $itemCategory -DefaultValue $false)
-            }
-            if ($resolved) {
-                if ($Profile.PSObject.Properties['currentCategoryCapacityBonuses']) {
-                    $itemCapacityBonus = [Math]::Max(0, [Math]::Min(50, [int](Get-TravelCategoryMapValue -Map $Profile.currentCategoryCapacityBonuses -Category $itemCategory -DefaultValue 0)))
-                }
-                if ($itemCapacityBonus -gt 0) { $notes.Add(('Current {0} travel capacity +{1}' -f $itemCategory, $itemCapacityBonus)) }
-            } else {
-                $categoryCapacityKnown = $false
-                $notes.Add(('Current {0} capacity needs a perks sync' -f $itemCategory))
-            }
-        }
+        if ($itemCapacityBonus -gt 0) { $notes.Add(('Current {0} company capacity +{1}' -f $itemCategory, $itemCapacityBonus)) }
 
         # We intentionally do not infer a faction travel-fee reduction from an
         # inaccessible/stale faction loadout. Zero is conservative for Standard
@@ -195,8 +154,7 @@ function Get-TravelProfileEffects {
         itemCapacityBonus = $itemCapacityBonus
         factionCapacityBonus = $factionCapacity
         totalCapacityBonus = ($generalCapacityBonus + $itemCapacityBonus + $factionCapacity)
-        capacityKnown = $categoryCapacityKnown
-        categoryCapacityKnown = $categoryCapacityKnown
+        capacityKnown = $true
         itemCategory = $itemCategory
         travelCostReductionPercent = $travelCostReductionPercent
         freeBusinessClass = $freeBusinessClass
