@@ -67,4 +67,4 @@ Human-readable summary of current visible behavior, background expansion, instal
 
 Travel Assistant is pre-use and under active expansion.
 
-The **visible** Rainmeter UI still uses the established UK/Japan Xanax proof. The data layer now includes a fail-soft all-country shadow collector that can learn every valid provider-observed `country + itemId` market while keeping those new markets hidden and non-optimizer-eligible until metadata, category-specific capacity, resale economics, filtering and confidence rules are implemented and validated.
+The **visible** Rainmeter UI still uses the established UK/Japan Xanax proof. The data layer now observes all 11 foreign countries, has locally resolved all 202 item categories in the current provider dataset, filters five verified legacy country-item rows out of new learning/economics work, and is beginning a one-request-at-a-time active-item Torn resale-price queue. New markets remain hidden and non-optimizer-eligible until category-specific capacity, generalized economics, filters, travel context and confidence rules are implemented and validated.
