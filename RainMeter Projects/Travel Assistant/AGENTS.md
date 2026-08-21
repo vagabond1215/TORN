@@ -49,8 +49,10 @@ OPTIMIZER candidates
 
 ### Visibility
 
-- The currently validated visible UI remains UK/Japan Xanax until a deliberate multi-item UI release passes validation.
-- Nessie Plushie and Cherry Blossom remain the first hidden metadata/UI proof items.
+- The last target-Windows-validated UI baseline is UK/Japan Xanax.
+- The current committed `0.3.0` release candidate adds Nessie Plushie under UK and Cherry Blossom under Japan and is pending target-Windows/Rainmeter acceptance.
+- Nessie/Cherry are presentation-only in this release: `visible=true`, `enabled=false`, `optimizerEligible=false`.
+- Current secondary rows do not inherit Xanax departure timing; existing graph/travel/restock/decision output remains Xanax-specific until deliberate per-item timing work is validated.
 - Future country/category filters are presentation filters only.
 - Future outbound travel presentation should show only the destination country's items and replace static flight duration with arrival countdown while keeping the plane icon.
 
@@ -76,6 +78,7 @@ OPTIMIZER candidates
 12. Storage/compute remain bounded. The one-second Rainmeter loop must not perform network/model work.
 13. Provider market membership may be stale. A verified inactive `country + itemId` override supersedes provider presence for learning, display, resale and optimization eligibility while preserving provenance/history.
 14. Broad resale population must never create an API burst; missing/no-price responses remain unresolved rather than becoming zero economics.
+15. Market/resale reference is not foreign price. Display them distinctly and never overwrite one with the other.
 
 ## Current background-collection contract
 
@@ -184,12 +187,12 @@ A later successful maintenance refresh may replace local rows with richer canoni
 It must:
 
 - run only for normal `Update` actions;
-- run after `FinalizeState` and after the visible heartbeat;
+- run after the visible heartbeat;
 - derive distinct item IDs only from active `observedMarkets` rows;
 - skip `catalogActive=false` and defensively skip `catalogStatus=legacy_removed`;
 - make at most one production Torn Item Market request per queue run path;
 - default to a 60-second attempt cadence, six-hour broad cache target, one-hour failure backoff and six-second request timeout;
-- prefer never-priced eligible items, then stale cache rows;
+- prioritize configured `visible=true` items among otherwise eligible stale/unpriced items, without increasing request frequency;
 - preserve a last successful cache row when a later refresh fails;
 - use bounded `curl.exe --config -` with the API key supplied only via stdin Authorization header;
 - never place a key in request URLs or process arguments;
@@ -265,13 +268,22 @@ Current mode base:
 
 A synced current-capacity bonus is authoritative for general capacity and replaces legacy inferred company/faction additions. Property/stock travel-method effects must not be double-counted.
 
-Company/star modeling still matters for non-capacity effects such as free Business Class.
+Company/star modeling remains authoritative for category-specific bonuses excluded from the general/Xanax capacity sync and for non-capacity effects such as free Business Class.
 
-Before multi-category economics becomes optimizer-eligible:
+Accepted category isolation:
 
-- Flower Shop flower capacity applies only to Flower items;
-- Toy Shop plushie capacity applies only to Plushie items;
+- Flower Shop 7★ adds +5 only to Flower items;
+- Toy Shop 7★ adds +5 only to Plushie items;
 - neither may increase Xanax capacity.
+
+Current accepted example:
+
+```text
+Airstrip general/Xanax = 18
+Standard general/Xanax = 13
+qualifying Airstrip Flower/Plushie = 23
+qualifying Standard Flower/Plushie = 18
+```
 
 A positive explicit `profitability.capacityOverride` remains authoritative where supported.
 
@@ -300,6 +312,7 @@ A positive explicit `profitability.capacityOverride` remains authoritative where
 - one-second Rainmeter work: local string/countdown/visibility only;
 - primary updater/model/finalizer: about once per minute;
 - broad shadow collection: no more often than 120 seconds unless revalidated;
+- visible-item enrichment: local-only, no network calls;
 - broad resale queue: at most one lower-priority Torn market request per normal update, after the visible heartbeat;
 - item catalog network maintenance: **not in the heartbeat**, explicit/manual only;
 - no permanent background PowerShell/browser processes;
@@ -308,18 +321,19 @@ A positive explicit `profitability.capacityOverride` remains authoritative where
 
 ## Current UI invariants
 
-Until a deliberate multi-item release:
+For the committed `0.3.0` release candidate, pending target-Windows/Rainmeter acceptance:
 
 - dark charcoal theme;
 - UK above Japan;
 - local vector country flags, not claimed official Torn assets;
-- header shows item name, profitability-colored foreign price and stock/out-of-stock state;
+- UK shows Xanax then Nessie Plushie; Japan shows Xanax then Cherry Blossom;
+- every visible item shows foreign shop price followed by `(Torn market reference)`;
+- foreign price retains profitability color; the parenthesized market reference is smaller and muted;
 - only literal `Out of Stock` is red;
 - out-of-stock text is `Out of Stock for h:mm since HH:mm`;
-- plane icon on travel row;
-- delivery-truck restock timing only when out of stock and predicted restock ETA exceeds flight time;
-- hidden timing/history remains in tooltip;
-- equal 8-hour graphs with 60-minute divisions;
+- existing plane/restock/decision row remains Xanax-specific;
+- existing equal 8-hour graphs with 60-minute divisions remain Xanax graphs;
+- hidden timing/history remains in the Xanax tooltip;
 - `Travel` header opens Torn travel;
 - Settings remains top-right.
 
@@ -347,11 +361,12 @@ For collection/config/model changes:
 
 - validate JSON;
 - run PowerShell parser/static checks;
-- exercise provider/metadata/resale normalization from fixtures/synthetic payloads;
+- exercise provider/metadata/resale/visible-item normalization from fixtures/synthetic payloads;
 - prove country/item cycle isolation;
 - prove primary markets are protected from duplicate shadow writes;
-- prove verified inactive markets are retained as provider metadata but skipped before new shadow history/cycle/resale work;
+- prove verified inactive markets are retained as provider metadata but skipped before new shadow history/cycle/resale/display work;
 - prove metadata network maintenance stays outside `RunUpdate.ps1`;
+- prove visible-item enrichment is local-only;
 - prove broad resale runs after the visible heartbeat and remains one-request bounded;
 - verify retention and ignored-runtime boundaries;
 - run focused tests before broad suites;
@@ -366,6 +381,9 @@ Current focused expansion checks:
 .\tests\Run-LocalCatalogTests.ps1
 .\tests\Validate-ResaleQueue.ps1
 .\tests\Run-ResaleQueueTests.ps1
+.\tests\Validate-VisibleItems.ps1
+.\tests\Run-VisibleItemsTests.ps1
+.\tests\Validate-RainmeterSkin.ps1
 ```
 
 Use `tests/Run-All.ps1` only when a broad run is justified.
