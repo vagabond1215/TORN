@@ -13,7 +13,7 @@ $finalizer = Join-Path $scriptDir 'FinalizeState.ps1'
 
 function Assert-Equal {
     param([string]$Name, $Actual, $Expected)
-    if ($Actual -ne $Expected) { throw "$Name — expected '$Expected', got '$Actual'." }
+    if ($Actual -ne $Expected) { throw "$Name - expected '$Expected', got '$Actual'." }
     Write-Host "PASS $Name" -ForegroundColor DarkGreen
 }
 
@@ -109,8 +109,6 @@ try {
     }
     Write-JsonNoBom -Path (Join-Path $runtimeDir 'engine-state.json') -Value $engine
 
-    # Primary updater may return LOW_MARGIN before producing a restock estimate.
-    # The finalizer must still add informational restock timing from completed cycles.
     Write-StateKv -Values @{
         TravelMode = 'airstrip'
         TravelModeLabel = 'Airstrip'
