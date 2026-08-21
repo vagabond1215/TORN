@@ -10,7 +10,7 @@ $passes = New-Object System.Collections.Generic.List[string]
 function Assert-Equal {
     param([string]$Name, $Actual, $Expected)
     if ($Actual -ne $Expected) {
-        $script:failures.Add("$Name — expected '$Expected', got '$Actual'")
+        $script:failures.Add("$Name - expected '$Expected', got '$Actual'")
     } else {
         $script:passes.Add($Name)
     }
@@ -19,7 +19,7 @@ function Assert-Equal {
 function Assert-True {
     param([string]$Name, [bool]$Condition, [string]$Details = '')
     if (-not $Condition) {
-        $suffix = if ([string]::IsNullOrWhiteSpace($Details)) { '' } else { " — $Details" }
+        $suffix = if ([string]::IsNullOrWhiteSpace($Details)) { '' } else { " - $Details" }
         $script:failures.Add("$Name$suffix")
     } else {
         $script:passes.Add($Name)
@@ -51,8 +51,6 @@ function Import-ProductionFunctions {
     foreach ($name in $wanted) {
         $definition = @($definitions | Where-Object { $_.Name -eq $name } | Select-Object -First 1)
         if ($definition.Count -ne 1) { throw "Could not locate production function '$name' in UpdateTracker.ps1" }
-        # The AST extent is the exact production function source. Re-scope only the
-        # declaration so the imported function survives after this helper returns.
         $source = [string]$definition[0].Extent.Text
         $scoped = $source -replace ('^function\s+' + [regex]::Escape($name)), ('function script:' + $name)
         Invoke-Expression $scoped
@@ -130,7 +128,6 @@ function New-DestinationState {
 
 Import-ProductionFunctions
 
-# Load-Cycles resolves these script-scope variables exactly as production does.
 $SeedCycleFile = Join-Path $FixtureDir 'cycles-safe.jsonl'
 $CycleFile = Join-Path $FixtureDir 'cycles-safe.jsonl'
 
@@ -138,18 +135,15 @@ $now = 1787168500
 $settings = New-Settings
 $country = New-Country
 
-# 1. Provider normalization uses the production YATA adapter function.
 $yata = Get-Content -LiteralPath (Join-Path $FixtureDir 'yata-export.sample.json') -Raw | ConvertFrom-Json
 $yataObs = Get-YataObservation -Payload $yata -Country $country -Item ([pscustomobject]@{ itemId = 206 }) -Now $now
 Assert-Equal 'YATA UK Xanax quantity normalization' ([int]$yataObs.stock) 1834
 Assert-Equal 'YATA UK Xanax foreign-price normalization' ([long]$yataObs.foreignPrice) 728000
 Assert-Equal 'YATA source timestamp normalization' ([long]$yataObs.sourceTimestamp) 1787168400
 
-# 2. Seed/runtime duplicate cycle records are deduplicated by production Load-Cycles.
 $dedupCycles = @(Load-Cycles -Country 'united_kingdom' -ItemId 206 -Cutoff ($now - 8640000))
 Assert-Equal 'Seed/runtime cycle deduplication' $dedupCycles.Count 8
 
-# 3. High-price / long-availability cycles produce a conservative safe window.
 $CycleFile = Join-Path $FixtureDir 'cycles-safe.jsonl'
 $SeedCycleFile = Join-Path $FixtureDir '__empty__.jsonl'
 $safeObs = New-Observation -Now $now -Price 822000
@@ -158,7 +152,6 @@ $safeRec = Get-Recommendation -Settings $settings -Country $country -Observation
 Assert-Equal 'High-price long-stock scenario selects SAFE_WINDOW' $safeRec.Status 'SAFE_WINDOW'
 Assert-True 'Safe window close remains in the future' ([long]$safeRec.WindowCloseAt -gt $now)
 
-# 4. Fast depletion + restock variance has no conservative overlap and selects BEST_ODDS.
 $CycleFile = Join-Path $FixtureDir 'cycles-fast.jsonl'
 $fastObs = New-Observation -Now $now -Price 722000
 $fastState = New-DestinationState -LastSoldOutAt ($now - 500)
@@ -167,7 +160,6 @@ Assert-Equal 'Low-price fast-depletion scenario selects BEST_ODDS' $fastRec.Stat
 Assert-True 'Best-odds departure is current/future' ([long]$fastRec.BestDepartureAt -ge ($now - 60))
 Assert-True 'Best-odds hit rate is probabilistic' ([double]$fastRec.HitRate -gt 0 -and [double]$fastRec.HitRate -lt 1)
 
-# 5. Profitability gate includes the configured Item Market fee and blocks timing.
 $CycleFile = Join-Path $FixtureDir 'cycles-safe.jsonl'
 $lowMarginObs = New-Observation -Now $now -Price 742000
 $lowMarginState = New-DestinationState -LastSoldOutAt ($now - 3000)
@@ -179,18 +171,15 @@ Assert-Equal 'Low-margin result exposes no safe close' ([long]$lowMargin.WindowC
 $unprofitable = Get-Recommendation -Settings $settings -Country $country -Observation $lowMarginObs -DestState $lowMarginState -ResalePrice 760000 -TravelMode 'airstrip' -Now $now -RecentObservations @()
 Assert-Equal 'Fee-adjusted negative spread is UNPROFITABLE' $unprofitable.Status 'UNPROFITABLE'
 
-# 6. Stale source data blocks timing before profitability/history evaluation.
 $staleObs = New-Observation -Now $now -Price 742000 -SourceTimestamp ($now - 301)
 $stale = Get-Recommendation -Settings $settings -Country $country -Observation $staleObs -DestState $lowMarginState -ResalePrice 1000000 -TravelMode 'airstrip' -Now $now -RecentObservations @()
 Assert-Equal 'Stale source suppresses recommendation' $stale.Status 'STALE_DATA'
 
-# 7. Travel mode changes departure window timing without changing observed history.
 $airRec = Get-Recommendation -Settings $settings -Country $country -Observation $safeObs -DestState $safeState -ResalePrice 1000000 -TravelMode 'airstrip' -Now $now -RecentObservations @()
 $wltRec = Get-Recommendation -Settings $settings -Country $country -Observation $safeObs -DestState $safeState -ResalePrice 1000000 -TravelMode 'wlt' -Now $now -RecentObservations @()
 Assert-Equal 'WLT scenario remains safe with same cycles' $wltRec.Status 'SAFE_WINDOW'
 Assert-True 'Travel mode changes safe-window timing' ([long]$airRec.WindowCloseAt -ne [long]$wltRec.WindowCloseAt)
 
-# 8. Current live depletion can shorten/close a window but cannot extend historical safety.
 $shortCountry = New-Country -Standard 900 -Airstrip 600 -Wlt 450 -Business 300
 $activeRestockAt = $now - 240
 $activeCycle = [pscustomobject]@{
@@ -203,7 +192,6 @@ $activeCycle = [pscustomobject]@{
 $activeState = New-DestinationState -LastSoldOutAt ($now - 7500) -ActiveCycle $activeCycle
 $activeObs = New-Observation -Now $now -Price 822000 -Stock 100
 
-# With only two samples, live slope is intentionally unavailable and historical safety remains.
 $twoSamples = @(
     [pscustomobject]@{ timestamp = $activeRestockAt; stock = 2500 },
     [pscustomobject]@{ timestamp = $now; stock = 100 }
@@ -212,7 +200,6 @@ $historicalLive = Get-Recommendation -Settings $settings -Country $shortCountry 
 Assert-Equal 'Live cycle without enough slope evidence retains historical SAFE_WINDOW' $historicalLive.Status 'SAFE_WINDOW'
 $historicalClose = [long]$historicalLive.WindowCloseAt
 
-# Three fast-depletion samples make the production live estimator close the opportunity.
 $fastLiveSamples = @(
     [pscustomobject]@{ timestamp = $activeRestockAt; stock = 2500 },
     [pscustomobject]@{ timestamp = $activeRestockAt + 120; stock = 1000 },
