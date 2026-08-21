@@ -102,8 +102,28 @@ function Get-SeedIndex {
     return $index
 }
 
+function Get-CategoryIndex {
+    param([object]$CategoryConfig)
+    $index = @{}
+    if ($null -eq $CategoryConfig -or -not $CategoryConfig.PSObject.Properties['categoriesByItemId']) { return $index }
+    foreach ($property in @($CategoryConfig.categoriesByItemId.PSObject.Properties)) {
+        $itemId = 0
+        if (-not [int]::TryParse([string]$property.Name, [ref]$itemId) -or $itemId -le 0) { continue }
+        $category = ([string]$property.Value).Trim()
+        if ([string]::IsNullOrWhiteSpace($category)) { continue }
+        $index[[string]$itemId] = $category
+    }
+    return $index
+}
+
 function New-LocalCatalogEntry {
-    param([object]$Group, [object]$Seed, [long]$Now)
+    param(
+        [object]$Group,
+        [object]$Seed,
+        [string]$OfflineCategory,
+        [string]$OfflineCategorySource,
+        [long]$Now
+    )
     if ($null -eq $Group -or [int]$Group.itemId -le 0) { return $null }
 
     $names = @($Group.providerNames)
@@ -118,9 +138,22 @@ function New-LocalCatalogEntry {
     }
 
     $name = if (-not [string]::IsNullOrWhiteSpace($seedName)) { $seedName } elseif (-not [string]::IsNullOrWhiteSpace($providerName)) { $providerName } else { 'Item ' + [string]$Group.itemId }
-    $categoryResolved = -not [string]::IsNullOrWhiteSpace($seedCategory)
-    $category = if ($categoryResolved) { $seedCategory } else { 'Unknown' }
-    $source = if ($null -ne $Seed) { 'config_seed' } else { 'provider_name' }
+
+    $category = 'Unknown'
+    $categoryResolved = $false
+    $source = 'provider_name'
+    $categorySource = ''
+    if (-not [string]::IsNullOrWhiteSpace($seedCategory)) {
+        $category = $seedCategory
+        $categoryResolved = $true
+        $source = 'config_seed'
+        $categorySource = 'config_seed'
+    } elseif (-not [string]::IsNullOrWhiteSpace($OfflineCategory)) {
+        $category = $OfflineCategory.Trim()
+        $categoryResolved = $true
+        $source = 'offline_yata_category'
+        $categorySource = if ([string]::IsNullOrWhiteSpace($OfflineCategorySource)) { 'offline_snapshot' } else { $OfflineCategorySource.Trim() }
+    }
 
     return [pscustomobject]@{
         schemaVersion = 1
@@ -134,6 +167,7 @@ function New-LocalCatalogEntry {
         weaponType = ''
         category = $category
         categoryResolved = $categoryResolved
+        categorySource = $categorySource
         tradabilityKnown = $false
         isTradable = $null
         marketPrice = 0L
@@ -144,20 +178,28 @@ function New-LocalCatalogEntry {
 }
 
 function Get-LocalCatalogSignature {
-    param([object[]]$Groups, [hashtable]$SeedIndex)
+    param(
+        [object[]]$Groups,
+        [hashtable]$SeedIndex,
+        [hashtable]$CategoryIndex,
+        [string]$CategorySourceId
+    )
     $parts = New-Object System.Collections.Generic.List[string]
+    $parts.Add(('categorySource={0}' -f [string]$CategorySourceId))
     foreach ($group in @($Groups)) {
         $names = @($group.providerNames) -join ','
         $countries = @($group.countries) -join ','
         $seedName = ''
         $seedCategory = ''
+        $offlineCategory = ''
         $seed = $null
         if ($SeedIndex.ContainsKey([string]$group.itemId)) { $seed = $SeedIndex[[string]$group.itemId] }
         if ($null -ne $seed) {
             if ($seed.PSObject.Properties['name']) { $seedName = [string]$seed.name }
             if ($seed.PSObject.Properties['category']) { $seedCategory = [string]$seed.category }
         }
-        $parts.Add(('{0}|{1}|{2}|{3}|{4}' -f [int]$group.itemId, $names, $countries, $seedName, $seedCategory))
+        if ($CategoryIndex.ContainsKey([string]$group.itemId)) { $offlineCategory = [string]$CategoryIndex[[string]$group.itemId] }
+        $parts.Add(('{0}|{1}|{2}|{3}|{4}|{5}' -f [int]$group.itemId, $names, $countries, $seedName, $seedCategory, $offlineCategory))
     }
 
     $text = $parts -join "`n"
@@ -194,14 +236,29 @@ if (-not $engineState.PSObject.Properties['localCatalog']) {
         categoriesResolved = 0
         unresolvedItems = 0
         nameConflicts = 0
+        offlineCategoryEntries = 0
+        offlineMatchedItems = 0
     })
+}
+foreach ($name in @('signature','lastBuildAt','observedItems','metadataItems','categoriesResolved','unresolvedItems','nameConflicts','offlineCategoryEntries','offlineMatchedItems')) {
+    if (-not $engineState.localCatalog.PSObject.Properties[$name]) {
+        $default = if ($name -eq 'signature') { '' } else { 0 }
+        $engineState.localCatalog | Add-Member NoteProperty $name $default
+    }
 }
 
 $itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
+$categoryConfig = Read-JsonFile (Join-Path $ConfigDir 'foreign-item-categories.json')
 $groups = @(Get-ObservedItemGroups -ObservedMarkets $engineState.observedMarkets)
 if ($groups.Count -eq 0) { return }
 $seedIndex = Get-SeedIndex -ItemsConfig $itemsConfig
-$signature = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex
+$categoryIndex = Get-CategoryIndex -CategoryConfig $categoryConfig
+$categorySourceId = 'offline_snapshot'
+if ($null -ne $categoryConfig -and $categoryConfig.PSObject.Properties['source'] -and $null -ne $categoryConfig.source -and $categoryConfig.source.PSObject.Properties['id']) {
+    $candidateSourceId = ([string]$categoryConfig.source.id).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($candidateSourceId)) { $categorySourceId = $candidateSourceId }
+}
+$signature = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex -CategoryIndex $categoryIndex -CategorySourceId $categorySourceId
 
 $existingMetadataCount = @($engineState.itemMetadata.PSObject.Properties).Count
 if ([string]$engineState.localCatalog.signature -eq $signature -and $existingMetadataCount -ge $groups.Count) { return }
@@ -210,15 +267,22 @@ $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $resolved = 0
 $unresolved = 0
 $conflicts = 0
+$offlineMatched = 0
 foreach ($group in $groups) {
+    $key = [string]$group.itemId
     $seed = $null
-    if ($seedIndex.ContainsKey([string]$group.itemId)) { $seed = $seedIndex[[string]$group.itemId] }
-    $localEntry = New-LocalCatalogEntry -Group $group -Seed $seed -Now $now
+    if ($seedIndex.ContainsKey($key)) { $seed = $seedIndex[$key] }
+    $offlineCategory = ''
+    if ($categoryIndex.ContainsKey($key)) {
+        $offlineCategory = [string]$categoryIndex[$key]
+        $offlineMatched++
+    }
+    $localEntry = New-LocalCatalogEntry -Group $group -Seed $seed -OfflineCategory $offlineCategory -OfflineCategorySource $categorySourceId -Now $now
     if ($null -eq $localEntry) { continue }
 
-    $existing = Get-DynamicProperty $engineState.itemMetadata ([string]$group.itemId)
+    $existing = Get-DynamicProperty $engineState.itemMetadata $key
     $entry = Merge-RicherMetadata -Existing $existing -LocalEntry $localEntry
-    Set-DynamicProperty $engineState.itemMetadata ([string]$group.itemId) $entry
+    Set-DynamicProperty $engineState.itemMetadata $key $entry
 
     if ($entry.PSObject.Properties['categoryResolved'] -and [bool]$entry.categoryResolved) { $resolved++ } else { $unresolved++ }
     if ($entry.PSObject.Properties['nameConflict'] -and [bool]$entry.nameConflict) { $conflicts++ }
@@ -231,4 +295,6 @@ $engineState.localCatalog.metadataItems = @($engineState.itemMetadata.PSObject.P
 $engineState.localCatalog.categoriesResolved = $resolved
 $engineState.localCatalog.unresolvedItems = $unresolved
 $engineState.localCatalog.nameConflicts = $conflicts
+$engineState.localCatalog.offlineCategoryEntries = $categoryIndex.Count
+$engineState.localCatalog.offlineMatchedItems = $offlineMatched
 Write-JsonAtomic -Path $EngineStateFile -Value $engineState
