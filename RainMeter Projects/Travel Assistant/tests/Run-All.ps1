@@ -11,6 +11,7 @@ $tests = @(
     'Run-SeedImporterTests.ps1',
     'Run-ModelTests.ps1',
     'Run-LiveProviderTests.ps1',
+    'Run-ShadowCollectionTests.ps1',
     'Run-TravelProfileTests.ps1',
     'Run-TornProfileSyncTests.ps1',
     'Run-CurrentCapacityTests.ps1',
