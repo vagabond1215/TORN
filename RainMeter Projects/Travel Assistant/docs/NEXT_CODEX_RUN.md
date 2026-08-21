@@ -1,108 +1,141 @@
-# Next Codex Run: Travel Assistant v1 Rainmeter Acceptance
+# Next Codex Run: Travel Assistant Settings / Travel-Profile Validation
 
 **Status: ACTIVE**
 
-This is the authoritative current execution handoff for `RainMeter Projects/Travel Assistant/`. Work remains **connector-first**. Use local/Codex execution only for Windows/Rainmeter behavior the GitHub connector cannot establish.
+This is the authoritative current execution handoff for `RainMeter Projects/Travel Assistant/`. Work remains **connector-first**; use the target Windows/Rainmeter environment only for behavior that cannot be established from the repository.
 
-Before changing code, read:
+## Stable baseline already validated
 
-1. `../AGENTS.md`
-2. `README.md`
-3. this file
-4. `ARCHITECTURE.md`
-5. `IMPLEMENTATION_STATUS.md`
-6. `WINDOWS_VALIDATION.md`
+Do **not** restart the project or repeat earlier debugging.
 
-## Current checkpoint
+Before the Settings extension, target-machine evidence had already established:
 
-Travel Assistant v1 is implemented for **Xanax in the United Kingdom and Japan**. YATA is the live foreign stock/price source. Torn Item Market is the resale reference when a local API key is configured. The Rainmeter UI, history/cycle engine, price-aware recommendation model, profitability/trip-economics guards, generated graphs, installer, historical tooling, and deterministic tests are present.
+- deterministic model/history/finalizer tests passed on the earlier validated implementation;
+- bounded YATA live validation passed;
+- Rainmeter junction installation passed;
+- UK/Japan panels and equal-width graphs rendered;
+- encoding/mojibake issues were fixed;
+- local Torn API key worked against Torn v2 Item Market;
+- the target machine required bounded `curl.exe` for Torn because Windows PowerShell `Invoke-RestMethod` hung specifically against `api.torn.com`;
+- production updater/finalizer exited `0` and consumed a fresh `torn_itemmarket` resale cache;
+- Rainmeter automatic one-minute polling was fixed and verified;
+- heartbeat/stale-update UI was verified;
+- Japan observed sellout history persisted;
+- a real UK restock then sellout transition was observed and recorded;
+- the corrected RunCommand configuration produced no new material Rainmeter log errors;
+- no persistent Travel Assistant PowerShell process was present between polls;
+- runtime/generated data remained only a few KiB with no graph-file accumulation.
 
-Business remains configured but intentionally disabled until its ticket/free-company economics are explicitly modeled. The committed historical seed remains intentionally empty until a trustworthy structured source is verified.
+Those are retained acceptance results. Do not wait for or manufacture additional stock cycles.
 
-### Deterministic Windows validation — PASS
+## New user-requested extension
 
-The target Windows machine ran the deterministic suite from commit `368562c9257d8defef9b3c55f44bbf34e5e2ea4a` with all previously documented checks passing. Do not rerun that broad suite unless a later functional source/config change specifically requires it.
+The user reported that the old main-skin travel-mode click took roughly 3–5 seconds. That was expected from the old implementation because a mode click invoked the full network/updater/finalizer pipeline, but it is not desirable UI behavior.
 
-### Bounded live environment validation — PASS
+The new design therefore:
 
-The target machine completed the bounded YATA/updater/graph/storage validation from commit `03d02f045ef97aafffa5855620abf39dea709489`. Do not repeat that broad live pass unless a later defect specifically requires it.
+- replaces the top-right mode cycler with **SETTINGS**;
+- moves travel-mode selection into a short-lived local Windows Forms dialog;
+- lets the user enter/edit the Torn API key there (masked by default);
+- adds travel-related company + star-rating inputs;
+- adds faction Excursion capacity and Travel Cost inputs;
+- previews derived travel effects;
+- saves only ignored local configuration/preferences;
+- leaves the proven minute-scale polling/history path unchanged.
 
-### Installation — PASS
+## Travel-profile economics implemented
 
-`Install.ps1` created ignored local settings and successfully linked the Rainmeter skin directory to the repository source. No reinstall is required; the installed skin is a junction.
+Committed `config/travel-perks.json` models:
 
-### Torn Item Market / local API key — PASS
+- Lingerie Store: 3-star +2 general travel capacity; 10-star free Business Class;
+- Cruise Line: 3-star +2 general capacity; 7-star stock-analysis information; 10-star +3 additional capacity;
+- Flower Shop: 7-star +5 **flowers only**; 10-star stock-analysis information;
+- Toy Shop: 7-star +5 **plushies only**; 10-star stock-analysis information;
+- Logistics Management: hospitalized return-to-Torn informational effect;
+- Theater: hidden traveling status/destination informational effect;
+- Faction Excursion capacity: +1 per level through 10;
+- Faction Travel Cost: -15% fees per level through 5 / -75%.
 
-A local Torn API key is configured in ignored `config/settings.local.json`.
+`TravelProfile.ps1` derives the effective profile. `FinalizeState.ps1` applies it only to final capacity/cost economics; observed history remains unchanged.
 
-Observed:
+A positive manual `capacityOverride` remains authoritative. Otherwise usable capacity is base mode capacity plus qualifying company/item/faction capacity.
 
-- Torn Item Market returned HTTP `200` through `curl.exe`;
-- Windows PowerShell `Invoke-RestMethod` hung specifically against `api.torn.com` on this target machine;
-- production Torn Item Market requests were rerouted through bounded `curl.exe` while YATA stayed unchanged;
-- production updater/finalizer exits `0` and writes a fresh `torn_itemmarket` resale cache;
-- Rainmeter consumes profitability-aware state instead of the no-key fallback.
+Flower/Toy item-specific capacity must **not** increase Xanax capacity.
 
-### Rainmeter rendering / polling — PASS
+## Business safety branch
 
-Direct target-machine evidence confirms:
+Business is now `settingsOnly` rather than a normal mode.
 
-- UK renders above Japan;
-- both graphs render and align;
-- live stock and foreign prices render;
-- encoding/mojibake is fixed;
-- sparse history remains conservative with no invented departure timing;
-- observed sellout history persists and renders;
-- Japan retained its observed `Last Sold Out` around `01:06`;
-- UK subsequently observed a real live restock and sellout transition;
-- the visible header shows last successful update plus next-poll countdown and reports stale state if polling stops;
-- manual updater/heartbeat output is correct;
-- the initial Rainmeter polling failure was isolated to incorrect RunCommand measure declaration (`Measure=RunCommand`);
-- both measures now use documented `Measure=Plugin` / `Plugin=RunCommand` configuration;
-- `tests/Validate-RainmeterSkin.ps1` passes on the target machine;
-- after the fix, Rainmeter completes automatic production polls without manual PowerShell and advances the heartbeat/live state.
+It appears in Settings only when free Business Class is established by the local profile (currently modeled as 10-star Lingerie Store).
 
-### Rainmeter log / resource sanity — PASS
+- Qualified free Business: travel cost is explicitly known as `$0` and normal final economics apply.
+- Ticket-funded or manually forced unqualified Business: economics remain unresolved, timing is suppressed, and unknown cost is never treated as zero.
 
-Historical log entries before the RunCommand fix showed invalid-measure and missing-`MeasureUpdate` errors. After the corrected skin was refreshed at approximately `10:55:42` and `10:56:49`, no new Travel Assistant warnings/errors were observed while automatic polling continued through at least `10:59:54`.
+## Repository changes in this extension
 
-A between-polls process/storage snapshot confirmed:
+Key files:
 
-- no continuously running Travel Assistant PowerShell process;
-- runtime plus generated storage: `7` files / `6,835` bytes total;
-- generated directory contains only `uk-stock.png`, `jp-stock.png`, `state.kv`, and `last-update.txt`;
-- generated graph/output files update in place instead of accumulating.
+```text
+TravelAssistant.ini
+config/travel-modes.json
+config/travel-perks.json
+config/settings.example.json
+config/settings.local.example.json
+@Resources/Scripts/OpenSettings.ps1
+@Resources/Scripts/TravelProfile.ps1
+@Resources/Scripts/FinalizeState.ps1
+tests/Validate-RainmeterSkin.ps1
+tests/Validate-TravelAssistant.ps1
+tests/Run-TravelProfileTests.ps1
+tests/Run-FinalizeStateTests.ps1
+tests/Run-All.ps1
+```
 
-Do not wait for additional real restock/sellout cycles merely to complete acceptance.
+The local user's existing ignored `config/settings.local.json` must not be overwritten.
 
-## Immediate next task
+## Immediate target-Windows validation
 
-Do **not** rerun broad deterministic/live validation. Only two direct interaction checks remain:
+Because this is a functional source/config change, validate the changed boundary before calling it complete. Start with the narrow checks rather than rerunning unrelated provider/history probes:
 
-1. Click the mode selector repeatedly and confirm the visible sequence is `Airstrip -> WLT -> Standard -> Airstrip`; Business must never appear.
-2. Click a timing/status/external-verification area and confirm Weav3r Travel Stock opens.
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-TravelAssistant.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-TravelProfileTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-FinalizeStateTests.ps1
+```
 
-If both pass, mark this run `COMPLETED` and update the status/handoff documents. No further local tests are required unless one of those interactions exposes a defect.
+If those pass, refresh Rainmeter and validate the new UI:
 
-## Defect handling
+1. Top-right control says `SETTINGS >` rather than cycling the mode.
+2. Clicking it opens the local Settings window without a long-running background process.
+3. Existing API key is present but masked by default; do not expose it in screenshots/logs/chat.
+4. Normal mode choices are Standard / Airstrip / WLT.
+5. Company choices include Lingerie, Cruise, Flower, Toy, Logistics, Theater, plus None/Other.
+6. Star rating is editable from 0–10.
+7. Faction Excursion capacity level is editable 0–10.
+8. Faction Travel Cost level is editable 0–5.
+9. Business is absent for an unqualified profile.
+10. Selecting Lingerie Store at 10 stars makes Business available and previewed as free.
+11. Flower/Toy profile does not show a Xanax-specific capacity increase.
+12. Save completes promptly and closes; the next normal poll applies the selected mode/profile.
+13. Existing YATA/Torn polling, heartbeat, graphs, sellout history, and conservative status behavior remain intact.
+14. No new material Rainmeter/PowerShell errors appear.
 
-If either final interaction fails, capture only the exact visible behavior or relevant new Rainmeter log line and fix repository code through the GitHub connector. Rerun only the narrowest check for that defect.
+Do not paste or log the API key.
 
-## Safety/model invariants
+## Optional future work, not required for this pass
 
-Preserve every invariant in `AGENTS.md`, especially:
-
-- prefer no recommendation over a weak one;
-- actual restocks/sellouts are observed history, not forecasts;
-- foreign price is first-class depletion evidence;
-- stale stock or resale data suppress timing;
-- profitability suppresses departure advice but not useful restock/history information;
-- current live depletion may shorten but never expand conservative safety;
-- runtime/generated data and credentials remain local/ignored;
-- Business remains disabled until economics are explicit.
+The Torn API exposes suitable user/faction data areas that may support a later **Sync from Torn** button for automatic company/perk detection. Do not implement automatic detection by guessing response fields or requiring broader key authority. Validate endpoint response contracts and permissions first; manual local inputs are the safe current contract.
 
 ## Completion criteria
 
-Mark this run `COMPLETED` only after the remaining selector and external-link checks above are truthfully observed.
+Mark this run `COMPLETED` only after:
 
-Historical backfill, further real-cycle learning, longer-term profitability calibration, and Business economics may remain follow-up work after v1 operational acceptance.
+- the four narrow PowerShell validations pass on the target machine;
+- the Settings dialog actually opens from Rainmeter;
+- local save/mode/profile behavior is observed;
+- 10-star Lingerie Business gating behaves as designed;
+- a subsequent automatic poll remains healthy;
+- no new material errors/resource regressions appear.
+
+If a defect appears, fix only the narrow affected layer and preserve all prior validated polling/history behavior.
