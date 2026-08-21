@@ -60,7 +60,7 @@ function Read-JsonLines {
         try { $rows.Add(($line | ConvertFrom-Json)) }
         catch { throw "Invalid JSONL in '$Path' line ${lineNumber}: $($_.Exception.Message)" }
     }
-    return @($rows)
+    return $rows.ToArray()
 }
 
 function Assert-NotSynthetic {
@@ -140,8 +140,8 @@ foreach ($row in @($existingCycles + $incomingCycles | Sort-Object country, item
     if ($cycleSeen.Add($key)) { $mergedCycles.Add($row) }
 }
 
-Write-JsonLinesAtomic -Path $SeedObservationPath -Rows @($mergedObservations)
-Write-JsonLinesAtomic -Path $SeedCyclePath -Rows @($mergedCycles)
+Write-JsonLinesAtomic -Path $SeedObservationPath -Rows $mergedObservations.ToArray()
+Write-JsonLinesAtomic -Path $SeedCyclePath -Rows $mergedCycles.ToArray()
 
 $metadata = Read-JsonFile $MetadataPath
 if ($null -eq $metadata) { $metadata = [pscustomobject]@{ schemaVersion = 1; sources = @(); notes = @() } }
