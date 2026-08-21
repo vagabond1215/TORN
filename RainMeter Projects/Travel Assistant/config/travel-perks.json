@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "companies": [
+    {
+      "id": "none",
+      "label": "None / Other",
+      "effects": []
+    },
+    {
+      "id": "lingerie_store",
+      "label": "Lingerie Store",
+      "effects": [
+        { "stars": 3, "generalCapacityBonus": 2, "label": "+2 travel item capacity" },
+        { "stars": 10, "freeBusinessClass": true, "label": "Free Business Class travel" }
+      ]
+    },
+    {
+      "id": "cruise_line",
+      "label": "Cruise Line",
+      "effects": [
+        { "stars": 3, "generalCapacityBonus": 2, "label": "+2 travel item capacity" },
+        { "stars": 7, "informational": "Destination stock report", "label": "Destination stock report" },
+        { "stars": 10, "generalCapacityBonus": 3, "label": "+3 additional travel item capacity" }
+      ]
+    },
+    {
+      "id": "flower_shop",
+      "label": "Flower Shop",
+      "effects": [
+        { "stars": 7, "itemCategory": "Flower", "itemCapacityBonus": 5, "label": "+5 flowers abroad" },
+        { "stars": 10, "informational": "Flower stock analysis", "label": "Flower stock analysis" }
+      ]
+    },
+    {
+      "id": "toy_shop",
+      "label": "Toy Shop",
+      "effects": [
+        { "stars": 7, "itemCategory": "Plushie", "itemCapacityBonus": 5, "label": "+5 plushies abroad" },
+        { "stars": 10, "informational": "Plushie stock analysis", "label": "Plushie stock analysis" }
+      ]
+    },
+    {
+      "id": "logistics_management",
+      "label": "Logistics Management",
+      "effects": [
+        { "stars": 5, "informational": "Can return to Torn while hospitalized", "label": "Return while hospitalized" }
+      ]
+    }
+  ],
+  "faction": {
+    "excursionCapacity": {
+      "maxLevel": 10,
+      "capacityPerLevel": 1
+    },
+    "travelCost": {
+      "maxLevel": 5,
+      "reductionPercentPerLevel": 15,
+      "maxReductionPercent": 75
+    }
+  }
+}
