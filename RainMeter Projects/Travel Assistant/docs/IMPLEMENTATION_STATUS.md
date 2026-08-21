@@ -2,11 +2,11 @@
 
 **Checkpoint:** 2026-08-21
 
-**Active run:** canonical item metadata enrichment for the full provider-observed foreign catalog. See `docs/NEXT_CODEX_RUN.md`.
+**Active run:** offline full item catalog enrichment. See `docs/NEXT_CODEX_RUN.md`.
 
 ## Stable visible baseline
 
-The Rainmeter presentation remains UK/Japan Xanax with the validated operational path:
+The Rainmeter presentation remains UK/Japan Xanax with the established operational path:
 
 - automatic one-minute polling and heartbeat;
 - Prometheus preferred live stock with YATA fallback;
@@ -15,9 +15,21 @@ The Rainmeter presentation remains UK/Japan Xanax with the validated operational
 - current-capacity economics using `/user/perks` authority;
 - compact cards with profit-colored prices, conditional restock indicator, and 8-hour graphs.
 
+Data-layer expansion must not change this visible behavior until a later explicit UI phase.
+
 ## Full-market shadow collection — ACCEPTED
 
-Live target-Windows evidence:
+All 11 Torn foreign destinations collect in the background while only UK/Japan remain visible/model-enabled.
+
+Focused Windows tests reported PASS:
+
+```text
+Validate-ShadowCollection.ps1
+Run-ShadowCollectionTests.ps1
+Validate-RainmeterSkin.ps1
+```
+
+Accepted live forced shadow pass:
 
 ```text
 lastProvider:         prometheus
@@ -26,14 +38,15 @@ marketsSeen:          232
 observedMarkets:      232
 observationsWritten:  51
 cyclesCompleted:      0
+lastErrorAt:          0
 lastError:            empty
 ```
 
-The first live catalog contained 202 distinct item IDs.
+Shadow collection remains fail-soft, skips UK/Japan Xanax primary writes, and records raw history only when stock or foreign price changes.
 
-## Canonical item metadata — TRANSPORT BLOCKED, RUNTIME ISOLATED
+## Torn catalog transport — REJECTED FOR HEARTBEAT USE
 
-Static/unit metadata tests passed, but all live Torn catalog requests on the target Windows host timed out before returning metadata:
+The target Windows host timed out before returning metadata on all tested Torn catalog strategies:
 
 ```text
 v2 /torn/{ids}/items | 150 IDs | 20s | 0 resolved
@@ -41,53 +54,96 @@ v2 /torn/{ids}/items |  40 IDs | 30s | 0 resolved
 classic torn/items    | bulk   | 12s | 0 resolved
 ```
 
-Do not keep increasing metadata timeout/batch size.
+Do not keep increasing these timeouts inside the live skin.
 
-### Heartbeat safety fix
-
-`ItemMetadata.ps1` is no longer invoked by `RunUpdate.ps1`.
-
-Current production runtime order:
+`ItemMetadata.ps1` is now manual/maintenance-only. Normal runtime is:
 
 ```text
 UpdateTracker
-ShadowCollector (fail-soft)
+ShadowCollector
 FinalizeState
 heartbeat
 ```
 
-This prevents catalog maintenance from delaying the one-minute Rainmeter update path.
+so catalog network latency cannot delay the Rainmeter heartbeat.
 
-### Committed metadata fallback
+## Committed metadata fallback — ACCEPTED
 
-`ItemMetadata.ps1` remains available as an explicit/manual maintenance tool. Before any optional Torn network attempt it imports the committed rows from `config/items.json` into runtime metadata with `source=config_seed`.
-
-Current committed seed metadata:
+Target Windows passed:
 
 ```text
-206 Xanax          | Drug
-266 Nessie Plushie | Plushie
-277 Cherry Blossom | Flower
+Validate-ItemMetadata.ps1
+Run-ItemMetadataTests.ps1
+Validate-RainmeterSkin.ps1
 ```
 
-Seed rows deliberately keep `marketPrice=0` and `tradabilityKnown=false`; unknown live economics are not inferred.
+Runtime fallback metadata was confirmed:
 
-A later successful catalog refresh may replace seed rows with richer metadata, but a network timeout must not leave the known seed catalog empty.
+```text
+206 Xanax          Drug     config_seed
+266 Nessie Plushie Plushie  config_seed
+277 Cherry Blossom Flower   config_seed
+```
 
-## Distribution work implemented
+Seed metadata intentionally keeps market value/tradability unknown unless richer metadata is available. A failed optional Torn maintenance attempt must not erase these committed rows.
 
-`Build-Rmskin.ps1` uses whitelist-based staging and explicitly excludes local API settings, runtime history/state, generated output, and credentials. Recipient-local settings are preserved on package updates through Rainmeter merge semantics. Windows staging/package validation is still required before publishing a `.rmskin`.
+## Provider-name enrichment — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-## Next planned phases
+The shadow collector now retains provider-supplied item names when present:
 
-1. establish a committed/offline full item metadata catalog refreshed outside the Rainmeter heartbeat;
-2. bounded/staggered Item Market resale-price queue;
-3. category-aware capacity (general + Flower/Plushie-specific effects);
-4. visible Nessie/Cherry proof;
-5. country/category filters;
-6. travel-state destination filtering and arrival countdown;
-7. full-country economics;
-8. `Optimal` route scheduling after sufficient evidence exists.
+```text
+normalized observation -> itemName
+observedMarkets entry  -> providerName
+```
+
+This is discovery/display metadata only. History/model identity remains `country + itemId` and the current visibility/optimizer flags are unchanged.
+
+Focused tests were updated:
+
+```text
+tests/Validate-ShadowCollection.ps1
+tests/Run-ShadowCollectionTests.ps1
+```
+
+Required Windows acceptance:
+
+1. rerun those two focused checks plus `Validate-RainmeterSkin.ps1`;
+2. force one shadow pass;
+3. confirm the observed-market count remains healthy and provider names populate for a substantial portion of the catalog;
+4. confirm Nessie/Cherry names when those rows are present;
+5. confirm no shadow error/current UI regression.
+
+## Active next goal: offline full catalog
+
+The local/package-shipped catalog should ultimately cover every provider-observed item ID with:
+
+```text
+itemId
+name
+category
+categoryResolved
+provenance
+```
+
+Provider names may be used as discovery/cross-check evidence. Categories must come from verified metadata and remain unresolved when evidence is insufficient; do not guess merely to enable filters or optimization.
+
+This catalog should be committed and included in the future `.rmskin`, so recipients do not depend on a successful Torn catalog response for basic item identity/category data.
+
+## Distribution work
+
+A whitelist-based `Build-Rmskin.ps1` and distribution validation exist for future sharing. Package staging excludes local API settings, runtime history/state, generated output and credentials. Recipient-local settings are intended to survive package upgrades via Rainmeter skin merge semantics. Windows package-builder validation remains outstanding before publication.
+
+## Later phases
+
+After the offline catalog is sufficiently complete:
+
+1. bounded/staggered Item Market resale-price queue;
+2. category-aware effective carrying capacity;
+3. promote Nessie Plushie and Cherry Blossom as the first visible multi-item proof;
+4. country/category filters;
+5. Torn travel-state destination filtering and arrival countdown;
+6. full-country economics population;
+7. `Optimal` route scheduling only after sufficient availability/economic evidence exists.
 
 ## Existing validation debt retained
 
