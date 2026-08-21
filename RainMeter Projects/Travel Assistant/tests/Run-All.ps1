@@ -12,6 +12,7 @@ $tests = @(
     'Run-LiveProviderTests.ps1',
     'Run-TravelProfileTests.ps1',
     'Run-TornProfileSyncTests.ps1',
+    'Run-CurrentCapacityTests.ps1',
     'Run-FinalizeStateTests.ps1',
     'Run-RestockDisplayTests.ps1'
 )
