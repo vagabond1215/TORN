@@ -45,6 +45,13 @@
       "effects": [
         { "stars": 5, "informational": "Can return to Torn while hospitalized", "label": "Return while hospitalized" }
       ]
+    },
+    {
+      "id": "theater",
+      "label": "Theater",
+      "effects": [
+        { "stars": 10, "informational": "Hidden traveling status and destination", "label": "Hidden travel status / destination" }
+      ]
     }
   ],
   "faction": {
