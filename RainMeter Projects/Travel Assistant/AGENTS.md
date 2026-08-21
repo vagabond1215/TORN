@@ -31,9 +31,10 @@ The preferred implementation path for Travel Assistant is **GPT + the connected 
 
 - Work only inside `RainMeter Projects/Travel Assistant/` unless the user explicitly requests a repository-wide change.
 - Do not modify `Faction Ledger/`, faction assets/data, spreadsheets, guides, or other TORN projects as a side effect of Travel Assistant work.
-- Version 1 is deliberately limited to **Xanax in the United Kingdom and Japan** in the UI.
+- Version 1 is deliberately limited to **Xanax in the United Kingdom and Japan** in the main UI.
 - Internals must remain generic enough to add more items/destinations later without a rewrite.
-- Do not add multi-item UI, broad country selection, or unrelated travel features until the v1 Xanax model is validated unless explicitly requested.
+- A local Settings interface may expose travel-mode, credential, company-star, and faction-travel inputs because the user explicitly requested those as recommendation inputs; this does not expand the v1 main panel beyond Xanax/UK/Japan.
+- Do not add multi-item main UI, broad country selection, or unrelated travel features until the v1 Xanax model is validated unless explicitly requested.
 
 ## Development branch policy
 
@@ -68,10 +69,10 @@ If local `main` is dirty or diverged, inspect rather than automatically resettin
 6. **Safe-window language must be conservative.** A `SAFE_WINDOW` must be supported by qualifying comparable historical cycles; do not label a probabilistic narrow-drop estimate as safe.
 7. **Best odds is not safe.** When no conservative overlap exists, report a best-departure point/window and confidence/historical hit rate without overstating certainty.
 8. **Profitability gates timing.** Continue collecting useful history on low-margin/unprofitable cycles, but suppress departure recommendations. Final profitability must account for the configured selling fee and, where known, travel-mode cost and usable carrying capacity.
-9. **Unknown economics are not zero-cost economics.** If a mode has unresolved cost semantics, suppress timing rather than assuming the cost is zero. This is why Business remains configured but disabled until its ticket/free-company branch is modeled.
+9. **Unknown economics are not zero-cost economics.** Ticket-funded Business travel remains unresolved and must suppress timing. Business may be used only when free Business Class is explicitly established by the local travel profile (currently 10-star Lingerie Store), in which case zero ticket cost is a known branch rather than an assumption.
 10. **Provider provenance is retained.** Normalized observations and seed metadata must identify their source sufficiently for debugging and confidence logic.
 11. **Provider-specific formats do not leak into the core model.** Convert provider responses to normalized observations at the adapter boundary.
-12. **Runtime data is not Git history.** Continuously collected observations, caches, temporary graph output, analysis/probe output, logs, and local credentials belong in ignored runtime/local paths.
+12. **Runtime data is not Git history.** Continuously collected observations, caches, temporary graph output, analysis/probe output, logs, local settings, and credentials belong in ignored runtime/local paths.
 13. **Persistent data is schema-versioned.** Seed/history/config formats must carry a schema version or have an unambiguous versioned contract.
 14. **Bound storage.** High-resolution history, cycle summaries, logs, generated artifacts, provider probes, and import previews must have explicit retention or size limits.
 15. **Bound compute.** Do not run statistical analysis, spawn PowerShell, hit the network, or regenerate graphs every second merely because Rainmeter refreshes every second.
@@ -95,6 +96,7 @@ If local `main` is dirty or diverged, inspect rather than automatically resettin
 - Public Torn API keys that expose only public-facing information may be used as explicitly allowed by the user.
 - Any limited/higher-authority key must remain local only and must never be committed.
 - Prefer local ignored configuration for credentials and provide committed example/template files when needed.
+- The Settings interface may edit the local API key, but it must mask the key by default and must not pass the key in Rainmeter actions or process command lines.
 - Never log full sensitive keys.
 - Do not broaden a key's authority merely for convenience if a lower-authority/public source is sufficient.
 
@@ -108,6 +110,7 @@ Design toward these boundaries:
 - Network polling should normally be on the order of **60–120 seconds**, subject to provider limits and usefulness.
 - Recalculate expensive analytics primarily when new data materially changes the state (restock, sellout, meaningful depletion update, price change, or scheduled low-frequency analysis).
 - The final state/economics pass should use cached/local state and must not add another network request each minute.
+- Opening Settings may launch one short-lived local UI process; it must not become a persistent background process.
 - Avoid a permanent background browser or heavyweight runtime.
 - Prefer one serialized short-lived updater pipeline over many independent PowerShell process launches.
 - Avoid thousands of individual Rainmeter meters for graph samples; use a compact graph-rendering approach.
@@ -130,8 +133,11 @@ These are design targets rather than guarantees; measure actual CPU/RAM/disk beh
 - Relative timing (`Leave in`, `Window opens in`, `Leave before`, etc.) is preferred over a displayed clock.
 - When an observed restock is live, an elapsed display such as `live +04:12` is acceptable and preferred over implying the observed timestamp is still a future estimate.
 - Default travel mode is **Airstrip**.
-- Current selector cycle is `Standard`, `Airstrip`, `WLT`.
-- `Business` remains configured for future activation but must stay disabled while its Business Class Ticket/free-company cost branch is unresolved.
+- The main skin exposes a top-right **Settings** action rather than cycling travel modes directly; this avoids coupling a simple preference change to a full network/update pass.
+- Settings exposes `Standard`, `Airstrip`, and `WLT` normally.
+- `Business` is settings-only and appears only when the local travel profile establishes free Business Class (currently 10-star Lingerie Store). Ticket-funded Business remains unresolved and must not be treated as zero cost.
+- Company/faction travel perks may alter final carrying capacity or travel cost only through the final economics layer; they must not rewrite observed history.
+- Flower Shop and Toy Shop item-specific capacity bonuses must not increase Xanax capacity.
 - A low-confidence actionable state may expose a clickable `CHECK WEAV3R` / external verification action.
 - Do not add an unsupported Windows Clock alarm integration. An internal optional alert can be considered later if explicitly requested.
 
@@ -184,9 +190,13 @@ Travel economics belong to configuration/state rather than Xanax-specific functi
 ```text
 country + travelMode -> travelSeconds + travelCost + baseTravelCapacity
 local capacityOverride -> usableCapacity when positive
+local travelProfile -> company type/stars + faction Excursion capacity level + faction travel-cost level
+travel-perks config + item category -> derived capacity/cost/free-Business effects
 ```
 
-Do not name core engine functions/classes/data formats after `XanaxUK` or similar one-off combinations. Prefer generic concepts such as `TravelOpportunityEngine`, `Observation`, `Cycle`, `Provider`, `ItemConfig`, `CountryConfig`, and final recommendation-state/economics guards.
+A positive manual `capacityOverride` remains authoritative over derived capacity. Otherwise usable capacity is base mode capacity plus qualifying general company capacity, qualifying item-specific company capacity, and faction Excursion capacity.
+
+Do not name core engine functions/classes/data formats after `XanaxUK` or similar one-off combinations. Prefer generic concepts such as `TravelOpportunityEngine`, `Observation`, `Cycle`, `Provider`, `ItemConfig`, `CountryConfig`, `TravelProfile`, and final recommendation-state/economics guards.
 
 ## Validation expectations
 
@@ -200,6 +210,9 @@ Until concrete test tooling exists, every implementation pass must at minimum:
 - verify stale stock and stale resale behavior;
 - verify travel-mode changes recalculate recommendations;
 - verify travel cost/capacity can affect final trip profitability;
+- verify company/faction travel profile effects change final capacity/cost without modifying history;
+- verify Flower/Toy item-specific bonuses do not affect Xanax;
+- verify 10-star Lingerie can establish zero-cost Business economics while unqualified Business still suppresses timing;
 - verify informational restock timing can remain visible when profitability suppresses timing;
 - verify unresolved Business economics suppress timing if Business is forced;
 - verify runtime retention/pruning is bounded;
