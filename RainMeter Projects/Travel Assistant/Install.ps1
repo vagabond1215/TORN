@@ -30,7 +30,7 @@ if (Test-Path -LiteralPath $SkinPath) {
     }
 } else {
     New-Item -ItemType Junction -Path $SkinPath -Target $ProjectRoot | Out-Null
-    Write-Host "Linked Rainmeter skin:`n  $SkinPath`n→ $ProjectRoot" -ForegroundColor Green
+    Write-Host "Linked Rainmeter skin:`n  $SkinPath`n-> $ProjectRoot" -ForegroundColor Green
 }
 
 Write-Host ''
