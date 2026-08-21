@@ -44,12 +44,12 @@ local function formatInteger(value)
 end
 
 local function formatMoney(value)
-    if number(value) <= 0 then return '—' end
+    if number(value) <= 0 then return '-' end
     return '$' .. formatInteger(value)
 end
 
 local function safeText(v, fallback)
-    if v == nil or v == '' then return fallback or '—' end
+    if v == nil or v == '' then return fallback or '-' end
     return v:gsub('[\r\n]', ' ')
 end
 
@@ -67,15 +67,15 @@ local function getStatusPresentation(status)
     elseif status == 'UNPROFITABLE' or status == 'WINDOW_CLOSED' then
         return '224,90,90,255', ''
     elseif status == 'STALE_DATA' then
-        return '232,178,72,255', 'STALE DATA · CHECK WEAV3R'
+        return '232,178,72,255', 'STALE DATA - CHECK WEAV3R'
     elseif status == 'SOURCE_DISAGREEMENT' then
-        return '232,178,72,255', 'SOURCE ISSUE · CHECK WEAV3R'
+        return '232,178,72,255', 'SOURCE ISSUE - CHECK WEAV3R'
     elseif status == 'PRICE_REGIME_UNVERIFIED' then
-        return '232,178,72,255', 'PRICE REGIME UNVERIFIED · CHECK WEAV3R'
+        return '232,178,72,255', 'PRICE REGIME UNVERIFIED - CHECK WEAV3R'
     elseif status == 'CHECK_EXTERNAL' then
         return '232,178,72,255', 'CHECK WEAV3R'
     elseif status == 'INSUFFICIENT_HISTORY' then
-        return '145,152,164,255', 'LEARNING · CHECK WEAV3R'
+        return '145,152,164,255', 'LEARNING - CHECK WEAV3R'
     end
     return '145,152,164,255', ''
 end
@@ -105,7 +105,7 @@ local function updateDestination(data, prefix)
     if lastSoldOutAt > 0 then
         setVariable(prefix .. 'LastSoldOutText', os.date('%H:%M', lastSoldOutAt))
     else
-        setVariable(prefix .. 'LastSoldOutText', '—')
+        setVariable(prefix .. 'LastSoldOutText', '-')
     end
 
     if stock > 0 and restockAt > 0 and restockAt <= now then
@@ -136,14 +136,14 @@ local function updateDestination(data, prefix)
             decision = message ~= '' and message or 'Best window passed'
         end
         if hitRate > 0 then
-            decision = decision .. string.format('  ·  %.0f%% hist.', hitRate * 100)
+            decision = decision .. string.format(' | %.0f%% hist.', hitRate * 100)
         end
     elseif status == 'LOW_MARGIN' or status == 'UNPROFITABLE' then
         decision = message ~= '' and message or 'No departure recommendation'
     elseif status == 'STALE_DATA' then
-        decision = message ~= '' and message or 'Data stale — check source'
+        decision = message ~= '' and message or 'Data stale - check source'
     elseif decision == '' then
-        decision = 'Learning — no departure recommendation'
+        decision = 'Learning - no departure recommendation'
     end
 
     setVariable(prefix .. 'DecisionText', decision)
@@ -157,7 +157,7 @@ end
 function Update()
     local data = readState()
     setVariable('TravelModeText', safeText(data.TravelModeLabel, 'Airstrip'))
-    setVariable('UpdatedText', safeText(data.UpdatedText, 'Waiting for first update…'))
+    setVariable('UpdatedText', safeText(data.UpdatedText, 'Waiting for first update...'))
     updateDestination(data, 'UK')
     updateDestination(data, 'JP')
     return 0
