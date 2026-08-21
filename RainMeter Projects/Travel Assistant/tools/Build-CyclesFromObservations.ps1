@@ -34,7 +34,7 @@ function Read-ObservationJsonl {
         if ([string]::IsNullOrWhiteSpace([string]$row.source)) { throw "Observation line $lineNumber has empty source." }
         $rows.Add($row)
     }
-    return @($rows)
+    return $rows.ToArray()
 }
 
 function Write-JsonLinesAtomic {
@@ -112,7 +112,7 @@ foreach ($cycle in @($cycles | Sort-Object country, itemId, restockAt, soldOutAt
     if ($seen.Add($key)) { $dedup.Add($cycle) }
 }
 
-Write-JsonLinesAtomic -Path $OutputPath -Rows @($dedup)
+Write-JsonLinesAtomic -Path $OutputPath -Rows $dedup.ToArray()
 Write-Host ("Built {0} completed cycle(s) from {1} observation(s)." -f $dedup.Count, $observations.Count) -ForegroundColor Green
 Write-Host ("Output: {0}" -f (Resolve-Path -LiteralPath $OutputPath).Path)
 exit 0
