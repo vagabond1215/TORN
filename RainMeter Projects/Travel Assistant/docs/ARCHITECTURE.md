@@ -7,14 +7,16 @@ Travel Assistant is a lightweight Rainmeter-facing Torn foreign-market decision 
 The architecture keeps three populations separate:
 
 ```text
-COLLECTED opportunities
+COLLECTED provider rows
+        !=
+ACTIVE market candidates
         !=
 VISIBLE opportunities
         !=
 OPTIMIZER candidates
 ```
 
-Collection is broad. Visibility is presentation/context filtered. Optimizer eligibility requires sufficiently modeled economics, availability and confidence.
+Collection is broad. Provider rows are then checked against verified market-validity exceptions. Visibility is presentation/context filtered. Optimizer eligibility requires sufficiently modeled economics, availability, market validity and confidence.
 
 ## Layering
 
@@ -23,11 +25,13 @@ Live foreign-stock providers
         ↓
 provider normalization
         ↓
-country + itemId observations
+provider-observed country + itemId rows
         ↓
-bounded raw history / observed cycle detection
+verified market-validity overrides
         ↓
-local item metadata catalog
+active-market bounded history / cycle detection
+        ↓
+local offline item metadata catalog
         ↓
 resale + capacity/economics enrichment
         ↓
@@ -56,7 +60,9 @@ YATA
 cached/local state + stale/failure handling
 ```
 
-Foreign-shop stock is crowd-sourced provider data. Static Wiki shop tables are documentation/cross-check material, not the authority for whether a market row is currently observed.
+Foreign-shop stock is crowd-sourced provider data. A provider row proves only that the provider currently reports that `country + itemId` pair; it does **not** by itself prove the item remains purchasable in that country.
+
+Static Wiki destination tables are documentation/cross-check material and may also contain stale rows. Item-specific histories/current destination lists can be used to establish explicit verified exceptions.
 
 Normalized observation schema:
 
@@ -73,7 +79,7 @@ sourceTimestamp
 
 Provider-specific country codes and response shapes stop at the adapter boundary.
 
-## Market identity and history
+## Market identity, validity and history
 
 Durable market identity is:
 
@@ -92,7 +98,25 @@ japan:277
 
 Names/categories are metadata and never define historical identity.
 
-Observed truth semantics:
+`config/foreign-market-overrides.json` carries explicit verified exceptions where a provider still reports a legacy market. Current verified inactive pairs are:
+
+```text
+mexico:21
+mexico:232
+mexico:327
+united_arab_emirates:383
+united_arab_emirates:440
+```
+
+For these rows:
+
+- provider metadata is retained in `observedMarkets`;
+- the market is annotated `catalogActive=false` / `catalogStatus=legacy_removed`;
+- new shadow observation/cycle writes are suppressed;
+- later display/resale/optimizer stages must treat the market as ineligible;
+- existing historical rows are retained.
+
+Observed truth semantics for active markets:
 
 ```text
 0 -> positive = observed restock
@@ -113,7 +137,7 @@ The five-minute live-source stale guard is a recommendation-safety threshold, no
 
 `UpdateTracker.ps1` remains the established visible UK/Japan Xanax collector/model path.
 
-`ShadowCollector.ps1` is the expansion bridge and collects every valid provider row for all 11 foreign countries while protecting current primary markets from duplicate history writes.
+`ShadowCollector.ps1` is the expansion bridge. It observes every valid provider row for all 11 foreign countries, protects current primary markets from duplicate writes, and excludes verified inactive legacy markets before new background history/cycle writes.
 
 Current production heartbeat path:
 
@@ -121,6 +145,8 @@ Current production heartbeat path:
 UpdateTracker
       ↓
 ShadowCollector (fail-soft)
+      ↓
+LocalCatalog (fail-soft / local only)
       ↓
 FinalizeState
       ↓
@@ -132,24 +158,36 @@ Shadow behavior:
 - default cadence: 120 seconds;
 - all 11 foreign destinations have `collect: true`;
 - all valid provider rows are normalized locally;
-- observed markets are tracked in ignored `engine-state.json -> observedMarkets`;
-- raw history is appended only when stock or foreign price changes;
+- all provider rows remain tracked in ignored `engine-state.json -> observedMarkets`;
+- `config/foreign-market-overrides.json` identifies verified inactive market pairs;
+- inactive pairs are skipped before new raw history/cycle writes;
+- raw history for active markets is appended only when stock or foreign price changes;
 - provider timestamp changes alone update freshness metadata without another raw observation;
-- non-primary restock/sellout cycles use the same cycle contract;
+- non-primary active restock/sellout cycles use the same cycle contract;
 - enabled-country + enabled-item primary markets are skipped by shadow writes;
 - failures are recorded locally and fail soft.
 
-Validated target-Windows baseline on 2026-08-21:
+Accepted target-Windows provider baseline on 2026-08-21:
 
 ```text
-provider:             prometheus
-countriesSeen:        11
-marketsSeen:          232
-observedMarkets:      232
-observationsWritten:  51 on acceptance pass
-cyclesCompleted:      0 on that early pass
-lastError:            empty
+provider:        prometheus
+countriesSeen:   11
+marketsSeen:     232 provider rows
+observedMarkets: 232
+provider names:  232 / 232
+item IDs:        202 distinct
+lastError:       empty
 ```
+
+After the verified legacy override implementation, the expected current split is:
+
+```text
+raw provider rows: 232
+legacy rows:         5
+active candidates: 227
+```
+
+These are current live counts, not permanent schema constants.
 
 The separate shadow provider request is a migration bridge. Long-term architecture should share one foreign-stock payload after primary behavior equivalence is proven.
 
@@ -171,20 +209,54 @@ Runtime metadata lives under:
 
 ```text
 engine-state.json -> itemMetadata
+engine-state.json -> localCatalog
 engine-state.json -> metadataCollection
 ```
 
-### Committed metadata fallback
+### Local offline catalog
 
-`config/items.json` contains explicit committed metadata for currently promoted/seeded items. When `ItemMetadata.ps1` is run manually, those rows are imported before any optional network attempt with:
+`LocalCatalog.ps1` performs no network access. It collapses provider rows by `itemId`, retains provider names/country membership and merges committed local metadata.
+
+Current precedence:
 
 ```text
-source=config_seed
-marketPrice=0
-tradabilityKnown=false
+richer manually acquired Torn metadata
+        >
+config/items.json seed
+        >
+verified item override
+        >
+197-ID offline YATA category snapshot
+        >
+provider name + Unknown category
 ```
 
-Current seeds:
+Current committed reference files:
+
+```text
+config/foreign-item-categories.json
+config/foreign-market-overrides.json
+```
+
+`foreign-item-categories.json` contains the 197-ID YATA-derived foreign-category snapshot and normalizes:
+
+```text
+Defensive -> Armor
+Other     -> Miscellaneous
+```
+
+`foreign-market-overrides.json` contains five individually verified item repairs plus per-country inactive-market status. Two canonical-name corrections are important:
+
+```text
+327 Blank Tokens   -> Blank Casino Chips
+383 Platinum PDA   -> Digital Organizer
+```
+
+The target provider currently exposes 202 distinct item IDs. The 197-ID snapshot plus five verified item overrides are intended to make current category coverage 202/202 without runtime Torn catalog access.
+
+### Committed seeds
+
+`config/items.json` contains explicit metadata for currently promoted/seeded items:
 
 ```text
 206 Xanax          | Drug
@@ -192,13 +264,17 @@ Current seeds:
 277 Cherry Blossom | Flower
 ```
 
-A successful future maintenance refresh may replace a seed row with richer canonical metadata. A network failure must never erase committed seed metadata.
+When `ItemMetadata.ps1` is run manually, those rows are imported before any optional network attempt with:
 
-### Full catalog direction
+```text
+source=config_seed
+marketPrice=0
+tradabilityKnown=false
+```
 
-The full provider-observed catalog should ultimately use a **committed/offline metadata catalog** refreshed outside the Rainmeter heartbeat. Item names/categories change slowly and are appropriate packaged reference data; stock/foreign price remain live provider data.
+A successful future maintenance refresh may replace a local row with richer canonical metadata. A network failure must never erase committed local metadata.
 
-Do not infer unknown categories. Do not let metadata maintenance delays affect polling, finalization or heartbeat health.
+Do not infer unknown categories from item names. Do not let metadata maintenance delays affect polling, finalization or heartbeat health.
 
 ## Country/item configuration
 
@@ -206,10 +282,10 @@ Do not infer unknown categories. Do not let metadata maintenance delays affect p
 
 ```text
 enabled = current visible/model country
-collect = background collection country
+collect = background observation country
 ```
 
-UK and Japan remain visible/model-enabled. All 11 Torn foreign destinations collect in the background.
+UK and Japan remain visible/model-enabled. All 11 Torn foreign destinations are observed in the background.
 
 `config/items.json` separates:
 
@@ -222,7 +298,7 @@ countries
 category
 ```
 
-The explicit item list is not a whitelist for shadow collection. Unknown provider-observed IDs continue accumulating history even before catalog enrichment exists.
+The explicit item list is not a whitelist for shadow observation. Unknown provider-observed IDs still enter `observedMarkets`; verified inactive market overrides determine whether they receive continuing learning/history.
 
 ## Availability model
 
@@ -234,11 +310,11 @@ Evidence priority remains:
 
 `SAFE_WINDOW` requires conservative historical support. Current depletion may shorten safety but never expand it beyond supporting history. `BEST_ODDS` remains probabilistic and must not be rendered as safe.
 
-Sparse, stale, incomparable or unsupported evidence yields no actionable departure advice.
+Sparse, stale, incomparable, inactive or unsupported evidence yields no actionable departure advice.
 
 ## Profitability / resale
 
-For a modeled opportunity:
+For an active modeled opportunity:
 
 ```text
 netResalePrice = gross resale reference × (1 - selling fee)
@@ -246,9 +322,9 @@ netProfitPerItem = netResalePrice - foreignPrice
 tripNet = (netProfitPerItem × usableCapacity) - effectiveTravelCost
 ```
 
-Profitability suppresses departure timing, not collection/history.
+Profitability suppresses departure timing, not collection/history for active markets.
 
-Broad resale expansion must use a bounded staggered cache/queue. Never issue one Torn Item Market request per observed item every minute.
+Broad resale expansion must use a bounded staggered cache/queue. Never issue one Torn Item Market request per observed item every minute. `catalogActive=false` markets must not receive resale/optimizer work.
 
 ## Capacity authority
 
@@ -292,7 +368,7 @@ Current invariants include UK above Japan, equal graph widths, 60-minute grid di
 
 ## Future filters and travel context
 
-Country/category filters affect **visibility only** and never stop background collection.
+Country/category filters affect **visibility only** and never stop background observation/learning of other active markets.
 
 Future travel-state normalization should expose:
 
@@ -309,14 +385,14 @@ Intended behavior:
 
 - at home: normal filtered opportunities and configured route duration;
 - outbound: force target-country items and show arrival countdown instead of static flight duration;
-- abroad: continue showing that country's items;
+- abroad: continue showing that country's active items;
 - returning to Torn: release forced foreign-country presentation.
 
 The plane icon stays; only time semantics change.
 
 ## Future `Optimal` mode
 
-`Optimal` is a scheduling layer above per-opportunity modeling. It must compare multiple short trips, fewer long trips and mixed-country sequences over a bounded planning horizon while accounting for capacity, fees/costs, availability/depletion evidence, confidence/freshness and opportunity cost.
+`Optimal` is a scheduling layer above per-opportunity modeling. It must compare multiple short trips, fewer long trips and mixed-country sequences over a bounded planning horizon while accounting for market validity, capacity, fees/costs, availability/depletion evidence, confidence/freshness and opportunity cost.
 
 Do not implement `Optimal` as a simple sort by profit/item or profit/trip.
 
@@ -332,24 +408,46 @@ Approximately every minute:
 
 Approximately every two minutes during the expansion bridge:
 
-- fail-soft all-country shadow stock collection.
+- fail-soft all-country shadow stock observation.
 
 Catalog metadata network maintenance:
 
 - **not part of the Rainmeter heartbeat**;
-- explicit/manual only until a committed offline catalog workflow is established.
+- explicit/manual only; normal category/market validity comes from committed local files.
 
 Do not add permanent background PowerShell/browser processes. Keep runtime state bounded and continue pruning shared observation/cycle stores.
 
-## Validation boundary
+## Distribution
 
-Shadow collection has passed focused deterministic tests and live target-Windows acceptance.
+The `.rmskin` builder is whitelist-based and must include both committed offline catalog files while excluding local credentials/runtime state:
 
-Metadata-focused checks now verify both the committed seed fallback and the absence of metadata network maintenance from `RunUpdate.ps1`:
-
-```powershell
-.\tests\Validate-ItemMetadata.ps1
-.\tests\Run-ItemMetadataTests.ps1
+```text
+config/foreign-item-categories.json
+config/foreign-market-overrides.json
 ```
 
-A manual Torn metadata timeout is no longer a runtime-health failure. Full-catalog completion depends on establishing the offline/committed catalog workflow, not on increasing Rainmeter-side request timeouts.
+Recipient-local `settings.local.json`, runtime history/state and generated files must never be packaged.
+
+## Validation boundary
+
+Shadow collection has passed focused deterministic tests and live target-Windows acceptance for broad provider observation. Local catalog mechanics have also passed target-Windows focused validation.
+
+The current narrow acceptance adds:
+
+```powershell
+.\tests\Validate-ShadowCollection.ps1
+.\tests\Run-ShadowCollectionTests.ps1
+.\tests\Validate-LocalCatalog.ps1
+.\tests\Run-LocalCatalogTests.ps1
+.\tests\Validate-RainmeterSkin.ps1
+```
+
+It must prove:
+
+- 202/202 current item categories resolve locally;
+- five verified provider rows are annotated inactive;
+- those rows remain observable for provenance;
+- those rows are skipped before new shadow history/cycle writes;
+- current UK/Japan Xanax presentation remains unchanged.
+
+A manual Torn metadata timeout is not a runtime-health failure. Future resale/optimizer work must consume only active market candidates.
