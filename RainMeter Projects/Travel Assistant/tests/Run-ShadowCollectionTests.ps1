@@ -23,7 +23,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ShadowCollector.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-LiveStockObservationsForCountry','Update-CycleState','Test-IsPrimaryMarket','Test-ObservationChanged','Update-ObservedMarketMetadata')
+$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-LiveStockObservationsForCountry','Update-CycleState','Test-IsPrimaryMarket','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -90,6 +90,19 @@ $primaryItems = New-Object 'System.Collections.Generic.HashSet[int]'
 Assert-True 'UK Xanax is protected primary market' (Test-IsPrimaryMarket -CountryId 'united_kingdom' -ItemId 206 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems)
 Assert-Equal 'UK Nessie remains shadow-collected' (Test-IsPrimaryMarket -CountryId 'united_kingdom' -ItemId 266 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems) $false
 Assert-Equal 'Non-primary country Xanax remains shadow-collected' (Test-IsPrimaryMarket -CountryId 'mexico' -ItemId 206 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems) $false
+
+$overrideFixture = [pscustomobject]@{
+    marketOverrides = [pscustomobject]@{
+        'mexico:21' = [pscustomobject]@{ active=$false; status='legacy_removed' }
+        'mexico:232' = [pscustomobject]@{ active=$false; status='legacy_removed' }
+        'japan:277' = [pscustomobject]@{ active=$true; status='verified_active' }
+    }
+}
+$inactiveMarkets = Get-InactiveMarketIndex -OverrideConfig $overrideFixture
+Assert-Equal 'Inactive market index keeps only inactive rows' $inactiveMarkets.Count 2
+Assert-True 'Legacy Dual Berettas market is suppressed' $inactiveMarkets.ContainsKey('mexico:21')
+Assert-True 'Legacy SIG 550 market is suppressed' $inactiveMarkets.ContainsKey('mexico:232')
+Assert-Equal 'Active market is not suppressed' $inactiveMarkets.ContainsKey('japan:277') $false
 
 $unchangedState = [pscustomobject]@{
     lastStock = 450
