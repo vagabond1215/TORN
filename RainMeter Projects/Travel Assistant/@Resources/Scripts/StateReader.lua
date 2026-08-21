@@ -1,4 +1,7 @@
 local statePath = nil
+local heartbeatPath = nil
+local pollInterval = 60
+local nextPollAt = nil
 
 local function trim(s)
     s = s:gsub('^\239\187\191', '')
@@ -15,6 +18,15 @@ local function readState()
     end
     f:close()
     return out
+end
+
+local function readEpochFile(path)
+    if path == nil then return 0 end
+    local f = io.open(path, 'r')
+    if not f then return 0 end
+    local raw = f:read('*a') or ''
+    f:close()
+    return tonumber(trim(raw)) or 0
 end
 
 local function number(v)
@@ -149,15 +161,54 @@ local function updateDestination(data, prefix)
     setVariable(prefix .. 'DecisionText', decision)
 end
 
+local function updateHeartbeatText(data, now)
+    local remaining = 0
+    if nextPollAt ~= nil then remaining = math.max(0, nextPollAt - now) end
+
+    local sourceStatus = safeText(data.UpdatedText, '')
+    if sourceStatus:find('failed', 1, true) then
+        setVariable('UpdatedText', sourceStatus .. string.format(' | retry %ds', remaining))
+        return
+    end
+
+    local heartbeat = readEpochFile(heartbeatPath)
+    if heartbeat <= 0 then
+        setVariable('UpdatedText', string.format('Waiting for first update | next poll %ds', remaining))
+        return
+    end
+
+    local age = math.max(0, now - heartbeat)
+    if age > (pollInterval * 2) then
+        setVariable('UpdatedText', string.format('UPDATE STALE - last %s (%ds ago) | retry %ds', os.date('%H:%M:%S', heartbeat), age, remaining))
+    else
+        setVariable('UpdatedText', string.format('Updated %s | next poll %ds', os.date('%H:%M:%S', heartbeat), remaining))
+    end
+end
+
 function Initialize()
     local configured = SELF:GetOption('StateFile', '#@#Generated\\state.kv')
+    local heartbeatConfigured = SELF:GetOption('HeartbeatFile', '#@#Generated\\last-update.txt')
+    local configuredPoll = tonumber(SELF:GetOption('PollInterval', '60')) or 60
+    if configuredPoll < 15 then configuredPoll = 15 end
+
     statePath = SKIN:MakePathAbsolute(configured)
+    heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
+    pollInterval = math.floor(configuredPoll)
+    nextPollAt = os.time() + pollInterval
 end
 
 function Update()
+    local now = os.time()
+
+    if nextPollAt == nil then nextPollAt = now + pollInterval end
+    if now >= nextPollAt then
+        nextPollAt = now + pollInterval
+        SKIN:Bang('!CommandMeasure', 'MeasureUpdate', 'Run')
+    end
+
     local data = readState()
     setVariable('TravelModeText', safeText(data.TravelModeLabel, 'Airstrip'))
-    setVariable('UpdatedText', safeText(data.UpdatedText, 'Waiting for first update...'))
+    updateHeartbeatText(data, now)
     updateDestination(data, 'UK')
     updateDestination(data, 'JP')
     return 0
