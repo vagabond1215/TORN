@@ -6,144 +6,196 @@ These instructions apply to the entire `RainMeter Projects/Travel Assistant/` su
 
 Before changing code or data, read:
 
-1. **This file (`AGENTS.md`)** — authoritative subtree rules and invariants.
-2. [`docs/README.md`](./docs/README.md) — documentation routing and precedence.
-3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — when marked **ACTIVE**, the authoritative implementation scope. Despite the historical filename, it applies to connector-first implementation as well as Codex/local work.
-4. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — durable architecture, data model, retention, provider boundaries, economics, and expansion design.
-5. [`docs/IMPLEMENTATION_STATUS.md`](./docs/IMPLEMENTATION_STATUS.md) — current implementation checkpoint and remaining validation boundary.
-6. [`Readme.md`](./Readme.md) — human-facing project overview.
+1. `AGENTS.md` — authoritative subtree rules and invariants.
+2. `docs/README.md` — documentation routing and precedence.
+3. `docs/NEXT_CODEX_RUN.md` — when **ACTIVE**, the current implementation scope.
+4. `docs/ARCHITECTURE.md` — durable architecture and data contracts.
+5. `docs/IMPLEMENTATION_STATUS.md` — current checkpoint and validation boundary.
+6. `Readme.md` — human-facing overview.
 
-If an older plan conflicts with an **ACTIVE** `NEXT_CODEX_RUN.md`, follow the current run document while preserving every invariant in this file.
+If an older plan conflicts with an **ACTIVE** `NEXT_CODEX_RUN.md`, follow the active run while preserving every invariant here.
 
 ## Connector-first execution policy
 
-The preferred implementation path for Travel Assistant is **GPT + the connected GitHub connector**. Codex/local execution is a fallback, not the default.
+- Prefer GPT + the connected GitHub connector for repository inspection, source/config/document edits, tests, and normal commits.
+- Use local/Windows execution only for concrete behavior the connector cannot validate: Rainmeter rendering, Windows PowerShell behavior, local performance/resource checks, local API/provider behavior, or OS-specific integration.
+- Never claim Windows/Rainmeter/live-provider validation that did not actually run.
+- Work only inside `RainMeter Projects/Travel Assistant/` unless the user explicitly expands scope.
+- Direct `main` edits remain allowed while this project is isolated/pre-use. Never force-push, rewrite unrelated history, or discard unrelated work.
 
-- Use the GitHub connector whenever it can safely inspect the repository, read files, create/update text source files, maintain documentation, inspect history, manage normal commits/branches/PRs, or otherwise perform the requested repository work.
-- Do **not** invoke Codex or require a separate local coding pass merely because source code must be written. If the connector can create or update the required files safely, use it.
-- External provider/API discovery may use normal web access where needed; repository changes should still be performed through the GitHub connector when practical.
-- Use Codex/local execution only when there is a concrete requirement the connector cannot satisfy, such as running Rainmeter on Windows, executing PowerShell/Rainmeter behavior against the local machine, measuring local CPU/RAM/disk use, exercising OS-specific integrations, running local-only test tooling, or manipulating files/binaries the connector cannot safely create or validate.
-- Before escalating to Codex/local execution, identify the specific missing capability or validation requirement. Keep any Codex/local scope as narrow as possible and return durable results/documentation to the repository afterward.
-- Connector-only work must not claim local runtime validation that did not occur. Record repository/static/fixture validation separately from Windows/Rainmeter/local execution validation.
-- A future implementation should remain maintainable from the connector wherever possible: favor text-based source/config, deterministic fixtures, scriptable tests, and provider adapters over opaque generated/binary state.
+## Product direction
 
-## Scope boundary
+Travel Assistant is expanding from the original UK/Japan Xanax proof into a generic Torn foreign-market assistant.
 
-- Work only inside `RainMeter Projects/Travel Assistant/` unless the user explicitly requests a repository-wide change.
-- Do not modify `Faction Ledger/`, faction assets/data, spreadsheets, guides, or other TORN projects as a side effect of Travel Assistant work.
-- Version 1 is deliberately limited to **Xanax in the United Kingdom and Japan** in the main UI.
-- Internals must remain generic enough to add more items/destinations later without a rewrite.
-- A local Settings interface may expose travel-mode, credential, company-star, and faction-travel inputs because the user explicitly requested those as recommendation inputs; this does not expand the v1 main panel beyond Xanax/UK/Japan.
-- Do not add multi-item main UI, broad country selection, or unrelated travel features until the v1 Xanax model is validated unless explicitly requested.
+The expansion must keep three concepts separate:
 
-## Development branch policy
-
-Travel Assistant is currently an isolated, pre-use project.
-
-Until a human declares otherwise:
-
-- normal development may update `main` directly within this subtree after appropriate validation;
-- begin from current `origin/main` and inspect for conflicting work before editing;
-- never force-push, rewrite shared history, or discard unrelated user work;
-- if `origin/main` moves during a run, reconcile safely before pushing;
-- when the project becomes relied on operationally, move to feature branches/PR review and appropriate automated validation before further high-impact changes.
-
-Recommended start from the repository root:
-
-```bash
-git fetch origin
-git switch main
-git pull --ff-only origin main
-git status -sb
+```text
+COLLECTED opportunities
+        !=
+VISIBLE opportunities
+        !=
+OPTIMIZER candidates
 ```
 
-If local `main` is dirty or diverged, inspect rather than automatically resetting/rebasing/force-pushing.
+### Collection
 
-## Non-negotiable data / recommendation invariants
+- Background collection should be broad and automatic.
+- Collect every valid foreign-shop row returned by the live provider for every configured foreign country, irrespective of item category.
+- Provider-observed market identity is `country + itemId`.
+- Collection filters must never depend on the current UI country/category filter.
+- Traveling to one country may narrow the visible UI later, but must not stop background learning for other countries.
 
-1. **No recommendation beats a bad recommendation.** Suppress departure advice when stock data is stale, resale data is stale for a money-sensitive decision, confidence is inadequate, the price regime is unsupported, sources materially disagree, travel economics are unresolved, or profitability is below configured thresholds.
-2. **Actual sellout means actual sellout.** The primary `Last Sold Out` field is historical/observed, not a predicted sellout timestamp.
-3. **Restock information is not a profitability recommendation.** An observed or statistically supported restock time may remain visible even when `LOW_MARGIN`/`UNPROFITABLE` suppresses all departure advice.
-4. **Foreign price is first-class data.** Do not pool radically different price/depletion regimes as if they were equivalent.
-5. **Current depletion outranks stale averages.** Once a live cycle is underway, recent observed stock decay should meaningfully inform the model and may shorten safety; it must not expand a conservative window beyond supporting evidence.
-6. **Safe-window language must be conservative.** A `SAFE_WINDOW` must be supported by qualifying comparable historical cycles; do not label a probabilistic narrow-drop estimate as safe.
-7. **Best odds is not safe.** When no conservative overlap exists, report a best-departure point/window and confidence/historical hit rate without overstating certainty.
-8. **Profitability gates timing.** Continue collecting useful history on low-margin/unprofitable cycles, but suppress departure recommendations. Final profitability must account for the configured selling fee and, where known, travel-mode cost and usable carrying capacity.
-9. **Unknown economics are not zero-cost economics.** Ticket-funded Business travel remains unresolved and must suppress timing. Business may be used only when free Business Class is explicitly established by the local travel profile (currently 10-star Lingerie Store), in which case zero ticket cost is a known branch rather than an assumption.
-10. **Provider provenance is retained.** Normalized observations and seed metadata must identify their source sufficiently for debugging and confidence logic.
-11. **Provider-specific formats do not leak into the core model.** Convert provider responses to normalized observations at the adapter boundary.
-12. **Runtime data is not Git history.** Continuously collected observations, caches, temporary graph output, analysis/probe output, logs, local settings, and credentials belong in ignored runtime/local paths.
-13. **Persistent data is schema-versioned.** Seed/history/config formats must carry a schema version or have an unambiguous versioned contract.
-14. **Bound storage.** High-resolution history, cycle summaries, logs, generated artifacts, provider probes, and import previews must have explicit retention or size limits.
-15. **Bound compute.** Do not run statistical analysis, spawn PowerShell, hit the network, or regenerate graphs every second merely because Rainmeter refreshes every second.
-16. **No browser scraping loop.** Prefer documented/suitable data endpoints. Do not repeatedly launch/render/scrape provider webpages.
-17. **Never trust provider availability forever.** Cache the last valid state, expose staleness, and fail visibly but gracefully.
-18. **Forecasts are not historical truth.** Provider-predicted restock/stockout/window fields may be comparison inputs later, but must not populate actual sellout/restock cycle truth.
+### Visibility
 
-## Provider and web-data policy
+- The currently validated visible UI remains UK/Japan Xanax until a later explicit UI expansion pass is validated.
+- Cherry Blossom and Nessie Plushie are seeded metadata for the first multi-item presentation proof, but remain hidden during the initial shadow-collection rollout.
+- Future country/category filters are presentation filters only.
+- While traveling outbound, future travel-aware presentation should show only the destination country's items and replace the static route duration with the API-derived arrival countdown while retaining the plane icon.
 
-- Treat Weav3r, YATA, DroqsDB, or other third-party providers as replaceable adapters, not as the application architecture.
-- Before using a provider endpoint, inspect its current behavior and usage restrictions.
-- Prefer a small number of efficient structured requests over page scraping.
-- Historical bootstrap/backfill should be one-time or deliberately bounded, cached, and provenance-documented.
-- Do not design a crawler that systematically archives an entire third-party service.
-- If a provider cannot safely/stably supply historical data, allow the model to start in `INSUFFICIENT_HISTORY` / `CHECK_EXTERNAL` mode and learn locally.
-- Multiple providers may be cross-checked, but disagreement must reduce confidence rather than being silently averaged away.
-- Derive committed completed cycles from observed snapshot transitions whenever possible; do not seed provider forecasts as actual events.
+### Optimizer
 
-## API keys and secrets
+- `Optimal` mode is a future scheduling layer, not a synonym for sorting by profit/item or profit/trip.
+- Do not enable an item/country market for optimizer decisions until its economics, capacity semantics, current availability and evidence quality are adequately modeled.
+- The optimizer must eventually compare many short trips, fewer long trips, and mixed-country sequences over a bounded planning horizon.
+- Best expected profit is still subject to freshness, confidence and unresolved-economics guards.
 
-- Public Torn API keys that expose only public-facing information may be used as explicitly allowed by the user.
-- Any limited/higher-authority key must remain local only and must never be committed.
-- Prefer local ignored configuration for credentials and provide committed example/template files when needed.
-- The Settings interface may edit the local API key, but it must mask the key by default and must not pass the key in Rainmeter actions or process command lines.
-- Never log full sensitive keys.
-- Do not broaden a key's authority merely for convenience if a lower-authority/public source is sufficient.
+## Non-negotiable recommendation/data invariants
+
+1. **No recommendation beats a bad recommendation.** Suppress actionable travel advice when stock/resale data is stale, confidence is inadequate, the price regime is unsupported, sources materially disagree, travel economics are unresolved, or configured profitability gates fail.
+2. **Observed history is truth, forecasts are not.** `0 -> positive` is an observed restock and `positive -> 0` an observed sellout. Provider predictions must never populate historical truth fields.
+3. **Market identity is generic.** Keep history/model state isolated by `country + itemId`; never let one item's transitions create another item's cycles.
+4. **Foreign price is first-class evidence.** Do not merge radically different price/depletion regimes as equivalent.
+5. **Current depletion can shorten safety, never expand it beyond supporting historical evidence.**
+6. **Best odds is not safe.** Keep probabilistic wording distinct from conservative `SAFE_WINDOW` wording.
+7. **Profitability gates timing, not learning.** Continue collecting useful observations/cycles when an opportunity is unprofitable.
+8. **Unknown economics are not zero economics.** Ticket-funded Business remains unresolved unless a known-free branch is established.
+9. **Provider provenance is retained and normalized at the adapter boundary.** Provider-specific response structures must not leak into the core observation/cycle model.
+10. **Collection failures must fail visibly but gracefully.** Background expansion must not take down the established visible Xanax path.
+11. **Runtime data is not Git history.** Observations, cycles, caches, generated graphs/state, provider probes, local settings, credentials and shadow-collection errors stay ignored/local.
+12. **Storage and compute remain bounded.** Do not turn Rainmeter's one-second update loop into network/model work.
+
+## Current background-collection contract
+
+The initial expansion uses a fail-soft `ShadowCollector.ps1`:
+
+- current visible updater runs first;
+- shadow collector runs afterward and before finalization;
+- default shadow polling interval is 120 seconds;
+- all 11 Torn foreign destinations are configured for collection;
+- every valid provider row is normalized to the standard observation schema;
+- current primary visible markets are skipped by shadow writes to avoid duplicate-cycle interference;
+- newly observed markets are tracked in ignored runtime engine state;
+- shadow failures are recorded locally and must not suppress the established updater/finalizer/heartbeat.
+
+This is an intentionally conservative migration layer. A later refactor may unify visible and shadow collection behind one provider fetch, but must prove identical primary-market behavior before removing the fail-soft bridge.
+
+## Observation / cycle contracts
+
+Normalized observation:
+
+```text
+schemaVersion
+timestamp
+country
+itemId
+stock
+foreignPrice
+source
+sourceTimestamp
+```
+
+Completed cycle:
+
+```text
+schemaVersion
+country
+itemId
+foreignPrice
+restockAt
+restockQuantity
+soldOutAt
+availabilitySeconds
+previousSoldOutAt
+restockDelaySeconds
+source
+```
+
+Default retention remains approximately:
+
+- high-resolution observations: 48 hours;
+- completed cycles: 90 days;
+- visible graph window: 8 hours.
+
+The live-provider stale threshold is a safety/freshness guard, not a history-retention threshold.
+
+## Capacity / travel-profile authority
+
+For current carrying capacity, prefer the player's current `/user/perks` state rather than requiring faction-upgrade permissions.
+
+Current mode base capacity:
+
+- Standard: 10;
+- Airstrip/WLT/qualified Business: 15.
+
+Current active general bonuses are derived from suitable current perk buckets, with property/stock travel-method effects excluded from additive capacity to avoid double-counting the selected mode base.
+
+A successfully synced current-capacity bonus is authoritative for general capacity and replaces legacy inferred company/faction capacity additions. Legacy fields may remain readable for backward compatibility.
+
+Company/star modeling is still required for non-capacity effects such as free Business Class. Category-specific capacity must be handled separately before multi-category economics becomes optimizer-eligible:
+
+- Flower Shop flower capacity applies only to Flower items;
+- Toy Shop plushie capacity applies only to Plushie items;
+- neither may increase Xanax capacity.
+
+A positive explicit `profitability.capacityOverride` remains authoritative where supported.
+
+## Provider / web-data policy
+
+- Treat Prometheus, YATA, Weav3r, DroqsDB and other services as replaceable adapters.
+- Prefer structured endpoints over browser scraping.
+- Foreign stock is provider-observed/crowd-sourced; do not assume a static Wiki table is the live catalog authority.
+- The live provider payload determines what markets are currently observed; canonical Torn metadata will later provide item names/categories.
+- Do not create one foreign-stock request per item. A country-stock payload should fan out locally to all item observations.
+- Resale-price enrichment is a separate concern and must be cached/staggered rather than issuing hundreds of Torn Item Market requests every minute.
+- Source disagreement lowers confidence; do not silently average incompatible source states.
+
+## API keys / secrets
+
+- Limited/higher-authority keys remain local only and must never be committed.
+- Settings stores the key only in ignored local configuration and masks it by default.
+- Never print, log or request that the user paste the full key into chat.
+- Do not broaden key permissions merely for convenience.
+- Keep the validated bounded `curl.exe` workaround scoped to Torn API calls that require it on the target Windows environment.
 
 ## Performance / resource budget
 
-Travel Assistant is intended to remain loaded on a Windows desktop for long periods.
+- One-second Rainmeter work: local string/countdown/visibility updates only.
+- Primary network/model pass: approximately once per minute.
+- Initial broad shadow collection: no more frequent than 120 seconds unless explicitly revalidated.
+- Avoid permanent background PowerShell/browser processes.
+- Keep updater executions serialized.
+- Reuse provider payloads locally where practical; the current separate shadow request is a migration bridge, not the desired long-term architecture.
+- Graph generation remains compact; do not create thousands of Rainmeter meters for samples.
 
-Design toward these boundaries:
+## Current UI invariants
 
-- Rainmeter may update countdown text every second, but this path should perform only inexpensive local calculations/string updates.
-- Network polling should normally be on the order of **60–120 seconds**, subject to provider limits and usefulness.
-- Recalculate expensive analytics primarily when new data materially changes the state (restock, sellout, meaningful depletion update, price change, or scheduled low-frequency analysis).
-- The final state/economics pass should use cached/local state and must not add another network request each minute.
-- Opening Settings may launch one short-lived local UI process; it must not become a persistent background process.
-- Avoid a permanent background browser or heavyweight runtime.
-- Prefer one serialized short-lived updater pipeline over many independent PowerShell process launches.
-- Avoid thousands of individual Rainmeter meters for graph samples; use a compact graph-rendering approach.
-- Keep high-resolution runtime observations roughly **24–48 hours** by default.
-- Keep compact completed-cycle summaries roughly **60–90 days** initially unless evidence justifies another bounded retention period.
-- Retain long-term learning as compact aggregates where possible.
-- Logs, probe captures, analysis output, and candidate imports must rotate/prune or remain intentionally small/runtime-only.
+Until a deliberate multi-item UI release:
 
-These are design targets rather than guarantees; measure actual CPU/RAM/disk behavior before calling a release stable.
+- dark charcoal theme;
+- UK card above Japan card;
+- country flags remain local Rainmeter vector shapes, not claimed official Torn assets;
+- header shows item name, profitability-colored foreign price, and current stock/out-of-stock state;
+- only the literal `Out of Stock` warning is red; elapsed/since text remains normal;
+- flight row uses a plane icon;
+- actionable restock timing uses a delivery-truck icon and is shown only when stock is out and predicted restock ETA exceeds flight time;
+- hidden restock/history context remains available in the tooltip;
+- graphs remain equal width with an 8-hour visible window and 60-minute vertical divisions;
+- `Travel` header opens Torn travel;
+- top-right Settings remains available.
 
-## UI invariants for v1
+## Stable machine-readable statuses
 
-- Dark/charcoal theme that remains distinguishable on a pure-black desktop.
-- Vertically stacked UK and Japan panels.
-- Same graph width/alignment for both destinations.
-- Three inline paired rows per destination:
-  - `Travel | Leave / Window`
-  - `Restock | Last Sold Out`
-  - `Stock | Foreign Price`
-- Relative timing (`Leave in`, `Window opens in`, `Leave before`, etc.) is preferred over a displayed clock.
-- When an observed restock is live, an elapsed display such as `live +04:12` is acceptable and preferred over implying the observed timestamp is still a future estimate.
-- Default travel mode is **Airstrip**.
-- The main skin exposes a top-right **Settings** action rather than cycling travel modes directly; this avoids coupling a simple preference change to a full network/update pass.
-- Settings exposes `Standard`, `Airstrip`, and `WLT` normally.
-- `Business` is settings-only and appears only when the local travel profile establishes free Business Class (currently 10-star Lingerie Store). Ticket-funded Business remains unresolved and must not be treated as zero cost.
-- Company/faction travel perks may alter final carrying capacity or travel cost only through the final economics layer; they must not rewrite observed history.
-- Flower Shop and Toy Shop item-specific capacity bonuses must not increase Xanax capacity.
-- A low-confidence actionable state may expose a clickable `CHECK WEAV3R` / external verification action.
-- Do not add an unsupported Windows Clock alarm integration. An internal optional alert can be considered later if explicitly requested.
-
-## Core status / reason codes
-
-Use stable machine-readable statuses and let Rainmeter render them. Initial vocabulary should include at least:
+Keep status logic keyed to codes, not display strings. Current vocabulary includes:
 
 ```text
 SAFE_WINDOW
@@ -159,74 +211,35 @@ STALE_DATA
 CHECK_EXTERNAL
 ```
 
-Add codes deliberately and document semantics; do not key logic off human display strings.
-
-## Data-model direction
-
-Core observation identity is generic:
-
-```text
-timestamp + country + itemId + stock + foreignPrice + source + sourceTimestamp
-```
-
-Completed cycles should capture enough information to learn restock and depletion behavior without preserving every raw sample forever:
-
-```text
-country
-itemId
-foreignPrice
-restockAt
-restockQuantity
-soldOutAt
-availabilitySeconds
-previousSoldOutAt
-restockDelaySeconds
-source / provenance
-confidence / quality metadata as appropriate
-```
-
-Travel economics belong to configuration/state rather than Xanax-specific functions:
-
-```text
-country + travelMode -> travelSeconds + travelCost + baseTravelCapacity
-local capacityOverride -> usableCapacity when positive
-local travelProfile -> company type/stars + faction Excursion capacity level + faction travel-cost level
-travel-perks config + item category -> derived capacity/cost/free-Business effects
-```
-
-A positive manual `capacityOverride` remains authoritative over derived capacity. Otherwise usable capacity is base mode capacity plus qualifying general company capacity, qualifying item-specific company capacity, and faction Excursion capacity.
-
-Do not name core engine functions/classes/data formats after `XanaxUK` or similar one-off combinations. Prefer generic concepts such as `TravelOpportunityEngine`, `Observation`, `Cycle`, `Provider`, `ItemConfig`, `CountryConfig`, `TravelProfile`, and final recommendation-state/economics guards.
+Add new codes deliberately and document their semantics.
 
 ## Validation expectations
 
-Until concrete test tooling exists, every implementation pass must at minimum:
+For changes touching collection/config/model behavior:
 
-- validate JSON/config syntax;
-- run PowerShell parser/static checks applicable to changed scripts;
-- exercise provider normalization against saved fixtures, not only live data;
-- replay representative historical cycles through the recommendation model;
-- verify low-margin/unprofitable suppression;
-- verify stale stock and stale resale behavior;
-- verify travel-mode changes recalculate recommendations;
-- verify travel cost/capacity can affect final trip profitability;
-- verify company/faction travel profile effects change final capacity/cost without modifying history;
-- verify Flower/Toy item-specific bonuses do not affect Xanax;
-- verify 10-star Lingerie can establish zero-cost Business economics while unqualified Business still suppresses timing;
-- verify informational restock timing can remain visible when profitability suppresses timing;
-- verify unresolved Business economics suppress timing if Business is forced;
-- verify runtime retention/pruning is bounded;
-- verify ignored local/runtime files are not accidentally staged;
-- run `git diff --check` before handoff.
+- validate JSON syntax;
+- run PowerShell parser/static validation on changed scripts;
+- exercise provider normalization from fixtures/synthetic payloads;
+- prove item/country cycle isolation;
+- prove primary visible markets are protected from duplicate shadow writes;
+- verify retention remains bounded;
+- verify ignored runtime/local files remain ignored;
+- run focused tests first and avoid broad unrelated reruns unless source changes justify them;
+- do not claim live/Rainmeter validation until it runs on Windows.
 
-The repository now contains deterministic PowerShell tests and a Windows validation checklist. Do not claim those tests pass until they actually execute on the target/local Windows environment. Record exact commands/results in `docs/NEXT_CODEX_RUN.md` / `docs/IMPLEMENTATION_STATUS.md`.
+Current shadow-focused checks include:
+
+```powershell
+.\tests\Validate-ShadowCollection.ps1
+.\tests\Run-ShadowCollectionTests.ps1
+```
+
+The full suite remains `tests/Run-All.ps1` when a broad run is justified.
 
 ## Documentation / handoff
 
+- Keep `docs/ARCHITECTURE.md` synchronized with durable structural decisions.
+- Keep `docs/NEXT_CODEX_RUN.md` as the rolling active implementation handoff.
+- Keep `docs/IMPLEMENTATION_STATUS.md` factual about what was implemented versus what still needs Windows/live validation.
 - Keep `Readme.md` human-readable and current.
-- Keep architecture and durable decisions in `docs/ARCHITECTURE.md` rather than duplicating them in transient prompts.
-- Keep source-specific historical rules in `docs/HISTORICAL_BOOTSTRAP.md` / `docs/PROVIDER_DISCOVERY.md`.
-- Keep the local runtime checklist in `docs/WINDOWS_VALIDATION.md`.
-- Use `docs/NEXT_CODEX_RUN.md` as the rolling current execution handoff.
-- When a run is completed, record what was actually implemented, validation performed, unresolved risks, and relevant commit SHAs before setting the run status to `COMPLETED`.
-- If a new blocker/follow-up is discovered, update the rolling handoff back to `ACTIVE` rather than creating scattered competing instructions.
+- If a new blocker/follow-up becomes the active scope, update the rolling handoff rather than creating competing task documents.
