@@ -138,20 +138,23 @@ Write-Host ''
 
 $basic = Invoke-TornJson -Uri 'https://api.torn.com/v2/user/basic?comment=TravelAssistantProfileProbe' -ApiKey $apiKey
 if ($basic.Success) {
-    $row = $basic.Payload.basic
+    # Torn v2 UserBasicResponse exposes the user record as top-level `profile`.
+    # Check the property explicitly so StrictMode turns future schema drift into a
+    # readable probe result rather than a property-access parser/runtime failure.
+    $row = if ($basic.Payload.PSObject.Properties['profile']) { $basic.Payload.profile } else { $null }
     if ($null -ne $row) {
         $name = if ($row.PSObject.Properties['name']) { [string]$row.name } else { '(unknown)' }
         $id = if ($row.PSObject.Properties['id']) { [string]$row.id } else { '?' }
         $level = if ($row.PSObject.Properties['level']) { [string]$row.level } else { '?' }
         Write-Host ('BASIC: OK - {0} [{1}], level {2}' -f $name, $id, $level) -ForegroundColor Green
     } else {
-        Write-Host 'BASIC: OK' -ForegroundColor Green
+        Write-Host 'BASIC: OK - response did not contain the expected profile object' -ForegroundColor Yellow
     }
 } else { Write-ProbeFailure -Label 'BASIC' -Result $basic }
 
 $job = Invoke-TornJson -Uri 'https://api.torn.com/v2/user/job?comment=TravelAssistantProfileProbe' -ApiKey $apiKey
 if ($job.Success) {
-    $row = $job.Payload.job
+    $row = if ($job.Payload.PSObject.Properties['job']) { $job.Payload.job } else { $null }
     if ($null -eq $row) {
         Write-Host 'JOB: OK - no current job/company' -ForegroundColor Green
     } elseif ([string]$row.type -eq 'company') {
