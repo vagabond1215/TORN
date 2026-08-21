@@ -92,10 +92,17 @@ function Invoke-TornProfileJson {
 
 function Get-TornFactionState {
     param([object]$Payload)
-    if ($null -eq $Payload -or -not $Payload.PSObject.Properties['upgrades'] -or $null -eq $Payload.upgrades) { return 'unknown' }
-    $upgrades = $Payload.upgrades
-    if ($upgrades.PSObject.Properties['state']) {
-        $state = ([string]$upgrades.state).ToLowerInvariant()
+    if ($null -eq $Payload) { return 'unknown' }
+
+    # Current Torn v2 FactionUpgradesResponse exposes `state` as a top-level
+    # sibling of `upgrades`. Keep the nested check as a compatibility fallback
+    # for any cached/legacy fixture created by older Travel Assistant builds.
+    foreach ($candidate in @(
+        $(if ($Payload.PSObject.Properties['state']) { $Payload.state } else { $null }),
+        $(if ($Payload.PSObject.Properties['upgrades'] -and $null -ne $Payload.upgrades -and $Payload.upgrades.PSObject.Properties['state']) { $Payload.upgrades.state } else { $null })
+    )) {
+        if ($null -eq $candidate) { continue }
+        $state = ([string]$candidate).ToLowerInvariant()
         if ($state -in @('peace','war')) { return $state }
     }
     return 'unknown'
