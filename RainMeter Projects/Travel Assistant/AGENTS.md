@@ -39,9 +39,11 @@ OPTIMIZER candidates
 
 ### Collection
 
-- Collect every valid foreign-shop row returned by the live provider for every configured foreign country, irrespective of category.
+- Observe every valid foreign-shop row returned by the live provider for every configured foreign country, irrespective of category.
+- A provider row is evidence about the provider dataset, **not proof that the item is currently purchasable in that country**.
 - Market identity is always `country + itemId`.
-- UI filters and current travel destination must never stop background learning for other markets.
+- Verified inactive/legacy markets remain observable for provenance but must not receive new learning/history writes or become visible/optimizer candidates.
+- UI filters and current travel destination must never stop background learning for other active markets.
 
 ### Visibility
 
@@ -53,7 +55,7 @@ OPTIMIZER candidates
 ### Optimizer
 
 - `Optimal` is a future scheduling layer, not a sort by profit/item or profit/trip.
-- Do not make a market optimizer-eligible until economics, capacity semantics, current availability and evidence quality are adequately modeled.
+- Do not make a market optimizer-eligible until economics, capacity semantics, current availability, market validity and evidence quality are adequately modeled.
 - It must eventually compare many short trips, fewer long trips and mixed-country sequences over a bounded planning horizon.
 
 ## Non-negotiable data/recommendation invariants
@@ -70,6 +72,7 @@ OPTIMIZER candidates
 10. Collection/enrichment failures must fail visibly but gracefully and must not break the established visible Xanax path.
 11. Runtime observations, cycles, caches, generated state/graphs, local settings, credentials and errors stay ignored/local.
 12. Storage/compute remain bounded. The one-second Rainmeter loop must not perform network/model work.
+13. Provider market membership may be stale. A verified inactive `country + itemId` override supersedes provider presence for learning, display and optimization eligibility while preserving provenance/history.
 
 ## Current background-collection contract
 
@@ -78,10 +81,12 @@ OPTIMIZER candidates
 - visible updater runs first;
 - shadow collector runs afterward;
 - default shadow interval is 120 seconds;
-- all 11 foreign destinations collect;
-- every valid provider row normalizes to the observation schema;
+- all 11 foreign destinations are observed;
+- every valid provider row normalizes to the observation schema and updates `observedMarkets`;
 - current primary visible markets are skipped by shadow writes;
-- raw history writes only on stock/foreign-price changes;
+- `config/foreign-market-overrides.json` supplies verified inactive market pairs;
+- inactive provider rows remain in `observedMarkets` but are skipped before new observation/cycle writes;
+- raw history writes only on stock/foreign-price changes for active markets;
 - provider timestamp alone updates freshness without another raw observation;
 - failures remain fail-soft.
 
@@ -90,10 +95,23 @@ Target-Windows acceptance on 2026-08-21 established:
 ```text
 Prometheus
 11 countries
-232 observed country-item markets
-51 changed observations on forced acceptance pass
+232 observed country-item provider rows
+232 / 232 rows with provider names
+202 distinct item IDs
 no shadow error
 ```
+
+Current verified legacy rows pending final Windows acceptance:
+
+```text
+mexico:21
+mexico:232
+mexico:327
+united_arab_emirates:383
+united_arab_emirates:440
+```
+
+Expected current split is 232 raw provider rows / 5 legacy rows / 227 active candidate markets. Do not hard-code these live counts as timeless constants.
 
 A later refactor may unify visible and shadow collection behind one provider fetch only after equivalent primary behavior is proven.
 
@@ -114,7 +132,26 @@ Therefore:
 - `RunUpdate.ps1` must not invoke `ItemMetadata.ps1`;
 - `ItemMetadata.ps1` is explicit/manual maintenance only;
 - do not keep increasing Torn catalog timeouts/batch sizes;
-- full catalog direction is a committed/offline metadata catalog refreshed outside the heartbeat.
+- full catalog direction is committed/offline metadata refreshed outside the heartbeat.
+
+`LocalCatalog.ps1` uses local precedence:
+
+```text
+richer manual Torn metadata
+    > explicit config seed
+    > verified item override
+    > offline YATA-derived category snapshot
+    > provider name + Unknown
+```
+
+Current committed offline metadata files:
+
+```text
+config/foreign-item-categories.json
+config/foreign-market-overrides.json
+```
+
+The 197-ID category snapshot plus five individually verified overrides are intended to resolve the current 202 observed item IDs without runtime Torn catalog access. The five verified overrides also correct stale canonical names for item 327 (`Blank Casino Chips`) and item 383 (`Digital Organizer`).
 
 `ItemMetadata.ps1` must seed committed `config/items.json` metadata before any optional network attempt. Seed rows use:
 
@@ -132,7 +169,7 @@ Current committed seeds:
 277 Cherry Blossom | Flower
 ```
 
-A later successful maintenance refresh may replace seed rows with richer canonical metadata. Network failure must never erase known seed metadata.
+A later successful maintenance refresh may replace seed rows with richer canonical metadata. Network failure must never erase known local metadata.
 
 ## Observation / cycle contracts
 
@@ -198,9 +235,10 @@ A positive explicit `profitability.capacityOverride` remains authoritative where
 
 - Treat Prometheus, YATA, Torn, Weav3r, DroqsDB and other services as replaceable adapters.
 - Prefer structured endpoints over scraping when practical.
-- Live foreign stock is provider-observed/crowd-sourced; static Wiki tables are not live-catalog authority.
+- Live foreign stock is provider-observed/crowd-sourced; provider market membership may contain legacy rows and is not by itself current-shop authority.
+- Static Wiki destination tables are also not sufficient alone as live-catalog authority; use item-specific/history evidence for verified exceptions.
 - Do not create one stock request per item; a country payload must fan out locally.
-- Full item names/categories should come from a committed/offline catalog once established.
+- Full item names/categories come from the committed/offline catalog plus verified overrides.
 - Resale pricing is separate and must be cached/staggered rather than hundreds of Torn market calls per minute.
 - Source disagreement lowers confidence; do not silently average incompatible states.
 
@@ -218,7 +256,7 @@ A positive explicit `profitability.capacityOverride` remains authoritative where
 - one-second Rainmeter work: local string/countdown/visibility only;
 - primary updater/model/finalizer: about once per minute;
 - broad shadow collection: no more often than 120 seconds unless revalidated;
-- item catalog network maintenance: **not in the heartbeat**, explicit/manual only until the offline catalog workflow exists;
+- item catalog network maintenance: **not in the heartbeat**, explicit/manual only;
 - no permanent background PowerShell/browser processes;
 - updater executions stay serialized;
 - graph generation remains compact.
@@ -267,6 +305,7 @@ For collection/config/model changes:
 - exercise provider/metadata normalization from fixtures/synthetic payloads;
 - prove country/item cycle isolation;
 - prove primary markets are protected from duplicate shadow writes;
+- prove verified inactive markets are retained as provider metadata but skipped before new shadow history/cycle writes;
 - prove metadata network maintenance stays outside `RunUpdate.ps1`;
 - verify retention and ignored-runtime boundaries;
 - run focused tests before broad suites;
@@ -277,6 +316,8 @@ Current focused expansion checks:
 ```powershell
 .\tests\Validate-ShadowCollection.ps1
 .\tests\Run-ShadowCollectionTests.ps1
+.\tests\Validate-LocalCatalog.ps1
+.\tests\Run-LocalCatalogTests.ps1
 .\tests\Validate-ItemMetadata.ps1
 .\tests\Run-ItemMetadataTests.ps1
 ```
