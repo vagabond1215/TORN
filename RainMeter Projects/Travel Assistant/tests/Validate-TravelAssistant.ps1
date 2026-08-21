@@ -101,12 +101,12 @@ if ($null -ne $settings) {
 
 $perks = $config['config\travel-perks.json']
 if ($null -ne $perks) {
-    foreach ($companyId in @('none','lingerie_store','cruise_line','flower_shop','toy_shop','logistics_management')) {
+    foreach ($companyId in @('none','lingerie_store','cruise_line','flower_shop','toy_shop','logistics_management','theater')) {
         if (@($perks.companies | Where-Object { [string]$_.id -eq $companyId }).Count -ne 1) {
             Fail "travel-perks.json must contain company '$companyId'."
         }
     }
-    $lingerie = @($perks.companies | Where-Object { [string]$_.id -eq 'lingerie_store' | Select-Object -First 1)
+    $lingerie = @($perks.companies | Where-Object { [string]$_.id -eq 'lingerie_store' } | Select-Object -First 1)
     if ($lingerie.Count -eq 1) {
         if (@($lingerie[0].effects | Where-Object { [int]$_.stars -eq 10 -and $_.freeBusinessClass -eq $true }).Count -ne 1) {
             Fail '10-star Lingerie Store must grant free Business Class in travel-perks.json.'
