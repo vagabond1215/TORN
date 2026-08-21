@@ -8,10 +8,12 @@ Set-StrictMode -Version 2.0
 
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
+$LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
+$LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
@@ -149,6 +151,16 @@ function Write-ShadowFailure {
     } catch { }
 }
 
+function Write-LocalCatalogFailure {
+    param([string]$Message)
+    try {
+        New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+        $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
+        if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
+        [System.IO.File]::WriteAllText($LocalCatalogErrorFile, $clean, [System.Text.UTF8Encoding]::new($false))
+    } catch { }
+}
+
 try {
     # Rainmeter can fire an initial refresh and a scheduled poll close together.
     # Skip a redundant overlapping run instead of creating concurrent network,
@@ -169,10 +181,21 @@ try {
         catch { Write-ShadowFailure -Message $_.Exception.Message }
     }
 
-    # Canonical catalog maintenance is intentionally NOT part of this heartbeat
-    # path. Metadata endpoints have repeatedly timed out on the target Windows
-    # host. Keep the live path bounded and run ItemMetadata.ps1 explicitly when
-    # maintaining the local catalog until a non-blocking source is established.
+    # Local catalog enrichment is disk/config work only. It converts provider
+    # names into a complete observed item table and applies committed category
+    # overrides without making any Torn catalog request. Rich manually fetched
+    # Torn metadata, if present, is preserved rather than downgraded.
+    if (Test-Path -LiteralPath $LocalCatalog) {
+        try {
+            & $LocalCatalog
+            if (Test-Path -LiteralPath $LocalCatalogErrorFile) { Remove-Item -LiteralPath $LocalCatalogErrorFile -Force -ErrorAction SilentlyContinue }
+        } catch {
+            Write-LocalCatalogFailure -Message $_.Exception.Message
+        }
+    }
+
+    # Network catalog maintenance is intentionally NOT part of this heartbeat
+    # path. ItemMetadata.ps1 remains an explicit/manual maintenance tool only.
 
     # FinalizeState.ps1 applies independent restock-display, resale-freshness,
     # and trip-economics guards without making another network request.
