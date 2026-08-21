@@ -50,6 +50,10 @@ if (-not (Test-Path -LiteralPath $launcherPath)) {
     $launcher = Get-Content -LiteralPath $launcherPath -Raw
     if ($launcher -notmatch 'OpenSettings\.ps1') { Fail 'LaunchSettings.ps1 must start OpenSettings.ps1.' }
     if ($launcher -notmatch 'Start-Process') { Fail 'LaunchSettings.ps1 must detach the Settings dialog process.' }
+    $tokens = $null
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($launcherPath, [ref]$tokens, [ref]$parseErrors)
+    foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in LaunchSettings.ps1: $($parseError.Message)" }
 }
 
 if ($ini -notmatch '(?m)^OnRefreshAction=\[!CommandMeasure MeasureUpdate "Run"\]\s*$') {
