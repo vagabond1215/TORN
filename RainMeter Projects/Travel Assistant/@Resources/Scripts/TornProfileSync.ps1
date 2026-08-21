@@ -90,23 +90,60 @@ function Invoke-TornProfileJson {
     }
 }
 
-function Get-TornFactionUpgradeRows {
+function Get-TornFactionState {
+    param([object]$Payload)
+    if ($null -eq $Payload -or -not $Payload.PSObject.Properties['upgrades'] -or $null -eq $Payload.upgrades) { return 'unknown' }
+    $upgrades = $Payload.upgrades
+    if ($upgrades.PSObject.Properties['state']) {
+        $state = ([string]$upgrades.state).ToLowerInvariant()
+        if ($state -in @('peace','war')) { return $state }
+    }
+    return 'unknown'
+}
+
+function Get-TornFactionCoreRows {
     param([object]$Payload)
     $rows = New-Object System.Collections.Generic.List[object]
-    if ($null -eq $Payload -or -not $Payload.PSObject.Properties['upgrades']) { return $rows.ToArray() }
+    if ($null -eq $Payload -or -not $Payload.PSObject.Properties['upgrades'] -or $null -eq $Payload.upgrades) { return $rows.ToArray() }
     $upgrades = $Payload.upgrades
-
     if ($upgrades.PSObject.Properties['core'] -and $null -ne $upgrades.core -and $upgrades.core.PSObject.Properties['upgrades']) {
         foreach ($row in @($upgrades.core.upgrades)) { if ($null -ne $row) { $rows.Add($row) } }
     }
-    foreach ($branchName in @('peace','war')) {
-        if (-not $upgrades.PSObject.Properties[$branchName]) { continue }
-        foreach ($branch in @($upgrades.$branchName)) {
-            if ($null -eq $branch -or -not $branch.PSObject.Properties['upgrades']) { continue }
-            foreach ($row in @($branch.upgrades)) { if ($null -ne $row) { $rows.Add($row) } }
-        }
+    return $rows.ToArray()
+}
+
+function Get-TornFactionBranchRows {
+    param([object]$Payload, [ValidateSet('peace','war')][string]$BranchName)
+    $rows = New-Object System.Collections.Generic.List[object]
+    if ($null -eq $Payload -or -not $Payload.PSObject.Properties['upgrades'] -or $null -eq $Payload.upgrades) { return $rows.ToArray() }
+    $upgrades = $Payload.upgrades
+    if (-not $upgrades.PSObject.Properties[$BranchName]) { return $rows.ToArray() }
+    foreach ($branch in @($upgrades.$BranchName)) {
+        if ($null -eq $branch -or -not $branch.PSObject.Properties['upgrades']) { continue }
+        foreach ($row in @($branch.upgrades)) { if ($null -ne $row) { $rows.Add($row) } }
     }
     return $rows.ToArray()
+}
+
+function Get-TornFactionTravelLevelsFromRows {
+    param([object[]]$Rows)
+    $capacityLevel = 0
+    $costLevel = 0
+    foreach ($row in @($Rows)) {
+        if ($null -eq $row) { continue }
+        $name = if ($row.PSObject.Properties['name']) { [string]$row.name } else { '' }
+        $ability = if ($row.PSObject.Properties['ability']) { [string]$row.ability } else { '' }
+        $level = if ($row.PSObject.Properties['level']) { [int]$row.level } else { 0 }
+        if ($name -match '(?i)^Travel capacity$' -or $ability -match '(?i)travel capacity') {
+            if ($level -gt $capacityLevel) { $capacityLevel = $level }
+        }
+        if ($name -match '(?i)^Travel cost$' -or $ability -match '(?i)travel.*fee') {
+            if ($level -gt $costLevel) { $costLevel = $level }
+        }
+    }
+    $capacityLevel = [Math]::Max(0, [Math]::Min(10, $capacityLevel))
+    $costLevel = [Math]::Max(0, [Math]::Min(5, $costLevel))
+    return [pscustomobject]@{ ExcursionLevel = $capacityLevel; TravelCostLevel = $costLevel }
 }
 
 function Get-TornCompanyTravelProfile {
@@ -126,12 +163,9 @@ function Get-TornCompanyTravelProfile {
         return [pscustomobject]@{ Resolved = $true; CompanyType = 'none'; CompanyStars = 0; Summary = ('Starter job: {0}' -f $label) }
     }
 
-    $typeId = 0
-    if ($job.PSObject.Properties['type_id']) { $typeId = [int]$job.type_id }
-    $rating = 0
-    if ($job.PSObject.Properties['rating']) { $rating = [int]$job.rating }
-    if ($rating -lt 0) { $rating = 0 }
-    if ($rating -gt 10) { $rating = 10 }
+    $typeId = if ($job.PSObject.Properties['type_id']) { [int]$job.type_id } else { 0 }
+    $rating = if ($job.PSObject.Properties['rating']) { [int]$job.rating } else { 0 }
+    $rating = [Math]::Max(0, [Math]::Min(10, $rating))
 
     $match = @($PerksConfig.companies | Where-Object {
         $_.PSObject.Properties['tornCompanyTypeId'] -and $null -ne $_.tornCompanyTypeId -and [int]$_.tornCompanyTypeId -eq $typeId
@@ -152,33 +186,36 @@ function Get-TornCompanyTravelProfile {
 function Get-TornFactionTravelProfile {
     param([object]$FactionPayload)
 
-    $rows = @(Get-TornFactionUpgradeRows -Payload $FactionPayload)
-    $capacityLevel = 0
-    $costLevel = 0
+    $state = Get-TornFactionState -Payload $FactionPayload
+    $coreRows = @(Get-TornFactionCoreRows -Payload $FactionPayload)
+    $peaceRows = @($coreRows) + @(Get-TornFactionBranchRows -Payload $FactionPayload -BranchName 'peace')
+    $warRows = @($coreRows) + @(Get-TornFactionBranchRows -Payload $FactionPayload -BranchName 'war')
+    $peace = Get-TornFactionTravelLevelsFromRows -Rows $peaceRows
+    $war = Get-TornFactionTravelLevelsFromRows -Rows $warRows
 
-    foreach ($row in $rows) {
-        $name = if ($row.PSObject.Properties['name']) { [string]$row.name } else { '' }
-        $ability = if ($row.PSObject.Properties['ability']) { [string]$row.ability } else { '' }
-        $level = if ($row.PSObject.Properties['level']) { [int]$row.level } else { 0 }
+    $active = $null
+    if ($state -eq 'peace') { $active = $peace }
+    elseif ($state -eq 'war') { $active = $war }
 
-        if ($name -match '(?i)^Travel capacity$' -or $ability -match '(?i)travel capacity') {
-            if ($level -gt $capacityLevel) { $capacityLevel = $level }
-        }
-        if ($name -match '(?i)^Travel cost$' -or $ability -match '(?i)travel.*fee') {
-            if ($level -gt $costLevel) { $costLevel = $level }
-        }
+    $resolved = ($null -ne $active)
+    $activeExcursion = if ($resolved) { [int]$active.ExcursionLevel } else { 0 }
+    $activeCost = if ($resolved) { [int]$active.TravelCostLevel } else { 0 }
+    $summary = if ($resolved) {
+        ('Mode {0}: active {1}/10 capacity, {2}/5 cost | Peace {3}/10,{4}/5 | War {5}/10,{6}/5' -f $state.ToUpperInvariant(), $activeExcursion, $activeCost, [int]$peace.ExcursionLevel, [int]$peace.TravelCostLevel, [int]$war.ExcursionLevel, [int]$war.TravelCostLevel)
+    } else {
+        ('Faction mode unknown | Peace {0}/10,{1}/5 | War {2}/10,{3}/5' -f [int]$peace.ExcursionLevel, [int]$peace.TravelCostLevel, [int]$war.ExcursionLevel, [int]$war.TravelCostLevel)
     }
 
-    if ($capacityLevel -lt 0) { $capacityLevel = 0 }
-    if ($capacityLevel -gt 10) { $capacityLevel = 10 }
-    if ($costLevel -lt 0) { $costLevel = 0 }
-    if ($costLevel -gt 5) { $costLevel = 5 }
-
     return [pscustomobject]@{
-        Resolved = $true
-        ExcursionLevel = $capacityLevel
-        TravelCostLevel = $costLevel
-        Summary = ('Excursion {0}/10, Travel Cost {1}/5' -f $capacityLevel, $costLevel)
+        Resolved = $resolved
+        State = $state
+        ExcursionLevel = $activeExcursion
+        TravelCostLevel = $activeCost
+        PeaceExcursionLevel = [int]$peace.ExcursionLevel
+        PeaceTravelCostLevel = [int]$peace.TravelCostLevel
+        WarExcursionLevel = [int]$war.ExcursionLevel
+        WarTravelCostLevel = [int]$war.TravelCostLevel
+        Summary = $summary
     }
 }
 
@@ -193,18 +230,20 @@ function Get-TornTravelProfileSync {
     $jobResult = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/user/job?comment=TravelAssistantSettingsSync' -ApiKey $ApiKey
     $factionResult = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/faction/upgrades?comment=TravelAssistantSettingsSync' -ApiKey $ApiKey
 
-    $company = $null
-    if ($jobResult.Success) {
-        $company = Get-TornCompanyTravelProfile -JobPayload $jobResult.Payload -PerksConfig $PerksConfig
+    $company = if ($jobResult.Success) {
+        Get-TornCompanyTravelProfile -JobPayload $jobResult.Payload -PerksConfig $PerksConfig
     } else {
-        $company = [pscustomobject]@{ Resolved = $false; CompanyType = ''; CompanyStars = 0; Summary = ('Job unavailable: {0}' -f [string]$jobResult.Error) }
+        [pscustomobject]@{ Resolved = $false; CompanyType = ''; CompanyStars = 0; Summary = ('Job unavailable: {0}' -f [string]$jobResult.Error) }
     }
 
-    $faction = $null
-    if ($factionResult.Success) {
-        $faction = Get-TornFactionTravelProfile -FactionPayload $factionResult.Payload
+    $faction = if ($factionResult.Success) {
+        Get-TornFactionTravelProfile -FactionPayload $factionResult.Payload
     } else {
-        $faction = [pscustomobject]@{ Resolved = $false; ExcursionLevel = 0; TravelCostLevel = 0; Summary = ('Faction upgrades unavailable: {0}' -f [string]$factionResult.Error) }
+        [pscustomobject]@{
+            Resolved = $false; State = 'unknown'; ExcursionLevel = 0; TravelCostLevel = 0
+            PeaceExcursionLevel = 0; PeaceTravelCostLevel = 0; WarExcursionLevel = 0; WarTravelCostLevel = 0
+            Summary = ('Faction upgrades unavailable: {0}' -f [string]$factionResult.Error)
+        }
     }
 
     return [pscustomobject]@{
@@ -213,8 +252,13 @@ function Get-TornTravelProfileSync {
         CompanyStars = [int]$company.CompanyStars
         CompanySummary = [string]$company.Summary
         FactionResolved = [bool]$faction.Resolved
+        FactionState = [string]$faction.State
         FactionExcursionLevel = [int]$faction.ExcursionLevel
         FactionTravelCostLevel = [int]$faction.TravelCostLevel
+        FactionPeaceExcursionLevel = [int]$faction.PeaceExcursionLevel
+        FactionPeaceTravelCostLevel = [int]$faction.PeaceTravelCostLevel
+        FactionWarExcursionLevel = [int]$faction.WarExcursionLevel
+        FactionWarTravelCostLevel = [int]$faction.WarTravelCostLevel
         FactionSummary = [string]$faction.Summary
     }
 }
