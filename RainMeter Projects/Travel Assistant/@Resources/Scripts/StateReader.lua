@@ -71,6 +71,13 @@ local function setVariable(name, value)
     SKIN:Bang('!SetVariable', name, tostring(value or ''))
 end
 
+local function providerLabel(provider)
+    if provider == 'prometheus' then return 'Prometheus' end
+    if provider == 'yata' then return 'YATA' end
+    if provider == nil or provider == '' or provider == 'none' then return '' end
+    return provider
+end
+
 local function getStatusPresentation(status)
     if status == 'SAFE_WINDOW' then
         return '86,190,116,255', ''
@@ -163,6 +170,15 @@ local function updateDestination(data, prefix)
     setVariable(prefix .. 'DecisionText', decision)
 end
 
+local function oldestSourceTimestamp(data)
+    local uk = number(data.UKSourceTimestamp)
+    local jp = number(data.JPSourceTimestamp)
+    if uk > 0 and jp > 0 then return math.min(uk, jp) end
+    if uk > 0 then return uk end
+    if jp > 0 then return jp end
+    return 0
+end
+
 local function updateHeartbeatText(data, now)
     local remaining = 0
     if nextPollAt ~= nil then remaining = math.max(0, nextPollAt - now) end
@@ -179,11 +195,20 @@ local function updateHeartbeatText(data, now)
         return
     end
 
+    local provider = providerLabel(safeText(data.LiveProvider, ''))
+    local sourceTimestamp = oldestSourceTimestamp(data)
+    local sourceText = ''
+    if provider ~= '' and sourceTimestamp > 0 then
+        sourceText = string.format(' | %s %ds old', provider, math.max(0, now - sourceTimestamp))
+    elseif provider ~= '' then
+        sourceText = ' | ' .. provider
+    end
+
     local age = math.max(0, now - heartbeat)
     if age > (pollInterval * 2) then
-        setVariable('UpdatedText', string.format('UPDATE STALE - last %s (%ds ago) | retry %ds', os.date('%H:%M:%S', heartbeat), age, remaining))
+        setVariable('UpdatedText', string.format('UPDATE STALE - last %s (%ds ago)%s | retry %ds', os.date('%H:%M:%S', heartbeat), age, sourceText, remaining))
     else
-        setVariable('UpdatedText', string.format('Updated %s | next poll %ds', os.date('%H:%M:%S', heartbeat), remaining))
+        setVariable('UpdatedText', string.format('Updated %s%s | next poll %ds', os.date('%H:%M:%S', heartbeat), sourceText, remaining))
     end
 end
 
