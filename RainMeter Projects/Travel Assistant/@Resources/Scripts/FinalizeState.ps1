@@ -51,7 +51,7 @@ function Write-StateKvAtomic {
         $cleanValue = $value.Replace("`r", ' ').Replace("`n", ' ')
         $lines.Add("$key=$cleanValue")
     }
-    [System.IO.File]::WriteAllLines($tmp, @($lines), [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllLines($tmp, $lines.ToArray(), [System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $tmp -Destination $Path -Force
 }
 
@@ -79,7 +79,7 @@ function Load-Cycles {
             if ($seen.Add($key)) { $rows.Add($row) }
         }
     }
-    return @($rows)
+    return $rows.ToArray()
 }
 
 function Get-ProfitabilitySettings {
@@ -115,8 +115,6 @@ $engineState = Read-JsonFile $EngineStateFile
 $state = Read-StateKv $StateKvFile
 
 if ($null -eq $settings -or $null -eq $itemsConfig -or $null -eq $countriesConfig -or $null -eq $engineState -or $state.Count -eq 0) {
-    # The primary updater owns first-run state. The finalizer never fabricates a
-    # recommendation when its input state is missing or incomplete.
     return
 }
 
@@ -165,8 +163,6 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
     if ($state.ContainsKey($prefix + 'Stock')) { [void][int]::TryParse([string]$state[$prefix + 'Stock'], [ref]$stock) }
     if ($state.ContainsKey($prefix + 'ForeignPrice')) { [void][long]::TryParse([string]$state[$prefix + 'ForeignPrice'], [ref]$foreignPrice) }
 
-    # Restock display is informational and independent of profitability. Preserve
-    # it even when the opportunity is LOW_MARGIN/UNPROFITABLE.
     if ($null -ne $destState) {
         $activeCycle = Get-DynamicProperty $destState 'activeCycle'
         if ($stock -gt 0 -and $null -ne $activeCycle -and [long]$activeCycle.restockAt -gt 0) {
@@ -206,14 +202,14 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
 
     if (($timingStatuses -contains $status) -and -not $resaleFresh) {
         $state[$prefix + 'Status'] = 'CHECK_EXTERNAL'
-        $state[$prefix + 'Message'] = 'Resale reference is stale — no departure recommendation'
+        $state[$prefix + 'Message'] = 'Resale reference is stale - no departure recommendation'
         Clear-DepartureTiming -State $state -Prefix $prefix
         continue
     }
 
     if (($timingStatuses -contains $status) -and (-not $travelCostKnown -or $capacity -le 0)) {
         $state[$prefix + 'Status'] = 'CHECK_EXTERNAL'
-        $state[$prefix + 'Message'] = 'Travel-mode economics are unresolved — no departure recommendation'
+        $state[$prefix + 'Message'] = 'Travel-mode economics are unresolved - no departure recommendation'
         Clear-DepartureTiming -State $state -Prefix $prefix
         continue
     }
@@ -239,7 +235,7 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
         Clear-DepartureTiming -State $state -Prefix $prefix
     } elseif ($tripProfit -lt $requiredTripProfit -or $tripMargin -lt $minimumMarginPercent) {
         $state[$prefix + 'Status'] = 'LOW_MARGIN'
-        $state[$prefix + 'Message'] = ('Trip net too low after travel cost: ${0:N0} · {1:N1}% at {2} slots' -f $tripProfit, $tripMargin, $capacity)
+        $state[$prefix + 'Message'] = ('Trip net too low after travel cost: ${0:N0} | {1:N1}% at {2} slots' -f $tripProfit, $tripMargin, $capacity)
         Clear-DepartureTiming -State $state -Prefix $prefix
     }
 }
