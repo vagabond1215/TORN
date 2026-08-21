@@ -10,7 +10,7 @@ $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('TravelAssistant-SeedIm
 
 function Assert-Equal {
     param([string]$Name, $Actual, $Expected)
-    if ($Actual -ne $Expected) { throw "$Name — expected '$Expected', got '$Actual'." }
+    if ($Actual -ne $Expected) { throw "$Name - expected '$Expected', got '$Actual'." }
     Write-Host "PASS $Name" -ForegroundColor DarkGreen
 }
 
@@ -85,13 +85,11 @@ try {
     Assert-Equal 'Seed metadata status' ([string]$seedMetadata.status) 'seeded'
     Assert-Equal 'Seed provenance source name' ([string]$seedMetadata.sources[0].name) 'provider-sample'
 
-    # Re-importing identical data must not duplicate observations/cycles.
     & $importer -ObservationPath $candidateObsPath -CyclePath $candidateCyclesPath -SourceName 'provider-sample' -SourceUrl 'https://example.invalid/history' -Notes 'dedup replay'
     if ($LASTEXITCODE -ne 0) { throw "Seed importer dedup replay exited with code $LASTEXITCODE." }
     Assert-Equal 'Seed observation deduplication' (@(Read-JsonLines -Path (Join-Path $tempRoot 'data\seed\observations.jsonl')).Count) 8
     Assert-Equal 'Seed cycle deduplication' (@(Read-JsonLines -Path (Join-Path $tempRoot 'data\seed\cycles.jsonl')).Count) 2
 
-    # Synthetic/test provenance must be rejected by default and must not mutate seed truth.
     $rejected = $false
     try {
         & $importer -ObservationPath $candidateObsPath -SourceName 'synthetic-test' -SourceUrl 'https://example.invalid/synthetic'
