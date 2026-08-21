@@ -247,6 +247,13 @@ function Test-IsPrimaryMarket {
     return ($PrimaryCountryIds.Contains($CountryId) -and $PrimaryItemIds.Contains($ItemId))
 }
 
+function Test-ObservationChanged {
+    param([object]$DestState, [object]$Observation)
+    if ([int]$DestState.lastStock -ne [int]$Observation.stock) { return $true }
+    if ([long]$DestState.lastForeignPrice -ne [long]$Observation.foreignPrice) { return $true }
+    return $false
+}
+
 function Update-ObservedMarketMetadata {
     param([object]$EngineState, [object]$Observation, [long]$Now)
     $key = ([string]$Observation.country) + ':' + ([string]$Observation.itemId)
@@ -324,9 +331,10 @@ try {
 
             $key = ([string]$observation.country) + ':' + ([string]$observation.itemId)
             $destState = Get-DestinationState -EngineState $engineState -Key $key
-            $sameSource = ([long]$destState.lastSourceTimestamp -eq [long]$observation.sourceTimestamp -and [long]$observation.sourceTimestamp -gt 0)
-            $sameValues = ([int]$destState.lastStock -eq [int]$observation.stock -and [long]$destState.lastForeignPrice -eq [long]$observation.foreignPrice)
-            if ($sameSource -and $sameValues) { continue }
+            if (-not (Test-ObservationChanged -DestState $destState -Observation $observation)) {
+                $destState.lastSourceTimestamp = [long]$observation.sourceTimestamp
+                continue
+            }
 
             Append-JsonLine -Path $ObservationFile -Value $observation
             $observationsWritten++
