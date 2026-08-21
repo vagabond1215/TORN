@@ -23,53 +23,28 @@ These presentation changes are not the subject of the new shadow collector and s
 
 ## Full-market shadow collection implemented
 
-### Collection countries
+All 11 Torn foreign destinations are configured with `collect: true` and Prometheus/YATA provider codes. Only United Kingdom and Japan remain `enabled: true` for the current visible/model path.
 
-All 11 Torn foreign destinations are now configured with `collect: true` and Prometheus/YATA provider codes:
-
-```text
-mexico               mex
-cayman_islands       cay
-canada                can
-hawaii                haw
-united_kingdom        uni
-argentina             arg
-switzerland           swi
-japan                 jap
-china                 chi
-united_arab_emirates  uae
-south_africa          sou
-```
-
-Only United Kingdom and Japan remain `enabled: true` for the current visible/model path.
-
-### Initial item metadata
-
-`config/items.json` now explicitly seeds:
+`config/items.json` explicitly seeds:
 
 - Xanax `[206]` — Drug — current visible/primary item;
 - Nessie Plushie `[266]` — Plushie — UK hidden collection seed;
 - Cherry Blossom `[277]` — Flower — Japan hidden collection seed.
 
-The new `collect`, `visible`, `optimizerEligible` and `countries` fields begin separating background collection from later UI/optimizer eligibility.
+The new `collect`, `visible`, `optimizerEligible`, and `countries` fields separate background collection from later UI/optimizer eligibility. The shadow collector itself is not limited to these three item IDs; it normalizes every valid provider row for every collection country.
 
-Nessie/Cherry remain hidden and not optimizer-eligible in this rollout.
+`ShadowCollector.ps1`:
 
-### ShadowCollector.ps1
+- defaults to a 120-second poll interval;
+- uses Prometheus then YATA fallback;
+- tracks every observed `country:itemId` market in ignored engine state;
+- appends raw history only when stock or foreign price changes;
+- retains source freshness in runtime metadata;
+- creates completed cycles with existing country/item identity;
+- skips current primary markets to protect UK/Japan Xanax from duplicate writes;
+- is fail-soft and cannot block the existing finalizer/heartbeat.
 
-New background collector behavior:
-
-- default interval: 120 seconds;
-- live provider order: Prometheus then YATA fallback;
-- every valid provider stock row for every collection country is normalized;
-- every observed `country:itemId` market is tracked in ignored runtime engine state;
-- changed non-primary observations are appended to the shared bounded observation history;
-- restock/sellout transitions produce completed cycles with existing schemas;
-- currently visible primary markets are skipped, protecting UK/Japan Xanax from duplicate shadow writes;
-- errors are fail-soft and written to ignored runtime state/error text;
-- unexpected shadow failure does not block the established finalizer/heartbeat.
-
-`RunUpdate.ps1` now serializes:
+`RunUpdate.ps1` serializes:
 
 ```text
 UpdateTracker
@@ -78,51 +53,34 @@ FinalizeState
 heartbeat
 ```
 
-The extra shadow provider request is an intentional migration bridge. The desired later architecture is one shared foreign-stock fetch fanning out to all markets after primary behavior equivalence is proven.
+The separate shadow provider request is an intentional migration bridge. The desired later architecture is one shared foreign-stock fetch fanning out to all markets after primary behavior equivalence is proven.
 
-## New tests
+## Focused Windows validation
 
-Added:
+Reported PASS on the target Windows machine:
 
 ```text
-tests/Validate-ShadowCollection.ps1
-tests/Run-ShadowCollectionTests.ps1
+Validate-ShadowCollection.ps1
+Run-ShadowCollectionTests.ps1
+Validate-RainmeterSkin.ps1
 ```
 
-They are now included in `tests/Run-All.ps1`.
+`Run-ShadowCollectionTests.ps1` specifically passed provider-row normalization, primary-market protection, provider-timestamp deduplication, stock/price-change recording, and country/item-isolated cycle completion.
 
-Coverage includes:
+The first attempt to inspect `engine-state.json` was run from `C:\Users\vagab` rather than the Travel Assistant directory, so the relative path resolved to `C:\Users\vagab\data\runtime\engine-state.json` and failed. The resulting `Observed markets: 1` output is not accepted as live shadow evidence because `$e` was not freshly loaded from the project runtime file.
 
-- 11-country provider-code contract;
-- shadow-only vs visible-country separation;
-- Xanax-only primary item guarantee during this rollout;
-- Nessie/Cherry item metadata flags;
-- multi-row provider normalization;
-- malformed-row rejection;
-- primary-market skip classification;
-- country/item identity retention through observed restock/sellout cycles.
+## Remaining acceptance for this run
 
-## Validation state
+From the Travel Assistant directory, force one shadow poll and inspect the real ignored runtime state. Success requires:
 
-Connector/GitHub implementation is complete for the initial shadow layer, but Windows execution has **not yet been reported for these new tests or for the live shadow pass**.
+- recent `lastPollAt`;
+- `lastProvider` normally `prometheus` (or `yata` fallback);
+- no `lastError`;
+- multiple countries/markets seen;
+- observed-market count substantially above the two visible Xanax markets;
+- current UK/Japan Xanax cards remain healthy.
 
-Required focused Windows checks:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-ShadowCollection.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ShadowCollectionTests.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
-```
-
-Then allow at least two minutes of normal Rainmeter operation and inspect:
-
-```powershell
-$e = Get-Content .\data\runtime\engine-state.json -Raw | ConvertFrom-Json
-$e.shadowCollection | Format-List
-@($e.observedMarkets.PSObject.Properties).Count
-```
-
-Success requires a recent successful shadow poll, multiple hidden observed markets, no shadow error, and unchanged healthy UK/Japan Xanax behavior.
+Once that succeeds, the next implementation phase is canonical item metadata/category enrichment followed by a bounded/staggered resale-price queue.
 
 ## Not implemented yet
 
