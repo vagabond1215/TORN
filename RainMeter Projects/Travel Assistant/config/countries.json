@@ -6,6 +6,7 @@
       "name": "United Kingdom",
       "city": "London",
       "enabled": true,
+      "collect": true,
       "providerCodes": {
         "prometheus": "uni",
         "yata": "uni",
@@ -40,6 +41,7 @@
       "name": "Japan",
       "city": "Tokyo",
       "enabled": true,
+      "collect": true,
       "providerCodes": {
         "prometheus": "jap",
         "yata": "jap",
@@ -68,6 +70,96 @@
       "travelTimeVerifiedAt": "2026-08-19",
       "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
       "travelEconomicsVerifiedAt": "2026-08-19"
+    },
+    {
+      "id": "mexico",
+      "name": "Mexico",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "mex",
+        "yata": "mex"
+      }
+    },
+    {
+      "id": "cayman_islands",
+      "name": "Cayman Islands",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "cay",
+        "yata": "cay"
+      }
+    },
+    {
+      "id": "canada",
+      "name": "Canada",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "can",
+        "yata": "can"
+      }
+    },
+    {
+      "id": "hawaii",
+      "name": "Hawaii",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "haw",
+        "yata": "haw"
+      }
+    },
+    {
+      "id": "argentina",
+      "name": "Argentina",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "arg",
+        "yata": "arg"
+      }
+    },
+    {
+      "id": "switzerland",
+      "name": "Switzerland",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "swi",
+        "yata": "swi"
+      }
+    },
+    {
+      "id": "china",
+      "name": "China",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "chi",
+        "yata": "chi"
+      }
+    },
+    {
+      "id": "united_arab_emirates",
+      "name": "United Arab Emirates",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "uae",
+        "yata": "uae"
+      }
+    },
+    {
+      "id": "south_africa",
+      "name": "South Africa",
+      "enabled": false,
+      "collect": true,
+      "providerCodes": {
+        "prometheus": "sou",
+        "yata": "sou"
+      }
     }
   ]
 }
