@@ -3,6 +3,7 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $SourceFinalizer = Join-Path $ProjectRoot '@Resources\Scripts\FinalizeState.ps1'
+$SourceTravelProfile = Join-Path $ProjectRoot '@Resources\Scripts\TravelProfile.ps1'
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('TravelAssistant-Finalize-' + [Guid]::NewGuid().ToString('N'))
 $scriptDir = Join-Path $tempRoot '@Resources\Scripts'
 $configDir = Join-Path $tempRoot 'config'
@@ -10,6 +11,7 @@ $runtimeDir = Join-Path $tempRoot 'data\runtime'
 $seedDir = Join-Path $tempRoot 'data\seed'
 $generatedDir = Join-Path $tempRoot '@Resources\Generated'
 $finalizer = Join-Path $scriptDir 'FinalizeState.ps1'
+$travelProfileScript = Join-Path $scriptDir 'TravelProfile.ps1'
 $localSettingsPath = Join-Path $configDir 'settings.local.json'
 
 function Assert-Equal {
@@ -42,6 +44,25 @@ function Write-LocalProfitabilitySettings {
             capacityOverride = $CapacityOverride
             minimumTotalTripProfit = $MinimumTotalTripProfit
             resaleStaleAfterSeconds = $ResaleStaleAfterSeconds
+        }
+    }
+    Write-JsonNoBom -Path $localSettingsPath -Value $local
+}
+
+function Write-LocalTravelProfileSettings {
+    param(
+        [string]$CompanyType = 'none',
+        [int]$CompanyStars = 0,
+        [int]$FactionExcursionLevel = 0,
+        [int]$FactionTravelCostLevel = 0
+    )
+    $local = [pscustomobject]@{
+        schemaVersion = 1
+        travelProfile = [pscustomobject]@{
+            companyType = $CompanyType
+            companyStars = $CompanyStars
+            factionExcursionLevel = $FactionExcursionLevel
+            factionTravelCostLevel = $FactionTravelCostLevel
         }
     }
     Write-JsonNoBom -Path $localSettingsPath -Value $local
@@ -154,9 +175,11 @@ function Invoke-Finalizer {
 New-Item -ItemType Directory -Force -Path $scriptDir, $configDir, $runtimeDir, $seedDir, $generatedDir | Out-Null
 try {
     Copy-Item -LiteralPath $SourceFinalizer -Destination $finalizer
+    Copy-Item -LiteralPath $SourceTravelProfile -Destination $travelProfileScript
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\settings.example.json') -Destination (Join-Path $configDir 'settings.example.json')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\items.json') -Destination (Join-Path $configDir 'items.json')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\countries.json') -Destination (Join-Path $configDir 'countries.json')
+    Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\travel-perks.json') -Destination (Join-Path $configDir 'travel-perks.json')
     [System.IO.File]::WriteAllText((Join-Path $seedDir 'cycles.jsonl'), '', [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::WriteAllText((Join-Path $runtimeDir 'cycles.jsonl'), '', [System.Text.UTF8Encoding]::new($false))
 
@@ -218,6 +241,27 @@ try {
     Assert-Equal 'Unresolved Business economics clears best departure' ([long]$result.UKBestDepartureAt) 0
     Assert-Equal 'Unresolved Business cost exposed as unknown' ([long]$result.UKTravelCost) -1
 
+    Write-LocalTravelProfileSettings -CompanyType 'lingerie_store' -CompanyStars 10 -FactionExcursionLevel 10 -FactionTravelCostLevel 5
+    $businessState = New-BaseState -Mode 'business' -UKStatus 'BEST_ODDS' -UKForeignPrice 700000 -Now $now
+    $businessState.UKTravelSeconds = 2700
+    $businessState.UKBestDepartureAt = $now + 300
+    Write-StateKv -Values $businessState
+    Write-EngineState -ResalePrice 1000000 -FetchedAt $now -UKLastSellOutAt ($now - 300)
+    $result = Invoke-Finalizer
+    Assert-Equal '10-star Lingerie makes Business economics known' ([long]$result.UKTravelCost) 0
+    Assert-Equal 'Company and faction bonuses increase Business capacity' ([int]$result.UKCapacity) 27
+    Assert-Equal 'Profitable free Business preserves BEST_ODDS' $result.UKStatus 'BEST_ODDS'
+    Assert-True 'Free Business preserves best departure timing' ([long]$result.UKBestDepartureAt -gt $now)
+
+    Write-LocalTravelProfileSettings -CompanyType 'lingerie_store' -CompanyStars 10 -FactionExcursionLevel 10 -FactionTravelCostLevel 5
+    $standardState = New-BaseState -Mode 'standard' -UKStatus 'SAFE_WINDOW' -UKForeignPrice 700000 -Now $now
+    $standardState.UKTravelSeconds = 9060
+    Write-StateKv -Values $standardState
+    Write-EngineState -ResalePrice 1000000 -FetchedAt $now -UKLastSellOutAt ($now - 300)
+    $result = Invoke-Finalizer
+    Assert-Equal 'Profile bonuses increase Standard capacity' ([int]$result.UKCapacity) 22
+    Assert-Equal 'Faction travel-cost perk reduces Standard fare' ([long]$result.UKTravelCost) 4500
+
     Write-LocalProfitabilitySettings -CapacityOverride 30 -MinimumTotalTripProfit 1600000
     Write-StateKv -Values (New-BaseState -Mode 'airstrip' -UKStatus 'SAFE_WINDOW' -UKForeignPrice 700000 -Now $now)
     Write-EngineState -ResalePrice 791000 -FetchedAt $now -UKLastSellOutAt ($now - 300)
@@ -229,7 +273,7 @@ try {
     Assert-Equal 'Total-trip floor failure clears departure timing' ([long]$result.UKWindowCloseAt) 0
 
     Clear-LocalSettings
-    Write-Host 'FinalizeState trip/restock guard tests passed.' -ForegroundColor Green
+    Write-Host 'FinalizeState trip/restock/profile guard tests passed.' -ForegroundColor Green
     exit 0
 } finally {
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
