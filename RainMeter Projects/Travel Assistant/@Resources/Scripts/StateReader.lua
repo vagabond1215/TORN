@@ -155,16 +155,10 @@ local function updateDestination(data, prefix)
     setVariable(prefix .. 'StatusColor', statusColor)
     setVariable(prefix .. 'OverlayText', overlayText)
 
-    if lastSoldOutAt > 0 then
-        setVariable(prefix .. 'LastSoldOutText', os.date('%H:%M', lastSoldOutAt))
-    else
-        setVariable(prefix .. 'LastSoldOutText', '-')
-    end
-
     if stock > 0 then
         setVariable(prefix .. 'StockHeaderText', 'Stock: ' .. formatInteger(stock))
     elseif lastSoldOutAt > 0 then
-        setVariable(prefix .. 'StockHeaderText', 'Out of Stock: ' .. formatShortElapsed(now - lastSoldOutAt))
+        setVariable(prefix .. 'StockHeaderText', 'Out of Stock: ' .. formatShortElapsed(now - lastSoldOutAt) .. ' (' .. os.date('%H:%M', lastSoldOutAt) .. ')')
     else
         setVariable(prefix .. 'StockHeaderText', 'Out of Stock')
     end
