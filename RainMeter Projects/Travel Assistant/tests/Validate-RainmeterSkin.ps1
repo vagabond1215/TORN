@@ -17,16 +17,25 @@ if ($ini -match '(?im)^Measure=RunCommand\s*$') {
     Fail 'RunCommand must be declared as Measure=Plugin plus Plugin=RunCommand.'
 }
 
-$pattern = '(?ms)^\[MeasureUpdate\]\s*(.*?)(?=^\[|\z)'
-$match = [regex]::Match($ini, $pattern)
-if (-not $match.Success) {
-    Fail 'Missing Rainmeter section [MeasureUpdate].'
-} else {
+foreach ($sectionName in @('MeasureUpdate','MeasureSettings')) {
+    $pattern = '(?ms)^\[' + [regex]::Escape($sectionName) + '\]\s*(.*?)(?=^\[|\z)'
+    $match = [regex]::Match($ini, $pattern)
+    if (-not $match.Success) {
+        Fail "Missing Rainmeter section [$sectionName]."
+        continue
+    }
+
     $body = $match.Groups[1].Value
-    if ($body -notmatch '(?im)^Measure=Plugin\s*$') { Fail '[MeasureUpdate] must declare Measure=Plugin.' }
-    if ($body -notmatch '(?im)^Plugin=RunCommand\s*$') { Fail '[MeasureUpdate] must declare Plugin=RunCommand.' }
-    if ($body -notmatch '(?im)^Program=powershell\.exe\s*$') { Fail '[MeasureUpdate] must execute powershell.exe.' }
-    if ($body -notmatch '(?im)^Parameter=.*RunUpdate\.ps1') { Fail '[MeasureUpdate] must route through RunUpdate.ps1.' }
+    if ($body -notmatch '(?im)^Measure=Plugin\s*$') { Fail "[$sectionName] must declare Measure=Plugin." }
+    if ($body -notmatch '(?im)^Plugin=RunCommand\s*$') { Fail "[$sectionName] must declare Plugin=RunCommand." }
+    if ($body -notmatch '(?im)^Program=powershell\.exe\s*$') { Fail "[$sectionName] must execute powershell.exe." }
+
+    if ($sectionName -eq 'MeasureUpdate' -and $body -notmatch '(?im)^Parameter=.*RunUpdate\.ps1') {
+        Fail '[MeasureUpdate] must route through RunUpdate.ps1.'
+    }
+    if ($sectionName -eq 'MeasureSettings' -and $body -notmatch '(?im)^Parameter=.*OpenSettings\.ps1') {
+        Fail '[MeasureSettings] must route through OpenSettings.ps1.'
+    }
 }
 
 if ($ini -notmatch '(?m)^OnRefreshAction=\[!CommandMeasure MeasureUpdate "Run"\]\s*$') {
@@ -35,8 +44,8 @@ if ($ini -notmatch '(?m)^OnRefreshAction=\[!CommandMeasure MeasureUpdate "Run"\]
 if ($ini -notmatch '(?ms)^\[MeterSettings\].*?Text=SETTINGS\s+>') {
     Fail 'Top-right Settings meter is missing.'
 }
-if ($ini -notmatch '(?m)^LeftMouseUpAction=.*OpenSettings\.ps1') {
-    Fail 'Settings meter must launch OpenSettings.ps1.'
+if ($ini -notmatch '(?m)^LeftMouseUpAction=\[!CommandMeasure MeasureSettings "Run"\]\s*$') {
+    Fail 'Settings meter must trigger the MeasureSettings RunCommand measure.'
 }
 if ($ini -match '(?m)^\[MeasureCycleMode\]') {
     Fail 'Main skin should no longer expose the slow CycleTravelMode RunCommand measure.'
