@@ -1,4 +1,4 @@
-# Next Codex Run: Bounded Resale-Price Queue
+# Next Codex Run: Category-Aware Carrying Capacity
 
 **Status: ACTIVE**
 
@@ -10,9 +10,9 @@ show narrowly
 optimize only after evidence/economics are ready
 ```
 
-## Accepted catalog baseline
+## Accepted baseline
 
-Target Windows has now accepted the complete current offline catalog and legacy-market filtering:
+Target Windows has accepted the current catalog/market-validity layer:
 
 ```text
 provider:                     prometheus
@@ -27,28 +27,23 @@ unresolvedItems:                 0
 nameConflicts:                   0
 ```
 
-Accepted legacy rows:
+The broad resale queue also completed a clean live request:
 
 ```text
-mexico:21
-mexico:232
-mexico:327
-united_arab_emirates:383
-united_arab_emirates:440
+activeMarkets: 227
+activeItems:   197
+pricedItems:     2
+freshItems:      2
+staleItems:    195
+successCount:    1
+failureCount:    0
+status:          OK
+lastItemId:       4
 ```
 
-Accepted canonical repairs:
-
-```text
-327 Blank Casino Chips | provider alias Blank Tokens | Material
-383 Digital Organizer  | provider alias Platinum PDA | Miscellaneous
-```
-
-The visible UI remains UK/Japan Xanax only.
+The successful row used the established `torn_itemmarket` cache schema. The visible UI remains UK/Japan Xanax only.
 
 ## Current production runtime
-
-The established visible/data path remains:
 
 ```text
 UpdateTracker
@@ -56,213 +51,114 @@ ShadowCollector (fail-soft)
 LocalCatalog (fail-soft / local-only)
 FinalizeState
 visible heartbeat
-```
-
-New broad resale population runs **after** the heartbeat:
-
-```text
 ResaleQueue (fail-soft, max one request/run)
 ```
 
-This ordering is intentional: broad-market resale latency must not make the current visible skin look unhealthy.
+Catalog metadata network maintenance remains outside the heartbeat.
 
-## Implemented resale queue
+## Implemented category-aware capacity
 
-New production script:
-
-```text
-@Resources/Scripts/ResaleQueue.ps1
-```
-
-It reads current `engine-state.json -> observedMarkets` and builds a distinct item set only from active markets.
-
-A market is excluded when:
+The accepted current-capacity model remains the authority for **general/Xanax** carrying capacity:
 
 ```text
-catalogActive=false
+base travel capacity
++ current suitcase/general active bonus
 ```
 
-or defensively when:
+For the currently synced example:
 
 ```text
-catalogStatus=legacy_removed
+Airstrip general/Xanax capacity = 18
+Standard general/Xanax capacity = 13
 ```
 
-Therefore the five verified legacy provider rows remain observable for provenance but receive no broad resale work.
+Category-specific company perks are now modeled separately from that general number.
 
-### Queue bounds
+### Important non-double-counting rule
 
-Defaults:
+`currentCapacity` / `currentCapacityBonus` represent the general/Xanax capacity and intentionally excluded Flower/Toy category-specific capacity from the original `/user/perks` parser.
+
+Therefore after a current-capacity sync:
+
+- general company/faction capacity is **not inferred again**;
+- a matching item-specific company bonus **is** allowed on top, because it was never included in the Xanax/general number.
+
+Current known category effects:
 
 ```text
-minimum attempt interval: 60 seconds
-broad cache freshness:     21600 seconds / 6 hours
-failed-item backoff:        3600 seconds / 1 hour
-request timeout:            6 seconds
-requests per run path:      1
+Flower Shop 7★ -> +5 only for Flower items
+Toy Shop    7★ -> +5 only for Plushie items
 ```
 
-At the current roughly 197 active distinct-item scale, one successful request/minute can populate an initially empty active catalog in roughly 3.3 hours of loaded-skin runtime without an API burst.
-
-This six-hour cache is the broad population/reference cache. The current visible Xanax updater retains its existing independent/fresher resale behavior and is not weakened by this change.
-
-### Candidate selection
-
-The queue skips:
-
-- items whose resale cache is still fresh;
-- verified inactive/legacy-only items;
-- recently failed items still within backoff.
-
-Never-priced eligible items are populated before old stale entries. Stale cached entries re-enter after the broad freshness interval.
-
-### API/key handling
-
-The queue uses the existing specific-item endpoint:
+Examples with a general Airstrip capacity of 18:
 
 ```text
-https://api.torn.com/v2/market/{itemId}/itemmarket?limit=1
+Xanax at Flower Shop 7★       = 18
+Cherry Blossom at Flower 7★   = 23
+Xanax at Toy Shop 7★          = 18
+Nessie Plushie at Toy Shop 7★ = 23
 ```
 
-Transport uses bounded `curl.exe --config -` with URL and Authorization header passed through stdin. The API key is never placed in the URL or process arguments.
+Standard mode with the same active general `+3` and matching category `+5` produces 18 slots (`10 + 3 + 5`).
 
-A successful cache row keeps the established resale schema:
+A positive explicit `profitability.capacityOverride` remains authoritative and exact.
+
+## CurrentCapacity parser cross-check
+
+`CurrentCapacity.ps1` now also parses category-specific Flower/Plushie perk strings independently from general capacity.
+
+New production helpers include:
 
 ```text
-price
-lowest
-average
-fetchedAt
-source=torn_itemmarket
+Get-TornTravelCapacityCategoryFromPerkText
+Get-TornCategoryTravelCapacityBonusFromPerkText
+Get-TornCategoryTravelCapacityPerks
+Get-TornEffectiveItemCapacity
 ```
 
-No usable price remains unresolved; zero is never interpreted as real economics.
+`Get-TornEffectiveXanaxCapacity` remains a backward-compatible Drug wrapper. Category-specific perks may be recognized/exposed by the parser but never increase Xanax capacity.
 
-### Runtime health
+An unparseable Flower-specific perk can make a direct Flower parser result unresolved without making unrelated Drug capacity unresolved.
 
-`engine-state.json -> resaleQueue` tracks:
+The normal TravelProfile economics path derives the category bonus from the already-synced company type/star profile, avoiding new persisted settings fields and avoiding another runtime API dependency.
 
-```text
-lastRunAt
-lastAttemptAt
-lastSuccessAt
-lastItemId
-activeMarkets
-activeItems
-pricedItems
-freshItems
-staleItems
-successCount
-failureCount
-status
-lastErrorAt
-lastError
-attempts
-```
+## Focused Windows acceptance
 
-Per-item attempts retain failure/backoff state without overwriting the last successful resale cache row.
-
-## Focused tests added
-
-```text
-tests/Validate-ResaleQueue.ps1
-tests/Run-ResaleQueueTests.ps1
-```
-
-They are included in `tests/Run-All.ps1`.
-
-The focused tests verify:
-
-- active market rows collapse to distinct item IDs;
-- `catalogActive=false` and `legacy_removed` rows are excluded;
-- fresh caches are skipped;
-- failed items back off instead of blocking the queue;
-- never-priced eligible items are prioritized;
-- the parser prefers the lowest listing and falls back to average price;
-- a zero/no-price response remains unresolved;
-- only one production broad Item Market invocation exists per queue run path;
-- curl/key handling remains stdin/header based;
-- the broad queue runs after the visible heartbeat and only for normal `Update` actions.
-
-## Immediate Windows validation
-
-Pull current `main`, then run only the focused checks:
+Run only:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-ResaleQueue.ps1
+  -File .\tests\Run-CurrentCapacityTests.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-ResaleQueueTests.ps1
+  -File .\tests\Run-TravelProfileTests.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-Then run one explicit live queue attempt:
+The focused capacity tests must prove:
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\@Resources\Scripts\ResaleQueue.ps1 -Force
-```
+- Xanax remains unchanged by Flower/Plushie bonuses;
+- category perk text parses separately from general travel capacity;
+- Flower +5 applies only to Flower;
+- Plushie +5 applies only to Plushie;
+- current general `+3` plus category `+5` gives Airstrip 23 / Standard 18;
+- current general company/faction capacity remains non-double-counted;
+- a positive explicit capacity override remains authoritative.
 
-Inspect without exposing the API key:
+No full suite is required unless these changes expose an unrelated regression.
 
-```powershell
-$e = Get-Content .\data\runtime\engine-state.json -Raw | ConvertFrom-Json
-$e.resaleQueue | Format-List
+## After acceptance
 
-"Resale cache rows: $(@($e.resaleCache.PSObject.Properties).Count)"
+Promote **Nessie Plushie** and **Cherry Blossom** as the first visible multi-item proof while keeping the current Xanax cards/functionality intact.
 
-$lastId = [string]$e.resaleQueue.lastItemId
-if (-not [string]::IsNullOrWhiteSpace($lastId) -and $lastId -ne '0') {
-    $e.resaleCache.PSObject.Properties[$lastId].Value | Format-List
-}
-```
+That UI/model phase should consume:
 
-Healthy first-run boundaries:
+- active-market validity;
+- local canonical category/name metadata;
+- broad resale cache;
+- category-aware carrying capacity;
+- existing country/item history isolation.
 
-```text
-activeMarkets: approximately 227 for the current provider dataset
-activeItems: approximately 197 if the five inactive IDs have no other active market
-status: OK, or a bounded ERROR with one item backed off
-lastItemId: one active item ID
-```
-
-Do not assume these live counts are permanent constants.
-
-If `status=ERROR`, show only:
-
-```powershell
-$e.resaleQueue.lastItemId
-$e.resaleQueue.lastError
-```
-
-Do not expose the API key or full local settings.
-
-## Acceptance target
-
-Before advancing:
-
-- focused tests pass on Windows;
-- one explicit live queue request completes within the bounded timeout or fails cleanly/backoffs one item;
-- current UK/Japan Xanax UI remains healthy;
-- no verified legacy market receives a resale attempt;
-- repeated normal Rainmeter updates gradually increase `pricedItems` without API bursts.
-
-## Next implementation after acceptance
-
-Move to category-aware effective carrying capacity:
-
-```text
-general travel capacity
-+ category-specific capacity when applicable
-```
-
-Required isolation:
-
-- Flower Shop flower bonus only for Flower items;
-- Toy Shop plushie bonus only for Plushie items;
-- neither may increase Xanax capacity.
-
-Then promote Nessie Plushie / Cherry Blossom as the first visible multi-item proof, followed by filters, travel-state destination behavior, full economics and finally `Optimal` scheduling.
+Then proceed to country/category filters, travel-state destination filtering/arrival countdown, full-country economics and finally `Optimal` scheduling after sufficient evidence exists.
