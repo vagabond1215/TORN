@@ -4,6 +4,7 @@ Set-StrictMode -Version 2.0
 $TestRoot = (Resolve-Path $PSScriptRoot).Path
 $tests = @(
     'Validate-TravelAssistant.ps1',
+    'Validate-RainmeterSkin.ps1',
     'Validate-HistoricalTools.ps1',
     'Run-HistoricalPipelineTests.ps1',
     'Run-SeedImporterTests.ps1',
