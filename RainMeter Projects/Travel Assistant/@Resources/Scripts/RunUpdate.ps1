@@ -9,12 +9,14 @@ Set-StrictMode -Version 2.0
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
+$VisibleItems = Join-Path $PSScriptRoot 'VisibleItems.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
+$VisibleItemsErrorFile = Join-Path $RuntimeDir 'visible-items-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
@@ -94,10 +96,6 @@ function Invoke-YataJsonNative {
         [int]$TimeoutSec = 15
     )
 
-    # Native Invoke-RestMethod has repeatedly succeeded against YATA on the
-    # target Windows machine. Keep the curl workaround scoped to api.torn.com.
-    # A single short retry covers transient YATA/network misses without turning
-    # the normal one-minute scheduler into a high-frequency polling loop.
     $attemptTimeout = [Math]::Min([Math]::Max($TimeoutSec, 1), 6)
     $lastError = $null
     for ($attempt = 1; $attempt -le 2; $attempt++) {
@@ -112,10 +110,6 @@ function Invoke-YataJsonNative {
     throw 'YATA live-stock request failed.'
 }
 
-# Windows PowerShell 5.1 on the target machine can hang specifically against
-# api.torn.com even though curl.exe completes immediately. Keep that workaround
-# provider-specific. YATA stays on the native transport that has been validated
-# successfully on this host, with one bounded retry.
 function Invoke-RestMethod {
     [CmdletBinding()]
     param(
@@ -143,60 +137,33 @@ function Write-UpdateHeartbeat {
     Move-Item -LiteralPath $tmp -Destination $HeartbeatFile -Force
 }
 
-function Write-ShadowFailure {
-    param([string]$Message)
+function Write-CompactFailure {
+    param([string]$Path, [string]$Message)
     try {
         New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
         $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
         if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
-        [System.IO.File]::WriteAllText($ShadowErrorFile, $clean, [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($Path, $clean, [System.Text.UTF8Encoding]::new($false))
     } catch { }
 }
 
-function Write-LocalCatalogFailure {
-    param([string]$Message)
-    try {
-        New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
-        $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
-        if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
-        [System.IO.File]::WriteAllText($LocalCatalogErrorFile, $clean, [System.Text.UTF8Encoding]::new($false))
-    } catch { }
-}
-
-function Write-ResaleQueueFailure {
-    param([string]$Message)
-    try {
-        New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
-        $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
-        if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
-        [System.IO.File]::WriteAllText($ResaleQueueErrorFile, $clean, [System.Text.UTF8Encoding]::new($false))
-    } catch { }
-}
+function Write-ShadowFailure { param([string]$Message) Write-CompactFailure -Path $ShadowErrorFile -Message $Message }
+function Write-LocalCatalogFailure { param([string]$Message) Write-CompactFailure -Path $LocalCatalogErrorFile -Message $Message }
+function Write-VisibleItemsFailure { param([string]$Message) Write-CompactFailure -Path $VisibleItemsErrorFile -Message $Message }
+function Write-ResaleQueueFailure { param([string]$Message) Write-CompactFailure -Path $ResaleQueueErrorFile -Message $Message }
 
 try {
-    # Rainmeter can fire an initial refresh and a scheduled poll close together.
-    # Skip a redundant overlapping run instead of creating concurrent network,
-    # history, state, graph, or finalized-display writes.
     $acquired = $mutex.WaitOne(0)
     if (-not $acquired) { exit 0 }
 
-    # UpdateTracker.ps1 owns the existing visible Xanax collection/history/model
-    # generation. Keep that stable path first.
     & $Updater -Action $Action
     if (-not $?) { exit 1 }
 
-    # Shadow collection is deliberately fail-soft. It starts the history clock
-    # for every observed foreign-market row across all configured collection
-    # countries, but it must never block the established Xanax UI/finalizer.
     if (Test-Path -LiteralPath $ShadowCollector) {
         try { & $ShadowCollector }
         catch { Write-ShadowFailure -Message $_.Exception.Message }
     }
 
-    # Local catalog enrichment is disk/config work only. It converts provider
-    # names into a complete observed item table and applies committed category
-    # overrides without making any Torn catalog request. Rich manually fetched
-    # Torn metadata, if present, is preserved rather than downgraded.
     if (Test-Path -LiteralPath $LocalCatalog) {
         try {
             & $LocalCatalog
@@ -206,31 +173,31 @@ try {
         }
     }
 
-    # Network catalog maintenance is intentionally NOT part of this heartbeat
-    # path. ItemMetadata.ps1 remains an explicit/manual maintenance tool only.
+    # Network catalog maintenance is intentionally NOT part of this heartbeat.
+    # ItemMetadata.ps1 remains explicit/manual maintenance only.
 
-    # FinalizeState.ps1 applies independent restock-display, resale-freshness,
-    # and trip-economics guards without making another network request.
     & $Finalizer
     if (-not $?) { exit 1 }
 
-    # Write the visible heartbeat as soon as the established production pass is
-    # complete. Broad resale population is deliberately lower priority and runs
-    # afterward so a bounded market-price miss cannot make the visible skin look
-    # unhealthy.
+    # Multi-item presentation enrichment is local-only. It reads already
+    # collected shadow stock, resaleCache, and the category-aware capacity model
+    # to expose Nessie/Cherry plus parenthesized market references. A failure
+    # leaves the validated Xanax state intact.
+    if (Test-Path -LiteralPath $VisibleItems) {
+        try {
+            & $VisibleItems
+            if (Test-Path -LiteralPath $VisibleItemsErrorFile) { Remove-Item -LiteralPath $VisibleItemsErrorFile -Force -ErrorAction SilentlyContinue }
+        } catch {
+            Write-VisibleItemsFailure -Message $_.Exception.Message
+        }
+    }
+
     Write-UpdateHeartbeat
 
-    # Populate the broad active-item resale cache gradually: at most one bounded
-    # Torn Item Market request per update. Verified catalogActive=false markets
-    # are excluded by ResaleQueue.ps1. The current visible Xanax path keeps its
-    # existing independent/fresher resale behavior.
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
         try {
             & $ResaleQueue
             if (Test-Path -LiteralPath $ResaleQueueErrorFile) {
-                # ResaleQueue.ps1 owns diagnostic persistence for handled API
-                # failures. Remove only an obsolete wrapper-level failure file
-                # when the queue state itself is no longer reporting an error.
                 try {
                     $queueState = Get-Content -LiteralPath (Join-Path $RuntimeDir 'engine-state.json') -Raw | ConvertFrom-Json
                     if ($queueState.PSObject.Properties['resaleQueue'] -and [string]$queueState.resaleQueue.status -ne 'ERROR') {
