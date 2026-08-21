@@ -2,11 +2,11 @@
 
 Rainmeter-based Torn foreign-market travel decision assistant.
 
-The currently validated visible UI remains focused on **Xanax in the United Kingdom and Japan**, while the project has begun a controlled expansion to background-collect the full foreign market before exposing more items, filters, travel-context behavior, or route optimization.
+The currently validated visible UI remains focused on **Xanax in the United Kingdom and Japan**, while the data layer now background-collects the full provider-observed foreign market and is beginning canonical item/category enrichment before broader UI or route optimization.
 
 ## Current direction
 
-Travel Assistant now separates:
+Travel Assistant separates:
 
 ```text
 COLLECTED opportunities
@@ -16,7 +16,7 @@ VISIBLE opportunities
 OPTIMIZER candidates
 ```
 
-That means the application can begin learning every foreign-market stock cycle now without forcing unfinished categories/economics into the visible UI or future `Optimal` mode.
+The application can learn foreign-market stock cycles broadly without forcing unfinished categories/economics into the visible UI or future `Optimal` mode.
 
 ## Current visible UI
 
@@ -37,7 +37,7 @@ Current visible behavior remains deliberately conservative: stale, unsupported, 
 
 ## Full-market shadow collection
 
-The initial expansion adds a fail-soft background collector for all 11 Torn foreign destinations:
+The expansion background-collects all 11 Torn foreign destinations:
 
 ```text
 Mexico
@@ -53,25 +53,58 @@ United Arab Emirates
 South Africa
 ```
 
-Every valid item row returned by Prometheus/YATA is normalized to the existing observation schema and can begin accumulating restock/sellout history by `country + itemId`.
+Every valid item row returned by Prometheus/YATA is normalized to the existing observation schema and can accumulate restock/sellout history by `country + itemId`.
 
-The shadow pass currently runs no more frequently than every 120 seconds and is intentionally isolated from the current UK/Japan Xanax primary markets. If shadow collection fails, it must not block the established updater/finalizer/heartbeat.
+The shadow pass runs no more frequently than every 120 seconds and is isolated from the current UK/Japan Xanax primary markets. Raw history is written only when stock or foreign price changes; provider timestamp changes still update freshness metadata without creating another raw sample.
+
+Target-Windows acceptance on 2026-08-21 confirmed:
+
+```text
+Prometheus
+11 countries
+232 observed country-item markets
+51 changed observations on the forced acceptance pass
+no shadow error
+```
 
 The background collector tracks observed markets in ignored `data/runtime/engine-state.json` and uses the same bounded raw/cycle history stores as the existing model.
 
-## First multi-item metadata seeds
+## Canonical item metadata
 
-The committed item metadata now includes:
+`ItemMetadata.ps1` enriches the **distinct observed item IDs** using Torn API v2 specific-item metadata.
+
+It records canonical:
 
 ```text
-206 Xanax          | Drug     | current primary/visible
-266 Nessie Plushie | Plushie  | United Kingdom shadow seed
-277 Cherry Blossom | Flower   | Japan shadow seed
+name
+type / category
+weapon category detail where available
+tradability
+Torn market-price reference
+shop locations/prices
 ```
 
-Nessie and Cherry remain hidden and not optimizer-eligible during the collection-foundation rollout.
+Metadata defaults to a six-hour cadence and requests at most 150 item IDs per batch. It uses bounded `curl.exe --config -`, passing the API key through stdin Authorization configuration rather than the URL or process command line.
 
-The shadow collector does **not** use this short list as a whitelist. Unknown provider-observed item IDs are still collected so history is not lost while canonical metadata catches up.
+Weapon items retain Torn's detailed `Primary`, `Secondary`, `Melee`, or `Temporary` category when available. Missing details remain unresolved `Weapon` rather than being guessed.
+
+Torn `market_price` is **informational metadata only** at this stage. It does not replace the current Item Market profitability gate.
+
+Metadata failures are fail-soft and cannot block the established Xanax finalizer/heartbeat.
+
+## First multi-item seeds
+
+Committed item configuration includes:
+
+```text
+206 Xanax           | Drug     | current primary/visible
+266 Nessie Plushie  | Plushie  | United Kingdom hidden seed
+277 Cherry Blossom  | Flower   | Japan hidden seed
+```
+
+Nessie and Cherry remain hidden and not optimizer-eligible during the data-layer rollout.
+
+The collector does **not** use this short list as a whitelist. Unknown provider-observed IDs are collected first and enriched from Torn metadata later.
 
 ## Live sources
 
@@ -85,7 +118,7 @@ YATA
 
 Foreign stock is crowd-sourced. Static Wiki shop tables are useful documentation, but the live provider payload determines which market rows are actually being observed.
 
-A Torn API key enables resale/economics features and remains local/ignored. On the validated Windows machine, Torn API calls that hang under native Windows PowerShell use the existing bounded `curl.exe` workaround; foreign-stock providers continue using normal bounded requests.
+A Torn API key enables metadata/resale/economics features and remains local/ignored. On the validated Windows machine, Torn API calls that hang under native Windows PowerShell use bounded `curl.exe` transport.
 
 Never commit a limited/full-authority key.
 
@@ -131,16 +164,15 @@ The live stale threshold is a recommendation-safety guard, not a history-expiry 
 
 ## Future expansion sequence
 
-After the shadow collector is validated on Windows:
+After canonical metadata is accepted on Windows:
 
-1. enrich every observed item ID with canonical name/category metadata;
-2. add a bounded/staggered Torn resale-price queue;
-3. generalize category-specific capacity/economics;
-4. expose Nessie + Cherry as the first multi-item UI proof;
-5. add country/category filters;
-6. add Torn travel-state destination filtering and arrival countdown;
-7. populate full-country economics;
-8. build `Optimal` as a bounded route scheduler comparing short, long and mixed-country trip sequences.
+1. add a bounded/staggered Torn Item Market resale-price queue;
+2. generalize category-specific capacity/economics;
+3. expose Nessie + Cherry as the first multi-item UI proof;
+4. add country/category filters;
+5. add Torn travel-state destination filtering and arrival countdown;
+6. populate full-country economics;
+7. build `Optimal` as a bounded route scheduler comparing short, long and mixed-country trip sequences.
 
 `Optimal` will not simply sort by profit/item or profit/trip. It must eventually consider travel time, return time, capacity, stock survival, restock/depletion evidence, fees/costs, confidence and opportunity cost across a planning horizon.
 
@@ -168,11 +200,13 @@ Because the installed skin is a junction to the repository source, later pulls n
 
 ## Validation
 
-Focused shadow-collection checks:
+Focused current expansion checks:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-ShadowCollection.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ShadowCollectionTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-ItemMetadata.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ItemMetadataTests.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
