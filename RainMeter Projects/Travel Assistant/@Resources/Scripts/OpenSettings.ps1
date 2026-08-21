@@ -33,9 +33,7 @@ function Write-SettingsError {
 
 trap {
     Write-SettingsError $_
-    try {
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Travel Assistant Settings error', 'OK', 'Error') | Out-Null
-    } catch { }
+    try { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Travel Assistant Settings error', 'OK', 'Error') | Out-Null } catch { }
     exit 1
 }
 
@@ -93,7 +91,7 @@ if ($null -ne $prefs -and $prefs.PSObject.Properties['travelMode']) { $currentMo
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Travel Assistant Settings'
-$form.Size = New-Object System.Drawing.Size(520, 625)
+$form.Size = New-Object System.Drawing.Size(560, 760)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -119,22 +117,34 @@ function Style-Input {
     $Control.ForeColor = [System.Drawing.Color]::FromArgb(232,235,240)
 }
 
-$title = New-Label -Text 'TRAVEL ASSISTANT' -X 16 -Y 14 -W 260 -H 28
+function New-LevelControl {
+    param([int]$X, [int]$Y, [int]$Maximum, [int]$Value)
+    $control = New-Object System.Windows.Forms.NumericUpDown
+    $control.Location = New-Object System.Drawing.Point($X,$Y)
+    $control.Size = New-Object System.Drawing.Size(70,24)
+    $control.Minimum = 0
+    $control.Maximum = $Maximum
+    $control.Value = [decimal][Math]::Max(0, [Math]::Min($Maximum, $Value))
+    Style-Input $control
+    $form.Controls.Add($control)
+    return $control
+}
+
+$title = New-Label -Text 'TRAVEL ASSISTANT' -X 16 -Y 14 -W 280 -H 28
 $title.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 14)
 
 New-Label -Text 'Torn API key' -X 18 -Y 58 | Out-Null
 $keyBox = New-Object System.Windows.Forms.TextBox
 $keyBox.Location = New-Object System.Drawing.Point(190,55)
-$keyBox.Size = New-Object System.Drawing.Size(250,24)
+$keyBox.Size = New-Object System.Drawing.Size(280,24)
 $keyBox.UseSystemPasswordChar = $true
 if ($local.PSObject.Properties['tornApiKey']) { $keyBox.Text = [string]$local.tornApiKey }
 Style-Input $keyBox
 $form.Controls.Add($keyBox)
-
 $showKey = New-Object System.Windows.Forms.CheckBox
 $showKey.Text = 'Show'
-$showKey.Location = New-Object System.Drawing.Point(448,57)
-$showKey.Size = New-Object System.Drawing.Size(55,22)
+$showKey.Location = New-Object System.Drawing.Point(478,57)
+$showKey.Size = New-Object System.Drawing.Size(60,22)
 $showKey.ForeColor = $form.ForeColor
 $showKey.Add_CheckedChanged({ $keyBox.UseSystemPasswordChar = -not $showKey.Checked })
 $form.Controls.Add($showKey)
@@ -142,7 +152,7 @@ $form.Controls.Add($showKey)
 New-Label -Text 'Travel mode' -X 18 -Y 101 | Out-Null
 $modeCombo = New-Object System.Windows.Forms.ComboBox
 $modeCombo.Location = New-Object System.Drawing.Point(190,98)
-$modeCombo.Size = New-Object System.Drawing.Size(250,24)
+$modeCombo.Size = New-Object System.Drawing.Size(280,24)
 $modeCombo.DropDownStyle = 'DropDownList'
 Style-Input $modeCombo
 $form.Controls.Add($modeCombo)
@@ -150,207 +160,180 @@ $form.Controls.Add($modeCombo)
 New-Label -Text 'Company' -X 18 -Y 144 | Out-Null
 $companyCombo = New-Object System.Windows.Forms.ComboBox
 $companyCombo.Location = New-Object System.Drawing.Point(190,141)
-$companyCombo.Size = New-Object System.Drawing.Size(250,24)
+$companyCombo.Size = New-Object System.Drawing.Size(280,24)
 $companyCombo.DropDownStyle = 'DropDownList'
 Style-Input $companyCombo
 $form.Controls.Add($companyCombo)
-
 $companyRows = @($perks.companies)
 foreach ($company in $companyRows) { [void]$companyCombo.Items.Add([string]$company.label) }
 $companyIndex = 0
-for ($i = 0; $i -lt $companyRows.Count; $i++) {
-    if ([string]$companyRows[$i].id -eq [string]$profile.companyType) { $companyIndex = $i; break }
-}
+for ($i = 0; $i -lt $companyRows.Count; $i++) { if ([string]$companyRows[$i].id -eq [string]$profile.companyType) { $companyIndex = $i; break } }
 $companyCombo.SelectedIndex = $companyIndex
 
 New-Label -Text 'Company stars' -X 18 -Y 187 | Out-Null
-$stars = New-Object System.Windows.Forms.NumericUpDown
-$stars.Location = New-Object System.Drawing.Point(190,184)
-$stars.Size = New-Object System.Drawing.Size(90,24)
-$stars.Minimum = 0
-$stars.Maximum = 10
-$stars.Value = [decimal][int]$profile.companyStars
-Style-Input $stars
-$form.Controls.Add($stars)
+$stars = New-LevelControl -X 190 -Y 184 -Maximum 10 -Value ([int]$profile.companyStars)
 
-New-Label -Text 'Faction: Excursion capacity' -X 18 -Y 230 -W 168 | Out-Null
-$excursion = New-Object System.Windows.Forms.NumericUpDown
-$excursion.Location = New-Object System.Drawing.Point(190,227)
-$excursion.Size = New-Object System.Drawing.Size(90,24)
-$excursion.Minimum = 0
-$excursion.Maximum = 10
-$excursion.Value = [decimal][int]$profile.factionExcursionLevel
-Style-Input $excursion
-$form.Controls.Add($excursion)
-New-Label -Text '(+1 item per level)' -X 290 -Y 230 -W 170 | Out-Null
+$section = New-Label -Text 'FACTION TRAVEL LOADOUTS' -X 18 -Y 225 -W 260
+$section.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
 
-New-Label -Text 'Faction: Travel cost' -X 18 -Y 273 | Out-Null
-$travelCostLevel = New-Object System.Windows.Forms.NumericUpDown
-$travelCostLevel.Location = New-Object System.Drawing.Point(190,270)
-$travelCostLevel.Size = New-Object System.Drawing.Size(90,24)
-$travelCostLevel.Minimum = 0
-$travelCostLevel.Maximum = 5
-$travelCostLevel.Value = [decimal][int]$profile.factionTravelCostLevel
-Style-Input $travelCostLevel
-$form.Controls.Add($travelCostLevel)
-New-Label -Text '(-15% fee per level)' -X 290 -Y 273 -W 170 | Out-Null
+New-Label -Text 'Faction mode' -X 18 -Y 257 | Out-Null
+$factionStateCombo = New-Object System.Windows.Forms.ComboBox
+$factionStateCombo.Location = New-Object System.Drawing.Point(190,254)
+$factionStateCombo.Size = New-Object System.Drawing.Size(140,24)
+$factionStateCombo.DropDownStyle = 'DropDownList'
+Style-Input $factionStateCombo
+[void]$factionStateCombo.Items.Add('Manual')
+[void]$factionStateCombo.Items.Add('Peace')
+[void]$factionStateCombo.Items.Add('War')
+$factionStateCombo.SelectedIndex = if ([string]$profile.factionState -eq 'peace') { 1 } elseif ([string]$profile.factionState -eq 'war') { 2 } else { 0 }
+$form.Controls.Add($factionStateCombo)
+
+New-Label -Text 'Loadout' -X 18 -Y 295 -W 135 | Out-Null
+New-Label -Text 'Capacity' -X 190 -Y 295 -W 70 | Out-Null
+New-Label -Text 'Cost' -X 290 -Y 295 -W 60 | Out-Null
+New-Label -Text 'Manual active' -X 18 -Y 322 -W 150 | Out-Null
+$manualExcursion = New-LevelControl -X 190 -Y 319 -Maximum 10 -Value ([int]$profile.factionExcursionLevel)
+$manualCost = New-LevelControl -X 290 -Y 319 -Maximum 5 -Value ([int]$profile.factionTravelCostLevel)
+New-Label -Text 'Peace' -X 18 -Y 359 -W 150 | Out-Null
+$peaceExcursion = New-LevelControl -X 190 -Y 356 -Maximum 10 -Value ([int]$profile.factionPeaceExcursionLevel)
+$peaceCost = New-LevelControl -X 290 -Y 356 -Maximum 5 -Value ([int]$profile.factionPeaceTravelCostLevel)
+New-Label -Text 'War' -X 18 -Y 396 -W 150 | Out-Null
+$warExcursion = New-LevelControl -X 190 -Y 393 -Maximum 10 -Value ([int]$profile.factionWarExcursionLevel)
+$warCost = New-LevelControl -X 290 -Y 393 -Maximum 5 -Value ([int]$profile.factionWarTravelCostLevel)
+New-Label -Text 'Capacity: +1 item/level (max 10)' -X 370 -Y 350 -W 170 -H 34 | Out-Null
+New-Label -Text 'Cost: -15%/level (max 5)' -X 370 -Y 391 -W 170 -H 34 | Out-Null
 
 $sync = New-Object System.Windows.Forms.Button
 $sync.Text = 'Sync from Torn'
-$sync.Location = New-Object System.Drawing.Point(18,316)
-$sync.Size = New-Object System.Drawing.Size(110,30)
+$sync.Location = New-Object System.Drawing.Point(18,442)
+$sync.Size = New-Object System.Drawing.Size(112,30)
 $form.Controls.Add($sync)
-
 $syncStatus = New-Object System.Windows.Forms.Label
-$syncStatus.Location = New-Object System.Drawing.Point(140,312)
-$syncStatus.Size = New-Object System.Drawing.Size(352,44)
+$syncStatus.Location = New-Object System.Drawing.Point(142,438)
+$syncStatus.Size = New-Object System.Drawing.Size(390,50)
 $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
-$syncStatus.Text = 'Populate company/stars and faction travel levels. Save remains explicit.'
+$syncStatus.Text = 'Populate company/stars, active faction mode, and both faction loadouts. Save remains explicit.'
 $form.Controls.Add($syncStatus)
 
-$summaryTitle = New-Label -Text 'Effective travel perks' -X 18 -Y 365 -W 240
+$summaryTitle = New-Label -Text 'Effective travel perks' -X 18 -Y 500 -W 240
 $summaryTitle.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
 $summary = New-Object System.Windows.Forms.Label
-$summary.Location = New-Object System.Drawing.Point(18,390)
-$summary.Size = New-Object System.Drawing.Size(475,74)
+$summary.Location = New-Object System.Drawing.Point(18,525)
+$summary.Size = New-Object System.Drawing.Size(515,90)
 $summary.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 $form.Controls.Add($summary)
-
-$note = New-Label -Text 'Flower/Toy +5 capacity is item-specific and does not increase Xanax capacity.' -X 18 -Y 470 -W 475 -H 24
+$note = New-Label -Text 'Flower/Toy +5 capacity is item-specific and does not increase Xanax capacity.' -X 18 -Y 620 -W 515 -H 24
 $note.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72)
 
 $script:modeIds = @()
-function Update-ProfilePreview {
+function Get-SelectedFactionState {
+    if ($factionStateCombo.SelectedIndex -eq 1) { return 'peace' }
+    if ($factionStateCombo.SelectedIndex -eq 2) { return 'war' }
+    return 'manual'
+}
+
+function Get-PreviewProfile {
     $companyId = 'none'
-    if ($companyCombo.SelectedIndex -ge 0 -and $companyCombo.SelectedIndex -lt $companyRows.Count) {
-        $companyId = [string]$companyRows[$companyCombo.SelectedIndex].id
+    if ($companyCombo.SelectedIndex -ge 0 -and $companyCombo.SelectedIndex -lt $companyRows.Count) { $companyId = [string]$companyRows[$companyCombo.SelectedIndex].id }
+    $state = Get-SelectedFactionState
+    $activeExcursion = [int]$manualExcursion.Value
+    $activeCost = [int]$manualCost.Value
+    if ($state -eq 'peace') { $activeExcursion = [int]$peaceExcursion.Value; $activeCost = [int]$peaceCost.Value }
+    elseif ($state -eq 'war') { $activeExcursion = [int]$warExcursion.Value; $activeCost = [int]$warCost.Value }
+    return [pscustomobject]@{
+        companyType = $companyId; companyStars = [int]$stars.Value; factionState = $state
+        factionExcursionLevel = $activeExcursion; factionTravelCostLevel = $activeCost
+        factionPeaceExcursionLevel = [int]$peaceExcursion.Value; factionPeaceTravelCostLevel = [int]$peaceCost.Value
+        factionWarExcursionLevel = [int]$warExcursion.Value; factionWarTravelCostLevel = [int]$warCost.Value
     }
-    $previewProfile = [pscustomobject]@{
-        companyType = $companyId
-        companyStars = [int]$stars.Value
-        factionExcursionLevel = [int]$excursion.Value
-        factionTravelCostLevel = [int]$travelCostLevel.Value
-    }
+}
+
+function Update-ProfilePreview {
+    $previewProfile = Get-PreviewProfile
     $effects = Get-TravelProfileEffects -Profile $previewProfile -PerksConfig $perks -Item $item
 
     $wantedMode = $currentMode
-    if ($modeCombo.SelectedIndex -ge 0 -and $modeCombo.SelectedIndex -lt $script:modeIds.Count) {
-        $wantedMode = [string]$script:modeIds[$modeCombo.SelectedIndex]
-    }
-
+    if ($modeCombo.SelectedIndex -ge 0 -and $modeCombo.SelectedIndex -lt $script:modeIds.Count) { $wantedMode = [string]$script:modeIds[$modeCombo.SelectedIndex] }
     $availableIds = @(Get-AvailableTravelModeIds -TravelModes $modes -Effects $effects)
-    $modeCombo.Items.Clear()
-    $script:modeIds = @()
+    $modeCombo.Items.Clear(); $script:modeIds = @()
     foreach ($id in $availableIds) {
         $row = @($modes.modes | Where-Object { [string]$_.id -eq $id } | Select-Object -First 1)
         if ($row.Count -eq 0) { continue }
-        [void]$modeCombo.Items.Add([string]$row[0].label)
-        $script:modeIds += $id
+        [void]$modeCombo.Items.Add([string]$row[0].label); $script:modeIds += $id
     }
     $selectIndex = [Array]::IndexOf([string[]]$script:modeIds, [string]$wantedMode)
     if ($selectIndex -lt 0) { $selectIndex = [Array]::IndexOf([string[]]$script:modeIds, 'airstrip') }
     if ($selectIndex -lt 0 -and $script:modeIds.Count -gt 0) { $selectIndex = 0 }
     if ($selectIndex -ge 0) { $modeCombo.SelectedIndex = $selectIndex }
 
+    $manualEnabled = ([string]$previewProfile.factionState -eq 'manual')
+    $manualExcursion.Enabled = $manualEnabled; $manualCost.Enabled = $manualEnabled
     $businessText = if ([bool]$effects.freeBusinessClass) { 'Business: FREE / available' } else { 'Business: locked (10-star Lingerie)' }
-    $summary.Text = ('General capacity +{0}   |   Xanax-specific +{1}' -f [int]$effects.generalCapacityBonus, [int]$effects.itemCapacityBonus) + [Environment]::NewLine + ('Faction capacity +{0}   |   Travel fees -{1}%' -f [int]$effects.factionCapacityBonus, [int]$effects.travelCostReductionPercent) + [Environment]::NewLine + $businessText
+    $stateText = ([string]$previewProfile.factionState).ToUpperInvariant()
+    $summary.Text = ('Faction mode {0}: active +{1} capacity | fees -{2}%' -f $stateText, [int]$effects.factionCapacityBonus, [int]$effects.travelCostReductionPercent) + [Environment]::NewLine + ('Peace {0}/10 cap, {1}/5 cost | War {2}/10 cap, {3}/5 cost' -f [int]$peaceExcursion.Value, [int]$peaceCost.Value, [int]$warExcursion.Value, [int]$warCost.Value) + [Environment]::NewLine + ('Company +{0} | Xanax-specific +{1} | {2}' -f [int]$effects.generalCapacityBonus, [int]$effects.itemCapacityBonus, $businessText)
 }
 
-$companyCombo.Add_SelectedIndexChanged({ Update-ProfilePreview })
-$stars.Add_ValueChanged({ Update-ProfilePreview })
-$excursion.Add_ValueChanged({ Update-ProfilePreview })
-$travelCostLevel.Add_ValueChanged({ Update-ProfilePreview })
+foreach ($control in @($companyCombo,$stars,$factionStateCombo,$manualExcursion,$manualCost,$peaceExcursion,$peaceCost,$warExcursion,$warCost)) {
+    if ($control -is [System.Windows.Forms.ComboBox]) { $control.Add_SelectedIndexChanged({ Update-ProfilePreview }) }
+    else { $control.Add_ValueChanged({ Update-ProfilePreview }) }
+}
 Update-ProfilePreview
 
 $sync.Add_Click({
-    $sync.Enabled = $false
-    $sync.Text = 'Syncing...'
+    $sync.Enabled = $false; $sync.Text = 'Syncing...'
     $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
     $syncStatus.Text = 'Reading Torn job and faction upgrades...'
     [System.Windows.Forms.Application]::DoEvents()
-
     try {
         $apiKey = [string]$keyBox.Text.Trim()
         if ([string]::IsNullOrWhiteSpace($apiKey)) { throw 'Enter a Torn API key before syncing.' }
-
         $result = Get-TornTravelProfileSync -ApiKey $apiKey -PerksConfig $perks
         $partial = $false
-
         if ($result.CompanyResolved) {
-            $companySyncIndex = -1
-            for ($i = 0; $i -lt $companyRows.Count; $i++) {
-                if ([string]$companyRows[$i].id -eq [string]$result.CompanyType) { $companySyncIndex = $i; break }
-            }
-            if ($companySyncIndex -ge 0) {
-                $companyCombo.SelectedIndex = $companySyncIndex
-                $stars.Value = [decimal][int]$result.CompanyStars
-            } else {
-                $partial = $true
-            }
-        } else {
-            $partial = $true
-        }
+            $idx = -1
+            for ($i = 0; $i -lt $companyRows.Count; $i++) { if ([string]$companyRows[$i].id -eq [string]$result.CompanyType) { $idx = $i; break } }
+            if ($idx -ge 0) { $companyCombo.SelectedIndex = $idx; $stars.Value = [decimal][int]$result.CompanyStars } else { $partial = $true }
+        } else { $partial = $true }
 
         if ($result.FactionResolved) {
-            $excursion.Value = [decimal][int]$result.FactionExcursionLevel
-            $travelCostLevel.Value = [decimal][int]$result.FactionTravelCostLevel
-        } else {
-            $partial = $true
-        }
-
+            $factionStateCombo.SelectedIndex = if ([string]$result.FactionState -eq 'peace') { 1 } elseif ([string]$result.FactionState -eq 'war') { 2 } else { 0 }
+            $peaceExcursion.Value = [decimal][int]$result.FactionPeaceExcursionLevel
+            $peaceCost.Value = [decimal][int]$result.FactionPeaceTravelCostLevel
+            $warExcursion.Value = [decimal][int]$result.FactionWarExcursionLevel
+            $warCost.Value = [decimal][int]$result.FactionWarTravelCostLevel
+            $manualExcursion.Value = [decimal][int]$result.FactionExcursionLevel
+            $manualCost.Value = [decimal][int]$result.FactionTravelCostLevel
+        } else { $partial = $true }
         Update-ProfilePreview
         $syncStatus.Text = ([string]$result.CompanySummary + ' | ' + [string]$result.FactionSummary)
-        if ($partial) {
-            $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72)
-        } else {
-            $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(86,190,116)
-        }
+        if ($partial) { $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72) }
+        else { $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(86,190,116) }
     } catch {
         Write-SettingsError $_
         $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(224,90,90)
         $syncStatus.Text = $_.Exception.Message
     } finally {
-        $sync.Text = 'Sync from Torn'
-        $sync.Enabled = $true
+        $sync.Enabled = $true; $sync.Text = 'Sync from Torn'
     }
 })
 
 $save = New-Object System.Windows.Forms.Button
-$save.Text = 'Save'
-$save.Location = New-Object System.Drawing.Point(318,525)
-$save.Size = New-Object System.Drawing.Size(82,30)
-$save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255)
-$save.ForeColor = [System.Drawing.Color]::Black
+$save.Text = 'Save'; $save.Location = New-Object System.Drawing.Point(354,665); $save.Size = New-Object System.Drawing.Size(82,30)
+$save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255); $save.ForeColor = [System.Drawing.Color]::Black
 $form.Controls.Add($save)
-
 $cancel = New-Object System.Windows.Forms.Button
-$cancel.Text = 'Cancel'
-$cancel.Location = New-Object System.Drawing.Point(410,525)
-$cancel.Size = New-Object System.Drawing.Size(82,30)
-$form.Controls.Add($cancel)
-$cancel.Add_Click({ $form.Close() })
+$cancel.Text = 'Cancel'; $cancel.Location = New-Object System.Drawing.Point(446,665); $cancel.Size = New-Object System.Drawing.Size(82,30)
+$form.Controls.Add($cancel); $cancel.Add_Click({ $form.Close() })
 
 $save.Add_Click({
     try {
-        $companyId = 'none'
-        if ($companyCombo.SelectedIndex -ge 0 -and $companyCombo.SelectedIndex -lt $companyRows.Count) {
-            $companyId = [string]$companyRows[$companyCombo.SelectedIndex].id
-        }
+        $preview = Get-PreviewProfile
         $selectedMode = 'airstrip'
-        if ($modeCombo.SelectedIndex -ge 0 -and $modeCombo.SelectedIndex -lt $script:modeIds.Count) {
-            $selectedMode = [string]$script:modeIds[$modeCombo.SelectedIndex]
-        }
-
+        if ($modeCombo.SelectedIndex -ge 0 -and $modeCombo.SelectedIndex -lt $script:modeIds.Count) { $selectedMode = [string]$script:modeIds[$modeCombo.SelectedIndex] }
         Set-ObjectProperty -Object $local -Name 'schemaVersion' -Value 1
         Set-ObjectProperty -Object $local -Name 'tornApiKey' -Value ([string]$keyBox.Text.Trim())
         Set-ObjectProperty -Object $local -Name 'travelMode' -Value $selectedMode
-        Set-ObjectProperty -Object $local -Name 'travelProfile' -Value ([pscustomobject]@{
-            companyType = $companyId
-            companyStars = [int]$stars.Value
-            factionExcursionLevel = [int]$excursion.Value
-            factionTravelCostLevel = [int]$travelCostLevel.Value
-        })
-
+        Set-ObjectProperty -Object $local -Name 'travelProfile' -Value $preview
         Write-JsonAtomic -Path $LocalSettingsPath -Value $local
         Write-JsonAtomic -Path $PreferencePath -Value ([pscustomobject]@{ schemaVersion = 1; travelMode = $selectedMode })
         Start-BackgroundUpdate
