@@ -1,95 +1,148 @@
 # Travel Assistant
 
-Rainmeter-based Torn travel decision assistant.
+Rainmeter-based Torn foreign-market travel decision assistant.
 
-The main v1 display remains deliberately focused on **Xanax in the United Kingdom and Japan**. The underlying observation, history, travel-mode, profitability, and travel-profile code is generic enough to expand later without rewriting the core model.
+The currently validated visible UI remains focused on **Xanax in the United Kingdom and Japan**, while the project has begun a controlled expansion to background-collect the full foreign market before exposing more items, filters, travel-context behavior, or route optimization.
 
-## Current status
+## Current direction
 
-The core Windows/Rainmeter path has been validated on the target machine:
+Travel Assistant now separates:
 
-- skin installation/junction works;
-- UK and Japan panels and graphs render;
-- YATA live stock/foreign prices update automatically;
-- Torn Item Market resale pricing works through the configured local API key;
-- the one-minute updater/heartbeat works from Rainmeter;
-- observed restock/sellout history persists;
-- stale/low-confidence/profitability guards remain conservative;
-- no persistent Travel Assistant PowerShell process or material storage growth was observed.
+```text
+COLLECTED opportunities
+        !=
+VISIBLE opportunities
+        !=
+OPTIMIZER candidates
+```
 
-A new **Settings** interface is now being added and requires a narrow Windows/Rainmeter validation pass before this extension is called complete.
+That means the application can begin learning every foreign-market stock cycle now without forcing unfinished categories/economics into the visible UI or future `Optimal` mode.
 
-The active execution scope is in [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md). Read [`AGENTS.md`](./AGENTS.md) before changing anything in this subtree.
+## Current visible UI
 
-## What the assistant answers
+The skin currently shows UK and Japan Xanax cards with:
 
-At a glance:
+- country flag;
+- Xanax foreign price in the item header, colored by current trip profitability;
+- current stock or an out-of-stock warning;
+- out-of-stock format `Out of Stock for h:mm since HH:mm`, with only `Out of Stock` colored red;
+- plane icon + current route duration;
+- delivery-truck restock timing only when the destination is out of stock and the predicted restock ETA is longer than the flight time;
+- hidden timing/history detail in tooltips;
+- 8-hour stock graphs with 60-minute vertical divisions;
+- top-right Settings;
+- clickable `Travel` header opening Torn travel.
 
-> Is the current foreign Xanax opportunity worth taking, and if so, when should I leave with my selected travel mode to maximize the chance that stock remains available when I arrive?
+Current visible behavior remains deliberately conservative: stale, unsupported, unresolved or unprofitable opportunities do not receive departure recommendations.
 
-The project deliberately prefers **no recommendation** over a recommendation built from stale, low-confidence, economically unresolved, or unprofitable data.
+## Full-market shadow collection
 
-## Main UI
+The initial expansion adds a fail-soft background collector for all 11 Torn foreign destinations:
 
-The Rainmeter skin displays:
+```text
+Mexico
+Cayman Islands
+Canada
+Hawaii
+United Kingdom
+Argentina
+Switzerland
+Japan
+China
+United Arab Emirates
+South Africa
+```
 
-- United Kingdom above Japan;
-- travel time and departure/recommendation state;
-- observed/estimated restock information and last **actual** sellout;
-- current stock and foreign purchase price;
-- equal-width 24-hour stock graphs;
-- visible last-successful-update time and next-poll countdown;
-- a top-right **SETTINGS** action;
-- Weav3r Travel Stock as an external verification link for low-confidence/actionable states.
+Every valid item row returned by Prometheus/YATA is normalized to the existing observation schema and can begin accumulating restock/sellout history by `country + itemId`.
 
-Travel mode is no longer cycled directly from the main skin. The old click had to run the full updater/finalizer and therefore could take several seconds. Mode selection now belongs in Settings and is applied by the next normal polling pass.
+The shadow pass currently runs no more frequently than every 120 seconds and is intentionally isolated from the current UK/Japan Xanax primary markets. If shadow collection fails, it must not block the established updater/finalizer/heartbeat.
 
-## Settings interface
+The background collector tracks observed markets in ignored `data/runtime/engine-state.json` and uses the same bounded raw/cycle history stores as the existing model.
 
-The local Windows Settings dialog edits only ignored/local state. It currently exposes:
+## First multi-item metadata seeds
 
-- Torn API key, masked by default;
-- travel mode;
-- travel-related company and star rating;
-- faction Excursion travel-capacity level;
-- faction Travel Cost level;
-- a preview of effective capacity/cost/free-Business effects.
+The committed item metadata now includes:
 
-The API key is stored in ignored `config/settings.local.json`; it is not embedded in `TravelAssistant.ini`, Git history, or the Rainmeter action command line.
+```text
+206 Xanax          | Drug     | current primary/visible
+266 Nessie Plushie | Plushie  | United Kingdom shadow seed
+277 Cherry Blossom | Flower   | Japan shadow seed
+```
 
-### Travel modes
+Nessie and Cherry remain hidden and not optimizer-eligible during the collection-foundation rollout.
 
-Normal choices are:
+The shadow collector does **not** use this short list as a whitelist. Unknown provider-observed item IDs are still collected so history is not lost while canonical metadata catches up.
 
-- Standard;
-- Airstrip (default);
-- WLT.
+## Live sources
 
-Business is **settings-only** and appears only when the local travel profile establishes free Business Class. The currently modeled safe branch is a **10-star Lingerie Store**. Ticket-funded Business travel remains economically unresolved, so forcing Business without that free-travel condition still suppresses departure advice rather than treating a ticket as free.
+Preferred foreign-stock source:
 
-## Travel-related company profile
+```text
+Prometheus
+    ↓ unavailable
+YATA
+```
 
-`config/travel-perks.json` keeps these effects data-driven. Current settings choices include:
+Foreign stock is crowd-sourced. Static Wiki shop tables are useful documentation, but the live provider payload determines which market rows are actually being observed.
 
-- **Lingerie Store** — 3 stars adds 2 general travel items; 10 stars provides free Business Class travel.
-- **Cruise Line** — 3 stars adds 2 travel items; 7 stars provides a destination stock-analysis special; 10 stars adds 3 more travel items.
-- **Flower Shop** — 7 stars adds 5 flowers abroad; 10 stars provides flower stock analysis.
-- **Toy Shop** — 7 stars adds 5 plushies abroad; 10 stars provides plushie stock analysis.
-- **Logistics Management** — 5 stars allows returning to Torn while hospitalized abroad.
-- **Theater** — 10 stars hides traveling status/destination.
+A Torn API key enables resale/economics features and remains local/ignored. On the validated Windows machine, Torn API calls that hang under native Windows PowerShell use the existing bounded `curl.exe` workaround; foreign-stock providers continue using normal bounded requests.
 
-Only effects relevant to the currently enabled item alter economics. In particular, Flower Shop and Toy Shop capacity bonuses are item-specific and **do not increase Xanax capacity**.
+Never commit a limited/full-authority key.
 
-## Faction travel profile
+## Current capacity/economics
 
-The Settings dialog also models the relevant Excursion faction upgrades:
+Current general carrying capacity prefers current `/user/perks` state plus selected mode base rather than requiring faction-upgrade permissions.
 
-- Travel capacity: +1 item per level, up to +10.
-- Travel cost: -15% travel fees per level, up to -75%.
+Base capacities:
 
-These local profile inputs affect only final travel economics. They never rewrite observed stock, restock, or sellout history.
+```text
+Standard: 10
+Airstrip/WLT/qualified Business: 15
+```
 
-A positive `profitability.capacityOverride` remains authoritative if the user intentionally supplies one. Otherwise usable capacity is derived from the selected mode's base capacity plus qualifying company/item/faction bonuses.
+Current active general bonuses are applied without double-counting the selected travel method.
+
+Before multi-category opportunities become recommendation/optimizer candidates, item-specific capacity must remain isolated:
+
+- Flower Shop flower capacity applies only to Flower items;
+- Toy Shop plushie capacity applies only to Plushie items;
+- neither affects Xanax.
+
+Ticket-funded Business remains economically unresolved. The known-safe free branch remains qualified free Business travel such as the modeled 10-star Lingerie Store condition.
+
+## Learning / retention
+
+Observed truth:
+
+```text
+0 -> positive stock = observed restock
+positive stock -> 0 = observed sellout
+```
+
+Forecasts never become historical truth.
+
+Default retained evidence:
+
+- approximately 48 hours of high-resolution observations;
+- approximately 90 days of completed cycles;
+- 8 hours visible on the current graph.
+
+The live stale threshold is a recommendation-safety guard, not a history-expiry rule.
+
+## Future expansion sequence
+
+After the shadow collector is validated on Windows:
+
+1. enrich every observed item ID with canonical name/category metadata;
+2. add a bounded/staggered Torn resale-price queue;
+3. generalize category-specific capacity/economics;
+4. expose Nessie + Cherry as the first multi-item UI proof;
+5. add country/category filters;
+6. add Torn travel-state destination filtering and arrival countdown;
+7. populate full-country economics;
+8. build `Optimal` as a bounded route scheduler comparing short, long and mixed-country trip sequences.
+
+`Optimal` will not simply sort by profit/item or profit/trip. It must eventually consider travel time, return time, capacity, stock survival, restock/depletion evidence, fees/costs, confidence and opportunity cost across a planning horizon.
 
 ## Installation
 
@@ -99,13 +152,11 @@ Expected repository source:
 C:\Codex\TORN\RainMeter Projects\Travel Assistant\
 ```
 
-Run:
+Install/junction setup:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
 ```
-
-The installer creates ignored local/runtime directories and a non-destructive junction under the current user's Rainmeter `Skins` directory. Because the installed skin is a junction to the repository source, later pulls normally require only a Rainmeter refresh, not reinstalling.
 
 Load:
 
@@ -113,116 +164,33 @@ Load:
 Travel Assistant\TravelAssistant.ini
 ```
 
-## API key and live sources
-
-YATA supplies live foreign stock and foreign price without a Torn API key.
-
-A Torn key enables the Item Market resale reference used by profitability gating. The Settings dialog is now the preferred way to enter it. The existing environment-variable fallback remains:
-
-```text
-TORN_API_KEY
-```
-
-On the validated Windows machine, native Windows PowerShell `Invoke-RestMethod` hung specifically against `api.torn.com`, while `curl.exe` returned immediately. Production Torn Item Market traffic is therefore routed through bounded `curl.exe`; YATA remains on the native request path.
-
-Never commit a limited/full-authority key.
-
-## Economics and safety
-
-The primary model first considers per-item spread/margin. `FinalizeState.ps1` then applies cached resale freshness and final trip economics:
-
-```text
-net resale = resale reference after configured selling fee
-net profit/item = net resale - foreign purchase price
-trip net = (net profit/item × usable capacity) - travel cost
-required trip profit = max(minimumTotalTripProfit,
-                           minimumProfitPerItem × usable capacity)
-```
-
-Final economics can include:
-
-- mode-specific travel cost;
-- user capacity override;
-- general company capacity bonuses;
-- item-specific company capacity bonuses where relevant;
-- faction Excursion capacity;
-- faction travel-fee reduction;
-- zero-cost Business only when free Business Class is explicitly established.
-
-If an economics/freshness gate fails, Travel Assistant continues collecting useful history and can continue showing restock information, but it clears departure timing.
-
-## Learning and history
-
-The committed seed remains intentionally empty rather than fabricated. Runtime observations are bounded and ignored by Git.
-
-The engine learns from actual stock transitions:
-
-```text
-0 -> positive stock = observed restock
-positive stock -> 0 = observed sellout
-```
-
-Completed cycles retain foreign price, restock/sellout times, availability duration, restock delay, and provenance. Forecasts never populate historical truth fields.
-
-Default targets are roughly:
-
-- 48 hours of high-resolution runtime observations;
-- 90 days of compact completed cycles.
-
-## Performance boundary
-
-- One-second Rainmeter work is local Lua/string/countdown logic only.
-- Network/history/model work normally runs once per minute.
-- Updater executions are serialized.
-- Finalization adds no network request.
-- Settings launches only a short-lived local Windows Forms process while open.
-- Graphs are two small generated PNG files.
-- Runtime/generated state stays ignored and bounded.
+Because the installed skin is a junction to the repository source, later pulls normally require only a Rainmeter refresh.
 
 ## Validation
 
-The full deterministic suite is:
+Focused shadow-collection checks:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-ShadowCollection.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-ShadowCollectionTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
+```
+
+Full deterministic suite when justified:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
 ```
 
-Travel-profile-specific checks include:
+Repository/static tests do not replace actual Windows/Rainmeter/provider validation.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-TravelProfileTests.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-FinalizeStateTests.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
-```
+## Documentation
 
-Repository/static tests do not replace actual Windows/Rainmeter interaction validation. See [`docs/WINDOWS_VALIDATION.md`](./docs/WINDOWS_VALIDATION.md).
+Read in this order before making changes:
 
-## Architecture and documentation
-
-The high-level path is:
-
-```text
-YATA / Torn provider adapters
-        ↓
-normalized observations
-        ↓
-bounded history + observed cycle detection
-        ↓
-price-aware restock/depletion model
-        ↓
-primary opportunity/profitability gate
-        ↓
-travel-profile + final trip-economics guards
-        ↓
-compact generated state
-        ↓
-Rainmeter UI
-```
-
-Read:
-
-1. [`AGENTS.md`](./AGENTS.md)
-2. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md)
-3. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
-4. [`docs/IMPLEMENTATION_STATUS.md`](./docs/IMPLEMENTATION_STATUS.md)
-5. [`docs/WINDOWS_VALIDATION.md`](./docs/WINDOWS_VALIDATION.md)
+1. `AGENTS.md`
+2. `docs/README.md`
+3. `docs/NEXT_CODEX_RUN.md`
+4. `docs/ARCHITECTURE.md`
+5. `docs/IMPLEMENTATION_STATUS.md`
+6. `Readme.md`
