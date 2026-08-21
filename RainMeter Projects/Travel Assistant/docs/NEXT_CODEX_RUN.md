@@ -1,4 +1,4 @@
-# Next Codex Run: Offline Foreign-Item Categories
+# Next Codex Run: Verify Complete Offline Catalog
 
 **Status: ACTIVE**
 
@@ -10,166 +10,109 @@ show narrowly
 optimize only after evidence/economics are ready
 ```
 
-## Accepted prerequisites
+## Accepted baseline
 
-The target Windows machine has accepted the broad hidden catalog foundation:
+Target Windows has already established:
 
 ```text
-Prometheus healthy
 11 foreign countries
-232 observed country-item markets
-232 / 232 markets with provider names
+232 provider country-item rows
+232 / 232 provider rows with names
 202 distinct observed item IDs
-202 / 202 local metadata rows
+202 local metadata rows
 0 provider-name conflicts
 ```
 
-Focused validations already reported PASS for shadow collection, provider-name enrichment, local-catalog normalization, and Rainmeter static structure.
+The visible UI remains UK/Japan Xanax only.
 
-The accepted pre-category local catalog reported:
+## Category snapshot result
 
-```text
-observedItems:      202
-metadataItems:      202
-categoriesResolved: 3
-unresolvedItems:    199
-nameConflicts:      0
-```
+The committed 197-ID YATA-derived category snapshot resolved 197 of the 202 current item IDs.
 
-The three committed category seeds remain:
+The five remaining rows reported by target Windows were:
 
 ```text
-206 Xanax          | Drug    | config_seed
-266 Nessie Plushie | Plushie | config_seed
-277 Cherry Blossom | Flower  | config_seed
+21   Dual 92G Berettas | mexico
+232  SIG 550           | mexico
+327  Blank Tokens      | mexico
+383  Platinum PDA      | united_arab_emirates
+440  Pillow            | united_arab_emirates
 ```
 
-## Torn catalog transport boundary
+Their absence from the snapshot exposed a more important issue: all five are legacy provider rows for markets no longer currently sold there.
 
-Do not reintroduce catalog network calls into the Rainmeter heartbeat. The target host timed out before returning metadata on all attempted Torn catalog strategies:
+## Verified repairs now committed
+
+`config/foreign-market-overrides.json` adds canonical item metadata plus per-market status:
 
 ```text
-v2 /torn/{ids}/items | 150 IDs | 20s | 0 resolved
-v2 /torn/{ids}/items |  40 IDs | 30s | 0 resolved
-classic torn/items    | bulk   | 12s | 0 resolved
+21  Dual 92G Berettas  | Secondary     | mexico inactive
+232 SIG 550            | Primary       | mexico inactive
+327 Blank Casino Chips | Material      | mexico inactive | provider alias Blank Tokens
+383 Digital Organizer  | Miscellaneous | UAE inactive    | provider alias Platinum PDA
+440 Pillow             | Melee         | UAE inactive
 ```
 
-`ItemMetadata.ps1` remains explicit/manual maintenance only.
+Evidence was checked against current Torn Wiki item pages and current destination shop listings.
 
-## Current production runtime
+Corrected invariant:
+
+> A live-provider row is provider evidence that a country-item relationship exists in its dataset. It is not sufficient proof by itself that the item remains currently purchasable in that country.
+
+## Runtime behavior
+
+`LocalCatalog.ps1` now uses precedence:
 
 ```text
-UpdateTracker
-ShadowCollector (fail-soft)
-LocalCatalog (fail-soft / local-only)
-FinalizeState
-heartbeat
+richer manually acquired Torn metadata
+    > config/items.json seed
+    > verified item override
+    > 197-ID offline YATA category snapshot
+    > provider name + Unknown
 ```
 
-`LocalCatalog.ps1` performs no network access.
-
-## Implemented offline category snapshot
-
-New committed data:
+Verified legacy markets are annotated in `observedMarkets`:
 
 ```text
-config/foreign-item-categories.json
+catalogActive=false
+catalogStatus=legacy_removed
+catalogStatusSource=verified_override
 ```
 
-Snapshot provenance is retained in-file:
+`ShadowCollector.ps1` still records the provider row in `observedMarkets` and counts it in `marketsSeen`, but it loads the inactive-market override set and skips those pairs before new observation/cycle writes.
+
+New health counter:
 
 ```text
-source.id:         yata_abroad_snapshot
-upstream repo:     kgensorealk-sudo/MyTORNHelper
-upstream commit:   a3e957929ce6a4cd253c733467ad1dded74f8791
-upstream path:     src/server/abroadItems.ts
-upstream table:    KNOWN_FOREIGN_ITEMS
-source entries:    197
-reviewed:          2026-08-21
+shadowCollection.legacyMarketsSeen
 ```
 
-The upstream table identifies itself as a comprehensive abroad-item table using exact YATA categories and contains 197 static known foreign items. It is a category snapshot, **not** the live-market authority.
+Existing historical rows are retained.
 
-Only item IDs already observed by the live provider are enriched from this file. Snapshot-only/stale IDs do not create opportunities or history.
-
-### Category normalization
-
-The snapshot uses YATA/Torn-era category vocabulary. Travel Assistant normalizes two labels for future filter semantics:
+## Expected current split
 
 ```text
-Defensive -> Armor
-Other     -> Miscellaneous
+provider rows observed: 232
+legacy provider rows:      5
+active candidate rows:   227
+observed item IDs:       202
+categories resolved:     202
+unresolved item IDs:       0
 ```
 
-The resulting local category set is:
-
-```text
-Alcohol
-Artifact
-Armor
-Clothing
-Drug
-Enhancer
-Flower
-Material
-Medical
-Melee
-Miscellaneous
-Plushie
-Primary
-Secondary
-Temporary
-Tool
-```
-
-### Category precedence
-
-For an observed `itemId`, metadata precedence is:
-
-```text
-manually acquired richer Torn metadata
-        >
-explicit config/items.json seed
-        >
-offline YATA category snapshot
-        >
-provider name + Unknown category
-```
-
-Snapshot-resolved rows use:
-
-```text
-source=offline_yata_category
-categorySource=yata_abroad_snapshot
-categoryResolved=true
-```
-
-An observed ID absent from the snapshot remains:
-
-```text
-source=provider_name
-category=Unknown
-categoryResolved=false
-```
-
-Never infer a missing category from the display name.
-
-### Local catalog health additions
-
-`engine-state.json -> localCatalog` now also records:
-
-```text
-offlineCategoryEntries
-offlineMatchedItems
-```
-
-The catalog signature includes snapshot category/source data, so updating the committed mapping automatically triggers a local rebuild without network activity.
+Do not hard-code 232/202 as timeless catalog constants; they are the current live baseline.
 
 ## Focused Windows acceptance
 
 Pull current `main`, then run:
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Validate-ShadowCollection.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-ShadowCollectionTests.ps1
+
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-LocalCatalog.ps1
 
@@ -180,9 +123,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-Then rebuild the real local catalog; this command is local-only:
+Then force one current provider pass and rebuild local metadata:
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\@Resources\Scripts\ShadowCollector.ps1 -Force
+
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\@Resources\Scripts\LocalCatalog.ps1
 ```
@@ -191,59 +137,66 @@ Inspect:
 
 ```powershell
 $e = Get-Content .\data\runtime\engine-state.json -Raw | ConvertFrom-Json
+$e.shadowCollection | Format-List
 $e.localCatalog | Format-List
 
 $meta = @($e.itemMetadata.PSObject.Properties)
 "Resolved: $(@($meta | Where-Object { $_.Value.categoryResolved -eq $true }).Count)"
 "Unresolved: $(@($meta | Where-Object { $_.Value.categoryResolved -ne $true }).Count)"
 
-$meta |
-  Where-Object { $_.Value.categoryResolved -ne $true } |
+$legacy = @(
+  $e.observedMarkets.PSObject.Properties |
+  Where-Object { $_.Value.PSObject.Properties['catalogActive'] -and $_.Value.catalogActive -eq $false }
+)
+"Inactive observed markets: $($legacy.Count)"
+
+$legacy |
   Select-Object Name,
-    @{n='Item';e={$_.Value.name}},
-    @{n='ProviderNames';e={$_.Value.providerNames -join ' | '}},
-    @{n='Countries';e={$_.Value.countries -join ' | '}}
+    @{n='ProviderName';e={$_.Value.providerName}},
+    @{n='Status';e={$_.Value.catalogStatus}},
+    @{n='Reason';e={$_.Value.catalogStatusReason}}
 ```
 
-Also inspect the category distribution:
+Expected target-Windows result for the current provider dataset:
 
-```powershell
-$meta |
-  Where-Object { $_.Value.categoryResolved -eq $true } |
-  Group-Object { $_.Value.category } |
-  Sort-Object Name |
-  Select-Object Name, Count
+```text
+shadowCollection.marketsSeen       = 232
+shadowCollection.legacyMarketsSeen = 5
+localCatalog.observedItems          = 202
+localCatalog.categoriesResolved     = 202
+localCatalog.unresolvedItems        = 0
+localCatalog.inactiveObservedMarkets= 5
 ```
 
-## Expected result
+The two renamed canonical metadata rows should be:
 
-The static snapshot has 197 entries while the live provider currently exposes 202 distinct item IDs, and the two sets are not assumed identical. Therefore:
+```text
+327 Blank Casino Chips | Material      | verified_override
+383 Digital Organizer  | Miscellaneous | verified_override
+```
 
-- `offlineCategoryEntries` should be 197;
-- `offlineMatchedItems` should be a large majority of the 202 observed IDs;
-- `categoriesResolved` should rise sharply above 3;
-- any current ID not represented by the snapshot must remain explicitly unresolved;
-- current UK/Japan Xanax behavior must remain unchanged.
+Their provider names should remain available separately for provenance.
 
-Do **not** assume the final unresolved count in advance.
+## Distribution
 
-## Completion of this phase
+`Build-Rmskin.ps1` now stages both offline catalog files:
 
-After the Windows result:
+```text
+config/foreign-item-categories.json
+config/foreign-market-overrides.json
+```
 
-1. record the actual snapshot-match/resolution counts;
-2. individually research every remaining unresolved current item ID;
-3. add only verified category entries with provenance;
-4. repeat until the current observed catalog is fully resolved or a specific item is intentionally documented as unresolved.
+Local API settings/runtime history remain excluded.
 
-## Later phases
+## Next implementation after acceptance
 
-After current categories are sufficiently complete:
+Move to the bounded/staggered Item Market resale-price queue for active market candidates only. Legacy `catalogActive=false` markets must not receive valuation/optimizer work.
 
-1. bounded/staggered resale-price refresh;
-2. general + category-specific carrying capacity;
-3. visible Nessie Plushie / Cherry Blossom multi-item proof;
-4. country/category filters;
-5. travel-state destination filtering and arrival countdown;
-6. full-country economics;
-7. `Optimal` route scheduling only after sufficient evidence exists.
+Then:
+
+1. category-aware carrying capacity;
+2. visible Nessie/Cherry multi-item proof;
+3. country/category filters;
+4. travel-state destination filtering and arrival countdown;
+5. full-country economics;
+6. `Optimal` scheduling after sufficient evidence exists.
