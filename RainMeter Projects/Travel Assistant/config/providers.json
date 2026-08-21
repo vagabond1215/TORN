@@ -2,12 +2,22 @@
   "schemaVersion": 1,
   "providers": [
     {
-      "id": "yata",
+      "id": "prometheus",
       "role": ["liveStock"],
       "enabled": true,
+      "priority": 1,
+      "endpoint": "https://api.prombot.co.uk/api/travel",
+      "minimumPollSeconds": 60,
+      "notes": "Preferred structured public abroad-stock source. Target-machine validation returned UK/Japan Xanax data successfully on 2026-08-21. Current Torn community stock tooling also uses this endpoint ahead of YATA. Normalize provider country codes, source timestamps, and provenance at the adapter boundary."
+    },
+    {
+      "id": "yata",
+      "role": ["liveStockFallback"],
+      "enabled": true,
+      "priority": 2,
       "endpoint": "https://yata.yt/api/v1/travel/export/",
       "minimumPollSeconds": 60,
-      "notes": "Structured public abroad-stock export. Normalize provider country codes and per-country update timestamps at the adapter boundary."
+      "notes": "Structured public abroad-stock export retained as fallback. Target-machine validation observed HTTP 502 responses on 2026-08-21, so do not make YATA availability a single point of failure."
     },
     {
       "id": "torn_itemmarket",
