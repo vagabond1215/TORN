@@ -23,7 +23,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ItemMetadata.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Get-ObservedItemIds','Get-CanonicalCategory','Convert-TornBulkItemMetadata')
+$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-ObservedItemIds','Import-ConfiguredMetadataSeeds','Get-CanonicalCategory','Convert-TornBulkItemMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -44,12 +44,29 @@ $state = [pscustomobject]@{
         'japan:206' = [pscustomobject]@{ country = 'japan'; itemId = 206 }
         'south_africa:206' = [pscustomobject]@{ country = 'south_africa'; itemId = 206 }
     }
+    itemMetadata = [pscustomobject]@{}
 }
 $ids = @(Get-ObservedItemIds -EngineState $state)
 Assert-Equal 'Observed item IDs are distinct' $ids.Count 3
 Assert-Equal 'Observed IDs sort ascending first' $ids[0] 206
 Assert-Equal 'Observed IDs include Nessie' $ids[1] 266
 Assert-Equal 'Observed IDs include Cherry Blossom' $ids[2] 277
+
+$seedConfig = [pscustomobject]@{
+    items = @(
+        [pscustomobject]@{ itemId = 206; name = 'Xanax'; category = 'Drug' },
+        [pscustomobject]@{ itemId = 266; name = 'Nessie Plushie'; category = 'Plushie' },
+        [pscustomobject]@{ itemId = 277; name = 'Cherry Blossom'; category = 'Flower' }
+    )
+}
+$seeded = Import-ConfiguredMetadataSeeds -EngineState $state -ItemsConfig $seedConfig -Now 1787344000
+Assert-Equal 'Committed metadata seeds populate three entries' $seeded 3
+Assert-Equal 'Seed Xanax category' $state.itemMetadata.'206'.category 'Drug'
+Assert-Equal 'Seed Nessie category' $state.itemMetadata.'266'.category 'Plushie'
+Assert-Equal 'Seed Cherry category' $state.itemMetadata.'277'.category 'Flower'
+Assert-Equal 'Seed provenance is explicit' $state.itemMetadata.'266'.source 'config_seed'
+Assert-Equal 'Seed market value remains unknown' ([long]$state.itemMetadata.'277'.marketPrice) 0
+Assert-Equal 'Seed tradability remains unknown' ([bool]$state.itemMetadata.'206'.tradabilityKnown) $false
 
 $xanax = [pscustomobject]@{
     name = 'Xanax'
@@ -91,5 +108,5 @@ Assert-Equal 'Missing type stays Unknown' $unknownMeta.category 'Unknown'
 Assert-Equal 'Missing type is marked unresolved' ([bool]$unknownMeta.categoryResolved) $false
 Assert-Equal 'Missing tradability stays unknown' ([bool]$unknownMeta.tradabilityKnown) $false
 
-Write-Host 'Bulk item metadata normalization tests passed.' -ForegroundColor Green
+Write-Host 'Item metadata fallback/normalization tests passed.' -ForegroundColor Green
 exit 0
