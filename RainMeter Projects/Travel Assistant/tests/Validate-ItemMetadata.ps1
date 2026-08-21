@@ -14,38 +14,26 @@ if (-not (Test-Path -LiteralPath $metadataPath)) {
     $text = Get-Content -LiteralPath $metadataPath -Raw
     $tokens = $null
     $parseErrors = $null
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($metadataPath, [ref]$tokens, [ref]$parseErrors)
+    [void][System.Management.Automation.Language.Parser]::ParseFile($metadataPath, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in ItemMetadata.ps1: $($parseError.Message)" }
 
     if ($text -notmatch '(?m)^\s*\[int\]\$RefreshIntervalSeconds\s*=\s*21600') { Fail 'Item metadata default refresh interval must be 6 hours.' }
-    if ($text -notmatch '(?m)^\s*\[int\]\$MaxIdsPerRequest\s*=\s*40') { Fail 'Item metadata requests must default to bounded 40-ID batches.' }
-
-    $curlFunction = @($ast.FindAll({
-        param($node)
-        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-TornItemsJsonWithCurl'
-    }, $true) | Select-Object -First 1)
-    if ($curlFunction.Count -ne 1) {
-        Fail 'Could not locate Invoke-TornItemsJsonWithCurl for timeout validation.'
-    } elseif ([string]$curlFunction[0].Extent.Text -notmatch '(?s)param\s*\(.*?\[int\]\$TimeoutSec\s*=\s*30(?:\s*[,\)])') {
-        Fail 'Item metadata curl helper must default to a bounded 30-second timeout.'
-    }
-
-    if (-not $text.Contains('https://api.torn.com/v2/torn/$ids/items?sort=ASC')) { Fail 'Item metadata must use Torn v2 specific-items endpoint.' }
+    if ($text -notmatch '(?m)^\s*\[int\]\$TimeoutSec\s*=\s*12') { Fail 'Item metadata default timeout must be 12 seconds.' }
+    if (-not $text.Contains("https://api.torn.com/torn/?selections=items")) { Fail 'Item metadata must use the single bulk Torn items selection.' }
+    if ($text.Contains('/v2/torn/$ids/items')) { Fail 'Item metadata must not use the timed-out v2 multi-ID path.' }
     if (-not $text.Contains('$psi.Arguments = ''-q --config -''')) { Fail 'Torn item metadata curl must receive its config through stdin.' }
     if (-not $text.Contains('Authorization: ApiKey {0}')) { Fail 'Torn item metadata must authenticate through an Authorization header.' }
+    if (-not $text.Contains('User-Agent: TravelAssistant-Rainmeter/1.0')) { Fail 'Torn metadata request must identify itself with a custom User-Agent.' }
     if ($text -match '(?i)[?&]key=') { Fail 'Torn API key must never be placed in the metadata request URL.' }
-    foreach ($functionName in @('Get-ObservedItemIds','Split-ItemIds','Get-CanonicalCategory','Convert-TornItemMetadata','Get-MetadataCategories')) {
+
+    foreach ($functionName in @('Get-ObservedItemIds','Get-CanonicalCategory','Convert-TornBulkItemMetadata','Invoke-TornBulkItemsJsonWithCurl','Get-MetadataCategories')) {
         if ($text -notmatch ('(?m)^function\s+' + [regex]::Escape($functionName) + '\s*\{')) { Fail "Missing metadata function $functionName." }
     }
-    foreach ($stateField in @('itemMetadata','metadataCollection','categoryResolved','marketPrice','shops','itemsRequested','itemsResolved')) {
+    foreach ($stateField in @('itemMetadata','metadataCollection','categoryResolved','marketPrice','itemsRequested','itemsResolved','tradabilityKnown')) {
         if (-not $text.Contains($stateField)) { Fail "Item metadata runtime contract is missing '$stateField'." }
     }
-    if ($text -notmatch "if \(\`$type -eq 'Weapon'\)") { Fail 'Weapon metadata must use detailed category handling.' }
-    if ($text -notmatch "category\s*=\s*'Weapon';\s*resolved\s*=\s*\`$false") { Fail 'Unresolved weapon categories must remain unresolved rather than guessed.' }
-    if (-not $text.Contains("source = 'torn_items'")) { Fail 'Canonical item metadata must retain Torn provenance.' }
-    if ($text -notmatch '(?m)\$chunks\.Add\(\[pscustomobject\]@\{ ids = \[int\[\]\]') { Fail 'Metadata batches must use explicit ids objects to avoid Windows PowerShell array flattening.' }
-    if (-not $text.Contains('Checkpoint after each successful batch')) { Fail 'Metadata enrichment must checkpoint successful batches before continuing.' }
-    if ($text -notmatch '(?s)foreach \(\$batch.*?Write-JsonAtomic -Path \$EngineStateFile -Value \$engineState') { Fail 'Metadata enrichment must persist state inside the batch loop.' }
+    if (-not $text.Contains("source = 'torn_items_bulk'")) { Fail 'Canonical item metadata must retain bulk Torn provenance.' }
+    if ($text.Contains('Split-ItemIds')) { Fail 'Obsolete multi-ID batching helper must be removed from metadata enrichment.' }
 }
 
 if (-not (Test-Path -LiteralPath $wrapperPath)) {
@@ -71,5 +59,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Item metadata configuration validation passed.' -ForegroundColor Green
-Write-Host 'Observed item IDs use 40-ID/30s bounded Torn batches with per-batch checkpoints and no change to visible recommendation economics.'
+Write-Host 'Observed item IDs use one 12-second bulk Torn items request with Authorization-header key handling and local filtering.'
 exit 0
