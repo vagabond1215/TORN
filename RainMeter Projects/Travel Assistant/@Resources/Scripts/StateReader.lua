@@ -48,6 +48,19 @@ local function formatDuration(seconds)
     return string.format('%02d:%02d', m, s)
 end
 
+local function formatShortElapsed(seconds)
+    seconds = math.max(0, math.floor(number(seconds)))
+    if seconds < 60 then return '<1m' end
+    if seconds < 3600 then return string.format('%dm', math.floor(seconds / 60)) end
+    if seconds < 86400 then
+        local h = math.floor(seconds / 3600)
+        local m = math.floor((seconds % 3600) / 60)
+        if m > 0 then return string.format('%dh %dm', h, m) end
+        return string.format('%dh', h)
+    end
+    return string.format('%dd', math.floor(seconds / 86400))
+end
+
 local function formatInteger(value)
     local s = tostring(math.floor(number(value) + 0.5))
     local sign, digits = s:match('^([%-]?)(%d+)$')
@@ -101,6 +114,24 @@ local function getStatusPresentation(status)
     return '145,152,164,255', ''
 end
 
+local function getPriceColor(data, prefix, status)
+    local profitRaw = data[prefix .. 'TripProfit']
+    local marginRaw = data[prefix .. 'TripMarginPercent']
+    local hasEconomics = profitRaw ~= nil and profitRaw ~= '' and marginRaw ~= nil and marginRaw ~= ''
+
+    if hasEconomics then
+        local profit = number(profitRaw)
+        local margin = number(marginRaw)
+        if profit <= 0 or margin <= 0 then return '224,90,90,255' end
+        if status == 'LOW_MARGIN' then return '232,178,72,255' end
+        return '86,190,116,255'
+    end
+
+    if status == 'UNPROFITABLE' then return '224,90,90,255' end
+    if status == 'LOW_MARGIN' then return '232,178,72,255' end
+    return '145,152,164,255'
+end
+
 local function updateDestination(data, prefix)
     local now = os.time()
     local travelSeconds = number(data[prefix .. 'TravelSeconds'])
@@ -119,6 +150,7 @@ local function updateDestination(data, prefix)
     setVariable(prefix .. 'TravelText', formatDuration(travelSeconds))
     setVariable(prefix .. 'StockText', formatInteger(stock))
     setVariable(prefix .. 'PriceText', formatMoney(foreignPrice))
+    setVariable(prefix .. 'PriceColor', getPriceColor(data, prefix, status))
     setVariable(prefix .. 'StatusText', status:gsub('_', ' '))
     setVariable(prefix .. 'StatusColor', statusColor)
     setVariable(prefix .. 'OverlayText', overlayText)
@@ -127,6 +159,14 @@ local function updateDestination(data, prefix)
         setVariable(prefix .. 'LastSoldOutText', os.date('%H:%M', lastSoldOutAt))
     else
         setVariable(prefix .. 'LastSoldOutText', '-')
+    end
+
+    if stock > 0 then
+        setVariable(prefix .. 'StockHeaderText', 'Stock: ' .. formatInteger(stock))
+    elseif lastSoldOutAt > 0 then
+        setVariable(prefix .. 'StockHeaderText', 'Out of Stock: ' .. formatShortElapsed(now - lastSoldOutAt))
+    else
+        setVariable(prefix .. 'StockHeaderText', 'Out of Stock')
     end
 
     if stock > 0 and restockAt > 0 and restockAt <= now then
