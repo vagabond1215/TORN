@@ -14,13 +14,13 @@ $localSettingsPath = Join-Path $configDir 'settings.local.json'
 
 function Assert-Equal {
     param([string]$Name, $Actual, $Expected)
-    if ($Actual -ne $Expected) { throw "$Name — expected '$Expected', got '$Actual'." }
+    if ($Actual -ne $Expected) { throw "$Name - expected '$Expected', got '$Actual'." }
     Write-Host "PASS $Name" -ForegroundColor DarkGreen
 }
 
 function Assert-True {
     param([string]$Name, [bool]$Condition)
-    if (-not $Condition) { throw "$Name — condition was false." }
+    if (-not $Condition) { throw "$Name - condition was false." }
     Write-Host "PASS $Name" -ForegroundColor DarkGreen
 }
 
@@ -162,7 +162,6 @@ try {
 
     $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 
-    # 1. Restock display must survive LOW_MARGIN when an actual live restock was observed.
     Clear-LocalSettings
     $activeRestock = $now - 120
     $activeCycle = [pscustomobject]@{
@@ -179,7 +178,6 @@ try {
     Assert-Equal 'Observed live restock retained independently of profitability' ([long]$result.UKRestockEstimateAt) $activeRestock
     Assert-Equal 'Observed live restock marked live' $result.UKRestockSampleCount 'live'
 
-    # 2. Stale resale reference must suppress a timing recommendation.
     Clear-LocalSettings
     Write-StateKv -Values (New-BaseState -UKStatus 'SAFE_WINDOW' -UKForeignPrice 700000 -Now $now)
     Write-EngineState -ResalePrice 1000000 -FetchedAt ($now - 601) -UKLastSellOutAt ($now - 300)
@@ -188,10 +186,6 @@ try {
     Assert-Equal 'Stale resale clears safe-window open time' ([long]$result.UKWindowOpenAt) 0
     Assert-Equal 'Stale resale clears safe-window close time' ([long]$result.UKWindowCloseAt) 0
 
-    # 3. Standard travel cost can make a borderline per-item opportunity LOW_MARGIN.
-    # Gross resale 791k -> 751,450 net after 5% fee; per-item profit = 51,450.
-    # At UK Standard base 10 slots: 514,500 - 18,000 travel = 496,500,
-    # below the default 10 * 50,000 required trip profit.
     Clear-LocalSettings
     $standardState = New-BaseState -Mode 'standard' -UKStatus 'SAFE_WINDOW' -UKForeignPrice 700000 -Now $now
     $standardState.UKTravelSeconds = 9060
@@ -204,7 +198,6 @@ try {
     Assert-Equal 'Standard trip profit includes travel cost' ([long]$result.UKTripProfit) 496500
     Assert-Equal 'Standard LOW_MARGIN clears departure timing' ([long]$result.UKWindowCloseAt) 0
 
-    # 4. Airstrip zero-cost economics preserve the same healthy timing recommendation.
     Clear-LocalSettings
     Write-StateKv -Values (New-BaseState -Mode 'airstrip' -UKStatus 'SAFE_WINDOW' -UKForeignPrice 700000 -Now $now)
     Write-EngineState -ResalePrice 791000 -FetchedAt $now -UKLastSellOutAt ($now - 300)
@@ -214,7 +207,6 @@ try {
     Assert-Equal 'Airstrip base capacity applied' ([int]$result.UKCapacity) 15
     Assert-True 'Airstrip safe-window timing remains present' ([long]$result.UKWindowCloseAt -gt $now)
 
-    # 5. If Business is manually forced before its economics are modeled, timing is suppressed.
     Clear-LocalSettings
     $businessState = New-BaseState -Mode 'business' -UKStatus 'BEST_ODDS' -UKForeignPrice 700000 -Now $now
     $businessState.UKTravelSeconds = 2700
@@ -226,8 +218,6 @@ try {
     Assert-Equal 'Unresolved Business economics clears best departure' ([long]$result.UKBestDepartureAt) 0
     Assert-Equal 'Unresolved Business cost exposed as unknown' ([long]$result.UKTravelCost) -1
 
-    # 6. A local capacity override is honored, and an explicit total-trip floor can
-    # exceed the scaled per-item floor without changing country contracts.
     Write-LocalProfitabilitySettings -CapacityOverride 30 -MinimumTotalTripProfit 1600000
     Write-StateKv -Values (New-BaseState -Mode 'airstrip' -UKStatus 'SAFE_WINDOW' -UKForeignPrice 700000 -Now $now)
     Write-EngineState -ResalePrice 791000 -FetchedAt $now -UKLastSellOutAt ($now - 300)
