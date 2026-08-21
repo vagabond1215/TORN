@@ -33,9 +33,23 @@ foreach ($sectionName in @('MeasureUpdate','MeasureSettings')) {
     if ($sectionName -eq 'MeasureUpdate' -and $body -notmatch '(?im)^Parameter=.*RunUpdate\.ps1') {
         Fail '[MeasureUpdate] must route through RunUpdate.ps1.'
     }
-    if ($sectionName -eq 'MeasureSettings' -and $body -notmatch '(?im)^Parameter=.*OpenSettings\.ps1') {
-        Fail '[MeasureSettings] must route through OpenSettings.ps1.'
+    if ($sectionName -eq 'MeasureSettings') {
+        if ($body -notmatch '(?im)^Parameter=.*LaunchSettings\.ps1') {
+            Fail '[MeasureSettings] must route through the short-lived LaunchSettings.ps1 wrapper.'
+        }
+        if ($body -match '(?im)^Timeout=-1\s*$') {
+            Fail '[MeasureSettings] must not remain owned by RunCommand for the lifetime of the Settings dialog.'
+        }
     }
+}
+
+$launcherPath = Join-Path $ProjectRoot '@Resources\Scripts\LaunchSettings.ps1'
+if (-not (Test-Path -LiteralPath $launcherPath)) {
+    Fail 'Missing @Resources\Scripts\LaunchSettings.ps1.'
+} else {
+    $launcher = Get-Content -LiteralPath $launcherPath -Raw
+    if ($launcher -notmatch 'OpenSettings\.ps1') { Fail 'LaunchSettings.ps1 must start OpenSettings.ps1.' }
+    if ($launcher -notmatch 'Start-Process') { Fail 'LaunchSettings.ps1 must detach the Settings dialog process.' }
 }
 
 if ($ini -notmatch '(?m)^OnRefreshAction=\[!CommandMeasure MeasureUpdate "Run"\]\s*$') {
