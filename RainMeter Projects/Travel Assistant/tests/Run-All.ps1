@@ -8,6 +8,7 @@ $tests = @(
     'Validate-GraphWindow.ps1',
     'Validate-ShadowCollection.ps1',
     'Validate-ItemMetadata.ps1',
+    'Validate-Distribution.ps1',
     'Validate-HistoricalTools.ps1',
     'Run-HistoricalPipelineTests.ps1',
     'Run-SeedImporterTests.ps1',
