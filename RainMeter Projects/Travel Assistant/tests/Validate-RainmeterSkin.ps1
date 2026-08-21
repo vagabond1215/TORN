@@ -69,6 +69,32 @@ if ($ini -match '(?m)^\[MeasureCycleMode\]') {
     Fail 'Main skin should no longer expose the slow CycleTravelMode RunCommand measure.'
 }
 
+$titleMatch = [regex]::Match($ini, '(?ms)^\[MeterTitle\]\s*(.*?)(?=^\[|\z)')
+if (-not $titleMatch.Success) {
+    Fail 'Missing [MeterTitle].'
+} else {
+    $titleBody = $titleMatch.Groups[1].Value
+    if ($titleBody -notmatch '(?im)^Text=Travel\s*$') { Fail 'Main header must display Travel.' }
+    if ($titleBody -notmatch '(?im)^LeftMouseUpAction=\["https://www\.torn\.com/page\.php\?sid=travel"\]\s*$') {
+        Fail 'Travel header must open the Torn travel page.'
+    }
+}
+
+foreach ($flagSection in @('MeterUKFlag','MeterJPFlag')) {
+    if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($flagSection) + '\]\s*$')) {
+        Fail "Missing [$flagSection] country flag meter."
+    }
+}
+if ($ini -match '(?m)^\[MeterUKStatus\]\s*$' -or $ini -match '(?m)^\[MeterJPStatus\]\s*$') {
+    Fail 'Redundant destination status footer meters must be removed.'
+}
+if ($ini -match '(?i)click timing/status to verify on Weav3r') {
+    Fail 'Redundant timing/status verification footer text is still present.'
+}
+if ($ini -match '(?im)^Text=UNITED KINGDOM - XANAX\s*$' -or $ini -match '(?im)^Text=JAPAN - XANAX\s*$') {
+    Fail 'Destination headings must use flag icons rather than country-name text.'
+}
+
 if ($errors.Count -gt 0) {
     foreach ($errorMessage in $errors) { Write-Host "FAIL: $errorMessage" -ForegroundColor Red }
     Write-Host "Rainmeter skin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
