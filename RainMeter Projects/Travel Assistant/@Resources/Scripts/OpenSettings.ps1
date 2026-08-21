@@ -11,6 +11,32 @@ $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $LocalSettingsPath = Join-Path $ConfigDir 'settings.local.json'
 $PreferencePath = Join-Path $RuntimeDir 'preferences.json'
+$SettingsErrorFile = Join-Path $RuntimeDir 'settings-error.txt'
+$RunUpdatePath = Join-Path $PSScriptRoot 'RunUpdate.ps1'
+
+New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+if (Test-Path -LiteralPath $SettingsErrorFile) { Remove-Item -LiteralPath $SettingsErrorFile -Force -ErrorAction SilentlyContinue }
+
+function Write-SettingsError {
+    param([object]$ErrorRecord)
+    try {
+        $message = if ($null -ne $ErrorRecord.Exception) { [string]$ErrorRecord.Exception.Message } else { [string]$ErrorRecord }
+        $detail = @(
+            ('Time: {0:o}' -f [DateTimeOffset]::Now),
+            ('Message: {0}' -f $message),
+            ('Position: {0}' -f [string]$ErrorRecord.InvocationInfo.PositionMessage)
+        ) -join [Environment]::NewLine
+        [System.IO.File]::WriteAllText($SettingsErrorFile, $detail, [System.Text.UTF8Encoding]::new($false))
+    } catch { }
+}
+
+trap {
+    Write-SettingsError $_
+    try {
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Travel Assistant Settings error', 'OK', 'Error') | Out-Null
+    } catch { }
+    exit 1
+}
 
 function Read-JsonFile {
     param([string]$Path)
@@ -35,6 +61,12 @@ function Set-ObjectProperty {
     $prop = $Object.PSObject.Properties[$Name]
     if ($null -eq $prop) { $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value }
     else { $prop.Value = $Value }
+}
+
+function Start-BackgroundUpdate {
+    if (-not (Test-Path -LiteralPath $RunUpdatePath)) { return }
+    $arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $RunUpdatePath.Replace('"', '\"')
+    Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden | Out-Null
 }
 
 $base = Read-JsonFile (Join-Path $ConfigDir 'settings.example.json')
@@ -254,9 +286,10 @@ $save.Add_Click({
 
         Write-JsonAtomic -Path $LocalSettingsPath -Value $local
         Write-JsonAtomic -Path $PreferencePath -Value ([pscustomobject]@{ schemaVersion = 1; travelMode = $selectedMode })
-        [System.Windows.Forms.MessageBox]::Show('Settings saved. Changes will be applied by the next Travel Assistant poll.', 'Travel Assistant Settings', 'OK', 'Information') | Out-Null
+        Start-BackgroundUpdate
         $form.Close()
     } catch {
+        Write-SettingsError $_
         [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Unable to save Travel Assistant settings', 'OK', 'Error') | Out-Null
     }
 })
