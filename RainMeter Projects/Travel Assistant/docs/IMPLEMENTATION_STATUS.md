@@ -1,6 +1,6 @@
 # Travel Assistant Implementation Status
 
-**Checkpoint:** 2026-08-19
+**Checkpoint:** 2026-08-21
 
 **Active run:** [`NEXT_CODEX_RUN.md`](./NEXT_CODEX_RUN.md) remains **ACTIVE**. This file records progress only; it does not replace the active scope or `AGENTS.md` invariants.
 
@@ -12,13 +12,43 @@ Starting implementation SHA:
 bb1ed84bd81a6021beaae7ed2c048e9974b71cab
 ```
 
-Latest repository head inspected immediately before this status update:
+Latest repository head represented by this status update:
 
 ```text
-9dbc90e38a37449e9e9dcca37bd4d59ac67bc6e6
+368562c9257d8defef9b3c55f44bbf34e5e2ea4a
 ```
 
 All implementation changes in this checkpoint are confined to `RainMeter Projects/Travel Assistant/`.
+
+## Local validation evidence
+
+The target Windows machine executed the deterministic/static suite from repository commit:
+
+```text
+368562c9257d8defef9b3c55f44bbf34e5e2ea4a
+```
+
+Command:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
+```
+
+Result: **PASS**.
+
+Confirmed locally:
+
+- `Validate-TravelAssistant.ps1` passed;
+- `Validate-HistoricalTools.ps1` passed all 11 checks;
+- `Run-HistoricalPipelineTests.ps1` passed observed restock/sellout cycle reconstruction;
+- `Run-SeedImporterTests.ps1` passed import, deduplication, provenance, and synthetic-seed rejection checks;
+- `Run-ModelTests.ps1` passed all 19 production-model fixture checks;
+- `Run-FinalizeStateTests.ps1` passed trip-economics, stale-resale, Business-gating, capacity, and restock-retention checks;
+- `Run-RestockDisplayTests.ps1` passed independent informational restock-display checks.
+
+During this local pass, several Windows PowerShell compatibility defects were found and fixed through the connector before the suite became clean: UTF-8 punctuation in execution-critical `.ps1` strings and direct `@($genericList)` conversion of `System.Collections.Generic.List[T]` values.
+
+This validates the deterministic PowerShell contracts on the target machine. It does **not** yet validate live provider access, `System.Drawing` graph generation, the Rainmeter junction/install path, Rainmeter parsing/rendering, or live resource behavior.
 
 ## Implemented
 
@@ -40,8 +70,8 @@ All implementation changes in this checkpoint are confined to `RainMeter Project
 - YATA structured travel-export adapter for stock and foreign price;
 - normalized generic observation records;
 - append-only runtime observation JSONL with duplicate source/value suppression;
-- observed zero → positive restock detection;
-- observed positive → zero actual sellout detection;
+- observed zero -> positive restock detection;
+- observed positive -> zero actual sellout detection;
 - compact completed-cycle JSONL records;
 - cached destination state retained for display when the live stock request fails;
 - automatic pruning of high-resolution observations and completed cycles;
@@ -68,17 +98,18 @@ All implementation changes in this checkpoint are confined to `RainMeter Project
 
 ```text
 UpdateTracker.ps1
-      ↓
+      |
+      v
 FinalizeState.ps1
 ```
 
 The finalizer makes no extra network request and adds these protections:
 
-- **restock display is independent of profitability** — low-margin/unprofitable opportunities can still show actual/estimated restock timing;
+- **restock display is independent of profitability** - low-margin/unprofitable opportunities can still show actual/estimated restock timing;
 - an active observed restock is retained exactly and the UI can render elapsed live time such as `live +04:12`;
 - otherwise, enough completed restock-delay samples can produce a median informational restock estimate even when departure timing is suppressed;
 - a cached resale reference older than `resaleStaleAfterSeconds` cannot keep `SAFE_WINDOW`/`BEST_ODDS` timing alive;
-- trip net is calculated from net profit/item × usable capacity minus mode travel cost;
+- trip net is calculated from net profit/item x usable capacity minus mode travel cost;
 - Standard cash travel cost participates in final profitability;
 - Airstrip/WLT zero-cost economics are explicit;
 - `capacityOverride` can replace the conservative base capacity;
@@ -154,13 +185,10 @@ Do not replace the empty bootstrap with synthetic fixtures or provider forecasts
 
 ## Current connector boundary
 
-The connector has implemented the repository-side skin, persistence/model logic, final restock/trip-economics guards, historical/bootstrap contracts, deterministic test harnesses, bounded live-environment checker, and local validation instructions.
+Repository-side deterministic validation is now complete on the target machine. The next evidence needed is machine-specific live/runtime behavior:
 
-The next evidence needed is machine-specific:
-
-- execute Windows PowerShell parser/model/history/finalizer tests;
 - make live YATA/Torn calls from the target network;
-- exercise `System.Drawing` graph generation;
+- exercise `System.Drawing` graph generation through one production updater pass;
 - create/verify the Rainmeter junction;
 - load the skin in the installed Rainmeter build and inspect its log;
 - measure actual runtime/disk behavior.
@@ -169,28 +197,31 @@ Those facts cannot be truthfully established by repository inspection alone, so 
 
 ## Known implementation gaps / next work
 
-1. **Windows runtime validation is required next.** Connector work has not run Rainmeter, Windows PowerShell, `System.Drawing`, the installer junction, or live YATA/Torn requests on the user's machine.
-2. **The deterministic PowerShell validation scripts are authored but not executed.** Do not record them as passing until a Windows run confirms it.
-3. **Price similarity is currently a bounded cohort, not a continuously weighted regression.** This is intentionally simple until real observations calibrate more sophisticated weighting; the present safe-window intersection remains conservative within its selected cohort.
-4. **Time-of-day/day-of-week pattern detection is not active in production yet.** `Analyze-History.ps1` can expose adequately sampled cohorts without automatically promoting them into model rules.
-5. **Cross-provider disagreement logic has statuses/contracts but no enabled secondary live provider yet.**
-6. **First launch in the middle of an already-live restock cannot know that cycle's exact restock timestamp.** Live-cycle depletion behavior becomes strongest after the tracker has observed its own 0 → positive transition.
-7. **Resource limits are designed but not measured.** CPU/RAM/disk measurements require the real Windows/Rainmeter pass.
-8. **No Windows Clock alarm integration.** This remains intentionally deferred because reliable programmatic alarm creation has not been established.
-9. **Initial profitability thresholds are provisional defaults.** The current 50k net profit/item and 5% net-margin floors should be calibrated after live validation; users with additional carrying capacity should set `capacityOverride` so trip economics reflect their actual capacity.
-10. **Business travel remains intentionally disabled.** Re-enable only after the engine can resolve either current Business Class Ticket opportunity cost or an explicit free-Business company perk.
-11. **Historical provider bootstrap is contract-ready but live-host verification remains unresolved.** Preserve low-confidence startup rather than manufacturing data.
+1. **Live Windows/Rainmeter validation is required next.** Deterministic PowerShell tests pass, but Rainmeter, the installer junction, `System.Drawing`, and live YATA/Torn behavior have not yet been validated on the target machine.
+2. **Price similarity is currently a bounded cohort, not a continuously weighted regression.** This is intentionally simple until real observations calibrate more sophisticated weighting; the present safe-window intersection remains conservative within its selected cohort.
+3. **Time-of-day/day-of-week pattern detection is not active in production yet.** `Analyze-History.ps1` can expose adequately sampled cohorts without automatically promoting them into model rules.
+4. **Cross-provider disagreement logic has statuses/contracts but no enabled secondary live provider yet.**
+5. **First launch in the middle of an already-live restock cannot know that cycle's exact restock timestamp.** Live-cycle depletion behavior becomes strongest after the tracker has observed its own 0 -> positive transition.
+6. **Resource limits are designed but not measured.** CPU/RAM/disk measurements require the real Windows/Rainmeter pass.
+7. **No Windows Clock alarm integration.** This remains intentionally deferred because reliable programmatic alarm creation has not been established.
+8. **Initial profitability thresholds are provisional defaults.** The current 50k net profit/item and 5% net-margin floors should be calibrated after live validation; users with additional carrying capacity should set `capacityOverride` so trip economics reflect their actual capacity.
+9. **Business travel remains intentionally disabled.** Re-enable only after the engine can resolve either current Business Class Ticket opportunity cost or an explicit free-Business company perk.
+10. **Historical provider bootstrap is contract-ready but live-host verification remains unresolved.** Preserve low-confidence startup rather than manufacturing data.
 
 ## Next steps
 
-Follow [`WINDOWS_VALIDATION.md`](./WINDOWS_VALIDATION.md). The minimum local command sequence is:
+Because the deterministic/static suite has just passed on the target machine, the immediate next command can skip re-running it:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1 -SkipTests
+```
+
+Then run:
+
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
 ```
 
-Then load `Travel Assistant\TravelAssistant.ini` in Rainmeter and inspect rendering/log behavior.
+Load `Travel Assistant\TravelAssistant.ini` in Rainmeter and inspect rendering/log behavior.
 
 Any runtime defect should be fed back through the GitHub connector where practical. A broad Codex pass is still unnecessary unless a concrete local-only debugging operation cannot be performed otherwise.
