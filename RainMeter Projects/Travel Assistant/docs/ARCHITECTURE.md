@@ -2,11 +2,9 @@
 
 ## Purpose
 
-Travel Assistant is a lightweight Rainmeter-facing Torn foreign-market decision system.
+Travel Assistant is a lightweight Rainmeter-facing Torn foreign-market decision system. The visible UI remains the validated UK/Japan Xanax proof while the data layer expands across the entire observed foreign market.
 
-The established visible presentation currently remains **Xanax in the United Kingdom and Japan**, while the data layer now collects the entire observed foreign market before broader UI or route optimization is enabled.
-
-The architecture separates three populations:
+The architecture keeps three populations separate:
 
 ```text
 COLLECTED opportunities
@@ -16,7 +14,7 @@ VISIBLE opportunities
 OPTIMIZER candidates
 ```
 
-Collection is broad. Visibility is controlled by user/context filters. Optimizer eligibility requires sufficiently modeled economics, availability and confidence.
+Collection is broad. Visibility is presentation/context filtered. Optimizer eligibility requires sufficiently modeled economics, availability and confidence.
 
 ## Layering
 
@@ -29,9 +27,7 @@ country + itemId observations
         ↓
 bounded raw history / observed cycle detection
         ↓
-canonical Torn item metadata
-        ↓
-per-market availability/depletion evidence
+local item metadata catalog
         ↓
 resale + capacity/economics enrichment
         ↓
@@ -48,9 +44,9 @@ Rainmeter presentation
 
 Settings and current user travel profile are side inputs to economics/presentation. They never rewrite observed history.
 
-## Provider boundaries
+## Live provider boundary
 
-Current live-stock order:
+Current foreign-stock order:
 
 ```text
 Prometheus
@@ -60,9 +56,9 @@ YATA
 cached/local state + stale/failure handling
 ```
 
-Foreign-shop stock is crowd-sourced provider data. The application must not treat a static Wiki shop table as the authoritative live catalog.
+Foreign-shop stock is crowd-sourced provider data. Static Wiki shop tables are documentation/cross-check material, not the authority for whether a market row is currently observed.
 
-Provider rows normalize to:
+Normalized observation schema:
 
 ```text
 schemaVersion
@@ -75,67 +71,11 @@ source
 sourceTimestamp
 ```
 
-Provider-specific country codes or response shapes must not leak into the core history/cycle model.
+Provider-specific country codes and response shapes stop at the adapter boundary.
 
-### Torn item metadata
+## Market identity and history
 
-Canonical item names/categories come from Torn API v2 specific-item metadata:
-
-```text
-GET /v2/torn/{ids}/items?sort=ASC
-```
-
-This requires only a public-access key. Specific-ID requests populate item details when available, which matters for weapon category identity.
-
-The metadata pass is bounded and low-frequency:
-
-- default refresh interval: 6 hours;
-- distinct provider-observed item IDs only;
-- maximum 150 item IDs per request batch;
-- every attempt, including partial/error responses, respects the refresh interval unless manually forced;
-- API key is passed to `curl.exe` through stdin configuration / Authorization header, never in the command line or URL;
-- failures are fail-soft and do not block the visible updater/finalizer/heartbeat.
-
-Runtime metadata is stored under:
-
-```text
-engine-state.json -> itemMetadata
-engine-state.json -> metadataCollection
-```
-
-Per-item metadata currently retains:
-
-```text
-itemId
-name
-type
-subType
-category
-categoryResolved
-isTradable
-marketPrice
-shops
-fetchedAt
-source
-```
-
-Canonical category handling:
-
-- non-weapons use Torn `type` directly;
-- `Weapon` items use `details.category` when available, preserving `Primary`, `Secondary`, `Melee`, or `Temporary`;
-- a weapon with missing details stays broad `Weapon` with `categoryResolved=false`; do not guess.
-
-Torn `value.market_price` is stored as metadata/reference only. It does **not** replace the existing Item Market resale-price profitability gate.
-
-### Torn Item Market
-
-Torn v2 Item Market remains the current resale reference for modeled opportunities. Broad full-market resale expansion must use a bounded staggered queue/cache rather than one request per item every minute.
-
-On the validated Windows host, Torn API requests that hang under native Windows PowerShell are routed through bounded `curl.exe` with the key supplied through stdin configuration.
-
-## Market identity
-
-Durable foreign-market identity is:
+Durable market identity is:
 
 ```text
 country + itemId
@@ -144,40 +84,22 @@ country + itemId
 Examples:
 
 ```text
-united_kingdom:206   Xanax
-united_kingdom:266   Nessie Plushie
-japan:206            Xanax
-japan:277            Cherry Blossom
+united_kingdom:206
+united_kingdom:266
+japan:206
+japan:277
 ```
 
-Names/categories are metadata. Historical isolation never depends on display names.
+Names/categories are metadata and never define historical identity.
 
-## Observation and history model
-
-Observed transitions have strict semantics:
+Observed truth semantics:
 
 ```text
 0 -> positive = observed restock
 positive -> 0 = observed sellout
 ```
 
-Completed cycle schema:
-
-```text
-schemaVersion
-country
-itemId
-foreignPrice
-restockAt
-restockQuantity
-soldOutAt
-availabilitySeconds
-previousSoldOutAt
-restockDelaySeconds
-source
-```
-
-Forecasts never populate these truth fields.
+Completed cycles retain country/item identity, foreign-price regime, restock quantity/timestamps, availability duration, prior sellout and source provenance. Forecasts never populate historical truth fields.
 
 Default retention:
 
@@ -185,24 +107,20 @@ Default retention:
 - completed cycles: approximately 90 days;
 - visible graph window: 8 hours.
 
-The 5-minute live-source stale guard is a recommendation-safety threshold, not history retention.
+The five-minute live-source stale guard is a recommendation-safety threshold, not history retention.
 
-## Primary collector and shadow collector
+## Primary and shadow collectors
 
-### Established primary path
+`UpdateTracker.ps1` remains the established visible UK/Japan Xanax collector/model path.
 
-`UpdateTracker.ps1` remains the established UK/Japan Xanax collector/model path. It owns the currently visible state and graphs.
+`ShadowCollector.ps1` is the expansion bridge and collects every valid provider row for all 11 foreign countries while protecting current primary markets from duplicate history writes.
 
-### Full-market shadow path
-
-`ShadowCollector.ps1` is the current expansion bridge. It runs after the primary updater and before metadata/finalization.
+Current production heartbeat path:
 
 ```text
 UpdateTracker
       ↓
 ShadowCollector (fail-soft)
-      ↓
-ItemMetadata (fail-soft / low-frequency)
       ↓
 FinalizeState
       ↓
@@ -212,67 +130,86 @@ heartbeat
 Shadow behavior:
 
 - default cadence: 120 seconds;
-- all 11 Torn foreign destinations have `collect: true`;
-- normalize every valid item row returned for each collection country;
-- record every observed market in ignored `engine-state.json -> observedMarkets`;
-- append non-primary raw history only when stock or foreign price changes;
-- provider timestamp changes alone update freshness metadata without producing another raw observation;
-- detect/write completed non-primary cycles using the same cycle contract;
-- skip currently enabled-country + enabled-item primary markets so UK/Japan Xanax cannot be double-written;
-- persist health/error counters under `engine-state.json -> shadowCollection`;
-- fail softly so visible functionality continues on shadow failure.
+- all 11 foreign destinations have `collect: true`;
+- all valid provider rows are normalized locally;
+- observed markets are tracked in ignored `engine-state.json -> observedMarkets`;
+- raw history is appended only when stock or foreign price changes;
+- provider timestamp changes alone update freshness metadata without another raw observation;
+- non-primary restock/sellout cycles use the same cycle contract;
+- enabled-country + enabled-item primary markets are skipped by shadow writes;
+- failures are recorded locally and fail soft.
 
-### Validated full-market baseline
-
-Target-Windows validation on 2026-08-21 confirmed:
+Validated target-Windows baseline on 2026-08-21:
 
 ```text
 provider:             prometheus
 countriesSeen:        11
 marketsSeen:          232
 observedMarkets:      232
-observationsWritten:  51 on forced acceptance pass
-cyclesCompleted:      0 on that initial pass
+observationsWritten:  51 on acceptance pass
+cyclesCompleted:      0 on that early pass
 lastError:            empty
 ```
 
-The extra foreign-stock fetch is accepted as a migration bridge. Long-term architecture should use one shared provider payload that fans out to all market observations after primary behavior equivalence is proven.
+The separate shadow provider request is a migration bridge. Long-term architecture should share one foreign-stock payload after primary behavior equivalence is proven.
 
-## Country configuration
+## Item metadata architecture
+
+Catalog metadata must not block the Rainmeter heartbeat.
+
+Three Torn catalog strategies were tested on the target Windows host and all timed out before returning metadata:
+
+```text
+v2 specific-items | 150 IDs | 20s
+v2 specific-items |  40 IDs | 30s
+classic torn/items bulk      | 12s
+```
+
+Therefore `ItemMetadata.ps1` is **manual/maintenance-only** and is not invoked by `RunUpdate.ps1`.
+
+Runtime metadata lives under:
+
+```text
+engine-state.json -> itemMetadata
+engine-state.json -> metadataCollection
+```
+
+### Committed metadata fallback
+
+`config/items.json` contains explicit committed metadata for currently promoted/seeded items. When `ItemMetadata.ps1` is run manually, those rows are imported before any optional network attempt with:
+
+```text
+source=config_seed
+marketPrice=0
+tradabilityKnown=false
+```
+
+Current seeds:
+
+```text
+206 Xanax          | Drug
+266 Nessie Plushie | Plushie
+277 Cherry Blossom | Flower
+```
+
+A successful future maintenance refresh may replace a seed row with richer canonical metadata. A network failure must never erase committed seed metadata.
+
+### Full catalog direction
+
+The full provider-observed catalog should ultimately use a **committed/offline metadata catalog** refreshed outside the Rainmeter heartbeat. Item names/categories change slowly and are appropriate packaged reference data; stock/foreign price remain live provider data.
+
+Do not infer unknown categories. Do not let metadata maintenance delays affect polling, finalization or heartbeat health.
+
+## Country/item configuration
 
 `config/countries.json` separates:
 
 ```text
-enabled = currently active visible/model country
-collect = background data-collection country
+enabled = current visible/model country
+collect = background collection country
 ```
 
-Current visible countries:
-
-```text
-United Kingdom
-Japan
-```
-
-Current collection countries:
-
-```text
-Mexico
-Cayman Islands
-Canada
-Hawaii
-United Kingdom
-Argentina
-Switzerland
-Japan
-China
-United Arab Emirates
-South Africa
-```
-
-The nine collection-only countries intentionally do not yet carry full recommendation economics. Background history does not require those fields. Add economics deliberately before they become recommendation/optimizer candidates.
-
-## Item configuration
+UK and Japan remain visible/model-enabled. All 11 Torn foreign destinations collect in the background.
 
 `config/items.json` separates:
 
@@ -285,31 +222,21 @@ countries
 category
 ```
 
-Current explicit seeds:
-
-```text
-206 Xanax           Drug     visible / primary
-266 Nessie Plushie  Plushie  UK hidden seed
-277 Cherry Blossom  Flower   Japan hidden seed
-```
-
-The shadow collector does not use this short list as a whitelist. Unknown provider-observed IDs are collected and later enriched through Torn metadata.
+The explicit item list is not a whitelist for shadow collection. Unknown provider-observed IDs continue accumulating history even before catalog enrichment exists.
 
 ## Availability model
 
-Per-market evidence priority remains:
+Evidence priority remains:
 
-1. current live depletion when enough observations exist;
+1. current live depletion when adequately sampled;
 2. comparable historical cycles in the current/near foreign-price regime;
 3. broader same-market history only with reduced confidence.
 
-`SAFE_WINDOW` requires conservative historical support. Current depletion may shorten safety but never expand it beyond supported history.
-
-`BEST_ODDS` is probabilistic and must not be rendered as safe.
+`SAFE_WINDOW` requires conservative historical support. Current depletion may shorten safety but never expand it beyond supporting history. `BEST_ODDS` remains probabilistic and must not be rendered as safe.
 
 Sparse, stale, incomparable or unsupported evidence yields no actionable departure advice.
 
-## Profitability / resale architecture
+## Profitability / resale
 
 For a modeled opportunity:
 
@@ -319,26 +246,22 @@ netProfitPerItem = netResalePrice - foreignPrice
 tripNet = (netProfitPerItem × usableCapacity) - effectiveTravelCost
 ```
 
-Profitability suppresses departure timing but never suppresses useful collection/history.
+Profitability suppresses departure timing, not collection/history.
 
-Full-market expansion must **not** issue one Torn Item Market request per observed item every minute. Broad resale enrichment requires a bounded staggered queue/cache per distinct item ID.
+Broad resale expansion must use a bounded staggered cache/queue. Never issue one Torn Item Market request per observed item every minute.
 
 ## Capacity authority
 
-Current general carrying capacity is derived primarily from current `/user/perks` state plus selected travel-mode base:
+Current general carrying capacity prefers current `/user/perks` plus selected mode base:
 
 ```text
 Standard: 10
 Airstrip/WLT/qualified Business: 15
 ```
 
-Current suitcase/enhancer and suitable active general bonuses are applied without double-counting property/stock travel-method base effects.
+Current suitcase/general bonuses are applied without double-counting property/stock travel-method base effects. A synced current-capacity bonus is authoritative for general capacity.
 
-A successfully synced current-capacity bonus is authoritative for general capacity and replaces legacy inferred company/faction capacity additions.
-
-Company/star metadata remains relevant for non-capacity effects such as free Business Class.
-
-Before multi-category economics becomes recommendation/optimizer eligible, capacity must be split into:
+Before multi-category economics becomes eligible, capacity must split into:
 
 ```text
 general usable capacity
@@ -347,19 +270,15 @@ general usable capacity
 
 Required isolation:
 
-- Flower Shop flower bonus applies only to Flower items;
-- Toy Shop plushie bonus applies only to Plushie items;
+- Flower Shop flower capacity applies only to Flower items;
+- Toy Shop plushie capacity applies only to Plushie items;
 - neither affects Xanax.
 
-## Business travel safety branch
+Ticket-funded Business remains unresolved. Business timing is allowed only when a known-free branch is established.
 
-Ticket-funded Business economics remain unresolved.
+## Presentation
 
-Business may be used only when a known-free branch is established, currently modeled through 10-star Lingerie Store. Otherwise forced Business suppresses timing instead of assuming zero cost.
-
-## Presentation architecture
-
-Current compact cards remain stable during data-layer expansion.
+Current compact cards stay stable until a deliberate multi-item UI release.
 
 Per destination:
 
@@ -369,24 +288,13 @@ Per destination:
 [8-hour stock graph]
 ```
 
-Current presentation rules include:
-
-- UK above Japan;
-- equal graph widths;
-- 8-hour graph window with 60-minute vertical divisions;
-- price color: good/low-margin/bad economics;
-- only the literal `Out of Stock` phrase is red;
-- out-of-stock text format: `Out of Stock for h:mm since HH:mm`;
-- delivery-truck restock indicator appears only while out of stock when predicted restock ETA exceeds flight time;
-- hidden timing/history details remain in tooltips;
-- `Travel` header opens Torn travel;
-- Settings remains top-right.
+Current invariants include UK above Japan, equal graph widths, 60-minute grid divisions, profit-colored price, only the literal `Out of Stock` phrase red, `Out of Stock for h:mm since HH:mm`, actionable delivery-truck restock timing, clickable `Travel` header and top-right Settings.
 
 ## Future filters and travel context
 
-Country/category filters act only on **visible opportunities**. They never change collection.
+Country/category filters affect **visibility only** and never stop background collection.
 
-Future Torn travel-state normalization should expose:
+Future travel-state normalization should expose:
 
 ```text
 travelState
@@ -404,22 +312,11 @@ Intended behavior:
 - abroad: continue showing that country's items;
 - returning to Torn: release forced foreign-country presentation.
 
-The plane icon remains unchanged; only time semantics change.
+The plane icon stays; only time semantics change.
 
 ## Future `Optimal` mode
 
-`Optimal` is a separate scheduling layer above per-opportunity modeling.
-
-It must evaluate a bounded planning horizon and compare:
-
-- multiple shorter trips;
-- one or two longer trips;
-- mixed-country sequences;
-- capacity/category effects;
-- travel costs/fees;
-- availability/restock/depletion evidence;
-- confidence and stale-data guards;
-- opportunity cost of choosing one route over another.
+`Optimal` is a scheduling layer above per-opportunity modeling. It must compare multiple short trips, fewer long trips and mixed-country sequences over a bounded planning horizon while accounting for capacity, fees/costs, availability/depletion evidence, confidence/freshness and opportunity cost.
 
 Do not implement `Optimal` as a simple sort by profit/item or profit/trip.
 
@@ -431,27 +328,28 @@ Every second:
 
 Approximately every minute:
 
-- serialized primary updater/model/finalizer.
+- serialized visible updater/model/finalizer.
 
 Approximately every two minutes during the expansion bridge:
 
 - fail-soft all-country shadow stock collection.
 
-Approximately every six hours:
+Catalog metadata network maintenance:
 
-- fail-soft canonical Torn item metadata refresh for the distinct observed item IDs.
+- **not part of the Rainmeter heartbeat**;
+- explicit/manual only until a committed offline catalog workflow is established.
 
-Do not add permanent background PowerShell/browser processes. Keep ignored state bounded and continue pruning shared observation/cycle stores.
+Do not add permanent background PowerShell/browser processes. Keep runtime state bounded and continue pruning shared observation/cycle stores.
 
 ## Validation boundary
 
 Shadow collection has passed focused deterministic tests and live target-Windows acceptance.
 
-Focused metadata tests:
+Metadata-focused checks now verify both the committed seed fallback and the absence of metadata network maintenance from `RunUpdate.ps1`:
 
 ```powershell
 .\tests\Validate-ItemMetadata.ps1
 .\tests\Run-ItemMetadataTests.ps1
 ```
 
-These must pass on Windows, followed by one forced live metadata refresh and inspection of `metadataCollection` / `itemMetadata`, before metadata enrichment is treated as operationally accepted.
+A manual Torn metadata timeout is no longer a runtime-health failure. Full-catalog completion depends on establishing the offline/committed catalog workflow, not on increasing Rainmeter-side request timeouts.
