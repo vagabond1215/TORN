@@ -6,6 +6,12 @@
   "highResolutionRetentionHours": 48,
   "cycleRetentionDays": 90,
   "graphWindowHours": 24,
+  "travelProfile": {
+    "companyType": "none",
+    "companyStars": 0,
+    "factionExcursionLevel": 0,
+    "factionTravelCostLevel": 0
+  },
   "profitability": {
     "sellTarget": "item_market",
     "itemMarketFeePercent": 5.0,
