@@ -82,5 +82,26 @@ $manualProfile = Get-TravelProfile -BaseSettings $baseSettings -LocalSettings $m
 Assert-Equal 'Manual state preserves legacy active capacity' ([int]$manualProfile.factionExcursionLevel) 7
 Assert-Equal 'Manual state preserves legacy active cost' ([int]$manualProfile.factionTravelCostLevel) 2
 
+$currentLocal = [pscustomobject]@{ travelProfile = [pscustomobject]@{
+    companyType='lingerie_store'; companyStars=10
+    currentCapacityKnown=$true; currentCapacityMode='airstrip'; currentCapacity=18; currentCapacityBonus=3; currentCapacitySyncedAt=1234567890
+    factionState='peace'; factionExcursionLevel=10; factionTravelCostLevel=5
+    factionPeaceExcursionLevel=10; factionPeaceTravelCostLevel=5; factionWarExcursionLevel=0; factionWarTravelCostLevel=0
+} }
+$currentProfile = Get-TravelProfile -BaseSettings $baseSettings -LocalSettings $currentLocal
+Assert-True 'Synced current capacity is retained' ([bool]$currentProfile.currentCapacityKnown)
+Assert-Equal 'Synced current capacity bonus is retained' ([int]$currentProfile.currentCapacityBonus) 3
+$currentEffects = Get-TravelProfileEffects -Profile $currentProfile -PerksConfig $perks -Item $item
+Assert-Equal 'Current capacity replaces inferred company and faction slots' ([int]$currentEffects.totalCapacityBonus) 3
+Assert-Equal 'Current capacity does not double count faction slots' ([int]$currentEffects.factionCapacityBonus) 0
+Assert-Equal 'Current capacity uses conservative zero faction fee reduction' ([int]$currentEffects.travelCostReductionPercent) 0
+Assert-True 'Current capacity still preserves 10-star Lingerie Business unlock' ([bool]$currentEffects.freeBusinessClass)
+$currentAir = Get-EffectiveTravelEconomics -Country $uk -TravelMode 'airstrip' -Effects $currentEffects
+Assert-Equal 'Current +3 bonus produces 18 Airstrip capacity' ([int]$currentAir.capacity) 18
+$currentStandard = Get-EffectiveTravelEconomics -Country $uk -TravelMode 'standard' -Effects $currentEffects
+Assert-Equal 'Current +3 bonus produces 13 Standard capacity' ([int]$currentStandard.capacity) 13
+$currentBusiness = Get-EffectiveTravelEconomics -Country $uk -TravelMode 'business' -Effects $currentEffects
+Assert-Equal 'Current +3 bonus produces 18 Business capacity' ([int]$currentBusiness.capacity) 18
+
 Write-Host 'Travel profile economics tests passed.' -ForegroundColor Green
 exit 0
