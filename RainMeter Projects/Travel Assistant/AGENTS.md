@@ -30,7 +30,9 @@ Travel Assistant is expanding from the UK/Japan Xanax proof into a generic Torn 
 Keep these populations separate:
 
 ```text
-COLLECTED opportunities
+COLLECTED provider rows
+        !=
+ACTIVE market candidates
         !=
 VISIBLE opportunities
         !=
@@ -42,7 +44,7 @@ OPTIMIZER candidates
 - Observe every valid foreign-shop row returned by the live provider for every configured foreign country, irrespective of category.
 - A provider row is evidence about the provider dataset, **not proof that the item is currently purchasable in that country**.
 - Market identity is always `country + itemId`.
-- Verified inactive/legacy markets remain observable for provenance but must not receive new learning/history writes or become visible/optimizer candidates.
+- Verified inactive/legacy markets remain observable for provenance but must not receive new learning/history/resale work or become visible/optimizer candidates.
 - UI filters and current travel destination must never stop background learning for other active markets.
 
 ### Visibility
@@ -72,7 +74,8 @@ OPTIMIZER candidates
 10. Collection/enrichment failures must fail visibly but gracefully and must not break the established visible Xanax path.
 11. Runtime observations, cycles, caches, generated state/graphs, local settings, credentials and errors stay ignored/local.
 12. Storage/compute remain bounded. The one-second Rainmeter loop must not perform network/model work.
-13. Provider market membership may be stale. A verified inactive `country + itemId` override supersedes provider presence for learning, display and optimization eligibility while preserving provenance/history.
+13. Provider market membership may be stale. A verified inactive `country + itemId` override supersedes provider presence for learning, display, resale and optimization eligibility while preserving provenance/history.
+14. Broad resale population must never create an API burst; missing/no-price responses remain unresolved rather than becoming zero economics.
 
 ## Current background-collection contract
 
@@ -90,7 +93,7 @@ OPTIMIZER candidates
 - provider timestamp alone updates freshness without another raw observation;
 - failures remain fail-soft.
 
-Target-Windows acceptance on 2026-08-21 established:
+Accepted target-Windows baseline on 2026-08-21:
 
 ```text
 Prometheus
@@ -98,10 +101,13 @@ Prometheus
 232 observed country-item provider rows
 232 / 232 rows with provider names
 202 distinct item IDs
+202 / 202 categories resolved
+5 verified legacy rows
+227 active country-item markets
 no shadow error
 ```
 
-Current verified legacy rows pending final Windows acceptance:
+Current verified legacy rows:
 
 ```text
 mexico:21
@@ -111,7 +117,7 @@ united_arab_emirates:383
 united_arab_emirates:440
 ```
 
-Expected current split is 232 raw provider rows / 5 legacy rows / 227 active candidate markets. Do not hard-code these live counts as timeless constants.
+Do not hard-code these live counts as timeless constants.
 
 A later refactor may unify visible and shadow collection behind one provider fetch only after equivalent primary behavior is proven.
 
@@ -132,7 +138,7 @@ Therefore:
 - `RunUpdate.ps1` must not invoke `ItemMetadata.ps1`;
 - `ItemMetadata.ps1` is explicit/manual maintenance only;
 - do not keep increasing Torn catalog timeouts/batch sizes;
-- full catalog direction is committed/offline metadata refreshed outside the heartbeat.
+- full catalog metadata comes from committed/offline references refreshed outside the heartbeat.
 
 `LocalCatalog.ps1` uses local precedence:
 
@@ -151,7 +157,7 @@ config/foreign-item-categories.json
 config/foreign-market-overrides.json
 ```
 
-The 197-ID category snapshot plus five individually verified overrides are intended to resolve the current 202 observed item IDs without runtime Torn catalog access. The five verified overrides also correct stale canonical names for item 327 (`Blank Casino Chips`) and item 383 (`Digital Organizer`).
+The 197-ID category snapshot plus five individually verified overrides resolve the current 202 observed item IDs without runtime Torn catalog access. The verified overrides also correct stale canonical names for item 327 (`Blank Casino Chips`) and item 383 (`Digital Organizer`).
 
 `ItemMetadata.ps1` must seed committed `config/items.json` metadata before any optional network attempt. Seed rows use:
 
@@ -169,7 +175,45 @@ Current committed seeds:
 277 Cherry Blossom | Flower
 ```
 
-A later successful maintenance refresh may replace seed rows with richer canonical metadata. Network failure must never erase known local metadata.
+A later successful maintenance refresh may replace local rows with richer canonical metadata. Network failure must never erase known local metadata.
+
+## Current resale-queue contract
+
+`ResaleQueue.ps1` is the broad pricing bridge.
+
+It must:
+
+- run only for normal `Update` actions;
+- run after `FinalizeState` and after the visible heartbeat;
+- derive distinct item IDs only from active `observedMarkets` rows;
+- skip `catalogActive=false` and defensively skip `catalogStatus=legacy_removed`;
+- make at most one production Torn Item Market request per queue run path;
+- default to a 60-second attempt cadence, six-hour broad cache target, one-hour failure backoff and six-second request timeout;
+- prefer never-priced eligible items, then stale cache rows;
+- preserve a last successful cache row when a later refresh fails;
+- use bounded `curl.exe --config -` with the API key supplied only via stdin Authorization header;
+- never place a key in request URLs or process arguments;
+- keep missing/zero-price outcomes unresolved.
+
+Broad queue success rows use the existing shared cache schema:
+
+```text
+price
+lowest
+average
+fetchedAt
+source=torn_itemmarket
+```
+
+The current visible Xanax updater retains its independent/fresher resale behavior. Do not weaken current visible resale freshness just because broad population uses a six-hour reference cache.
+
+Runtime queue health lives under:
+
+```text
+engine-state.json -> resaleQueue
+```
+
+and must remain ignored/local.
 
 ## Observation / cycle contracts
 
@@ -256,6 +300,7 @@ A positive explicit `profitability.capacityOverride` remains authoritative where
 - one-second Rainmeter work: local string/countdown/visibility only;
 - primary updater/model/finalizer: about once per minute;
 - broad shadow collection: no more often than 120 seconds unless revalidated;
+- broad resale queue: at most one lower-priority Torn market request per normal update, after the visible heartbeat;
 - item catalog network maintenance: **not in the heartbeat**, explicit/manual only;
 - no permanent background PowerShell/browser processes;
 - updater executions stay serialized;
@@ -302,11 +347,12 @@ For collection/config/model changes:
 
 - validate JSON;
 - run PowerShell parser/static checks;
-- exercise provider/metadata normalization from fixtures/synthetic payloads;
+- exercise provider/metadata/resale normalization from fixtures/synthetic payloads;
 - prove country/item cycle isolation;
 - prove primary markets are protected from duplicate shadow writes;
-- prove verified inactive markets are retained as provider metadata but skipped before new shadow history/cycle writes;
+- prove verified inactive markets are retained as provider metadata but skipped before new shadow history/cycle/resale work;
 - prove metadata network maintenance stays outside `RunUpdate.ps1`;
+- prove broad resale runs after the visible heartbeat and remains one-request bounded;
 - verify retention and ignored-runtime boundaries;
 - run focused tests before broad suites;
 - never claim live/Rainmeter validation until it runs on Windows.
@@ -318,8 +364,8 @@ Current focused expansion checks:
 .\tests\Run-ShadowCollectionTests.ps1
 .\tests\Validate-LocalCatalog.ps1
 .\tests\Run-LocalCatalogTests.ps1
-.\tests\Validate-ItemMetadata.ps1
-.\tests\Run-ItemMetadataTests.ps1
+.\tests\Validate-ResaleQueue.ps1
+.\tests\Run-ResaleQueueTests.ps1
 ```
 
 Use `tests/Run-All.ps1` only when a broad run is justified.
