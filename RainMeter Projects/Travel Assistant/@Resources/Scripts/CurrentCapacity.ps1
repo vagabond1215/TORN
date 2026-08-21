@@ -7,36 +7,6 @@ function Get-TornTravelModeBaseCapacity {
     return 10
 }
 
-function Get-TornSuitcaseCapacityBonus {
-    param([object]$InventoryPayload)
-
-    $best = 0
-    $name = 'none'
-    if ($null -eq $InventoryPayload -or -not $InventoryPayload.PSObject.Properties['inventory'] -or $null -eq $InventoryPayload.inventory) {
-        return [pscustomobject]@{ Resolved = $false; Bonus = 0; Name = 'unknown'; Summary = 'Inventory response did not contain inventory data.' }
-    }
-    if (-not $InventoryPayload.inventory.PSObject.Properties['items']) {
-        return [pscustomobject]@{ Resolved = $false; Bonus = 0; Name = 'unknown'; Summary = 'Inventory response did not contain item rows.' }
-    }
-
-    foreach ($row in @($InventoryPayload.inventory.items)) {
-        if ($null -eq $row -or -not $row.PSObject.Properties['name']) { continue }
-        $itemName = [string]$row.name
-        $amount = if ($row.PSObject.Properties['amount']) { [long]$row.amount } else { 1L }
-        if ($amount -le 0) { continue }
-
-        $candidate = 0
-        if ($itemName -match '(?i)^Large Suitcase$') { $candidate = 3 }
-        elseif ($itemName -match '(?i)^Medium Suitcase$') { $candidate = 2 }
-        elseif ($itemName -match '(?i)^Small Suitcase$') { $candidate = 1 }
-
-        if ($candidate -gt $best) { $best = $candidate; $name = $itemName }
-    }
-
-    $summary = if ($best -gt 0) { ('{0} (+{1})' -f $name, $best) } else { 'No suitcase (+0)' }
-    return [pscustomobject]@{ Resolved = $true; Bonus = $best; Name = $name; Summary = $summary }
-}
-
 function Get-TornTravelCapacityBonusFromPerkText {
     param([string]$Text)
     if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
@@ -49,9 +19,14 @@ function Get-TornTravelCapacityBonusFromPerkText {
     if ($value -notmatch '(?i)(travel|travelling|traveling|carry|carrying)' -or $value -notmatch '(?i)(capacity|items?)') { return $null }
 
     foreach ($pattern in @(
-        '(?i)(?:increase(?:s|d)?|additional|extra|adds?|plus|\+)\D{0,40}(\d{1,2})\s*(?:travel\s*)?(?:items?|capacity)',
-        '(?i)(?:travel\s*)?(?:items?|capacity)\D{0,40}(?:increase(?:s|d)?\s*(?:by)?|additional|extra|adds?|plus|\+)\D{0,10}(\d{1,2})',
-        '(?i)(?:maximum\s+)?(?:travel(?:ing|ling)?\s+)?capacity\D{0,30}(?:by\s*)?(\d{1,2})'
+        # "Increases maximum traveling capacity by 10" / "capacity by +3"
+        '(?i)(?:maximum\s+)?(?:travel(?:ing|ling)?\s+)?capacity\D{0,30}(?:by\s*)?\+?\s*(\d{1,2})',
+        # "Increases travel item capacity by 2"
+        '(?i)(?:increase(?:s|d)?|additional|extra|adds?|plus|\+)\D{0,40}(\d{1,2})\s*(?:additional\s*)?(?:travel(?:ing|ling)?\s*)?(?:items?|capacity)',
+        # "Increases travel items by 10 for 31 days"
+        '(?i)(?:travel(?:ing|ling)?\s*)?(?:items?|capacity)\D{0,30}(?:by|of|to|plus|\+)?\D{0,8}(\d{1,2})',
+        # "Able to carry 2 additional items"
+        '(?i)carry(?:ing)?\D{0,12}(\d{1,2})\D{0,20}(?:additional\s*)?items?'
     )) {
         $m = [regex]::Match($value, $pattern)
         if ($m.Success) {
@@ -60,6 +35,44 @@ function Get-TornTravelCapacityBonusFromPerkText {
         }
     }
     return $null
+}
+
+function Get-TornSuitcaseCapacityFromPerks {
+    param([object]$PerksPayload)
+
+    if ($null -eq $PerksPayload -or -not $PerksPayload.PSObject.Properties['perks'] -or $null -eq $PerksPayload.perks) {
+        return [pscustomobject]@{ Resolved = $false; Bonus = 0; Summary = 'Perks response did not contain current perks.'; Recognized = @(); Unparsed = @() }
+    }
+
+    $enhancerProp = $PerksPayload.perks.PSObject.Properties['enhancer']
+    if ($null -eq $enhancerProp) {
+        return [pscustomobject]@{ Resolved = $false; Bonus = 0; Summary = 'Current perks did not contain the enhancer bucket.'; Recognized = @(); Unparsed = @() }
+    }
+
+    $recognized = New-Object System.Collections.Generic.List[object]
+    $unparsed = New-Object System.Collections.Generic.List[object]
+    $best = 0
+
+    foreach ($raw in @($enhancerProp.Value)) {
+        $text = [string]$raw
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+        $interesting = ($text -match '(?i)(travel|travelling|traveling|carry|carrying)' -and $text -match '(?i)(capacity|items?)')
+        if (-not $interesting) { continue }
+
+        $bonus = Get-TornTravelCapacityBonusFromPerkText -Text $text
+        if ($null -eq $bonus) {
+            $unparsed.Add([pscustomobject]@{ Bucket = 'enhancer'; Text = $text })
+            continue
+        }
+
+        $parsed = [int]$bonus
+        if ($parsed -gt $best) { $best = $parsed }
+        $recognized.Add([pscustomobject]@{ Bucket = 'enhancer'; Text = $text; Bonus = $parsed })
+    }
+
+    $resolved = ($unparsed.Count -eq 0)
+    $summary = if ($resolved) { ('Current suitcase/enhancer travel capacity +{0}' -f $best) } else { ('Current suitcase/enhancer +{0}; {1} enhancer capacity string(s) need parser review' -f $best, $unparsed.Count) }
+    return [pscustomobject]@{ Resolved = $resolved; Bonus = $best; Summary = $summary; Recognized = $recognized.ToArray(); Unparsed = $unparsed.ToArray() }
 }
 
 function Get-TornActiveTravelCapacityPerks {
@@ -73,10 +86,9 @@ function Get-TornActiveTravelCapacityPerks {
         return [pscustomobject]@{ Resolved = $false; Bonus = 0; Recognized = @(); Unparsed = @(); Summary = 'Perks response did not contain current perks.' }
     }
 
-    # Property and stock can establish the 15-item base travel method. They are
-    # deliberately excluded here because the selected Travel Assistant mode
-    # already supplies the base capacity. Active additive capacity comes from
-    # faction/job/book (plus any future additive bucket we explicitly support).
+    # Property and stock establish the 15-item base travel method and are not
+    # additive here. Enhancer is handled separately as the non-stacking
+    # suitcase bonus. Additive general capacity comes from faction/job/book.
     foreach ($bucket in @('faction','job','book')) {
         $prop = $PerksPayload.perks.PSObject.Properties[$bucket]
         if ($null -eq $prop) { continue }
@@ -110,12 +122,11 @@ function Get-TornActiveTravelCapacityPerks {
 function Get-TornEffectiveXanaxCapacity {
     param(
         [Parameter(Mandatory = $true)][string]$TravelMode,
-        [Parameter(Mandatory = $true)][object]$PerksPayload,
-        [Parameter(Mandatory = $true)][object]$InventoryPayload
+        [Parameter(Mandatory = $true)][object]$PerksPayload
     )
 
     $base = Get-TornTravelModeBaseCapacity -TravelMode $TravelMode
-    $suitcase = Get-TornSuitcaseCapacityBonus -InventoryPayload $InventoryPayload
+    $suitcase = Get-TornSuitcaseCapacityFromPerks -PerksPayload $PerksPayload
     $active = Get-TornActiveTravelCapacityPerks -PerksPayload $PerksPayload
     $resolved = ([bool]$suitcase.Resolved -and [bool]$active.Resolved)
     $capacity = $base + [int]$suitcase.Bonus + [int]$active.Bonus
@@ -129,7 +140,7 @@ function Get-TornEffectiveXanaxCapacity {
         Capacity = $capacity
         SuitcaseSummary = [string]$suitcase.Summary
         PerkSummary = [string]$active.Summary
-        RecognizedPerks = @($active.Recognized)
-        UnparsedPerks = @($active.Unparsed)
+        RecognizedPerks = @($suitcase.Recognized) + @($active.Recognized)
+        UnparsedPerks = @($suitcase.Unparsed) + @($active.Unparsed)
     }
 }
