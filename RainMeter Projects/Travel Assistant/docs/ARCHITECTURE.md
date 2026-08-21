@@ -4,16 +4,14 @@
 
 Travel Assistant is a lightweight Rainmeter-facing decision system for Torn foreign-market travel opportunities.
 
-Version 1 presents **Xanax in the United Kingdom and Japan**, but country, item, provider, price, stock, travel mode, and travel economics are data so later expansion does not require a rewrite.
+The main v1 presentation remains **Xanax in the United Kingdom and Japan**, while provider, item, country, travel-mode, price, capacity, company/faction travel profile, and economics inputs remain data-driven.
 
 The engine answers two separate questions:
 
 1. **Availability:** when would a departure be likely to arrive while stock is available?
-2. **Economics:** is the opportunity profitable enough to justify recommending that departure?
+2. **Economics:** is that trip economically justified for this user's selected travel mode/profile?
 
-Only after both pass should the UI show departure advice.
-
----
+Departure advice appears only when both are adequately supported.
 
 ## Layering
 
@@ -22,82 +20,90 @@ Provider adapters
       ↓
 Normalized observations
       ↓
-History / cycle detection
+Bounded history / observed cycle detection
       ↓
-Restock + depletion analytics
+Restock + price-aware depletion analytics
       ↓
-Travel / profitability / opportunity engine
+Primary opportunity / per-item profitability engine
       ↓
-Final state guards
+Local travel-profile + final trip-economics guards
       ↓
-Compact computed state
+Compact generated state
       ↓
 Rainmeter presentation
 ```
 
-### Provider adapters
+The Settings interface is a side input to the **local travel-profile/final-economics layer**. It does not write observations or historical cycles.
 
-Responsibilities:
+## Provider adapters
 
-- retrieve current/historical source data;
-- respect provider rate/usage limits;
-- normalize timestamps, country/item identifiers, stock, foreign price, and provenance;
-- return provider errors/freshness explicitly;
-- contain all provider-specific response parsing.
+Current production roles:
 
-Provider-specific data shapes must not propagate into the history or recommendation engine.
+- **YATA** — live foreign stock and foreign purchase price.
+- **Torn v2 Item Market** — resale reference when a local API key is configured.
+- **Weav3r Travel Stock** — external verification link.
 
-Current/candidate roles are kept in `config/providers.json`. A provider may be live, resale-only, bootstrap-only, cross-check-only, or external-verification-only without changing the core model.
+Provider-specific response shapes are normalized at the adapter boundary and must not leak into history/model code.
 
-### History / cycle engine
+On the validated Windows target, native Windows PowerShell `Invoke-RestMethod` hung specifically against `api.torn.com` while `curl.exe` returned normally. `RunUpdate.ps1` therefore routes only Torn Item Market requests through bounded `curl.exe`; YATA remains on the native request path.
 
-Responsibilities:
+## Observation and history model
 
-- append normalized observations;
-- detect meaningful stock transitions;
-- identify observed restocks;
-- identify actual observed sellouts;
-- build completed cycle summaries;
-- maintain bounded high-resolution history;
-- compact/prune old runtime observations;
-- merge immutable seed history into reads without copying it into mutable runtime state;
-- maintain provenance and schema versioning.
+Core observation identity:
 
-### Analytics engine
+```text
+timestamp + country + itemId + stock + foreignPrice + source + sourceTimestamp
+```
 
-Responsibilities:
+Observed transitions have strict semantics:
 
-- restock interval distributions;
-- robust restock variance;
-- price-conditioned availability/depletion behavior;
-- recent-vs-historical drift detection;
-- current-cycle depletion estimation;
-- comparable-cycle selection / weighting;
-- safe-overlap calculations;
-- best-odds departure calculations;
-- confidence scoring.
+```text
+0 -> positive stock = observed restock
+positive stock -> 0 = observed sellout
+```
 
-Heavyweight ML is not required. Prefer transparent, testable statistical logic that can run cheaply on a desktop.
+A compact completed cycle retains:
 
-### Profitability / travel-economics engine
+```text
+country
+itemId
+foreignPrice
+restockAt
+restockQuantity
+soldOutAt
+availabilitySeconds
+previousSoldOutAt
+restockDelaySeconds
+source / provenance
+```
 
-Responsibilities:
+Actual restock/sellout fields are historical truth only. Provider forecasts may be future comparison inputs but never populate these truth records.
 
-- foreign purchase price;
-- current resale reference;
-- resale-reference freshness;
-- transaction/selling fee;
-- minimum absolute profit per item;
-- minimum percentage margin;
-- travel-mode cost;
-- conservative/default carrying capacity;
-- optional user capacity override;
-- minimum total-trip profit;
-- later: free Business-Class perk, Business Class Ticket opportunity cost, and multiple resale targets.
+Runtime storage is local/ignored and bounded. High-resolution observations target roughly 48 hours; completed cycles roughly 90 days initially.
 
-Profitability is a gate on recommendations, not on data collection.
+## Availability model
 
-`config/countries.json` stores durable travel-economics inputs that are stable by destination/mode:
+The model uses foreign price as first-class evidence. Evidence priority is:
+
+1. current live depletion, once enough observations exist;
+2. comparable historical cycles at the same/near foreign price;
+3. broader destination/item history only with reduced confidence.
+
+The current implementation uses a bounded near-price cohort rather than heavyweight ML.
+
+### Safe window
+
+`SAFE_WINDOW` requires conservative overlap among enough comparable cycles after converting historical availability intervals through the selected travel time. Current live depletion may **shorten** that window; it may never extend it beyond historical evidence.
+
+### Best odds
+
+When no conservative overlap exists, a strongest empirical departure point may be presented as `BEST_ODDS`. Best odds is probabilistic and is not labeled safe.
+
+Sparse, stale, incomparable, or unsupported evidence yields no departure timing.
+
+## Travel mode and profile inputs
+
+Durable country/mode inputs remain in `config/countries.json`:
 
 ```text
 travelSeconds
@@ -105,426 +111,208 @@ travelCosts
 baseTravelCapacity
 ```
 
-For v1:
+Local user-specific travel inputs belong in ignored `config/settings.local.json`:
 
-- Standard has a destination-specific cash travel cost;
-- Airstrip and WLT are explicitly zero-cost travel modes;
-- Business travel time/base capacity is configured, but its cost is intentionally unresolved because it may consume a Business Class Ticket or be free with the relevant company perk.
+```text
+travelMode
+travelProfile.companyType
+travelProfile.companyStars
+travelProfile.factionExcursionLevel
+travelProfile.factionTravelCostLevel
+profitability.capacityOverride
+```
 
-Therefore Business remains configured but disabled in the runtime selector until that cost branch is represented safely. This follows the project invariant that **no recommendation is better than an economically misleading recommendation**.
+Company/faction effect definitions live in committed `config/travel-perks.json` so the economics code does not hard-code company names.
 
-The primary recommendation engine performs the early per-item profit/margin gate. `FinalizeState.ps1` then applies the final trip-level economics/freshness guard using the generated state plus cached resale data:
+`@Resources/Scripts/TravelProfile.ps1` converts those inputs into derived effects:
+
+```text
+generalCapacityBonus
+itemCapacityBonus
+factionCapacityBonus
+travelCostReductionPercent
+freeBusinessClass
+```
+
+### Company effects currently modeled
+
+- Lingerie Store: general capacity at 3 stars; free Business Class at 10 stars.
+- Cruise Line: general capacity at 3 and 10 stars; 7-star stock analysis is informational.
+- Flower Shop: flower-only capacity at 7 stars; stock analysis informational.
+- Toy Shop: plushie-only capacity at 7 stars; stock analysis informational.
+- Logistics Management: hospitalized return-to-Torn effect is informational for the current model.
+- Theater: hidden travel status/destination is informational for the current model.
+
+Item-specific bonuses are matched against the enabled item's category. Flower/Toy bonuses therefore do not alter Xanax capacity.
+
+### Faction effects currently modeled
+
+Excursion inputs:
+
+- travel capacity: +1 item per level, max +10;
+- travel cost: -15% travel fees per level, max -75%.
+
+These are final-economics inputs only. They never alter historical stock/cycle evidence.
+
+### Capacity precedence
+
+A positive local `capacityOverride` is authoritative. Otherwise:
+
+```text
+usableCapacity = baseModeCapacity
+               + generalCompanyCapacity
+               + qualifyingItemSpecificCapacity
+               + factionExcursionCapacity
+```
+
+This avoids double-counting a user-provided actual capacity override.
+
+## Business travel safety branch
+
+Business time/base capacity remain configured in country data. The cash/opportunity cost of consuming a Business Class Ticket remains unresolved.
+
+Therefore:
+
+- Business is **settings-only**;
+- it appears in Settings only when the local travel profile establishes free Business Class;
+- the currently modeled known-free branch is 10-star Lingerie Store;
+- in that branch Business travel cost is explicitly known as zero;
+- manually forcing Business without free travel produces unresolved economics and suppresses departure timing.
+
+Unknown ticket economics are never interpreted as zero cost.
+
+## Profitability and finalization
+
+The primary recommendation engine performs early per-item spread/margin checks. `FinalizeState.ps1` then enforces cached resale freshness and final trip economics without making another network request.
 
 ```text
 netResalePrice = grossResaleReference × (1 - sellingFee)
 netProfitPerItem = netResalePrice - foreignPrice
-tripNet = (netProfitPerItem × usableCapacity) - travelModeCost
+tripNet = (netProfitPerItem × usableCapacity) - effectiveTravelCost
 requiredTripProfit = max(minimumTotalTripProfit,
                          minimumProfitPerItem × usableCapacity)
 ```
 
-`capacityOverride = 0` means use the conservative configured base capacity. A positive local override allows the user's actual carrying capacity to replace that base value without changing country/item contracts.
+The effective travel cost may include the faction Travel Cost reduction. For known-free Lingerie Business, effective travel cost is zero.
 
-If the cached resale reference is too old, a timing recommendation is suppressed even if the last primary model pass had produced a safe/best-odds departure. This prevents an old market value from keeping a departure countdown alive indefinitely.
+Finalizer responsibilities include:
 
-### Final state guards
+- preserve informational restock/history even when departure advice is suppressed;
+- retain exact active-restock time while stock is live;
+- derive restock timing from completed cycles only when enough samples exist;
+- suppress timing if resale data is stale;
+- suppress timing if travel economics are unresolved;
+- apply travel profile capacity/cost effects;
+- clear timing fields after a failed final gate without erasing observed history.
 
-`RunUpdate.ps1` serializes the update pipeline and calls:
+## Settings architecture
 
-```text
-UpdateTracker.ps1
-      ↓
-FinalizeState.ps1
-```
+The main skin exposes a top-right **SETTINGS** action.
 
-The finalizer performs no additional web requests. It exists to enforce display/recommendation invariants that should remain independent from the primary model's early-return path.
-
-Current responsibilities:
-
-- preserve/derive restock timing for display even when profitability suppresses departure advice;
-- use exact observed active-restock time while stock is live;
-- otherwise derive a median restock estimate from enough completed-cycle restock delays;
-- ensure a stale resale reference cannot support `SAFE_WINDOW`/`BEST_ODDS` timing;
-- apply mode cost + carrying capacity to trip-level profitability;
-- suppress timing if travel-mode economics are unresolved;
-- clear departure fields when a final economics/freshness gate fails without erasing actual sellout/restock information.
-
-This separation is intentional: **informational stock/restock history remains useful even when the correct travel recommendation is “do not go.”**
-
-### Rainmeter presentation
-
-Responsibilities:
-
-- display the latest finalized state;
-- update relative countdown strings cheaply;
-- render/cycle enabled travel modes;
-- open external verification links when requested;
-- show vertically aligned graphs/panels;
-- expose stale/low-confidence/unprofitable states clearly.
-
-Rainmeter should not perform the statistical model itself.
-
----
-
-## Core normalized observation
-
-Conceptual schema:
-
-```json
-{
-  "schemaVersion": 1,
-  "timestamp": 1787168400,
-  "country": "united_kingdom",
-  "itemId": 206,
-  "stock": 1438,
-  "foreignPrice": 742000,
-  "source": "provider-name",
-  "sourceTimestamp": 1787168372
-}
-```
-
-Required principles:
-
-- canonical country/item identifiers are stable;
-- timestamps have documented semantics and normalized timezone handling;
-- foreign price belongs on the observation/cycle rather than being assumed from a static item table;
-- source/provenance survives normalization;
-- provider forecasts are not stored as historical facts;
-- additional provider metadata may be retained only when useful and bounded.
-
----
-
-## Completed cycle record
-
-Conceptual schema:
-
-```json
-{
-  "schemaVersion": 1,
-  "country": "united_kingdom",
-  "itemId": 206,
-  "foreignPrice": 728000,
-  "restockAt": 1787168400,
-  "restockQuantity": 2630,
-  "soldOutAt": 1787168765,
-  "availabilitySeconds": 365,
-  "previousSoldOutAt": 1787161000,
-  "restockDelaySeconds": 7400,
-  "source": "provider-name"
-}
-```
-
-A completed cycle is the durable compact training unit. It is derived from observed stock transitions, not from estimated restock/sellout timestamps.
-
-Do not preserve all minute-level observations forever merely to retain a cycle.
-
----
-
-## Restock timing model
-
-For each `country + item`, derive restock timing from actual historical transitions.
-
-Useful statistics may include:
-
-- median interval from prior sellout to next restock;
-- robust spread / percentile range;
-- minimum/maximum only when sample quality warrants using them;
-- recent-window behavior versus longer history;
-- time-of-day/day-of-week segmentation only when enough data exists to support it.
-
-Pattern detection must not create false precision from tiny samples. If a proposed cohort has inadequate support, fall back to a broader cohort and reduce confidence.
-
-Restock timing is **informationally independent of profitability**. If the current foreign price makes a trip unattractive, the assistant may still display an observed/estimated restock time while suppressing all departure advice.
-
----
-
-## Price-conditioned depletion model
-
-Foreign price can materially change demand and stock duration, so radically different prices must not be pooled indiscriminately.
-
-Evidence priority is:
-
-1. **Current observed depletion** — strongest once enough samples exist in the live cycle.
-2. **Comparable historical price cycles** — highest historical weight.
-3. **Nearby-price cycles** — lower weight as price distance grows.
-4. **Broad destination/item history** — fallback only, with lower confidence.
-
-The initial engine uses a bounded near-price cohort rather than a heavyweight regression. This is intentionally simple while real history accumulates.
-
-If the current price lies outside useful historical support, return `PRICE_REGIME_UNVERIFIED` rather than extrapolating confidently.
-
----
-
-## Departure simulation
-
-For a selected enabled travel mode and candidate departure offset:
+`OpenSettings.ps1` is a short-lived Windows Forms process. It edits only ignored local files:
 
 ```text
-arrival = departure + travelTime(country, travelMode)
+config/settings.local.json
+data/runtime/preferences.json
 ```
 
-Evaluate whether that arrival would fall inside the availability interval of qualifying historical cycles.
+It exposes:
 
-This creates an empirical mapping:
+- masked Torn API key;
+- travel mode;
+- company type and stars;
+- faction Excursion capacity level;
+- faction Travel Cost level;
+- derived effect preview.
 
-```text
-departure offset → historical success rate
-```
+The API key is never embedded in the `.ini` or passed in the Rainmeter action command line.
 
-The model uses comparable cycles, not every cycle equally.
+Mode selection was intentionally moved out of the main skin. The old mode click invoked the entire network/updater/finalizer pipeline and therefore could visibly lag several seconds. Settings writes the local preference immediately; the next normal polling pass recomputes travel timing/economics.
 
-`recommendation.arrivalBufferSeconds` acts as an edge-safety margin when converting historical restock/stockout intervals into departure intervals; the current model favors arrivals inside the observed availability interval rather than pretending an uncertain early arrival is automatically equivalent to a confirmed hit.
+The settings UI is presentation/configuration only. Core safety logic remains in `TravelProfile.ps1` / `FinalizeState.ps1`, so malformed/manual configuration cannot bypass final economics guards.
 
-### Conservative safe window
-
-A safe window exists only when qualifying comparable cycles support a meaningful overlapping departure interval after travel-time conversion.
-
-User-facing semantics:
-
-- `SAFE WINDOW OPENS IN ...`
-- `SAFE WINDOW OPEN`
-- `LEAVE BEFORE ...`
-
-“Safe” means conservative against the selected/qualifying historical sample; it is not a guarantee of future Torn behavior.
-
-When the current restock is live, current depletion may **shorten** the conservative close time; it may not extend the window beyond historical safety evidence.
-
-### Best-odds departure
-
-If restock variance is wider than the reliable stock-availability period, there may be no conservative overlap.
-
-Then compute the candidate departure point or narrow interval with the highest empirical success rate and use `BEST_ODDS` / `LEAVE IN`, not `SAFE_WINDOW`.
-
-The UI may show a historical hit rate/confidence when useful.
-
----
-
-## Profitability gate
-
-The recommendation pipeline is:
-
-```text
-fresh stock data?
-  ↓
-fresh resale reference?
-  ↓
-profitable enough per item and per trip?
-  ↓
-comparable regime / sufficient confidence?
-  ↓
-safe window or best odds?
-  ↓
-display recommendation
-```
-
-Current production checks include:
-
-- Item Market resale reference;
-- configured Item Market fee;
-- resale-reference freshness;
-- minimum net profit per item;
-- minimum net percentage margin;
-- mode-specific cash travel cost;
-- configured or overridden carrying capacity;
-- minimum total-trip profit.
-
-Travel-economics configuration records:
-
-- Standard destination cash cost;
-- Airstrip/WLT zero travel cost;
-- base carrying capacity by mode;
-- unresolved Business cost explicitly as `null`.
-
-Business must remain disabled until `travelModeCost` can be safely resolved as either:
-
-- zero because the user explicitly has the free Business-Class company perk; or
-- the current Business Class Ticket opportunity cost.
-
-If any profitability gate fails:
-
-- continue collecting stock/cycle data;
-- continue displaying actual/estimated restock information when supported;
-- show `LOW_MARGIN` or `UNPROFITABLE`;
-- do not show a departure time/window.
-
----
-
-## Confidence model
-
-Confidence is explainable and considers at least:
-
-- data freshness;
-- usable sample count;
-- similarity of current foreign price to historical cycles;
-- whether current depletion agrees with historical expectations;
-- restock timing stability;
-- source agreement/disagreement if multiple providers are used;
-- whether the current model is extrapolating outside observed history.
-
-Recommended coarse lifecycle states:
-
-```text
-UNVERIFIED / INSUFFICIENT_HISTORY
-LEARNING
-ESTABLISHED
-```
-
-Do not rely on a fixed cycle-count threshold alone. A small highly variable sample can remain low-confidence; a moderately sized stable sample can become useful sooner.
-
----
-
-## First-run / historical bootstrap
-
-Preferred startup sequence:
-
-1. load committed compact seed data if present;
-2. begin local bounded observations immediately;
-3. optionally add a bounded historical seed from a verified structured history endpoint;
-4. normalize provider observations to the core schema;
-5. derive cycles from observed transitions;
-6. if timing looks potentially actionable but confidence is too low, show `CHECK_EXTERNAL` and expose Weav3r.
-
-Historical bootstrap is an optimization, not a correctness requirement. If it is unreliable or unsuitable, start conservatively and learn locally.
-
-### Seed-provider rules
-
-A bootstrap source must provide enough historical truth to distinguish observations from forecasts.
-
-Preferred inputs:
-
-```text
-timestamp
-stock quantity
-foreign purchase price
-country
-item
-```
-
-Travel Assistant currently contains two candidate discovery paths:
-
-- DroqsDB metadata/current-endpoint probe, disabled until its live historical contract is verified;
-- a preview-first adapter for a documented travel-planner-compatible `/api/history/:country/:itemId?hours=...` snapshot endpoint.
-
-The compatible travel-planner adapter requests only UK/Japan Xanax, defaults to 168 hours, and caps a single requested window at 720 hours. It requires an explicit deployment base URL and does not assume that an arbitrary deployment permits external bootstrap use.
-
-Provider safe-window/restock forecasts may be useful for later comparison, but must not populate `Last Sold Out` or completed-cycle truth records.
-
----
-
-## Data retention
-
-### Seed data — committed
-
-```text
-data/seed/
-  observations.jsonl
-  cycles.jsonl
-  metadata.json
-  README.md
-```
-
-Seed data remains compact, immutable during normal runtime, provenance-documented, and intentionally refreshed rather than continuously appended.
-
-### Runtime data — local / ignored
-
-```text
-data/runtime/
-  observations.jsonl
-  cycles.jsonl
-  engine-state.json
-  preferences.json
-  provider-probes/
-  historical-imports/
-  analysis/
-```
-
-Default targets:
-
-- high-resolution observations: about 48 hours;
-- completed cycle summaries: about 90 days initially;
-- long-term learning: compact aggregates when introduced;
-- probe/import/analysis output: local and manually disposable;
-- logs: rotated/pruned or intentionally tiny.
-
-No unbounded raw HTTP response archive, screenshot archive, or browser cache.
-
----
-
-## Resource model
+## Rainmeter runtime model
 
 ### Every second
 
 Allowed:
 
 - read compact generated state;
-- countdown arithmetic;
-- text/status refresh;
-- inexpensive UI state changes.
+- calculate countdowns;
+- update strings/colors;
+- schedule the next minute-scale update.
 
-Avoid:
+Not allowed:
 
-- HTTP requests;
-- PowerShell process spawning;
-- full history parsing;
-- model retraining;
+- web requests;
+- history parsing;
+- model computation;
 - graph regeneration.
 
-### Approximately every 60–120 seconds
+### Approximately every 60 seconds
 
-Subject to provider limits/usefulness:
-
-- fetch current observations;
-- normalize/append changed samples;
-- detect price/stock/restock/sellout changes;
-- update model state;
-- finalize resale/trip-economics guards locally;
-- regenerate the two compact graph images.
-
-Updater executions are serialized so refresh and scheduled poll events cannot write concurrently.
-
-### Low-frequency / event-triggered work
-
-- prune/compact old runtime data;
-- historical bootstrap/probe runs;
-- migration/seed maintenance;
-- offline descriptive history analysis;
-- future aggregate recalculation.
-
----
-
-## UI architecture
-
-Version 1 layout is vertically stacked:
+`RunUpdate.ps1` serializes:
 
 ```text
-UNITED KINGDOM
-Travel | Leave / Window
-Restock | Last Sold Out
-Stock | Foreign Price
-Graph
-Recommendation state
-
-JAPAN
-Travel | Leave / Window
-Restock | Last Sold Out
-Stock | Foreign Price
-Graph
-Recommendation state
+UpdateTracker.ps1
+      ↓
+FinalizeState.ps1
+      ↓
+heartbeat write
 ```
 
-Design rules:
+This pass may:
 
-- same graph dimensions/alignment for both destinations;
-- dark charcoal panel on a black desktop;
-- strong but restrained contrast;
-- relative countdowns preferred to absolute clocks;
+- fetch YATA;
+- refresh Torn resale cache when required;
+- append changed observations;
+- detect restock/sellout transitions;
+- recompute recommendation state;
+- apply travel-profile economics;
+- regenerate the two small graph PNGs.
+
+The heartbeat is written only after a successful complete pass, allowing the skin to show last-successful-update time and visibly flag stale polling.
+
+## Rainmeter presentation invariants
+
+Main layout remains:
+
+```text
+TRAVEL ASSISTANT                         SETTINGS >
+last update / next poll
+
+UNITED KINGDOM - XANAX
+Travel | Leave / Window
+Restock | Last Sold Out
+Stock | Foreign Price
+Graph
+Status
+
+JAPAN - XANAX
+Travel | Leave / Window
+Restock | Last Sold Out
+Stock | Foreign Price
+Graph
+Status
+```
+
+Rules:
+
+- UK above Japan;
+- equal graph widths;
+- charcoal theme;
+- relative timing preferred;
 - Airstrip default;
-- runtime-selectable Standard/Airstrip/WLT now;
-- Business configured but disabled until trip economics are safe;
-- external verification action only when useful;
-- no unsupported Clock-app alarm automation in v1.
+- Settings rather than a main-skin mode cycler;
+- Business settings-only and free-profile-gated;
+- external Weav3r verification available;
+- low-confidence state must not fabricate timing.
 
----
+## Historical bootstrap
+
+The committed historical seed remains intentionally empty until a trustworthy bounded structured source is verified. Startup correctness does not depend on a seed: the model can begin in `INSUFFICIENT_HISTORY` and learn locally.
+
+Provider forecasts cannot be imported as observed cycles.
 
 ## Expansion design
 
@@ -534,32 +322,25 @@ Future expansion remains configuration-driven:
 items.json
 countries.json
 travel-modes.json
+travel-perks.json
 providers.json
 settings*.json
 ```
 
-The core engine accepts generic `country + itemId + travelMode` combinations.
+Core code should remain generic around `country + itemId + travelMode + travelProfile` rather than fixed UK/Xanax names.
 
-Do not create functions/data models named around fixed combinations such as `GetUKXanaxWindow`. Prefer generic operations such as:
+Possible future settings work includes a **Sync from Torn** action using suitable Torn user/faction endpoints, but auto-detection must be permission-aware and validated against real response contracts before it can replace manual local profile inputs.
 
-- `GetObservations(provider, country, item)`
-- `BuildCycles(observations)`
-- `SelectComparableCycles(country, item, price, context)`
-- `EvaluateDepartureWindow(...)`
-- `EvaluateProfitability(...)`
-- `FinalizeRecommendationState(...)`
+## Validation boundary
 
-Adding a new item/destination should primarily require configuration, provider coverage, sufficient history, economics metadata, and UI selection—not a rewrite of persistence or analytics.
+Repository/static tests include:
 
----
+- model replay;
+- finalizer guards;
+- travel-profile effect math;
+- unqualified vs. free-Lingerie Business behavior;
+- Flower/Toy non-Xanax isolation;
+- Rainmeter RunCommand/Settings structure;
+- JSON/config parsing.
 
-## Versioning / migrations
-
-Persistent data contracts are versioned from the beginning.
-
-When a schema changes:
-
-- preserve old seed/runtime data when reasonably possible;
-- add an explicit migration/upgrade path or invalidate only the affected cache safely;
-- do not silently reinterpret old fields with new semantics;
-- update architecture, fixtures/tests, and validation rules in the same pass.
+Actual Settings-window rendering, Rainmeter launch quoting, local save behavior, and post-save polling still require target-Windows validation; connector-only work must not claim those have passed.
