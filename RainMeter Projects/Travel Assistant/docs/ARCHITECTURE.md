@@ -2,9 +2,7 @@
 
 ## Purpose
 
-Travel Assistant is a lightweight Rainmeter-facing Torn foreign-market decision system. The visible UI remains the validated UK/Japan Xanax proof while the data layer expands across the entire observed foreign market.
-
-The architecture keeps four populations separate:
+Travel Assistant is a lightweight Rainmeter-facing Torn foreign-market decision system. It separates broad observation from current market validity, presentation, and eventual route optimization.
 
 ```text
 COLLECTED provider rows
@@ -16,7 +14,7 @@ VISIBLE opportunities
 OPTIMIZER candidates
 ```
 
-Collection is broad. Provider rows are checked against verified market-validity exceptions. Visibility is presentation/context filtered. Optimizer eligibility requires sufficiently modeled economics, availability, market validity and confidence.
+The last validated visible baseline is UK/Japan Xanax. The current committed `0.3.0` release candidate adds UK Nessie Plushie and Japan Cherry Blossom as presentation-only secondary rows pending target-Windows/Rainmeter acceptance.
 
 ## Layering
 
@@ -37,22 +35,22 @@ bounded/staggered resale cache
         ↓
 category-aware capacity/economics
         ↓
-per-opportunity recommendation state
+primary per-opportunity recommendation state
+        ↓
+local visible-item enrichment
         ↓
 future filter / travel-context layer
         ↓
 future route optimizer
         ↓
-compact generated state
-        ↓
 Rainmeter presentation
 ```
 
-Settings and current user travel profile are side inputs to economics/presentation. They never rewrite observed history.
+Settings/current travel profile are side inputs. They never rewrite observed history.
 
-## Live provider boundary
+## Provider boundary and market identity
 
-Current foreign-stock order:
+Current live stock preference:
 
 ```text
 Prometheus
@@ -62,11 +60,33 @@ YATA
 cached/local state + stale/failure handling
 ```
 
-Foreign-shop stock is crowd-sourced provider data. A provider row proves only that the provider reports that `country + itemId` pair; it does **not** by itself prove the item remains purchasable in that country.
+Market identity is always:
 
-Static Wiki destination tables are documentation/cross-check material and may also contain stale rows. Item-specific history/current destination evidence can establish explicit verified exceptions.
+```text
+country + itemId
+```
 
-Normalized observation schema:
+A provider row proves only that the provider reports that pair. It does not prove the relationship is still purchasable. Verified exceptions in `config/foreign-market-overrides.json` supersede provider presence for learning/display/resale/optimizer eligibility while preserving provenance.
+
+Current verified inactive pairs:
+
+```text
+mexico:21
+mexico:232
+mexico:327
+united_arab_emirates:383
+united_arab_emirates:440
+```
+
+For inactive rows:
+
+- keep `observedMarkets` provenance;
+- annotate `catalogActive=false` / `catalogStatus=legacy_removed`;
+- suppress new shadow observations/cycles;
+- suppress display/resale/optimizer work;
+- retain existing history.
+
+Normalized active observation:
 
 ```text
 schemaVersion
@@ -79,110 +99,49 @@ source
 sourceTimestamp
 ```
 
-Provider-specific country codes and response shapes stop at the adapter boundary.
-
-## Market identity, validity and history
-
-Durable market identity is:
-
-```text
-country + itemId
-```
-
-Names/categories are metadata and never define historical identity.
-
-`config/foreign-market-overrides.json` carries explicit verified exceptions where a provider still reports a legacy market. Current verified inactive pairs are:
-
-```text
-mexico:21
-mexico:232
-mexico:327
-united_arab_emirates:383
-united_arab_emirates:440
-```
-
-For these rows:
-
-- provider metadata is retained in `observedMarkets`;
-- the market is annotated `catalogActive=false` / `catalogStatus=legacy_removed`;
-- new shadow observation/cycle writes are suppressed;
-- later display/resale/optimizer stages treat the market as ineligible;
-- existing historical rows are retained.
-
-Observed truth semantics for active markets:
+Observed truth:
 
 ```text
 0 -> positive = observed restock
 positive -> 0 = observed sellout
 ```
 
-Completed cycles retain country/item identity, foreign-price regime, restock quantity/timestamps, availability duration, prior sellout and source provenance. Forecasts never populate historical truth fields.
+Forecasts never become history.
 
-Default retention:
+Retention:
 
-- raw/high-resolution observations: approximately 48 hours;
-- completed cycles: approximately 90 days;
-- visible graph window: 8 hours.
+- raw observations: ~48h;
+- completed cycles: ~90d;
+- current graph: 8h.
 
-The five-minute live-source stale guard is a recommendation-safety threshold, not history retention.
+The 5-minute stale guard is a recommendation-safety threshold, not retention.
 
-## Primary and shadow collectors
+## Primary and shadow collection
 
-`UpdateTracker.ps1` remains the established visible UK/Japan Xanax collector/model path.
+`UpdateTracker.ps1` remains the established primary UK/Japan Xanax collector/model path.
 
-`ShadowCollector.ps1` is the expansion bridge. It observes every valid provider row for all 11 foreign countries, protects current primary markets from duplicate writes, and excludes verified inactive legacy markets before new background history/cycle writes.
+`ShadowCollector.ps1` observes all 11 countries at a default 120-second cadence and protects current primary markets from duplicate history writes.
 
-The visible production pass is:
-
-```text
-UpdateTracker
-      ↓
-ShadowCollector (fail-soft)
-      ↓
-LocalCatalog (fail-soft / local only)
-      ↓
-FinalizeState
-      ↓
-visible heartbeat
-```
-
-Current accepted target-Windows provider/catalog baseline on 2026-08-21:
+Accepted target-Windows baseline:
 
 ```text
-provider:                      prometheus
-countriesSeen:                 11
-provider rows:                 232
-legacy rows:                     5
-active country-item markets:   227
-provider names:                232 / 232
-item IDs:                      202 distinct
-categories resolved:           202 / 202
-lastError:                     empty
+provider:                    prometheus
+countries:                   11
+provider country-item rows:  232
+verified legacy rows:          5
+active markets:              227
+provider names:              232 / 232
+item IDs:                    202
+categories resolved:         202 / 202
 ```
 
-These are current live counts, not permanent constants.
+These are live baseline values, not constants.
 
-The separate shadow provider request is a migration bridge. Long-term architecture should share one foreign-stock payload after primary behavior equivalence is proven.
+## Offline catalog
 
-## Item metadata architecture
+Torn catalog network metadata must not block Rainmeter. The target host timed out on all attempted catalog strategies, so `ItemMetadata.ps1` is manual/maintenance-only.
 
-Catalog metadata must not block the Rainmeter heartbeat.
-
-Three Torn catalog strategies were tested on the target Windows host and all timed out before returning metadata:
-
-```text
-v2 specific-items | 150 IDs | 20s
-v2 specific-items |  40 IDs | 30s
-classic torn/items bulk      | 12s
-```
-
-Therefore `ItemMetadata.ps1` is manual/maintenance-only and is not invoked by `RunUpdate.ps1`.
-
-### Local offline catalog
-
-`LocalCatalog.ps1` performs no network access. It collapses provider rows by `itemId`, retains provider names/country membership and merges committed local metadata.
-
-Current precedence:
+`LocalCatalog.ps1` performs no network work. Current precedence:
 
 ```text
 richer manually acquired Torn metadata
@@ -193,99 +152,37 @@ verified item override
         >
 197-ID offline YATA category snapshot
         >
-provider name + Unknown category
+provider name + Unknown
 ```
 
-Committed reference files:
+Committed references:
 
 ```text
 config/foreign-item-categories.json
 config/foreign-market-overrides.json
 ```
 
-The target provider currently exposes 202 distinct item IDs. The 197-ID snapshot plus five verified item overrides resolve the current 202/202 category set without runtime Torn catalog access.
-
-Canonical corrections retained separately from provider aliases include:
-
-```text
-327 Blank Tokens -> Blank Casino Chips
-383 Platinum PDA -> Digital Organizer
-```
-
-Do not infer unknown categories from item names. Future newly observed IDs stay unresolved until locally verified.
+Current 202 observed IDs are fully resolved locally. Newly observed unknown IDs remain unresolved until verified; names are not used to guess categories.
 
 ## Resale-price architecture
 
-The current visible Xanax path already maintains a short-lived Torn Item Market cache used by `FinalizeState.ps1`. Broad-market expansion must not turn that into hundreds of synchronous API calls.
+The primary Xanax updater keeps its independent/fresher Torn Item Market path.
 
-`ResaleQueue.ps1` therefore populates the shared `engine-state.json -> resaleCache` gradually.
+`ResaleQueue.ps1` populates the shared broad `resaleCache` for distinct active items only.
 
-### Active-item scope
-
-The queue derives distinct item IDs only from provider rows that remain active:
+Queue defaults:
 
 ```text
-catalogActive != false
-and
-catalogStatus != legacy_removed
+minimum interval:    60s
+broad freshness:      6h
+failure backoff:       1h
+request timeout:       6s
+requests/run path:     1
 ```
 
-A legacy-only item receives no new broad valuation work. If an item appears in both an inactive legacy market and another active market, its active relationship still makes the item eligible for resale pricing.
+Transport is bounded `curl.exe --config -`; API key is supplied in the Authorization header through stdin, never URL/process arguments.
 
-### Runtime order
-
-Broad resale runs **after** `FinalizeState` and the visible heartbeat:
-
-```text
-UpdateTracker
-ShadowCollector
-LocalCatalog
-FinalizeState
-visible heartbeat
-ResaleQueue
-```
-
-This introduces a deliberate one-update lag before a newly fetched broad resale row could affect future generalized economics, while protecting visible heartbeat health from a lower-priority pricing request.
-
-### Queue bounds
-
-Default broad-population policy:
-
-```text
-minimum attempt interval: 60s
-cache freshness target:    6h
-failed-item backoff:        1h
-per-request timeout:        6s
-requests per run path:      1
-```
-
-At roughly 197 active distinct items, one successful request/minute can populate an initially empty active catalog in about 3.3 hours of loaded-skin runtime. This is population/reference freshness, not the final optimizer refresh policy.
-
-Future optimization may prioritize a much smaller set of economically competitive candidates for more frequent refresh while retaining slower broad coverage.
-
-### Candidate ordering
-
-The queue:
-
-- skips fresh resale cache rows;
-- skips recent failures still in backoff;
-- prioritizes never-priced eligible items;
-- then refreshes stale cached items;
-- advances past failures rather than allowing one bad item to block catalog population.
-
-### Transport and cache schema
-
-The queue uses:
-
-```text
-GET https://api.torn.com/v2/market/{itemId}/itemmarket?limit=1
-```
-
-through bounded `curl.exe --config -` because the target Windows host has validated curl for Torn Item Market while native PowerShell can hang.
-
-The API key is supplied only through an Authorization header written to curl stdin; never through request URLs or process arguments.
-
-Successful cache entry:
+Successful row:
 
 ```text
 price
@@ -295,57 +192,55 @@ fetchedAt
 source=torn_itemmarket
 ```
 
-The lowest listing is preferred, with Torn's average as fallback. Missing/zero price remains unresolved and is never treated as zero economics.
+Missing/zero price remains unresolved.
 
-Queue health is stored under:
+Candidate ordering:
 
-```text
-engine-state.json -> resaleQueue
-```
+1. skip fresh cache rows;
+2. skip items still in failure backoff;
+3. among eligible rows, prioritize configured `visible=true` items;
+4. then normal unpriced/stale catalog ordering.
 
-with aggregate active/priced/fresh/stale counts plus per-item attempt/backoff state.
+Visible priority changes ordering only; it does not increase request frequency.
 
-The current visible Xanax updater retains its existing independent/fresher cache behavior; broad queue policy does not relax current departure gating.
+A target-Windows live queue request has succeeded with `status=OK`.
 
-## Country/item configuration
+## Capacity/economics authority
 
-`config/countries.json` separates:
-
-```text
-enabled = current visible/model country
-collect = background observation country
-```
-
-UK and Japan remain visible/model-enabled. All 11 Torn foreign destinations are observed in the background.
-
-`config/items.json` separates:
+General capacity prefers current `/user/perks` plus travel-mode base:
 
 ```text
-enabled
-collect
-visible
-optimizerEligible
-countries
-category
+Standard: 10
+Airstrip/WLT/qualified Business: 15
 ```
 
-The explicit item list is not a whitelist for shadow observation. Unknown provider-observed IDs still enter `observedMarkets`; verified inactive market overrides determine whether they receive continuing learning/history/economics work.
+A synced current-capacity bonus is authoritative for **general/Xanax** capacity and prevents general company/faction double counting.
 
-## Availability model
+Accepted current example:
 
-Evidence priority remains:
+```text
+Airstrip general/Xanax = 18
+Standard general/Xanax = 13
+```
 
-1. current live depletion when adequately sampled;
-2. comparable historical cycles in the current/near foreign-price regime;
-3. broader same-market history only with reduced confidence.
+Category-specific company effects excluded from that general number are added only for matching items:
 
-`SAFE_WINDOW` requires conservative historical support. Current depletion may shorten safety but never expand it beyond supporting history. `BEST_ODDS` remains probabilistic and must not be rendered as safe.
+```text
+Flower Shop 7★ -> +5 Flower
+Toy Shop    7★ -> +5 Plushie
+```
 
-Sparse, stale, incomparable, inactive or unsupported evidence yields no actionable departure advice.
+Thus:
 
-## Profitability / economics
+```text
+qualifying Airstrip Flower/Plushie = 23
+qualifying Standard Flower/Plushie = 18
+Xanax remains 18 / 13
+```
 
-For an active modeled opportunity:
+A positive `profitability.capacityOverride` remains authoritative.
+
+For a modeled active opportunity:
 
 ```text
 netResalePrice = gross resale reference × (1 - selling fee)
@@ -353,55 +248,90 @@ netProfitPerItem = netResalePrice - foreignPrice
 tripNet = (netProfitPerItem × usableCapacity) - effectiveTravelCost
 ```
 
-Profitability suppresses departure timing, not learning/history for active markets.
+Unknown economics are never treated as zero economics.
 
-`catalogActive=false` markets must not receive resale/economics/optimizer work.
+## Runtime order
 
-## Capacity authority
-
-Current general carrying capacity prefers current `/user/perks` plus selected mode base:
+Current production order:
 
 ```text
-Standard: 10
-Airstrip/WLT/qualified Business: 15
+UpdateTracker
+      ↓
+ShadowCollector (fail-soft)
+      ↓
+LocalCatalog (fail-soft / local-only)
+      ↓
+FinalizeState
+      ↓
+VisibleItems (fail-soft / local-only)
+      ↓
+visible heartbeat
+      ↓
+ResaleQueue (fail-soft / max one request, Update only)
 ```
 
-Current suitcase/general bonuses are applied without double-counting property/stock travel-method base effects. A synced current-capacity bonus is authoritative for general capacity.
+`VisibleItems.ps1` is intentionally local-only. A failure there leaves the established primary Xanax state intact.
 
-Before multi-category economics becomes eligible, capacity must split into:
+The broad resale request runs after heartbeat so lower-priority pricing latency cannot make visible update health stale.
+
+## First multi-item presentation layer
+
+Committed `0.3.0` release candidate:
 
 ```text
-general usable capacity
-+ qualifying category-specific capacity
+United Kingdom
+  Xanax
+  Nessie Plushie
+
+Japan
+  Xanax
+  Cherry Blossom
 ```
 
-Required isolation:
-
-- Flower Shop flower capacity applies only to Flower items;
-- Toy Shop plushie capacity applies only to Plushie items;
-- neither affects Xanax.
-
-Ticket-funded Business remains unresolved. Business timing is allowed only when a known-free branch is established.
-
-## Presentation
-
-Current compact cards stay stable until a deliberate multi-item UI release.
-
-Per destination:
+Item configuration:
 
 ```text
-[flag] XANAX [profit-colored price] [stock / out-of-stock state]
-[plane] flight time   [optional actionable delivery-truck restock]   [decision]
-[8-hour stock graph]
+206 Xanax           visible=true  enabled=true   optimizerEligible=true
+266 Nessie Plushie  visible=true  enabled=false  optimizerEligible=false
+277 Cherry Blossom  visible=true  enabled=false  optimizerEligible=false
 ```
 
-Current invariants include UK above Japan, equal graph widths, 60-minute grid divisions, profit-colored price, only the literal `Out of Stock` phrase red, `Out of Stock for h:mm since HH:mm`, actionable delivery-truck restock timing, clickable `Travel` header and top-right Settings.
+The secondary rows therefore do not broaden `UpdateTracker`'s primary model.
+
+### Price semantics
+
+Each visible row renders:
+
+```text
+foreign shop price (Torn Item Market reference)
+```
+
+- foreign shop price remains first-class provider evidence and keeps profitability color;
+- parenthesized resale reference is smaller/muted;
+- missing reference displays as `-`;
+- a stale broad reference may remain visible for context but cannot produce a GOOD/LOW_MARGIN/UNPROFITABLE secondary color until fresh.
+
+### Deliberate first-release boundary
+
+The existing:
+
+- plane/travel time;
+- actionable restock truck;
+- departure decision;
+- 8-hour graph;
+- graph overlay/timing tooltip
+
+remain **Xanax-specific**.
+
+Secondary Nessie/Cherry rows show stock, foreign price, resale reference, category-aware capacity and economics context, but do not yet claim independent trained departure timing.
+
+This is intentional: visibility does not imply optimizer eligibility or fully modeled timing.
 
 ## Future filters and travel context
 
 Country/category filters affect visibility only and never stop background observation/learning of other active markets.
 
-Future travel-state normalization should expose:
+Future normalized travel state:
 
 ```text
 travelState
@@ -414,64 +344,45 @@ travelMethod
 
 Intended behavior:
 
-- at home: normal filtered opportunities and configured route duration;
-- outbound: force target-country items and show arrival countdown instead of static flight duration;
-- abroad: continue showing that country's active items;
-- returning to Torn: release forced foreign-country presentation.
+- at home: normal filtered opportunities;
+- outbound: force destination-country visibility and show arrival countdown instead of static flight duration;
+- abroad: destination-country active items only;
+- returning: release forced foreign-country view.
 
-The plane icon stays; only time semantics change.
+Plane icon remains; time semantics change.
 
-## Future `Optimal` mode
+## Future `Optimal`
 
-`Optimal` is a scheduling layer above per-opportunity modeling. It must compare multiple short trips, fewer long trips and mixed-country sequences over a bounded planning horizon while accounting for market validity, capacity, fees/costs, availability/depletion evidence, confidence/freshness and opportunity cost.
+`Optimal` is a scheduling layer above per-opportunity modeling. It must compare short-trip repetition, longer routes and mixed-country sequences over a bounded horizon using market validity, capacity, resale/foreign economics, travel cost/time, availability/depletion evidence, confidence/freshness and opportunity cost.
 
-Do not implement `Optimal` as a simple sort by profit/item or profit/trip.
+Do not implement it as a simple profit/item or profit/trip sort.
 
-## Runtime / performance
+## Performance
 
-Every second:
-
-- local Lua/countdown/visibility/string work only.
-
-Approximately every minute:
-
-- serialized visible updater/model/finalizer;
-- at most one lower-priority broad resale request after the visible heartbeat.
-
-Approximately every two minutes during the expansion bridge:
-
-- fail-soft all-country shadow stock observation.
-
-Catalog metadata network maintenance:
-
-- not part of the Rainmeter heartbeat;
-- explicit/manual only; normal category/market validity comes from committed local files.
-
-Do not add permanent background PowerShell/browser processes. Keep runtime state bounded and continue pruning shared observation/cycle stores.
+- every second: local Lua/countdown/visibility/string work only;
+- primary serialized update: ~1 minute;
+- shadow provider observation: no more often than ~120s unless revalidated;
+- `VisibleItems`: local-only;
+- broad resale: max one bounded Torn market request per normal update after heartbeat;
+- catalog metadata network maintenance: not in heartbeat;
+- no permanent background PowerShell/browser processes.
 
 ## Distribution
 
-The `.rmskin` builder is whitelist-based and includes both committed offline catalog files while excluding local credentials/runtime state:
+The `.rmskin` builder is whitelist-based. It includes runtime `.ps1`/`.lua` scripts and committed offline catalog files while excluding:
 
-```text
-config/foreign-item-categories.json
-config/foreign-market-overrides.json
-```
-
-All `.ps1`/`.lua` runtime scripts, including `ResaleQueue.ps1`, are staged from `@Resources/Scripts` by the builder.
-
-Recipient-local `settings.local.json`, runtime history/state and generated files must never be packaged.
+- `settings.local.json` / API key;
+- runtime history/state;
+- generated files;
+- local errors/cache.
 
 ## Validation boundary
 
-Shadow collection and the complete current offline catalog have passed focused deterministic tests and target-Windows live acceptance.
+Accepted on target Windows:
 
-Current resale-queue acceptance is intentionally narrow:
+- broad shadow/provider collection;
+- complete current offline catalog/legacy suppression;
+- one live broad resale request;
+- category-aware capacity focused tests.
 
-```powershell
-.\tests\Validate-ResaleQueue.ps1
-.\tests\Run-ResaleQueueTests.ps1
-.\tests\Validate-RainmeterSkin.ps1
-```
-
-Then run one explicit `ResaleQueue.ps1 -Force` attempt and inspect only queue/cache health. Do not claim broad live pricing acceptance until that target-Windows evidence exists.
+Current `0.3.0` UI candidate still requires focused PowerShell/static tests plus actual Rainmeter visual acceptance. See `docs/NEXT_CODEX_RUN.md`.
