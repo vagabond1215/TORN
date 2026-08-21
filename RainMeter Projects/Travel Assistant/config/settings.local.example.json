@@ -9,14 +9,6 @@
     "currentCapacityMode": "",
     "currentCapacity": 0,
     "currentCapacityBonus": 0,
-    "currentCategoryCapacityBonuses": {
-      "Flower": 0,
-      "Plushie": 0
-    },
-    "currentCategoryCapacityResolved": {
-      "Flower": false,
-      "Plushie": false
-    },
     "currentCapacitySyncedAt": 0,
     "factionState": "manual",
     "factionExcursionLevel": 0,
