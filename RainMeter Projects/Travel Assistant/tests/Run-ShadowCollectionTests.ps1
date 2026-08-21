@@ -23,7 +23,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ShadowCollector.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Get-LiveStockObservationsForCountry','Update-CycleState','Test-IsPrimaryMarket','Test-ObservationChanged')
+$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-LiveStockObservationsForCountry','Update-CycleState','Test-IsPrimaryMarket','Test-ObservationChanged','Update-ObservedMarketMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -42,10 +42,10 @@ $payload = [pscustomobject]@{
         uni = [pscustomobject]@{
             update = 1787327048
             stocks = @(
-                [pscustomobject]@{ id = 206; quantity = 123; cost = 767000 },
-                [pscustomobject]@{ id = 266; quantity = 450; cost = 200 },
-                [pscustomobject]@{ id = 268; quantity = 20; cost = 1000 },
-                [pscustomobject]@{ id = 999; quantity = 1 }
+                [pscustomobject]@{ id = 206; name = 'Xanax'; quantity = 123; cost = 767000 },
+                [pscustomobject]@{ id = 266; name = 'Nessie Plushie'; quantity = 450; cost = 200 },
+                [pscustomobject]@{ id = 268; name = 'Red Fox Plushie'; quantity = 20; cost = 1000 },
+                [pscustomobject]@{ id = 999; name = 'Malformed'; quantity = 1 }
             )
         }
     }
@@ -59,9 +59,28 @@ $rows = @(Get-LiveStockObservationsForCountry -Payload $payload -Country $countr
 Assert-Equal 'All valid provider rows normalize' $rows.Count 3
 Assert-Equal 'Shadow normalization keeps country' ([string]$rows[1].country) 'united_kingdom'
 Assert-Equal 'Shadow normalization keeps item id' ([int]$rows[1].itemId) 266
+Assert-Equal 'Shadow normalization keeps provider item name' ([string]$rows[1].itemName) 'Nessie Plushie'
 Assert-Equal 'Shadow normalization keeps stock' ([int]$rows[1].stock) 450
 Assert-Equal 'Shadow normalization keeps foreign price' ([long]$rows[1].foreignPrice) 200
 Assert-Equal 'Shadow normalization keeps provider timestamp' ([long]$rows[1].sourceTimestamp) 1787327048
+
+$catalogState = [pscustomobject]@{ observedMarkets = [pscustomobject]@{} }
+Update-ObservedMarketMetadata -EngineState $catalogState -Observation $rows[1] -Now 1787327100
+$catalogEntry = $catalogState.observedMarkets.PSObject.Properties['united_kingdom:266'].Value
+Assert-Equal 'Observed market stores provider item name' ([string]$catalogEntry.providerName) 'Nessie Plushie'
+
+$renamedObservation = [pscustomobject]@{
+    country = 'united_kingdom'
+    itemId = 266
+    itemName = 'Nessie Plushie'
+    stock = 400
+    foreignPrice = 200
+    source = 'yata'
+    sourceTimestamp = 1787327200
+}
+Update-ObservedMarketMetadata -EngineState $catalogState -Observation $renamedObservation -Now 1787327200
+Assert-Equal 'Observed market keeps provider name across refresh' ([string]$catalogEntry.providerName) 'Nessie Plushie'
+Assert-Equal 'Observed market refresh still updates stock' ([int]$catalogEntry.lastStock) 400
 
 $primaryCountries = New-Object 'System.Collections.Generic.HashSet[string]'
 [void]$primaryCountries.Add('united_kingdom')
