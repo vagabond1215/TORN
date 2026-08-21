@@ -1,4 +1,4 @@
-# Next Codex Run: Travel Assistant Settings / Torn Sync Validation
+# Next Codex Run: Travel Assistant Settings / Current Capacity Validation
 
 **Status: ACTIVE**
 
@@ -12,96 +12,87 @@ Already validated on the target Windows/Rainmeter machine:
 - Torn Item Market via bounded curl and ignored local API key;
 - automatic one-minute Rainmeter polling, heartbeat/stale detection, real restock/sellout history collection;
 - clean post-fix Rainmeter log, no persistent Travel Assistant PowerShell process, bounded generated/runtime storage;
-- final economics/history/model tests from the stable baseline.
+- Prometheus preferred live stock with YATA fallback;
+- production Prometheus pass around 1.16 s with current stock/price/source timestamps.
 
-## Current live-stock path
+## Current Settings design
 
-YATA later returned provider-side HTTP 502 from both native PowerShell and curl. Prometheus was probed successfully and is now preferred:
+The top-right main-skin control is `SETTINGS >`.
 
-```text
-Prometheus
-   ↓ unavailable
-YATA
-   ↓ unavailable
-cached state + STALE_DATA
-```
-
-Validated production pass: `EXIT=0`, ~1.16 s, `LiveProvider=prometheus`, with near-current UK/Japan source timestamps and populated Xanax stock/prices.
-
-## Settings extension
-
-The top-right main-skin mode click is replaced by `SETTINGS >`.
-
-Settings now supports:
+Settings now centers on:
 
 - masked Torn API key;
 - Standard / Airstrip / WLT;
-- travel company + star rating;
-- faction Excursion capacity;
-- faction Travel Cost;
-- derived travel-perk preview;
-- settings-only Business when free Business Class is established;
-- hidden asynchronous update after explicit Save;
-- ignored `settings-error.txt` diagnostics.
+- company + stars for non-capacity effects such as free Business Class;
+- **Current Xanax capacity**;
+- `Sync from Torn` as a populate-only action;
+- explicit Save followed by a hidden asynchronous update.
 
-The Excursion-label overlap artifact has been fixed.
+Legacy faction/loadout fields remain readable for old local settings but are no longer the preferred user-facing capacity source.
 
-## Travel-profile economics
+## Current-capacity authority
 
-Implemented and already target-tested:
+Do not query faction upgrades to determine usable Xanax carrying capacity.
 
-- Lingerie 3-star +2 capacity, 10-star free Business;
-- Cruise Line +2 at 3-star and +3 more at 10-star;
-- Flower/Toy item-specific capacity does not increase Xanax capacity;
-- faction Excursion +1 per level to 10;
-- faction Travel Cost -15% per level to 5;
-- unknown ticket-funded Business economics remain suppressed.
+Use current `/user/perks` instead:
 
-`Run-TravelProfileTests.ps1` and profile-integrated `Run-FinalizeStateTests.ps1` passed previously.
+- mode supplies base capacity: Standard `10`; Airstrip/WLT/qualified Business `15`;
+- `perks.enhancer` supplies the current non-stacking suitcase bonus;
+- `perks.faction`, `perks.job`, and `perks.book` supply currently active additive general travel-capacity bonuses;
+- property/stock method perks are excluded from additive capacity to avoid double-counting the selected 10/15 base;
+- Flower/Toy item-specific bonuses do not increase Xanax capacity;
+- unknown relevant perk text keeps the result unresolved rather than guessing.
 
-## Torn profile sync
+A successfully synced current-capacity bonus is authoritative and replaces inferred company/faction capacity slots in economics.
 
-A redacted local probe using the saved API key successfully reached:
+### Live target validation
 
-- `/user/basic`;
-- `/user/job`;
-- `/user/perks`;
-- `/faction/upgrades`.
-
-Current probed state:
+While the user was actively traveling, `Probe-TornTravelProfile.ps1` resolved:
 
 ```text
-Job: Education starter job / Substitute Teacher
-Travel company: none
-Company stars: 0
-Faction Travel capacity: 0
-Faction Travel cost: 0
+Mode: Airstrip
+Base: 15
+Large Suitcase/enhancer: +3
+Other active perks: +0
+Effective capacity: 18
 ```
 
-`Sync from Torn` is implemented as **populate-only**: it changes the form controls but does not persist until Save. Unknown company types are left unresolved rather than guessed.
+`Run-CurrentCapacityTests.ps1` passed all current parser/enhancer/exclusion/unresolved cases.
 
-Target-Windows tests already passed on `2367874fedea5f9beea215baea4265e92e7c39d4`:
+`Run-TravelProfileTests.ps1` passed all existing economics tests plus:
 
-- `Validate-TravelAssistant.ps1`;
-- `Run-TornProfileSyncTests.ps1` including starter job, known/unknown company mappings, rating preservation, and faction travel upgrade parsing.
+- synced current capacity retained;
+- current bonus retained;
+- current capacity replaces inferred company/faction slots;
+- no faction double-counting;
+- conservative zero faction fee reduction when current capacity is authoritative;
+- 10-star Lingerie Business unlock still preserved;
+- current `+3` yields Airstrip `18`, Standard `13`, qualified Business `18`.
+
+`Validate-TravelAssistant.ps1` also passed.
 
 ## Immediate remaining validation
 
 Do not add more code unless one of these checks fails.
 
-1. Reopen Settings from Rainmeter and confirm the Excursion control no longer has the label-overlap artifact.
-2. Click **Sync from Torn**. Expected current values:
-   - Company: `None / Other`
-   - Company stars: `0`
-   - Faction Excursion: `0`
-   - Faction Travel Cost: `0`
-   The sync status should identify the Education starter-job result.
-3. Confirm Sync does **not** save by itself: Cancel/reopen should retain the previously saved values.
-4. Manually choose Lingerie Store + 10 stars and confirm Business appears; switch back to an unqualified profile and confirm Business disappears.
-5. Click Save and confirm the dialog closes promptly and the hidden update applies the selected mode/profile.
-6. Allow a normal automatic poll afterward and confirm Prometheus/freshness remains healthy.
-7. Check for any new material Rainmeter/PowerShell errors or persistent background processes only if behavior suggests a regression.
+1. Refresh All in Rainmeter and open Settings.
+2. Confirm the simplified UI shows **Current Xanax capacity** and no longer asks the user to manage faction Peace/War loadouts.
+3. Click **Sync from Torn**. With the same active perks, expected Airstrip capacity is `18` (`15 + 3`).
+4. Before saving, change Airstrip → Standard and confirm the displayed capacity recalculates to `13`; switch back to Airstrip and confirm `18`.
+5. Confirm Sync is populate-only: Cancel/reopen should retain the previously saved values.
+6. Manually choose Lingerie Store + 10 stars and confirm Business appears; switch back to an unqualified profile and confirm Business disappears.
+7. Choose the intended settings and Save. The dialog should close promptly and trigger the hidden update.
+8. Verify generated state uses the synced current bonus without inferred capacity double-counting. Useful check:
+
+```powershell
+Get-Content .\@Resources\Generated\state.kv |
+    Select-String '^(TravelMode|ProfileGeneralCapacityBonus|ProfileFactionCapacityBonus|UKCapacity|JPCapacity)='
+```
+
+For the currently validated Airstrip `+3` state, expect the effective capacities to be `18` for UK and Japan and no inferred faction-capacity addition.
+9. Allow a normal automatic poll afterward and confirm Prometheus/source freshness remains healthy.
+10. Check for new material Rainmeter/PowerShell errors only if behavior suggests a regression.
 
 ## Completion criteria
 
-Mark **COMPLETED** only when the live Settings sync/save/Business-gating checks above pass and the next normal automatic poll remains healthy.
+Mark **COMPLETED** only when the live Settings sync/recalculation/save/Business-gating checks above pass and the next normal automatic poll remains healthy.
