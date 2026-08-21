@@ -20,7 +20,7 @@ $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($ScriptPath, [ref]$tokens, [ref]$parseErrors)
 if (@($parseErrors).Count -gt 0) { throw ('LocalCatalog.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; ')) }
 
-$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-ObservedItemGroups','Get-SeedIndex','New-LocalCatalogEntry','Get-LocalCatalogSignature','Merge-RicherMetadata')
+$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-ObservedItemGroups','Get-SeedIndex','Get-CategoryIndex','New-LocalCatalogEntry','Get-LocalCatalogSignature','Merge-RicherMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -40,9 +40,10 @@ $observed = [pscustomobject]@{
     'united_kingdom:206' = [pscustomobject]@{ country='united_kingdom'; itemId=206; providerName='Xanax' }
     'mexico:999' = [pscustomobject]@{ country='mexico'; itemId=999; providerName='Fixture Item' }
     'canada:999' = [pscustomobject]@{ country='canada'; itemId=999; providerName='Fixture Item Renamed' }
+    'hawaii:1000' = [pscustomobject]@{ country='hawaii'; itemId=1000; providerName='Unmapped Fixture' }
 }
 $groups = @(Get-ObservedItemGroups -ObservedMarkets $observed)
-Assert-Equal 'Observed market rows collapse to distinct items' $groups.Count 4
+Assert-Equal 'Observed market rows collapse to distinct items' $groups.Count 5
 $xanaxGroup = @($groups | Where-Object { $_.itemId -eq 206 })[0]
 Assert-Equal 'Xanax group keeps one provider name' @($xanaxGroup.providerNames).Count 1
 Assert-Equal 'Xanax group keeps both countries' @($xanaxGroup.countries).Count 2
@@ -57,26 +58,48 @@ $config = [pscustomobject]@{ items = @(
 $seedIndex = Get-SeedIndex -ItemsConfig $config
 Assert-Equal 'Seed index keeps three committed items' $seedIndex.Count 3
 
+$categoryConfig = [pscustomobject]@{
+    categoriesByItemId = [pscustomobject]@{
+        '266' = 'OfflinePlushie'
+        '999' = 'Tool'
+    }
+}
+$categoryIndex = Get-CategoryIndex -CategoryConfig $categoryConfig
+Assert-Equal 'Offline category index keeps mapped items' $categoryIndex.Count 2
+Assert-Equal 'Offline category index keeps fixture category' $categoryIndex['999'] 'Tool'
+
 $nessieGroup = @($groups | Where-Object { $_.itemId -eq 266 })[0]
-$nessie = New-LocalCatalogEntry -Group $nessieGroup -Seed $seedIndex['266'] -Now 1787345000
+$nessie = New-LocalCatalogEntry -Group $nessieGroup -Seed $seedIndex['266'] -OfflineCategory $categoryIndex['266'] -OfflineCategorySource 'yata_abroad_snapshot' -Now 1787345000
 Assert-Equal 'Seeded Nessie keeps canonical name' $nessie.name 'Nessie Plushie'
-Assert-Equal 'Seeded Nessie resolves Plushie category' $nessie.category 'Plushie'
+Assert-Equal 'Seeded Nessie category overrides offline snapshot' $nessie.category 'Plushie'
 Assert-True 'Seeded category is resolved' ([bool]$nessie.categoryResolved)
 Assert-Equal 'Seed provenance is explicit' $nessie.source 'config_seed'
+Assert-Equal 'Seed category provenance is explicit' $nessie.categorySource 'config_seed'
 
-$unknown = New-LocalCatalogEntry -Group $conflictGroup -Seed $null -Now 1787345000
-Assert-Equal 'Unseeded observed item uses provider-name provenance' $unknown.source 'provider_name'
-Assert-Equal 'Unseeded observed item category stays Unknown' $unknown.category 'Unknown'
-Assert-Equal 'Unseeded category stays unresolved' ([bool]$unknown.categoryResolved) $false
-Assert-True 'Provider name disagreement is surfaced' ([bool]$unknown.nameConflict)
-Assert-Equal 'Provider name disagreement retains both names' @($unknown.providerNames).Count 2
+$mapped = New-LocalCatalogEntry -Group $conflictGroup -Seed $null -OfflineCategory $categoryIndex['999'] -OfflineCategorySource 'yata_abroad_snapshot' -Now 1787345000
+Assert-Equal 'Offline mapped item uses offline category provenance' $mapped.source 'offline_yata_category'
+Assert-Equal 'Offline mapped item resolves category' $mapped.category 'Tool'
+Assert-True 'Offline mapped category is resolved' ([bool]$mapped.categoryResolved)
+Assert-Equal 'Offline category source is retained' $mapped.categorySource 'yata_abroad_snapshot'
+Assert-True 'Provider name disagreement remains surfaced after category resolution' ([bool]$mapped.nameConflict)
+Assert-Equal 'Provider name disagreement retains both names' @($mapped.providerNames).Count 2
 
-$sigA = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex
-$sigB = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex
+$unmappedGroup = @($groups | Where-Object { $_.itemId -eq 1000 })[0]
+$unknown = New-LocalCatalogEntry -Group $unmappedGroup -Seed $null -OfflineCategory '' -OfflineCategorySource 'yata_abroad_snapshot' -Now 1787345000
+Assert-Equal 'Unmapped observed item uses provider-name provenance' $unknown.source 'provider_name'
+Assert-Equal 'Unmapped observed item category stays Unknown' $unknown.category 'Unknown'
+Assert-Equal 'Unmapped category stays unresolved' ([bool]$unknown.categoryResolved) $false
+Assert-Equal 'Unmapped category provenance stays empty' $unknown.categorySource ''
+
+$sigA = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex -CategoryIndex $categoryIndex -CategorySourceId 'yata_abroad_snapshot'
+$sigB = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex -CategoryIndex $categoryIndex -CategorySourceId 'yata_abroad_snapshot'
 Assert-Equal 'Local catalog signature is deterministic' $sigA $sigB
 $configChanged = [pscustomobject]@{ items = @([pscustomobject]@{ itemId=206; name='Xanax'; category='Drug Revised' }) }
-$sigChanged = Get-LocalCatalogSignature -Groups $groups -SeedIndex (Get-SeedIndex -ItemsConfig $configChanged)
-Assert-True 'Category override changes local catalog signature' ($sigChanged -ne $sigA)
+$sigSeedChanged = Get-LocalCatalogSignature -Groups $groups -SeedIndex (Get-SeedIndex -ItemsConfig $configChanged) -CategoryIndex $categoryIndex -CategorySourceId 'yata_abroad_snapshot'
+Assert-True 'Seed category override changes local catalog signature' ($sigSeedChanged -ne $sigA)
+$categoryConfigChanged = [pscustomobject]@{ categoriesByItemId = [pscustomobject]@{ '266'='OfflinePlushie'; '999'='Material' } }
+$sigCategoryChanged = Get-LocalCatalogSignature -Groups $groups -SeedIndex $seedIndex -CategoryIndex (Get-CategoryIndex -CategoryConfig $categoryConfigChanged) -CategorySourceId 'yata_abroad_snapshot'
+Assert-True 'Offline category change alters local catalog signature' ($sigCategoryChanged -ne $sigA)
 
 $rich = [pscustomobject]@{
     itemId = 266
@@ -91,5 +114,5 @@ Assert-Equal 'Richer Torn metadata source is preserved' $merged.source 'torn_ite
 Assert-Equal 'Richer Torn market reference is preserved' ([long]$merged.marketPrice) 123456
 Assert-Equal 'Richer metadata still receives provider country context' @($merged.countries).Count 1
 
-Write-Host 'Local catalog normalization tests passed.' -ForegroundColor Green
+Write-Host 'Local catalog category precedence/normalization tests passed.' -ForegroundColor Green
 exit 0
