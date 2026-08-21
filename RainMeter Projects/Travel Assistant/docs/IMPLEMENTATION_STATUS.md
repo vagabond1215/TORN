@@ -19,7 +19,7 @@ Data-layer expansion must not change this visible behavior until a later explici
 
 ## Full-market shadow collection — ACCEPTED
 
-All 11 Torn foreign destinations now collect in the background while only UK/Japan remain visible/model-enabled.
+All 11 Torn foreign destinations collect in the background while only UK/Japan remain visible/model-enabled.
 
 Focused Windows tests reported PASS:
 
@@ -29,7 +29,7 @@ Run-ShadowCollectionTests.ps1
 Validate-RainmeterSkin.ps1
 ```
 
-Live forced shadow pass from the correct project directory reported:
+Live forced shadow pass:
 
 ```text
 lastProvider:         prometheus
@@ -42,34 +42,64 @@ lastErrorAt:          0
 lastError:            empty
 ```
 
-This is accepted as the operational baseline for broad background collection. The initial `cyclesCompleted=0` is expected on a first/early pass; cycles require observed restock/sellout transitions over time.
+This is the accepted operational baseline for broad background collection.
 
-Shadow collection remains fail-soft, skips UK/Japan Xanax primary writes, and records raw history only when stock or foreign price changes.
+## Canonical item metadata — ACTIVE
 
-## Canonical item metadata — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+The first live catalog contained 202 distinct item IDs across the 232 country-item markets.
 
-New `@Resources/Scripts/ItemMetadata.ps1` enriches the distinct item IDs discovered by shadow collection using Torn API v2 specific-item metadata.
+### v2 multi-ID approach rejected on target Windows host
 
-Production contract:
+The original v2 metadata strategy passed its static/unit tests but failed twice in real transport:
 
 ```text
-GET /v2/torn/{ids}/items?sort=ASC
+150 IDs / 20s -> 0 resolved -> timeout
+40 IDs / 30s  -> 0 resolved -> timeout
 ```
+
+The second failure occurred on the first 40-ID batch, so the issue is not just an oversized 150-ID response. Do not continue increasing timeout/batch size for this path.
+
+### Current bulk metadata approach
+
+`@Resources/Scripts/ItemMetadata.ps1` now uses the classic Torn bulk items selection:
+
+```text
+GET https://api.torn.com/torn/?selections=items
+Authorization: ApiKey <local key>
+```
+
+The response is filtered locally to observed item IDs.
 
 Behavior:
 
-- public-key request;
-- default refresh every 6 hours;
-- maximum 150 item IDs per request batch;
-- bounded retries: every attempt respects the six-hour cadence unless manually forced;
-- secure `curl.exe --config -` transport so the key is not placed in the process command line or URL;
-- canonical name/type/category/tradability/market-price/shop metadata stored in ignored `engine-state.json`;
-- weapon rows use Torn `details.category` to retain Primary/Secondary/Melee/Temporary identity when available;
-- unresolved weapon detail remains `Weapon` with `categoryResolved=false` rather than guessing;
-- Torn `market_price` is metadata only and does not replace existing Item Market profitability logic;
-- failures are fail-soft and do not block finalization or heartbeat.
+- one metadata request per refresh attempt;
+- 6-hour default refresh cadence;
+- 12-second default timeout;
+- custom Travel Assistant User-Agent;
+- key supplied through stdin Authorization header, never URL/process command line;
+- canonical item `type` becomes the category (Drug, Flower, Plushie, Primary, Secondary, Melee, Temporary, Defensive, etc.);
+- weapon subtype is retained separately as `weaponType`;
+- unknown/missing type remains unresolved rather than guessed;
+- market value is metadata/reference only and does not replace Item Market profitability logic;
+- failures remain fail-soft and must not block the established updater/finalizer/heartbeat.
 
-`RunUpdate.ps1` now serializes:
+Runtime metadata fields:
+
+```text
+itemId
+name
+type
+weaponType
+category
+categoryResolved
+tradabilityKnown
+isTradable
+marketPrice
+fetchedAt
+source=torn_items_bulk
+```
+
+`RunUpdate.ps1` still serializes:
 
 ```text
 UpdateTracker
@@ -79,18 +109,9 @@ FinalizeState
 heartbeat
 ```
 
-New focused tests:
-
-```text
-tests/Validate-ItemMetadata.ps1
-tests/Run-ItemMetadataTests.ps1
-```
-
-Both are included in `tests/Run-All.ps1`.
-
 ## Remaining acceptance for metadata phase
 
-Run the two focused metadata tests on Windows, then force one metadata refresh and inspect:
+Run revised bulk metadata tests on Windows, then force one metadata refresh and inspect:
 
 ```text
 engine-state.json -> metadataCollection
@@ -99,14 +120,18 @@ engine-state.json -> itemMetadata
 
 Success requires:
 
+- `source=torn_items_bulk`;
+- recent `lastRefreshAt`;
 - no metadata error;
-- `source=torn_items`;
-- `distinctObservedItems > 0`;
-- `itemsRequested` equals the number of distinct observed item IDs;
-- `itemsResolved` is equal or very close to requested, with any discrepancy investigated rather than silently guessed;
+- `itemsRequested` equals the distinct observed item count;
+- `itemsResolved` equals or is very close to requested;
 - populated canonical category list;
-- correct sample metadata for Xanax, Nessie Plushie and Cherry Blossom when those IDs are observed;
+- correct sample metadata for Xanax, Nessie Plushie and Cherry Blossom when observed;
 - current UK/Japan Xanax Rainmeter behavior unchanged.
+
+## Distribution work also implemented
+
+A whitelist-based `Build-Rmskin.ps1` and distribution validation now exist for future sharing. The package staging explicitly excludes local API settings, runtime history/state, generated output and credentials. Recipient-local settings are intended to survive package upgrades via Rainmeter skin merge semantics. This distribution path still requires Windows package-builder validation before a `.rmskin` should be published.
 
 ## Next planned phases
 
@@ -122,4 +147,4 @@ After metadata acceptance:
 
 ## Existing validation debt retained
 
-Earlier Settings/current-capacity interaction acceptance (populate-only sync, Airstrip 18 / Standard 13 mode flip, Business gating, healthy following poll) remains useful Windows evidence and is not erased by this expansion.
+Earlier Settings/current-capacity interaction acceptance remains useful Windows evidence and is not erased by this expansion.
