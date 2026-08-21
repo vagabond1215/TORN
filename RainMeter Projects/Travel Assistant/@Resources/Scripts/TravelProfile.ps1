@@ -9,13 +9,24 @@ function Get-TravelProfile {
     $profile = [pscustomobject]@{
         companyType = 'none'
         companyStars = 0
+        factionState = 'manual'
         factionExcursionLevel = 0
         factionTravelCostLevel = 0
+        factionPeaceExcursionLevel = 0
+        factionPeaceTravelCostLevel = 0
+        factionWarExcursionLevel = 0
+        factionWarTravelCostLevel = 0
     }
 
+    $fieldNames = @(
+        'companyType','companyStars','factionState',
+        'factionExcursionLevel','factionTravelCostLevel',
+        'factionPeaceExcursionLevel','factionPeaceTravelCostLevel',
+        'factionWarExcursionLevel','factionWarTravelCostLevel'
+    )
     foreach ($source in @($BaseSettings, $LocalSettings)) {
         if ($null -eq $source -or -not $source.PSObject.Properties['travelProfile'] -or $null -eq $source.travelProfile) { continue }
-        foreach ($name in @('companyType','companyStars','factionExcursionLevel','factionTravelCostLevel')) {
+        foreach ($name in $fieldNames) {
             $prop = $source.travelProfile.PSObject.Properties[$name]
             if ($null -eq $prop) { continue }
             $profile.PSObject.Properties[$name].Value = $prop.Value
@@ -25,8 +36,29 @@ function Get-TravelProfile {
     $profile.companyType = [string]$profile.companyType
     if ([string]::IsNullOrWhiteSpace($profile.companyType)) { $profile.companyType = 'none' }
     $profile.companyStars = [Math]::Max(0, [Math]::Min(10, [int]$profile.companyStars))
-    $profile.factionExcursionLevel = [Math]::Max(0, [Math]::Min(10, [int]$profile.factionExcursionLevel))
-    $profile.factionTravelCostLevel = [Math]::Max(0, [Math]::Min(5, [int]$profile.factionTravelCostLevel))
+
+    $state = ([string]$profile.factionState).ToLowerInvariant()
+    if ($state -notin @('peace','war','manual')) { $state = 'manual' }
+    $profile.factionState = $state
+
+    $profile.factionPeaceExcursionLevel = [Math]::Max(0, [Math]::Min(10, [int]$profile.factionPeaceExcursionLevel))
+    $profile.factionPeaceTravelCostLevel = [Math]::Max(0, [Math]::Min(5, [int]$profile.factionPeaceTravelCostLevel))
+    $profile.factionWarExcursionLevel = [Math]::Max(0, [Math]::Min(10, [int]$profile.factionWarExcursionLevel))
+    $profile.factionWarTravelCostLevel = [Math]::Max(0, [Math]::Min(5, [int]$profile.factionWarTravelCostLevel))
+
+    # The legacy active fields remain the economics contract. New synced profiles
+    # derive them from the currently active Torn faction loadout; older/manual
+    # local files continue to use their existing single pair of values.
+    if ($state -eq 'peace') {
+        $profile.factionExcursionLevel = [int]$profile.factionPeaceExcursionLevel
+        $profile.factionTravelCostLevel = [int]$profile.factionPeaceTravelCostLevel
+    } elseif ($state -eq 'war') {
+        $profile.factionExcursionLevel = [int]$profile.factionWarExcursionLevel
+        $profile.factionTravelCostLevel = [int]$profile.factionWarTravelCostLevel
+    } else {
+        $profile.factionExcursionLevel = [Math]::Max(0, [Math]::Min(10, [int]$profile.factionExcursionLevel))
+        $profile.factionTravelCostLevel = [Math]::Max(0, [Math]::Min(5, [int]$profile.factionTravelCostLevel))
+    }
     return $profile
 }
 
@@ -49,22 +81,14 @@ function Get-TravelProfileEffects {
             if ($effect.PSObject.Properties['stars']) { $requiredStars = [int]$effect.stars }
             if ([int]$Profile.companyStars -lt $requiredStars) { continue }
 
-            if ($effect.PSObject.Properties['generalCapacityBonus']) {
-                $generalCapacityBonus += [int]$effect.generalCapacityBonus
-            }
-            if ($effect.PSObject.Properties['freeBusinessClass'] -and [bool]$effect.freeBusinessClass) {
-                $freeBusinessClass = $true
-            }
+            if ($effect.PSObject.Properties['generalCapacityBonus']) { $generalCapacityBonus += [int]$effect.generalCapacityBonus }
+            if ($effect.PSObject.Properties['freeBusinessClass'] -and [bool]$effect.freeBusinessClass) { $freeBusinessClass = $true }
             if ($null -ne $Item -and $effect.PSObject.Properties['itemCategory'] -and $effect.PSObject.Properties['itemCapacityBonus']) {
                 $itemCategory = ''
                 if ($Item.PSObject.Properties['category']) { $itemCategory = [string]$Item.category }
-                if ([string]$effect.itemCategory -eq $itemCategory) {
-                    $itemCapacityBonus += [int]$effect.itemCapacityBonus
-                }
+                if ([string]$effect.itemCategory -eq $itemCategory) { $itemCapacityBonus += [int]$effect.itemCapacityBonus }
             }
-            if ($effect.PSObject.Properties['label'] -and -not [string]::IsNullOrWhiteSpace([string]$effect.label)) {
-                $notes.Add([string]$effect.label)
-            }
+            if ($effect.PSObject.Properties['label'] -and -not [string]::IsNullOrWhiteSpace([string]$effect.label)) { $notes.Add([string]$effect.label) }
         }
     }
 
@@ -110,13 +134,9 @@ function Get-AvailableTravelModeIds {
     foreach ($mode in @($TravelModes.modes)) {
         $id = [string]$mode.id
         if ($mode.enabled -ne $true) { continue }
-
         $requiresFreeBusiness = $false
-        if ($mode.PSObject.Properties['requiresFreeBusinessClass']) {
-            $requiresFreeBusiness = [bool]$mode.requiresFreeBusinessClass
-        }
+        if ($mode.PSObject.Properties['requiresFreeBusinessClass']) { $requiresFreeBusiness = [bool]$mode.requiresFreeBusinessClass }
         if ($requiresFreeBusiness -and -not [bool]$Effects.freeBusinessClass) { continue }
-
         $ids.Add($id)
     }
     return $ids.ToArray()
@@ -139,10 +159,7 @@ function Get-EffectiveTravelEconomics {
     }
 
     if ($TravelMode -eq 'business') {
-        if ([bool]$Effects.freeBusinessClass) {
-            $travelCostKnown = $true
-            $travelCost = 0L
-        }
+        if ([bool]$Effects.freeBusinessClass) { $travelCostKnown = $true; $travelCost = 0L }
     } elseif ($null -ne $rawTravelCost) {
         $travelCostKnown = $true
         $travelCost = [long]$rawTravelCost
@@ -161,11 +178,8 @@ function Get-EffectiveTravelEconomics {
     }
 
     $capacity = 0
-    if ($CapacityOverride -gt 0) {
-        $capacity = $CapacityOverride
-    } elseif ($baseCapacity -gt 0) {
-        $capacity = $baseCapacity + [int]$Effects.totalCapacityBonus
-    }
+    if ($CapacityOverride -gt 0) { $capacity = $CapacityOverride }
+    elseif ($baseCapacity -gt 0) { $capacity = $baseCapacity + [int]$Effects.totalCapacityBonus }
 
     return [pscustomobject]@{
         travelCostKnown = $travelCostKnown
