@@ -28,7 +28,7 @@ function Invoke-TornJsonWithCurl {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $curl.Source
-    $psi.Arguments = '--config -'
+    $psi.Arguments = '-q --config -'
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
     $psi.RedirectStandardInput = $true
@@ -50,7 +50,7 @@ function Invoke-TornJsonWithCurl {
 
         if ($null -ne $Headers) {
             foreach ($name in $Headers.Keys) {
-                $value = [string]$Headers[$name]
+                $value = ([string]$Headers[$name]).Replace("`r", ' ').Replace("`n", ' ')
                 $header = ('{0}: {1}' -f [string]$name, $value).Replace('"', '\"')
                 $process.StandardInput.WriteLine(('header = "{0}"' -f $header))
             }
