@@ -48,7 +48,7 @@ OPTIMIZER candidates
 ### Visibility
 
 - The currently validated visible UI remains UK/Japan Xanax until a later explicit UI expansion pass is validated.
-- Cherry Blossom and Nessie Plushie are seeded metadata for the first multi-item presentation proof, but remain hidden during the initial shadow-collection rollout.
+- Cherry Blossom and Nessie Plushie are seeded metadata for the first multi-item presentation proof, but remain hidden during the data-layer expansion.
 - Future country/category filters are presentation filters only.
 - While traveling outbound, future travel-aware presentation should show only the destination country's items and replace the static route duration with the API-derived arrival countdown while retaining the plane icon.
 
@@ -70,24 +70,57 @@ OPTIMIZER candidates
 7. **Profitability gates timing, not learning.** Continue collecting useful observations/cycles when an opportunity is unprofitable.
 8. **Unknown economics are not zero economics.** Ticket-funded Business remains unresolved unless a known-free branch is established.
 9. **Provider provenance is retained and normalized at the adapter boundary.** Provider-specific response structures must not leak into the core observation/cycle model.
-10. **Collection failures must fail visibly but gracefully.** Background expansion must not take down the established visible Xanax path.
-11. **Runtime data is not Git history.** Observations, cycles, caches, generated graphs/state, provider probes, local settings, credentials and shadow-collection errors stay ignored/local.
+10. **Collection/enrichment failures must fail visibly but gracefully.** Background expansion must not take down the established visible Xanax path.
+11. **Runtime data is not Git history.** Observations, cycles, caches, generated graphs/state, provider probes, local settings, credentials and background errors stay ignored/local.
 12. **Storage and compute remain bounded.** Do not turn Rainmeter's one-second update loop into network/model work.
 
 ## Current background-collection contract
 
-The initial expansion uses a fail-soft `ShadowCollector.ps1`:
+The expansion currently uses a fail-soft `ShadowCollector.ps1`:
 
 - current visible updater runs first;
-- shadow collector runs afterward and before finalization;
+- shadow collector runs afterward;
 - default shadow polling interval is 120 seconds;
 - all 11 Torn foreign destinations are configured for collection;
 - every valid provider row is normalized to the standard observation schema;
 - current primary visible markets are skipped by shadow writes to avoid duplicate-cycle interference;
 - newly observed markets are tracked in ignored runtime engine state;
+- raw history is written only for stock/foreign-price changes; source timestamp alone does not create another raw observation;
 - shadow failures are recorded locally and must not suppress the established updater/finalizer/heartbeat.
 
+Target-Windows acceptance on 2026-08-21 established the current broad baseline:
+
+```text
+Prometheus
+11 countries
+232 observed country-item markets
+51 changed observations on the forced acceptance pass
+no shadow error
+```
+
 This is an intentionally conservative migration layer. A later refactor may unify visible and shadow collection behind one provider fetch, but must prove identical primary-market behavior before removing the fail-soft bridge.
+
+## Current canonical item-metadata contract
+
+`ItemMetadata.ps1` enriches the distinct item IDs discovered by collection using Torn API v2 specific-item metadata:
+
+```text
+GET /v2/torn/{ids}/items?sort=ASC
+```
+
+Rules:
+
+- public-access key only is required by the endpoint;
+- default metadata cadence is 6 hours;
+- maximum 150 item IDs per request batch;
+- failed/partial attempts still respect the six-hour cadence unless explicitly forced;
+- key is supplied to bounded `curl.exe` through stdin Authorization configuration, never the URL/process command line;
+- runtime output belongs in ignored `engine-state.json -> itemMetadata` / `metadataCollection`;
+- non-weapons use Torn `type` as canonical category;
+- weapons use `details.category` when available to retain Primary/Secondary/Melee/Temporary identity;
+- unresolved weapon category remains broad `Weapon` with `categoryResolved=false`; never guess;
+- Torn `market_price` is informational metadata in this phase and must not replace the current Item Market profitability gate;
+- metadata failure is fail-soft and must not block finalization/heartbeat.
 
 ## Observation / cycle contracts
 
@@ -151,11 +184,12 @@ A positive explicit `profitability.capacityOverride` remains authoritative where
 
 ## Provider / web-data policy
 
-- Treat Prometheus, YATA, Weav3r, DroqsDB and other services as replaceable adapters.
+- Treat Prometheus, YATA, Torn, Weav3r, DroqsDB and other services as replaceable adapters.
 - Prefer structured endpoints over browser scraping.
 - Foreign stock is provider-observed/crowd-sourced; do not assume a static Wiki table is the live catalog authority.
-- The live provider payload determines what markets are currently observed; canonical Torn metadata will later provide item names/categories.
+- The live provider payload determines what markets are currently observed; canonical Torn metadata supplies item names/categories for observed item IDs.
 - Do not create one foreign-stock request per item. A country-stock payload should fan out locally to all item observations.
+- Metadata lookup is low-frequency/batched and separate from live stock polling.
 - Resale-price enrichment is a separate concern and must be cached/staggered rather than issuing hundreds of Torn Item Market requests every minute.
 - Source disagreement lowers confidence; do not silently average incompatible source states.
 
@@ -166,12 +200,14 @@ A positive explicit `profitability.capacityOverride` remains authoritative where
 - Never print, log or request that the user paste the full key into chat.
 - Do not broaden key permissions merely for convenience.
 - Keep the validated bounded `curl.exe` workaround scoped to Torn API calls that require it on the target Windows environment.
+- Never put a Torn API key in process arguments or request URLs when stdin/header transport is available.
 
 ## Performance / resource budget
 
 - One-second Rainmeter work: local string/countdown/visibility updates only.
 - Primary network/model pass: approximately once per minute.
-- Initial broad shadow collection: no more frequent than 120 seconds unless explicitly revalidated.
+- Broad shadow collection: no more frequent than 120 seconds unless explicitly revalidated.
+- Canonical item metadata: approximately every 6 hours, with bounded item-ID batches.
 - Avoid permanent background PowerShell/browser processes.
 - Keep updater executions serialized.
 - Reuse provider payloads locally where practical; the current separate shadow request is a migration bridge, not the desired long-term architecture.
@@ -219,19 +255,22 @@ For changes touching collection/config/model behavior:
 
 - validate JSON syntax;
 - run PowerShell parser/static validation on changed scripts;
-- exercise provider normalization from fixtures/synthetic payloads;
+- exercise provider/metadata normalization from fixtures or synthetic payloads;
 - prove item/country cycle isolation;
 - prove primary visible markets are protected from duplicate shadow writes;
+- verify network cadence remains bounded even on errors/partial responses;
 - verify retention remains bounded;
 - verify ignored runtime/local files remain ignored;
 - run focused tests first and avoid broad unrelated reruns unless source changes justify them;
 - do not claim live/Rainmeter validation until it runs on Windows.
 
-Current shadow-focused checks include:
+Current focused expansion checks include:
 
 ```powershell
 .\tests\Validate-ShadowCollection.ps1
 .\tests\Run-ShadowCollectionTests.ps1
+.\tests\Validate-ItemMetadata.ps1
+.\tests\Run-ItemMetadataTests.ps1
 ```
 
 The full suite remains `tests/Run-All.ps1` when a broad run is justified.
