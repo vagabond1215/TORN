@@ -17,6 +17,37 @@ function Get-TornProfileApiErrorText {
     return ''
 }
 
+function Get-TornProfileApiErrorCode {
+    param([object]$Payload)
+    if ($null -eq $Payload -or -not $Payload.PSObject.Properties['error'] -or $null -eq $Payload.error) { return 0 }
+    $err = $Payload.error
+    if ($err -is [string]) { return 0 }
+    foreach ($name in @('code','error_code')) {
+        if ($err.PSObject.Properties[$name]) {
+            $value = 0
+            if ([int]::TryParse([string]$err.$name, [ref]$value)) { return $value }
+        }
+    }
+    return 0
+}
+
+function New-TornProfileResult {
+    param(
+        [bool]$Success,
+        [int]$HttpStatus,
+        [object]$Payload,
+        [string]$Error = '',
+        [int]$ApiErrorCode = 0
+    )
+    return [pscustomobject]@{
+        Success = $Success
+        HttpStatus = $HttpStatus
+        Payload = $Payload
+        Error = $Error
+        ApiErrorCode = $ApiErrorCode
+    }
+}
+
 function Invoke-TornProfileJson {
     param(
         [Parameter(Mandatory = $true)][string]$Uri,
@@ -80,11 +111,20 @@ function Invoke-TornProfileJson {
         if ($status -lt 200 -or $status -ge 300) {
             $message = Get-TornProfileApiErrorText -Payload $payload
             if ([string]::IsNullOrWhiteSpace($message)) { $message = 'HTTP request failed.' }
-            return [pscustomobject]@{ Success = $false; HttpStatus = $status; Payload = $payload; Error = $message }
+            return New-TornProfileResult -Success $false -HttpStatus $status -Payload $payload -Error $message -ApiErrorCode (Get-TornProfileApiErrorCode -Payload $payload)
         }
 
         if ($null -eq $payload) { throw 'Torn returned HTTP success but the JSON response could not be parsed.' }
-        return [pscustomobject]@{ Success = $true; HttpStatus = $status; Payload = $payload; Error = '' }
+
+        # Torn can return an API-level error envelope with HTTP 200. Treat that
+        # as a failed API call so callers never parse an error object as data.
+        if ($payload.PSObject.Properties['error']) {
+            $message = Get-TornProfileApiErrorText -Payload $payload
+            if ([string]::IsNullOrWhiteSpace($message)) { $message = 'Torn returned an API error response.' }
+            return New-TornProfileResult -Success $false -HttpStatus $status -Payload $payload -Error $message -ApiErrorCode (Get-TornProfileApiErrorCode -Payload $payload)
+        }
+
+        return New-TornProfileResult -Success $true -HttpStatus $status -Payload $payload
     } finally {
         $process.Dispose()
     }
@@ -94,9 +134,6 @@ function Get-TornFactionState {
     param([object]$Payload)
     if ($null -eq $Payload) { return 'unknown' }
 
-    # Current Torn v2 FactionUpgradesResponse exposes `state` as a top-level
-    # sibling of `upgrades`. Keep the nested check as a compatibility fallback
-    # for any cached/legacy fixture created by older Travel Assistant builds.
     foreach ($candidate in @(
         $(if ($Payload.PSObject.Properties['state']) { $Payload.state } else { $null }),
         $(if ($Payload.PSObject.Properties['upgrades'] -and $null -ne $Payload.upgrades -and $Payload.upgrades.PSObject.Properties['state']) { $Payload.upgrades.state } else { $null })
@@ -246,10 +283,12 @@ function Get-TornTravelProfileSync {
     $faction = if ($factionResult.Success) {
         Get-TornFactionTravelProfile -FactionPayload $factionResult.Payload
     } else {
+        $errorText = [string]$factionResult.Error
+        if ([int]$factionResult.ApiErrorCode -gt 0) { $errorText = ('Torn code {0}: {1}' -f [int]$factionResult.ApiErrorCode, $errorText) }
         [pscustomobject]@{
             Resolved = $false; State = 'unknown'; ExcursionLevel = 0; TravelCostLevel = 0
             PeaceExcursionLevel = 0; PeaceTravelCostLevel = 0; WarExcursionLevel = 0; WarTravelCostLevel = 0
-            Summary = ('Faction upgrades unavailable: {0}' -f [string]$factionResult.Error)
+            Summary = ('Faction upgrades unavailable: {0}' -f $errorText)
         }
     }
 
