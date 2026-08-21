@@ -71,28 +71,34 @@ Effective capacity: 18
 
 `Validate-TravelAssistant.ps1` also passed.
 
+### Live generated-state economics pass
+
+After saving Airstrip with the synced current `+3` bonus, the target Windows machine produced:
+
+```text
+JPCapacity=18
+ProfileFactionCapacityBonus=0
+ProfileGeneralCapacityBonus=3
+TravelMode=airstrip
+UKCapacity=18
+```
+
+This confirms the final generated state uses the current-capacity authority and does not add inferred faction capacity on top.
+
 ## Immediate remaining validation
 
 Do not add more code unless one of these checks fails.
 
-1. Refresh All in Rainmeter and open Settings.
-2. Confirm the simplified UI shows **Current Xanax capacity** and no longer asks the user to manage faction Peace/War loadouts.
-3. Click **Sync from Torn**. With the same active perks, expected Airstrip capacity is `18` (`15 + 3`).
-4. Before saving, change Airstrip → Standard and confirm the displayed capacity recalculates to `13`; switch back to Airstrip and confirm `18`.
-5. Confirm Sync is populate-only: Cancel/reopen should retain the previously saved values.
-6. Manually choose Lingerie Store + 10 stars and confirm Business appears; switch back to an unqualified profile and confirm Business disappears.
-7. Choose the intended settings and Save. The dialog should close promptly and trigger the hidden update.
-8. Verify generated state uses the synced current bonus without inferred capacity double-counting. Useful check:
+1. Confirm the simplified Settings UI shows **Current Xanax capacity** and no longer asks the user to manage faction Peace/War loadouts.
+2. Click **Sync from Torn**. With the same active perks, expected Airstrip capacity is `18` (`15 + 3`).
+3. Before saving, change Airstrip → Standard and confirm the displayed capacity recalculates to `13`; switch back to Airstrip and confirm `18`.
+4. Confirm Sync is populate-only: Cancel/reopen should retain the previously saved values.
+5. Manually choose Lingerie Store + 10 stars and confirm Business appears; switch back to an unqualified profile and confirm Business disappears.
+6. Allow a normal automatic poll after the successful Save and confirm Prometheus/source freshness remains healthy.
+7. Check for new material Rainmeter/PowerShell errors only if behavior suggests a regression.
 
-```powershell
-Get-Content .\@Resources\Generated\state.kv |
-    Select-String '^(TravelMode|ProfileGeneralCapacityBonus|ProfileFactionCapacityBonus|UKCapacity|JPCapacity)='
-```
-
-For the currently validated Airstrip `+3` state, expect the effective capacities to be `18` for UK and Japan and no inferred faction-capacity addition.
-9. Allow a normal automatic poll afterward and confirm Prometheus/source freshness remains healthy.
-10. Check for new material Rainmeter/PowerShell errors only if behavior suggests a regression.
+The generated-state capacity/economics check has already passed and should not be repeated unless a later change touches that path.
 
 ## Completion criteria
 
-Mark **COMPLETED** only when the live Settings sync/recalculation/save/Business-gating checks above pass and the next normal automatic poll remains healthy.
+Mark **COMPLETED** only when the live Settings sync/recalculation/Business-gating/populate-only checks above pass and the next normal automatic poll remains healthy.
