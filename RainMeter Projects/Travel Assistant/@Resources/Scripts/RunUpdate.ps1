@@ -9,11 +9,13 @@ Set-StrictMode -Version 2.0
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
+$ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
+$ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
@@ -161,6 +163,16 @@ function Write-LocalCatalogFailure {
     } catch { }
 }
 
+function Write-ResaleQueueFailure {
+    param([string]$Message)
+    try {
+        New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+        $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
+        if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
+        [System.IO.File]::WriteAllText($ResaleQueueErrorFile, $clean, [System.Text.UTF8Encoding]::new($false))
+    } catch { }
+}
+
 try {
     # Rainmeter can fire an initial refresh and a scheduled poll close together.
     # Skip a redundant overlapping run instead of creating concurrent network,
@@ -202,9 +214,34 @@ try {
     & $Finalizer
     if (-not $?) { exit 1 }
 
-    # Write a tiny local heartbeat only after the serialized production pass
-    # completes. Rainmeter uses this to make polling health visible.
+    # Write the visible heartbeat as soon as the established production pass is
+    # complete. Broad resale population is deliberately lower priority and runs
+    # afterward so a bounded market-price miss cannot make the visible skin look
+    # unhealthy.
     Write-UpdateHeartbeat
+
+    # Populate the broad active-item resale cache gradually: at most one bounded
+    # Torn Item Market request per update. Verified catalogActive=false markets
+    # are excluded by ResaleQueue.ps1. The current visible Xanax path keeps its
+    # existing independent/fresher resale behavior.
+    if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
+        try {
+            & $ResaleQueue
+            if (Test-Path -LiteralPath $ResaleQueueErrorFile) {
+                # ResaleQueue.ps1 owns diagnostic persistence for handled API
+                # failures. Remove only an obsolete wrapper-level failure file
+                # when the queue state itself is no longer reporting an error.
+                try {
+                    $queueState = Get-Content -LiteralPath (Join-Path $RuntimeDir 'engine-state.json') -Raw | ConvertFrom-Json
+                    if ($queueState.PSObject.Properties['resaleQueue'] -and [string]$queueState.resaleQueue.status -ne 'ERROR') {
+                        Remove-Item -LiteralPath $ResaleQueueErrorFile -Force -ErrorAction SilentlyContinue
+                    }
+                } catch { }
+            }
+        } catch {
+            Write-ResaleQueueFailure -Message $_.Exception.Message
+        }
+    }
 
     exit 0
 } finally {
