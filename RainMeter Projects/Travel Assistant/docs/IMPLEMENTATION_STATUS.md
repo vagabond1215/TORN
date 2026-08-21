@@ -21,7 +21,22 @@ Data-layer expansion must not change this visible behavior until a later explici
 
 All 11 Torn foreign destinations collect in the background while only UK/Japan remain visible/model-enabled.
 
-Focused Windows tests reported PASS:
+Accepted live baseline:
+
+```text
+lastProvider:         prometheus
+countriesSeen:        11
+marketsSeen:          232
+observedMarkets:      232
+observationsWritten:  51 on the forced acceptance pass
+lastError:            empty
+```
+
+History identity remains `country + itemId`, primary UK/Japan Xanax writes are protected from shadow duplication, and raw history is written only for stock/foreign-price changes.
+
+## Provider-name enrichment — ACCEPTED
+
+Target Windows passed:
 
 ```text
 Validate-ShadowCollection.ps1
@@ -29,20 +44,14 @@ Run-ShadowCollectionTests.ps1
 Validate-RainmeterSkin.ps1
 ```
 
-Accepted live forced shadow pass:
+A subsequent forced live pass reported:
 
 ```text
-lastProvider:         prometheus
-countriesSeen:        11
-marketsSeen:          232
-observedMarkets:      232
-observationsWritten:  51
-cyclesCompleted:      0
-lastErrorAt:          0
-lastError:            empty
+Observed markets: 232
+Markets with provider names: 232
 ```
 
-Shadow collection remains fail-soft, skips UK/Japan Xanax primary writes, and records raw history only when stock or foreign price changes.
+Provider names are now accepted discovery/cross-check metadata for the whole currently observed market. They do not replace item IDs as durable identity and they do not determine category/economics by themselves.
 
 ## Torn catalog transport — REJECTED FOR HEARTBEAT USE
 
@@ -54,30 +63,11 @@ v2 /torn/{ids}/items |  40 IDs | 30s | 0 resolved
 classic torn/items    | bulk   | 12s | 0 resolved
 ```
 
-Do not keep increasing these timeouts inside the live skin.
-
-`ItemMetadata.ps1` is now manual/maintenance-only. Normal runtime is:
-
-```text
-UpdateTracker
-ShadowCollector
-FinalizeState
-heartbeat
-```
-
-so catalog network latency cannot delay the Rainmeter heartbeat.
+`ItemMetadata.ps1` remains manual/maintenance-only. Catalog network latency must not delay the skin.
 
 ## Committed metadata fallback — ACCEPTED
 
-Target Windows passed:
-
-```text
-Validate-ItemMetadata.ps1
-Run-ItemMetadataTests.ps1
-Validate-RainmeterSkin.ps1
-```
-
-Runtime fallback metadata was confirmed:
+Target Windows validated and confirmed:
 
 ```text
 206 Xanax          Drug     config_seed
@@ -85,57 +75,95 @@ Runtime fallback metadata was confirmed:
 277 Cherry Blossom Flower   config_seed
 ```
 
-Seed metadata intentionally keeps market value/tradability unknown unless richer metadata is available. A failed optional Torn maintenance attempt must not erase these committed rows.
+Seed metadata intentionally keeps market value/tradability unknown unless richer metadata exists.
 
-## Provider-name enrichment — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+## Local offline catalog — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-The shadow collector now retains provider-supplied item names when present:
-
-```text
-normalized observation -> itemName
-observedMarkets entry  -> providerName
-```
-
-This is discovery/display metadata only. History/model identity remains `country + itemId` and the current visibility/optimizer flags are unchanged.
-
-Focused tests were updated:
+New:
 
 ```text
-tests/Validate-ShadowCollection.ps1
-tests/Run-ShadowCollectionTests.ps1
+@Resources/Scripts/LocalCatalog.ps1
+tests/Validate-LocalCatalog.ps1
+tests/Run-LocalCatalogTests.ps1
 ```
 
-Required Windows acceptance:
-
-1. rerun those two focused checks plus `Validate-RainmeterSkin.ps1`;
-2. force one shadow pass;
-3. confirm the observed-market count remains healthy and provider names populate for a substantial portion of the catalog;
-4. confirm Nessie/Cherry names when those rows are present;
-5. confirm no shadow error/current UI regression.
-
-## Active next goal: offline full catalog
-
-The local/package-shipped catalog should ultimately cover every provider-observed item ID with:
+`RunUpdate.ps1` now serializes:
 
 ```text
-itemId
-name
-category
-categoryResolved
-provenance
+UpdateTracker
+ShadowCollector (fail-soft)
+LocalCatalog (fail-soft / local only)
+FinalizeState
+heartbeat
 ```
 
-Provider names may be used as discovery/cross-check evidence. Categories must come from verified metadata and remain unresolved when evidence is insufficient; do not guess merely to enable filters or optimization.
+`LocalCatalog.ps1` performs **no network access**. It collapses the provider-observed market table by `itemId`, retains provider names/country membership, and builds `engine-state.json -> itemMetadata` for every distinct observed item.
 
-This catalog should be committed and included in the future `.rmskin`, so recipients do not depend on a successful Torn catalog response for basic item identity/category data.
+Current category policy:
+
+- committed items use their verified `config/items.json` name/category with `source=config_seed` and `categoryResolved=true`;
+- unclassified provider-observed items use their provider name with `source=provider_name`, `category=Unknown`, `categoryResolved=false`;
+- multiple provider names for one item ID are retained as `nameConflict=true` instead of silently choosing a new identity;
+- richer manually acquired `source=torn_items_bulk` rows are preserved and only augmented with provider/country context.
+
+A deterministic SHA-256 signature prevents needless runtime-state rewrites when provider names/country membership and committed seed metadata have not changed.
+
+Runtime health is stored under:
+
+```text
+engine-state.json -> localCatalog
+```
+
+with:
+
+```text
+signature
+lastBuildAt
+observedItems
+metadataItems
+categoriesResolved
+unresolvedItems
+nameConflicts
+```
+
+## Remaining acceptance for local catalog
+
+Run on target Windows:
+
+```text
+Validate-LocalCatalog.ps1
+Run-LocalCatalogTests.ps1
+Validate-RainmeterSkin.ps1
+```
+
+Then run `LocalCatalog.ps1` once and inspect `localCatalog` plus `itemMetadata`.
+
+Expected current scale:
+
+```text
+observedItems:      ~202
+metadataItems:      >= observedItems
+categoriesResolved: >= 3
+nameConflicts:      ideally 0
+```
+
+No network call should occur during that test.
+
+## Active next goal: verified offline categories
+
+After local-catalog acceptance, add verified category overrides for the remaining observed IDs using static/offline Torn-derived evidence. The official Torn Wiki item taxonomy currently documents the relevant categories, including Alcohol, Artifact, Clothing, Defensive, Drug, Enhancer, Flower, Medical, Melee, Other, Plushie, Primary, Secondary, Temporary, plus Tool and Material classifications.
+
+Never infer category purely from item naming. Every observed item should eventually be resolved or explicitly left unresolved with provenance retained.
+
+The resulting catalog must be suitable for inclusion in the eventual `.rmskin`, so recipients do not need Torn catalog access just to know item names/categories.
 
 ## Distribution work
 
-A whitelist-based `Build-Rmskin.ps1` and distribution validation exist for future sharing. Package staging excludes local API settings, runtime history/state, generated output and credentials. Recipient-local settings are intended to survive package upgrades via Rainmeter skin merge semantics. Windows package-builder validation remains outstanding before publication.
+A whitelist-based `.rmskin` package-builder path exists for future sharing. Distribution must exclude local API settings, runtime history/state, generated output and credentials. Recipient-local settings should survive package upgrades. Windows package-builder validation remains outstanding before publication.
 
 ## Later phases
 
-After the offline catalog is sufficiently complete:
+After offline categories are sufficiently complete:
 
 1. bounded/staggered Item Market resale-price queue;
 2. category-aware effective carrying capacity;
