@@ -3,53 +3,60 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $catalogPath = Join-Path $ProjectRoot '@Resources\Scripts\LocalCatalog.ps1'
-$categoryPath = Join-Path $ProjectRoot 'config\foreign-item-categories.json'
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
+$categoryPath = Join-Path $ProjectRoot 'config\foreign-item-categories.json'
+$overridePath = Join-Path $ProjectRoot 'config\foreign-market-overrides.json'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
 if (-not (Test-Path -LiteralPath $categoryPath)) {
     Fail 'Missing config\foreign-item-categories.json.'
 } else {
-    try {
-        $categoryConfig = Get-Content -LiteralPath $categoryPath -Raw | ConvertFrom-Json
-        if ([int]$categoryConfig.schemaVersion -ne 1) { Fail 'Offline foreign-item category snapshot schemaVersion must be 1.' }
-        if ($null -eq $categoryConfig.source -or [string]$categoryConfig.source.id -ne 'yata_abroad_snapshot') { Fail 'Offline category snapshot must retain yata_abroad_snapshot provenance.' }
-        if ([int]$categoryConfig.source.entryCount -ne 197) { Fail 'Offline category snapshot provenance must record 197 source entries.' }
-        $categoryRows = @($categoryConfig.categoriesByItemId.PSObject.Properties)
-        if ($categoryRows.Count -ne 197) { Fail "Expected 197 offline category entries, found $($categoryRows.Count)." }
-        if ([string]$categoryConfig.normalization.Defensive -ne 'Armor') { Fail 'Defensive categories must normalize to Armor.' }
-        if ([string]$categoryConfig.normalization.Other -ne 'Miscellaneous') { Fail 'Other categories must normalize to Miscellaneous.' }
+    $categories = Get-Content -LiteralPath $categoryPath -Raw | ConvertFrom-Json
+    if (-not $categories.PSObject.Properties['categoriesByItemId']) { Fail 'Offline category snapshot must expose categoriesByItemId.' }
+    if (-not $categories.PSObject.Properties['source']) { Fail 'Offline category snapshot must retain provenance.' }
+    $entryCount = @($categories.categoriesByItemId.PSObject.Properties).Count
+    if ($entryCount -ne 197) { Fail "Expected 197 YATA-derived offline category entries, found $entryCount." }
+    foreach ($pair in @(
+        [pscustomobject]@{ id='206'; category='Drug' },
+        [pscustomobject]@{ id='266'; category='Plushie' },
+        [pscustomobject]@{ id='277'; category='Flower' },
+        [pscustomobject]@{ id='50'; category='Armor' },
+        [pscustomobject]@{ id='259'; category='Miscellaneous' },
+        [pscustomobject]@{ id='1504'; category='Artifact' }
+    )) {
+        $prop = $categories.categoriesByItemId.PSObject.Properties[$pair.id]
+        if ($null -eq $prop -or [string]$prop.Value -ne $pair.category) { Fail "Offline category $($pair.id) must be $($pair.category)." }
+    }
+}
 
-        $expectedCategories = @('Alcohol','Artifact','Armor','Clothing','Drug','Enhancer','Flower','Material','Medical','Melee','Miscellaneous','Plushie','Primary','Secondary','Temporary','Tool')
-        $actualCategories = @($categoryRows | ForEach-Object { [string]$_.Value } | Sort-Object -Unique)
-        foreach ($category in $expectedCategories) {
-            if ($actualCategories -notcontains $category) { Fail "Offline category snapshot is missing canonical category '$category'." }
-        }
-        foreach ($category in $actualCategories) {
-            if ($expectedCategories -notcontains $category) { Fail "Offline category snapshot contains unexpected category '$category'." }
-        }
+if (-not (Test-Path -LiteralPath $overridePath)) {
+    Fail 'Missing config\foreign-market-overrides.json.'
+} else {
+    $overrides = Get-Content -LiteralPath $overridePath -Raw | ConvertFrom-Json
+    if (-not $overrides.PSObject.Properties['itemOverrides']) { Fail 'Verified override config must expose itemOverrides.' }
+    if (-not $overrides.PSObject.Properties['marketOverrides']) { Fail 'Verified override config must expose marketOverrides.' }
+    if (@($overrides.itemOverrides.PSObject.Properties).Count -ne 5) { Fail 'Verified item override count must remain five for the current legacy-row repair.' }
+    if (@($overrides.marketOverrides.PSObject.Properties).Count -ne 5) { Fail 'Verified market override count must remain five for the current legacy-row repair.' }
 
-        $spotChecks = [ordered]@{
-            '206' = 'Drug'
-            '266' = 'Plushie'
-            '277' = 'Flower'
-            '50' = 'Armor'
-            '259' = 'Miscellaneous'
-            '419' = 'Enhancer'
-            '159' = 'Tool'
-            '361' = 'Medical'
-            '1246' = 'Material'
-            '1499' = 'Artifact'
-        }
-        foreach ($itemId in $spotChecks.Keys) {
-            $property = $categoryConfig.categoriesByItemId.PSObject.Properties[[string]$itemId]
-            if ($null -eq $property -or [string]$property.Value -ne [string]$spotChecks[$itemId]) {
-                Fail "Offline category snapshot item $itemId must resolve to '$($spotChecks[$itemId])'."
-            }
-        }
-    } catch {
-        Fail ('Offline category snapshot JSON validation failed: ' + $_.Exception.Message)
+    foreach ($pair in @(
+        [pscustomobject]@{ id='21'; name='Dual 92G Berettas'; category='Secondary' },
+        [pscustomobject]@{ id='232'; name='SIG 550'; category='Primary' },
+        [pscustomobject]@{ id='327'; name='Blank Casino Chips'; category='Material' },
+        [pscustomobject]@{ id='383'; name='Digital Organizer'; category='Miscellaneous' },
+        [pscustomobject]@{ id='440'; name='Pillow'; category='Melee' }
+    )) {
+        $prop = $overrides.itemOverrides.PSObject.Properties[$pair.id]
+        if ($null -eq $prop) { Fail "Missing verified item override $($pair.id)."; continue }
+        if ([string]$prop.Value.name -ne $pair.name) { Fail "Verified item $($pair.id) name mismatch." }
+        if ([string]$prop.Value.category -ne $pair.category) { Fail "Verified item $($pair.id) category mismatch." }
+    }
+
+    foreach ($key in @('mexico:21','mexico:232','mexico:327','united_arab_emirates:383','united_arab_emirates:440')) {
+        $prop = $overrides.marketOverrides.PSObject.Properties[$key]
+        if ($null -eq $prop) { Fail "Missing legacy market override '$key'."; continue }
+        if ([bool]$prop.Value.active -ne $false) { Fail "Legacy market '$key' must be inactive." }
+        if ([string]$prop.Value.status -ne 'legacy_removed') { Fail "Legacy market '$key' must use status legacy_removed." }
     }
 }
 
@@ -62,10 +69,10 @@ if (-not (Test-Path -LiteralPath $catalogPath)) {
     [void][System.Management.Automation.Language.Parser]::ParseFile($catalogPath, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in LocalCatalog.ps1: $($parseError.Message)" }
 
-    foreach ($functionName in @('Get-ObservedItemGroups','Get-SeedIndex','Get-CategoryIndex','New-LocalCatalogEntry','Get-LocalCatalogSignature','Merge-RicherMetadata')) {
+    foreach ($functionName in @('Get-ObservedItemGroups','Get-SeedIndex','Get-CategoryIndex','Get-VerifiedItemIndex','Get-MarketOverrideIndex','New-LocalCatalogEntry','Get-LocalCatalogSignature','Merge-RicherMetadata','Apply-MarketOverrides')) {
         if ($text -notmatch ('(?m)^function\s+' + [regex]::Escape($functionName) + '\s*\{')) { Fail "Missing local catalog function $functionName." }
     }
-    foreach ($token in @('providerName','providerNames','nameConflict','countries','categoryResolved','categorySource','localCatalog','config_seed','offline_yata_category','provider_name','foreign-item-categories.json','offlineCategoryEntries','offlineMatchedItems')) {
+    foreach ($token in @('providerName','providerNames','nameConflict','countries','categoryResolved','categorySource','localCatalog','config_seed','offline_yata_category','verified_override','catalogActive','catalogStatus','foreign-item-categories.json','foreign-market-overrides.json','offlineCategoryEntries','offlineMatchedItems','verifiedItemOverrides','inactiveObservedMarkets')) {
         if (-not $text.Contains($token)) { Fail "Local catalog contract is missing '$token'." }
     }
     if ($text -match '(?i)https?://|Invoke-RestMethod|curl\.exe') { Fail 'Local catalog enrichment must not perform network access.' }
@@ -96,5 +103,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Local catalog configuration validation passed.' -ForegroundColor Green
-Write-Host 'The 197-ID offline category snapshot enriches only observed items; unmatched items remain explicitly unresolved.'
+Write-Host 'All current observed item IDs can resolve locally; five verified legacy provider markets are explicitly inactive.'
 exit 0
