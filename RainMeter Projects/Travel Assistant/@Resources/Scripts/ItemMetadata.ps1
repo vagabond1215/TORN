@@ -1,6 +1,6 @@
 param(
     [int]$RefreshIntervalSeconds = 21600,
-    [int]$MaxIdsPerRequest = 150,
+    [int]$MaxIdsPerRequest = 40,
     [switch]$Force
 )
 
@@ -109,8 +109,8 @@ function Get-ObservedItemIds {
 }
 
 function Split-ItemIds {
-    param([int[]]$ItemIds, [int]$Maximum = 150)
-    if ($Maximum -lt 1) { $Maximum = 150 }
+    param([int[]]$ItemIds, [int]$Maximum = 40)
+    if ($Maximum -lt 1) { $Maximum = 40 }
     $chunks = New-Object System.Collections.Generic.List[object]
     $current = New-Object System.Collections.Generic.List[int]
     foreach ($id in @($ItemIds)) {
@@ -180,13 +180,13 @@ function Convert-TornItemMetadata {
 }
 
 function Invoke-TornItemsJsonWithCurl {
-    param([int[]]$ItemIds, [string]$ApiKey, [int]$TimeoutSec = 20)
+    param([int[]]$ItemIds, [string]$ApiKey, [int]$TimeoutSec = 30)
     if ($null -eq $ItemIds -or $ItemIds.Count -eq 0) { return $null }
     if ([string]::IsNullOrWhiteSpace($ApiKey)) { throw 'A local Torn API key is required for item metadata enrichment.' }
 
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($null -eq $curl) { throw 'curl.exe is required for Torn item metadata requests on this Windows environment.' }
-    if ($TimeoutSec -lt 1) { $TimeoutSec = 20 }
+    if ($TimeoutSec -lt 1) { $TimeoutSec = 30 }
     $connectTimeout = [Math]::Min(5, $TimeoutSec)
     $ids = (@($ItemIds | ForEach-Object { [int]$_ }) -join ',')
     $uri = "https://api.torn.com/v2/torn/$ids/items?sort=ASC"
@@ -233,19 +233,33 @@ function Invoke-TornItemsJsonWithCurl {
     }
 }
 
+function Get-MetadataCategories {
+    param([object]$EngineState)
+    $categories = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($property in @($EngineState.itemMetadata.PSObject.Properties)) {
+        $entry = $property.Value
+        if ($null -ne $entry -and $entry.PSObject.Properties['category'] -and -not [string]::IsNullOrWhiteSpace([string]$entry.category)) {
+            [void]$categories.Add([string]$entry.category)
+        }
+    }
+    return @($categories | Sort-Object)
+}
+
 function Write-MetadataError {
     param([object]$EngineState, [long]$Now, [string]$Message)
     $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
     if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
     $EngineState.metadataCollection.lastAttemptAt = $Now
+    $EngineState.metadataCollection.itemsResolved = @($EngineState.itemMetadata.PSObject.Properties).Count
+    $EngineState.metadataCollection.categories = @(Get-MetadataCategories -EngineState $EngineState)
     $EngineState.metadataCollection.lastErrorAt = $Now
     $EngineState.metadataCollection.lastError = $clean
     try { [System.IO.File]::WriteAllText($ErrorFile, $clean, [System.Text.UTF8Encoding]::new($false)) } catch { }
 }
 
 if ($RefreshIntervalSeconds -lt 3600) { $RefreshIntervalSeconds = 3600 }
-if ($MaxIdsPerRequest -lt 1) { $MaxIdsPerRequest = 150 }
-if ($MaxIdsPerRequest -gt 250) { $MaxIdsPerRequest = 250 }
+if ($MaxIdsPerRequest -lt 1) { $MaxIdsPerRequest = 40 }
+if ($MaxIdsPerRequest -gt 100) { $MaxIdsPerRequest = 100 }
 
 $now = Get-NowEpoch
 $engineState = Get-EngineState
@@ -258,6 +272,8 @@ if (-not $Force -and $lastAttemptAt -gt 0 -and ($now - $lastAttemptAt) -lt $Refr
 
 $engineState.metadataCollection.lastAttemptAt = $now
 $engineState.metadataCollection.distinctObservedItems = $itemIds.Count
+$engineState.metadataCollection.itemsRequested = 0
+$engineState.metadataCollection.itemsResolved = @($engineState.itemMetadata.PSObject.Properties).Count
 $apiKey = Get-ApiKey
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
     Write-MetadataError -EngineState $engineState -Now $now -Message 'No local Torn API key is available for public item metadata enrichment.'
@@ -267,20 +283,25 @@ if ([string]::IsNullOrWhiteSpace($apiKey)) {
 
 try {
     $requested = 0
-    $resolved = 0
-    $categories = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($batch in @(Split-ItemIds -ItemIds ([int[]]$itemIds) -Maximum $MaxIdsPerRequest)) {
         $chunk = [int[]]$batch.ids
         $requested += $chunk.Count
-        $payload = Invoke-TornItemsJsonWithCurl -ItemIds $chunk -ApiKey $apiKey -TimeoutSec 20
+        $engineState.metadataCollection.itemsRequested = $requested
+
+        $payload = Invoke-TornItemsJsonWithCurl -ItemIds $chunk -ApiKey $apiKey -TimeoutSec 30
         if ($null -eq $payload -or -not $payload.PSObject.Properties['items']) { throw 'Torn item metadata response does not contain items.' }
         foreach ($item in @($payload.items)) {
             $metadata = Convert-TornItemMetadata -Item $item -Now $now
             if ($null -eq $metadata) { continue }
             Set-DynamicProperty $engineState.itemMetadata ([string]$metadata.itemId) $metadata
-            if (-not [string]::IsNullOrWhiteSpace([string]$metadata.category)) { [void]$categories.Add([string]$metadata.category) }
-            $resolved++
         }
+
+        # Checkpoint after each successful batch. A later timeout must not erase
+        # canonical metadata already returned by Torn during this attempt.
+        $engineState.metadataCollection.source = 'torn_items'
+        $engineState.metadataCollection.itemsResolved = @($engineState.itemMetadata.PSObject.Properties).Count
+        $engineState.metadataCollection.categories = @(Get-MetadataCategories -EngineState $engineState)
+        Write-JsonAtomic -Path $EngineStateFile -Value $engineState
     }
 
     $engineState.metadataCollection.lastRefreshAt = $now
@@ -288,8 +309,8 @@ try {
     $engineState.metadataCollection.source = 'torn_items'
     $engineState.metadataCollection.distinctObservedItems = $itemIds.Count
     $engineState.metadataCollection.itemsRequested = $requested
-    $engineState.metadataCollection.itemsResolved = $resolved
-    $engineState.metadataCollection.categories = @($categories | Sort-Object)
+    $engineState.metadataCollection.itemsResolved = @($engineState.itemMetadata.PSObject.Properties).Count
+    $engineState.metadataCollection.categories = @(Get-MetadataCategories -EngineState $engineState)
     $engineState.metadataCollection.lastErrorAt = 0
     $engineState.metadataCollection.lastError = ''
     if (Test-Path -LiteralPath $ErrorFile) { Remove-Item -LiteralPath $ErrorFile -Force -ErrorAction SilentlyContinue }
