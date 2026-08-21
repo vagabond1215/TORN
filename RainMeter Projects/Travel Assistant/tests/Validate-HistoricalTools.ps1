@@ -48,7 +48,7 @@ function Read-JsonLines {
         try { $rows.Add(($line | ConvertFrom-Json)) }
         catch { Fail "Invalid JSONL in $Path line ${lineNumber}: $($_.Exception.Message)" }
     }
-    return @($rows)
+    return $rows.ToArray()
 }
 
 $observations = @(Read-JsonLines -Path $observationPath)
