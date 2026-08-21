@@ -174,11 +174,17 @@ function Get-LiveStockObservationsForCountry {
         $foreignPrice = [long]$row.cost
         if ($itemId -le 0 -or $stock -lt 0 -or $foreignPrice -lt 0) { continue }
 
+        $itemName = ''
+        if ($row.PSObject.Properties['name'] -and -not [string]::IsNullOrWhiteSpace([string]$row.name)) {
+            $itemName = [string]$row.name
+        }
+
         $rows.Add([pscustomobject]@{
             schemaVersion = 1
             timestamp = [long]$timestamp
             country = [string]$Country.id
             itemId = $itemId
+            itemName = $itemName
             stock = $stock
             foreignPrice = $foreignPrice
             source = $Source
@@ -258,10 +264,16 @@ function Update-ObservedMarketMetadata {
     param([object]$EngineState, [object]$Observation, [long]$Now)
     $key = ([string]$Observation.country) + ':' + ([string]$Observation.itemId)
     $entry = Get-DynamicProperty $EngineState.observedMarkets $key
+    $providerName = ''
+    if ($Observation.PSObject.Properties['itemName'] -and -not [string]::IsNullOrWhiteSpace([string]$Observation.itemName)) {
+        $providerName = [string]$Observation.itemName
+    }
+
     if ($null -eq $entry) {
         $entry = [pscustomobject]@{
             country = [string]$Observation.country
             itemId = [int]$Observation.itemId
+            providerName = $providerName
             firstSeenAt = $Now
             lastSeenAt = $Now
             lastStock = [int]$Observation.stock
@@ -273,6 +285,12 @@ function Update-ObservedMarketMetadata {
         return
     }
 
+    if (-not $entry.PSObject.Properties['providerName']) {
+        $entry | Add-Member NoteProperty providerName ''
+    }
+    if (-not [string]::IsNullOrWhiteSpace($providerName)) {
+        $entry.providerName = $providerName
+    }
     $entry.lastSeenAt = $Now
     $entry.lastStock = [int]$Observation.stock
     $entry.lastForeignPrice = [long]$Observation.foreignPrice
