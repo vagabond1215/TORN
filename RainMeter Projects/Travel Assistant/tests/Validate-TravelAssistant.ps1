@@ -27,9 +27,13 @@ $required = @(
     '@Resources\Scripts\UpdateTracker.ps1',
     '@Resources\Scripts\FinalizeState.ps1',
     '@Resources\Scripts\TravelProfile.ps1',
+    '@Resources\Scripts\TornProfileSync.ps1',
     '@Resources\Scripts\OpenSettings.ps1',
     '@Resources\Scripts\StateReader.lua',
     'tests\Run-ModelTests.ps1',
+    'tests\Run-LiveProviderTests.ps1',
+    'tests\Run-TravelProfileTests.ps1',
+    'tests\Run-TornProfileSyncTests.ps1',
     'tests\Run-FinalizeStateTests.ps1',
     'tests\Run-RestockDisplayTests.ps1',
     'tests\Validate-RainmeterSkin.ps1'
@@ -105,6 +109,14 @@ if ($null -ne $perks) {
         if (@($perks.companies | Where-Object { [string]$_.id -eq $companyId }).Count -ne 1) {
             Fail "travel-perks.json must contain company '$companyId'."
         }
+    }
+    $mappedCompanyTypes = @($perks.companies | Where-Object { $_.PSObject.Properties['tornCompanyTypeId'] -and $null -ne $_.tornCompanyTypeId })
+    $mappedIds = @($mappedCompanyTypes | ForEach-Object { [int]$_.tornCompanyTypeId })
+    if (@($mappedIds | Select-Object -Unique).Count -ne $mappedIds.Count) {
+        Fail 'travel-perks.json Torn company type IDs must be unique.'
+    }
+    foreach ($company in $mappedCompanyTypes) {
+        if ([int]$company.tornCompanyTypeId -le 0) { Fail "Invalid Torn company type ID for $([string]$company.id)." }
     }
     $lingerie = @($perks.companies | Where-Object { [string]$_.id -eq 'lingerie_store' } | Select-Object -First 1)
     if ($lingerie.Count -eq 1) {
@@ -182,13 +194,18 @@ $scriptFiles = @(
     '@Resources\Scripts\UpdateTracker.ps1',
     '@Resources\Scripts\FinalizeState.ps1',
     '@Resources\Scripts\TravelProfile.ps1',
+    '@Resources\Scripts\TornProfileSync.ps1',
     '@Resources\Scripts\OpenSettings.ps1',
+    'tools\Probe-TornTravelProfile.ps1',
     'tests\Validate-TravelAssistant.ps1',
     'tests\Validate-RainmeterSkin.ps1',
     'tests\Validate-HistoricalTools.ps1',
     'tests\Run-HistoricalPipelineTests.ps1',
     'tests\Run-SeedImporterTests.ps1',
     'tests\Run-ModelTests.ps1',
+    'tests\Run-LiveProviderTests.ps1',
+    'tests\Run-TravelProfileTests.ps1',
+    'tests\Run-TornProfileSyncTests.ps1',
     'tests\Run-FinalizeStateTests.ps1',
     'tests\Run-RestockDisplayTests.ps1',
     'tests\Run-All.ps1',
