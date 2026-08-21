@@ -7,7 +7,11 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
+$ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
@@ -135,6 +139,16 @@ function Write-UpdateHeartbeat {
     Move-Item -LiteralPath $tmp -Destination $HeartbeatFile -Force
 }
 
+function Write-ShadowFailure {
+    param([string]$Message)
+    try {
+        New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+        $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
+        if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
+        [System.IO.File]::WriteAllText($ShadowErrorFile, $clean, [System.Text.UTF8Encoding]::new($false))
+    } catch { }
+}
+
 try {
     # Rainmeter can fire an initial refresh and a scheduled poll close together.
     # Skip a redundant overlapping run instead of creating concurrent network,
@@ -142,12 +156,21 @@ try {
     $acquired = $mutex.WaitOne(0)
     if (-not $acquired) { exit 0 }
 
-    # UpdateTracker.ps1 owns live collection/history/model generation.
-    # FinalizeState.ps1 then applies independent restock-display, resale-freshness,
-    # and trip-economics guards without making another network request.
+    # UpdateTracker.ps1 owns the existing visible Xanax collection/history/model
+    # generation. Keep that stable path first.
     & $Updater -Action $Action
     if (-not $?) { exit 1 }
 
+    # Shadow collection is deliberately fail-soft. It starts the history clock
+    # for every observed foreign-market row across all configured collection
+    # countries, but it must never block the established Xanax UI/finalizer.
+    if (Test-Path -LiteralPath $ShadowCollector) {
+        try { & $ShadowCollector }
+        catch { Write-ShadowFailure -Message $_.Exception.Message }
+    }
+
+    # FinalizeState.ps1 applies independent restock-display, resale-freshness,
+    # and trip-economics guards without making another network request.
     & $Finalizer
     if (-not $?) { exit 1 }
 
