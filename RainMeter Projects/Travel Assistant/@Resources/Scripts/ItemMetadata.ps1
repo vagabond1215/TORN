@@ -117,11 +117,11 @@ function Split-ItemIds {
         if ([int]$id -le 0) { continue }
         $current.Add([int]$id)
         if ($current.Count -ge $Maximum) {
-            $chunks.Add(@($current.ToArray()))
+            $chunks.Add([pscustomobject]@{ ids = [int[]]$current.ToArray() })
             $current = New-Object System.Collections.Generic.List[int]
         }
     }
-    if ($current.Count -gt 0) { $chunks.Add(@($current.ToArray())) }
+    if ($current.Count -gt 0) { $chunks.Add([pscustomobject]@{ ids = [int[]]$current.ToArray() }) }
     return $chunks.ToArray()
 }
 
@@ -210,7 +210,7 @@ function Invoke-TornItemsJsonWithCurl {
         $process.StandardInput.WriteLine(('connect-timeout = {0}' -f $connectTimeout))
         $process.StandardInput.WriteLine(('max-time = {0}' -f $TimeoutSec))
         $process.StandardInput.WriteLine(('url = "{0}"' -f $uri))
-        $process.StandardInput.WriteLine(('header = "Accept: application/json"'))
+        $process.StandardInput.WriteLine('header = "Accept: application/json"')
         $safeKey = $ApiKey.Replace("`r", '').Replace("`n", '').Replace('"', '\"')
         $process.StandardInput.WriteLine(('header = "Authorization: ApiKey {0}"' -f $safeKey))
         $process.StandardInput.Close()
@@ -270,9 +270,10 @@ try {
     $requested = 0
     $resolved = 0
     $categories = New-Object 'System.Collections.Generic.HashSet[string]'
-    foreach ($chunk in @(Split-ItemIds -ItemIds ([int[]]$itemIds) -Maximum $MaxIdsPerRequest)) {
-        $requested += @($chunk).Count
-        $payload = Invoke-TornItemsJsonWithCurl -ItemIds ([int[]]$chunk) -ApiKey $apiKey -TimeoutSec 20
+    foreach ($batch in @(Split-ItemIds -ItemIds ([int[]]$itemIds) -Maximum $MaxIdsPerRequest)) {
+        $chunk = [int[]]$batch.ids
+        $requested += $chunk.Count
+        $payload = Invoke-TornItemsJsonWithCurl -ItemIds $chunk -ApiKey $apiKey -TimeoutSec 20
         if ($null -eq $payload -or -not $payload.PSObject.Properties['items']) { throw 'Torn item metadata response does not contain items.' }
         foreach ($item in @($payload.items)) {
             $metadata = Convert-TornItemMetadata -Item $item -Now $now
