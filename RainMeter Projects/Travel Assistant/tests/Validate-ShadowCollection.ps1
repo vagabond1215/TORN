@@ -93,6 +93,8 @@ if (-not (Test-Path -LiteralPath $collectorPath)) {
         Fail 'Shadow collector default interval must remain 120 seconds for the initial rollout.'
     }
     if (-not $collector.Contains('observedMarkets')) { Fail 'Shadow collector must retain an observed-market catalog in runtime engine state.' }
+    if (-not $collector.Contains('providerName')) { Fail 'Observed-market catalog must retain provider-supplied item names when available.' }
+    if (-not $collector.Contains('itemName')) { Fail 'Normalized shadow rows must carry provider-supplied item names when available.' }
     if (-not $collector.Contains('Test-IsPrimaryMarket')) { Fail 'Shadow collector must protect primary visible markets from duplicate writes.' }
     if (-not $collector.Contains('Get-LiveStockObservationsForCountry')) { Fail 'Shadow collector must normalize every provider row per country.' }
 }
@@ -117,5 +119,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Shadow collection configuration validation passed.' -ForegroundColor Green
-Write-Host '11 countries collect in background; current visible scope remains UK/Japan Xanax.' -ForegroundColor DarkGreen
+Write-Host '11 countries collect in background; provider item names enrich the hidden catalog while current visible scope remains UK/Japan Xanax.' -ForegroundColor DarkGreen
 exit 0
