@@ -102,18 +102,30 @@ Target-Windows deterministic validation on current `main`:
 - `Run-TravelProfileTests.ps1` passed, including current-capacity authority and no-double-counting cases;
 - `Run-CurrentCapacityTests.ps1` passed all parser, enhancer, exclusion, and unresolved-string cases.
 
+### Live generated-state integration
+
+After saving Airstrip with the synced `+3` current bonus, the generated Rainmeter state showed:
+
+```text
+JPCapacity=18
+ProfileFactionCapacityBonus=0
+ProfileGeneralCapacityBonus=3
+TravelMode=airstrip
+UKCapacity=18
+```
+
+This is the required end-to-end proof that final profitability/economics uses the current-capacity authority without inferred faction-capacity double-counting.
+
 ## Remaining completion boundary
 
-Directly validate in Rainmeter:
+The generated-state economics check is complete. Remaining direct Rainmeter interaction checks are:
 
-1. Refresh All and open Settings.
-2. Confirm the simplified form shows **Current Xanax capacity** rather than faction Peace/War loadout controls.
-3. Click `Sync from Torn`; while the same current perks remain active, expect Airstrip capacity `18` (`15 + 3`).
-4. Without saving, change Airstrip → Standard and confirm capacity changes to `13`; switch back to Airstrip and confirm `18`.
-5. Confirm Sync is populate-only: Cancel/reopen must retain the previously saved settings.
-6. Confirm 10-star Lingerie still exposes Business and an unqualified company does not.
-7. Save the intended settings and verify generated state uses the synced current bonus without inferred faction/company-capacity double-counting.
-8. Allow a normal automatic poll afterward and confirm Prometheus/freshness remains healthy.
-9. Confirm no new material Rainmeter/PowerShell errors appear.
+1. Confirm the simplified form shows **Current Xanax capacity** rather than faction Peace/War loadout controls.
+2. Click `Sync from Torn`; while the same current perks remain active, expect Airstrip capacity `18` (`15 + 3`).
+3. Without saving, change Airstrip → Standard and confirm capacity changes to `13`; switch back to Airstrip and confirm `18`.
+4. Confirm Sync is populate-only: Cancel/reopen must retain the previously saved settings.
+5. Confirm 10-star Lingerie still exposes Business and an unqualified company does not.
+6. Allow a normal automatic poll afterward and confirm Prometheus/freshness remains healthy.
+7. Confirm no new material Rainmeter/PowerShell errors appear if behavior suggests a regression.
 
 Only after these interaction checks pass should the active run be marked **COMPLETED**.
