@@ -2,314 +2,227 @@
 
 Rainmeter-based Torn travel decision assistant.
 
-Version 1 focuses on **Xanax in the United Kingdom and Japan**, while the data model and analysis engine remain generic so additional foreign items and destinations can be added later without rewriting the project.
+The main v1 display remains deliberately focused on **Xanax in the United Kingdom and Japan**. The underlying observation, history, travel-mode, profitability, and travel-profile code is generic enough to expand later without rewriting the core model.
 
 ## Current status
 
-**Initial implementation is in the repository; Windows/Rainmeter runtime validation is still required.**
+The core Windows/Rainmeter path has been validated on the target machine:
 
-Implemented so far:
+- skin installation/junction works;
+- UK and Japan panels and graphs render;
+- YATA live stock/foreign prices update automatically;
+- Torn Item Market resale pricing works through the configured local API key;
+- the one-minute updater/heartbeat works from Rainmeter;
+- observed restock/sellout history persists;
+- stale/low-confidence/profitability guards remain conservative;
+- no persistent Travel Assistant PowerShell process or material storage growth was observed.
 
-- dark, vertically stacked UK/Japan Rainmeter skin;
-- default Airstrip travel mode with a clickable Standard → Airstrip → WLT cycle;
-- Business travel mode is configured but intentionally gated until Business Class Ticket / free 10* Lingerie economics are included in profitability checks;
-- structured live stock/foreign-price adapter using YATA;
-- generic observation and completed-cycle persistence;
-- actual restock/sellout transition detection;
-- price-aware comparable-cycle selection;
-- conservative safe-window vs. best-odds departure logic;
-- current-cycle depletion estimate that may shorten, but never extend, a conservative historical window;
-- Torn Item Market resale lookup when a local API key is supplied;
-- two-stage profitability gating: per-item margin first, then final resale-freshness + carrying-capacity + travel-cost trip checks;
-- restock information remains available independently of profitability, including exact live-restock elapsed time when observed;
-- cached local fallback when the live stock provider fails;
-- 24-hour generated stock graphs with restock/sellout markers;
-- bounded runtime retention and ignored local/runtime state;
-- synthetic fixtures, production-function replay tests, final-state/economics tests, historical-pipeline tests, and static validators;
-- non-destructive Rainmeter junction installer;
-- bounded historical-provider probes/adapters, normalized-observation cycle builder, provenance-aware seed importer, and offline history analyzer.
+A new **Settings** interface is now being added and requires a narrow Windows/Rainmeter validation pass before this extension is called complete.
 
-The current implementation remains in learning mode until it has sufficient actual restock/sellout history or a verified historical seed is added. The committed seed is intentionally empty rather than fabricated.
+The active execution scope is in [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md). Read [`AGENTS.md`](./AGENTS.md) before changing anything in this subtree.
 
-The active implementation scope is in [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md). Read [`AGENTS.md`](./AGENTS.md) before changing anything in this subtree.
+## What the assistant answers
 
-## Primary goal
+At a glance:
 
-At a glance, answer:
+> Is the current foreign Xanax opportunity worth taking, and if so, when should I leave with my selected travel mode to maximize the chance that stock remains available when I arrive?
 
-> Is the current foreign Xanax opportunity worth taking, and if so, when should I leave with my selected travel mode to maximize the chance that stock is still available when I arrive?
+The project deliberately prefers **no recommendation** over a recommendation built from stale, low-confidence, economically unresolved, or unprofitable data.
 
-The assistant must prefer **no recommendation** over a confident-looking recommendation built from stale, incomparable, low-confidence, or unprofitable data.
+## Main UI
 
-## Version 1 scope
+The Rainmeter skin displays:
 
-- United Kingdom — Xanax
-- Japan — Xanax
-- Airstrip travel mode by default
-- Runtime-selectable Standard, Airstrip, and WLT travel modes
-- Business travel-time metadata retained for future activation once ticket/free-flight economics are safely modeled
-- Vertically stacked destination panels and graphs
-- 24-hour stock history graph per destination
-- Inline status rows:
-  - `Travel | Leave / Window`
-  - `Restock | Last Sold Out`
-  - `Stock | Foreign Price`
-- Last **actual** sellout, not predicted sellout, in the primary status row
-- Price-aware depletion analysis
-- Historical restock variance analysis
-- Conservative safe-departure windows when historical overlap supports one
-- Best-odds exact departure timing when no conservative window exists
-- Profitability gating: unprofitable or low-margin opportunities do not receive departure recommendations
-- Low-confidence and stale-data warnings
-- Clickable Weav3r fallback for external verification
-- Bounded CPU, memory, network, and disk usage
+- United Kingdom above Japan;
+- travel time and departure/recommendation state;
+- observed/estimated restock information and last **actual** sellout;
+- current stock and foreign purchase price;
+- equal-width 24-hour stock graphs;
+- visible last-successful-update time and next-poll countdown;
+- a top-right **SETTINGS** action;
+- Weav3r Travel Stock as an external verification link for low-confidence/actionable states.
 
-## Display concept
+Travel mode is no longer cycled directly from the main skin. The old click had to run the full updater/finalizer and therefore could take several seconds. Mode selection now belongs in Settings and is applied by the next normal polling pass.
 
-```text
-TRAVEL ASSISTANT                              AIRSTRIP ›
+## Settings interface
 
-UNITED KINGDOM · XANAX
-Travel: 1:46:00       | Leave in: 00:11:24
-Restock: ~1:xx        | Last Sold Out: 12:41
-Stock: 2,143          | Price: $728,000
-[                24-HOUR STOCK GRAPH                ]
-SAFE WINDOW           | Leave before: 00:08:36
+The local Windows Settings dialog edits only ignored/local state. It currently exposes:
 
-JAPAN · XANAX
-Travel: 2:29:00       | Leave in: 00:07:13
-Restock: ~2:xx        | Last Sold Out: 11:52
-Stock: 0              | Price: $742,000
-[                24-HOUR STOCK GRAPH                ]
-BEST ODDS             | historical hit rate shown when useful
-```
+- Torn API key, masked by default;
+- travel mode;
+- travel-related company and star rating;
+- faction Excursion travel-capacity level;
+- faction Travel Cost level;
+- a preview of effective capacity/cost/free-Business effects.
 
-The exact labels are state-driven. The skin does not display a clock; relative countdowns are preferred.
+The API key is stored in ignored `config/settings.local.json`; it is not embedded in `TravelAssistant.ini`, Git history, or the Rainmeter action command line.
 
-When a restock is actually observed and still live, the Restock field can display elapsed live time such as `live +04:12`. If the trip is currently low-margin, that restock information still remains visible while all departure timing is suppressed.
+### Travel modes
 
-## Install from the repository clone
+Normal choices are:
 
-Expected source location:
+- Standard;
+- Airstrip (default);
+- WLT.
+
+Business is **settings-only** and appears only when the local travel profile establishes free Business Class. The currently modeled safe branch is a **10-star Lingerie Store**. Ticket-funded Business travel remains economically unresolved, so forcing Business without that free-travel condition still suppresses departure advice rather than treating a ticket as free.
+
+## Travel-related company profile
+
+`config/travel-perks.json` keeps these effects data-driven. Current settings choices include:
+
+- **Lingerie Store** — 3 stars adds 2 general travel items; 10 stars provides free Business Class travel.
+- **Cruise Line** — 3 stars adds 2 travel items; 7 stars provides a destination stock-analysis special; 10 stars adds 3 more travel items.
+- **Flower Shop** — 7 stars adds 5 flowers abroad; 10 stars provides flower stock analysis.
+- **Toy Shop** — 7 stars adds 5 plushies abroad; 10 stars provides plushie stock analysis.
+- **Logistics Management** — 5 stars allows returning to Torn while hospitalized abroad.
+- **Theater** — 10 stars hides traveling status/destination.
+
+Only effects relevant to the currently enabled item alter economics. In particular, Flower Shop and Toy Shop capacity bonuses are item-specific and **do not increase Xanax capacity**.
+
+## Faction travel profile
+
+The Settings dialog also models the relevant Excursion faction upgrades:
+
+- Travel capacity: +1 item per level, up to +10.
+- Travel cost: -15% travel fees per level, up to -75%.
+
+These local profile inputs affect only final travel economics. They never rewrite observed stock, restock, or sellout history.
+
+A positive `profitability.capacityOverride` remains authoritative if the user intentionally supplies one. Otherwise usable capacity is derived from the selected mode's base capacity plus qualifying company/item/faction bonuses.
+
+## Installation
+
+Expected repository source:
 
 ```text
 C:\Codex\TORN\RainMeter Projects\Travel Assistant\
 ```
 
-From that directory in Windows PowerShell:
+Run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
 ```
 
-The installer:
+The installer creates ignored local/runtime directories and a non-destructive junction under the current user's Rainmeter `Skins` directory. Because the installed skin is a junction to the repository source, later pulls normally require only a Rainmeter refresh, not reinstalling.
 
-1. creates ignored runtime/generated directories;
-2. creates `config/settings.local.json` from the local example if needed;
-3. creates a non-destructive junction under the current user's Rainmeter `Skins` directory pointing back to the repository source.
-
-It will **not** delete or replace an unrelated existing `Travel Assistant` skin directory.
-
-After installation, refresh Rainmeter and load:
+Load:
 
 ```text
 Travel Assistant\TravelAssistant.ini
 ```
 
-## Local API key
+## API key and live sources
 
-The live foreign stock feed does not require a Torn key, so the tracker can begin learning immediately.
+YATA supplies live foreign stock and foreign price without a Torn API key.
 
-Profitability-gated departure recommendations currently require a Torn API key for the resale reference. Put it in ignored:
-
-```text
-config\settings.local.json
-```
-
-or define the environment variable:
+A Torn key enables the Item Market resale reference used by profitability gating. The Settings dialog is now the preferred way to enter it. The existing environment-variable fallback remains:
 
 ```text
 TORN_API_KEY
 ```
 
-Do not commit limited/full-authority keys. Public keys are sufficient for public Item Market data; local configuration remains the default so the repository does not need a committed credential.
+On the validated Windows machine, native Windows PowerShell `Invoke-RestMethod` hung specifically against `api.torn.com`, while `curl.exe` returned immediately. Production Torn Item Market traffic is therefore routed through bounded `curl.exe`; YATA remains on the native request path.
 
-## Profitability behavior
+Never commit a limited/full-authority key.
 
-The initial sell target is the Torn Item Market. The calculation uses the configured Item Market selling fee before determining net profit.
+## Economics and safety
 
-Torn's official Item Market documentation currently specifies a regular 5% sales tax. Bazaar sales do not use that regular Item Market fee, so a future Bazaar sell target must be an explicit mode with its own price source/fee behavior rather than silently sharing Item Market assumptions.
-
-`config/countries.json` records per-destination Standard cash travel cost plus base carrying capacity for Standard/Airstrip/WLT/Business. Airstrip and WLT are explicitly represented as free travel modes.
-
-After the primary recommendation model runs, `FinalizeState.ps1` applies the final trip-level guard:
+The primary model first considers per-item spread/margin. `FinalizeState.ps1` then applies cached resale freshness and final trip economics:
 
 ```text
-net resale = current resale reference after configured selling fee
+net resale = resale reference after configured selling fee
 net profit/item = net resale - foreign purchase price
 trip net = (net profit/item × usable capacity) - travel cost
+required trip profit = max(minimumTotalTripProfit,
+                           minimumProfitPerItem × usable capacity)
 ```
 
-It suppresses timing if:
+Final economics can include:
 
-- the cached resale reference is too old;
-- the trip is negative;
-- the trip does not meet the configured net-profit/margin floors;
-- the selected travel mode has unresolved economics.
+- mode-specific travel cost;
+- user capacity override;
+- general company capacity bonuses;
+- item-specific company capacity bonuses where relevant;
+- faction Excursion capacity;
+- faction travel-fee reduction;
+- zero-cost Business only when free Business Class is explicitly established.
 
-Default behavior uses the conservative base carrying capacity in `countries.json`. A positive local `capacityOverride` can represent the user's actual travel capacity. `minimumTotalTripProfit` can impose a separate whole-trip floor, while `minimumProfitPerItem × capacity` remains the default scaled requirement.
+If an economics/freshness gate fails, Travel Assistant continues collecting useful history and can continue showing restock information, but it clears departure timing.
 
-Business is **disabled in the selector for now**: a Business Class Ticket can be a major trip cost unless the user's company perk makes Business travel free. The project will not issue Business-mode departure advice until that branch is modeled safely.
+## Learning and history
 
-Default settings are configurable in `config/settings.example.json`; personal overrides belong in ignored `config/settings.local.json`.
+The committed seed remains intentionally empty rather than fabricated. Runtime observations are bounded and ignored by Git.
 
-An unprofitable or below-threshold trip still contributes useful stock/restock/depletion history and still may display restock information, but receives **no departure timing recommendation**.
-
-## Decision order
-
-The recommendation pipeline effectively evaluates:
-
-1. Is the stock source current enough to use?
-2. Is the resale reference current enough to support a money-sensitive departure decision?
-3. Is the trip sufficiently profitable after selling fee, carrying capacity, and travel-mode cost?
-4. Is the current foreign-price/depletion regime comparable to useful history?
-5. Is there enough reliable history to recommend anything?
-6. If stock is currently live, does current depletion still support arrival?
-7. Is there a conservative departure interval supported by comparable cycles?
-8. If not, is there a useful best-odds departure point?
-9. Otherwise, show no departure recommendation and direct the user to external verification when appropriate.
-
-Primary reason/status codes remain machine-readable, including:
-
-- `SAFE_WINDOW`
-- `BEST_ODDS`
-- `TOO_EARLY`
-- `WINDOW_CLOSED`
-- `INSUFFICIENT_HISTORY`
-- `PRICE_REGIME_UNVERIFIED`
-- `SOURCE_DISAGREEMENT`
-- `LOW_MARGIN`
-- `UNPROFITABLE`
-- `STALE_DATA`
-- `CHECK_EXTERNAL`
-
-Rainmeter translates these into concise user-facing text.
-
-## Architecture
-
-Keep Rainmeter thin. Data collection, history normalization, cycle detection, statistical analysis, profitability, and recommendation generation belong outside the `.ini` presentation layer.
+The engine learns from actual stock transitions:
 
 ```text
-Providers
-   ↓
-Normalized observations
-   ↓
-History / cycle engine
-   ↓
-Restock + price-aware depletion analytics
-   ↓
-Primary profitability + opportunity engine
-   ↓
-Final restock / resale-freshness / trip-economics guards
-   ↓
-Compact generated state
-   ↓
-Rainmeter UI
+0 -> positive stock = observed restock
+positive stock -> 0 = observed sellout
 ```
 
-Provider-specific logic is isolated so the live source or historical bootstrap can change without rewriting the model or skin.
+Completed cycles retain foreign price, restock/sellout times, availability duration, restock delay, and provenance. Forecasts never populate historical truth fields.
 
-See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the durable data model, [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) for current provider choices, and [`docs/HISTORICAL_BOOTSTRAP.md`](./docs/HISTORICAL_BOOTSTRAP.md) for seed/backfill rules.
+Default targets are roughly:
 
-## Historical data and learning
-
-The project distinguishes **seed data** from **runtime data**.
-
-- `data/seed/` is reserved for a compact, provenance-documented historical bootstrap committed to Git.
-- `data/runtime/` is local, bounded, automatically pruned/compacted, and ignored by Git.
-- High-resolution runtime observations default to roughly 48 hours.
-- Completed cycle summaries default to roughly 90 days.
-- Long-term learning should eventually favor compact aggregates over permanent minute-by-minute logs.
-
-The initial historical seed is empty because no bounded historical source has yet been validated strongly enough to commit as training evidence. The tracker therefore starts conservatively and learns from live observations.
-
-The repository includes:
-
-```text
-tools\Probe-DroqsDb.ps1
-tools\Import-TravelPlannerHistory.ps1
-tools\Build-CyclesFromObservations.ps1
-tools\Import-SeedHistory.ps1
-tools\Analyze-History.ps1
-```
-
-The travel-planner-compatible adapter targets a documented read-only snapshot-history shape (`yata_ts`, `quantity`, `cost`) and is preview-only unless `-ImportToSeed` is explicitly supplied. No deployment host is assumed. A future verified structured backfill can therefore be inspected, normalized, converted to **observed** completed cycles, provenance-checked, and merged into the immutable seed without changing the runtime model.
-
-`Analyze-History.ps1` can inspect accumulated completed cycles by price bucket and UTC restock hour without automatically promoting small/noisy patterns into production rules.
-
-## Price-aware behavior
-
-Foreign price is first-class. Sellout behavior at a very low foreign price is not treated as interchangeable with behavior at a high foreign price.
-
-For a current opportunity, evidence is intended to be weighted in this order:
-
-1. current observed depletion when a restock is already live;
-2. comparable same/near-price historical cycles;
-3. broader destination/item history only at reduced confidence.
-
-The current v1 engine selects a bounded near-price cohort. Further continuous price weighting/pattern detection can be added after real history exists to calibrate against.
+- 48 hours of high-resolution runtime observations;
+- 90 days of compact completed cycles.
 
 ## Performance boundary
 
-The skin is designed to remain lightweight on a continuously running Windows desktop.
-
-- One-second UI updates perform local countdown/string work through a Lua measure.
-- Network/history/model updates default to once per minute.
-- Overlapping updater runs are serialized rather than allowed to race.
-- The final state/economics pass makes no extra web request.
-- Torn resale pricing is cached and is not queried every second.
-- No persistent browser is used.
-- Graphs are two small generated PNGs rather than thousands of Rainmeter meters.
-- Runtime observations/cycles are pruned.
-- Runtime state, generated graphs, logs, provider probes, and credentials are ignored by Git.
-
-Actual CPU/RAM/disk measurements still require a Windows/Rainmeter runtime pass before the project should be called stable.
+- One-second Rainmeter work is local Lua/string/countdown logic only.
+- Network/history/model work normally runs once per minute.
+- Updater executions are serialized.
+- Finalization adds no network request.
+- Settings launches only a short-lived local Windows Forms process while open.
+- Graphs are two small generated PNG files.
+- Runtime/generated state stays ignored and bounded.
 
 ## Validation
 
-Run all connector-authored deterministic/static PowerShell checks with:
+The full deterministic suite is:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-All.ps1
 ```
 
-That suite now includes isolated final-state tests for stale resale suppression, Standard-trip cost/capacity, zero-cost Airstrip, Business economics gating, and restock display independent of profitability.
-
-For the first bounded live Windows/provider/resource pass:
+Travel-profile-specific checks include:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-LiveEnvironment.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-TravelProfileTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-FinalizeStateTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-This deliberately performs only a small number of live requests and one production updater/finalizer pass; it is not a stress loop.
+Repository/static tests do not replace actual Windows/Rainmeter interaction validation. See [`docs/WINDOWS_VALIDATION.md`](./docs/WINDOWS_VALIDATION.md).
 
-Synthetic fixtures under `tests/fixtures/` are not historical/training data.
+## Architecture and documentation
 
-Connector-side repository work must not claim that Windows PowerShell, Rainmeter rendering, live provider access, or resource usage has been validated locally when it has not.
+The high-level path is:
 
-See [`docs/WINDOWS_VALIDATION.md`](./docs/WINDOWS_VALIDATION.md) for the exact local checklist.
+```text
+YATA / Torn provider adapters
+        ↓
+normalized observations
+        ↓
+bounded history + observed cycle detection
+        ↓
+price-aware restock/depletion model
+        ↓
+primary opportunity/profitability gate
+        ↓
+travel-profile + final trip-economics guards
+        ↓
+compact generated state
+        ↓
+Rainmeter UI
+```
 
-## Documentation routing
+Read:
 
-Read in this order before implementation work:
-
-1. [`AGENTS.md`](./AGENTS.md) — subtree rules and invariants.
-2. [`docs/README.md`](./docs/README.md) — documentation map and precedence.
-3. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md) — authoritative active implementation pass.
-4. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — durable architecture and expansion design.
-5. [`docs/IMPLEMENTATION_STATUS.md`](./docs/IMPLEMENTATION_STATUS.md) — current checkpoint and runtime boundary.
-6. [`docs/PROVIDER_DISCOVERY.md`](./docs/PROVIDER_DISCOVERY.md) — provider-specific decisions and unresolved discovery.
-7. [`docs/HISTORICAL_BOOTSTRAP.md`](./docs/HISTORICAL_BOOTSTRAP.md) — historical seed/provenance workflow.
-8. [`docs/WINDOWS_VALIDATION.md`](./docs/WINDOWS_VALIDATION.md) — required local runtime validation.
-
-Keep these documents synchronized when architecture or execution policy changes.
+1. [`AGENTS.md`](./AGENTS.md)
+2. [`docs/NEXT_CODEX_RUN.md`](./docs/NEXT_CODEX_RUN.md)
+3. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
+4. [`docs/IMPLEMENTATION_STATUS.md`](./docs/IMPLEMENTATION_STATUS.md)
+5. [`docs/WINDOWS_VALIDATION.md`](./docs/WINDOWS_VALIDATION.md)
