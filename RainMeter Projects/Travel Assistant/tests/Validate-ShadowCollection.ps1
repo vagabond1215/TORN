@@ -7,11 +7,13 @@ function Fail([string]$Message) { $script:errors.Add($Message) }
 
 $itemsPath = Join-Path $ProjectRoot 'config\items.json'
 $countriesPath = Join-Path $ProjectRoot 'config\countries.json'
+$overridePath = Join-Path $ProjectRoot 'config\foreign-market-overrides.json'
 $collectorPath = Join-Path $ProjectRoot '@Resources\Scripts\ShadowCollector.ps1'
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 
 $items = Get-Content -LiteralPath $itemsPath -Raw | ConvertFrom-Json
 $countries = Get-Content -LiteralPath $countriesPath -Raw | ConvertFrom-Json
+$overrides = if (Test-Path -LiteralPath $overridePath) { Get-Content -LiteralPath $overridePath -Raw | ConvertFrom-Json } else { $null }
 
 $expectedCodes = [ordered]@{
     mexico = 'mex'
@@ -85,6 +87,16 @@ foreach ($expected in $itemExpectations) {
     }
 }
 
+if ($null -eq $overrides -or -not $overrides.PSObject.Properties['marketOverrides']) {
+    Fail 'Verified foreign-market overrides must be present.'
+} else {
+    foreach ($key in @('mexico:21','mexico:232','mexico:327','united_arab_emirates:383','united_arab_emirates:440')) {
+        $prop = $overrides.marketOverrides.PSObject.Properties[$key]
+        if ($null -eq $prop) { Fail "Missing inactive legacy market '$key'."; continue }
+        if ([bool]$prop.Value.active -ne $false) { Fail "Legacy market '$key' must be inactive." }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $collectorPath)) {
     Fail 'ShadowCollector.ps1 is missing.'
 } else {
@@ -92,11 +104,12 @@ if (-not (Test-Path -LiteralPath $collectorPath)) {
     if ($collector -notmatch '(?m)^\s*\[int\]\$MinimumPollIntervalSeconds\s*=\s*120') {
         Fail 'Shadow collector default interval must remain 120 seconds for the initial rollout.'
     }
-    if (-not $collector.Contains('observedMarkets')) { Fail 'Shadow collector must retain an observed-market catalog in runtime engine state.' }
-    if (-not $collector.Contains('providerName')) { Fail 'Observed-market catalog must retain provider-supplied item names when available.' }
-    if (-not $collector.Contains('itemName')) { Fail 'Normalized shadow rows must carry provider-supplied item names when available.' }
-    if (-not $collector.Contains('Test-IsPrimaryMarket')) { Fail 'Shadow collector must protect primary visible markets from duplicate writes.' }
-    if (-not $collector.Contains('Get-LiveStockObservationsForCountry')) { Fail 'Shadow collector must normalize every provider row per country.' }
+    foreach ($token in @('observedMarkets','providerName','itemName','Test-IsPrimaryMarket','Get-LiveStockObservationsForCountry','Get-InactiveMarketIndex','foreign-market-overrides.json','legacyMarketsSeen')) {
+        if (-not $collector.Contains($token)) { Fail "Shadow collector contract is missing '$token'." }
+    }
+    if ($collector -notmatch '(?s)Update-ObservedMarketMetadata.+?\$marketsSeen\+\+.+?\$inactiveMarketIndex\.ContainsKey\(\$key\).+?continue') {
+        Fail 'Shadow collector must retain legacy provider rows in observedMarkets while suppressing them before history/cycle writes.'
+    }
 }
 
 if (-not (Test-Path -LiteralPath $wrapperPath)) {
@@ -119,5 +132,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Shadow collection configuration validation passed.' -ForegroundColor Green
-Write-Host '11 countries collect in background; provider item names enrich the hidden catalog while current visible scope remains UK/Japan Xanax.' -ForegroundColor DarkGreen
+Write-Host '11 countries remain observable; five verified legacy provider markets are excluded from new history while current visible scope stays UK/Japan Xanax.' -ForegroundColor DarkGreen
 exit 0
