@@ -18,6 +18,35 @@ function Write-ProbeFailure {
     Write-Host ('{0}: UNAVAILABLE (HTTP {1}) - {2}' -f $Label, [int]$Result.HttpStatus, [string]$Result.Error) -ForegroundColor Yellow
 }
 
+function Get-ShapeTypeName {
+    param([object]$Value)
+    if ($null -eq $Value) { return 'null' }
+    if ($Value -is [string]) { return 'string' }
+    if ($Value -is [System.Collections.IDictionary]) { return 'dictionary' }
+    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [pscustomobject])) {
+        try { return ('array[{0}]' -f @($Value).Count) } catch { return 'enumerable' }
+    }
+    return $Value.GetType().Name
+}
+
+function Write-ObjectShape {
+    param([string]$Label, [object]$Value, [int]$Indent = 2)
+    $pad = ' ' * $Indent
+    if ($null -eq $Value) {
+        Write-Host ($pad + $Label + ': null')
+        return
+    }
+
+    $typeName = Get-ShapeTypeName -Value $Value
+    Write-Host ($pad + $Label + ': ' + $typeName)
+
+    if ($Value -is [pscustomobject]) {
+        foreach ($property in @($Value.PSObject.Properties)) {
+            Write-Host ($pad + '  .' + $property.Name + ' = ' + (Get-ShapeTypeName -Value $property.Value))
+        }
+    }
+}
+
 function Write-FactionBranchDiagnostic {
     param([object]$Payload, [ValidateSet('peace','war')][string]$BranchName)
 
@@ -99,9 +128,24 @@ if ($faction.Success) {
     Write-Host ('  War:    capacity {0}/10 | cost {1}/5' -f [int]$profile.WarExcursionLevel, [int]$profile.WarTravelCostLevel)
 
     if ([int]$profile.PeaceExcursionLevel -eq 0 -and [int]$profile.WarExcursionLevel -eq 0) {
-        Write-Host '  No travel-capacity row was recognized; showing redacted branch structure:' -ForegroundColor Yellow
+        Write-Host '  No travel-capacity row was recognized; showing redacted response shape:' -ForegroundColor Yellow
+        Write-ObjectShape -Label 'exact endpoint payload' -Value $faction.Payload
+        if ($faction.Payload.PSObject.Properties['upgrades']) {
+            Write-ObjectShape -Label 'exact endpoint .upgrades' -Value $faction.Payload.upgrades -Indent 4
+        }
         Write-FactionBranchDiagnostic -Payload $faction.Payload -BranchName 'peace'
         Write-FactionBranchDiagnostic -Payload $faction.Payload -BranchName 'war'
+
+        Write-Host '  Probing generic v2 faction selection shape...' -ForegroundColor DarkYellow
+        $genericFaction = Invoke-TornProfileJson -Uri 'https://api.torn.com/v2/faction?selections=upgrades&comment=TravelAssistantProfileProbe' -ApiKey $apiKey
+        if ($genericFaction.Success) {
+            Write-ObjectShape -Label 'generic faction payload' -Value $genericFaction.Payload
+            if ($genericFaction.Payload.PSObject.Properties['upgrades']) {
+                Write-ObjectShape -Label 'generic faction .upgrades' -Value $genericFaction.Payload.upgrades -Indent 4
+            }
+        } else {
+            Write-ProbeFailure -Label 'GENERIC FACTION UPGRADES' -Result $genericFaction
+        }
     }
     if (-not [bool]$profile.Resolved) {
         Write-Host '  Active mode was not recognized; no active faction perks should be assumed.' -ForegroundColor Yellow
