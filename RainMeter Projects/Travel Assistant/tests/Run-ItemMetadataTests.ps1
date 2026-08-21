@@ -23,7 +23,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ItemMetadata.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Get-ObservedItemIds','Split-ItemIds','Get-CanonicalCategory','Convert-TornItemMetadata')
+$wanted = @('Get-DynamicProperty','Get-ObservedItemIds','Get-CanonicalCategory','Convert-TornBulkItemMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -51,61 +51,45 @@ Assert-Equal 'Observed IDs sort ascending first' $ids[0] 206
 Assert-Equal 'Observed IDs include Nessie' $ids[1] 266
 Assert-Equal 'Observed IDs include Cherry Blossom' $ids[2] 277
 
-$batches = @(Split-ItemIds -ItemIds ([int[]](1..202)) -Maximum 40)
-Assert-Equal '202 live-scale items use six metadata batches' $batches.Count 6
-for ($i = 0; $i -lt 5; $i++) {
-    Assert-Equal ("Metadata batch {0} size" -f ($i + 1)) @($batches[$i].ids).Count 40
+$xanax = [pscustomobject]@{
+    name = 'Xanax'
+    type = 'Drug'
+    weapon_type = $null
+    market_value = 841051
+    tradeable = $true
 }
-Assert-Equal 'Final metadata batch size' @($batches[5].ids).Count 2
-
-$flower = [pscustomobject]@{
-    id = 277
-    name = 'Cherry Blossom'
-    type = 'Flower'
-    sub_type = $null
-    is_tradable = $true
-    value = [pscustomobject]@{
-        market_price = 85000
-        shops = @(
-            [pscustomobject]@{ country = 'Japan'; shop = 'Bits n Bob'; buy_price = 500; sell_price = 250 }
-        )
-    }
-    details = $null
-}
-$flowerMeta = Convert-TornItemMetadata -Item $flower -Now 1787342000
-Assert-Equal 'Flower canonical category' $flowerMeta.category 'Flower'
-Assert-True 'Flower category resolves directly' ([bool]$flowerMeta.categoryResolved)
-Assert-Equal 'Flower metadata keeps item name' $flowerMeta.name 'Cherry Blossom'
-Assert-Equal 'Flower metadata keeps market reference' ([long]$flowerMeta.marketPrice) 85000
-Assert-Equal 'Flower metadata keeps shop country' $flowerMeta.shops[0].country 'Japan'
+$xanaxMeta = Convert-TornBulkItemMetadata -ItemId 206 -Item $xanax -Now 1787344000
+Assert-Equal 'Bulk metadata keeps item ID' $xanaxMeta.itemId 206
+Assert-Equal 'Bulk metadata keeps item name' $xanaxMeta.name 'Xanax'
+Assert-Equal 'Bulk metadata uses Torn type as category' $xanaxMeta.category 'Drug'
+Assert-True 'Bulk metadata resolves non-empty category' ([bool]$xanaxMeta.categoryResolved)
+Assert-Equal 'Bulk metadata keeps market reference' ([long]$xanaxMeta.marketPrice) 841051
+Assert-True 'Bulk metadata detects tradability field' ([bool]$xanaxMeta.tradabilityKnown)
+Assert-True 'Bulk metadata keeps tradable status' ([bool]$xanaxMeta.isTradable)
+Assert-Equal 'Bulk metadata retains source provenance' $xanaxMeta.source 'torn_items_bulk'
 
 $weapon = [pscustomobject]@{
-    id = 999
     name = 'Fixture Rifle'
-    type = 'Weapon'
-    sub_type = 'Rifle'
-    is_tradable = $true
-    value = [pscustomobject]@{ market_price = 1000000; shops = @() }
-    details = [pscustomobject]@{ category = 'Primary' }
+    type = 'Primary'
+    weapon_type = 'Rifle'
+    market_value = 1000000
+    tradable = $true
 }
-$weaponMeta = Convert-TornItemMetadata -Item $weapon -Now 1787342000
-Assert-Equal 'Weapon uses detailed canonical category' $weaponMeta.category 'Primary'
-Assert-True 'Detailed weapon category is resolved' ([bool]$weaponMeta.categoryResolved)
-Assert-Equal 'Weapon retains broad Torn type' $weaponMeta.type 'Weapon'
-Assert-Equal 'Weapon retains Torn subtype' $weaponMeta.subType 'Rifle'
+$weaponMeta = Convert-TornBulkItemMetadata -ItemId 999 -Item $weapon -Now 1787344000
+Assert-Equal 'Bulk weapon category stays Primary' $weaponMeta.category 'Primary'
+Assert-Equal 'Bulk weapon type detail is retained' $weaponMeta.weaponType 'Rifle'
+Assert-True 'Bulk weapon category resolves directly' ([bool]$weaponMeta.categoryResolved)
 
-$unknownWeapon = [pscustomobject]@{
-    id = 1000
-    name = 'Fixture Weapon'
-    type = 'Weapon'
-    sub_type = $null
-    is_tradable = $true
-    value = [pscustomobject]@{ market_price = 1; shops = @() }
-    details = $null
+$unknown = [pscustomobject]@{
+    name = 'Fixture Unknown'
+    type = ''
+    weapon_type = $null
+    market_value = 1
 }
-$unknownMeta = Convert-TornItemMetadata -Item $unknownWeapon -Now 1787342000
-Assert-Equal 'Unresolved weapon stays broad instead of guessing' $unknownMeta.category 'Weapon'
-Assert-Equal 'Unresolved weapon category is marked unresolved' ([bool]$unknownMeta.categoryResolved) $false
+$unknownMeta = Convert-TornBulkItemMetadata -ItemId 1000 -Item $unknown -Now 1787344000
+Assert-Equal 'Missing type stays Unknown' $unknownMeta.category 'Unknown'
+Assert-Equal 'Missing type is marked unresolved' ([bool]$unknownMeta.categoryResolved) $false
+Assert-Equal 'Missing tradability stays unknown' ([bool]$unknownMeta.tradabilityKnown) $false
 
-Write-Host 'Item metadata normalization tests passed.' -ForegroundColor Green
+Write-Host 'Bulk item metadata normalization tests passed.' -ForegroundColor Green
 exit 0
