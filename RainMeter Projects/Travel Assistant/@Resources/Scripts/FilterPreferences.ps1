@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('None','ToggleTripBand','ResetFilters')]
+    [ValidateSet('None','ToggleTripBand','ResetFilters','SetSortMode')]
     [string]$Action = 'None',
     [string]$Value = '',
     [switch]$SkipMain
@@ -57,7 +57,7 @@ function Get-FilterVisibleCategories {
 
 function New-DefaultUiPreferences {
     return [pscustomobject]@{
-        schemaVersion = 3
+        schemaVersion = 4
         travelMode = 'airstrip'
         pinnedMarket = ''
         itemFilterAll = $true
@@ -73,6 +73,7 @@ function New-DefaultUiPreferences {
         maxEnergyLoss = 0
         nerveWastePolicy = 'allowed'
         maxNerveLoss = 0
+        sortMode = 'optimal'
     }
 }
 
@@ -83,6 +84,13 @@ function Normalize-WastePolicy {
     return $policy
 }
 
+function Normalize-SortMode {
+    param([object]$Value)
+    $mode = ([string]$Value).Trim().ToLowerInvariant()
+    if ($mode -notin @('optimal','upcoming','profit','time')) { return 'optimal' }
+    return $mode
+}
+
 function Normalize-UiPreferences {
     param([object]$Preferences)
     $defaults = New-DefaultUiPreferences
@@ -91,7 +99,7 @@ function Normalize-UiPreferences {
     foreach ($property in @($defaults.PSObject.Properties)) {
         if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
-    Set-FilterProperty $Preferences 'schemaVersion' 3
+    Set-FilterProperty $Preferences 'schemaVersion' 4
 
     $mode = [string]$Preferences.travelMode
     if ($mode -notin @('standard','airstrip','wlt','business')) { Set-FilterProperty $Preferences 'travelMode' 'airstrip' }
@@ -143,6 +151,7 @@ function Normalize-UiPreferences {
     Set-FilterProperty $Preferences 'nerveWastePolicy' (Normalize-WastePolicy $Preferences.nerveWastePolicy)
     Set-FilterProperty $Preferences 'maxEnergyLoss' ([Math]::Max(0, [Math]::Min(1000, [int]$Preferences.maxEnergyLoss)))
     Set-FilterProperty $Preferences 'maxNerveLoss' ([Math]::Max(0, [Math]::Min(32767, [int]$Preferences.maxNerveLoss)))
+    Set-FilterProperty $Preferences 'sortMode' (Normalize-SortMode $Preferences.sortMode)
     return $Preferences
 }
 
@@ -192,11 +201,15 @@ if ($Action -eq 'ToggleTripBand') {
     $prefs = Reset-UiFilterPreferences -Preferences $prefs
     [void](Save-UiPreferences -Preferences $prefs)
     $changed = $true
+} elseif ($Action -eq 'SetSortMode') {
+    Set-FilterProperty $prefs 'sortMode' (Normalize-SortMode $Value)
+    [void](Save-UiPreferences -Preferences $prefs)
+    $changed = $true
 }
 
 if ($changed) {
     $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
     if (Test-Path -LiteralPath $filterState) { try { & $filterState } catch { } }
-    $optimizer = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
-    if (Test-Path -LiteralPath $optimizer) { try { & $optimizer } catch { } }
+    $opportunities = Join-Path $PSScriptRoot 'OpportunityState.ps1'
+    if (Test-Path -LiteralPath $opportunities) { try { & $opportunities } catch { } }
 }
