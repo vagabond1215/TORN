@@ -92,20 +92,26 @@ function Normalize-UiPreferences {
     if (-not [string]::IsNullOrWhiteSpace($pin) -and $pin -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { Set-FilterProperty $Preferences 'pinnedMarket' '' }
 
     $itemIds = New-Object 'System.Collections.Generic.HashSet[int]'
-    foreach ($id in @($Preferences.selectedItemIds)) { $n = 0; if ([int]::TryParse([string]$id, [ref]$n) -and $n -gt 0) { [void]$itemIds.Add($n) } }
+    foreach ($id in @($Preferences.selectedItemIds)) {
+        $n = 0
+        if ([int]::TryParse([string]$id, [ref]$n) -and $n -gt 0) { [void]$itemIds.Add($n) }
+    }
     Set-FilterProperty $Preferences 'selectedItemIds' ([int[]]@($itemIds | Sort-Object))
 
     $bands = New-Object 'System.Collections.Generic.HashSet[string]'
-    foreach ($band in @($Preferences.selectedTripBands)) { $b = ([string]$band).ToLowerInvariant(); if ($b -in @('short','medium','long')) { [void]$bands.Add($b) } }
+    foreach ($band in @($Preferences.selectedTripBands)) {
+        $b = ([string]$band).ToLowerInvariant()
+        if ($b -in @('short','medium','long')) { [void]$bands.Add($b) }
+    }
     Set-FilterProperty $Preferences 'selectedTripBands' ([string[]]@($bands | Sort-Object))
 
     $availableCountries = [string[]]@(Get-FilterAvailableCountryIds)
     $availableCountrySet = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($id in $availableCountries) { [void]$availableCountrySet.Add($id) }
     $countries = New-Object 'System.Collections.Generic.HashSet[string]'
-    foreach ($id in @($Preferences.selectedCountryIds)) { $c = [string]$id; if ($availableCountrySet.Contains($c)) { [void]$countries.Add($c) } }
-    if (-not $Preferences.PSObject.Properties['selectedCountryIds'] -or @($Preferences.selectedCountryIds).Count -eq 0) {
-        foreach ($id in $availableCountries) { [void]$countries.Add($id) }
+    foreach ($id in @($Preferences.selectedCountryIds)) {
+        $c = [string]$id
+        if ($availableCountrySet.Contains($c)) { [void]$countries.Add($c) }
     }
     Set-FilterProperty $Preferences 'selectedCountryIds' ([string[]]@($countries | Sort-Object))
 
@@ -117,7 +123,10 @@ function Normalize-UiPreferences {
     Set-FilterProperty $Preferences 'selectedCategories' ([string[]]@($categories | Sort-Object))
 
     $ignored = New-Object 'System.Collections.Generic.HashSet[int]'
-    foreach ($id in @($Preferences.ignoredItemIds)) { $n = 0; if ([int]::TryParse([string]$id, [ref]$n) -and $n -gt 0) { [void]$ignored.Add($n) } }
+    foreach ($id in @($Preferences.ignoredItemIds)) {
+        $n = 0
+        if ([int]::TryParse([string]$id, [ref]$n) -and $n -gt 0) { [void]$ignored.Add($n) }
+    }
     Set-FilterProperty $Preferences 'ignoredItemIds' ([int[]]@($ignored | Sort-Object))
     Set-FilterProperty $Preferences 'itemFilterAll' ([bool]$Preferences.itemFilterAll)
     Set-FilterProperty $Preferences 'categoryFilterAll' ([bool]$Preferences.categoryFilterAll)
@@ -163,10 +172,20 @@ function Reset-UiFilterPreferences {
 if ($SkipMain) { return }
 
 $prefs = Read-UiPreferences
+$changed = $false
 if ($Action -eq 'ToggleTripBand') {
     $prefs = Toggle-TripBandPreference -Preferences $prefs -Band $Value
     [void](Save-UiPreferences -Preferences $prefs)
+    $changed = $true
 } elseif ($Action -eq 'ResetFilters') {
     $prefs = Reset-UiFilterPreferences -Preferences $prefs
     [void](Save-UiPreferences -Preferences $prefs)
+    $changed = $true
+}
+
+if ($changed) {
+    $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
+    if (Test-Path -LiteralPath $filterState) {
+        try { & $filterState } catch { }
+    }
 }
