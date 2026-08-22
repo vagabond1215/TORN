@@ -66,10 +66,30 @@ local function copyProjectionFields(data)
 end
 
 local function stabilizeProjection(data)
-    -- UpdateTracker may publish compatibility fields before OpportunityState completes.
-    -- Keep the last complete opportunity/UI projection through that interval.
+    -- Never let an intermediate writer erase a complete projection. A transient
+    -- zero-row "Learning ..." pass is also non-authoritative once valid rows have
+    -- already been shown; retain those rows until a real empty-state reason arrives.
     if data.OpportunityCount ~= nil then
-        lastProjectionData = copyProjectionFields(data)
+        local incomingCount = math.max(0, math.floor(number(data.OpportunityCount)))
+        local incomingMessage = safeText(data.OpportunityMessage, '')
+        local cachedCount = 0
+        if lastProjectionData ~= nil then cachedCount = math.max(0, math.floor(number(lastProjectionData.OpportunityCount))) end
+
+        if incomingCount > 0 then
+            lastProjectionData = copyProjectionFields(data)
+        elseif cachedCount > 0 and incomingMessage:match('^Learning') then
+            local incomingSortMode = data.OpportunitySortMode
+            local incomingSortText = data.OpportunitySortText
+            for key, value in pairs(lastProjectionData) do
+                if key:match('^Opportunity') then data[key] = value
+                elseif key:match('^UI') and data[key] == nil then data[key] = value end
+            end
+            if incomingSortMode ~= nil then data.OpportunitySortMode = incomingSortMode end
+            if incomingSortText ~= nil then data.OpportunitySortText = incomingSortText end
+            data.OpportunityMessage = ''
+        else
+            lastProjectionData = copyProjectionFields(data)
+        end
     elseif lastProjectionData ~= nil then
         for key, value in pairs(lastProjectionData) do
             if data[key] == nil then data[key] = value end
@@ -170,8 +190,6 @@ local function applySortColors(mode)
 end
 
 local function configureInteractiveMeters()
-    -- Reuse the existing sort meter sections so the skin file stays compact.
-    -- The old SORT label becomes the left-most NAME sort.
     SKIN:Bang('!SetOption', 'MeterSortLabel', 'Text', 'NAME')
     SKIN:Bang('!SetOption', 'MeterSortLabel', 'X', '12')
     SKIN:Bang('!SetOption', 'MeterSortLabel', 'Y', '89')
@@ -260,8 +278,6 @@ local function sortOpportunityRows(rows, mode)
             if a.probability ~= b.probability then return a.probability > b.probability end
             return string.lower(a.name) < string.lower(b.name)
         else
-            -- Old projections do not have WindowStartAt. In that migration case,
-            -- retain their existing upcoming order until the next normal update.
             if a.windowStart > 0 and b.windowStart > 0 and a.windowStart ~= b.windowStart then return a.windowStart < b.windowStart end
             if a.probability ~= b.probability then return a.probability > b.probability end
             if a.gross ~= b.gross then return a.gross > b.gross end
@@ -309,7 +325,7 @@ end
 
 local function updateOpportunities(data)
     local count = math.max(0, math.min(8, math.floor(number(data.OpportunityCount))))
-    setVariable('OpportunityMessageText', safeText(data.OpportunityMessage, 'Learning opportunities...'))
+    setVariable('OpportunityMessageText', safeText(data.OpportunityMessage, 'No current opportunities'))
     setMeterVisible('MeterOpportunityMessage', count == 0)
 
     for i = 1, 8 do
