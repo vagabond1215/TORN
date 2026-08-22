@@ -56,7 +56,7 @@ if (Test-Path -LiteralPath $files.State) {
         if (-not $text.Contains($key)) { Fail "FilterState.ps1 missing state key $key." }
     }
     if (-not $text.Contains("Remove('UIPinnedMarket')")) { Fail 'FilterState.ps1 must remove stale UIPinnedMarket projection so a one-second state refresh cannot undo a direct pin click.' }
-    if ($text -match "\$state\['UIPinnedMarket'\]\s*=") { Fail 'Pin must not be mirrored into state.kv.' }
+    if ($text -match '\$state\[''UIPinnedMarket''\]\s*=') { Fail 'Pin must not be mirrored into state.kv.' }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'FilterState.ps1 must remain local-only.' }
 }
 
