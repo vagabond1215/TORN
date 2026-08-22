@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
+$ObservationHistory = Join-Path $PSScriptRoot 'MaintainObservationHistory.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
 $EngineStateSchema = Join-Path $PSScriptRoot 'EnsureEngineStateSchema.ps1'
@@ -20,6 +21,7 @@ $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
 $RuntimeLogScript = Join-Path $PSScriptRoot 'RuntimeLog.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$HistoryErrorFile = Join-Path $RuntimeDir 'history-maintenance-error.txt'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
 $EngineStateSchemaErrorFile = Join-Path $RuntimeDir 'engine-state-schema-error.txt'
@@ -168,15 +170,36 @@ function Invoke-FailSoftScript {
     } catch { Write-CompactFailure -Path $ErrorPath -Message $_.Exception.ToString() }
 }
 
+function Invoke-HistoryMaintenance {
+    param([string]$Phase)
+    if (-not (Test-Path -LiteralPath $ObservationHistory)) { return }
+    try {
+        & $ObservationHistory -Phase $Phase
+        Clear-CompactFailure -Path $HistoryErrorFile
+    } catch {
+        Write-CompactFailure -Path $HistoryErrorFile -Message $_.Exception.ToString()
+    }
+}
+
 try {
     $acquired = $mutex.WaitOne(0)
     if (-not $acquired) { exit 0 }
+
+    # UpdateTracker's legacy prune discards every pre-cutoff change-only sample.
+    # Roll one state baseline per market to the retention boundary first and advance
+    # lastPruneAt so the destructive legacy prune is skipped on this update.
+    Invoke-HistoryMaintenance -Phase 'PreUpdate'
 
     & $Updater -Action $Action
     if (-not $?) { throw 'UpdateTracker returned failure.' }
 
     # ShadowCollector catches provider failures internally and owns its error file.
     Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile -ClearErrorOnSuccess $false
+
+    # Bootstrap truthful current snapshots for active markets whose older baseline
+    # was already lost by previous retention pruning. Deleted history is not invented.
+    Invoke-HistoryMaintenance -Phase 'PostUpdate'
+
     Invoke-FailSoftScript -Path $LocalCatalog -ErrorPath $LocalCatalogErrorFile
 
     # Persist engine-state schema normalization even when ShadowCollector is inside
