@@ -135,6 +135,7 @@ local function updateOpportunities(data)
             if suffix == 'AccentColor' then fallback = '58,64,73,255' end
             setVariable(prefix .. suffix, safeText(data[prefix .. suffix], fallback))
         end
+        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
         setGroupVisible('OpportunityRow' .. i, i <= count)
     end
 
