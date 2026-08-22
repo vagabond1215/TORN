@@ -32,42 +32,42 @@ $engine=Read-PopupJson $EngineStateFile
 function Get-ActiveCatalogRows {
     $activeIds=New-Object 'System.Collections.Generic.HashSet[int]'
     if ($null -ne $engine -and $engine.PSObject.Properties['observedMarkets']) {
-        foreach ($p in @($engine.observedMarkets.PSObject.Properties)) {
+        foreach ($p in $engine.observedMarkets.PSObject.Properties) {
             $m=$p.Value; if ($null -eq $m) { continue }
             if (($m.PSObject.Properties['catalogActive'] -and $m.catalogActive -eq $false) -or ($m.PSObject.Properties['catalogStatus'] -and [string]$m.catalogStatus -eq 'legacy_removed')) { continue }
             if ($m.PSObject.Properties['itemId']) { [void]$activeIds.Add([int]$m.itemId) }
         }
     }
-    $rows=New-Object System.Collections.Generic.List[object]
+    $resultRows=@()
     if ($null -ne $engine -and $engine.PSObject.Properties['itemMetadata']) {
-        foreach ($p in @($engine.itemMetadata.PSObject.Properties)) {
+        foreach ($p in $engine.itemMetadata.PSObject.Properties) {
             $id=[int]$p.Name
             if ($activeIds.Count -gt 0 -and -not $activeIds.Contains($id)) { continue }
             $v=$p.Value
             $name=if ($v.PSObject.Properties['name']) { [string]$v.name } else { 'Item '+$id }
             $category=if ($v.PSObject.Properties['category']) { [string]$v.category } else { 'Unknown' }
-            $rows.Add([pscustomobject]@{itemId=$id;name=$name;category=$category})
+            $resultRows += [pscustomobject]@{itemId=$id;name=$name;category=$category}
         }
     }
-    if ($rows.Count -eq 0 -and $null -ne $items) {
-        foreach ($item in @($items.items)) { $rows.Add([pscustomobject]@{itemId=[int]$item.itemId;name=[string]$item.name;category=[string]$item.category}) }
+    if ($resultRows.Count -eq 0 -and $null -ne $items) {
+        foreach ($item in @($items.items)) { $resultRows += [pscustomobject]@{itemId=[int]$item.itemId;name=[string]$item.name;category=[string]$item.category} }
     }
-    return @($rows | Sort-Object name,itemId)
+    return @($resultRows | Sort-Object name,itemId)
 }
 
 $catalog=@(Get-ActiveCatalogRows)
-$rows=New-Object System.Collections.Generic.List[object]
+$rows=@()
 $titleText=''; $allLabel='All'; $showAllToggle=$true
 
 if ($Filter -eq 'Item') {
     $titleText='Item filter'; $allLabel='All active items'
     $selected=New-Object 'System.Collections.Generic.HashSet[int]'; foreach ($id in @($prefs.selectedItemIds)) { [void]$selected.Add([int]$id) }
-    foreach ($item in $catalog) { $rows.Add((New-PopupRow ([string]$item.itemId) ('{0}  [{1}]' -f $item.name,$item.category) ([bool]$prefs.itemFilterAll -or $selected.Contains([int]$item.itemId)))) }
+    foreach ($item in $catalog) { $rows += (New-PopupRow ([string]$item.itemId) ('{0}  [{1}]' -f $item.name,$item.category) ([bool]$prefs.itemFilterAll -or $selected.Contains([int]$item.itemId))) }
 } elseif ($Filter -eq 'Category') {
     $titleText='Category filter'; $allLabel='All active categories'
     $selected=New-Object 'System.Collections.Generic.HashSet[string]'; foreach ($c in @($prefs.selectedCategories)) { [void]$selected.Add([string]$c) }
     foreach ($category in @($catalog | ForEach-Object { [string]$_.category } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)) {
-        $rows.Add((New-PopupRow $category $category ([bool]$prefs.categoryFilterAll -or $selected.Contains($category))))
+        $rows += (New-PopupRow $category $category ([bool]$prefs.categoryFilterAll -or $selected.Contains($category)))
     }
 } elseif ($Filter -eq 'Country') {
     if ($null -eq $countries -or -not $countries.PSObject.Properties['countries']) { throw 'countries.json is missing or invalid.' }
@@ -76,20 +76,20 @@ if ($Filter -eq 'Item') {
     $selected=New-Object 'System.Collections.Generic.HashSet[string]'; foreach ($id in @($prefs.selectedCountryIds)) { [void]$selected.Add([string]$id) }
     foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $true -and $bands.Contains([string]$_.tripBand) } | Sort-Object tripBand,name)) {
         $band=[string]$country.tripBand; $label='{0}  [{1}]' -f [string]$country.name,($band.Substring(0,1).ToUpperInvariant()+$band.Substring(1))
-        $rows.Add((New-PopupRow ([string]$country.id) $label ($selected.Contains([string]$country.id))))
+        $rows += (New-PopupRow ([string]$country.id) $label ($selected.Contains([string]$country.id)))
     }
 } else {
     $titleText='Ignore List'; $showAllToggle=$false
     $ignored=New-Object 'System.Collections.Generic.HashSet[int]'; foreach ($id in @($prefs.ignoredItemIds)) { [void]$ignored.Add([int]$id) }
-    $allMetadata=New-Object System.Collections.Generic.List[object]
+    $allMetadata=@()
     if ($null -ne $engine -and $engine.PSObject.Properties['itemMetadata']) {
-        foreach ($p in @($engine.itemMetadata.PSObject.Properties)) {
+        foreach ($p in $engine.itemMetadata.PSObject.Properties) {
             $v=$p.Value; $id=[int]$p.Name; $name=if ($v.PSObject.Properties['name']){[string]$v.name}else{'Item '+$id}; $category=if($v.PSObject.Properties['category']){[string]$v.category}else{'Unknown'}
-            $allMetadata.Add([pscustomobject]@{itemId=$id;name=$name;category=$category})
+            $allMetadata += [pscustomobject]@{itemId=$id;name=$name;category=$category}
         }
     }
-    if ($allMetadata.Count -eq 0) { foreach ($item in $catalog) { $allMetadata.Add($item) } }
-    foreach ($item in @($allMetadata | Sort-Object name,itemId)) { $rows.Add((New-PopupRow ([string]$item.itemId) ('{0}  [{1}]  #{2}' -f $item.name,$item.category,$item.itemId) ($ignored.Contains([int]$item.itemId)))) }
+    if ($allMetadata.Count -eq 0) { foreach ($item in $catalog) { $allMetadata += $item } }
+    foreach ($item in @($allMetadata | Sort-Object name,itemId)) { $rows += (New-PopupRow ([string]$item.itemId) ('{0}  [{1}]  #{2}' -f $item.name,$item.category,$item.itemId) ($ignored.Contains([int]$item.itemId))) }
 }
 
 $form=New-Object System.Windows.Forms.Form
@@ -104,7 +104,7 @@ $form.Controls.Add($note)
 
 $allCheck=New-Object System.Windows.Forms.CheckBox; $allCheck.Text=$allLabel; $allCheck.Location=New-Object System.Drawing.Point(18,86); $allCheck.Size=New-Object System.Drawing.Size(320,24); $allCheck.Visible=$showAllToggle; $form.Controls.Add($allCheck)
 $list=New-Object System.Windows.Forms.CheckedListBox; $list.Location=New-Object System.Drawing.Point(16,116); $list.Size=New-Object System.Drawing.Size(450,386); $list.BackColor=[System.Drawing.Color]::FromArgb(20,23,27); $list.ForeColor=[System.Drawing.Color]::FromArgb(232,235,240); $list.CheckOnClick=$true; $list.HorizontalScrollbar=$true; $form.Controls.Add($list)
-foreach ($row in @($rows)) { $idx=$list.Items.Add([string]$row.Label); $list.SetItemChecked($idx,[bool]$row.Checked) }
+foreach ($row in $rows) { $idx=$list.Items.Add([string]$row.Label); $list.SetItemChecked($idx,[bool]$row.Checked) }
 $script:updating=$false
 function Refresh-All { if(-not $showAllToggle){return}; $all=$list.Items.Count -gt 0; for($i=0;$i-lt$list.Items.Count;$i++){if(-not$list.GetItemChecked($i)){$all=$false;break}}; $script:updating=$true; try{$allCheck.Checked=$all}finally{$script:updating=$false} }
 $allCheck.Add_CheckedChanged({ if($script:updating){return}; for($i=0;$i-lt$list.Items.Count;$i++){$list.SetItemChecked($i,$allCheck.Checked)} })
@@ -118,13 +118,15 @@ $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'; $cancel.L
 
 $save.Add_Click({
     try {
-        $selected=New-Object System.Collections.Generic.List[string]; for($i=0;$i-lt$rows.Count;$i++){if($list.GetItemChecked($i)){$selected.Add([string]$rows[$i].Id)}}
+        $selected=@(); for($i=0;$i-lt$rows.Count;$i++){if($list.GetItemChecked($i)){$selected += [string]$rows[$i].Id}}
         if($Filter -eq 'Item') { Set-FilterProperty $prefs 'itemFilterAll' ($rows.Count -gt 0 -and $selected.Count -eq $rows.Count); Set-FilterProperty $prefs 'selectedItemIds' ([int[]]@($selected|ForEach-Object{[int]$_})) }
-        elseif($Filter -eq 'Category') { Set-FilterProperty $prefs 'categoryFilterAll' ($rows.Count -gt 0 -and $selected.Count -eq $rows.Count); Set-FilterProperty $prefs 'selectedCategories' ([string[]]@($selected)) }
+        elseif($Filter -eq 'Category') { Set-FilterProperty $prefs 'categoryFilterAll' ($rows.Count -gt 0 -and $selected.Count -eq $rows.Count); Set-FilterProperty $prefs 'selectedCategories' ([string[]]$selected) }
         elseif($Filter -eq 'Country') {
-            $displayed=New-Object 'System.Collections.Generic.HashSet[string]'; foreach($row in @($rows)){[void]$displayed.Add([string]$row.Id)}
-            $result=New-Object 'System.Collections.Generic.HashSet[string]'; foreach($id in @($prefs.selectedCountryIds)){if(-not$displayed.Contains([string]$id)){[void]$result.Add([string]$id)}}; foreach($id in @($selected)){[void]$result.Add([string]$id)}
-            Set-FilterProperty $prefs 'selectedCountryIds' ([string[]]@($result|Sort-Object))
+            $displayed=@($rows | ForEach-Object {[string]$_.Id})
+            $result=@()
+            foreach($id in @($prefs.selectedCountryIds)){if($displayed -notcontains [string]$id){$result += [string]$id}}
+            foreach($id in $selected){if($result -notcontains [string]$id){$result += [string]$id}}
+            Set-FilterProperty $prefs 'selectedCountryIds' ([string[]]@($result|Sort-Object -Unique))
         } else { Set-FilterProperty $prefs 'ignoredItemIds' ([int[]]@($selected|ForEach-Object{[int]$_}|Sort-Object -Unique)) }
         [void](Save-UiPreferences $prefs)
 
@@ -132,12 +134,12 @@ $save.Add_Click({
             $scriptPath=Join-Path $PSScriptRoot $scriptName
             if(-not(Test-Path -LiteralPath $scriptPath)){continue}
             try { & $scriptPath }
-            catch { Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message (($scriptName+': ')+$_.Exception.ToString()) }
+            catch { Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message (($scriptName+': ')+(Format-TravelAssistantErrorRecord $_)) }
         }
         Clear-TravelAssistantLatestError -Component $logComponent
         $form.Close()
     } catch {
-        Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message $_.Exception.ToString()
+        Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message (Format-TravelAssistantErrorRecord $_)
     }
 })
 $form.AcceptButton=$save; $form.CancelButton=$cancel; [void]$form.ShowDialog()
