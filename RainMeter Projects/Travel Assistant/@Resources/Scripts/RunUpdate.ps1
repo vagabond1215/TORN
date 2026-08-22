@@ -10,7 +10,7 @@ $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
 $TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
-$VisibleItems = Join-Path $PSScriptRoot 'VisibleItems.ps1'
+$OptimalRoute = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
@@ -20,7 +20,7 @@ $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
 $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
-$VisibleItemsErrorFile = Join-Path $RuntimeDir 'visible-items-error.txt'
+$OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
@@ -33,7 +33,6 @@ function Invoke-TornJsonWithCurl {
         [hashtable]$Headers,
         [int]$TimeoutSec = 15
     )
-
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($null -eq $curl) { throw 'curl.exe is required for Torn Item Market requests on this Windows environment.' }
     if ($TimeoutSec -lt 1) { $TimeoutSec = 15 }
@@ -112,11 +111,14 @@ function Write-CompactFailure {
     } catch { }
 }
 
-function Write-ShadowFailure { param([string]$Message) Write-CompactFailure -Path $ShadowErrorFile -Message $Message }
-function Write-LocalCatalogFailure { param([string]$Message) Write-CompactFailure -Path $LocalCatalogErrorFile -Message $Message }
-function Write-TravelContextFailure { param([string]$Message) Write-CompactFailure -Path $TravelContextErrorFile -Message $Message }
-function Write-VisibleItemsFailure { param([string]$Message) Write-CompactFailure -Path $VisibleItemsErrorFile -Message $Message }
-function Write-ResaleQueueFailure { param([string]$Message) Write-CompactFailure -Path $ResaleQueueErrorFile -Message $Message }
+function Invoke-FailSoftScript {
+    param([string]$Path,[string]$ErrorPath)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    try {
+        & $Path
+        if (Test-Path -LiteralPath $ErrorPath) { Remove-Item -LiteralPath $ErrorPath -Force -ErrorAction SilentlyContinue }
+    } catch { Write-CompactFailure -Path $ErrorPath -Message $_.Exception.Message }
+}
 
 try {
     $acquired = $mutex.WaitOne(0)
@@ -125,53 +127,27 @@ try {
     & $Updater -Action $Action
     if (-not $?) { exit 1 }
 
-    if (Test-Path -LiteralPath $ShadowCollector) {
-        try { & $ShadowCollector } catch { Write-ShadowFailure -Message $_.Exception.Message }
-    }
+    Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile
+    Invoke-FailSoftScript -Path $LocalCatalog -ErrorPath $LocalCatalogErrorFile
 
-    if (Test-Path -LiteralPath $LocalCatalog) {
-        try {
-            & $LocalCatalog
-            if (Test-Path -LiteralPath $LocalCatalogErrorFile) { Remove-Item -LiteralPath $LocalCatalogErrorFile -Force -ErrorAction SilentlyContinue }
-        } catch { Write-LocalCatalogFailure -Message $_.Exception.Message }
-    }
-
-    # Network catalog maintenance is intentionally NOT part of this heartbeat.
-    # ItemMetadata.ps1 remains explicit/manual maintenance only.
-
+    # Legacy Xanax post-processing is retained as background compatibility data,
+    # but the 0.5 minimalist UI does not use profitability statuses as route gates.
     & $Finalizer
     if (-not $?) { exit 1 }
 
-    if ($Action -eq 'Update' -and (Test-Path -LiteralPath $TravelContext)) {
-        try {
-            & $TravelContext
-            if (Test-Path -LiteralPath $TravelContextErrorFile) {
-                try {
-                    $travelState = Get-Content -LiteralPath (Join-Path $RuntimeDir 'engine-state.json') -Raw | ConvertFrom-Json
-                    if ($travelState.PSObject.Properties['travelContext'] -and [string]::IsNullOrWhiteSpace([string]$travelState.travelContext.lastError)) { Remove-Item -LiteralPath $TravelContextErrorFile -Force -ErrorAction SilentlyContinue }
-                } catch { }
-            }
-        } catch { Write-TravelContextFailure -Message $_.Exception.Message }
-    }
+    if ($Action -eq 'Update') { Invoke-FailSoftScript -Path $TravelContext -ErrorPath $TravelContextErrorFile }
 
-    if (Test-Path -LiteralPath $VisibleItems) {
-        try {
-            & $VisibleItems
-            if (Test-Path -LiteralPath $VisibleItemsErrorFile) { Remove-Item -LiteralPath $VisibleItemsErrorFile -Force -ErrorAction SilentlyContinue }
-        } catch { Write-VisibleItemsFailure -Message $_.Exception.Message }
-    }
+    # OptimalRoute is local-only. It reads retained stock/history, current bars,
+    # local preferences, capacity, and cached MV. It performs no network calls.
+    Invoke-FailSoftScript -Path $OptimalRoute -ErrorPath $OptimalRouteErrorFile
 
-    # Local-only UI preferences are projected after all opportunity state so the
-    # one-second Lua loop can filter/reflow cards without reading JSON itself.
-    if (Test-Path -LiteralPath $FilterState) {
-        try { & $FilterState } catch { }
-    }
+    if (Test-Path -LiteralPath $FilterState) { try { & $FilterState } catch { } }
 
+    # User-visible freshness is committed before the lower-priority broad market queue.
     Write-UpdateHeartbeat
 
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
         try {
-            # This is local-only queue policy. It never performs a request.
             if (Test-Path -LiteralPath $ResalePriority) { & $ResalePriority }
             & $ResaleQueue
             if (Test-Path -LiteralPath $ResaleQueueErrorFile) {
@@ -180,7 +156,7 @@ try {
                     if ($queueState.PSObject.Properties['resaleQueue'] -and [string]$queueState.resaleQueue.status -ne 'ERROR') { Remove-Item -LiteralPath $ResaleQueueErrorFile -Force -ErrorAction SilentlyContinue }
                 } catch { }
             }
-        } catch { Write-ResaleQueueFailure -Message $_.Exception.Message }
+        } catch { Write-CompactFailure -Path $ResaleQueueErrorFile -Message $_.Exception.Message }
     }
 
     exit 0
