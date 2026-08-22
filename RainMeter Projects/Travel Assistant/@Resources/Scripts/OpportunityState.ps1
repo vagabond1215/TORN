@@ -153,11 +153,14 @@ function Write-OpportunityProjection {
     $State['OpportunitySortText'] = $SortMode.ToUpperInvariant()
     $State['OpportunityMessage'] = $Message
     $State['OpportunityCount'] = [Math]::Min(8,@($Rows).Count)
-    # Clear retired 0.6 "best/optimal" state so old state.kv values cannot leak into UI.
     $State['OpportunityBestKey'] = ''
 
     foreach ($index in 1..8) {
-        foreach ($suffix in @('Key','RankText','OptimalText','Name','Country','CountryCode','WindowText','LeaveText','ChanceText','TimeText','GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip')) {
+        foreach ($suffix in @(
+            'Key','RankText','OptimalText','Name','Country','CountryCode','WindowText','LeaveText','ChanceText','TimeText',
+            'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip',
+            'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds'
+        )) {
             $State['Opportunity'+$index+$suffix] = ''
         }
     }
@@ -183,6 +186,11 @@ function Write-OpportunityProjection {
         $State['Opportunity'+$n+'PriceColor'] = [string]$row.priceColor
         $State['Opportunity'+$n+'AccentColor'] = '58,64,73,255'
         $State['Opportunity'+$n+'Tooltip'] = [string]$row.tooltip
+        $State['Opportunity'+$n+'GrossValue'] = [long]$row.grossProfit
+        $State['Opportunity'+$n+'ProfitHourValue'] = ('{0:R}' -f [double]$row.profitPerHour)
+        $State['Opportunity'+$n+'WindowStartAt'] = [long]$row.windowStartAt
+        $State['Opportunity'+$n+'ProbabilityValue'] = ('{0:R}' -f [double]$row.probability)
+        $State['Opportunity'+$n+'ElapsedSeconds'] = [long]$row.elapsedSeconds
     }
 }
 
@@ -206,7 +214,7 @@ if ($missing.Count -gt 0) { throw ('Opportunity prerequisites missing or invalid
 
 $preferences = Read-UiPreferences
 $sortMode = [string]$preferences.sortMode
-if ($sortMode -notin @('upcoming','gross','profit_per_hour')) { $sortMode = 'upcoming' }
+if ($sortMode -notin @('name','upcoming','gross','profit_per_hour')) { $sortMode = 'upcoming' }
 $profile = Get-TravelProfile -BaseSettings $settings -LocalSettings $local
 $evidence = Get-OptimalEvidence
 $optimizerSettings = Get-OptimalProperty $settings 'optimizer'
@@ -391,12 +399,14 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
 
 $allRows = @($rows.ToArray())
 $sorted = @()
-if ($sortMode -eq 'gross') {
-    $sorted = @($allRows | Sort-Object @{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},elapsedSeconds)
+if ($sortMode -eq 'name') {
+    $sorted = @($allRows | Sort-Object name,countryName,key)
+} elseif ($sortMode -eq 'gross') {
+    $sorted = @($allRows | Sort-Object @{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},elapsedSeconds,name)
 } elseif ($sortMode -eq 'profit_per_hour') {
-    $sorted = @($allRows | Sort-Object @{Expression='profitPerHour';Descending=$true},@{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true})
+    $sorted = @($allRows | Sort-Object @{Expression='profitPerHour';Descending=$true},@{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},name)
 } else {
-    $sorted = @($allRows | Sort-Object @{Expression='windowStartAt';Ascending=$true},@{Expression='probability';Descending=$true},@{Expression='grossProfit';Descending=$true})
+    $sorted = @($allRows | Sort-Object @{Expression='windowStartAt';Ascending=$true},@{Expression='probability';Descending=$true},@{Expression='grossProfit';Descending=$true},name)
 }
 
 $message = ''
