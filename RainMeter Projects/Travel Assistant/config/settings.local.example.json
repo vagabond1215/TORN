@@ -19,12 +19,12 @@
     "factionWarTravelCostLevel": 0
   },
   "profitability": {
-    "sellTarget": "item_market",
-    "itemMarketFeePercent": 5.0,
-    "minimumProfitPerItem": 50000,
-    "minimumMarginPercent": 5.0,
+    "sellTarget": "market_value",
+    "itemMarketFeePercent": 0.0,
+    "minimumProfitPerItem": 0,
+    "minimumMarginPercent": 0.0,
     "minimumTotalTripProfit": 0,
     "capacityOverride": 0,
-    "resaleStaleAfterSeconds": 600
+    "resaleStaleAfterSeconds": 21600
   }
 }
