@@ -6,7 +6,7 @@ This directory separates durable architecture from the active implementation han
 
 1. [`../AGENTS.md`](../AGENTS.md) — subtree invariants and product boundaries.
 2. [`NEXT_CODEX_RUN.md`](./NEXT_CODEX_RUN.md) — authoritative active implementation/validation scope when **ACTIVE**.
-3. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — durable collection/catalog/MV/capacity/optimizer structure.
+3. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — durable collection/catalog/MV/capacity/opportunity structure.
 4. [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md) — factual implementation checkpoint and pending Windows boundary.
 5. [`PROVIDER_DISCOVERY.md`](./PROVIDER_DISCOVERY.md) — provider notes.
 6. [`HISTORICAL_BOOTSTRAP.md`](./HISTORICAL_BOOTSTRAP.md) — historical truth/provenance rules.
@@ -35,23 +35,20 @@ Accepted data foundation at the last target-Windows check:
 5 verified legacy relationships
 ```
 
-The previous four independent item cards/graphs were an intermediate UI proof. The current committed **0.5.0 candidate** replaces that surface with one minimalist, evidence-aware next-trip optimizer showing only the item(s) to purchase.
+The active **0.6.0 candidate** restores the opportunity list as the primary surface and makes optimizer intelligence an ordering layer rather than a replacement UI.
 
-0.5 adds:
+Current primary behavior:
 
-- all-11-country travel economics for route comparison;
-- active-catalog Item/Category filters plus Trip/Country filters;
-- full-catalog Ignore List;
-- 100% Torn MV valuation by default and optional 95% MV;
-- no minimum-profit/LOW_MARGIN timing gate in the main optimizer;
-- independently configurable Energy/Nerve waste policies and maximum losses;
-- Energy-over-natural-max stacking bypass only for Energy;
-- current travel/bar context from one bounded `travel,basic,bars` call;
-- category-aware mixed-capacity purchase plans;
-- modeled arrival availability from retained cycles;
-- optimizer-driven MV queue priority while preserving the one-request/update cap;
-- compact aligned purchase rows with `$foreign ($MV)` formatting.
+- up to eight evidence-backed country/item opportunities;
+- persistent Item/Trip/Country/Category filters;
+- `OPTIMAL`, `UPCOMING`, `PROFIT`, and `TIME` orderings;
+- no separate Chance sort;
+- `OPTIMAL` = probability-weighted gross trip profit per total elapsed hour;
+- global optimal row stays marked while another ordering is selected;
+- current/future window timing plus leave timing, likelihood, elapsed time, gross profit, foreign price and MV in each row;
+- Energy/Nerve waste constraints for new outbound opportunities;
+- stable `country:itemId` graph actions;
+- 8-hour on-demand graphs with hourly markers and left-edge carry-forward;
+- background route optimizer retained for compatibility and MV-priority work.
 
-This 0.5 candidate is pending target-Windows/Rainmeter acceptance. It is a **next-trip planner**, not yet the future bounded multi-trip sequence scheduler.
-
-See `NEXT_CODEX_RUN.md` for the exact focused acceptance commands.
+This 0.6 candidate is pending target-Windows/Rainmeter acceptance. See `NEXT_CODEX_RUN.md` for the exact focused acceptance commands.
