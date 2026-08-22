@@ -52,6 +52,18 @@ local function moneyNumber(v)
     return sign * (tonumber(text) or 0)
 end
 
+local function formatInteger(v)
+    local value = math.floor(math.abs(number(v)) + 0.5)
+    local text = tostring(value)
+    while true do
+        local changed, count = text:gsub('^(%d+)(%d%d%d)', '%1,%2')
+        text = changed
+        if count == 0 then break end
+    end
+    if number(v) < 0 then text = '-' .. text end
+    return text
+end
+
 local function readKv(path)
     local out = {}
     local file = io.open(path, 'r')
@@ -251,8 +263,8 @@ local function configureInteractiveMeters()
         SKIN:Bang('!SetOption', p .. 'Rank', 'StringAlign', 'Center')
         SKIN:Bang('!SetOption', p .. 'Rank', 'FontFace', 'Segoe UI Semibold')
         SKIN:Bang('!SetOption', p .. 'Rank', 'FontSize', '7')
-        SKIN:Bang('!SetOption', p .. 'Rank', 'FontColor', '24,27,31,255')
-        SKIN:Bang('!SetOption', p .. 'Rank', 'Text', '#Opportunity' .. i .. 'TimeText#')
+        SKIN:Bang('!SetOption', p .. 'Rank', 'FontColor', '#Muted#')
+        SKIN:Bang('!SetOption', p .. 'Rank', 'Text', '')
 
         SKIN:Bang('!SetOption', p .. 'Name', 'X', '56')
         SKIN:Bang('!SetOption', p .. 'Name', 'W', '248')
@@ -369,7 +381,7 @@ local function applyFlagForRow(index, key)
     if lastFlagKeys[index] == key then return end
     lastFlagKeys[index] = key
     local meter = 'MeterOpportunity' .. index .. 'Card'
-    for shapeIndex = 2, 7 do setShape(meter, shapeIndex, invisibleShape) end
+    for shapeIndex = 2, 9 do setShape(meter, shapeIndex, invisibleShape) end
 
     local country = countryIdFromKey(key)
     if country == 'mexico' then
@@ -435,9 +447,6 @@ local function applyFlagForRow(index, key)
     else
         setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 90,96,106,255 | StrokeWidth 0')
     end
-
-    setShape(meter,8,'Rectangle 4,32,36,14 | Fill Color 248,248,248,255 | StrokeWidth 0')
-    setShape(meter,9,'Rectangle 4,4,36,42,2 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color 255,255,255,70')
 end
 
 local function graphSpecPath(key)
@@ -456,7 +465,7 @@ end
 
 local function clearGraphShapes(index)
     local meter = 'MeterOpportunity' .. index .. 'Card'
-    for shapeIndex = 10, 18 do setShape(meter, shapeIndex, invisibleShape) end
+    for shapeIndex = 10, 23 do setShape(meter, shapeIndex, invisibleShape) end
     SKIN:Bang('!SetOption', meter, 'GraphPath', '44,150 | LineTo 520,150')
 end
 
@@ -467,14 +476,19 @@ local function applyGraphShapes(index, spec)
     setShape(meter,12,'Line 44,113,520,113 | StrokeWidth 1 | Stroke Color 58,64,73,140')
     setShape(meter,13,'Line 44,150,520,150 | StrokeWidth 1 | Stroke Color 58,64,73,180')
     setShape(meter,14,'Line 44,76,44,150 | StrokeWidth 1 | Stroke Color 58,64,73,180')
-    setShape(meter,15,'Line 203,76,203,150 | StrokeWidth 1 | Stroke Color 58,64,73,120')
-    setShape(meter,16,'Line 361,76,361,150 | StrokeWidth 1 | Stroke Color 58,64,73,120')
-    setShape(meter,17,'Line 520,76,520,150 | StrokeWidth 1 | Stroke Color 58,64,73,180')
+    setShape(meter,15,'Line 103.5,76,103.5,150 | StrokeWidth 1 | Stroke Color 58,64,73,110')
+    setShape(meter,16,'Line 163,76,163,150 | StrokeWidth 1 | Stroke Color 58,64,73,110')
+    setShape(meter,17,'Line 222.5,76,222.5,150 | StrokeWidth 1 | Stroke Color 58,64,73,110')
+    setShape(meter,18,'Line 282,76,282,150 | StrokeWidth 1 | Stroke Color 58,64,73,110')
+    setShape(meter,19,'Line 341.5,76,341.5,150 | StrokeWidth 1 | Stroke Color 58,64,73,110')
+    setShape(meter,20,'Line 401,76,401,150 | StrokeWidth 1 | Stroke Color 58,64,73,110')
+    setShape(meter,21,'Line 460.5,76,460.5,150 | StrokeWidth 1 | Stroke Color 58,64,73,110')
+    setShape(meter,22,'Line 520,76,520,150 | StrokeWidth 1 | Stroke Color 58,64,73,180')
     if spec ~= nil and safeText(spec.GraphPath, '') ~= '' then
         SKIN:Bang('!SetOption', meter, 'GraphPath', safeText(spec.GraphPath, '44,150 | LineTo 520,150'))
-        setShape(meter,18,'Path GraphPath | StrokeWidth 2 | Stroke Color 82,174,255,255 | Fill Color 0,0,0,0')
+        setShape(meter,23,'Path GraphPath | StrokeWidth 2 | Stroke Color 82,174,255,255 | Fill Color 0,0,0,0')
     else
-        setShape(meter,18,invisibleShape)
+        setShape(meter,23,invisibleShape)
     end
 end
 
@@ -518,25 +532,29 @@ local function layoutRows(data, count)
             SKIN:Bang('!SetOption', p .. 'Graph', 'Text', isExpanded and '^' or 'v')
 
             if isExpanded then
-                SKIN:Bang('!SetOption', p .. 'Country', 'X', '48')
-                SKIN:Bang('!SetOption', p .. 'Country', 'Y', tostring(y+57))
-                SKIN:Bang('!SetOption', p .. 'Country', 'W', '430')
+                -- Reuse hidden compatibility string meters as sparse chart axis labels.
+                SKIN:Bang('!SetOption', p .. 'Country', 'X', '40')
+                SKIN:Bang('!SetOption', p .. 'Country', 'Y', tostring(y+67))
+                SKIN:Bang('!SetOption', p .. 'Country', 'W', '38')
+                SKIN:Bang('!SetOption', p .. 'Country', 'StringAlign', 'Right')
                 SKIN:Bang('!SetOption', p .. 'Country', 'FontSize', '7')
                 SKIN:Bang('!SetOption', p .. 'Country', 'FontColor', '#Muted#')
-                SKIN:Bang('!SetOption', p .. 'Country', 'StringAlign', 'Left')
-                SKIN:Bang('!SetOption', p .. 'Optimal', 'X', '44')
-                SKIN:Bang('!SetOption', p .. 'Optimal', 'Y', tostring(y+154))
-                SKIN:Bang('!SetOption', p .. 'Optimal', 'W', '44')
+
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'X', '40')
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'Y', tostring(y+143))
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'W', '38')
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'StringAlign', 'Right')
                 SKIN:Bang('!SetOption', p .. 'Optimal', 'FontSize', '7')
                 SKIN:Bang('!SetOption', p .. 'Optimal', 'FontColor', '#Muted#')
-                SKIN:Bang('!SetOption', p .. 'Optimal', 'Text', '-8h')
-                SKIN:Bang('!SetOption', p .. 'Time', 'X', '520')
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'Text', '0')
+
+                SKIN:Bang('!SetOption', p .. 'Time', 'X', '44')
                 SKIN:Bang('!SetOption', p .. 'Time', 'Y', tostring(y+154))
                 SKIN:Bang('!SetOption', p .. 'Time', 'W', '44')
-                SKIN:Bang('!SetOption', p .. 'Time', 'StringAlign', 'Right')
+                SKIN:Bang('!SetOption', p .. 'Time', 'StringAlign', 'Left')
                 SKIN:Bang('!SetOption', p .. 'Time', 'FontSize', '7')
                 SKIN:Bang('!SetOption', p .. 'Time', 'FontColor', '#Muted#')
-                SKIN:Bang('!SetOption', p .. 'Time', 'Text', 'now')
+                SKIN:Bang('!SetOption', p .. 'Time', 'Text', '-8h')
             else
                 SKIN:Bang('!HideMeter', p .. 'Country')
                 SKIN:Bang('!HideMeter', p .. 'Optimal')
@@ -562,9 +580,9 @@ local function updateExpandedGraph(data)
     if signature ~= lastGraphSignature then
         lastGraphSignature = signature
         applyGraphShapes(expandedRow, spec)
-        local summary = 'Loading 8-hour stock history...'
-        if spec ~= nil then summary = safeText(spec.Summary, summary) end
-        SKIN:Bang('!SetOption', p .. 'Country', 'Text', summary)
+        local maxText = ''
+        if spec ~= nil and number(spec.MaxStock) > 0 then maxText = formatInteger(spec.MaxStock) end
+        SKIN:Bang('!SetOption', p .. 'Country', 'Text', maxText)
     end
     SKIN:Bang('!ShowMeter', p .. 'Country')
     SKIN:Bang('!ShowMeter', p .. 'Optimal')
@@ -590,7 +608,9 @@ local function updateOpportunities(data)
             if suffix == 'AccentColor' then fallback = '58,64,73,255' end
             setVariable(prefix .. suffix, safeText(data[prefix .. suffix], fallback))
         end
-        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
+        local p = 'MeterOpportunity' .. i
+        SKIN:Bang('!SetOption', p .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
+        SKIN:Bang('!SetOption', p .. 'Rank', 'Text', safeText(data[prefix .. 'TimeText'], ''))
         updateOpportunityGrossMeter(data, prefix, i)
         local visible = i <= count
         setGroupVisible('OpportunityRow' .. i, visible)
@@ -614,11 +634,18 @@ local function deferPolling(seconds)
     if nextPollAt == nil or nextPollAt < target then nextPollAt = target end
 end
 
+local function runViewerMeasure(marketKey)
+    setVariable('ViewerMarketKey', marketKey or '')
+    -- Dynamic RunCommand parameters are refreshed explicitly so a prior Viewer
+    -- key cannot leak into an inline chart request (or vice versa).
+    SKIN:Bang('!UpdateMeasure', 'MeasureItemViewer')
+    SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')
+end
+
 local function requestInlineGraph(key)
     if key == '' then return end
     lastInlineRenderRequestAt = os.time()
-    setVariable('ViewerMarketKey', 'inline_' .. key)
-    SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')
+    runViewerMeasure('inline_' .. key)
 end
 
 function Initialize()
@@ -652,6 +679,7 @@ end
 function OpenFilter(filterName)
     deferPolling(5)
     setVariable('FilterRequest', filterName)
+    SKIN:Bang('!UpdateMeasure', 'MeasureFilterPopup')
     SKIN:Bang('!CommandMeasure', 'MeasureFilterPopup', 'Run')
 end
 
@@ -659,6 +687,7 @@ function ToggleTripBand(band)
     deferPolling(5)
     setVariable('PreferenceAction', 'ToggleTripBand')
     setVariable('PreferenceValue', band)
+    SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
 end
 
@@ -666,6 +695,7 @@ function ResetFilters()
     deferPolling(5)
     setVariable('PreferenceAction', 'ResetFilters')
     setVariable('PreferenceValue', '')
+    SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
 end
 
@@ -684,6 +714,7 @@ function SetSortMode(mode)
 
     setVariable('PreferenceAction', 'SetSortMode')
     setVariable('PreferenceValue', mode)
+    SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
     SKIN:Bang('!UpdateMeter', '*')
     SKIN:Bang('!Redraw')
@@ -715,8 +746,7 @@ end
 
 function OpenViewer(marketKey)
     deferPolling(5)
-    setVariable('ViewerMarketKey', marketKey or '')
-    SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')
+    runViewerMeasure(marketKey or '')
 end
 
 function Update()
