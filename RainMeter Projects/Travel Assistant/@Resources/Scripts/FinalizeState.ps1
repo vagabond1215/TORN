@@ -38,8 +38,7 @@ function Read-StateKv {
         $index = $line.IndexOf('=')
         if ($index -lt 1) { continue }
         $key = $line.Substring(0, $index).Trim([char]0xFEFF).Trim()
-        $value = $line.Substring($index + 1).Trim()
-        $values[$key] = $value
+        $values[$key] = $line.Substring($index + 1).Trim()
     }
     return $values
 }
@@ -49,9 +48,8 @@ function Write-StateKvAtomic {
     $tmp = $Path + '.tmp'
     $lines = New-Object System.Collections.Generic.List[string]
     foreach ($key in ($Values.Keys | Sort-Object)) {
-        $value = [string]$Values[$key]
-        $cleanValue = $value.Replace("`r", ' ').Replace("`n", ' ')
-        $lines.Add("$key=$cleanValue")
+        $value = ([string]$Values[$key]).Replace("`r", ' ').Replace("`n", ' ')
+        $lines.Add("$key=$value")
     }
     [System.IO.File]::WriteAllLines($tmp, $lines.ToArray(), [System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $tmp -Destination $Path -Force
@@ -87,11 +85,10 @@ function Load-Cycles {
 function Get-ProfitabilitySettings {
     $base = Read-JsonFile (Join-Path $ConfigDir 'settings.example.json')
     if ($null -eq $base) { throw 'config/settings.example.json is missing or invalid.' }
-
     $profitability = $base.profitability
     $local = Read-JsonFile (Join-Path $ConfigDir 'settings.local.json')
     if ($null -ne $local -and $local.PSObject.Properties['profitability'] -and $null -ne $local.profitability) {
-        foreach ($name in @('sellTarget','itemMarketFeePercent','minimumProfitPerItem','minimumMarginPercent','minimumTotalTripProfit','capacityOverride','resaleStaleAfterSeconds')) {
+        foreach ($name in @('capacityOverride','resaleStaleAfterSeconds')) {
             $localProp = $local.profitability.PSObject.Properties[$name]
             if ($null -eq $localProp) { continue }
             $targetProp = $profitability.PSObject.Properties[$name]
@@ -102,14 +99,6 @@ function Get-ProfitabilitySettings {
     return $profitability
 }
 
-function Clear-DepartureTiming {
-    param([hashtable]$State, [string]$Prefix)
-    $State[$Prefix + 'WindowOpenAt'] = 0
-    $State[$Prefix + 'WindowCloseAt'] = 0
-    $State[$Prefix + 'BestDepartureAt'] = 0
-    $State[$Prefix + 'HitRate'] = 0
-}
-
 $settings = Read-JsonFile (Join-Path $ConfigDir 'settings.example.json')
 $localSettings = Read-JsonFile (Join-Path $ConfigDir 'settings.local.json')
 $itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
@@ -118,9 +107,7 @@ $perksConfig = Read-JsonFile (Join-Path $ConfigDir 'travel-perks.json')
 $engineState = Read-JsonFile $EngineStateFile
 $state = Read-StateKv $StateKvFile
 
-if ($null -eq $settings -or $null -eq $itemsConfig -or $null -eq $countriesConfig -or $null -eq $perksConfig -or $null -eq $engineState -or $state.Count -eq 0) {
-    return
-}
+if ($null -eq $settings -or $null -eq $itemsConfig -or $null -eq $countriesConfig -or $null -eq $perksConfig -or $null -eq $engineState -or $state.Count -eq 0) { return }
 
 $enabledItem = @($itemsConfig.items | Where-Object { $_.enabled -eq $true } | Select-Object -First 1)
 if ($enabledItem.Count -eq 0) { return }
@@ -141,50 +128,41 @@ $state['ProfileItemCapacityBonus'] = [int]$travelEffects.itemCapacityBonus
 $state['ProfileTravelCostReductionPercent'] = [int]$travelEffects.travelCostReductionPercent
 $state['ProfileFreeBusinessClass'] = if ([bool]$travelEffects.freeBusinessClass) { 1 } else { 0 }
 
-$resale = Get-DynamicProperty $engineState.resaleCache ([string]$itemId)
-$resalePrice = 0L
+$resale = if ($engineState.PSObject.Properties['resaleCache']) { Get-DynamicProperty $engineState.resaleCache ([string]$itemId) } else { $null }
+$marketValue = 0L
 $resaleFetchedAt = 0L
 if ($null -ne $resale) {
-    if ($resale.PSObject.Properties['price']) { $resalePrice = [long]$resale.price }
+    if ($resale.PSObject.Properties['average'] -and [long]$resale.average -gt 0) { $marketValue = [long]$resale.average }
+    elseif ($resale.PSObject.Properties['price']) { $marketValue = [long]$resale.price }
     if ($resale.PSObject.Properties['fetchedAt']) { $resaleFetchedAt = [long]$resale.fetchedAt }
 }
-$resaleStaleAfter = 600L
-if ($profitability.PSObject.Properties['resaleStaleAfterSeconds']) { $resaleStaleAfter = [long]$profitability.resaleStaleAfterSeconds }
+$resaleStaleAfter = if ($profitability.PSObject.Properties['resaleStaleAfterSeconds']) { [long]$profitability.resaleStaleAfterSeconds } else { 21600L }
 if ($resaleStaleAfter -lt 60) { $resaleStaleAfter = 60 }
-$resaleFresh = ($resalePrice -gt 0 -and $resaleFetchedAt -gt 0 -and ($now - $resaleFetchedAt) -le $resaleStaleAfter)
-
-$feePercent = 5.0
-if ($profitability.PSObject.Properties['itemMarketFeePercent']) { $feePercent = [double]$profitability.itemMarketFeePercent }
-if ($feePercent -lt 0) { $feePercent = 0 }
-if ($feePercent -gt 100) { $feePercent = 100 }
-$minimumProfitPerItem = if ($profitability.PSObject.Properties['minimumProfitPerItem']) { [double]$profitability.minimumProfitPerItem } else { 0.0 }
-$minimumMarginPercent = if ($profitability.PSObject.Properties['minimumMarginPercent']) { [double]$profitability.minimumMarginPercent } else { 0.0 }
-$minimumTotalTripProfit = if ($profitability.PSObject.Properties['minimumTotalTripProfit']) { [double]$profitability.minimumTotalTripProfit } else { 0.0 }
+$resaleFresh = ($marketValue -gt 0 -and $resaleFetchedAt -gt 0 -and ($now - $resaleFetchedAt) -le $resaleStaleAfter)
 $capacityOverride = if ($profitability.PSObject.Properties['capacityOverride']) { [int]$profitability.capacityOverride } else { 0 }
 if ($capacityOverride -lt 0) { $capacityOverride = 0 }
 
 $cutoff = $now - ([long]$settings.cycleRetentionDays * 86400)
 $minimumRestockSamples = [int]$settings.recommendation.minimumComparableCycles
-$hardDataStatuses = @('STALE_DATA','SOURCE_DISAGREEMENT')
-$timingStatuses = @('SAFE_WINDOW','BEST_ODDS','TOO_EARLY')
 
 foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -eq $true })) {
     $prefix = if ([string]$country.id -eq 'united_kingdom') { 'UK' } elseif ([string]$country.id -eq 'japan') { 'JP' } else { ([string]$country.id).ToUpperInvariant() }
     $destKey = ([string]$country.id) + ':' + ([string]$itemId)
-    $destState = Get-DynamicProperty $engineState.destinations $destKey
+    $destState = if ($engineState.PSObject.Properties['destinations']) { Get-DynamicProperty $engineState.destinations $destKey } else { $null }
     $stock = 0
     $foreignPrice = 0L
     if ($state.ContainsKey($prefix + 'Stock')) { [void][int]::TryParse([string]$state[$prefix + 'Stock'], [ref]$stock) }
     if ($state.ContainsKey($prefix + 'ForeignPrice')) { [void][long]::TryParse([string]$state[$prefix + 'ForeignPrice'], [ref]$foreignPrice) }
 
+    # Restock/sellout evidence is independent of profitability and remains useful
+    # even when the current item has negative trade value.
     if ($null -ne $destState) {
         $activeCycle = Get-DynamicProperty $destState 'activeCycle'
-        if ($stock -gt 0 -and $null -ne $activeCycle -and [long]$activeCycle.restockAt -gt 0) {
+        if ($stock -gt 0 -and $null -ne $activeCycle -and $activeCycle.PSObject.Properties['restockAt'] -and [long]$activeCycle.restockAt -gt 0) {
             $state[$prefix + 'RestockEstimateAt'] = [long]$activeCycle.restockAt
             $state[$prefix + 'RestockSampleCount'] = 'live'
         } else {
-            $lastSellOutAt = 0L
-            if ($destState.PSObject.Properties['lastSellOutAt']) { $lastSellOutAt = [long]$destState.lastSellOutAt }
+            $lastSellOutAt = if ($destState.PSObject.Properties['lastSellOutAt']) { [long]$destState.lastSellOutAt } else { 0L }
             if ($lastSellOutAt -gt 0) {
                 $restockCycles = @(Load-Cycles -Country ([string]$country.id) -ItemId $itemId -Cutoff $cutoff | Where-Object {
                     $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0
@@ -201,9 +179,6 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
         }
     }
 
-    $status = [string]$state[$prefix + 'Status']
-    if ($hardDataStatuses -contains $status) { continue }
-
     $economics = Get-EffectiveTravelEconomics -Country $country -TravelMode $mode -Effects $travelEffects -CapacityOverride $capacityOverride
     $travelCostKnown = [bool]$economics.travelCostKnown
     $travelCost = [long]$economics.travelCost
@@ -212,48 +187,22 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
     $state[$prefix + 'TravelCost'] = if ($travelCostKnown) { $travelCost } else { -1 }
     $state[$prefix + 'Capacity'] = $capacity
     $state[$prefix + 'ResaleFresh'] = if ($resaleFresh) { 1 } else { 0 }
+    $state[$prefix + 'MarketValue'] = $marketValue
+    $state[$prefix + 'RequiredTripProfit'] = 0
 
-    if (($timingStatuses -contains $status) -and -not $resaleFresh) {
-        $state[$prefix + 'Status'] = 'CHECK_EXTERNAL'
-        $state[$prefix + 'Message'] = 'Resale reference is stale - no departure recommendation'
-        Clear-DepartureTiming -State $state -Prefix $prefix
-        continue
-    }
-
-    if (($timingStatuses -contains $status) -and (-not $travelCostKnown -or $capacity -le 0)) {
-        $state[$prefix + 'Status'] = 'CHECK_EXTERNAL'
-        if ($mode -eq 'business' -and -not [bool]$travelEffects.freeBusinessClass) {
-            $state[$prefix + 'Message'] = 'Business travel requires modeled ticket cost or free 10-star Lingerie travel'
-        } else {
-            $state[$prefix + 'Message'] = 'Travel-mode economics are unresolved - no departure recommendation'
-        }
-        Clear-DepartureTiming -State $state -Prefix $prefix
-        continue
-    }
-
-    if (-not $resaleFresh -or -not $travelCostKnown -or $capacity -le 0 -or $foreignPrice -le 0) { continue }
-
-    $netResalePrice = [long][Math]::Floor($resalePrice * (1.0 - ($feePercent / 100.0)))
-    $netProfitPerItem = [long]($netResalePrice - $foreignPrice)
-    $tripProfit = [long](($netProfitPerItem * $capacity) - $travelCost)
-    $tripSpend = [long](($foreignPrice * $capacity) + $travelCost)
-    $tripMargin = if ($tripSpend -gt 0) { 100.0 * $tripProfit / [double]$tripSpend } else { 0.0 }
-    $requiredTripProfit = [Math]::Max($minimumTotalTripProfit, ($minimumProfitPerItem * $capacity))
-
-    $state[$prefix + 'NetResalePrice'] = $netResalePrice
-    $state[$prefix + 'NetProfitPerItem'] = $netProfitPerItem
-    $state[$prefix + 'TripProfit'] = $tripProfit
-    $state[$prefix + 'TripMarginPercent'] = ('{0:F4}' -f $tripMargin)
-    $state[$prefix + 'RequiredTripProfit'] = [long][Math]::Ceiling($requiredTripProfit)
-
-    if ($tripProfit -lt 0) {
-        $state[$prefix + 'Status'] = 'UNPROFITABLE'
-        $state[$prefix + 'Message'] = ('Trip is negative after travel cost: ${0:N0} at {1} slots' -f $tripProfit, $capacity)
-        Clear-DepartureTiming -State $state -Prefix $prefix
-    } elseif ($tripProfit -lt $requiredTripProfit -or $tripMargin -lt $minimumMarginPercent) {
-        $state[$prefix + 'Status'] = 'LOW_MARGIN'
-        $state[$prefix + 'Message'] = ('Trip net too low after travel cost: ${0:N0} | {1:N1}% at {2} slots' -f $tripProfit, $tripMargin, $capacity)
-        Clear-DepartureTiming -State $state -Prefix $prefix
+    # Economics are informational only. They must never rewrite Status/Message or
+    # clear SAFE_WINDOW/BEST_ODDS timing. The 0.5 optimizer separately applies
+    # optional profitable-only filtering while allowing negative-value candidates
+    # by default.
+    if ($marketValue -gt 0 -and $foreignPrice -gt 0 -and $capacity -gt 0) {
+        $profitPerItem = [long]($marketValue - $foreignPrice)
+        $tripProfit = if ($travelCostKnown) { [long](($profitPerItem * $capacity) - $travelCost) } else { [long]($profitPerItem * $capacity) }
+        $tripSpend = if ($travelCostKnown) { [long](($foreignPrice * $capacity) + $travelCost) } else { [long]($foreignPrice * $capacity) }
+        $tripMargin = if ($tripSpend -gt 0) { 100.0 * $tripProfit / [double]$tripSpend } else { 0.0 }
+        $state[$prefix + 'NetResalePrice'] = $marketValue
+        $state[$prefix + 'NetProfitPerItem'] = $profitPerItem
+        $state[$prefix + 'TripProfit'] = $tripProfit
+        $state[$prefix + 'TripMarginPercent'] = ('{0:F4}' -f $tripMargin)
     }
 }
 
