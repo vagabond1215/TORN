@@ -57,15 +57,6 @@ local function setMeterVisible(meter, visible)
     else SKIN:Bang('!HideMeter', meter) end
 end
 
-local function formatCountdown(seconds)
-    seconds = math.max(0, math.floor(number(seconds)))
-    local h = math.floor(seconds / 3600)
-    local m = math.floor((seconds % 3600) / 60)
-    local s = seconds % 60
-    if h > 0 then return string.format('%d:%02d:%02d', h, m, s) end
-    return string.format('%02d:%02d', m, s)
-end
-
 local function providerLabel(provider)
     if provider == 'prometheus' then return 'Prometheus' end
     if provider == 'yata' then return 'YATA' end
@@ -75,9 +66,6 @@ end
 local function oldestSourceTimestamp(data)
     local projected = number(data.UIOldestMarketSourceTimestamp)
     if projected > 0 then return projected end
-
-    -- Compatibility fallback for state written before optimizer-wide freshness
-    -- projection existed.
     local values = {}
     for _, key in ipairs({'UKSourceTimestamp','JPSourceTimestamp'}) do
         local value = number(data[key])
@@ -121,60 +109,38 @@ local function updateFilters(data)
     setVariable('TripLongColor', number(data.UITripLongOn) == 1 and '82,174,255,255' or '145,152,164,255')
 end
 
-local function updateOptimal(data, now)
-    local visible = number(data.OptimalVisible) == 1
-    local itemCount = math.max(0, math.min(8, math.floor(number(data.OptimalItemCount))))
-    if not visible then itemCount = 0 end
+local function updateSort(data)
+    local mode = safeText(data.OpportunitySortMode, 'optimal'):lower()
+    local active = '82,174,255,255'
+    local inactive = '145,152,164,255'
+    setVariable('SortOptimalColor', mode == 'optimal' and active or inactive)
+    setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
+    setVariable('SortProfitColor', mode == 'profit' and active or inactive)
+    setVariable('SortTimeColor', mode == 'time' and active or inactive)
+end
 
-    local title = 'OPTIMAL'
-    if visible then title = 'OPTIMAL  •  ' .. safeText(data.OptimalCountryName, 'Route') end
-    setVariable('OptimalTitleText', title)
-
-    local arrival = safeText(data.OptimalArrivalText, '')
-    if safeText(data.TravelState, '') == 'traveling' then
-        local arrivalAt = number(data.TravelArrivalAt)
-        if arrivalAt > now then arrival = 'arrive ' .. formatCountdown(arrivalAt - now) end
-    end
-
-    local metaParts = {}
-    for _, value in ipairs({
-        arrival,
-        safeText(data.OptimalCapacityText, ''),
-        safeText(data.OptimalChanceText, ''),
-        safeText(data.OptimalEnergyText, ''),
-        safeText(data.OptimalNerveText, '')
-    }) do
-        if value ~= '' then table.insert(metaParts, value) end
-    end
-    setVariable('OptimalMetaText', table.concat(metaParts, '  •  '))
-
-    local valueText = ''
-    if visible and safeText(data.OptimalExpectedProfitText, '') ~= '' then
-        valueText = safeText(data.OptimalExpectedProfitText, '') .. ' EV  @ ' .. safeText(data.OptimalProfitBasisText, '100% MV')
-    end
-    setVariable('OptimalValueText', valueText)
-    setVariable('OptimalMessageText', safeText(data.OptimalMessage, 'Learning current markets...'))
-
-    -- A route uses the body for purchase rows. Learning/no-route state uses the
-    -- same space for its explanatory message, never both at once.
-    setMeterVisible('MeterRouteMessage', not visible or itemCount == 0)
+local function updateOpportunities(data)
+    local count = math.max(0, math.min(8, math.floor(number(data.OpportunityCount))))
+    setVariable('OpportunityMessageText', safeText(data.OpportunityMessage, 'Learning opportunities...'))
+    setMeterVisible('MeterOpportunityMessage', count == 0)
 
     for i = 1, 8 do
-        local prefix = 'OptimalItem' .. i
-        setVariable(prefix .. 'Name', safeText(data[prefix .. 'Name'], ''))
-        setVariable(prefix .. 'QtyText', safeText(data[prefix .. 'QtyText'], ''))
-        setVariable(prefix .. 'PriceText', safeText(data[prefix .. 'PriceText'], '-'))
-        setVariable(prefix .. 'MarketValueText', safeText(data[prefix .. 'MarketValueText'], '-'))
-        setVariable(prefix .. 'ChanceText', safeText(data[prefix .. 'ChanceText'], ''))
-        setVariable(prefix .. 'PriceColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
-        setVariable(prefix .. 'Tooltip', safeText(data[prefix .. 'Tooltip'], ''))
-        setGroupVisible('OptimalItemRow' .. i, visible and i <= itemCount)
+        local prefix = 'Opportunity' .. i
+        for _, suffix in ipairs({
+            'Key','RankText','OptimalText','Name','Country','CountryCode','WindowText','LeaveText',
+            'ChanceText','TimeText','GrossText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip'
+        }) do
+            local fallback = ''
+            if suffix == 'PriceColor' then fallback = '145,152,164,255' end
+            if suffix == 'AccentColor' then fallback = '58,64,73,255' end
+            setVariable(prefix .. suffix, safeText(data[prefix .. suffix], fallback))
+        end
+        setGroupVisible('OpportunityRow' .. i, i <= count)
     end
 
-    local routeHeight = 82 + itemCount * 28
-    if itemCount == 0 then routeHeight = 92 end
-    setVariable('RouteHeight', routeHeight)
-    setVariable('PanelHeight', 90 + routeHeight + 8)
+    local panelHeight = 164
+    if count > 0 then panelHeight = 120 + count * 54 + 8 end
+    setVariable('PanelHeight', panelHeight)
 end
 
 function Initialize()
@@ -211,6 +177,17 @@ function ResetFilters()
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
 end
 
+function SetSortMode(mode)
+    setVariable('PreferenceAction', 'SetSortMode')
+    setVariable('PreferenceValue', mode)
+    SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
+end
+
+function OpenViewer(marketKey)
+    setVariable('ViewerMarketKey', marketKey or '')
+    SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')
+end
+
 function Update()
     local now = os.time()
     local data = readState()
@@ -233,6 +210,7 @@ function Update()
 
     updateHeartbeatText(data, now)
     updateFilters(data)
-    updateOptimal(data, now)
+    updateSort(data)
+    updateOpportunities(data)
     return 0
 end
