@@ -16,10 +16,7 @@ ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
 NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
 [FLAG]  <item>                                <$gross>   v
-[time]  <window>  <leave>  <chance/LEARNING>  <foreign> (<MV>)
-
-[FLAG]  <item>                                <$gross>   v
-[time]  ...
+ time   <window>  <leave>  <chance/LEARNING>  <foreign> (<MV>)
 ```
 
 Up to eight current/future opportunities may be shown.
@@ -27,8 +24,8 @@ Up to eight current/future opportunities may be shown.
 ### Compact-card rules
 
 - Remove visible `#1/#2/...` place numbers.
-- Left side is a destination flag tile.
-- Bottom of that tile is a white strip containing the existing total elapsed/travel-time text.
+- Left side is a destination flag with travel/elapsed-time text directly beneath it on the normal card background.
+- Do **not** draw the former white travel-time strip or a separate flag-tile background/outline.
 - Country name/code and elapsed time do not appear again in the card body.
 - Visible gross is only `$amount`; no `gross` suffix and no `xN` suffix.
 - Quantity remains in internal projection/tooltips for inspectable economics.
@@ -45,9 +42,13 @@ The row chevron expands an 8-hour stock graph **inside that card/list**.
 - Expanded cards reflow later rows and panel height.
 - The graph is local-only and uses `RenderInlineGraph.ps1` plus generated Rainmeter Shape-path data.
 - An open inline graph can refresh locally at approximately one-minute cadence.
+- The 8-hour graph has seven evenly spaced internal vertical separators: one-hour segments.
+- Y-axis labels are sparse: retained numeric maximum at the upper-left, `0` at the lower-left.
+- X-axis keeps `-8h` at the lower-left; the right edge implicitly means now.
+- Do not display `8H STOCK`, `max`, retained-point counts, stock-change counts, or other graph summary prose.
 - Zero-stock-only history must plot flat at zero rather than a fabricated `0..1` axis.
 
-`VIEWER >` remains a **separate standalone WinForms market browser**. Do not conflate the popup Viewer with inline expansion.
+`VIEWER >` remains a **separate standalone WinForms market browser**. The row chevron must never open it. Because `MeasureItemViewer` uses dynamic variables, the Lua reader must explicitly refresh that RunCommand measure before `Run` so a stale prior Viewer key cannot leak into an inline request.
 
 ## Ordering
 
@@ -74,14 +75,13 @@ Fresh current stock must not vanish because completed-cycle likelihood evidence 
 Both inline and standalone graph surfaces use the same retained local truth:
 
 - 8-hour visible history;
-- hourly context in the full Viewer;
 - 48h high-resolution observation retention;
 - 90d completed-cycle retention;
 - change-only predecessor/baseline carry-forward;
 - no provider/Torn request to view a graph;
 - no forecast-to-history mutation.
 
-The standalone Viewer retains its richer dropdown, labels and diagnostic graph. Inline graphs are deliberately compact.
+The standalone Viewer retains its richer dropdown and diagnostics. Inline graphs are deliberately compact.
 
 ## Popups / diagnostics
 
@@ -113,8 +113,6 @@ Inline rendering is outside that network heartbeat and local-only.
 
 ## Target-Windows acceptance
 
-From repository root:
-
 ```powershell
 cd C:\Codex\TORN
 git pull --ff-only origin main
@@ -127,30 +125,25 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
-
-Select-String .\@Resources\Generated\state.kv `
-  -Pattern '^Opportunity(Count|Message|SortMode|1(Key|Name|ChanceText|TimeText|GrossText|PriceText|MarketValueText))='
 ```
 
 Then refresh Rainmeter and verify:
 
 1. Fresh in-stock markets appear even if likelihood says `LEARNING`.
-2. No `#1/#2/...` labels.
-3. Every visible card has a recognizable country flag on the left.
-4. The flag has a white bottom strip with dark elapsed/travel-time text.
-5. Country name/code and center travel-time text are absent from the card body.
-6. Gross is displayed as `$amount` only; no `gross x18`/quantity suffix.
+2. No rank numbers.
+3. Every card has a recognizable country flag and visible time directly beneath it.
+4. No white strip/background behind the travel time.
+5. Country name/code and duplicate center travel-time text are absent.
+6. Gross is `$amount` only.
 7. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR reorder immediately.
-8. Row control is a `v` chevron.
-9. Clicking it expands an in-card 8-hour graph and changes to `^`.
-10. Opening another row collapses the first; at most one graph is open.
-11. Collapsing/re-expanding does not open the standalone Viewer.
+8. Row `v` expands only that in-card graph; it does not spawn the standalone Viewer.
+9. The graph has seven internal hourly vertical separators.
+10. Graph labels are only numeric Y max, `0`, and `-8h`; no summary/count prose.
+11. Opening another row collapses the first; at most one graph is open.
 12. `VIEWER >` still opens the separate full Viewer popup.
-13. Expanded graph follows the same market through sorting or safely collapses if the market disappears.
-14. Zero-stock graph is flat at zero; nonzero retained history shows step changes where data exist.
-15. The list remains populated through normal polling and does not flash to a learning placeholder.
-16. SETTINGS and Item/Country/Category popups still open and save.
-17. No visible PowerShell console or persistent `ERROR` remains.
+13. Zero-stock graph stays flat at zero; nonzero retained history shows real step changes.
+14. The list remains populated through normal polling.
+15. SETTINGS and filters still work with no visible PowerShell console.
 
 If anything errors:
 
@@ -158,7 +151,7 @@ If anything errors:
 Get-Content .\data\runtime\logs\travel-assistant.log -Tail 40
 ```
 
-Send the focused acceptance output and screenshots of one collapsed-list view and one expanded inline graph before marking 0.6 accepted.
+Send the focused acceptance output plus one collapsed-card screenshot and one expanded-card screenshot before marking 0.6 accepted.
 
 ## After acceptance
 
