@@ -19,7 +19,8 @@ $required = @(
     '@Resources\Scripts\ResalePriority.ps1','@Resources\Scripts\ResaleQueue.ps1',
     '@Resources\Scripts\LaunchOptimizerSettings.ps1','@Resources\Scripts\OpenOptimizerSettings.ps1',
     '@Resources\Scripts\LaunchSettings.ps1','@Resources\Scripts\OpenSettings.ps1','@Resources\Scripts\StateReader.lua',
-    'tests\Validate-OptimalRoute.ps1','tests\Run-OptimalRouteTests.ps1','tests\Validate-RainmeterSkin.ps1'
+    '@Resources\Scripts\LaunchItemViewer.ps1','@Resources\Scripts\OpenItemViewer.ps1',
+    'tests\Validate-OptimalRoute.ps1','tests\Run-OptimalRouteTests.ps1','tests\Validate-RainmeterSkin.ps1','tests\Validate-ItemViewer.ps1'
 )
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $relative))) { Fail "Missing required file: $relative" }
@@ -118,13 +119,14 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 if (Test-Path -LiteralPath $iniPath) {
     $ini = Get-Content -LiteralPath $iniPath -Raw
     if ($ini -notmatch '(?m)^Version=0\.5\.0\s*$') { Fail 'Rainmeter skin must report version 0.5.0.' }
-    foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureState]','[MeterSettings]','[MeterFilterTopLine]','[MeterRouteCard]','[MeterRouteTitle]','[MeterRouteMeta]','[MeterOptimalItem1Name]','[MeterOptimalItem1Price]')) {
-        if (-not $ini.Contains($section)) { Fail "Rainmeter skin missing optimizer section $section" }
+    foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureState]','[MeasureItemViewer]','[MeterSettings]','[MeterFilterTopLine]','[MeterItemViewer]','[MeterRouteCard]','[MeterRouteTitle]','[MeterRouteMeta]','[MeterOptimalItem1Name]','[MeterOptimalItem1Price]','[MeterOptimalItem1Chart]')) {
+        if (-not $ini.Contains($section)) { Fail "Rainmeter skin missing optimizer/viewer section $section" }
     }
     foreach ($retired in @('[MeterUKCard]','[MeterJPCard]','[MeterUKGraph]','[MeterJPGraph]','MaxExpandedCards=')) {
-        if ($ini.Contains($retired)) { Fail "Minimal optimizer skin still contains retired card/graph contract '$retired'." }
+        if ($ini.Contains($retired)) { Fail "Minimal optimizer skin still contains retired default card/graph contract '$retired'." }
     }
     if (-not $ini.Contains('LaunchOptimizerSettings.ps1')) { Fail 'Main Settings action must open optimizer settings.' }
+    if (-not $ini.Contains('LaunchItemViewer.ps1')) { Fail 'Main skin must expose the detached on-demand item viewer.' }
 }
 
 $optimizerSettingsPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
@@ -161,5 +163,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Travel Assistant 0.5 static architecture validation passed.' -ForegroundColor Green
-Write-Host 'Minimal optimizer UI, full-country travel economics, local policy, and parse-clean runtime contracts are present.'
+Write-Host 'Minimal optimizer UI, on-demand 8-hour viewer, full-country travel economics, local policy, and parse-clean runtime contracts are present.'
 exit 0
