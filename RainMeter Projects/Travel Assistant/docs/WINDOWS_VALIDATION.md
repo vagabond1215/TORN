@@ -1,12 +1,12 @@
 # Windows / Rainmeter Validation
 
-This checklist covers target-machine behavior that connector-only work cannot prove: Windows PowerShell, Rainmeter, local credentials/settings, UI interaction, filesystem writes, and resource behavior.
+This checklist covers target-machine behavior that connector-only work cannot prove: Windows PowerShell 5.1, Rainmeter rendering, local settings, UI interaction, filesystem writes, and runtime timing.
 
 ## Preconditions
 
 - Windows PowerShell 5.1 or compatible.
 - Rainmeter installed.
-- Repository cloned at:
+- Repository cloned at approximately:
 
 ```text
 C:\Codex\TORN\RainMeter Projects\Travel Assistant\
@@ -22,184 +22,138 @@ git status -sb
 
 Do not reset/rebase/force-push to manufacture a clean result.
 
-## Previously validated baseline
+## Focused acceptance
 
-The target machine has already demonstrated:
-
-- installation/junction creation;
-- YATA live stock/foreign-price requests;
-- Torn Item Market access through a local API key and bounded `curl.exe` transport;
-- production updater/finalizer exit 0;
-- UK/Japan rendering and generated graphs;
-- automatic one-minute Rainmeter polling;
-- heartbeat/stale-update display;
-- observed sellout persistence and a real UK restock/sellout transition;
-- clean post-fix Rainmeter log;
-- no persistent Travel Assistant PowerShell process between polls;
-- bounded runtime/generated storage.
-
-Do not repeat the old broad live-provider investigation unless a new defect specifically points there.
-
-## Settings / travel-profile extension: deterministic checks
-
-For the current extension, run the changed-boundary checks first:
+Run:
 
 ```powershell
 cd "C:\Codex\TORN\RainMeter Projects\Travel Assistant"
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-TravelAssistant.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-TravelProfileTests.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-FinalizeStateTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-CurrentAcceptance.ps1
 ```
 
-Expected: all four exit 0.
+Stop at the first failure and capture only that failure block plus the runtime log tail when relevant.
 
-These specifically cover:
+The focused suite covers parser/static architecture plus deterministic travel context, route economics, opportunity ordering, PowerShell 5.1 collection compatibility, observation-history retention, resale priority and final-state behavior.
 
-- Settings/profile config and script syntax;
-- ignored local credential path;
-- correct Rainmeter RunCommand declaration and Settings action structure;
-- Lingerie/Cruise/faction capacity math;
-- Flower/Toy not increasing Xanax capacity;
-- faction fee reduction;
-- unqualified Business remaining unresolved;
-- 10-star Lingerie establishing known free Business economics;
-- final timing suppression/preservation rules.
+## One production update
 
-If one fails, stop and capture that test's full output before running broader suites.
+After the focused suite is green:
 
-## Settings UI validation
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
 
-Refresh Rainmeter after pulling current main. The installed skin is a junction, so no reinstall is normally required.
+Select-String .\@Resources\Generated\state.kv `
+  -Pattern '^Opportunity(Count|Message|SortMode|1(Key|Name|Country|ChanceText|TimeText|GrossText|QuantityText|ProfitHourText))='
+```
 
-Confirm the top-right main-skin control is:
+At minimum, `OpportunityCount`, `OpportunityMessage`, and `OpportunitySortMode` must exist even when zero rows are currently eligible.
+
+## Main Rainmeter surface
+
+Refresh the skin and verify the visible sort row is exactly:
 
 ```text
-SETTINGS >
+SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 ```
 
-Click it and verify a short-lived **Travel Assistant Settings** window opens.
+There must be no visible `OPTIMAL` badge/mode, Chance sort, or shortest-Time sort.
 
-### API key
+For visible opportunity rows verify:
+
+- item and country are readable;
+- gross trip profit is accompanied by modeled quantity (`xN`);
+- window timing is present;
+- leave timing is present;
+- modeled hit likelihood is a separate percentage;
+- total elapsed time is visible;
+- foreign price and Torn MV are visible;
+- `GRAPH` is clickable.
+
+Hover the gross value and verify its tooltip explains approximately:
+
+```text
+unit spread × quantity = trip gross
+```
+
+`PROFIT/HR` must mean:
+
+```text
+gross trip profit / total elapsed hours
+```
+
+Hit likelihood must not be multiplied into that value.
+
+## Poll stability
+
+Leave the skin visible through at least two automatic polling cycles.
 
 Confirm:
 
-- existing local key is preserved;
-- it is masked by default;
-- Show toggles visibility;
-- no key appears in the Rainmeter action text, log, or console output;
-- never paste the key into validation notes/chat.
-
-### Travel mode
-
-For an ordinary profile, Settings should offer:
-
-```text
-Standard
-Airstrip
-WLT
-```
-
-Airstrip remains the default for a clean local profile.
-
-The old main-skin mode cycler should be absent.
-
-### Company / stars
-
-Confirm the company list includes:
-
-```text
-None / Other
-Lingerie Store
-Cruise Line
-Flower Shop
-Toy Shop
-Logistics Management
-Theater
-```
-
-Confirm company stars accept 0–10.
-
-Expected profile behavior:
-
-- Lingerie 3-star: preview shows +2 general capacity.
-- Lingerie below 10-star: Business absent/locked.
-- Lingerie 10-star: Business appears and preview says free/available.
-- Cruise 10-star: preview derives +5 general capacity (+2 +3).
-- Flower/Toy: Xanax-specific capacity remains 0.
-
-### Faction
-
-Confirm:
-
-- Excursion capacity level accepts 0–10 and preview reflects +1 capacity per level.
-- Travel Cost level accepts 0–5 and preview reflects -15% per level through -75%.
-
-### Save behavior
-
-Change a harmless setting, click Save, and confirm:
-
-- dialog saves/closes promptly;
-- no full updater/network wait blocks the click;
-- ignored `config/settings.local.json` remains valid JSON;
-- `data/runtime/preferences.json` records the selected travel mode;
-- the next normal one-minute poll applies the selected mode/profile to generated state;
-- normal polling/heartbeat continues afterward.
-
-Do not delete or replace the user's existing API key while testing.
-
-## Business guard validation
-
-Normal path:
-
-1. Choose a non-Lingerie profile or Lingerie below 10-star.
-2. Business must not be selectable in Settings.
-
-Qualified path:
-
-1. Choose Lingerie Store.
-2. Set stars to 10.
-3. Business becomes selectable.
-4. Save Business.
-5. After the next poll, generated economics should treat Business travel cost as known zero and use base Business capacity plus qualifying general/faction capacity.
-
-After testing, return to the user's desired normal profile/mode.
-
-Do not test ticket-funded Business by assuming a ticket value of zero. That branch remains unresolved.
-
-## Polling / UI regression check
-
-After saving Settings, leave the skin alone through at least one full countdown.
-
-Confirm:
-
+- opportunity rows do **not** disappear to `Learning opportunities...` for the duration of a poll;
 - header update time advances;
-- countdown resets;
-- `state.kv` and `last-update.txt` advance without manual PowerShell;
-- UK/Japan graphs remain rendered;
-- actual `Last Sold Out` history remains present;
-- sparse-history states still do not invent timing;
-- no new mojibake appears.
+- countdown resets normally;
+- selected sort remains selected after refresh/poll;
+- a click immediately changes the selected sort highlight;
+- rows reorder after the local projection completes;
+- buttons do not require repeated pixel-perfect clicking.
 
-## Log check
+If the list still flashes blank during a poll, capture the approximate duration and whether it happened immediately after a manual Rainmeter Refresh or during an ordinary automatic poll.
 
-Open **Rainmeter → About → Log** after opening/saving Settings and after a subsequent automatic poll.
+## Filter controls
 
-No new material entries should appear for:
+Verify:
 
-- Travel Assistant Lua errors;
-- RunCommand errors/timeouts;
-- missing script/image/file errors;
-- unsupported options;
-- repeated PowerShell failures;
-- updater/finalizer errors.
+- ITEM opens and is populated;
+- country selector opens and is populated;
+- CAT opens and is populated;
+- SHORT / MED / LONG toggle reliably;
+- RESET restores default filters;
+- filter changes remain after the next automatic update.
 
-Historical log entries from already-fixed builds do not count as current defects if no new errors appear after the current refresh timestamp.
+## Settings
 
-## Resource/storage sanity
+Click `SETTINGS >` and verify **Travel Assistant Settings** opens without a visible PowerShell console.
 
-While Settings is closed and the skin is idle between polls:
+Settings must retain:
+
+- profitable-only toggle;
+- 95% MV toggle;
+- Energy Waste policy / maximum loss;
+- Nerve Waste policy / maximum loss;
+- Ignore List;
+- Profile / API.
+
+The explanatory text should state that the main sorts are UPCOMING, GROSS PROFIT, and PROFIT/HR and that hit likelihood remains separate.
+
+## Viewer / graph validation
+
+Open `VIEWER >` and one row `GRAPH`.
+
+Confirm:
+
+- Viewer is populated;
+- row GRAPH focuses the exact `country:itemId` market;
+- graph spans 8 hours with 60-minute markers;
+- unchanged stock carries across the left edge rather than producing a lone current dot when a retained baseline exists;
+- observed restock/sellout transitions are drawn when present;
+- Viewer performs no provider/Torn request.
+
+The historical retention invariant is:
+
+```text
+48h high-resolution change-only history + one boundary baseline/market
+90d completed cycles
+8h display window
+```
+
+## Popup / process behavior
+
+Settings, filters, Ignore List, Profile/API and Viewer should display only their WinForms window. The launcher console must remain hidden and close immediately after handing off to the hidden STA popup host.
+
+While all popups are closed and the updater is idle:
 
 ```powershell
 Get-CimInstance Win32_Process |
@@ -208,33 +162,40 @@ Get-CimInstance Win32_Process |
     $_.CommandLine -like '*Travel Assistant*'
   } |
   Select-Object ProcessId, Name, CommandLine
-
-Get-ChildItem .\data\runtime, .\@Resources\Generated -File -Recurse |
-  Measure-Object Length -Sum |
-  Select-Object Count, Sum
-
-Get-ChildItem .\@Resources\Generated -File |
-  Select-Object Name, Length, LastWriteTime
 ```
 
-Expected:
+Expected: no permanent Travel Assistant PowerShell process.
 
-- no persistent Travel Assistant PowerShell process while Settings is closed and updater is idle;
-- only small bounded runtime/generated state;
-- generated files update in place rather than accumulating graph images;
-- Rainmeter remains responsive.
+A PowerShell host is expected while an actual WinForms popup is open.
 
-A PowerShell process is expected **while the Settings window itself is open** because the dialog is intentionally hosted by a short-lived local PowerShell/WinForms process.
+## Runtime log
+
+All current component/popup failures should be available in:
+
+```text
+data\runtime\logs\travel-assistant.log
+```
+
+When something fails, collect:
+
+```powershell
+Get-Content .\data\runtime\logs\travel-assistant.log -Tail 40
+```
+
+Do not paste API keys or full local settings.
 
 ## Completion
 
-The Settings/travel-profile extension can be marked operationally validated only after:
+0.6 may be marked operationally accepted only after:
 
-- the four narrow tests pass;
-- the Settings window opens from Rainmeter;
-- API/mode/company/faction fields render correctly;
-- save/poll behavior works;
-- Business gating is observed;
-- post-change log/resource checks are clean.
+- `Run-CurrentAcceptance.ps1` is green;
+- one production update writes a valid opportunity projection;
+- the three sorts work and persist;
+- the list remains visible through ordinary polling;
+- Settings/filters/Viewer/GRAPH actions work without visible console windows;
+- gross quantity arithmetic is clear;
+- 8-hour graph behavior is correct;
+- current runtime log is clean after successful operations;
+- a final Rainmeter screenshot passes layout review.
 
-Automatic future company/faction detection from Torn API data is separate follow-up work and is not required for this validation pass.
+Browser notifications remain a separate follow-up after this acceptance boundary.
