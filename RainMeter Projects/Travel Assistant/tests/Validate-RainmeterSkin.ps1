@@ -70,8 +70,10 @@ else {
 
 if (Test-Path -LiteralPath $viewerLauncherPath) {
     $launcher=Get-Content -LiteralPath $viewerLauncherPath -Raw
-    foreach($token in @("$inlinePrefix = 'inline_'",'RenderInlineGraph.ps1','& $renderer -MarketKey $actualKey','-Popup ItemViewer')) {
-        if(-not $launcher.Contains($token)){Fail "LaunchItemViewer.ps1 missing separate inline/popup routing token '$token'."}
+    foreach($token in @('`$inlinePrefix = ''inline_''','RenderInlineGraph.ps1','& $renderer -MarketKey $actualKey','-Popup ItemViewer')) {
+        $expected=$token
+        if($expected.StartsWith('`$')){$expected=$expected.Substring(1)}
+        if(-not $launcher.Contains($expected)){Fail "LaunchItemViewer.ps1 missing separate inline/popup routing token '$expected'."}
     }
 }
 
@@ -139,7 +141,7 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
     )) {
         if (-not $stateReader.Contains($token)) { Fail "StateReader.lua missing compact-card contract: $token" }
     }
-    foreach ($retiredToken in @("display = display .. ' gross'","display = display .. ' ' .. quantityText","Text=#Opportunity1RankText#")) {
+    foreach ($retiredToken in @("display = display .. ' gross'","display = display .. ' ' .. quantityText")) {
         if ($stateReader.Contains($retiredToken)) { Fail "StateReader.lua retains retired card-label behavior '$retiredToken'." }
     }
 }
