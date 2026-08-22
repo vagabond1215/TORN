@@ -138,6 +138,22 @@ function Clear-CompactFailure {
     }
 }
 
+function Mirror-ChildOwnedFailure {
+    param([string]$ErrorPath)
+    if (-not (Test-Path -LiteralPath $ErrorPath)) {
+        if (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue) {
+            Clear-TravelAssistantLatestError -Component (Get-UpdateFailureComponent $ErrorPath)
+        }
+        return
+    }
+    try {
+        $message = Get-Content -LiteralPath $ErrorPath -Raw -ErrorAction Stop
+        if (-not [string]::IsNullOrWhiteSpace($message) -and (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue)) {
+            Write-TravelAssistantLog -Level ERROR -Component (Get-UpdateFailureComponent $ErrorPath) -Message $message
+        }
+    } catch { }
+}
+
 function Invoke-FailSoftScript {
     param(
         [string]$Path,
@@ -148,9 +164,7 @@ function Invoke-FailSoftScript {
     try {
         & $Path
         if ($ClearErrorOnSuccess) { Clear-CompactFailure -Path $ErrorPath }
-        elseif (-not (Test-Path -LiteralPath $ErrorPath) -and (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue)) {
-            Clear-TravelAssistantLatestError -Component (Get-UpdateFailureComponent $ErrorPath)
-        }
+        else { Mirror-ChildOwnedFailure -ErrorPath $ErrorPath }
     } catch { Write-CompactFailure -Path $ErrorPath -Message $_.Exception.ToString() }
 }
 
@@ -161,7 +175,8 @@ try {
     & $Updater -Action $Action
     if (-not $?) { throw 'UpdateTracker returned failure.' }
 
-    Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile
+    # ShadowCollector catches provider failures internally and owns its error file.
+    Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile -ClearErrorOnSuccess $false
     Invoke-FailSoftScript -Path $LocalCatalog -ErrorPath $LocalCatalogErrorFile
 
     # Persist engine-state schema normalization even when ShadowCollector is inside
