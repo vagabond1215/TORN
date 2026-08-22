@@ -22,7 +22,7 @@ function Assert-Sequence {
 }
 
 $defaults = New-DefaultUiPreferences
-Assert-Equal 'Default preference schema is three' ([int]$defaults.schemaVersion) 3
+Assert-Equal 'Default preference schema is four' ([int]$defaults.schemaVersion) 4
 Assert-True 'Default item filter is All' ([bool]$defaults.itemFilterAll)
 Assert-Sequence 'Default trip bands include all three' @($defaults.selectedTripBands) @('short','medium','long')
 Assert-Equal 'Default countries include all 11 destinations' @($defaults.selectedCountryIds).Count 11
@@ -34,6 +34,7 @@ Assert-Equal 'Default Energy waste policy is Allowed' ([string]$defaults.energyW
 Assert-Equal 'Default Nerve waste policy is Allowed' ([string]$defaults.nerveWastePolicy) 'allowed'
 Assert-Equal 'Default Energy loss limit is zero' ([int]$defaults.maxEnergyLoss) 0
 Assert-Equal 'Default Nerve loss limit is zero' ([int]$defaults.maxNerveLoss) 0
+Assert-Equal 'Default opportunity ordering is Optimal' ([string]$defaults.sortMode) 'optimal'
 
 $custom = [pscustomobject]@{
     schemaVersion = 1
@@ -52,9 +53,10 @@ $custom = [pscustomobject]@{
     maxEnergyLoss = 25
     nerveWastePolicy = 'forbidden'
     maxNerveLoss = 7
+    sortMode = 'PROFIT'
 }
 $normalized = Normalize-UiPreferences -Preferences $custom
-Assert-Equal 'Preference schema upgrades to three' ([int]$normalized.schemaVersion) 3
+Assert-Equal 'Preference schema upgrades to four' ([int]$normalized.schemaVersion) 4
 Assert-Equal 'Legacy pin remains preserved as harmless local preference' ([string]$normalized.pinnedMarket) 'united_kingdom:266'
 Assert-Equal 'Explicit empty country selection stays empty' @($normalized.selectedCountryIds).Count 0
 Assert-True 'Profitable-only survives normalization' ([bool]$normalized.showProfitableOnly)
@@ -64,6 +66,7 @@ Assert-Equal 'Energy policy normalizes case' ([string]$normalized.energyWastePol
 Assert-Equal 'Energy loss limit survives' ([int]$normalized.maxEnergyLoss) 25
 Assert-Equal 'Nerve policy survives' ([string]$normalized.nerveWastePolicy) 'forbidden'
 Assert-Equal 'Nerve loss limit survives' ([int]$normalized.maxNerveLoss) 7
+Assert-Equal 'Opportunity sort normalizes case' ([string]$normalized.sortMode) 'profit'
 
 $toggled = Toggle-TripBandPreference -Preferences $normalized -Band medium
 Assert-Equal 'Toggling only enabled trip band can leave no bands selected' @($toggled.selectedTripBands).Count 0
@@ -73,13 +76,14 @@ Assert-Sequence 'Trip-band toggle preserves Ignore List' @($toggled.ignoredItemI
 Assert-Equal 'Trip-band toggle preserves Energy policy' ([string]$toggled.energyWastePolicy) 'limited'
 Assert-Equal 'Trip-band toggle preserves Nerve policy' ([string]$toggled.nerveWastePolicy) 'forbidden'
 Assert-True 'Trip-band toggle preserves 95 percent MV preference' ([bool]$toggled.use95PercentMarketValue)
+Assert-Equal 'Trip-band toggle preserves sort mode' ([string]$toggled.sortMode) 'profit'
 
 $reset = Reset-UiFilterPreferences -Preferences $normalized
 Assert-True 'Reset restores item All' ([bool]$reset.itemFilterAll)
 Assert-Sequence 'Reset restores all trip bands' @($reset.selectedTripBands) @('short','medium','long')
 Assert-Equal 'Reset restores all countries' @($reset.selectedCountryIds).Count 11
 Assert-True 'Reset restores category All' ([bool]$reset.categoryFilterAll)
-Assert-True 'Reset clears profitable-only route filter' (-not [bool]$reset.showProfitableOnly)
+Assert-True 'Reset clears profitable-only opportunity filter' (-not [bool]$reset.showProfitableOnly)
 Assert-Sequence 'Reset preserves Ignore List' @($reset.ignoredItemIds) @('277')
 Assert-Equal 'Reset preserves travel mode' ([string]$reset.travelMode) 'airstrip'
 Assert-Equal 'Reset preserves Energy policy' ([string]$reset.energyWastePolicy) 'limited'
@@ -87,6 +91,7 @@ Assert-Equal 'Reset preserves Energy limit' ([int]$reset.maxEnergyLoss) 25
 Assert-Equal 'Reset preserves Nerve policy' ([string]$reset.nerveWastePolicy) 'forbidden'
 Assert-Equal 'Reset preserves Nerve limit' ([int]$reset.maxNerveLoss) 7
 Assert-True 'Reset preserves 95 percent MV basis' ([bool]$reset.use95PercentMarketValue)
+Assert-Equal 'Reset preserves selected ordering' ([string]$reset.sortMode) 'profit'
 
 $bad = [pscustomobject]@{
     travelMode='nonsense'
@@ -98,6 +103,7 @@ $bad = [pscustomobject]@{
     nerveWastePolicy='sometimes'
     maxEnergyLoss=5000
     maxNerveLoss=-10
+    sortMode='chance'
 }
 $fixed = Normalize-UiPreferences -Preferences $bad
 Assert-Equal 'Invalid travel mode falls back safely' ([string]$fixed.travelMode) 'airstrip'
@@ -109,6 +115,7 @@ Assert-Equal 'Invalid Energy policy falls back to Allowed' ([string]$fixed.energ
 Assert-Equal 'Invalid Nerve policy falls back to Allowed' ([string]$fixed.nerveWastePolicy) 'allowed'
 Assert-Equal 'Energy limit clamps to maximum' ([int]$fixed.maxEnergyLoss) 1000
 Assert-Equal 'Nerve limit clamps to zero' ([int]$fixed.maxNerveLoss) 0
+Assert-Equal 'No separate chance sort is exposed' ([string]$fixed.sortMode) 'optimal'
 
-Write-Host 'Optimizer filter/preference tests passed.' -ForegroundColor Green
+Write-Host 'Opportunity filter/preference tests passed.' -ForegroundColor Green
 exit 0
