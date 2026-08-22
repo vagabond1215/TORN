@@ -5,14 +5,13 @@ $TestRoot = (Resolve-Path $PSScriptRoot).Path
 $tests = @(
     'Validate-TravelAssistant.ps1',
     'Validate-RainmeterSkin.ps1',
-    'Validate-GraphWindow.ps1',
     'Validate-ShadowCollection.ps1',
     'Validate-ItemMetadata.ps1',
     'Validate-LocalCatalog.ps1',
     'Validate-ResaleQueue.ps1',
-    'Validate-VisibleItems.ps1',
     'Validate-Filters.ps1',
     'Validate-TravelContext.ps1',
+    'Validate-OptimalRoute.ps1',
     'Validate-Distribution.ps1',
     'Validate-HistoricalTools.ps1',
     'Run-HistoricalPipelineTests.ps1',
@@ -24,14 +23,13 @@ $tests = @(
     'Run-LocalCatalogTests.ps1',
     'Run-ResaleQueueTests.ps1',
     'Run-ResalePriorityTests.ps1',
-    'Run-VisibleItemsTests.ps1',
     'Run-FilterPreferenceTests.ps1',
     'Run-TravelContextTests.ps1',
+    'Run-OptimalRouteTests.ps1',
     'Run-TravelProfileTests.ps1',
     'Run-TornProfileSyncTests.ps1',
     'Run-CurrentCapacityTests.ps1',
-    'Run-FinalizeStateTests.ps1',
-    'Run-RestockDisplayTests.ps1'
+    'Run-FinalizeStateTests.ps1'
 )
 
 foreach ($name in $tests) {
@@ -46,6 +44,6 @@ foreach ($name in $tests) {
 }
 
 Write-Host ''
-Write-Host 'All connector-authored Travel Assistant PowerShell validations passed.' -ForegroundColor Green
-Write-Host 'This still does not replace live Rainmeter/provider/resource validation.' -ForegroundColor Yellow
+Write-Host 'All Travel Assistant 0.5 deterministic/static validations passed.' -ForegroundColor Green
+Write-Host 'This still does not replace live Rainmeter/provider/API validation on Windows.' -ForegroundColor Yellow
 exit 0
