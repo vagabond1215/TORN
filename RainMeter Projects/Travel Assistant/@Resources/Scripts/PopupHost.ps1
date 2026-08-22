@@ -39,7 +39,7 @@ try {
     }
     Clear-TravelAssistantLatestError -Component $component
 } catch {
-    $detail = $_.Exception.ToString()
+    $detail = Format-TravelAssistantErrorRecord $_
     Write-TravelAssistantLog -Level ERROR -Component $component -Message $detail
     try {
         Add-Type -AssemblyName System.Windows.Forms
