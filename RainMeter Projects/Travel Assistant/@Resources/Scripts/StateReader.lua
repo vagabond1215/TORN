@@ -4,6 +4,9 @@ local pollInterval = 60
 local failureRetryInterval = 15
 local failureRetryArmed = false
 local nextPollAt = nil
+local lastProjectionData = nil
+local pendingSortMode = nil
+local pendingSortUntil = 0
 
 local function trim(s)
     s = tostring(s or ''):gsub('^\239\187\191', '')
@@ -32,6 +35,29 @@ local function readState()
     end
     file:close()
     return out
+end
+
+local function copyProjectionFields(data)
+    local out = {}
+    for key, value in pairs(data) do
+        if key:match('^Opportunity') or key:match('^UI') then out[key] = value end
+    end
+    return out
+end
+
+local function stabilizeProjection(data)
+    -- UpdateTracker still publishes compatibility fields before OpportunityState
+    -- completes. During that short interval Opportunity/UI keys are absent, not
+    -- intentionally zero. Keep the last complete projection until a new explicit
+    -- OpportunityCount arrives so the skin never flashes back to "Learning".
+    if data.OpportunityCount ~= nil then
+        lastProjectionData = copyProjectionFields(data)
+    elseif lastProjectionData ~= nil then
+        for key, value in pairs(lastProjectionData) do
+            if data[key] == nil then data[key] = value end
+        end
+    end
+    return data
 end
 
 local function readEpochFile(path)
@@ -117,14 +143,62 @@ local function updateFilters(data)
     SKIN:Bang('!SetOption', 'MeterCategoryFilter', 'Text', 'CAT  ' .. categoryText .. '  v')
 end
 
-local function updateSort(data)
-    local mode = safeText(data.OpportunitySortMode, 'optimal'):lower()
+local function applySortColors(mode)
     local active = '82,174,255,255'
     local inactive = '145,152,164,255'
     setVariable('SortOptimalColor', mode == 'optimal' and active or inactive)
     setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
     setVariable('SortProfitColor', mode == 'profit' and active or inactive)
     setVariable('SortTimeColor', mode == 'time' and active or inactive)
+end
+
+local function updateSort(data, now)
+    local projected = safeText(data.OpportunitySortMode, 'optimal'):lower()
+    if pendingSortMode ~= nil then
+        if projected == pendingSortMode or now >= pendingSortUntil then
+            pendingSortMode = nil
+            pendingSortUntil = 0
+        end
+    end
+    applySortColors(pendingSortMode or projected)
+end
+
+local function parseMoney(value)
+    local text = safeText(value, '')
+    local negative = text:find('^%-') ~= nil
+    local digits = text:gsub('[^0-9]', '')
+    local n = tonumber(digits) or 0
+    if negative then n = -n end
+    return n
+end
+
+local function updateOpportunityGrossMeter(data, prefix, index)
+    local grossText = safeText(data[prefix .. 'GrossText'], '')
+    local foreign = parseMoney(data[prefix .. 'PriceText'])
+    local marketValue = parseMoney(data[prefix .. 'MarketValueText'])
+    local gross = parseMoney(grossText)
+    local unitSpread = marketValue - foreign
+    local quantity = 0
+    if unitSpread ~= 0 and gross ~= 0 then
+        quantity = math.floor(math.abs(gross / unitSpread) + 0.5)
+    end
+
+    local display = grossText
+    if display ~= '' then
+        display = display .. ' trip'
+        if quantity > 0 then display = display .. ' x' .. tostring(quantity) end
+    end
+    SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'Text', display)
+
+    local tooltip = safeText(data[prefix .. 'Tooltip'], '')
+    if quantity > 0 and unitSpread ~= 0 then
+        local sign = unitSpread < 0 and '-' or ''
+        local absolute = math.abs(unitSpread)
+        local formatted = tostring(absolute):reverse():gsub('(%d%d%d)', '%1,'):reverse():gsub('^,', '')
+        local arithmetic = string.format('Unit spread %s$%s x %d = %s trip gross before travel cost', sign, formatted, quantity, grossText)
+        if tooltip ~= '' then tooltip = arithmetic .. ' | ' .. tooltip else tooltip = arithmetic end
+    end
+    SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'ToolTipText', tooltip)
 end
 
 local function updateOpportunities(data)
@@ -144,12 +218,19 @@ local function updateOpportunities(data)
             setVariable(prefix .. suffix, safeText(data[prefix .. suffix], fallback))
         end
         SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
+        updateOpportunityGrossMeter(data, prefix, i)
         setGroupVisible('OpportunityRow' .. i, i <= count)
     end
 
     local panelHeight = 164
     if count > 0 then panelHeight = 120 + count * 54 + 8 end
     setVariable('PanelHeight', panelHeight)
+end
+
+local function deferPolling(seconds)
+    local now = os.time()
+    local target = now + (seconds or 10)
+    if nextPollAt == nil or nextPollAt < target then nextPollAt = target end
 end
 
 function Initialize()
@@ -167,39 +248,57 @@ function Initialize()
     failureRetryInterval = math.floor(configuredFailureRetry)
     failureRetryArmed = false
     nextPollAt = os.time() + pollInterval
+    lastProjectionData = nil
+    pendingSortMode = nil
+    pendingSortUntil = 0
 end
 
 function OpenFilter(filterName)
+    deferPolling(10)
     setVariable('FilterRequest', filterName)
     SKIN:Bang('!CommandMeasure', 'MeasureFilterPopup', 'Run')
 end
 
 function ToggleTripBand(band)
+    deferPolling(10)
     setVariable('PreferenceAction', 'ToggleTripBand')
     setVariable('PreferenceValue', band)
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
 end
 
 function ResetFilters()
+    deferPolling(10)
     setVariable('PreferenceAction', 'ResetFilters')
     setVariable('PreferenceValue', '')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
 end
 
 function SetSortMode(mode)
+    mode = safeText(mode, 'optimal'):lower()
+    if mode ~= 'optimal' and mode ~= 'upcoming' and mode ~= 'profit' and mode ~= 'time' then mode = 'optimal' end
+    deferPolling(10)
+    pendingSortMode = mode
+    pendingSortUntil = os.time() + 10
+    applySortColors(mode)
     setVariable('PreferenceAction', 'SetSortMode')
     setVariable('PreferenceValue', mode)
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
+    SKIN:Bang('!UpdateMeter', 'MeterSortOptimal')
+    SKIN:Bang('!UpdateMeter', 'MeterSortUpcoming')
+    SKIN:Bang('!UpdateMeter', 'MeterSortProfit')
+    SKIN:Bang('!UpdateMeter', 'MeterSortTime')
+    SKIN:Bang('!Redraw')
 end
 
 function OpenViewer(marketKey)
+    deferPolling(10)
     setVariable('ViewerMarketKey', marketKey or '')
     SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')
 end
 
 function Update()
     local now = os.time()
-    local data = readState()
+    local data = stabilizeProjection(readState())
     local sourceStatus = safeText(data.UpdatedText, '')
     local sourceFailed = sourceStatus:find('failed', 1, true) ~= nil
 
@@ -219,7 +318,7 @@ function Update()
 
     updateHeartbeatText(data, now)
     updateFilters(data)
-    updateSort(data)
+    updateSort(data, now)
     updateOpportunities(data)
     return 0
 end
