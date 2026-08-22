@@ -14,7 +14,7 @@ ELIGIBLE opportunity candidates
 VISIBLE ranked opportunities
 ```
 
-The current 0.6 product is a **ranked opportunity browser**. Optimizer intelligence changes ordering and highlights the strongest economic candidate; it does not collapse the UI to one route.
+The current 0.6 product is a **ranked opportunity browser**. The user-facing ordering is explicit and inspectable; it does not collapse the UI to one route and it does not hide likelihood inside a composite `OPTIMAL` score.
 
 ## Layering
 
@@ -41,7 +41,7 @@ background next-trip route model
         ↓
 ranked opportunity projection
         ↓
-filters / selected ordering
+filters / selected transparent ordering
         ↓
 Rainmeter opportunity rows + on-demand graphs
 ```
@@ -94,13 +94,13 @@ stale live-provider guard:         5m
 visible graph window:              8h
 ```
 
-The graph horizon is display-only. It does not change learning retention.
+The graph horizon is display-only. It does not change learning retention. Change-only high-resolution pruning must preserve one predecessor/baseline per market across the retention cutoff so unchanged stock does not lose graph continuity.
 
 ## Local catalog and MV
 
 Catalog network maintenance remains outside the normal heartbeat. `LocalCatalog.ps1` resolves metadata from committed/local sources.
 
-`ResaleQueue.ps1` is the sole broad Torn Item Market request path. The optimizer/opportunity layer uses cached `itemmarket.item.average_price` as MV.
+`ResaleQueue.ps1` is the sole broad Torn Item Market request path. The route/opportunity layer uses cached `itemmarket.item.average_price` as MV.
 
 Default value basis:
 
@@ -170,7 +170,7 @@ selected MV basis
 profit per item
 gross trip profit
 total elapsed time
-optimal score
+profit per hour
 ```
 
 Gross trip profit:
@@ -179,29 +179,27 @@ Gross trip profit:
 gross = quantity × (selected MV basis - foreign price)
 ```
 
-It intentionally does not subtract travel cost because the primary UI is presenting gross trade economics.
+It intentionally does not subtract travel cost because the primary UI is presenting gross trade economics. Quantity is projected separately so the displayed gross can be checked directly.
 
-Optimal score:
+Profit per hour:
 
 ```text
-expected gross = gross × hit probability
-OPTIMAL score = expected gross / elapsed hours
+profit/hr = gross trip profit / total elapsed hours
 ```
+
+Hit probability is **not** multiplied into `PROFIT/HR`; it stays visible as a separate decision variable.
 
 Total elapsed time includes any required wait plus outbound travel, return travel, and purchase buffer. If currently returning to Torn, remaining return time precedes the next outbound opportunity.
 
 Visible sorts:
 
 ```text
-OPTIMAL   expected gross / elapsed hour, descending
-UPCOMING  earliest current/modeled window first
-PROFIT    gross trip profit descending
-TIME      total elapsed time ascending
+UPCOMING      earliest current/modeled window first
+GROSS PROFIT  gross trip profit descending
+PROFIT/HR     gross trip profit / elapsed hours descending
 ```
 
-There is no separate Chance sort. Likelihood is displayed on every opportunity and folded into `OPTIMAL`.
-
-The global maximum optimal score is marked `OPTIMAL` independently of the current visible ordering.
+There is no user-facing `OPTIMAL`, Chance, or shortest-Time sort.
 
 ## Energy / Nerve waste
 
@@ -223,7 +221,7 @@ Limited(max loss)
 
 ## Background route planner
 
-`OptimalRoute.ps1` remains local-only and continues to build one best next-trip plan for compatibility, diagnostics and MV-priority behavior. It is no longer the sole/primary UI projection.
+`OptimalRoute.ps1` remains local-only and continues to build one best next-trip plan for compatibility, diagnostics and MV-priority behavior. It is not a user-facing sort or badge.
 
 ## Filters / Ignore List / ordering
 
@@ -236,11 +234,17 @@ data/runtime/preferences.json
 Primary controls:
 
 ```text
-ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
-SORT  OPTIMAL  UPCOMING  PROFIT  TIME
+ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
+SORT  UPCOMING   GROSS PROFIT   PROFIT/HR
 ```
 
 Ignore List excludes items from opportunity/optimizer candidates and broad per-item MV requests but not shared provider collection/history.
+
+## Projection stability / interaction
+
+`UpdateTracker.ps1` still writes compatibility state early in a minute update, before `OpportunityState.ps1` finishes. `StateReader.lua` therefore preserves the last complete `Opportunity*`/`UI*` projection during intermediate writes so the skin does not flash to an empty learning state.
+
+The reader captures that last complete projection during initialization as well as normal updates. Sort actions update their active visual state immediately and defer the next automatic poll briefly while local re-projection completes. Text buttons receive transparent rectangular hitboxes rather than relying on glyph pixels alone.
 
 ## Graph viewer
 
