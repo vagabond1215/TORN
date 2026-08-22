@@ -23,6 +23,7 @@ $tests = @(
     'Run-ItemMetadataTests.ps1',
     'Run-LocalCatalogTests.ps1',
     'Run-ResaleQueueTests.ps1',
+    'Run-ResalePriorityTests.ps1',
     'Run-VisibleItemsTests.ps1',
     'Run-FilterPreferenceTests.ps1',
     'Run-TravelContextTests.ps1',
