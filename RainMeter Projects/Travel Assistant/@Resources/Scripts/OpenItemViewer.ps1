@@ -1,6 +1,7 @@
 param(
     [ValidateRange(0,8)]
-    [int]$Row = 0
+    [int]$Row = 0,
+    [string]$MarketKey = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,6 +20,8 @@ $PreferenceFile = Join-Path $RuntimeDir 'preferences.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
+
+if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
 
 function Read-ViewerJson {
     param([string]$Path)
@@ -176,6 +179,7 @@ if ($sortedRows.Count -eq 0) {
 }
 
 $history = @{}
+$baseline = @{}
 foreach ($path in @($SeedObservationFile,$RuntimeObservationFile)) {
     if (-not (Test-Path -LiteralPath $path)) { continue }
     foreach ($line in Get-Content -LiteralPath $path) {
@@ -183,11 +187,14 @@ foreach ($path in @($SeedObservationFile,$RuntimeObservationFile)) {
         try {
             $row = $line | ConvertFrom-Json
             $timestamp = [long](Get-ViewerProperty $row 'timestamp')
-            if ($timestamp -lt $cutoff) { continue }
             $country = [string](Get-ViewerProperty $row 'country')
             $itemId = [int](Get-ViewerProperty $row 'itemId')
             if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0) { continue }
             $key = $country + ':' + [string]$itemId
+            if ($timestamp -lt $cutoff) {
+                if (-not $baseline.ContainsKey($key) -or [long](Get-ViewerProperty $baseline[$key] 'timestamp') -lt $timestamp) { $baseline[$key] = $row }
+                continue
+            }
             if (-not $history.ContainsKey($key)) { $history[$key] = New-Object System.Collections.Generic.List[object] }
             $history[$key].Add($row)
         } catch { }
@@ -198,8 +205,18 @@ function Get-ViewerGraphRows {
     param([object]$Selection)
     $rows = New-Object System.Collections.Generic.List[object]
     $seen = New-Object 'System.Collections.Generic.HashSet[string]'
-    if ($history.ContainsKey([string]$Selection.key)) {
-        foreach ($row in @($history[[string]$Selection.key] | Sort-Object timestamp)) {
+    $selectionKey = [string]$Selection.key
+    if ($baseline.ContainsKey($selectionKey)) {
+        $base = $baseline[$selectionKey]
+        $rows.Add([pscustomobject]@{
+            timestamp = $cutoff
+            stock = [long](Get-ViewerProperty $base 'stock')
+            foreignPrice = [long](Get-ViewerProperty $base 'foreignPrice')
+            source = 'carry_forward'
+        })
+    }
+    if ($history.ContainsKey($selectionKey)) {
+        foreach ($row in @($history[$selectionKey] | Sort-Object timestamp)) {
             $key = ('{0}|{1}|{2}|{3}' -f [long](Get-ViewerProperty $row 'timestamp'),[long](Get-ViewerProperty $row 'stock'),[long](Get-ViewerProperty $row 'foreignPrice'),[string](Get-ViewerProperty $row 'source'))
             if ($seen.Add($key)) { $rows.Add($row) }
         }
@@ -369,15 +386,27 @@ foreach ($entry in $sortedRows) {
 }
 
 $initialIndex = 0
-if ($Row -ge 1 -and $Row -le 8) {
-    $wantedName = ''
-    $stateKey = 'OptimalItem' + $Row + 'Name'
-    if ($state.ContainsKey($stateKey)) { $wantedName = [string]$state[$stateKey] }
-    $wantedCountry = ''
-    if ($engine.PSObject.Properties['optimizer'] -and $engine.optimizer.PSObject.Properties['selectedCountryId']) { $wantedCountry = [string]$engine.optimizer.selectedCountryId }
-    if (-not [string]::IsNullOrWhiteSpace($wantedName)) {
+if (-not [string]::IsNullOrWhiteSpace($MarketKey)) {
+    for ($i=0; $i -lt $sortedRows.Count; $i++) {
+        if ([string]$sortedRows[$i].key -eq $MarketKey) { $initialIndex = $i; break }
+    }
+} elseif ($Row -ge 1 -and $Row -le 8) {
+    $opportunityKey = 'Opportunity' + $Row + 'Key'
+    if ($state.ContainsKey($opportunityKey) -and -not [string]::IsNullOrWhiteSpace([string]$state[$opportunityKey])) {
+        $wantedKey = [string]$state[$opportunityKey]
         for ($i=0; $i -lt $sortedRows.Count; $i++) {
-            if ([string]$sortedRows[$i].name -eq $wantedName -and ([string]::IsNullOrWhiteSpace($wantedCountry) -or [string]$sortedRows[$i].countryId -eq $wantedCountry)) { $initialIndex = $i; break }
+            if ([string]$sortedRows[$i].key -eq $wantedKey) { $initialIndex = $i; break }
+        }
+    } else {
+        $wantedName = ''
+        $stateKey = 'OptimalItem' + $Row + 'Name'
+        if ($state.ContainsKey($stateKey)) { $wantedName = [string]$state[$stateKey] }
+        $wantedCountry = ''
+        if ($engine.PSObject.Properties['optimizer'] -and $engine.optimizer.PSObject.Properties['selectedCountryId']) { $wantedCountry = [string]$engine.optimizer.selectedCountryId }
+        if (-not [string]::IsNullOrWhiteSpace($wantedName)) {
+            for ($i=0; $i -lt $sortedRows.Count; $i++) {
+                if ([string]$sortedRows[$i].name -eq $wantedName -and ([string]::IsNullOrWhiteSpace($wantedCountry) -or [string]$sortedRows[$i].countryId -eq $wantedCountry)) { $initialIndex = $i; break }
+            }
         }
     }
 }
@@ -398,7 +427,7 @@ function Update-ViewerSelection {
         $ageText = 'source ' + (Format-ViewerAge $age) + ' old'
         if ($age -gt $staleAfterSeconds) { $ageText += ' (STALE)' }
     }
-    $subMetric.Text = ('{0} | {1} | {2} retained point(s) in display window' -f [string]$selection.category,$ageText,$rows.Count)
+    $subMetric.Text = ('{0} | {1} | {2} plotted point(s), including carried baseline when available' -f [string]$selection.category,$ageText,$rows.Count)
     $old = $picture.Image
     $picture.Image = New-ViewerGraphBitmap -Selection $selection -Rows $rows
     if ($null -ne $old) { $old.Dispose() }
