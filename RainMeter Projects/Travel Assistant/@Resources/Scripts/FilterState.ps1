@@ -69,7 +69,12 @@ $state['UICategoryFilterAll'] = if ([bool]$prefs.categoryFilterAll) { 1 } else {
 $state['UISelectedCategories'] = (@($prefs.selectedCategories | ForEach-Object { [string]$_ }) -join '|')
 $state['UIShowProfitableOnly'] = if ([bool]$prefs.showProfitableOnly) { 1 } else { 0 }
 $state['UIIgnoredItemIds'] = (@($prefs.ignoredItemIds | ForEach-Object { [string][int]$_ }) -join ',')
-$state['UIPinnedMarket'] = [string]$prefs.pinnedMarket
+
+# Pin state is intentionally not mirrored through state.kv. StateReader owns the
+# live pin and persists it directly to ignored preferences.json. Projecting an
+# older pin here can overwrite a just-clicked pin on the next one-second update.
+[void]$state.Remove('UIPinnedMarket')
+
 $state['UIItemFilterText'] = Get-FilterStateItemText -Preferences $prefs
 $state['UICategoryFilterText'] = Get-FilterStateCategoryText -Preferences $prefs
 $state['UITripShortOn'] = if (@($prefs.selectedTripBands) -contains 'short') { 1 } else { 0 }
