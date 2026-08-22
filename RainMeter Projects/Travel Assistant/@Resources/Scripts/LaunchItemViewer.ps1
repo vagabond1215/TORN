@@ -7,6 +7,16 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
+$inlinePrefix = 'inline_'
+if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey.StartsWith($inlinePrefix,[System.StringComparison]::OrdinalIgnoreCase)) {
+    $actualKey = $MarketKey.Substring($inlinePrefix.Length)
+    if ($actualKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'Inline MarketKey must be country:itemId.' }
+    $renderer = Join-Path $PSScriptRoot 'RenderInlineGraph.ps1'
+    if (-not (Test-Path -LiteralPath $renderer)) { throw 'RenderInlineGraph.ps1 is missing.' }
+    & $renderer -MarketKey $actualKey
+    exit 0
+}
+
 $hostScript = Join-Path $PSScriptRoot 'PopupHost.ps1'
 if (-not (Test-Path -LiteralPath $hostScript)) { throw 'PopupHost.ps1 is missing.' }
 if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
