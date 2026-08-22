@@ -16,11 +16,18 @@ $evidence = Get-OptimalEvidence
 if ($null -eq $evidence) { throw 'Get-OptimalEvidence returned null.' }
 if ($null -eq $evidence.cycles -or $null -eq $evidence.observations -or $null -eq $evidence.restockStock) { throw 'Evidence maps are incomplete.' }
 
-# Force enumeration of each retained collection because Windows PowerShell 5.1
-# can fail here even when parser/static tests are green.
+# Windows PowerShell 5.1 can throw "Argument types do not match" when a generic
+# List<T>/HashSet<T> is wrapped directly in @(...). Production evidence values
+# must therefore be ordinary PowerShell/.NET arrays. Inspect Count directly;
+# deliberately do not reproduce the unsafe @($map[$key]) construct in this test.
 foreach ($map in @($evidence.cycles,$evidence.observations,$evidence.restockStock)) {
     foreach ($key in @($map.Keys)) {
-        $count = @($map[$key]).Count
+        $value = $map[$key]
+        if ($null -eq $value) { continue }
+        if (-not ($value -is [System.Array])) {
+            throw ('Evidence value {0} is {1}; expected an array safe for Windows PowerShell 5.1.' -f $key,$value.GetType().FullName)
+        }
+        $count = $value.Count
         if ($count -lt 0) { throw 'Impossible collection count.' }
     }
 }
