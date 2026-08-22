@@ -14,36 +14,17 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
     Fail 'Missing VisibleItems.ps1.'
 } else {
     $text = Get-Content -LiteralPath $scriptPath -Raw
-    $tokens = $null; $parseErrors = $null
-    [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+    $tokens=$null; $parseErrors=$null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "VisibleItems.ps1 parse error: $($parseError.Message)" }
 
-    foreach ($fn in @(
-        'Get-VisibleSecondaryItem',
-        'Get-VisibleItemsResaleSnapshot',
-        'Get-VisibleItemGraphRows',
-        'Write-VisibleItemStockGraph',
-        'Get-VisibleSecondaryPresentation',
-        'Set-VisibleSecondaryState'
-    )) {
-        if ($text -notmatch ('(?m)^function\s+' + [regex]::Escape($fn) + '\s*\{')) { Fail "Missing $fn." }
+    foreach ($fn in @('Get-VisibleSecondaryItem','Get-VisibleItemsResaleSnapshot','Get-VisibleItemGraphRows','Write-VisibleItemStockGraph','Get-VisibleSecondaryPresentation','Set-VisibleSecondaryState')) {
+        if ($text -notmatch ('(?m)^function\s+'+[regex]::Escape($fn)+'\s*\{')) { Fail "Missing $fn." }
     }
-
     foreach ($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','https://','http://')) {
         if ($text.Contains($networkToken)) { Fail "VisibleItems.ps1 must remain local-only; found '$networkToken'." }
     }
-
-    foreach ($token in @(
-        'SecondaryMarketValue',
-        'SecondaryPriceClass',
-        'SecondaryGraphName',
-        'Get-TravelProfileEffects',
-        'Get-EffectiveTravelEconomics',
-        'catalogActive',
-        'legacy_removed',
-        'sourceTimestamp',
-        'observations.jsonl'
-    )) {
+    foreach ($token in @('SecondaryMarketValue','SecondaryPriceClass','SecondaryGraphName','Get-TravelProfileEffects','Get-EffectiveTravelEconomics','catalogActive','legacy_removed','sourceTimestamp','observations.jsonl')) {
         if (-not $text.Contains($token)) { Fail "Visible presentation contract missing '$token'." }
     }
 }
@@ -55,52 +36,46 @@ if ($nessie.Count -ne 1 -or $nessie[0].visible -ne $true -or $nessie[0].enabled 
 if ($cherry.Count -ne 1 -or $cherry[0].visible -ne $true -or $cherry[0].enabled -ne $false) { Fail 'Cherry Blossom must be visible but remain outside the primary enabled model path.' }
 
 $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
-$finalizerCall = $wrapper.IndexOf('& $Finalizer')
-$visibleCall = $wrapper.IndexOf('& $VisibleItems')
-$heartbeatCall = $wrapper.LastIndexOf('Write-UpdateHeartbeat')
-$resaleCall = $wrapper.IndexOf('& $ResaleQueue')
-if ($finalizerCall -lt 0 -or $visibleCall -lt 0 -or $heartbeatCall -lt 0 -or $resaleCall -lt 0 -or -not ($finalizerCall -lt $visibleCall -and $visibleCall -lt $heartbeatCall -and $heartbeatCall -lt $resaleCall)) {
-    Fail 'Runtime order must remain FinalizeState -> VisibleItems -> heartbeat -> ResaleQueue.'
+$finalizer = $wrapper.IndexOf('& $Finalizer')
+$travel = $wrapper.IndexOf('& $TravelContext')
+$visible = $wrapper.IndexOf('& $VisibleItems')
+$filterState = $wrapper.IndexOf('& $FilterState')
+$heartbeat = $wrapper.LastIndexOf('Write-UpdateHeartbeat')
+$priority = $wrapper.IndexOf('& $ResalePriority')
+$resale = $wrapper.IndexOf('& $ResaleQueue')
+if (@($finalizer,$travel,$visible,$filterState,$heartbeat,$priority,$resale) -contains -1 -or -not ($finalizer -lt $travel -and $travel -lt $visible -and $visible -lt $filterState -and $filterState -lt $heartbeat -and $heartbeat -lt $priority -and $priority -lt $resale)) {
+    Fail 'Runtime order must remain FinalizeState -> TravelContext -> VisibleItems -> FilterState -> heartbeat -> ResalePriority -> ResaleQueue.'
 }
 
 $ini = Get-Content -LiteralPath $iniPath -Raw
-foreach ($section in @(
-    'MeterUKCard','MeterUKSecondaryCard','MeterJPCard','MeterJPSecondaryCard',
-    'MeterUKSecondaryFlag','MeterJPSecondaryFlag',
-    'MeterUKSecondaryGraph','MeterJPSecondaryGraph',
-    'MeterUKSecondaryExpand','MeterJPSecondaryExpand'
-)) {
-    if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($section) + '\]\s*$')) { Fail "Missing independent item-card meter [$section]." }
+foreach ($section in @('MeterUKCard','MeterUKSecondaryCard','MeterJPCard','MeterJPSecondaryCard','MeterUKSecondaryFlag','MeterJPSecondaryFlag','MeterUKSecondaryGraph','MeterJPSecondaryGraph','MeterUKSecondaryExpand','MeterJPSecondaryExpand')) {
+    if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing independent item-card meter [$section]." }
 }
-
 foreach ($token in @('#UKMarketValueText#','#JPMarketValueText#','#UKSecondaryMarketValueText#','#JPSecondaryMarketValueText#')) {
     if (-not $ini.Contains($token)) { Fail "Skin is missing market-value variable $token." }
 }
-if ($ini -notmatch '(?m)^Version=0\.3\.1\s*$') { Fail 'Independent-card release should report skin version 0.3.1.' }
-if ($ini -notmatch '(?m)^MaxExpandedCards=2\s*$') { Fail 'Default expanded-card cap must be two.' }
+if ($ini -notmatch '(?m)^Version=0\.4\.0\s*$') { Fail 'Current filtered independent-card release should report skin version 0.4.0.' }
+if ($ini -notmatch '(?m)^MaxExpandedCards=2\s*$') { Fail 'Default expanded-card cap must remain two.' }
 if ($ini -notmatch '(?m)^MaxExpandedCards=#MaxExpandedCards#\s*$') { Fail 'MeasureState must pass the expanded-card cap into StateReader.lua.' }
-
-foreach ($group in @('UKPrimaryBody','UKSecondaryHeader','UKSecondaryBody','JPPrimaryBody','JPSecondaryHeader','JPSecondaryBody')) {
-    if ($ini -notmatch ('(?m)^Group=' + [regex]::Escape($group) + '\s*$')) { Fail "Skin is missing independent card group '$group'." }
-}
-
-if ($ini -notmatch '(?m)^ImageName=#@#Generated\\#UKSecondaryGraphName#\s*$') { Fail 'UK secondary card must own its own graph image.' }
-if ($ini -notmatch '(?m)^ImageName=#@#Generated\\#JPSecondaryGraphName#\s*$') { Fail 'JP secondary card must own its own graph image.' }
-if ($ini -notmatch "ToggleCard\('UKSecondary'\)" -or $ini -notmatch "ToggleCard\('JPSecondary'\)") { Fail 'Secondary card headers must be expandable through StateReader.lua.' }
+if ($ini -notmatch '(?m)^ImageName=#@#Generated\\#UKSecondaryGraphName#\s*$') { Fail 'UK secondary card must own its graph image.' }
+if ($ini -notmatch '(?m)^ImageName=#@#Generated\\#JPSecondaryGraphName#\s*$') { Fail 'JP secondary card must own its graph image.' }
 
 if (-not (Test-Path -LiteralPath $stateReaderPath)) {
     Fail 'Missing StateReader.lua.'
 } else {
     $stateReader = Get-Content -LiteralPath $stateReaderPath -Raw
     foreach ($token in @(
-        "local maxExpandedCards = 2",
-        "local function countExpandedCards()",
-        "local function collapseForRequestedCard(requested)",
-        "local function applyCardLayout()",
-        "function ToggleCard(cardKey)",
-        "if countExpandedCards() >= maxExpandedCards then collapseForRequestedCard(cardKey) end",
-        "setMeterGroupVisible('UKSecondaryHeader', true)",
-        "setMeterGroupVisible('JPSecondaryHeader', true)"
+        'local maxExpandedCards = 2',
+        'local function countExpandedCards()',
+        'local function collapseForRequestedCard(requested)',
+        'local function applyCardLayout()',
+        'function ToggleCard(cardKey)',
+        'function TogglePin(cardKey)',
+        "return '★'",
+        "UKSecondary='united_kingdom:266'",
+        "JPSecondary='japan:277'",
+        'if pinKey==cardKey then return true end',
+        "travelFilterCountryId~='' and cardCountry[cardKey]~=travelFilterCountryId"
     )) {
         if (-not $stateReader.Contains($token)) { Fail "StateReader.lua is missing independent-card contract: $token" }
     }
@@ -112,5 +87,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Visible-item configuration validation passed.' -ForegroundColor Green
-Write-Host 'Nessie and Cherry are independent expandable cards with local history graphs; at most two cards are expanded by default.'
+Write-Host 'Nessie and Cherry remain independent cards; one card may be pinned/top/expanded while travel and local filters control relevance.'
 exit 0
