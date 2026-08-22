@@ -35,20 +35,22 @@ Accepted data foundation at the last target-Windows check:
 5 verified legacy relationships
 ```
 
-The active **0.6.0 candidate** restores the opportunity list as the primary surface and makes optimizer intelligence an ordering layer rather than a replacement UI.
+The active **0.6.0 candidate** uses the opportunity list as the primary surface with transparent selectable ordering rather than a replacement route card or hidden composite score.
 
 Current primary behavior:
 
 - up to eight evidence-backed country/item opportunities;
 - persistent Item/Trip/Country/Category filters;
-- `OPTIMAL`, `UPCOMING`, `PROFIT`, and `TIME` orderings;
-- no separate Chance sort;
-- `OPTIMAL` = probability-weighted gross trip profit per total elapsed hour;
-- global optimal row stays marked while another ordering is selected;
-- current/future window timing plus leave timing, likelihood, elapsed time, gross profit, foreign price and MV in each row;
+- `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR` orderings;
+- hit likelihood displayed independently rather than folded into a hidden ranking score;
+- gross trip profit shown with explicit modeled purchase quantity;
+- `PROFIT/HR` = gross trip profit / total elapsed hours;
+- current/future window timing plus leave timing, likelihood, elapsed time, foreign price and MV in each row;
 - Energy/Nerve waste constraints for new outbound opportunities;
 - stable `country:itemId` graph actions;
 - 8-hour on-demand graphs with hourly markers and left-edge carry-forward;
-- background route optimizer retained for compatibility and MV-priority work.
+- change-only retention baseline preservation;
+- refresh-stable opportunity projection and enlarged text-control hitboxes;
+- background route optimizer retained only for compatibility and MV-priority work.
 
 This 0.6 candidate is pending target-Windows/Rainmeter acceptance. See `NEXT_CODEX_RUN.md` for the exact focused acceptance commands.
