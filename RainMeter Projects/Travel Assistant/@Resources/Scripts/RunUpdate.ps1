@@ -11,6 +11,7 @@ $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
 $TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
 $VisibleItems = Join-Path $PSScriptRoot 'VisibleItems.ps1'
+$FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
@@ -158,6 +159,12 @@ try {
             & $VisibleItems
             if (Test-Path -LiteralPath $VisibleItemsErrorFile) { Remove-Item -LiteralPath $VisibleItemsErrorFile -Force -ErrorAction SilentlyContinue }
         } catch { Write-VisibleItemsFailure -Message $_.Exception.Message }
+    }
+
+    # Local-only UI preferences are projected after all opportunity state so the
+    # one-second Lua loop can filter/reflow cards without reading JSON itself.
+    if (Test-Path -LiteralPath $FilterState) {
+        try { & $FilterState } catch { }
     }
 
     Write-UpdateHeartbeat
