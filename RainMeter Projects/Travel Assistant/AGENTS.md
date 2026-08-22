@@ -55,7 +55,7 @@ Travel                                      SETTINGS >
 Updated ...
 
 ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
-SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
+NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
 #1  <item>   <country>                     <trip gross> <qty>
     <window>  <leave>  <hit likelihood>  <elapsed>  <foreign> (<MV>)  GRAPH
@@ -67,6 +67,7 @@ Rules:
 
 - Show a ranked list of evidence-backed `country:itemId` trade opportunities; do not collapse the primary UI to one recommended route.
 - Visible ordering is selectable and persistent:
+  - `NAME`: alphabetical item name, then destination.
   - `UPCOMING`: soonest modeled/current stock window first.
   - `GROSS PROFIT`: highest total trip gross first.
   - `PROFIT/HR`: gross trip profit divided by total elapsed hours.
@@ -79,10 +80,11 @@ Rules:
 - Each visible row has an on-demand `GRAPH` action keyed by stable `country:itemId` identity.
 - `VIEWER >` opens the broader market browser.
 - Stock graphs use an 8-hour display with hourly markers. The last retained observation before the display cutoff is carried into the left edge so change-only history does not create a false blank plateau.
-- Graph/viewer work is local-only and never creates observations or performs provider/Torn requests.
-- The one-second Lua loop is local-only and may update visibility/reflow but never poll APIs.
+- Viewer work is local-only and never performs provider/Torn requests. It may repair a synthetic carried baseline for migration/retention continuity, but it must never invent a restock/sellout transition or turn a forecast into observed history.
+- The one-second Lua loop is local-only and may update visibility/reflow/sorting but never poll APIs.
 - The last complete opportunity/UI projection must remain visible during intermediate minute-update writes. Do not let the skin flash back to `Learning opportunities...` simply because `UpdateTracker` is still running.
-- Sort controls should respond immediately at the UI layer, then finish local re-projection. Keep stable clickable hitboxes on text controls.
+- Sort controls must reorder the already-projected rows immediately in Lua. Persist the sort choice with a tiny local write; do not run the full opportunity evidence pass on every sort click.
+- Keep stable rectangular hitboxes on text controls.
 
 `OptimalRoute.ps1` remains a background compatibility/pricing-priority route model. Its name is not permission to reintroduce an `OPTIMAL` UI mode. `OpportunityState.ps1` is the primary presentation/ranking projection.
 
@@ -108,7 +110,7 @@ energyWastePolicy
 maxEnergyLoss
 nerveWastePolicy
 maxNerveLoss
-sortMode                     # upcoming | gross | profit_per_hour
+sortMode                     # name | upcoming | gross | profit_per_hour
 ```
 
 Legacy sort migration:
@@ -183,6 +185,7 @@ Legacy `FinalizeState.ps1` economics are informational only and must not rewrite
 11. Stale provider markets are not visible opportunity candidates.
 12. Forecasted windows and presentation sorting never write observation/cycle history.
 13. Change-only observation pruning must preserve one predecessor/baseline per market across the high-resolution retention boundary.
+14. A prior `history_bootstrap`-only migration hole may be repaired to a carried `history_repair_baseline` using the market's recorded first-seen/current unchanged state. Such repair is continuity metadata, not an observed market transition.
 
 ## Energy / Nerve constraints
 
@@ -342,6 +345,7 @@ ResaleQueue             # <= 1 market request
 ## Performance budget
 
 - one-second Rainmeter loop: local only;
+- sorting already-projected rows in Lua is local and immediate;
 - serialized updater: roughly once/minute;
 - shadow collection: no more often than ~120s unless revalidated;
 - travel/bars: one bounded request per normal update;
@@ -367,6 +371,6 @@ generated state/graphs
 
 ## Current validation boundary
 
-The 0.6 ranked opportunity implementation is **pending target-Windows/Rainmeter acceptance**. Do not call it accepted until focused parser/deterministic tests, one production update, working popups/sort controls, stable poll rendering, and a Rainmeter screenshot pass.
+The 0.6 ranked opportunity implementation is **pending target-Windows/Rainmeter acceptance**. Do not call it accepted until focused parser/deterministic tests, one production update, working popups/sort controls, stable poll rendering, repaired viewer continuity, and a Rainmeter screenshot pass.
 
 See `docs/NEXT_CODEX_RUN.md` for the current exact acceptance commands.
