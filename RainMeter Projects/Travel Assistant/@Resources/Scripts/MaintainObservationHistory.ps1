@@ -70,6 +70,11 @@ function Remove-SyntheticObservationArtifacts {
         return 0
     }
 
+    # This is also the one-time migration from the legacy updater's every-source-
+    # timestamp rows to the current transition-only database. For each market keep
+    # the first retained state and every subsequent stock change; foreign-price-only
+    # or timestamp-only repeats are discarded.
+    $lastStockByKey = @{}
     $tmp = $ObservationFile + '.cleanup.tmp'
     $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
     $removed = 0
@@ -79,7 +84,15 @@ function Remove-SyntheticObservationArtifacts {
             try {
                 $row = $line | ConvertFrom-Json
                 if (Test-IsSyntheticHistorySource $row) { $removed++; continue }
+                $key = Get-HistoryMarketKey $row
+                if ([string]::IsNullOrWhiteSpace($key)) { $removed++; continue }
+                $stock = [long](Get-HistoryProperty $row 'stock')
+                if ($lastStockByKey.ContainsKey($key) -and [long]$lastStockByKey[$key] -eq $stock) {
+                    $removed++
+                    continue
+                }
                 $writer.WriteLine($line)
+                $lastStockByKey[$key] = $stock
             } catch {
                 # Invalid JSON is not useful evidence; omit it during the same migration cleanup.
                 $removed++
@@ -87,7 +100,7 @@ function Remove-SyntheticObservationArtifacts {
         }
     } finally { $writer.Dispose() }
     Move-Item -LiteralPath $tmp -Destination $ObservationFile -Force
-    [System.IO.File]::WriteAllText($SyntheticCleanupMarker,('removed=' + $removed),[System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($SyntheticCleanupMarker,('removed_or_compacted=' + $removed),[System.Text.UTF8Encoding]::new($false))
     return $removed
 }
 
@@ -167,8 +180,8 @@ $settings = Read-HistoryJson $SettingsFile
 $engine = Read-HistoryJson $EngineStateFile
 if ($null -eq $settings -or $null -eq $engine) { return }
 
-# One-time migration cleanup removes rows that painted current state backward in
-# older builds. The marker prevents a full 48-hour JSONL rewrite every minute.
+# One-time migration cleanup removes fabricated rows and compacts old same-stock
+# polling noise. The marker prevents a full 48-hour JSONL rewrite every minute.
 [void](Remove-SyntheticObservationArtifacts)
 
 # PostUpdate performs migration cleanup only. If a market has no retained
