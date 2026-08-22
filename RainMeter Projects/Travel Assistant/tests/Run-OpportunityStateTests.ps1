@@ -32,6 +32,42 @@ Assert-Near (Get-OpportunityProbabilityAtAge -Cycles $cycles -AgeSeconds 750L) 1
 Assert-Near (Get-OpportunityProbabilityAtAge -Cycles $cycles -AgeSeconds 950L) (2.0/3.0) 0.0001 'Two historical windows cover age 950.'
 Assert-Near (Get-OpportunityProbabilityAtAge -Cycles $cycles -AgeSeconds 1100L) 0.0 0.0001 'No historical window covers age 1100.'
 
+# Recurring-cycle regression: 45m stocked, ~60m sold out, 90m flight.
+# From a current restock anchor the present stock lasts ~45m, then the item is
+# sold out for ~60m. A 90m flight therefore needs to depart around 15m after
+# the current restock to arrive at the following restock, not return NO HIT.
+$recurringCycles = @(
+    [pscustomobject]@{ restockDelaySeconds=3300L; availabilitySeconds=2700L },
+    [pscustomobject]@{ restockDelaySeconds=3600L; availabilitySeconds=2700L },
+    [pscustomobject]@{ restockDelaySeconds=3900L; availabilitySeconds=2700L }
+)
+$anchorRestock = 200000L
+$flightSeconds = 5400L
+$recurringWindow = Get-OpportunityNextRecurringWindow -Cycles $recurringCycles -AnchorAt $anchorRestock -AnchorPhase 'restock' -NowEpoch $anchorRestock -EarliestArrivalAt ($anchorRestock+$flightSeconds) -PreferredProbability 0.5
+Assert-True ($null -ne $recurringWindow) 'Recurring restock model should find the following stocked cycle beyond a 90-minute flight.'
+if ($null -ne $recurringWindow) {
+    Assert-Equal ([long]$recurringWindow.targetAt) ($anchorRestock+6300L) 'Mixed cycle overlap should target the >=50% supported next restock at 105 minutes.'
+    Assert-Equal ([long]($recurringWindow.targetAt-$anchorRestock-$flightSeconds)) 900L 'A 90-minute flight should leave about 15 minutes after the current restock.'
+    Assert-Near ([double]$recurringWindow.probability) (2.0/3.0) 0.0001 'Next-cycle target should be supported by two of three empirical cycle scenarios.'
+}
+
+# Sold-out anchor must also project beyond the first historical cycle.
+$steadyCycles = @(
+    [pscustomobject]@{ restockDelaySeconds=3600L; availabilitySeconds=2700L },
+    [pscustomobject]@{ restockDelaySeconds=3600L; availabilitySeconds=2700L },
+    [pscustomobject]@{ restockDelaySeconds=3600L; availabilitySeconds=2700L }
+)
+$selloutAnchor = 300000L
+$lateArrival = $selloutAnchor + 10000L
+$lateWindow = Get-OpportunityNextRecurringWindow -Cycles $steadyCycles -AnchorAt $selloutAnchor -AnchorPhase 'sellout' -NowEpoch $selloutAnchor -EarliestArrivalAt $lateArrival -PreferredProbability 0.5
+Assert-True ($null -ne $lateWindow) 'Sold-out forecast should continue into later cycles instead of stopping after the first stock window.'
+if ($null -ne $lateWindow) {
+    Assert-Equal ([long]$lateWindow.startAt) ($selloutAnchor+9900L) 'Second recurring stocked period should begin after one complete 105-minute cycle plus the next 60-minute restock delay.'
+    Assert-Equal ([long]$lateWindow.targetAt) $lateArrival 'Arrival already inside the second recurring stocked period should remain actionable.'
+    Assert-Near ([double]$lateWindow.probability) 1.0 0.0001 'Identical empirical cycles should give certainty inside their repeated stocked interval.'
+}
+Assert-Near (Get-OpportunityRecurringProbabilityAtAge -Cycles $steadyCycles -AgeSeconds 10000L -AnchorPhase 'sellout') 1.0 0.0001 'Recurring probability must recognize stock in a later cycle.'
+
 $state = @{}
 $rows = @(
     [pscustomobject]@{
@@ -54,7 +90,7 @@ Assert-Equal ([long]$state['Opportunity2GrossValue']) 1200L 'Raw gross value mus
 Assert-Near ([double]$state['Opportunity2ProfitHourValue']) 2400.0 0.001 'Raw profit/hour must be available for immediate Lua sorting.'
 Assert-Equal ([long]$state['Opportunity2WindowStartAt']) 100200L 'Raw window timestamp must be available for immediate Lua sorting.'
 Assert-Near ([double]$state['Opportunity2ProbabilityValue']) .8 0.0001 'Raw probability must remain available as an independent sort tiebreaker.'
-Assert-Equal ([long]$state['Opportunity2ElapsedSeconds']) 1800L 'Raw elapsed seconds must be available for local sorting and the flag travel-time strip.'
+Assert-Equal ([long]$state['Opportunity2ElapsedSeconds']) 1800L 'Raw elapsed seconds must be available for local sorting and the flag travel-time tooltip.'
 Assert-Equal (Get-OpportunityCountryCode 'united_kingdom') 'UK' 'United Kingdom display code remains available internally even though country text is removed from the card body.'
 
 $learningState = @{}
@@ -80,5 +116,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Opportunity-state deterministic tests passed.' -ForegroundColor Green
-Write-Host 'Fresh in-stock rows remain visible with LEARNING likelihood; compact cards omit place numbers while keeping transparent NAME/UPCOMING/GROSS PROFIT/PROFIT-HR data.'
+Write-Host 'Availability projection now carries empirical stocked/out-of-stock cycle pairs forward across as many future cycles as the travel horizon requires.'
 exit 0
