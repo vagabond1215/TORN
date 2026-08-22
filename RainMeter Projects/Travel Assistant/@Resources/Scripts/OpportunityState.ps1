@@ -1,12 +1,15 @@
 param(
-    [switch]$SkipMain,
+    [Alias('SkipMain')]
+    [switch]$OpportunityStateSkipMain,
     [long]$Now = 0
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
-. (Join-Path $PSScriptRoot 'OptimalRoute.ps1') -SkipMain
+$requestedNow = $Now
+. (Join-Path $PSScriptRoot 'OptimalRoute.ps1') -SkipMain -Now $requestedNow
+$Now = $requestedNow
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
@@ -183,7 +186,7 @@ function Write-OpportunityProjection {
     }
 }
 
-if ($SkipMain) { return }
+if ($OpportunityStateSkipMain) { return }
 if ($Now -le 0) { $Now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 
 $engine = Read-OptimalJson $EngineStateFile
@@ -192,7 +195,14 @@ $local = Read-OptimalJson (Join-Path $ConfigDir 'settings.local.json')
 $countries = Read-OptimalJson (Join-Path $ConfigDir 'countries.json')
 $perks = Read-OptimalJson (Join-Path $ConfigDir 'travel-perks.json')
 $state = Read-OptimalStateKv $StateKvFile
-if ($null -eq $engine -or $null -eq $settings -or $null -eq $countries -or $null -eq $perks -or $state.Count -eq 0 -or -not $engine.PSObject.Properties['observedMarkets']) { return }
+$missing = New-Object System.Collections.Generic.List[string]
+if ($null -eq $engine) { $missing.Add('engine-state.json') }
+if ($null -eq $settings) { $missing.Add('settings.example.json') }
+if ($null -eq $countries) { $missing.Add('countries.json') }
+if ($null -eq $perks) { $missing.Add('travel-perks.json') }
+if ($state.Count -eq 0) { $missing.Add('state.kv') }
+if ($null -ne $engine -and -not $engine.PSObject.Properties['observedMarkets']) { $missing.Add('engine.observedMarkets') }
+if ($missing.Count -gt 0) { throw ('Opportunity prerequisites missing or invalid: ' + ($missing -join ', ')) }
 
 $preferences = Read-UiPreferences
 $sortMode = [string]$preferences.sortMode
