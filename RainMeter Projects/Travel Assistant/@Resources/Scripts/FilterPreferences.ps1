@@ -13,6 +13,8 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $PreferenceFile = Join-Path $RuntimeDir 'preferences.json'
+$RuntimeLogScript = Join-Path $PSScriptRoot 'RuntimeLog.ps1'
+if (Test-Path -LiteralPath $RuntimeLogScript) { . $RuntimeLogScript }
 
 function Read-FilterJson {
     param([string]$Path)
@@ -213,8 +215,28 @@ if ($Action -eq 'ToggleTripBand') {
 }
 
 if ($changed) {
-    $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
-    if (Test-Path -LiteralPath $filterState) { try { & $filterState } catch { } }
+    # A pure sort change does not alter filters, collection, or route economics.
+    # Reproject the opportunity order directly so the shared Rainmeter RunCommand
+    # measure is released as quickly as possible.
+    if ($Action -ne 'SetSortMode') {
+        $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
+        if (Test-Path -LiteralPath $filterState) {
+            try { & $filterState }
+            catch {
+                if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+                    Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('FilterState.ps1: ' + $_.Exception.ToString())
+                }
+            }
+        }
+    }
+
     $opportunities = Join-Path $PSScriptRoot 'OpportunityState.ps1'
-    if (Test-Path -LiteralPath $opportunities) { try { & $opportunities } catch { } }
+    if (Test-Path -LiteralPath $opportunities) {
+        try { & $opportunities }
+        catch {
+            if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+                Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('OpportunityState.ps1: ' + $_.Exception.ToString())
+            }
+        }
+    }
 }
