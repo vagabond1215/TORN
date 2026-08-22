@@ -11,9 +11,12 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$SeedDir = Join-Path $ProjectRoot 'data\seed'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
+$RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
+$SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
 
 function Read-VisibleItemsJson {
     param([string]$Path)
@@ -66,11 +69,13 @@ function Test-VisibleItemCountry {
 function Get-VisibleSecondaryItem {
     param([object]$ItemsConfig, [string]$CountryId, [int]$PrimaryItemId)
     if ($null -eq $ItemsConfig -or -not $ItemsConfig.PSObject.Properties['items']) { return $null }
-    return @($ItemsConfig.items | Where-Object {
+    $matches = @($ItemsConfig.items | Where-Object {
         [int]$_.itemId -ne $PrimaryItemId -and
         $_.PSObject.Properties['visible'] -and $_.visible -eq $true -and
         (Test-VisibleItemCountry -Item $_ -CountryId $CountryId)
-    } | Select-Object -First 1)[0]
+    } | Select-Object -First 1)
+    if ($matches.Count -eq 0) { return $null }
+    return $matches[0]
 }
 
 function Get-VisibleItemsProfitabilitySettings {
@@ -108,6 +113,115 @@ function Get-VisibleItemsResaleSnapshot {
     return [pscustomobject]@{ price = $price; fetchedAt = $fetchedAt; source = $source; fresh = $fresh }
 }
 
+function Get-VisibleItemGraphRows {
+    param(
+        [string]$CountryId,
+        [int]$ItemId,
+        [long]$Cutoff,
+        [object]$Market
+    )
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($path in @($SeedObservationFile, $RuntimeObservationFile)) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        foreach ($line in Get-Content -LiteralPath $path) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $row = $line | ConvertFrom-Json
+                if ([string]$row.country -ne $CountryId -or [int]$row.itemId -ne $ItemId -or [long]$row.timestamp -lt $Cutoff) { continue }
+                $key = ('{0}|{1}|{2}|{3}|{4}|{5}' -f [string]$row.country, [int]$row.itemId, [long]$row.timestamp, [int]$row.stock, [long]$row.foreignPrice, [string]$row.source)
+                if ($seen.Add($key)) { $rows.Add($row) }
+            } catch { }
+        }
+    }
+
+    # observedMarkets is a current provider snapshot, not inferred history. Add
+    # it to the display series only at its real provider/source timestamp so a
+    # sparse change-only shadow history still reaches the current observation.
+    if ($null -ne $Market) {
+        $snapshotTs = 0L
+        if ($Market.PSObject.Properties['sourceTimestamp']) { $snapshotTs = [long]$Market.sourceTimestamp }
+        if ($snapshotTs -le 0 -and $Market.PSObject.Properties['lastSeenAt']) { $snapshotTs = [long]$Market.lastSeenAt }
+        if ($snapshotTs -ge $Cutoff) {
+            $stock = if ($Market.PSObject.Properties['lastStock']) { [int]$Market.lastStock } else { 0 }
+            $foreignPrice = if ($Market.PSObject.Properties['lastForeignPrice']) { [long]$Market.lastForeignPrice } else { 0L }
+            $source = if ($Market.PSObject.Properties['source']) { [string]$Market.source } else { 'provider_snapshot' }
+            $key = ('{0}|{1}|{2}|{3}|{4}|{5}' -f $CountryId, $ItemId, $snapshotTs, $stock, $foreignPrice, $source)
+            if ($seen.Add($key)) {
+                $rows.Add([pscustomobject]@{
+                    schemaVersion = 1
+                    timestamp = $snapshotTs
+                    country = $CountryId
+                    itemId = $ItemId
+                    stock = $stock
+                    foreignPrice = $foreignPrice
+                    source = $source
+                    sourceTimestamp = $snapshotTs
+                })
+            }
+        }
+    }
+
+    return @($rows | Sort-Object timestamp)
+}
+
+function Write-VisibleItemStockGraph {
+    param([object[]]$Rows, [string]$Path, [long]$NowEpoch, [int]$WindowHours = 8)
+
+    Add-Type -AssemblyName System.Drawing
+    $width = 520
+    $height = 118
+    $padX = 8
+    $padY = 8
+    $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+    $g = [System.Drawing.Graphics]::FromImage($bitmap)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.Clear([System.Drawing.Color]::FromArgb(24, 27, 31))
+    $gridPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(48, 53, 60), 1)
+    for ($i = 1; $i -le 3; $i++) {
+        $y = [single]($padY + (($height - 2 * $padY) * $i / 4.0))
+        $g.DrawLine($gridPen, $padX, $y, $width - $padX, $y)
+    }
+
+    if ($null -ne $Rows -and $Rows.Count -gt 0) {
+        $windowStart = $NowEpoch - ($WindowHours * 3600)
+        $maxStock = [double](($Rows | Measure-Object stock -Maximum).Maximum)
+        if ($maxStock -lt 1) { $maxStock = 1 }
+        $linePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(82, 174, 255), 2)
+        $restockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(86, 190, 116), 1)
+        $selloutPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(224, 90, 90), 1)
+        $plotW = $width - 2 * $padX
+        $plotH = $height - 2 * $padY
+        $prev = $null
+        foreach ($row in $Rows) {
+            $x = [single]($padX + (([long]$row.timestamp - $windowStart) / [double]($WindowHours * 3600)) * $plotW)
+            if ($x -lt $padX) { $x = $padX }
+            if ($x -gt ($width - $padX)) { $x = $width - $padX }
+            $y = [single]($padY + $plotH - (([double]$row.stock / $maxStock) * $plotH))
+            if ($null -ne $prev) {
+                $px = [single]$prev.x
+                $py = [single]$prev.y
+                $g.DrawLine($linePen, $px, $py, $x, $py)
+                $g.DrawLine($linePen, $x, $py, $x, $y)
+                if ([int]$prev.stock -eq 0 -and [int]$row.stock -gt 0) { $g.DrawLine($restockPen, $x, $padY, $x, $height - $padY) }
+                if ([int]$prev.stock -gt 0 -and [int]$row.stock -eq 0) { $g.DrawLine($selloutPen, $x, $padY, $x, $height - $padY) }
+            }
+            $prev = [pscustomobject]@{ x = $x; y = $y; stock = [int]$row.stock }
+        }
+        $linePen.Dispose()
+        $restockPen.Dispose()
+        $selloutPen.Dispose()
+    }
+
+    $gridPen.Dispose()
+    $g.Dispose()
+    $tmp = $Path + '.tmp.png'
+    $bitmap.Save($tmp, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bitmap.Dispose()
+    Move-Item -LiteralPath $tmp -Destination $Path -Force
+}
+
 function Get-VisibleSecondaryPresentation {
     param(
         [Parameter(Mandatory = $true)][object]$Country,
@@ -127,11 +241,11 @@ function Get-VisibleSecondaryPresentation {
     $marketKey = $countryId + ':' + [string]$itemId
     $market = if ($EngineState.PSObject.Properties['observedMarkets']) { Get-VisibleItemsDynamicProperty $EngineState.observedMarkets $marketKey } else { $null }
     if ($null -eq $market) {
-        return [pscustomobject]@{ visible = $false; itemId = $itemId; name = [string]$Item.name; category = [string]$Item.category }
+        return [pscustomobject]@{ visible = $false; itemId = $itemId; name = [string]$Item.name; category = [string]$Item.category; market = $null }
     }
     if (($market.PSObject.Properties['catalogActive'] -and $market.catalogActive -eq $false) -or
         ($market.PSObject.Properties['catalogStatus'] -and [string]$market.catalogStatus -eq 'legacy_removed')) {
-        return [pscustomobject]@{ visible = $false; itemId = $itemId; name = [string]$Item.name; category = [string]$Item.category }
+        return [pscustomobject]@{ visible = $false; itemId = $itemId; name = [string]$Item.name; category = [string]$Item.category; market = $market }
     }
 
     $name = [string]$Item.name
@@ -209,6 +323,7 @@ function Get-VisibleSecondaryPresentation {
         tripProfit = $tripProfit
         tripMarginPercent = $tripMargin
         priceClass = $priceClass
+        market = $market
     }
 }
 
@@ -236,6 +351,7 @@ function Set-VisibleSecondaryState {
     $State[$Prefix + 'SecondaryTripProfit'] = [long]$Presentation.tripProfit
     $State[$Prefix + 'SecondaryTripMarginPercent'] = ('{0:F4}' -f [double]$Presentation.tripMarginPercent)
     $State[$Prefix + 'SecondaryPriceClass'] = [string]$Presentation.priceClass
+    $State[$Prefix + 'SecondaryGraphName'] = ('{0}-{1}-stock.png' -f $Prefix.ToLowerInvariant(), [int]$Presentation.itemId)
 }
 
 if ($SkipMain) { return }
@@ -259,6 +375,9 @@ $capacityOverride = if ($profitability.PSObject.Properties['capacityOverride']) 
 if ($capacityOverride -lt 0) { $capacityOverride = 0 }
 $profile = Get-TravelProfile -BaseSettings $settings -LocalSettings $localSettings
 $mode = if ($state.ContainsKey('TravelMode') -and -not [string]::IsNullOrWhiteSpace([string]$state['TravelMode'])) { [string]$state['TravelMode'] } else { [string]$settings.travelMode }
+$graphWindowHours = if ($settings.PSObject.Properties['graphWindowHours']) { [int]$settings.graphWindowHours } else { 8 }
+if ($graphWindowHours -lt 1) { $graphWindowHours = 8 }
+$graphCutoff = $Now - ([long]$graphWindowHours * 3600)
 
 foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -eq $true })) {
     $prefix = if ([string]$country.id -eq 'united_kingdom') { 'UK' } elseif ([string]$country.id -eq 'japan') { 'JP' } else { ([string]$country.id).ToUpperInvariant() }
@@ -270,8 +389,21 @@ foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -e
         $state[$prefix + 'SecondaryVisible'] = 0
         continue
     }
+
     $presentation = Get-VisibleSecondaryPresentation -Country $country -Item $secondary -EngineState $engineState -TravelProfile $profile -PerksConfig $perksConfig -Profitability $profitability -TravelMode $mode -NowEpoch $Now -CapacityOverride $capacityOverride
     Set-VisibleSecondaryState -State $state -Prefix $prefix -Presentation $presentation
+
+    if ([bool]$presentation.visible) {
+        $graphName = [string]$state[$prefix + 'SecondaryGraphName']
+        $graphPath = Join-Path $GeneratedDir $graphName
+        try {
+            $rows = @(Get-VisibleItemGraphRows -CountryId ([string]$country.id) -ItemId ([int]$secondary.itemId) -Cutoff $graphCutoff -Market $presentation.market)
+            Write-VisibleItemStockGraph -Rows $rows -Path $graphPath -NowEpoch $Now -WindowHours $graphWindowHours
+        } catch {
+            # Graph generation is presentation-only. Never block finalized state
+            # because System.Drawing or one local image write failed.
+        }
+    }
 }
 
 Write-VisibleItemsStateKvAtomic -Values $state -Path $StateKvFile
