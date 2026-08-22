@@ -28,6 +28,7 @@ $observedMarkets = [pscustomobject]@{}
 $observedMarkets | Add-Member NoteProperty 'alpha:1' ([pscustomobject]@{ country='alpha'; itemId=1; providerName='Alpha Item'; firstSeenAt=100000; lastStock=3; lastForeignPrice=100; source='fixture'; sourceTimestamp=19999900; lastSeenAt=19999900 })
 $observedMarkets | Add-Member NoteProperty 'beta:2' ([pscustomobject]@{ country='beta'; itemId=2; providerName='Beta Item'; firstSeenAt=200000; lastStock=7; lastForeignPrice=200; source='fixture'; sourceTimestamp=19999901; lastSeenAt=19999901 })
 $observedMarkets | Add-Member NoteProperty 'gamma:3' ([pscustomobject]@{ country='gamma'; itemId=3; providerName='Gamma Item'; firstSeenAt=300000; lastStock=9; lastForeignPrice=300; source='fixture'; sourceTimestamp=19999902; lastSeenAt=19999902 })
+$observedMarkets | Add-Member NoteProperty 'delta:4' ([pscustomobject]@{ country='delta'; itemId=4; providerName='Delta Item'; firstSeenAt=400000; lastStock=4; lastForeignPrice=400; source='fixture'; sourceTimestamp=19999903; lastSeenAt=19999903 })
 $engine = [pscustomobject]@{ schemaVersion=1; lastPruneAt=0; observedMarkets=$observedMarkets; destinations=[pscustomobject]@{}; resaleCache=[pscustomobject]@{} }
 $engine | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $runtimeDir 'engine-state.json') -Encoding UTF8
 
@@ -35,7 +36,8 @@ $observationFile = Join-Path $runtimeDir 'observations.jsonl'
 @(
     [pscustomobject]@{schemaVersion=1;timestamp=100000;country='alpha';itemId=1;stock=5;foreignPrice=100;source='fixture';sourceTimestamp=100000},
     [pscustomobject]@{schemaVersion=1;timestamp=19900000;country='alpha';itemId=1;stock=3;foreignPrice=100;source='fixture';sourceTimestamp=19900000},
-    [pscustomobject]@{schemaVersion=1;timestamp=200000;country='beta';itemId=2;stock=7;foreignPrice=200;source='fixture';sourceTimestamp=200000}
+    [pscustomobject]@{schemaVersion=1;timestamp=200000;country='beta';itemId=2;stock=7;foreignPrice=200;source='fixture';sourceTimestamp=200000},
+    [pscustomobject]@{schemaVersion=1;timestamp=19999000;country='delta';itemId=4;stock=4;foreignPrice=400;source='history_bootstrap';sourceTimestamp=19999000}
 ) | ForEach-Object { $_ | ConvertTo-Json -Compress } | Set-Content -LiteralPath $observationFile -Encoding UTF8
 
 $cycleFile = Join-Path $runtimeDir 'cycles.jsonl'
@@ -69,11 +71,21 @@ try {
         throw 'Missing-market first-seen carried baseline was not repaired at the retention boundary.'
     }
 
+    $deltaBaseline = @($rowsAfterPost | Where-Object { $_.country -eq 'delta' -and [int]$_.itemId -eq 4 -and $_.source -eq 'history_repair_baseline' })
+    $deltaBootstrap = @($rowsAfterPost | Where-Object { $_.country -eq 'delta' -and [int]$_.itemId -eq 4 -and $_.source -eq 'history_bootstrap' })
+    if ($deltaBaseline.Count -ne 1 -or [long]$deltaBaseline[0].timestamp -ne $observationCutoff -or [int]$deltaBaseline[0].stock -ne 4) {
+        throw 'Bootstrap-only market did not receive a carried repair baseline.'
+    }
+    if ($deltaBootstrap.Count -ne 1 -or [long]$deltaBootstrap[0].timestamp -ne 19999000) {
+        throw 'Bootstrap-only repair must preserve the truthful original bootstrap point.'
+    }
+
     & $testScript -Phase PostUpdate -Now $now
     $rowsAfterSecondPost = @(Get-Content -LiteralPath $observationFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
-    if (@($rowsAfterSecondPost | Where-Object { $_.country -eq 'gamma' -and [int]$_.itemId -eq 3 }).Count -ne 1) { throw 'PostUpdate history repair is not idempotent.' }
+    if (@($rowsAfterSecondPost | Where-Object { $_.country -eq 'gamma' -and [int]$_.itemId -eq 3 }).Count -ne 1) { throw 'Missing-market history repair is not idempotent.' }
+    if (@($rowsAfterSecondPost | Where-Object { $_.country -eq 'delta' -and [int]$_.itemId -eq 4 }).Count -ne 2) { throw 'Bootstrap-only history repair is not idempotent.' }
 
-    Write-Host 'Change-only observation retention baseline and repair tests passed.' -ForegroundColor Green
+    Write-Host 'Change-only observation retention, missing-market repair, and bootstrap-only migration tests passed.' -ForegroundColor Green
     exit 0
 } finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
