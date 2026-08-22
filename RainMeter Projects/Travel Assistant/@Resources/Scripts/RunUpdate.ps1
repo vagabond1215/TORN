@@ -9,6 +9,7 @@ Set-StrictMode -Version 2.0
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
+$TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
 $VisibleItems = Join-Path $PSScriptRoot 'VisibleItems.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
@@ -16,6 +17,7 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
+$TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
 $VisibleItemsErrorFile = Join-Path $RuntimeDir 'visible-items-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
@@ -149,6 +151,7 @@ function Write-CompactFailure {
 
 function Write-ShadowFailure { param([string]$Message) Write-CompactFailure -Path $ShadowErrorFile -Message $Message }
 function Write-LocalCatalogFailure { param([string]$Message) Write-CompactFailure -Path $LocalCatalogErrorFile -Message $Message }
+function Write-TravelContextFailure { param([string]$Message) Write-CompactFailure -Path $TravelContextErrorFile -Message $Message }
 function Write-VisibleItemsFailure { param([string]$Message) Write-CompactFailure -Path $VisibleItemsErrorFile -Message $Message }
 function Write-ResaleQueueFailure { param([string]$Message) Write-CompactFailure -Path $ResaleQueueErrorFile -Message $Message }
 
@@ -179,10 +182,28 @@ try {
     & $Finalizer
     if (-not $?) { exit 1 }
 
+    # Travel context is a small, bounded, fail-soft Torn request. On failure the
+    # last successful foreign filter is retained so irrelevant pinned cards are
+    # not suddenly revealed mid-trip.
+    if ($Action -eq 'Update' -and (Test-Path -LiteralPath $TravelContext)) {
+        try {
+            & $TravelContext
+            if (Test-Path -LiteralPath $TravelContextErrorFile) {
+                try {
+                    $travelState = Get-Content -LiteralPath (Join-Path $RuntimeDir 'engine-state.json') -Raw | ConvertFrom-Json
+                    if ($travelState.PSObject.Properties['travelContext'] -and [string]::IsNullOrWhiteSpace([string]$travelState.travelContext.lastError)) {
+                        Remove-Item -LiteralPath $TravelContextErrorFile -Force -ErrorAction SilentlyContinue
+                    }
+                } catch { }
+            }
+        } catch {
+            Write-TravelContextFailure -Message $_.Exception.Message
+        }
+    }
+
     # Multi-item presentation enrichment is local-only. It reads already
-    # collected shadow stock, resaleCache, and the category-aware capacity model
-    # to expose Nessie/Cherry plus parenthesized market references. A failure
-    # leaves the validated Xanax state intact.
+    # collected shadow stock, resaleCache, category-aware capacity, and the
+    # normalized travel context to build independent item-card state.
     if (Test-Path -LiteralPath $VisibleItems) {
         try {
             & $VisibleItems
