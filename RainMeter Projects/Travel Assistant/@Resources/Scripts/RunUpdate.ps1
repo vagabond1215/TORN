@@ -26,6 +26,7 @@ $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
+$StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
 $acquired = $false
 
@@ -149,6 +150,18 @@ try {
     # Primary presentation is the sortable opportunity surface. OPTIMAL is one
     # ordering over evidence-backed item/country windows rather than the only view.
     Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
+
+    # OpportunityState must always leave an explicit projection, even when the
+    # correct result is zero rows. Detect silent early-return states immediately.
+    $hasOpportunityProjection = $false
+    try {
+        if (Test-Path -LiteralPath $StateKvFile) {
+            $hasOpportunityProjection = [bool](Select-String -LiteralPath $StateKvFile -Pattern '^OpportunityCount=' -Quiet)
+        }
+    } catch { $hasOpportunityProjection = $false }
+    if (-not $hasOpportunityProjection) {
+        Write-CompactFailure -Path $OpportunityStateErrorFile -Message 'OpportunityState completed without writing OpportunityCount to state.kv. Run OpportunityState.ps1 directly to identify the missing local prerequisite.'
+    }
 
     if (Test-Path -LiteralPath $FilterState) { try { & $FilterState } catch { } }
 
