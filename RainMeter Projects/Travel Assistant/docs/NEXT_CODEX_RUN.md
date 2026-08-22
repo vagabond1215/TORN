@@ -1,83 +1,97 @@
-# Next Codex Run: Ranked Opportunity Surface
+# Next Codex Run: Compact Opportunity Cards
 
 **Status: ACTIVE — 0.6.0 PENDING TARGET-WINDOWS / RAINMETER ACCEPTANCE**
 
-## Product correction
+## Product direction
 
-The 0.5 single `OPTIMAL` route card was rejected as the primary UI. The intended product is a persistent opportunity surface with explicit, inspectable ordering.
+The primary surface is a compact persistent opportunity list. The retired single-route `OPTIMAL` UI and later composite `OPTIMAL` sort must not return.
 
-The `OPTIMAL` presentation concept has now also been removed. There is no hidden composite score in the user-facing ordering.
-
-Current main view:
+Current main view target:
 
 ```text
 Travel                                      SETTINGS >
 Updated ...
 
 ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
-SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
+NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
-#1  <item>   <country>                     <trip gross> <qty>
-    <window>  <leave>  <hit likelihood>  <elapsed>  <foreign> (<MV>)  GRAPH
-#2  <item>   <country>                     <trip gross> <qty>
-    ...
+[FLAG]  <item>                                <$gross>   v
+[time]  <window>  <leave>  <chance/LEARNING>  <foreign> (<MV>)
+
+[FLAG]  <item>                                <$gross>   v
+[time]  ...
 ```
 
-Up to eight evidence-backed opportunities are shown.
+Up to eight current/future opportunities may be shown.
 
-## Ordering semantics
+### Compact-card rules
 
+- Remove visible `#1/#2/...` place numbers.
+- Left side is a destination flag tile.
+- Bottom of that tile is a white strip containing the existing total elapsed/travel-time text.
+- Country name/code and elapsed time do not appear again in the card body.
+- Visible gross is only `$amount`; no `gross` suffix and no `xN` suffix.
+- Quantity remains in internal projection/tooltips for inspectable economics.
+- Far-right control is a compact `v`/`^` chevron, not the word `GRAPH`.
+
+## Inline card graph
+
+The row chevron expands an 8-hour stock graph **inside that card/list**.
+
+- Only one inline graph may be expanded at a time.
+- Opening a different card collapses the previous one.
+- Clicking the open card again collapses it.
+- Stable `country:itemId` identity follows the market through visible sorting.
+- Expanded cards reflow later rows and panel height.
+- The graph is local-only and uses `RenderInlineGraph.ps1` plus generated Rainmeter Shape-path data.
+- An open inline graph can refresh locally at approximately one-minute cadence.
+- Zero-stock-only history must plot flat at zero rather than a fabricated `0..1` axis.
+
+`VIEWER >` remains a **separate standalone WinForms market browser**. Do not conflate the popup Viewer with inline expansion.
+
+## Ordering
+
+- `NAME`: item name ascending, then destination.
 - `UPCOMING`: earliest current/modeled stock window first.
-- `GROSS PROFIT`: highest total trip gross first.
-- `PROFIT/HR`: gross trip profit divided by total elapsed hours.
-- Hit likelihood remains a separate displayed percentage. It is **not** multiplied into any visible sort score.
-- There is no `OPTIMAL`, Chance, or shortest-Time sort in the user-facing surface.
+- `GROSS PROFIT`: highest trip gross first.
+- `PROFIT/HR`: trip gross / total elapsed hours, descending.
+- Hit likelihood remains a separate decision variable and is not multiplied into any sort score.
 
-Gross profit is `(selected MV basis - foreign price) × modeled purchasable quantity` and intentionally does not subtract travel cost. Quantity is displayed beside gross so the arithmetic is inspectable. Total elapsed time includes required wait, outbound travel, return travel, and purchase buffer; a current return leg is included before the next outbound opportunity.
+Sort clicks must reorder the already-projected rows immediately in Lua. The PowerShell action only persists the preference and must not delay visual sorting.
 
-## Opportunity evidence
+## Current stock and learning
 
-- Fresh current stock uses the existing arrival-survival model.
-- Sold-out opportunities require completed sellout→restock plus availability evidence.
-- Upcoming windows come from overlap of completed historical live intervals after sellout.
-- Minimum availability samples remain controlled by optimizer settings.
-- Forecasts never become history.
-- Stale provider rows are excluded.
-- Unresolved foreign travel (`traveling_unknown` / `abroad_unknown`) fails closed in the primary opportunity projection.
+Fresh current stock must not vanish because completed-cycle likelihood evidence is incomplete.
 
-## Energy / Nerve
+- Fresh in-stock rows may show `LEARNING` in the likelihood field.
+- Unknown likelihood is not a fake 0% or 100%.
+- Gross/profit-hour can still be calculated from current stock, current foreign price, capacity and cached MV.
+- Sold-out/future windows still require completed cycle evidence.
+- Stale stock, unresolved MV, explicit filters, waste policy, or travel restriction may still legitimately remove a row.
 
-The opportunity layer uses the same policies as the route model:
+## History / Viewer
+
+Both inline and standalone graph surfaces use the same retained local truth:
+
+- 8-hour visible history;
+- hourly context in the full Viewer;
+- 48h high-resolution observation retention;
+- 90d completed-cycle retention;
+- change-only predecessor/baseline carry-forward;
+- no provider/Torn request to view a graph;
+- no forecast-to-history mutation.
+
+The standalone Viewer retains its richer dropdown, labels and diagnostic graph. Inline graphs are deliberately compact.
+
+## Popups / diagnostics
+
+Settings, Item/Country/Category filters, Ignore List, Profile/API and standalone Viewer use hidden STA popup hosts. No PowerShell console should remain visible.
+
+Runtime failures:
 
 ```text
-Energy Waste: Allowed | Forbidden | Limited
-Nerve Waste:  Allowed | Forbidden | Limited
+data/runtime/logs/travel-assistant.log
 ```
-
-Energy stacked above natural maximum bypasses Energy restriction; Nerve has no equivalent bypass. Unknown bars fail safe under Forbidden/Limited. Constraints apply to new outbound opportunities but must not remove guidance after travel is committed to a recognized destination.
-
-## Graphs
-
-Graphs remain part of the product as on-demand diagnostics:
-
-- every visible opportunity row has `GRAPH`;
-- `VIEWER >` opens the general market browser;
-- graph targeting uses stable `country:itemId`, not visible row number;
-- visible window is 8 hours with hourly markers;
-- last known observation before the cutoff is carried into the left edge;
-- 48h raw-learning and 90d completed-cycle retention remain independent;
-- graph viewing is local-only and consumes no provider/Torn API request.
-
-## Interaction / refresh stability
-
-- Sort clicks use a shortened local-only projection path.
-- Sort buttons update their active highlight immediately while the local re-sort finishes.
-- Transparent hitboxes are applied to text controls so clicks are not limited to glyph pixels.
-- The Lua reader captures the last complete opportunity/UI projection during initialization and preserves it while the minute update pipeline is publishing intermediate compatibility state. The skin must not flash back to `Learning opportunities...` during a normal poll.
-
-## Popups
-
-Settings, Item/Country/Category filters, Ignore List, Profile/API, and Viewer are detached PowerShell/WinForms surfaces. Launcher script paths must remain explicitly quoted because the repository path contains spaces. Runtime failures go to `data/runtime/logs/travel-assistant.log`.
 
 ## Runtime order
 
@@ -87,15 +101,15 @@ ShadowCollector
 LocalCatalog
 FinalizeState
 TravelContext
-OptimalRoute          # background route / pricing-priority compatibility model
-OpportunityState      # primary sortable UI projection
+OptimalRoute          # background compatibility / MV priority
+OpportunityState      # primary opportunity projection
 FilterState
 heartbeat
 ResalePriority
 ResaleQueue
 ```
 
-`OptimalRoute.ps1` remains internal/background only; do not reintroduce an `OPTIMAL` UI mode from its name.
+Inline rendering is outside that network heartbeat and local-only.
 
 ## Target-Windows acceptance
 
@@ -115,36 +129,40 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
 
 Select-String .\@Resources\Generated\state.kv `
-  -Pattern '^Opportunity(Count|Message|SortMode|1(Key|Name|Country|ChanceText|TimeText|GrossText|QuantityText|ProfitHourText))='
+  -Pattern '^Opportunity(Count|Message|SortMode|1(Key|Name|ChanceText|TimeText|GrossText|PriceText|MarketValueText))='
 ```
 
 Then refresh Rainmeter and verify:
 
-1. no single-route card and no visible `OPTIMAL` badge/mode;
-2. ranked opportunity rows remain visible throughout normal polling rather than flashing to `Learning opportunities...`;
-3. `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR` visibly reorder rows;
-4. hit likelihood remains displayed separately and does not change the mathematical definition of `PROFIT/HR`;
-5. trip gross visibly includes quantity, e.g. `$777,870 gross x18`, and the tooltip explains unit spread × quantity;
-6. Item/Country/Category filter popups open and update the list;
-7. sort/filter controls respond promptly and do not revert after refresh;
-8. `SETTINGS >` opens;
-9. `VIEWER >` opens;
-10. each row `GRAPH` opens the correct `country:itemId` graph;
-11. graphs span 8 hours with hourly markers and left-edge continuity;
-12. no controls or opportunity-row fields overlap;
-13. no persistent `ERROR` remains after a successful normal update.
+1. Fresh in-stock markets appear even if likelihood says `LEARNING`.
+2. No `#1/#2/...` labels.
+3. Every visible card has a recognizable country flag on the left.
+4. The flag has a white bottom strip with dark elapsed/travel-time text.
+5. Country name/code and center travel-time text are absent from the card body.
+6. Gross is displayed as `$amount` only; no `gross x18`/quantity suffix.
+7. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR reorder immediately.
+8. Row control is a `v` chevron.
+9. Clicking it expands an in-card 8-hour graph and changes to `^`.
+10. Opening another row collapses the first; at most one graph is open.
+11. Collapsing/re-expanding does not open the standalone Viewer.
+12. `VIEWER >` still opens the separate full Viewer popup.
+13. Expanded graph follows the same market through sorting or safely collapses if the market disappears.
+14. Zero-stock graph is flat at zero; nonzero retained history shows step changes where data exist.
+15. The list remains populated through normal polling and does not flash to a learning placeholder.
+16. SETTINGS and Item/Country/Category popups still open and save.
+17. No visible PowerShell console or persistent `ERROR` remains.
 
-If anything errors, inspect only:
+If anything errors:
 
 ```powershell
 Get-Content .\data\runtime\logs\travel-assistant.log -Tail 40
 ```
 
-Send the acceptance output and screenshots before marking 0.6 accepted.
+Send the focused acceptance output and screenshots of one collapsed-list view and one expanded inline graph before marking 0.6 accepted.
 
-## After 0.6 acceptance
+## After acceptance
 
-1. refine row density/visual hierarchy based on the real Rainmeter render;
-2. calibrate availability probabilities as more cycles accumulate;
-3. add optional browser notifications by consuming the accepted opportunity projection rather than duplicating timing logic;
-4. later consider bounded multi-trip sequencing as a separate optimization layer.
+1. Tune flag/chart proportions from the real Rainmeter render.
+2. Calibrate probability model as completed cycles accumulate.
+3. Add optional Chrome/browser notifications as a consumer of accepted local opportunity timing state.
+4. Consider bounded multi-trip sequencing separately from the opportunity browser.
