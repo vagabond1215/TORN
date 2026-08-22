@@ -48,7 +48,7 @@ if (Test-Path -LiteralPath $files.Popup) {
     foreach ($filter in @("'Item'","'Country'","'Category'","'Ignore'")) {
         if (-not $text.Contains($filter)) { Fail "OpenFilterPopup.ps1 missing filter $filter." }
     }
-    foreach ($token in @('Get-ActiveCatalogRows','observedMarkets','itemMetadata','OptimalRoute.ps1','OpportunityState.ps1','ignoredItemIds','Persistent opportunity filter')) {
+    foreach ($token in @('Get-ActiveCatalogRows','observedMarkets','itemMetadata','OptimalRoute.ps1','OpportunityState.ps1','ignoredItemIds','Persistent opportunity filter','RuntimeLog.ps1','Write-TravelAssistantLog')) {
         if (-not $text.Contains($token)) { Fail "Filter popup missing '$token'." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Filter popup must remain local-only.' }
@@ -56,7 +56,10 @@ if (Test-Path -LiteralPath $files.Popup) {
 
 if (Test-Path -LiteralPath $files.Launcher) {
     $text = Get-Content -LiteralPath $files.Launcher -Raw
-    if (-not $text.Contains('Start-Process') -or -not $text.Contains('OpenFilterPopup.ps1') -or -not $text.Contains('$arguments = @(')) { Fail 'Filter popup launcher must detach OpenFilterPopup.ps1 with an argument array.' }
+    foreach($token in @('Start-Process','PopupHost.ps1','-Popup Filter','-WindowStyle Hidden','-STA','$arguments')) {
+        if(-not $text.Contains($token)){Fail "Filter popup launcher missing '$token'."}
+    }
+    if($text.Contains('-WindowStyle Normal')){Fail 'Filter popup launcher must not expose a PowerShell console.'}
 }
 
 if (Test-Path -LiteralPath $files.State) {
@@ -86,14 +89,18 @@ if (Test-Path -LiteralPath $files.Opportunities) {
 
 if (Test-Path -LiteralPath $files.Settings) {
     $text = Get-Content -LiteralPath $files.Settings -Raw
-    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Ignore List...','Profile / API...','OPTIMAL is a sort')) {
+    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Ignore List...','Profile / API...','OPTIMAL is a sort','RuntimeLog.ps1')) {
         if (-not $text.Contains($token)) { Fail "OpenOptimizerSettings.ps1 missing '$token'." }
     }
+    if($text.Contains('-WindowStyle Normal')){Fail 'Optimizer Settings must not spawn visible PowerShell consoles.'}
 }
 
 if (Test-Path -LiteralPath $files.SettingsLauncher) {
     $text = Get-Content -LiteralPath $files.SettingsLauncher -Raw
-    if (-not $text.Contains('Start-Process') -or -not $text.Contains('OpenOptimizerSettings.ps1') -or -not $text.Contains('$arguments = @(')) { Fail 'Optimizer settings launcher must detach OpenOptimizerSettings.ps1 with an argument array.' }
+    foreach($token in @('Start-Process','PopupHost.ps1','-Popup OptimizerSettings','-WindowStyle Hidden','-STA','$arguments')) {
+        if(-not $text.Contains($token)){Fail "Optimizer settings launcher missing '$token'."}
+    }
+    if($text.Contains('-WindowStyle Normal')){Fail 'Optimizer settings launcher must not expose a PowerShell console.'}
 }
 
 if (Test-Path -LiteralPath $files.StateReader) {
@@ -131,6 +138,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Opportunity filters, four explicit sort modes, waste policies, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
+Write-Host 'Opportunity filters, four explicit sort modes, hidden popup host, waste policies, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
 Write-Host 'OPTIMAL ranks expected gross value per elapsed hour; likelihood is folded into that score rather than exposed as a separate sort.'
 exit 0
