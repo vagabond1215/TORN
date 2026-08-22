@@ -15,7 +15,7 @@ $required = @(
     'data\seed\metadata.json','data\seed\observations.jsonl','data\seed\cycles.jsonl',
     '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\FinalizeState.ps1',
     '@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\LocalCatalog.ps1','@Resources\Scripts\TravelContext.ps1',
-    '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1',
+    '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1',
     '@Resources\Scripts\ResalePriority.ps1','@Resources\Scripts\ResaleQueue.ps1',
     '@Resources\Scripts\LaunchOptimizerSettings.ps1','@Resources\Scripts\OpenOptimizerSettings.ps1',
     '@Resources\Scripts\LaunchSettings.ps1','@Resources\Scripts\OpenSettings.ps1','@Resources\Scripts\StateReader.lua',
@@ -49,9 +49,7 @@ if ($null -ne $settings) {
     if (-not $settings.PSObject.Properties['optimizer']) { Fail 'settings.example.json must contain optimizer.' }
     if ($settings.PSObject.Properties['profitability']) {
         if ([double]$settings.profitability.itemMarketFeePercent -ne 0) { Fail 'Default Item Market fee must be zero under MV valuation.' }
-        if ([double]$settings.profitability.minimumProfitPerItem -ne 0 -or [double]$settings.profitability.minimumMarginPercent -ne 0 -or [double]$settings.profitability.minimumTotalTripProfit -ne 0) {
-            Fail 'Legacy minimum-profit gates must default to zero and must not control route timing.'
-        }
+        if ([double]$settings.profitability.minimumProfitPerItem -ne 0 -or [double]$settings.profitability.minimumMarginPercent -ne 0 -or [double]$settings.profitability.minimumTotalTripProfit -ne 0) { Fail 'Legacy minimum-profit gates must default to zero and must not control opportunity timing.' }
         if ([long]$settings.profitability.resaleStaleAfterSeconds -lt 3600) { Fail 'MV cache freshness must be at least one hour.' }
     }
     if ($settings.PSObject.Properties['optimizer']) {
@@ -72,9 +70,7 @@ $modes = $config['config\travel-modes.json']
 $countries = $config['config\countries.json']
 if ($null -ne $modes -and $null -ne $countries) {
     $modeIds = @($modes.modes | ForEach-Object { [string]$_.id })
-    foreach ($requiredMode in @('standard','airstrip','wlt','business')) {
-        if ($modeIds -notcontains $requiredMode) { Fail "Missing travel mode '$requiredMode'." }
-    }
+    foreach ($requiredMode in @('standard','airstrip','wlt','business')) { if ($modeIds -notcontains $requiredMode) { Fail "Missing travel mode '$requiredMode'." } }
     $collect = @($countries.countries | Where-Object { $_.collect -eq $true })
     if ($collect.Count -ne 11) { Fail "Expected 11 collect=true foreign destinations; found $($collect.Count)." }
     foreach ($country in $collect) {
@@ -91,8 +87,6 @@ if ($null -ne $modes -and $null -ne $countries) {
     }
 }
 
-# Parse every shipped PowerShell script and every test. This catches the class of
-# interpolation/parser regression that previously broke Validate-RainmeterSkin.ps1.
 $parsePaths = @(
     Get-ChildItem -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts') -Filter '*.ps1' -File -ErrorAction SilentlyContinue
     Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'tests') -Filter '*.ps1' -File -ErrorAction SilentlyContinue
@@ -108,33 +102,38 @@ foreach ($file in $parsePaths) {
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 if (Test-Path -LiteralPath $wrapperPath) {
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
-    foreach ($token in @('ShadowCollector.ps1','LocalCatalog.ps1','FinalizeState.ps1','TravelContext.ps1','OptimalRoute.ps1','FilterState.ps1','ResalePriority.ps1','ResaleQueue.ps1','Write-UpdateHeartbeat')) {
+    foreach ($token in @('ShadowCollector.ps1','LocalCatalog.ps1','FinalizeState.ps1','TravelContext.ps1','OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1','ResalePriority.ps1','ResaleQueue.ps1','Write-UpdateHeartbeat')) {
         if (-not $wrapper.Contains($token)) { Fail "RunUpdate.ps1 missing '$token'." }
     }
-    if ($wrapper.Contains('VisibleItems.ps1')) { Fail 'Minimal 0.5 runtime must not regenerate retired card graphs through VisibleItems.ps1.' }
+    if ($wrapper.Contains('VisibleItems.ps1')) { Fail 'Normal runtime must not regenerate old embedded card graphs through VisibleItems.ps1.' }
     if ($wrapper.Contains('ItemMetadata.ps1')) { Fail 'Network catalog metadata must remain outside the Rainmeter heartbeat.' }
 }
 
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 if (Test-Path -LiteralPath $iniPath) {
     $ini = Get-Content -LiteralPath $iniPath -Raw
-    if ($ini -notmatch '(?m)^Version=0\.5\.0\s*$') { Fail 'Rainmeter skin must report version 0.5.0.' }
-    foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureState]','[MeasureItemViewer]','[MeterSettings]','[MeterFilterTopLine]','[MeterItemViewer]','[MeterRouteCard]','[MeterRouteTitle]','[MeterRouteMeta]','[MeterOptimalItem1Name]','[MeterOptimalItem1Price]','[MeterOptimalItem1Chart]')) {
-        if (-not $ini.Contains($section)) { Fail "Rainmeter skin missing optimizer/viewer section $section" }
+    if ($ini -notmatch '(?m)^Version=0\.6\.0\s*$') { Fail 'Rainmeter skin must report version 0.6.0.' }
+    foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureState]','[MeasureItemViewer]','[MeterSettings]','[MeterFilterTopLine]','[MeterSortOptimal]','[MeterSortUpcoming]','[MeterSortProfit]','[MeterSortTime]','[MeterViewer]','[MeterOpportunity1Name]','[MeterOpportunity1Price]','[MeterOpportunity1Graph]')) {
+        if (-not $ini.Contains($section)) { Fail "Rainmeter skin missing opportunity/viewer section $section" }
     }
-    foreach ($retired in @('[MeterUKCard]','[MeterJPCard]','[MeterUKGraph]','[MeterJPGraph]','MaxExpandedCards=')) {
-        if ($ini.Contains($retired)) { Fail "Minimal optimizer skin still contains retired default card/graph contract '$retired'." }
+    foreach ($retired in @('[MeterRouteCard]','[MeterOptimalItem1Name]','[MeterUKCard]','[MeterJPCard]','[MeterUKGraph]','[MeterJPGraph]','MaxExpandedCards=')) {
+        if ($ini.Contains($retired)) { Fail "Opportunity skin still contains retired primary-view contract '$retired'." }
     }
     if (-not $ini.Contains('LaunchOptimizerSettings.ps1')) { Fail 'Main Settings action must open optimizer settings.' }
     if (-not $ini.Contains('LaunchItemViewer.ps1')) { Fail 'Main skin must expose the detached on-demand item viewer.' }
 }
 
+$opportunityPath = Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
+if (Test-Path -LiteralPath $opportunityPath) {
+    $opportunity = Get-Content -LiteralPath $opportunityPath -Raw
+    foreach ($token in @('grossProfit','expectedGross','optimalScore','elapsedSeconds','Get-OpportunityNextWindow','Write-OpportunityProjection')) { if (-not $opportunity.Contains($token)) { Fail "Opportunity model missing '$token'." } }
+    if ($opportunity -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Opportunity projection must remain local-only.' }
+}
+
 $optimizerSettingsPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
 if (Test-Path -LiteralPath $optimizerSettingsPath) {
     $ui = Get-Content -LiteralPath $optimizerSettingsPath -Raw
-    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Profile / API...','Ignore List...')) {
-        if (-not $ui.Contains($token)) { Fail "Optimizer Settings missing '$token'." }
-    }
+    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Profile / API...','Ignore List...')) { if (-not $ui.Contains($token)) { Fail "Optimizer Settings missing '$token'." } }
 }
 
 $profileSettingsPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenSettings.ps1'
@@ -162,6 +161,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Travel Assistant 0.5 static architecture validation passed.' -ForegroundColor Green
-Write-Host 'Minimal optimizer UI, on-demand 8-hour viewer, full-country travel economics, local policy, and parse-clean runtime contracts are present.'
+Write-Host 'Travel Assistant 0.6 static architecture validation passed.' -ForegroundColor Green
+Write-Host 'Sortable opportunity UI, on-demand 8-hour viewer, background route model, full-country travel economics, local policy, and parse-clean runtime contracts are present.'
 exit 0
