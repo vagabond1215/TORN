@@ -112,11 +112,15 @@ function Write-CompactFailure {
 }
 
 function Invoke-FailSoftScript {
-    param([string]$Path,[string]$ErrorPath)
+    param(
+        [string]$Path,
+        [string]$ErrorPath,
+        [bool]$ClearErrorOnSuccess = $true
+    )
     if (-not (Test-Path -LiteralPath $Path)) { return }
     try {
         & $Path
-        if (Test-Path -LiteralPath $ErrorPath) { Remove-Item -LiteralPath $ErrorPath -Force -ErrorAction SilentlyContinue }
+        if ($ClearErrorOnSuccess -and (Test-Path -LiteralPath $ErrorPath)) { Remove-Item -LiteralPath $ErrorPath -Force -ErrorAction SilentlyContinue }
     } catch { Write-CompactFailure -Path $ErrorPath -Message $_.Exception.Message }
 }
 
@@ -135,7 +139,9 @@ try {
     & $Finalizer
     if (-not $?) { exit 1 }
 
-    if ($Action -eq 'Update') { Invoke-FailSoftScript -Path $TravelContext -ErrorPath $TravelContextErrorFile }
+    # TravelContext owns its diagnostic file because it catches transient API failures
+    # internally while preserving the last successful destination/bar context.
+    if ($Action -eq 'Update') { Invoke-FailSoftScript -Path $TravelContext -ErrorPath $TravelContextErrorFile -ClearErrorOnSuccess $false }
 
     # OptimalRoute is local-only. It reads retained stock/history, current bars,
     # local preferences, capacity, and cached MV. It performs no network calls.
