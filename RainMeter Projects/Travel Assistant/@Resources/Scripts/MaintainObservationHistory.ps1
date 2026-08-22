@@ -14,6 +14,7 @@ $ObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $CycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $SettingsFile = Join-Path $ConfigDir 'settings.example.json'
+$SyntheticCleanupMarker = Join-Path $RuntimeDir 'synthetic-history-cleanup-v1.done'
 
 if ($Now -le 0) { $Now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 
@@ -62,7 +63,13 @@ function Test-IsSyntheticHistorySource {
 }
 
 function Remove-SyntheticObservationArtifacts {
-    if (-not (Test-Path -LiteralPath $ObservationFile)) { return 0 }
+    if (Test-Path -LiteralPath $SyntheticCleanupMarker) { return 0 }
+    if (-not (Test-Path -LiteralPath $ObservationFile)) {
+        New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+        [System.IO.File]::WriteAllText($SyntheticCleanupMarker,'no observation file',[System.Text.UTF8Encoding]::new($false))
+        return 0
+    }
+
     $tmp = $ObservationFile + '.cleanup.tmp'
     $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
     $removed = 0
@@ -74,12 +81,13 @@ function Remove-SyntheticObservationArtifacts {
                 if (Test-IsSyntheticHistorySource $row) { $removed++; continue }
                 $writer.WriteLine($line)
             } catch {
-                # Invalid JSON is not useful evidence; omit it during the same cleanup.
+                # Invalid JSON is not useful evidence; omit it during the same migration cleanup.
                 $removed++
             }
         }
     } finally { $writer.Dispose() }
     Move-Item -LiteralPath $tmp -Destination $ObservationFile -Force
+    [System.IO.File]::WriteAllText($SyntheticCleanupMarker,('removed=' + $removed),[System.Text.UTF8Encoding]::new($false))
     return $removed
 }
 
@@ -159,13 +167,12 @@ $settings = Read-HistoryJson $SettingsFile
 $engine = Read-HistoryJson $EngineStateFile
 if ($null -eq $settings -or $null -eq $engine) { return }
 
-# Remove migration-era rows that painted current state backward through time. This
-# is safe on every update and makes all consumers (inline graph, Viewer, forecasts)
-# operate on the same observed evidence without each maintaining a private ignore list.
+# One-time migration cleanup removes rows that painted current state backward in
+# older builds. The marker prevents a full 48-hour JSONL rewrite every minute.
 [void](Remove-SyntheticObservationArtifacts)
 
-# PostUpdate performs cleanup only. If a market has no retained predecessor, that
-# earlier interval remains unknown; no current-state baseline is fabricated.
+# PostUpdate performs migration cleanup only. If a market has no retained
+# predecessor, that earlier interval remains unknown; no current-state baseline is fabricated.
 if ($Phase -eq 'PostUpdate') { return }
 
 $retentionHours = [Math]::Max(1,[int]$settings.highResolutionRetentionHours)
