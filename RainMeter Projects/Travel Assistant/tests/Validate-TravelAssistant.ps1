@@ -105,12 +105,14 @@ if (Test-Path -LiteralPath $projectorPath) {
 $historyPath=Join-Path $ProjectRoot '@Resources\Scripts\MaintainObservationHistory.ps1'
 if (Test-Path -LiteralPath $historyPath) {
     $history=Get-Content -LiteralPath $historyPath -Raw
-    foreach($token in @('Write-BaselineAwareObservationPrune','latestBefore','retention_baseline',"if (`$Phase -eq 'PostUpdate') { return }")) {
+    foreach($token in @(
+        'Write-BaselineAwareObservationPrune','latestBefore','retention_baseline','Test-IsSyntheticHistorySource',
+        'Remove-SyntheticObservationArtifacts',"@('history_bootstrap','history_repair_baseline')",'[void](Remove-SyntheticObservationArtifacts)',
+        "if (`$Phase -eq 'PostUpdate') { return }"
+    )) {
         if (-not $history.Contains($token)) { Fail "History maintenance missing '$token'." }
     }
-    foreach($forbidden in @('history_bootstrap','history_repair_baseline','Add-MissingMarketBaselines')) {
-        if ($history.Contains($forbidden)) { Fail "History maintenance must not fabricate '$forbidden' evidence." }
-    }
+    if ($history.Contains('Add-MissingMarketBaselines')) { Fail 'History maintenance must not recreate migration-era synthetic baselines.' }
 }
 
 $opportunityPath=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
@@ -157,5 +159,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Travel Assistant 0.6 static architecture validation passed.' -ForegroundColor Green
-Write-Host 'Single-owner foreign-stock collection, transition-only history, non-fabricated retention, correct card layering, and observed-only graph contracts are present.'
+Write-Host 'Single-owner foreign-stock collection, transition-only history, synthetic-artifact cleanup, correct card layering, and observed-only graph contracts are present.'
 exit 0
