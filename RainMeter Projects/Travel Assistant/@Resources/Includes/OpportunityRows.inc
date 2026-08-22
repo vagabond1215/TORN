@@ -1,5 +1,7 @@
 ; Opportunity row meters. Positions are updated dynamically by StateReader.lua.
 ; Each row uses a FlagKit PNG plus a generated local inline-history PNG.
+; Inline graph meters intentionally use a separate group so showing a row never
+; resurrects a previously collapsed graph image.
 
 [MeterOpportunity1Card]
 Meter=Shape
@@ -12,6 +14,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+
 [MeterOpportunity1Flag]
 Meter=Image
 Group=OpportunityRow1
@@ -24,6 +27,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+
 [MeterOpportunity1Name]
 Meter=String
 Group=OpportunityRow1
@@ -38,6 +42,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+
 [MeterOpportunity1Gross]
 Meter=String
 Group=OpportunityRow1
@@ -52,6 +57,7 @@ FontColor=#Good#
 AntiAlias=1
 Text=
 ToolTipText=
+
 [MeterOpportunity1Window]
 Meter=String
 Group=OpportunityRow1
@@ -65,6 +71,7 @@ FontColor=#Muted#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity1Leave]
 Meter=String
 Group=OpportunityRow1
@@ -78,6 +85,7 @@ FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity1Chance]
 Meter=String
 Group=OpportunityRow1
@@ -90,6 +98,7 @@ FontSize=8
 FontColor=#Muted#
 AntiAlias=1
 Text=
+
 [MeterOpportunity1Price]
 Meter=String
 Group=OpportunityRow1
@@ -106,6 +115,7 @@ Text=
 InlinePattern=(\([^\)]+\))$
 InlineSetting=Size | 7
 InlineSetting2=Color | #Muted#
+
 [MeterOpportunity1Graph]
 Meter=String
 Group=OpportunityRow1
@@ -122,11 +132,12 @@ SolidColor=0,0,0,1
 Text=v
 ToolTipText=Expand 8-hour stock history in this card
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(1)"]
+
 [MeterOpportunity1InlineGraph]
 Meter=Image
-Group=OpportunityRow1
+Group=OpportunityInlineGraph1
 X=58
-Y=174
+Y=173
 W=470
 H=100
 PreserveAspectRatio=1
@@ -144,6 +155,8 @@ H=50
 Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#
+ToolTipText=
+
 [MeterOpportunity2Flag]
 Meter=Image
 Group=OpportunityRow2
@@ -156,6 +169,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+
 [MeterOpportunity2Name]
 Meter=String
 Group=OpportunityRow2
@@ -170,6 +184,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+
 [MeterOpportunity2Gross]
 Meter=String
 Group=OpportunityRow2
@@ -184,6 +199,7 @@ FontColor=#Good#
 AntiAlias=1
 Text=
 ToolTipText=
+
 [MeterOpportunity2Window]
 Meter=String
 Group=OpportunityRow2
@@ -197,6 +213,7 @@ FontColor=#Muted#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity2Leave]
 Meter=String
 Group=OpportunityRow2
@@ -210,6 +227,7 @@ FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity2Chance]
 Meter=String
 Group=OpportunityRow2
@@ -222,6 +240,7 @@ FontSize=8
 FontColor=#Muted#
 AntiAlias=1
 Text=
+
 [MeterOpportunity2Price]
 Meter=String
 Group=OpportunityRow2
@@ -238,6 +257,7 @@ Text=
 InlinePattern=(\([^\)]+\))$
 InlineSetting=Size | 7
 InlineSetting2=Color | #Muted#
+
 [MeterOpportunity2Graph]
 Meter=String
 Group=OpportunityRow2
@@ -254,11 +274,12 @@ SolidColor=0,0,0,1
 Text=v
 ToolTipText=Expand 8-hour stock history in this card
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(2)"]
+
 [MeterOpportunity2InlineGraph]
 Meter=Image
-Group=OpportunityRow2
+Group=OpportunityInlineGraph2
 X=58
-Y=228
+Y=227
 W=470
 H=100
 PreserveAspectRatio=1
@@ -276,6 +297,8 @@ H=50
 Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#
+ToolTipText=
+
 [MeterOpportunity3Flag]
 Meter=Image
 Group=OpportunityRow3
@@ -288,6 +311,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+
 [MeterOpportunity3Name]
 Meter=String
 Group=OpportunityRow3
@@ -302,6 +326,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+
 [MeterOpportunity3Gross]
 Meter=String
 Group=OpportunityRow3
@@ -316,6 +341,7 @@ FontColor=#Good#
 AntiAlias=1
 Text=
 ToolTipText=
+
 [MeterOpportunity3Window]
 Meter=String
 Group=OpportunityRow3
@@ -329,6 +355,7 @@ FontColor=#Muted#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity3Leave]
 Meter=String
 Group=OpportunityRow3
@@ -342,6 +369,7 @@ FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity3Chance]
 Meter=String
 Group=OpportunityRow3
@@ -354,6 +382,7 @@ FontSize=8
 FontColor=#Muted#
 AntiAlias=1
 Text=
+
 [MeterOpportunity3Price]
 Meter=String
 Group=OpportunityRow3
@@ -370,6 +399,7 @@ Text=
 InlinePattern=(\([^\)]+\))$
 InlineSetting=Size | 7
 InlineSetting2=Color | #Muted#
+
 [MeterOpportunity3Graph]
 Meter=String
 Group=OpportunityRow3
@@ -386,11 +416,12 @@ SolidColor=0,0,0,1
 Text=v
 ToolTipText=Expand 8-hour stock history in this card
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(3)"]
+
 [MeterOpportunity3InlineGraph]
 Meter=Image
-Group=OpportunityRow3
+Group=OpportunityInlineGraph3
 X=58
-Y=282
+Y=281
 W=470
 H=100
 PreserveAspectRatio=1
@@ -408,6 +439,8 @@ H=50
 Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#
+ToolTipText=
+
 [MeterOpportunity4Flag]
 Meter=Image
 Group=OpportunityRow4
@@ -420,6 +453,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+
 [MeterOpportunity4Name]
 Meter=String
 Group=OpportunityRow4
@@ -434,6 +468,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+
 [MeterOpportunity4Gross]
 Meter=String
 Group=OpportunityRow4
@@ -448,6 +483,7 @@ FontColor=#Good#
 AntiAlias=1
 Text=
 ToolTipText=
+
 [MeterOpportunity4Window]
 Meter=String
 Group=OpportunityRow4
@@ -461,6 +497,7 @@ FontColor=#Muted#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity4Leave]
 Meter=String
 Group=OpportunityRow4
@@ -474,6 +511,7 @@ FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity4Chance]
 Meter=String
 Group=OpportunityRow4
@@ -486,6 +524,7 @@ FontSize=8
 FontColor=#Muted#
 AntiAlias=1
 Text=
+
 [MeterOpportunity4Price]
 Meter=String
 Group=OpportunityRow4
@@ -502,6 +541,7 @@ Text=
 InlinePattern=(\([^\)]+\))$
 InlineSetting=Size | 7
 InlineSetting2=Color | #Muted#
+
 [MeterOpportunity4Graph]
 Meter=String
 Group=OpportunityRow4
@@ -518,11 +558,12 @@ SolidColor=0,0,0,1
 Text=v
 ToolTipText=Expand 8-hour stock history in this card
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(4)"]
+
 [MeterOpportunity4InlineGraph]
 Meter=Image
-Group=OpportunityRow4
+Group=OpportunityInlineGraph4
 X=58
-Y=336
+Y=335
 W=470
 H=100
 PreserveAspectRatio=1
@@ -540,6 +581,8 @@ H=50
 Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#
+ToolTipText=
+
 [MeterOpportunity5Flag]
 Meter=Image
 Group=OpportunityRow5
@@ -552,6 +595,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+
 [MeterOpportunity5Name]
 Meter=String
 Group=OpportunityRow5
@@ -566,6 +610,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+
 [MeterOpportunity5Gross]
 Meter=String
 Group=OpportunityRow5
@@ -580,6 +625,7 @@ FontColor=#Good#
 AntiAlias=1
 Text=
 ToolTipText=
+
 [MeterOpportunity5Window]
 Meter=String
 Group=OpportunityRow5
@@ -593,6 +639,7 @@ FontColor=#Muted#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity5Leave]
 Meter=String
 Group=OpportunityRow5
@@ -606,6 +653,7 @@ FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity5Chance]
 Meter=String
 Group=OpportunityRow5
@@ -618,6 +666,7 @@ FontSize=8
 FontColor=#Muted#
 AntiAlias=1
 Text=
+
 [MeterOpportunity5Price]
 Meter=String
 Group=OpportunityRow5
@@ -634,6 +683,7 @@ Text=
 InlinePattern=(\([^\)]+\))$
 InlineSetting=Size | 7
 InlineSetting2=Color | #Muted#
+
 [MeterOpportunity5Graph]
 Meter=String
 Group=OpportunityRow5
@@ -650,11 +700,12 @@ SolidColor=0,0,0,1
 Text=v
 ToolTipText=Expand 8-hour stock history in this card
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(5)"]
+
 [MeterOpportunity5InlineGraph]
 Meter=Image
-Group=OpportunityRow5
+Group=OpportunityInlineGraph5
 X=58
-Y=390
+Y=389
 W=470
 H=100
 PreserveAspectRatio=1
@@ -672,6 +723,8 @@ H=50
 Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#
+ToolTipText=
+
 [MeterOpportunity6Flag]
 Meter=Image
 Group=OpportunityRow6
@@ -684,6 +737,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+
 [MeterOpportunity6Name]
 Meter=String
 Group=OpportunityRow6
@@ -698,6 +752,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+
 [MeterOpportunity6Gross]
 Meter=String
 Group=OpportunityRow6
@@ -712,6 +767,7 @@ FontColor=#Good#
 AntiAlias=1
 Text=
 ToolTipText=
+
 [MeterOpportunity6Window]
 Meter=String
 Group=OpportunityRow6
@@ -725,6 +781,7 @@ FontColor=#Muted#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity6Leave]
 Meter=String
 Group=OpportunityRow6
@@ -738,6 +795,7 @@ FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity6Chance]
 Meter=String
 Group=OpportunityRow6
@@ -750,6 +808,7 @@ FontSize=8
 FontColor=#Muted#
 AntiAlias=1
 Text=
+
 [MeterOpportunity6Price]
 Meter=String
 Group=OpportunityRow6
@@ -766,6 +825,7 @@ Text=
 InlinePattern=(\([^\)]+\))$
 InlineSetting=Size | 7
 InlineSetting2=Color | #Muted#
+
 [MeterOpportunity6Graph]
 Meter=String
 Group=OpportunityRow6
@@ -782,11 +842,12 @@ SolidColor=0,0,0,1
 Text=v
 ToolTipText=Expand 8-hour stock history in this card
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(6)"]
+
 [MeterOpportunity6InlineGraph]
 Meter=Image
-Group=OpportunityRow6
+Group=OpportunityInlineGraph6
 X=58
-Y=444
+Y=443
 W=470
 H=100
 PreserveAspectRatio=1
@@ -804,6 +865,8 @@ H=50
 Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#
+ToolTipText=
+
 [MeterOpportunity7Flag]
 Meter=Image
 Group=OpportunityRow7
@@ -816,6 +879,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+
 [MeterOpportunity7Name]
 Meter=String
 Group=OpportunityRow7
@@ -830,6 +894,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+
 [MeterOpportunity7Gross]
 Meter=String
 Group=OpportunityRow7
@@ -844,6 +909,7 @@ FontColor=#Good#
 AntiAlias=1
 Text=
 ToolTipText=
+
 [MeterOpportunity7Window]
 Meter=String
 Group=OpportunityRow7
@@ -857,6 +923,7 @@ FontColor=#Muted#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity7Leave]
 Meter=String
 Group=OpportunityRow7
@@ -870,6 +937,7 @@ FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity7Chance]
 Meter=String
 Group=OpportunityRow7
@@ -882,6 +950,7 @@ FontSize=8
 FontColor=#Muted#
 AntiAlias=1
 Text=
+
 [MeterOpportunity7Price]
 Meter=String
 Group=OpportunityRow7
@@ -898,6 +967,7 @@ Text=
 InlinePattern=(\([^\)]+\))$
 InlineSetting=Size | 7
 InlineSetting2=Color | #Muted#
+
 [MeterOpportunity7Graph]
 Meter=String
 Group=OpportunityRow7
@@ -914,11 +984,12 @@ SolidColor=0,0,0,1
 Text=v
 ToolTipText=Expand 8-hour stock history in this card
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(7)"]
+
 [MeterOpportunity7InlineGraph]
 Meter=Image
-Group=OpportunityRow7
+Group=OpportunityInlineGraph7
 X=58
-Y=498
+Y=497
 W=470
 H=100
 PreserveAspectRatio=1
@@ -936,6 +1007,8 @@ H=50
 Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#
+ToolTipText=
+
 [MeterOpportunity8Flag]
 Meter=Image
 Group=OpportunityRow8
@@ -948,6 +1021,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+
 [MeterOpportunity8Name]
 Meter=String
 Group=OpportunityRow8
@@ -962,6 +1036,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+
 [MeterOpportunity8Gross]
 Meter=String
 Group=OpportunityRow8
@@ -976,6 +1051,7 @@ FontColor=#Good#
 AntiAlias=1
 Text=
 ToolTipText=
+
 [MeterOpportunity8Window]
 Meter=String
 Group=OpportunityRow8
@@ -989,6 +1065,7 @@ FontColor=#Muted#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity8Leave]
 Meter=String
 Group=OpportunityRow8
@@ -1002,6 +1079,7 @@ FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
+
 [MeterOpportunity8Chance]
 Meter=String
 Group=OpportunityRow8
@@ -1014,6 +1092,7 @@ FontSize=8
 FontColor=#Muted#
 AntiAlias=1
 Text=
+
 [MeterOpportunity8Price]
 Meter=String
 Group=OpportunityRow8
@@ -1030,6 +1109,7 @@ Text=
 InlinePattern=(\([^\)]+\))$
 InlineSetting=Size | 7
 InlineSetting2=Color | #Muted#
+
 [MeterOpportunity8Graph]
 Meter=String
 Group=OpportunityRow8
@@ -1046,11 +1126,12 @@ SolidColor=0,0,0,1
 Text=v
 ToolTipText=Expand 8-hour stock history in this card
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(8)"]
+
 [MeterOpportunity8InlineGraph]
 Meter=Image
-Group=OpportunityRow8
+Group=OpportunityInlineGraph8
 X=58
-Y=552
+Y=551
 W=470
 H=100
 PreserveAspectRatio=1
