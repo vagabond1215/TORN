@@ -4,9 +4,9 @@
 
 ## Product correction
 
-The 0.5 single `OPTIMAL` route card was rejected as the primary UI. The intended product is the opportunity surface with optimizer intelligence layered onto its ordering.
+The 0.5 single `OPTIMAL` route card was rejected as the primary UI. The intended product is a persistent opportunity surface with explicit, inspectable ordering.
 
-`OPTIMAL` is a sort mode, not a separate screen.
+The `OPTIMAL` presentation concept has now also been removed. There is no hidden composite score in the user-facing ordering.
 
 Current main view:
 
@@ -14,12 +14,12 @@ Current main view:
 Travel                                      SETTINGS >
 Updated ...
 
-ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
-SORT  OPTIMAL  UPCOMING  PROFIT  TIME                 VIEWER >
+ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
+SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
-#1  OPTIMAL  <item>   <country>                     <gross>
+#1  <item>   <country>                     <trip gross> <qty>
     <window>  <leave>  <hit likelihood>  <elapsed>  <foreign> (<MV>)  GRAPH
-#2           <item>   <country>                     <gross>
+#2  <item>   <country>                     <trip gross> <qty>
     ...
 ```
 
@@ -27,14 +27,13 @@ Up to eight evidence-backed opportunities are shown.
 
 ## Ordering semantics
 
-- `OPTIMAL`: `(gross trip profit × modeled hit probability) / total elapsed hours`.
 - `UPCOMING`: earliest current/modeled stock window first.
-- `PROFIT`: highest gross trip profit first.
-- `TIME`: shortest total elapsed opportunity first.
-- There is **no separate Chance sort**. Hit likelihood is displayed and folded into `OPTIMAL`.
-- The globally best optimal opportunity remains marked `OPTIMAL` even while another ordering is selected.
+- `GROSS PROFIT`: highest total trip gross first.
+- `PROFIT/HR`: gross trip profit divided by total elapsed hours.
+- Hit likelihood remains a separate displayed percentage. It is **not** multiplied into any visible sort score.
+- There is no `OPTIMAL`, Chance, or shortest-Time sort in the user-facing surface.
 
-Gross profit is item resale spread × modeled purchasable quantity and intentionally does not subtract travel cost. Total elapsed time includes required wait, outbound travel, return travel, and purchase buffer; a current return leg is included before the next outbound opportunity.
+Gross profit is `(selected MV basis - foreign price) × modeled purchasable quantity` and intentionally does not subtract travel cost. Quantity is displayed beside gross so the arithmetic is inspectable. Total elapsed time includes required wait, outbound travel, return travel, and purchase buffer; a current return leg is included before the next outbound opportunity.
 
 ## Opportunity evidence
 
@@ -69,9 +68,16 @@ Graphs remain part of the product as on-demand diagnostics:
 - 48h raw-learning and 90d completed-cycle retention remain independent;
 - graph viewing is local-only and consumes no provider/Torn API request.
 
+## Interaction / refresh stability
+
+- Sort clicks use a shortened local-only projection path.
+- Sort buttons update their active highlight immediately while the local re-sort finishes.
+- Transparent hitboxes are applied to text controls so clicks are not limited to glyph pixels.
+- The Lua reader captures the last complete opportunity/UI projection during initialization and preserves it while the minute update pipeline is publishing intermediate compatibility state. The skin must not flash back to `Learning opportunities...` during a normal poll.
+
 ## Popups
 
-Settings, Item/Country/Category filters, Ignore List, Profile/API, and Viewer are detached PowerShell/WinForms surfaces. Launcher script paths must remain explicitly quoted because the repository path contains spaces.
+Settings, Item/Country/Category filters, Ignore List, Profile/API, and Viewer are detached PowerShell/WinForms surfaces. Launcher script paths must remain explicitly quoted because the repository path contains spaces. Runtime failures go to `data/runtime/logs/travel-assistant.log`.
 
 ## Runtime order
 
@@ -81,13 +87,15 @@ ShadowCollector
 LocalCatalog
 FinalizeState
 TravelContext
-OptimalRoute          # background route / pricing-priority model
+OptimalRoute          # background route / pricing-priority compatibility model
 OpportunityState      # primary sortable UI projection
 FilterState
 heartbeat
 ResalePriority
 ResaleQueue
 ```
+
+`OptimalRoute.ps1` remains internal/background only; do not reintroduce an `OPTIMAL` UI mode from its name.
 
 ## Target-Windows acceptance
 
@@ -107,29 +115,32 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
 
 Select-String .\@Resources\Generated\state.kv `
-  -Pattern '^(Opportunity|UIOldestMarketSourceTimestamp)'
-
-if (Test-Path .\data\runtime\opportunity-state-error.txt) {
-  Get-Content .\data\runtime\opportunity-state-error.txt
-}
+  -Pattern '^Opportunity(Count|Message|SortMode|1(Key|Name|Country|ChanceText|TimeText|GrossText|QuantityText|ProfitHourText))='
 ```
 
 Then refresh Rainmeter and verify:
 
-1. no single-route `OPTIMAL` card;
-2. ranked opportunity rows are visible when evidence supports them;
-3. `OPTIMAL`, `UPCOMING`, `PROFIT`, and `TIME` visibly reorder rows;
-4. there is no Chance sort;
-5. the globally best economic row retains its `OPTIMAL` badge under other sorts;
+1. no single-route card and no visible `OPTIMAL` badge/mode;
+2. ranked opportunity rows remain visible throughout normal polling rather than flashing to `Learning opportunities...`;
+3. `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR` visibly reorder rows;
+4. hit likelihood remains displayed separately and does not change the mathematical definition of `PROFIT/HR`;
+5. trip gross visibly includes quantity, e.g. `$777,870 gross x18`, and the tooltip explains unit spread × quantity;
 6. Item/Country/Category filter popups open and update the list;
-7. `SETTINGS >` opens;
-8. `VIEWER >` opens;
-9. each row `GRAPH` opens the correct `country:itemId` graph;
-10. graphs span 8 hours with hourly markers and left-edge continuity;
-11. no controls or opportunity-row fields overlap;
-12. no persistent `ERROR` remains after a successful normal update.
+7. sort/filter controls respond promptly and do not revert after refresh;
+8. `SETTINGS >` opens;
+9. `VIEWER >` opens;
+10. each row `GRAPH` opens the correct `country:itemId` graph;
+11. graphs span 8 hours with hourly markers and left-edge continuity;
+12. no controls or opportunity-row fields overlap;
+13. no persistent `ERROR` remains after a successful normal update.
 
-Send the acceptance output and a screenshot before marking 0.6 accepted.
+If anything errors, inspect only:
+
+```powershell
+Get-Content .\data\runtime\logs\travel-assistant.log -Tail 40
+```
+
+Send the acceptance output and screenshots before marking 0.6 accepted.
 
 ## After 0.6 acceptance
 
