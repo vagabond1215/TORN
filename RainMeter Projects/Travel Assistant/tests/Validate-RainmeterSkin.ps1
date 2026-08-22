@@ -24,11 +24,11 @@ foreach ($sectionName in @('MeasureUpdate','MeasureSettings','MeasureFilterPopup
 $updateBody=[regex]::Match($ini,'(?ms)^\[MeasureUpdate\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($updateBody -notmatch '(?im)^Parameter=.*RunUpdate\.ps1') { Fail 'MeasureUpdate must route through RunUpdate.ps1.' }
 $settingsBody=[regex]::Match($ini,'(?ms)^\[MeasureSettings\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-if ($settingsBody -notmatch '(?im)^Parameter=.*LaunchOptimizerSettings\.ps1') { Fail 'Main Settings action must open optimizer settings.' }
+if ($settingsBody -notmatch '(?im)^Parameter=.*LaunchOptimizerSettings\.ps1') { Fail 'Main Settings action must open opportunity settings.' }
 $popupBody=[regex]::Match($ini,'(?ms)^\[MeasureFilterPopup\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($popupBody -notmatch '(?im)^Parameter=.*LaunchFilterPopup\.ps1.*#FilterRequest#') { Fail 'Filter popup must use its detached launcher and dynamic request.' }
 $viewerBody=[regex]::Match($ini,'(?ms)^\[MeasureItemViewer\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-if ($viewerBody -notmatch '(?im)^Parameter=.*LaunchItemViewer\.ps1.*-MarketKey.*#ViewerMarketKey#') { Fail 'Item viewer must target a stable market key.' }
+if ($viewerBody -notmatch '(?im)^Parameter=.*LaunchItemViewer\.ps1.*-MarketKey.*#ViewerMarketKey#') { Fail 'Item viewer must route through its stable market-key launcher.' }
 $prefBody=[regex]::Match($ini,'(?ms)^\[MeasurePreferenceAction\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($prefBody -notmatch '(?im)^Parameter=.*FilterPreferences\.ps1.*#PreferenceAction#.*#PreferenceValue#') { Fail 'Quick actions must route through FilterPreferences.ps1.' }
 
@@ -37,7 +37,8 @@ foreach ($launcherName in @('LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing $launcherName."; continue }
     $text=Get-Content -LiteralPath $path -Raw
     if (-not $text.Contains('Start-Process')) { Fail "$launcherName must detach its long-lived UI process." }
-    if (-not $text.Contains('$arguments = @(')) { Fail "$launcherName must use an argument array instead of fragile hand-quoted command text." }
+    if (-not $text.Contains('$quotedTarget')) { Fail "$launcherName must explicitly quote its script path because the project path contains spaces." }
+    if (-not $text.Contains('$arguments')) { Fail "$launcherName must build an explicit argument collection." }
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in ${launcherName}: $($parseError.Message)" }
@@ -85,6 +86,7 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
         'local function updateSort(data)',
         'local function updateOpportunities(data)',
         "setGroupVisible('OpportunityRow' .. i, i <= count)",
+        "SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor'",
         'function SetSortMode(mode)',
         'function OpenViewer(marketKey)',
         'function OpenFilter(filterName)',
