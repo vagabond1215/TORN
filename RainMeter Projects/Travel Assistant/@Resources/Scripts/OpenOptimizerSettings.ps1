@@ -43,7 +43,7 @@ function Get-ComboPolicy($Combo) {
     return 'allowed'
 }
 
-$title=Add-Label 'OPTIMAL ROUTE SETTINGS' 16 14 300 28
+$title=Add-Label 'OPPORTUNITY SETTINGS' 16 14 300 28
 $title.Font=New-Object System.Drawing.Font('Segoe UI Semibold',14)
 
 $profitable=New-Object System.Windows.Forms.CheckBox
@@ -58,7 +58,7 @@ Add-Label 'Max Energy Loss' 318 98 110 | Out-Null
 $energyMax=New-Object System.Windows.Forms.NumericUpDown
 $energyMax.Location=New-Object System.Drawing.Point(425,94); $energyMax.Size=New-Object System.Drawing.Size(62,26); $energyMax.Minimum=0; $energyMax.Maximum=1000; $energyMax.Value=[decimal][int]$prefs.maxEnergyLoss; $form.Controls.Add($energyMax)
 
-$energyNote=Add-Label 'If current energy is already above its natural maximum, energy waste restrictions are bypassed for route selection.' 18 127 468 38
+$energyNote=Add-Label 'If current energy is already above its natural maximum, energy waste restrictions are bypassed for opportunity ranking.' 18 127 468 38
 $energyNote.ForeColor=[System.Drawing.Color]::FromArgb(145,152,164)
 
 Add-Label 'Nerve Waste' 18 180 130 | Out-Null
@@ -81,16 +81,22 @@ Refresh-Limits
 $ignore=New-Object System.Windows.Forms.Button
 $ignore.Text='Ignore List...'; $ignore.Location=New-Object System.Drawing.Point(18,260); $ignore.Size=New-Object System.Drawing.Size(120,32); $form.Controls.Add($ignore)
 $ignore.Add_Click({
-    if (Test-Path -LiteralPath $FilterLauncher) { Start-Process -FilePath 'powershell.exe' -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Filter Ignore' -f $FilterLauncher.Replace('"','\"')) -WindowStyle Hidden | Out-Null }
+    if (Test-Path -LiteralPath $FilterLauncher) {
+        $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$FilterLauncher,'-Filter','Ignore')
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Normal | Out-Null
+    }
 })
 
 $profile=New-Object System.Windows.Forms.Button
 $profile.Text='Profile / API...'; $profile.Location=New-Object System.Drawing.Point(154,260); $profile.Size=New-Object System.Drawing.Size(120,32); $form.Controls.Add($profile)
 $profile.Add_Click({
-    if (Test-Path -LiteralPath $ProfileLauncher) { Start-Process -FilePath 'powershell.exe' -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $ProfileLauncher.Replace('"','\"')) -WindowStyle Hidden | Out-Null }
+    if (Test-Path -LiteralPath $ProfileLauncher) {
+        $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$ProfileLauncher)
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Normal | Out-Null
+    }
 })
 
-$info=Add-Label '100% MV is the default optimizer value basis. 95% MV is optional. Item-market fees and minimum-margin thresholds do not close availability windows.' 18 310 468 50
+$info=Add-Label 'OPTIMAL is a sort: modeled hit likelihood x gross trip profit, normalized by total elapsed time. UPCOMING, PROFIT, and TIME remain directly selectable in the main skin.' 18 310 468 50
 $info.ForeColor=[System.Drawing.Color]::FromArgb(145,152,164)
 
 $save=New-Object System.Windows.Forms.Button
@@ -108,9 +114,8 @@ $save.Add_Click({
     Set-FilterProperty $current 'nerveWastePolicy' (Get-ComboPolicy $nervePolicy)
     Set-FilterProperty $current 'maxNerveLoss' ([int]$nerveMax.Value)
     [void](Save-UiPreferences $current)
-    $filterState=Join-Path $PSScriptRoot 'FilterState.ps1'; if (Test-Path -LiteralPath $filterState) { try { & $filterState } catch { } }
     if (Test-Path -LiteralPath $RunUpdatePath) {
-        $args='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $RunUpdatePath.Replace('"','\"')
+        $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$RunUpdatePath,'-Action','Update')
         Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Hidden | Out-Null
     }
     $form.Close()
