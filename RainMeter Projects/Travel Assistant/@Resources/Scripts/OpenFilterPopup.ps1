@@ -96,7 +96,7 @@ $title=New-Object System.Windows.Forms.Label; $title.Text=$titleText.ToUpperInva
 $note=New-Object System.Windows.Forms.Label; $note.Location=New-Object System.Drawing.Point(16,42); $note.Size=New-Object System.Drawing.Size(450,42); $note.ForeColor=[System.Drawing.Color]::FromArgb(145,152,164)
 if ($Filter -eq 'Ignore') { $note.Text='Checked items are hidden and excluded from broad per-item Torn market-price requests. Stock/history collection continues.' }
 elseif ($Filter -eq 'Country') { $note.Text='Short / Medium / Long choose bands. Use this list for country-level exceptions within enabled bands.' }
-else { $note.Text='Persistent optimizer filter. It changes route candidates only; collected stock/history is retained.' }
+else { $note.Text='Persistent opportunity filter. It changes ranked candidates only; collected stock/history is retained.' }
 $form.Controls.Add($note)
 
 $allCheck=New-Object System.Windows.Forms.CheckBox; $allCheck.Text=$allLabel; $allCheck.Location=New-Object System.Drawing.Point(18,86); $allCheck.Size=New-Object System.Drawing.Size(320,24); $allCheck.Visible=$showAllToggle; $form.Controls.Add($allCheck)
@@ -123,8 +123,9 @@ $save.Add_Click({
         Set-FilterProperty $prefs 'selectedCountryIds' ([string[]]@($result|Sort-Object))
     } else { Set-FilterProperty $prefs 'ignoredItemIds' ([int[]]@($selected|ForEach-Object{[int]$_}|Sort-Object -Unique)) }
     [void](Save-UiPreferences $prefs)
-    $filterState=Join-Path $PSScriptRoot 'FilterState.ps1'; if(Test-Path -LiteralPath $filterState){try{& $filterState}catch{}}
     $optimizer=Join-Path $PSScriptRoot 'OptimalRoute.ps1'; if(Test-Path -LiteralPath $optimizer){try{& $optimizer}catch{}}
+    $opportunities=Join-Path $PSScriptRoot 'OpportunityState.ps1'; if(Test-Path -LiteralPath $opportunities){try{& $opportunities}catch{}}
+    $filterState=Join-Path $PSScriptRoot 'FilterState.ps1'; if(Test-Path -LiteralPath $filterState){try{& $filterState}catch{}}
     $form.Close()
 })
 $form.AcceptButton=$save; $form.CancelButton=$cancel; [void]$form.ShowDialog()
