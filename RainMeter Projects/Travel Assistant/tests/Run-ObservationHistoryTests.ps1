@@ -36,6 +36,7 @@ $observationFile = Join-Path $runtimeDir 'observations.jsonl'
 @(
     [pscustomobject]@{schemaVersion=1;timestamp=100000;country='alpha';itemId=1;stock=5;foreignPrice=100;source='fixture';sourceTimestamp=100000},
     [pscustomobject]@{schemaVersion=1;timestamp=19900000;country='alpha';itemId=1;stock=3;foreignPrice=100;source='fixture';sourceTimestamp=19900000},
+    [pscustomobject]@{schemaVersion=1;timestamp=19900500;country='alpha';itemId=1;stock=3;foreignPrice=125;source='fixture';sourceTimestamp=19900500},
     [pscustomobject]@{schemaVersion=1;timestamp=200000;country='beta';itemId=2;stock=7;foreignPrice=200;source='fixture';sourceTimestamp=200000},
     [pscustomobject]@{schemaVersion=1;timestamp=19999000;country='delta';itemId=4;stock=4;foreignPrice=400;source='history_bootstrap';sourceTimestamp=19999000},
     [pscustomobject]@{schemaVersion=1;timestamp=19999500;country='gamma';itemId=3;stock=9;foreignPrice=300;source='history_repair_baseline';sourceTimestamp=19999500}
@@ -54,8 +55,10 @@ try {
     $rows = @(Get-Content -LiteralPath $observationFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
     $alphaBaseline = @($rows | Where-Object { $_.country -eq 'alpha' -and [long]$_.timestamp -eq $observationCutoff -and $_.source -eq 'retention_baseline' })
     if ($alphaBaseline.Count -ne 1 -or [int]$alphaBaseline[0].stock -ne 5) { throw 'Alpha predecessor was not rolled to the retention boundary.' }
-    $alphaRecent = @($rows | Where-Object { $_.country -eq 'alpha' -and [long]$_.timestamp -eq 19900000 })
-    if ($alphaRecent.Count -ne 1 -or [int]$alphaRecent[0].stock -ne 3) { throw 'Alpha in-window change was not retained.' }
+    $alphaRecent = @($rows | Where-Object { $_.country -eq 'alpha' -and [int]$_.stock -eq 3 })
+    if ($alphaRecent.Count -ne 1 -or [long]$alphaRecent[0].timestamp -ne 19900000 -or [long]$alphaRecent[0].foreignPrice -ne 100) {
+        throw 'Legacy same-stock timestamp/price noise was not compacted to the first observed state.'
+    }
     $betaBaseline = @($rows | Where-Object { $_.country -eq 'beta' -and [long]$_.timestamp -eq $observationCutoff -and $_.source -eq 'retention_baseline' })
     if ($betaBaseline.Count -ne 1 -or [int]$betaBaseline[0].stock -ne 7) { throw 'Beta unchanged state lost its real predecessor retention baseline.' }
 
@@ -71,9 +74,9 @@ try {
 
     $engineAfterPre = Get-Content -LiteralPath (Join-Path $runtimeDir 'engine-state.json') -Raw | ConvertFrom-Json
     if ([long]$engineAfterPre.lastPruneAt -ne $now) { throw 'PreUpdate did not advance lastPruneAt.' }
+    $marker = Join-Path $runtimeDir 'synthetic-history-cleanup-v1.done'
+    if (-not (Test-Path -LiteralPath $marker)) { throw 'One-time observation migration marker was not written.' }
 
-    # PostUpdate is cleanup-only. It must not fabricate a baseline for markets that
-    # still have current engine state but no actual retained observation.
     & $testScript -Phase PostUpdate -Now $now
     $rowsAfterPost = @(Get-Content -LiteralPath $observationFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
     if (@($rowsAfterPost | Where-Object { $_.country -eq 'gamma' -or $_.country -eq 'delta' }).Count -ne 0) {
@@ -82,9 +85,9 @@ try {
 
     & $testScript -Phase PostUpdate -Now $now
     $rowsAfterSecondPost = @(Get-Content -LiteralPath $observationFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
-    if ($rowsAfterSecondPost.Count -ne $rowsAfterPost.Count) { throw 'Synthetic-history cleanup is not idempotent.' }
+    if ($rowsAfterSecondPost.Count -ne $rowsAfterPost.Count) { throw 'One-time history migration is not idempotent.' }
 
-    Write-Host 'Observed predecessor retention, synthetic-history purge, unknown-gap preservation, and cycle pruning tests passed.' -ForegroundColor Green
+    Write-Host 'Observed predecessor retention, synthetic-history purge, same-stock compaction, unknown-gap preservation, and cycle pruning tests passed.' -ForegroundColor Green
     exit 0
 } finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
