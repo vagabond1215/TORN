@@ -2,9 +2,9 @@
 
 **Checkpoint:** 2026-08-21
 
-**Active run:** 0.4.0 persistent filters, pinning, travel relevance, profitable-only, and Ignore List. See `docs/NEXT_CODEX_RUN.md`.
+**Active run:** 0.5.0 minimalist next-trip optimizer. See `docs/NEXT_CODEX_RUN.md`.
 
-## Accepted foundation
+## Accepted data foundation
 
 Target-Windows evidence already covers:
 
@@ -20,143 +20,135 @@ Target-Windows evidence already covers:
 
 Also accepted:
 
-- established UK/Japan Xanax collection/history/model path;
-- current `/user/perks` general capacity behavior;
+- provider-name enrichment on every observed market;
+- offline category/catalog authority;
+- bounded one-request-at-a-time Torn Item Market pricing;
+- `/user/perks` general capacity behavior;
 - Flower/Toy category-capacity isolation;
-- one-request-at-a-time broad Torn Item Market transport;
-- independent UK Xanax / Nessie and Japan Xanax / Cherry cards;
-- global two-expanded-card cap;
-- item-specific secondary graphs;
-- parenthesized smaller/muted Torn market references.
+- Airstrip general/Xanax 18 and Standard 13 on the target profile.
 
-The old subordinate Nessie/Cherry rows inside Xanax country cards are rejected and must not return.
+The 0.4 independent-card/graph surface was an intermediate proof and is no longer the active product direction.
 
-## Current visible cards
+## 0.5 minimalist UI — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+
+Main skin now shows one compact selected next trip and only its purchase rows.
 
 ```text
-United Kingdom + Xanax
-United Kingdom + Nessie Plushie
-Japan          + Xanax
-Japan          + Cherry Blossom
+Travel                                      SETTINGS >
+Updated ...
+ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
+
+OPTIMAL • destination                 expected value
+arrival/out • slots • hit chance • Energy loss • Nerve loss
+item      xN    foreign price (Torn MV)    modeled arrival chance
 ```
 
-Nessie/Cherry remain:
+- no default UK/JP card stack;
+- no default stock graphs;
+- item names use one left-aligned column and consistent typography;
+- parenthesized MV is smaller/muted;
+- route body and learning/no-route message never overlap.
+
+## Next-trip optimizer — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+
+`OptimalRoute.ps1` is local-only and consumes:
+
+- active observed foreign markets;
+- canonical local item metadata;
+- Torn MV cache (`average_price`);
+- current foreign price/stock;
+- retained restock/sellout cycles;
+- travel time/cost;
+- general/category carrying capacity;
+- current destination and Energy/Nerve bars;
+- persistent filters and Ignore List.
+
+It produces one best **next-trip** plan. This is not yet the eventual multi-trip sequence scheduler.
+
+Availability behavior:
+
+- trained in-stock market: probability stock survives until arrival from completed availability durations;
+- at destination: fresh current stock is direct evidence;
+- sold out: requires completed restock-delay + availability evidence;
+- insufficient history: learning, not fake confidence;
+- stale provider market: excluded.
+
+Route scoring currently uses expected trip value normalized by trip duration.
+
+## Value semantics — IMPLEMENTED
+
+Default optimizer basis:
 
 ```text
-visible=true
-enabled=false
-optimizerEligible=false
+100% Torn MV
+0% Item Market fee deduction
+0 minimum profit gate
+0 minimum margin gate
+negative-value candidates allowed
 ```
 
-They show live provider stock, foreign value, broad resale reference, category-aware economics, flight duration, and their own stock graphs. They still do not emit actionable Xanax-style departure timing.
+Optional setting uses 95% MV.
 
-## 0.4.0 filter bar — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
-
-A horizontal data bar now sits below the update/source line:
+Price color:
 
 ```text
-ITEM  All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
+foreign <= chosen MV basis -> green
+foreign > chosen MV basis  -> red
 ```
 
-Implemented controls:
+`Show profitable items only` explicitly removes non-positive item spreads. Without it, negative-value purchases remain legal candidates.
 
-- Item popup with All / individual renderable-item checkboxes;
-- independent Short / Medium / Long trip-band toggles;
-- country popup for individual destinations inside enabled trip bands;
-- Category popup with All / individual renderable categories;
-- Reset that restores presentation defaults but preserves pin, Ignore List, and travel mode.
+Legacy `FinalizeState.ps1` was changed so economics are informational only and do not rewrite/clear timing state.
 
-All filter/preferences state is ignored/local in:
+## Energy / Nerve constraints — IMPLEMENTED
+
+Preferences/UI support independently:
 
 ```text
-data/runtime/preferences.json
+Energy Waste: Allowed / Forbidden / Limited
+Max Energy Loss
+Nerve Waste:  Allowed / Forbidden / Limited
+Max Nerve Loss
 ```
 
-No presentation filter changes background collection or retained history.
+`TravelContext.ps1` now requests `travel,basic,bars` in the same bounded user call and normalizes Energy/Nerve bar values.
 
-## Pin / favorite — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+Special rule:
 
-Right-click an item title or expand glyph to toggle one pinned `country:itemId` market.
+- Energy current > natural maximum => bypass Energy waste restriction.
+- Nerve receives no equivalent bypass.
+- unknown bars fail safe for non-Allowed policies.
 
-A pin:
+## Filters / Ignore List — IMPLEMENTED
 
-- displays `★`;
-- remains expanded;
-- sorts first;
-- consumes one of the two expanded-card slots;
-- cannot be auto-collapsed.
+The horizontal Item / Trip / Country / Category controls remain persistent/local.
 
-Ordinary filters do not hide a pin at home, but travel destination and Ignore List do.
+Item/Category popups use the active local catalog instead of the old four-card set.
 
-Pin state is persisted directly to `preferences.json` and is intentionally removed from the `state.kv` projection to prevent a one-second stale state refresh from undoing a just-clicked pin.
+Ignore List:
 
-## Travel context — IMPLEMENTED, PENDING LIVE/RAINMETER ACCEPTANCE
+- complete local metadata catalog;
+- excluded from optimizer;
+- excluded from broad per-item MV requests;
+- shared provider stock/history still collected.
 
-`TravelContext.ps1` performs a bounded fail-soft Torn request to obtain travel/basic state and projects:
+Trip bands remain presentation taxonomy only.
+
+## Broad resale priority — IMPLEMENTED
+
+Still one Torn Item Market request maximum per normal update.
+
+Priority now includes optimizer MV blockers (`engine.optimizer.pricingPriorityItemIds`).
 
 ```text
-TravelState
-TravelDestination
-TravelDestinationCountryId
-TravelFilterActive
-TravelMethod
-TravelDepartedAt
-TravelArrivalAt
-TravelTimeLeft
+optimizer/configured priority failure retry: 5m
+unrelated/general failure backoff:             1h
+ignored item:                                  parked
+broad MV freshness:                            6h
+request timeout:                               6s
 ```
 
-Current effect: while traveling/abroad to a recognized foreign destination, wrong-country cards—including a pinned card—are hidden.
-
-A transient failure keeps the previous successful foreign restriction.
-
-Not yet implemented:
-
-- outbound arrival countdown in place of static flight duration;
-- full all-country card rendering;
-- travel-aware per-item timing recommendations.
-
-## Settings additions — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
-
-Settings now includes at the top:
-
-```text
-[ ] Show profitable items only
-[ Ignore List... ]
-```
-
-Settings Save now merges preference-owned fields rather than replacing `preferences.json` with only travel mode.
-
-### Profitable-only
-
-Current primary cards require positive modeled trip profit. Current secondary cards require usable/fresh broad resale economics plus positive trip profit.
-
-Unknown economics are not treated as profitable.
-
-### Ignore List
-
-Ignore popup uses the complete local item metadata table, currently 202 rows at the accepted baseline.
-
-Ignored items are:
-
-- hidden from view;
-- unable to force display through pin;
-- parked outside broad per-item Torn Item Market requests.
-
-Shared Prometheus/YATA country-stock collection continues because individual item suppression would not reduce those shared provider calls.
-
-## Broad resale retry improvement
-
-A target-Windows screenshot showed Cherry successfully populated while Nessie remained `(-)`. This is consistent with Nessie entering the normal one-hour failure backoff.
-
-`ResalePriority.ps1` now applies:
-
-```text
-visible/pinned failed item:    5-minute retry eligibility
-hidden/general failed item:   60-minute backoff
-ignored item:                 parked outside queue
-```
-
-The queue still performs at most one Torn Item Market request per normal update.
+`ResalePriority.ps1` remains local-only and never makes a request.
 
 ## Runtime order
 
@@ -166,44 +158,45 @@ ShadowCollector
 LocalCatalog
 FinalizeState
 TravelContext
-VisibleItems
+OptimalRoute
 FilterState
 heartbeat
 ResalePriority
 ResaleQueue
 ```
 
-Important boundaries:
+`VisibleItems.ps1` is retired from production runtime. `ItemMetadata.ps1` remains manual-only.
 
-- `VisibleItems`, `FilterState`, and `ResalePriority` are local-only;
-- `TravelContext` is bounded/fail-soft;
-- broad resale remains one-request-at-a-time after heartbeat;
-- `ItemMetadata.ps1` remains outside normal Rainmeter polling.
+## Settings surface
 
-## Current validation boundary
-
-Connector-authored code and focused tests are committed. The new 0.4.0 UI has **not** yet been accepted on the target Windows/Rainmeter host.
-
-Required focused checks:
+Main Settings now opens a lightweight optimizer dialog:
 
 ```text
-Validate-Filters.ps1
-Run-FilterPreferenceTests.ps1
-Validate-TravelContext.ps1
-Run-TravelContextTests.ps1
-Validate-VisibleItems.ps1
-Validate-RainmeterSkin.ps1
+Show profitable items only
+Use 95% MV profit calculation
+Energy Waste + Max Energy Loss
+Nerve Waste + Max Nerve Loss
+Ignore List...
+Profile / API...
 ```
 
-Then run one normal `RunUpdate.ps1 -Action Update`, refresh Rainmeter, and exercise the Item/Trip/Country/Category/Reset/pin/Settings/Ignore interactions.
+The existing detailed settings editor remains behind `Profile / API...` for API key, profile, current capacity and company/travel-mode controls.
 
-Do not claim 0.4.0 accepted until the user reports those checks.
+## Validation status
 
-## Next after acceptance
+The user-reported 0.4 validator defects were fixed in the 0.5 validators:
 
-1. generalize independent card enumeration beyond the four proof markets;
-2. expose the full relevant catalog through Item/Category filters once cards can render it;
-3. add locally ticking outbound arrival countdown;
-4. generalize timing/economics per item as evidence allows;
-5. build full-country opportunity presentation;
-6. implement `Optimal` later as a bounded route scheduler, not a simple sort.
+- stale travel-context exact-string check removed/replaced;
+- invalid `$launcherName:` strict parser interpolation fixed with safe literal handling.
+
+0.5 still requires target-Windows validation. Do not mark accepted until the focused tests, one normal production update, and a Rainmeter screenshot pass.
+
+See `docs/NEXT_CODEX_RUN.md` for exact commands.
+
+## After 0.5 acceptance
+
+1. let broad MV coverage improve without increasing API rate;
+2. calibrate availability probabilities as cycles accumulate;
+3. validate real mixed general/category capacity plans;
+4. keep default UI minimal while improving tooltips/diagnostics;
+5. later build the bounded multi-trip sequence scheduler comparing repeated short, long and mixed-country route sequences.
