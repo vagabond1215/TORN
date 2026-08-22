@@ -22,7 +22,7 @@ $logPath = Join-Path $Scripts 'RuntimeLog.ps1'
 if (Test-Path -LiteralPath $logPath) {
     $text = Get-Content -LiteralPath $logPath -Raw
     foreach ($token in @(
-        "data\\runtime\\logs",
+        'data\runtime\logs',
         'travel-assistant.log',
         'TravelAssistantLogRetentionDays = 7',
         'TravelAssistantLogMaxBytes = 262144',
