@@ -37,5 +37,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify NAME / UPCOMING / GROSS PROFIT / PROFIT-HR, country flag + white time rail, no row rank/country/body-time/gross-xN labels, one-at-a-time inline chevron graphs, separate VIEWER popup, filters, and SETTINGS. Runtime failures are logged under data\runtime\logs.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify bright FlagKit cards above the panel background, NAME / UPCOMING / GROSS PROFIT / PROFIT-HR, no rank/country/body-time/gross-xN labels, sort changes collapse the inline chart, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS. Runtime failures are logged under data\runtime\logs.' -ForegroundColor Yellow
 exit 0
