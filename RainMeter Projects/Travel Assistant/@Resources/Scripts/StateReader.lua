@@ -73,6 +73,11 @@ local function providerLabel(provider)
 end
 
 local function oldestSourceTimestamp(data)
+    local projected = number(data.UIOldestMarketSourceTimestamp)
+    if projected > 0 then return projected end
+
+    -- Compatibility fallback for state written before optimizer-wide freshness
+    -- projection existed.
     local values = {}
     for _, key in ipairs({'UKSourceTimestamp','JPSourceTimestamp'}) do
         local value = number(data[key])
