@@ -159,9 +159,7 @@ $allCheck.Add_CheckedChanged({
     if ($script:updatingAll) { return }
     for ($i=0; $i -lt $list.Items.Count; $i++) { $list.SetItemChecked($i,$allCheck.Checked) }
 })
-$list.Add_ItemCheck({
-    $form.BeginInvoke([Action]{ Refresh-AllCheck }) | Out-Null
-})
+$list.Add_ItemCheck({ $form.BeginInvoke([Action]{ Refresh-AllCheck }) | Out-Null })
 Refresh-AllCheck
 
 if ($Filter -eq 'Country' -and $rows.Count -eq 0) {
@@ -219,6 +217,8 @@ $save.Add_Click({
     }
 
     [void](Save-UiPreferences -Preferences $prefs)
+    $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
+    if (Test-Path -LiteralPath $filterState) { try { & $filterState } catch { } }
     $form.Close()
 })
 
