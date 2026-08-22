@@ -23,7 +23,7 @@ function Read-PriorityJson {
 function Write-PriorityJsonAtomic {
     param([string]$Path, [object]$Value)
     $tmp = $Path + '.tmp'
-    $Value | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $tmp -Encoding UTF8
+    $Value | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $tmp -Encoding UTF8
     Move-Item -LiteralPath $tmp -Destination $Path -Force
 }
 
@@ -103,6 +103,21 @@ foreach ($property in @($engine.resaleQueue.attempts.PSObject.Properties)) {
 }
 
 $priorityIds = New-Object 'System.Collections.Generic.HashSet[int]'
+
+# The optimizer records item IDs whose MV is currently the blocker for route
+# evaluation. They receive the same bounded five-minute failure retry policy as
+# the old visible proof items, but this script never makes a request itself.
+if ($engine.PSObject.Properties['optimizer'] -and $null -ne $engine.optimizer -and $engine.optimizer.PSObject.Properties['pricingPriorityItemIds']) {
+    foreach ($id in @($engine.optimizer.pricingPriorityItemIds)) {
+        $itemId = 0
+        if ([int]::TryParse([string]$id, [ref]$itemId) -and $itemId -gt 0 -and -not $ignoredIds.Contains($itemId)) {
+            [void]$priorityIds.Add($itemId)
+        }
+    }
+}
+
+# Keep configured visible items as a secondary compatibility priority while the
+# broad catalog is still populating.
 foreach ($item in @($items.items)) {
     if ($null -eq $item -or -not $item.PSObject.Properties['itemId']) { continue }
     $itemId = [int]$item.itemId
@@ -129,15 +144,14 @@ foreach ($itemId in @($priorityIds)) {
     if ($lastAttemptAt -le 0 -or $lastErrorAt -le $lastSuccessAt) { continue }
     if (($Now - $lastAttemptAt) -lt $PriorityBackoffSeconds) { continue }
 
-    # ResaleQueue already prioritizes visible IDs. Clearing only the failed
-    # attempt timestamp makes that existing candidate eligible again without
-    # adding a second request path or weakening hidden-catalog backoff.
+    # Clearing only the failed attempt timestamp makes the existing candidate
+    # eligible again. ResaleQueue remains the sole one-request-per-update path.
     $attempt.lastAttemptAt = 0
     $resetCount++
 }
 
 foreach ($pair in @(
-    @('priorityVisibleItems',[int]$priorityIds.Count),
+    @('priorityOptimizerItems',[int]$priorityIds.Count),
     @('pinnedItemId',[int]$pinnedItemId),
     @('ignoredItems',[int]$ignoredIds.Count),
     @('priorityBackoffSeconds',[int]$PriorityBackoffSeconds),
