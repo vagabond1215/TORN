@@ -4,13 +4,14 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $viewerPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenItemViewer.ps1'
 $launcherPath = Join-Path $ProjectRoot '@Resources\Scripts\LaunchItemViewer.ps1'
+$inlineRendererPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 $hostPath = Join-Path $ProjectRoot '@Resources\Scripts\PopupHost.ps1'
 $historyPath = Join-Path $ProjectRoot '@Resources\Scripts\MaintainObservationHistory.ps1'
 $settingsPath = Join-Path $ProjectRoot 'config\settings.example.json'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($viewerPath,$launcherPath,$hostPath,$historyPath)) {
+foreach ($path in @($viewerPath,$launcherPath,$inlineRendererPath,$hostPath,$historyPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing $path."; continue }
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
@@ -19,7 +20,7 @@ foreach ($path in @($viewerPath,$launcherPath,$hostPath,$historyPath)) {
 
 if (Test-Path -LiteralPath $launcherPath) {
     $launcher = Get-Content -LiteralPath $launcherPath -Raw
-    foreach ($token in @('PopupHost.ps1','Start-Process','-WindowStyle Hidden','-STA','-Popup ItemViewer','-MarketKey','$MarketKey','IsNullOrWhiteSpace($MarketKey)')) {
+    foreach ($token in @('PopupHost.ps1','Start-Process','-WindowStyle Hidden','-STA','-Popup ItemViewer','-MarketKey','$MarketKey','IsNullOrWhiteSpace($MarketKey)','RenderInlineGraph.ps1',"'inline_'",'& $renderer -MarketKey $actualKey')) {
         if (-not $launcher.Contains([string]$token)) { Fail "Viewer launcher missing '$token'." }
     }
     if (-not $launcher.Contains("MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$'")) { Fail 'Viewer launcher must validate stable country:itemId keys.' }
@@ -50,6 +51,14 @@ if (Test-Path -LiteralPath $viewerPath) {
     if ($viewer -match '(?i)Invoke-RestMethod|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Item viewer must remain local-only and must not make network requests.' }
 }
 
+if (Test-Path -LiteralPath $inlineRendererPath) {
+    $inline = Get-Content -LiteralPath $inlineRendererPath -Raw
+    foreach($token in @('RuntimeObservationFile','SeedObservationFile','GraphPath','PointCount','ChangeCount','display_carry','current_snapshot','inline-graph-')) {
+        if(-not $inline.Contains($token)){Fail "Inline card graph renderer missing '$token'."}
+    }
+    if ($inline -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline card graph renderer must remain local-only.' }
+}
+
 if (Test-Path -LiteralPath $historyPath) {
     $history = Get-Content -LiteralPath $historyPath -Raw
     foreach ($token in @('earliestByKey',"existingSource -ne 'history_bootstrap'",'history_repair_baseline','RetentionCutoff')) {
@@ -72,6 +81,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Item viewer validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Stable-key hidden-host eight-hour item viewer with self-healing baseline and truthful zero-stock axis validation passed.' -ForegroundColor Green
-Write-Host 'Viewer is local-only; retained 48h/90d learning remains independent of the 8h display.' -ForegroundColor DarkGreen
+Write-Host 'Standalone Viewer plus separate local inline 8-hour card graph validation passed.' -ForegroundColor Green
+Write-Host 'Both graph surfaces are local-only; retained 48h/90d learning remains independent of the 8h display.' -ForegroundColor DarkGreen
 exit 0
