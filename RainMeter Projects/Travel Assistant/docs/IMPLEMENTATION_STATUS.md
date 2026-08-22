@@ -2,11 +2,11 @@
 
 **Checkpoint:** 2026-08-22
 
-**Active run:** 0.6.0 ranked opportunity surface. See `docs/NEXT_CODEX_RUN.md`.
+**Active run:** 0.6.0 compact opportunity surface. See `docs/NEXT_CODEX_RUN.md`.
 
 ## Accepted data foundation
 
-Target-Windows evidence already covers:
+Previously target-Windows validated foundation:
 
 ```text
 11 foreign countries collected
@@ -20,120 +20,147 @@ Target-Windows evidence already covers:
 
 Also accepted:
 
-- provider-name enrichment on every observed market;
+- provider-name enrichment;
 - offline category/catalog authority;
-- bounded one-request-at-a-time Torn Item Market pricing;
+- bounded one-request Torn Item Market pricing;
 - `/user/perks` general capacity behavior;
 - Flower/Toy category-capacity isolation;
 - Airstrip general/Xanax 18 and Standard 13 on the target profile.
 
-## 0.6 opportunity UI — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
-
-The rejected 0.5 single-route card has been replaced by a ranked opportunity list. The later user-facing `OPTIMAL` composite ranking has also been removed.
+## 0.6 compact opportunity UI — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
 Primary controls:
 
 ```text
 ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
-SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
+NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 ```
 
-Up to eight rows show:
+Visible rows are now designed as:
 
 ```text
-rank
-item + destination
-gross trip profit + quantity
-current or modeled stock window
-leave timing
-modeled hit likelihood
-total elapsed time
-foreign price (Torn MV)
-GRAPH
+[FLAG]  item                                    $gross   v
+[time]  current/window   leave   chance/LEARNING   foreign (MV)
 ```
 
-Ordering is intentionally transparent:
+Changes implemented:
 
-- `UPCOMING`: earliest supported/current window first.
-- `GROSS PROFIT`: total trip gross descending.
-- `PROFIT/HR`: total trip gross divided by total elapsed hours.
-- Hit likelihood remains a separate displayed percentage and is not folded into any hidden score.
+- retired visible row rank numbers;
+- retired country code/name from the row body;
+- retired duplicate center elapsed-time text;
+- moved elapsed/time text to a white strip under a vector destination flag;
+- removed visible `gross` and `xN` suffixes from the gross dollar field;
+- retained quantity internally and in tooltips for economic inspection;
+- replaced `GRAPH` word with a compact `v`/`^` expansion control.
 
-## Opportunity evidence — IMPLEMENTED
+Flags are Rainmeter Shape approximations for all 11 destinations and require no binary image assets.
 
-`OpportunityState.ps1` is local-only and consumes retained stock/cycles, cached MV, current travel/bars, filters and capacity.
+## Inline card graph — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-Current stock uses arrival-survival evidence. Sold-out markets use overlap of completed historical live intervals after sellout to locate supported future windows. Estimated restock quantity uses observed restock quantities when available.
+`RenderInlineGraph.ps1` renders retained 8-hour stock history to a small generated Rainmeter Shape-path spec.
 
-The opportunity layer:
+`StateReader.lua`:
 
-- excludes stale markets;
-- requires fresh cached MV;
-- honors Item/Trip/Country/Category filters and Ignore List;
-- honors profitable-only when explicitly enabled;
-- honors Energy/Nerve waste constraints for new outbound opportunities;
-- preserves destination purchase guidance after travel is committed;
-- fails closed for unresolved foreign destination states;
-- never writes predicted history.
+- expands the selected card in-place;
+- shifts lower rows down and grows panel height;
+- allows only one expanded graph at a time;
+- collapses the current graph when another card opens;
+- tracks the expanded market by stable `country:itemId` through sorting;
+- refreshes the open graph locally around once per minute.
 
-## Gross / profit-per-hour semantics — IMPLEMENTED
-
-Gross trip profit is:
+The existing Viewer launcher distinguishes:
 
 ```text
-(selected MV basis - foreign price) × modeled purchasable quantity
+inline_<country:itemId> -> RenderInlineGraph.ps1, no popup
+ordinary/empty key      -> standalone Item Viewer popup
 ```
 
-It intentionally excludes travel cost. The row now exposes quantity beside gross, and the tooltip explains the arithmetic.
+Inline graph viewing makes no network request and does not write observation/cycle history.
 
-`PROFIT/HR` is:
+## Standalone Viewer — RETAINED
+
+`VIEWER >` is still a separate WinForms market browser with:
+
+- broad market dropdown;
+- full 8-hour graph;
+- hourly markers;
+- restock/sellout diagnostics;
+- truthful zero-stock axis;
+- retained baseline repair.
+
+The standalone Viewer is not replaced by card expansion.
+
+## Current in-stock learning semantics — IMPLEMENTED
+
+Fresh observed stock is now allowed to remain visible before arrival-survival evidence is trained.
+
+For current in-stock markets:
+
+- known likelihood -> percentage;
+- unknown likelihood -> `LEARNING`;
+- unknown likelihood no longer causes the row to be dropped.
+
+Gross and profit/hour still derive from current stock/capacity, foreign price and cached MV. This does not relax future sold-out forecasting: sold-out future windows still need completed-cycle evidence.
+
+## Transparent ordering — IMPLEMENTED
+
+- `NAME`: alphabetical item/destination.
+- `UPCOMING`: earliest current/modeled window.
+- `GROSS PROFIT`: trip gross descending.
+- `PROFIT/HR`: trip gross / total elapsed hours descending.
+
+Hit likelihood remains separate and is not probability-weighted into any visible sort.
+
+Sorts reorder already-projected rows immediately in Lua; the PowerShell preference action persists the mode without gating visual response.
+
+## Economics
 
 ```text
-gross trip profit / total elapsed hours
+gross = (selected MV basis - foreign price) × purchasable quantity
+profit/hr = gross / total elapsed hours
 ```
 
-It is not probability-weighted. Likelihood is left visible for the player to judge independently.
+Gross excludes travel cost. Quantity is no longer printed beside the row gross but remains projected for tooltips/debugging.
 
-## Projection / interaction stability — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+Default basis remains:
 
-Recent target screenshots showed the opportunity rows disappearing to `Learning opportunities...` for a large portion of a polling cycle. The cause is intermediate compatibility-state publication while the full update pipeline is still running.
+```text
+100% Torn MV
+0% Item Market fee deduction
+0 minimum profit gate
+0 minimum margin gate
+negative-value candidates allowed
+```
 
-`StateReader.lua` now:
+Optional 95% MV and profitable-only settings remain.
 
-- captures the last complete `Opportunity*`/`UI*` projection during initialization;
-- preserves it while the minute updater is between compatibility and opportunity projections;
-- updates the selected sort highlight immediately;
-- briefly defers the next automatic poll after an interactive action;
-- gives text controls transparent rectangular hitboxes for more reliable clicking.
+## Projection / interaction stability
 
-Pure sort changes also skip unnecessary `FilterState.ps1` recomputation and directly rebuild only the opportunity ordering.
+The Lua reader retains the last complete opportunity/UI projection while intermediate minute-update writes are occurring. A transient learning-only zero pass does not erase previously valid visible rows.
 
-## Graph viewer — IMPLEMENTED
+Text controls have explicit hitboxes. Sort and inline expansion are local UI operations rather than network-update operations.
 
-The item viewer remains an 8-hour diagnostic surface with hourly markers.
+## Graph/history retention
 
-- General `VIEWER >` browses active markets.
-- Every opportunity row has `GRAPH`.
-- Row targeting uses stable `country:itemId`, not row number.
-- The last observation before the 8-hour cutoff is carried to the left edge for change-only history continuity.
-- Change-only 48h pruning now preserves one boundary baseline per market.
-- Markets whose old baseline was already lost receive a truthful retained/current bootstrap rather than invented intermediate history.
-- Viewer is local-only and consumes no provider/Torn request.
-- Learning retention remains 48h raw / 90d completed cycles.
+- visible graph horizon: 8h;
+- high-resolution observation retention: 48h;
+- completed cycle retention: 90d;
+- change-only pruning preserves a predecessor/baseline;
+- bootstrap-only historical migration can be repaired as a carried unchanged baseline without inventing a transition.
 
-## Popup reliability changes — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+## Popups / runtime diagnostics
 
-Detached Settings, filter and viewer launchers use one hidden STA popup host. Runtime/popup failures go to:
+Detached Settings/filter/standalone Viewer paths use hidden STA PowerShell. Failures are written to:
 
 ```text
 data/runtime/logs/travel-assistant.log
 ```
 
-Windows PowerShell 5.1 generic collection enumeration bugs found during validation were removed from the preference/evidence/viewer/filter paths.
+Windows PowerShell 5.1 generic collection compatibility fixes remain in place.
 
 ## Background optimizer — RETAINED
 
-`OptimalRoute.ps1` remains the background one-best-next-trip planner for compatibility, diagnostics and MV-priority work. Its name no longer maps to a user-facing sort or badge.
+`OptimalRoute.ps1` remains a background compatibility/diagnostics/MV-priority model only. It does not define the user-facing UI.
 
 ## Runtime order
 
@@ -151,42 +178,29 @@ ResalePriority
 ResaleQueue
 ```
 
-## Value semantics
-
-Default basis remains:
-
-```text
-100% Torn MV
-0% Item Market fee deduction
-0 minimum profit gate
-0 minimum margin gate
-negative-value candidates allowed
-```
-
-Optional setting uses 95% MV. `Show profitable items only` explicitly removes non-positive candidates.
-
 ## Validation status
 
-Static/deterministic validators now cover:
+Current validators cover:
 
-- three transparent sort modes;
-- migration from old `optimal/profit/time` sort IDs;
-- no user-facing OPTIMAL badge/hidden score;
-- gross quantity projection;
-- raw gross-per-hour math;
-- stable market-key graph targeting;
-- graph carry-forward baseline and retention repair;
-- Windows PowerShell 5.1 collection compatibility;
-- opportunity-model deterministic overlap/probability tests;
+- four transparent sort modes;
+- local immediate sorting fields;
+- fresh current in-stock `LEARNING` likelihood projection;
+- no visible place-number projection;
+- separate inline vs standalone graph routing;
+- inline renderer parse/local-only contract;
+- flag rail / white time strip / chevron expansion contract;
+- exclusive expanded graph state;
+- stable projection through polling;
+- retained-history repair and zero-stock graph truthfulness;
+- Windows PowerShell 5.1 compatibility;
 - Energy/Nerve integration;
-- hidden popup/logging contract;
-- refresh-stable projection and responsive sort path.
+- popup/logging contract.
 
-0.6 still requires target-Windows validation. Do not mark accepted until `tests/Run-CurrentAcceptance.ps1`, one normal production update, all popups/sort controls, row graphs and a Rainmeter screenshot pass.
+This visual candidate still requires target-Windows/Rainmeter acceptance. Do not mark 0.6 accepted until the focused suite, one production update, compact collapsed cards, one expanded inline graph, sorting, popups and standalone Viewer are visibly validated.
 
 ## After 0.6 acceptance
 
-1. refine visual row density/alignment from the actual Rainmeter render;
-2. continue probability calibration from accumulated cycles;
-3. add optional Chrome/browser notifications as a consumer of the accepted opportunity state;
-4. later evaluate bounded multi-trip sequence scheduling separately from the opportunity browser.
+1. refine vector flag and inline graph proportions from the real render;
+2. continue probability calibration as cycles accumulate;
+3. add optional Chrome/browser notifications consuming accepted opportunity timing state;
+4. evaluate bounded multi-trip sequence scheduling separately.
