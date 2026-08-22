@@ -7,7 +7,7 @@ $Scripts = Join-Path $ProjectRoot '@Resources\Scripts'
 . (Join-Path $Scripts 'FilterPreferences.ps1') -SkipMain
 $prefs = Read-UiPreferences
 if ($null -eq $prefs) { throw 'Read-UiPreferences returned null.' }
-if ([string]$prefs.sortMode -notin @('upcoming','gross','profit_per_hour')) { throw 'Normalized sort mode is invalid.' }
+if ([string]$prefs.sortMode -notin @('name','upcoming','gross','profit_per_hour')) { throw 'Normalized sort mode is invalid.' }
 if ($null -eq $prefs.selectedTripBands) { throw 'Normalized trip bands are missing.' }
 if ($null -eq $prefs.selectedCountryIds) { throw 'Normalized country selection is missing.' }
 
