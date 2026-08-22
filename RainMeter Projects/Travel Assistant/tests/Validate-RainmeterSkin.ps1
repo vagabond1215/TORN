@@ -21,7 +21,14 @@ $reader = Get-Content -LiteralPath $stateReaderPath -Raw
 $renderer = Get-Content -LiteralPath $rendererPath -Raw
 
 if ($ini -notmatch '(?m)^Version=0\.6\.0\s*$') { Fail 'Skin must report version 0.6.0.' }
-if (-not $ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'TravelAssistant.ini must include OpportunityRows.inc.' }
+$includeToken='@IncludeRows=#@#Includes\OpportunityRows.inc'
+$includeAt=$ini.IndexOf($includeToken,[System.StringComparison]::Ordinal)
+$backgroundAt=$ini.IndexOf('[MeterBackground]',[System.StringComparison]::Ordinal)
+$messageAt=$ini.IndexOf('[MeterOpportunityMessage]',[System.StringComparison]::Ordinal)
+if ($includeAt -lt 0) { Fail 'TravelAssistant.ini must include OpportunityRows.inc as the final row layer.' }
+elseif ($includeAt -lt $backgroundAt -or $includeAt -lt $messageAt) { Fail 'OpportunityRows.inc must be included after the panel/background meters so cards render above the background.' }
+if ($ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'Retired early OpportunityRows include would darken the cards beneath MeterBackground.' }
+
 foreach ($section in @('MeasureUpdate','MeasureSettings','MeasureFilterPopup','MeasureItemViewer','MeasureInlineGraph','MeasurePreferenceAction','MeasureState','MeterSortName','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour','MeterViewer')) {
     if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing [$section]." }
 }
@@ -69,15 +76,16 @@ $tokens=$null; $parseErrors=$null
 foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
 foreach ($token in @(
     'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
-    "source='current_snapshot'",'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap',
-    'for ($i=0; $i -le 8; $i++)','Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force',
-    'StableImageFile','PointCount','ChangeCount'
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
 )) {
     if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
 }
 if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
-foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath')) {
-    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/Shape chart token '$retired'." }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
 }
 
 if ($errors.Count -gt 0) {
@@ -85,5 +93,5 @@ if ($errors.Count -gt 0) {
     Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Rainmeter native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and runtime-observation PNG history validation passed.' -ForegroundColor Green
+Write-Host 'Rainmeter card layering, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
 exit 0
