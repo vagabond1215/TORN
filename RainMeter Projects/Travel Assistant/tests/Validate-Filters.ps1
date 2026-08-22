@@ -41,6 +41,8 @@ if (Test-Path -LiteralPath $files.Popup) {
     foreach ($filter in @("'Item'","'Country'","'Category'","'Ignore'")) { if (-not $text.Contains($filter)) { Fail "OpenFilterPopup.ps1 missing filter $filter." } }
     if (-not $text.Contains('itemMetadata')) { Fail 'Ignore List must enumerate the full local metadata catalog when available.' }
     if (-not $text.Contains('FilterState.ps1')) { Fail 'Popup saves must project updated filter state immediately.' }
+    if (-not $text.Contains('A favorite is preserved and returns when unignored.')) { Fail 'Ignore List UI must explain that an existing favorite is preserved.' }
+    if ($text -match "Set-FilterProperty\s+\$prefs\s+'pinnedMarket'\s+''") { Fail 'Ignore List must hide a pinned item without deleting the favorite.' }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Filter popup must remain local-only.' }
 }
 
@@ -121,5 +123,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Filter, pin, Settings, and ignore-list configuration validation passed.' -ForegroundColor Green
-Write-Host 'Presentation filters remain local/persistent; direct pin state is not overwritten by stale state.kv projection; Ignore List suppresses broad per-item market pricing.'
+Write-Host 'Presentation filters remain local/persistent; Ignore List outranks but preserves favorites and suppresses broad per-item market pricing.'
 exit 0
