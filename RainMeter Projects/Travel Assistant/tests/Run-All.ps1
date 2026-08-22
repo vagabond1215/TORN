@@ -5,6 +5,7 @@ $TestRoot = (Resolve-Path $PSScriptRoot).Path
 $tests = @(
     'Validate-TravelAssistant.ps1',
     'Validate-RainmeterSkin.ps1',
+    'Validate-ItemViewer.ps1',
     'Validate-ShadowCollection.ps1',
     'Validate-ItemMetadata.ps1',
     'Validate-LocalCatalog.ps1',
