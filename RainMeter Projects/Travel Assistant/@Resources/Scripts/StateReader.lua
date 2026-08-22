@@ -1,10 +1,13 @@
 local statePath = nil
 local heartbeatPath = nil
+local preferencesPath = nil
 local pollInterval = 60
 local failureRetryInterval = 15
 local failureRetryArmed = false
 local nextPollAt = nil
 local maxExpandedCards = 2
+local pinnedMarket = ''
+local travelFilterCountryId = ''
 
 local cardExpanded = {
     UKPrimary = true,
@@ -18,10 +21,16 @@ local restockWanted = { UK = false, JP = false }
 
 local cardOrder = { 'UKPrimary', 'UKSecondary', 'JPPrimary', 'JPSecondary' }
 local cardVariablePrefix = {
-    UKPrimary = 'UKCard',
-    UKSecondary = 'UKSecondaryCard',
-    JPPrimary = 'JPCard',
-    JPSecondary = 'JPSecondaryCard'
+    UKPrimary = 'UKCard', UKSecondary = 'UKSecondaryCard', JPPrimary = 'JPCard', JPSecondary = 'JPSecondaryCard'
+}
+local cardMarket = {
+    UKPrimary = 'united_kingdom:206', UKSecondary = 'united_kingdom:266', JPPrimary = 'japan:206', JPSecondary = 'japan:277'
+}
+local cardCountry = {
+    UKPrimary = 'united_kingdom', UKSecondary = 'united_kingdom', JPPrimary = 'japan', JPSecondary = 'japan'
+}
+local cardPinPrefix = {
+    UKPrimary = 'UK', UKSecondary = 'UKSecondary', JPPrimary = 'JP', JPSecondary = 'JPSecondary'
 }
 
 local function trim(s)
@@ -48,6 +57,17 @@ local function readEpochFile(path)
     local raw = f:read('*a') or ''
     f:close()
     return tonumber(trim(raw)) or 0
+end
+
+local function readPinnedPreference(path)
+    if path == nil then return '' end
+    local f = io.open(path, 'r')
+    if not f then return '' end
+    local raw = f:read('*a') or ''
+    f:close()
+    local value = raw:match('"pinnedMarket"%s*:%s*"([^"]*)"') or ''
+    if value:match('^[a-z0-9_]+:[1-9][0-9]*$') then return value end
+    return ''
 end
 
 local function number(v)
@@ -110,22 +130,16 @@ local function setVariable(name, value)
 end
 
 local function setMeterGroupVisible(group, visible)
-    if visible then
-        SKIN:Bang('!ShowMeterGroup', group)
-    else
-        SKIN:Bang('!HideMeterGroup', group)
-    end
+    if visible then SKIN:Bang('!ShowMeterGroup', group) else SKIN:Bang('!HideMeterGroup', group) end
 end
 
 local function setRestockVisibility(prefix, visible)
     local iconMeter = 'Meter' .. prefix .. 'RestockIcon'
     local textMeter = 'Meter' .. prefix .. 'Restock'
     if visible then
-        SKIN:Bang('!ShowMeter', iconMeter)
-        SKIN:Bang('!ShowMeter', textMeter)
+        SKIN:Bang('!ShowMeter', iconMeter); SKIN:Bang('!ShowMeter', textMeter)
     else
-        SKIN:Bang('!HideMeter', iconMeter)
-        SKIN:Bang('!HideMeter', textMeter)
+        SKIN:Bang('!HideMeter', iconMeter); SKIN:Bang('!HideMeter', textMeter)
     end
 end
 
@@ -137,23 +151,14 @@ local function providerLabel(provider)
 end
 
 local function getStatusPresentation(status)
-    if status == 'SAFE_WINDOW' then
-        return '86,190,116,255', ''
-    elseif status == 'BEST_ODDS' or status == 'LOW_MARGIN' then
-        return '232,178,72,255', ''
-    elseif status == 'UNPROFITABLE' or status == 'WINDOW_CLOSED' then
-        return '224,90,90,255', ''
-    elseif status == 'STALE_DATA' then
-        return '232,178,72,255', 'STALE DATA - CHECK WEAV3R'
-    elseif status == 'SOURCE_DISAGREEMENT' then
-        return '232,178,72,255', 'SOURCE ISSUE - CHECK WEAV3R'
-    elseif status == 'PRICE_REGIME_UNVERIFIED' then
-        return '232,178,72,255', 'PRICE REGIME UNVERIFIED - CHECK WEAV3R'
-    elseif status == 'CHECK_EXTERNAL' then
-        return '232,178,72,255', 'CHECK WEAV3R'
-    elseif status == 'INSUFFICIENT_HISTORY' then
-        return '145,152,164,255', 'LEARNING - CHECK WEAV3R'
-    end
+    if status == 'SAFE_WINDOW' then return '86,190,116,255', ''
+    elseif status == 'BEST_ODDS' or status == 'LOW_MARGIN' then return '232,178,72,255', ''
+    elseif status == 'UNPROFITABLE' or status == 'WINDOW_CLOSED' then return '224,90,90,255', ''
+    elseif status == 'STALE_DATA' then return '232,178,72,255', 'STALE DATA - CHECK WEAV3R'
+    elseif status == 'SOURCE_DISAGREEMENT' then return '232,178,72,255', 'SOURCE ISSUE - CHECK WEAV3R'
+    elseif status == 'PRICE_REGIME_UNVERIFIED' then return '232,178,72,255', 'PRICE REGIME UNVERIFIED - CHECK WEAV3R'
+    elseif status == 'CHECK_EXTERNAL' then return '232,178,72,255', 'CHECK WEAV3R'
+    elseif status == 'INSUFFICIENT_HISTORY' then return '145,152,164,255', 'LEARNING - CHECK WEAV3R' end
     return '145,152,164,255', ''
 end
 
@@ -162,8 +167,7 @@ local function getPriceColor(data, prefix, status)
     local marginRaw = data[prefix .. 'TripMarginPercent']
     local hasEconomics = profitRaw ~= nil and profitRaw ~= '' and marginRaw ~= nil and marginRaw ~= ''
     if hasEconomics then
-        local profit = number(profitRaw)
-        local margin = number(marginRaw)
+        local profit = number(profitRaw); local margin = number(marginRaw)
         if profit <= 0 or margin <= 0 then return '224,90,90,255' end
         if status == 'LOW_MARGIN' then return '232,178,72,255' end
         return '86,190,116,255'
@@ -180,96 +184,112 @@ local function secondaryPriceColor(priceClass)
     return '145,152,164,255'
 end
 
-local function isCardVisible(cardKey)
+local function baseCardVisible(cardKey)
     if cardKey == 'UKSecondary' then return secondaryVisible.UK end
     if cardKey == 'JPSecondary' then return secondaryVisible.JP end
     return cardKey == 'UKPrimary' or cardKey == 'JPPrimary'
 end
 
+local function isCardVisible(cardKey)
+    if not baseCardVisible(cardKey) then return false end
+    if travelFilterCountryId ~= '' and cardCountry[cardKey] ~= travelFilterCountryId then return false end
+    return true
+end
+
+local function pinnedCardKey()
+    if pinnedMarket == '' then return nil end
+    for key, market in pairs(cardMarket) do if market == pinnedMarket then return key end end
+    return nil
+end
+
 local function countExpandedCards()
     local count = 0
-    for _, key in ipairs(cardOrder) do
-        if isCardVisible(key) and cardExpanded[key] then count = count + 1 end
-    end
+    for _, key in ipairs(cardOrder) do if isCardVisible(key) and cardExpanded[key] then count = count + 1 end end
     return count
 end
 
 local function collapseForRequestedCard(requested)
+    local pinKey = pinnedCardKey()
     local prefix = requested:sub(1, 2)
-    local companion = nil
-    if requested:find('Secondary', 1, true) then companion = prefix .. 'Primary'
-    else companion = prefix .. 'Secondary' end
-
-    if companion ~= requested and isCardVisible(companion) and cardExpanded[companion] then
-        cardExpanded[companion] = false
-        return
+    local companion = requested:find('Secondary', 1, true) and (prefix .. 'Primary') or (prefix .. 'Secondary')
+    if companion ~= requested and companion ~= pinKey and isCardVisible(companion) and cardExpanded[companion] then
+        cardExpanded[companion] = false; return true
     end
-
     for _, key in ipairs(cardOrder) do
-        if key ~= requested and isCardVisible(key) and cardExpanded[key] then
-            cardExpanded[key] = false
-            return
-        end
+        if key ~= requested and key ~= pinKey and isCardVisible(key) and cardExpanded[key] then cardExpanded[key] = false; return true end
+    end
+    return false
+end
+
+local function enforcePinnedExpansion()
+    local pinKey = pinnedCardKey()
+    if pinKey ~= nil and isCardVisible(pinKey) then cardExpanded[pinKey] = true end
+    while countExpandedCards() > maxExpandedCards do
+        if not collapseForRequestedCard(pinKey or '') then break end
     end
 end
 
-local function applyCardLayout()
-    local top = 52
-    local gap = 8
-    local expandedHeight = 182
-    local collapsedHeight = 42
-    local y = top
+local function displayOrder()
+    local ordered = {}
+    local pinKey = pinnedCardKey()
+    if pinKey ~= nil and isCardVisible(pinKey) then table.insert(ordered, pinKey) end
+    for _, key in ipairs(cardOrder) do if key ~= pinKey then table.insert(ordered, key) end end
+    return ordered
+end
 
-    for _, key in ipairs(cardOrder) do
+local function updatePinVariables()
+    for key, prefix in pairs(cardPinPrefix) do
+        local isPinned = pinnedMarket ~= '' and cardMarket[key] == pinnedMarket
+        setVariable(prefix .. 'PinText', isPinned and '★' or '☆')
+        setVariable(prefix .. 'PinColor', isPinned and '82,174,255,255' or '145,152,164,255')
+    end
+end
+
+local function setHeaderVisibility(key, visible)
+    if key == 'UKPrimary' then setMeterGroupVisible('UKPrimaryHeader', visible)
+    elseif key == 'JPPrimary' then setMeterGroupVisible('JPPrimaryHeader', visible)
+    elseif key == 'UKSecondary' then setMeterGroupVisible('UKSecondaryHeader', visible)
+    elseif key == 'JPSecondary' then setMeterGroupVisible('JPSecondaryHeader', visible) end
+end
+
+local function setBodyVisibility(key, visible)
+    if key == 'UKPrimary' then setMeterGroupVisible('UKPrimaryBody', visible)
+    elseif key == 'JPPrimary' then setMeterGroupVisible('JPPrimaryBody', visible)
+    elseif key == 'UKSecondary' then setMeterGroupVisible('UKSecondaryBody', visible)
+    elseif key == 'JPSecondary' then setMeterGroupVisible('JPSecondaryBody', visible) end
+end
+
+local function applyCardLayout()
+    enforcePinnedExpansion()
+    updatePinVariables()
+    local top = 52; local gap = 8; local expandedHeight = 182; local collapsedHeight = 42; local y = top
+
+    for _, key in ipairs(displayOrder()) do
+        local variablePrefix = cardVariablePrefix[key]
         if isCardVisible(key) then
             local h = cardExpanded[key] and expandedHeight or collapsedHeight
-            local variablePrefix = cardVariablePrefix[key]
-            setVariable(variablePrefix .. 'Y', y)
-            setVariable(variablePrefix .. 'Height', h)
-
-            if key == 'UKPrimary' then
-                setVariable('UKExpandText', cardExpanded[key] and 'v' or '>')
-                setMeterGroupVisible('UKPrimaryBody', cardExpanded[key])
-            elseif key == 'JPPrimary' then
-                setVariable('JPExpandText', cardExpanded[key] and 'v' or '>')
-                setMeterGroupVisible('JPPrimaryBody', cardExpanded[key])
-            elseif key == 'UKSecondary' then
-                setVariable('UKSecondaryExpandText', cardExpanded[key] and 'v' or '>')
-                setMeterGroupVisible('UKSecondaryHeader', true)
-                setMeterGroupVisible('UKSecondaryBody', cardExpanded[key])
-            elseif key == 'JPSecondary' then
-                setVariable('JPSecondaryExpandText', cardExpanded[key] and 'v' or '>')
-                setMeterGroupVisible('JPSecondaryHeader', true)
-                setMeterGroupVisible('JPSecondaryBody', cardExpanded[key])
-            end
-
+            setVariable(variablePrefix .. 'Y', y); setVariable(variablePrefix .. 'Height', h)
+            setHeaderVisibility(key, true); setBodyVisibility(key, cardExpanded[key])
+            if key == 'UKPrimary' then setVariable('UKExpandText', cardExpanded[key] and 'v' or '>')
+            elseif key == 'JPPrimary' then setVariable('JPExpandText', cardExpanded[key] and 'v' or '>')
+            elseif key == 'UKSecondary' then setVariable('UKSecondaryExpandText', cardExpanded[key] and 'v' or '>')
+            elseif key == 'JPSecondary' then setVariable('JPSecondaryExpandText', cardExpanded[key] and 'v' or '>') end
             y = y + h + gap
         else
-            local variablePrefix = cardVariablePrefix[key]
-            setVariable(variablePrefix .. 'Y', y)
-            setVariable(variablePrefix .. 'Height', 0)
-            if key == 'UKSecondary' then
-                setMeterGroupVisible('UKSecondaryHeader', false)
-                setMeterGroupVisible('UKSecondaryBody', false)
-            elseif key == 'JPSecondary' then
-                setMeterGroupVisible('JPSecondaryHeader', false)
-                setMeterGroupVisible('JPSecondaryBody', false)
-            end
+            setVariable(variablePrefix .. 'Y', y); setVariable(variablePrefix .. 'Height', 0)
+            setHeaderVisibility(key, false); setBodyVisibility(key, false)
         end
     end
 
     setVariable('PanelHeight', y)
-    setRestockVisibility('UK', cardExpanded.UKPrimary and restockWanted.UK)
-    setRestockVisibility('JP', cardExpanded.JPPrimary and restockWanted.JP)
+    setRestockVisibility('UK', isCardVisible('UKPrimary') and cardExpanded.UKPrimary and restockWanted.UK)
+    setRestockVisibility('JP', isCardVisible('JPPrimary') and cardExpanded.JPPrimary and restockWanted.JP)
 end
 
 local function updateSecondaryItem(data, prefix)
     local visible = number(data[prefix .. 'SecondaryVisible']) == 1
     secondaryVisible[prefix] = visible
-    if not visible then
-        cardExpanded[prefix .. 'Secondary'] = false
-        return
-    end
+    if not visible then cardExpanded[prefix .. 'Secondary'] = false; return end
 
     local now = os.time()
     local name = safeText(data[prefix .. 'SecondaryName'], 'Item')
@@ -285,32 +305,18 @@ local function updateSecondaryItem(data, prefix)
     local priceClass = safeText(data[prefix .. 'SecondaryPriceClass'], 'UNKNOWN')
     local graphName = safeText(data[prefix .. 'SecondaryGraphName'], '')
 
-    setVariable(prefix .. 'SecondaryName', name)
-    setVariable(prefix .. 'SecondaryPriceText', formatMoney(foreignPrice))
-    setVariable(prefix .. 'SecondaryMarketValueText', formatMoney(marketValue))
-    setVariable(prefix .. 'SecondaryPriceColor', secondaryPriceColor(priceClass))
-    setVariable(prefix .. 'SecondaryGraphName', graphName)
-
-    if stock > 0 then
-        setVariable(prefix .. 'SecondaryStockHeaderText', 'Stock: ' .. formatInteger(stock))
-    elseif lastSoldOutAt > 0 then
-        setVariable(prefix .. 'SecondaryStockHeaderText', 'Out of Stock for ' .. formatHoursMinutes(now - lastSoldOutAt) .. ' since ' .. os.date('%H:%M', lastSoldOutAt))
-    else
-        setVariable(prefix .. 'SecondaryStockHeaderText', 'Out of Stock')
-    end
+    setVariable(prefix .. 'SecondaryName', name); setVariable(prefix .. 'SecondaryPriceText', formatMoney(foreignPrice))
+    setVariable(prefix .. 'SecondaryMarketValueText', formatMoney(marketValue)); setVariable(prefix .. 'SecondaryPriceColor', secondaryPriceColor(priceClass)); setVariable(prefix .. 'SecondaryGraphName', graphName)
+    if stock > 0 then setVariable(prefix .. 'SecondaryStockHeaderText', 'Stock: ' .. formatInteger(stock))
+    elseif lastSoldOutAt > 0 then setVariable(prefix .. 'SecondaryStockHeaderText', 'Out of Stock for ' .. formatHoursMinutes(now - lastSoldOutAt) .. ' since ' .. os.date('%H:%M', lastSoldOutAt))
+    else setVariable(prefix .. 'SecondaryStockHeaderText', 'Out of Stock') end
 
     local decision = 'Learning - no departure recommendation'
-    if marketValue <= 0 then
-        decision = 'Market value pending - no departure recommendation'
-    elseif priceClass == 'UNPROFITABLE' then
-        decision = 'Unprofitable - no departure recommendation'
-    elseif priceClass == 'LOW_MARGIN' then
-        decision = 'Low margin - no departure recommendation'
-    elseif priceClass == 'GOOD' then
-        decision = 'Economics positive - timing model learning'
-    end
-    setVariable(prefix .. 'SecondaryDecisionText', decision)
-    setVariable(prefix .. 'SecondaryOverlayText', 'TIMING MODEL LEARNING')
+    if marketValue <= 0 then decision = 'Market value pending - no departure recommendation'
+    elseif priceClass == 'UNPROFITABLE' then decision = 'Unprofitable - no departure recommendation'
+    elseif priceClass == 'LOW_MARGIN' then decision = 'Low margin - no departure recommendation'
+    elseif priceClass == 'GOOD' then decision = 'Economics positive - timing model learning' end
+    setVariable(prefix .. 'SecondaryDecisionText', decision); setVariable(prefix .. 'SecondaryOverlayText', 'TIMING MODEL LEARNING')
 
     local tooltip = { name }
     if category ~= '' then table.insert(tooltip, category) end
@@ -318,9 +324,7 @@ local function updateSecondaryItem(data, prefix)
     if marketValue > 0 then
         local age = marketFetchedAt > 0 and formatShortElapsed(now - marketFetchedAt) or 'unknown age'
         table.insert(tooltip, 'Torn market ' .. formatMoney(marketValue) .. ' (' .. age .. ')')
-    else
-        table.insert(tooltip, 'Torn market value pending background pricing')
-    end
+    else table.insert(tooltip, 'Torn market value pending background pricing') end
     if capacity > 0 then table.insert(tooltip, 'Capacity ' .. formatInteger(capacity)) end
     if priceClass ~= 'UNKNOWN' then table.insert(tooltip, 'Trip net ' .. formatMoney(tripProfit)) end
     if sourceTimestamp > 0 then table.insert(tooltip, 'Stock source ' .. formatShortElapsed(now - sourceTimestamp) .. ' old') end
@@ -329,99 +333,52 @@ local function updateSecondaryItem(data, prefix)
 end
 
 local function updateDestination(data, prefix)
-    local now = os.time()
-    local travelSeconds = number(data[prefix .. 'TravelSeconds'])
-    local stock = number(data[prefix .. 'Stock'])
-    local foreignPrice = number(data[prefix .. 'ForeignPrice'])
-    local marketValue = number(data[prefix .. 'MarketValue'])
-    local lastSoldOutAt = number(data[prefix .. 'LastSoldOutAt'])
-    local restockAt = number(data[prefix .. 'RestockEstimateAt'])
-    local windowOpenAt = number(data[prefix .. 'WindowOpenAt'])
-    local windowCloseAt = number(data[prefix .. 'WindowCloseAt'])
-    local bestDepartureAt = number(data[prefix .. 'BestDepartureAt'])
-    local hitRate = number(data[prefix .. 'HitRate'])
-    local status = safeText(data[prefix .. 'Status'], 'INSUFFICIENT_HISTORY')
-    local message = safeText(data[prefix .. 'Message'], '')
-    local statusColor, overlayText = getStatusPresentation(status)
+    local now = os.time(); local travelSeconds = number(data[prefix .. 'TravelSeconds']); local stock = number(data[prefix .. 'Stock']); local foreignPrice = number(data[prefix .. 'ForeignPrice'])
+    local marketValue = number(data[prefix .. 'MarketValue']); local lastSoldOutAt = number(data[prefix .. 'LastSoldOutAt']); local restockAt = number(data[prefix .. 'RestockEstimateAt'])
+    local windowOpenAt = number(data[prefix .. 'WindowOpenAt']); local windowCloseAt = number(data[prefix .. 'WindowCloseAt']); local bestDepartureAt = number(data[prefix .. 'BestDepartureAt']); local hitRate = number(data[prefix .. 'HitRate'])
+    local status = safeText(data[prefix .. 'Status'], 'INSUFFICIENT_HISTORY'); local message = safeText(data[prefix .. 'Message'], ''); local statusColor, overlayText = getStatusPresentation(status)
 
-    setVariable(prefix .. 'TravelText', formatDuration(travelSeconds))
-    setVariable(prefix .. 'StockText', formatInteger(stock))
-    setVariable(prefix .. 'PriceText', formatMoney(foreignPrice))
-    setVariable(prefix .. 'MarketValueText', formatMoney(marketValue))
-    setVariable(prefix .. 'PriceColor', getPriceColor(data, prefix, status))
-    setVariable(prefix .. 'StatusText', status:gsub('_', ' '))
-    setVariable(prefix .. 'StatusColor', statusColor)
-    setVariable(prefix .. 'OverlayText', overlayText)
+    setVariable(prefix .. 'TravelText', formatDuration(travelSeconds)); setVariable(prefix .. 'StockText', formatInteger(stock)); setVariable(prefix .. 'PriceText', formatMoney(foreignPrice))
+    setVariable(prefix .. 'MarketValueText', formatMoney(marketValue)); setVariable(prefix .. 'PriceColor', getPriceColor(data, prefix, status)); setVariable(prefix .. 'StatusText', status:gsub('_', ' ')); setVariable(prefix .. 'StatusColor', statusColor); setVariable(prefix .. 'OverlayText', overlayText)
+    if stock > 0 then setVariable(prefix .. 'StockHeaderText', 'Stock: ' .. formatInteger(stock))
+    elseif lastSoldOutAt > 0 then setVariable(prefix .. 'StockHeaderText', 'Out of Stock for ' .. formatHoursMinutes(now - lastSoldOutAt) .. ' since ' .. os.date('%H:%M', lastSoldOutAt))
+    else setVariable(prefix .. 'StockHeaderText', 'Out of Stock') end
 
-    if stock > 0 then
-        setVariable(prefix .. 'StockHeaderText', 'Stock: ' .. formatInteger(stock))
-    elseif lastSoldOutAt > 0 then
-        setVariable(prefix .. 'StockHeaderText', 'Out of Stock for ' .. formatHoursMinutes(now - lastSoldOutAt) .. ' since ' .. os.date('%H:%M', lastSoldOutAt))
-    else
-        setVariable(prefix .. 'StockHeaderText', 'Out of Stock')
-    end
-
-    local restockText = 'learning'
-    local restockEta = 0
-    if stock > 0 and restockAt > 0 and restockAt <= now then
-        restockText = 'live +' .. formatDuration(now - restockAt)
-    elseif restockAt > now then
-        restockEta = restockAt - now
-        restockText = '~' .. formatDuration(restockEta)
-    elseif restockAt > 0 then
-        restockText = 'due / variable'
-    end
+    local restockText = 'learning'; local restockEta = 0
+    if stock > 0 and restockAt > 0 and restockAt <= now then restockText = 'live +' .. formatDuration(now - restockAt)
+    elseif restockAt > now then restockEta = restockAt - now; restockText = '~' .. formatDuration(restockEta)
+    elseif restockAt > 0 then restockText = 'due / variable' end
     setVariable(prefix .. 'RestockText', restockText)
     restockWanted[prefix] = stock <= 0 and restockEta > 0 and travelSeconds > 0 and restockEta > travelSeconds
 
     local decision = message
     if status == 'SAFE_WINDOW' then
-        if windowOpenAt > now then
-            decision = 'Window opens in ' .. formatDuration(windowOpenAt - now)
-        elseif windowCloseAt > now then
-            decision = 'Leave before ' .. formatDuration(windowCloseAt - now)
-        else
-            decision = 'Window closed'
-        end
+        if windowOpenAt > now then decision = 'Window opens in ' .. formatDuration(windowOpenAt - now)
+        elseif windowCloseAt > now then decision = 'Leave before ' .. formatDuration(windowCloseAt - now)
+        else decision = 'Window closed' end
     elseif status == 'BEST_ODDS' then
-        if bestDepartureAt > now then
-            decision = 'Leave in ' .. formatDuration(bestDepartureAt - now)
-        elseif bestDepartureAt > 0 and bestDepartureAt >= (now - 60) then
-            decision = 'LEAVE NOW'
-        else
-            decision = message ~= '' and message or 'Best window passed'
-        end
+        if bestDepartureAt > now then decision = 'Leave in ' .. formatDuration(bestDepartureAt - now)
+        elseif bestDepartureAt > 0 and bestDepartureAt >= (now - 60) then decision = 'LEAVE NOW'
+        else decision = message ~= '' and message or 'Best window passed' end
         if hitRate > 0 then decision = decision .. string.format(' | %.0f%% hist.', hitRate * 100) end
-    elseif status == 'LOW_MARGIN' or status == 'UNPROFITABLE' then
-        decision = message ~= '' and message or 'No departure recommendation'
-    elseif status == 'STALE_DATA' then
-        decision = message ~= '' and message or 'Data stale - check source'
-    elseif decision == '' then
-        decision = 'Learning - no departure recommendation'
-    end
-
+    elseif status == 'LOW_MARGIN' or status == 'UNPROFITABLE' then decision = message ~= '' and message or 'No departure recommendation'
+    elseif status == 'STALE_DATA' then decision = message ~= '' and message or 'Data stale - check source'
+    elseif decision == '' then decision = 'Learning - no departure recommendation' end
     setVariable(prefix .. 'DecisionText', decision)
 
     local tooltip = { decision }
     if travelSeconds > 0 then table.insert(tooltip, 'Flight ' .. formatDuration(travelSeconds)) end
     if marketValue > 0 then table.insert(tooltip, 'Torn market reference ' .. formatMoney(marketValue)) end
-    if restockAt > now then
-        table.insert(tooltip, 'Restock estimate ' .. formatDuration(restockAt - now) .. ' (' .. os.date('%H:%M', restockAt) .. ')')
-    elseif stock > 0 and restockAt > 0 then
-        table.insert(tooltip, 'Current restock began ' .. formatShortElapsed(now - restockAt) .. ' ago (' .. os.date('%H:%M', restockAt) .. ')')
-    elseif restockAt > 0 then
-        table.insert(tooltip, 'Restock estimate due / variable (' .. os.date('%H:%M', restockAt) .. ')')
-    end
-    if stock <= 0 and lastSoldOutAt > 0 then
-        table.insert(tooltip, 'Sold out ' .. formatShortElapsed(now - lastSoldOutAt) .. ' ago (' .. os.date('%H:%M', lastSoldOutAt) .. ')')
-    end
+    if restockAt > now then table.insert(tooltip, 'Restock estimate ' .. formatDuration(restockAt - now) .. ' (' .. os.date('%H:%M', restockAt) .. ')')
+    elseif stock > 0 and restockAt > 0 then table.insert(tooltip, 'Current restock began ' .. formatShortElapsed(now - restockAt) .. ' ago (' .. os.date('%H:%M', restockAt) .. ')')
+    elseif restockAt > 0 then table.insert(tooltip, 'Restock estimate due / variable (' .. os.date('%H:%M', restockAt) .. ')') end
+    if stock <= 0 and lastSoldOutAt > 0 then table.insert(tooltip, 'Sold out ' .. formatShortElapsed(now - lastSoldOutAt) .. ' ago (' .. os.date('%H:%M', lastSoldOutAt) .. ')') end
     table.insert(tooltip, 'Departure/window timing uses retained availability and depletion history')
     setVariable(prefix .. 'DecisionTooltipText', table.concat(tooltip, ' | '))
 end
 
 local function oldestSourceTimestamp(data)
-    local uk = number(data.UKSourceTimestamp)
-    local jp = number(data.JPSourceTimestamp)
+    local uk = number(data.UKSourceTimestamp); local jp = number(data.JPSourceTimestamp)
     if uk > 0 and jp > 0 then return math.min(uk, jp) end
     if uk > 0 then return uk end
     if jp > 0 then return jp end
@@ -429,37 +386,23 @@ local function oldestSourceTimestamp(data)
 end
 
 local function updateHeartbeatText(data, now)
-    local remaining = 0
-    if nextPollAt ~= nil then remaining = math.max(0, nextPollAt - now) end
+    local remaining = 0; if nextPollAt ~= nil then remaining = math.max(0, nextPollAt - now) end
     local sourceStatus = safeText(data.UpdatedText, '')
-    if sourceStatus:find('failed', 1, true) then
-        setVariable('UpdatedText', sourceStatus .. string.format(' | retry %ds', remaining))
-        return
-    end
+    if sourceStatus:find('failed', 1, true) then setVariable('UpdatedText', sourceStatus .. string.format(' | retry %ds', remaining)); return end
     local heartbeat = readEpochFile(heartbeatPath)
-    if heartbeat <= 0 then
-        setVariable('UpdatedText', string.format('Waiting for first update | next poll %ds', remaining))
-        return
-    end
-    local provider = providerLabel(safeText(data.LiveProvider, ''))
-    local sourceTimestamp = oldestSourceTimestamp(data)
-    local sourceText = ''
-    if provider ~= '' and sourceTimestamp > 0 then
-        sourceText = string.format(' | %s %ds old', provider, math.max(0, now - sourceTimestamp))
-    elseif provider ~= '' then
-        sourceText = ' | ' .. provider
-    end
+    if heartbeat <= 0 then setVariable('UpdatedText', string.format('Waiting for first update | next poll %ds', remaining)); return end
+    local provider = providerLabel(safeText(data.LiveProvider, '')); local sourceTimestamp = oldestSourceTimestamp(data); local sourceText = ''
+    if provider ~= '' and sourceTimestamp > 0 then sourceText = string.format(' | %s %ds old', provider, math.max(0, now - sourceTimestamp))
+    elseif provider ~= '' then sourceText = ' | ' .. provider end
     local age = math.max(0, now - heartbeat)
-    if age > (pollInterval * 2) then
-        setVariable('UpdatedText', string.format('UPDATE STALE - last %s (%ds ago)%s | retry %ds', os.date('%H:%M:%S', heartbeat), age, sourceText, remaining))
-    else
-        setVariable('UpdatedText', string.format('Updated %s%s | next poll %ds', os.date('%H:%M:%S', heartbeat), sourceText, remaining))
-    end
+    if age > (pollInterval * 2) then setVariable('UpdatedText', string.format('UPDATE STALE - last %s (%ds ago)%s | retry %ds', os.date('%H:%M:%S', heartbeat), age, sourceText, remaining))
+    else setVariable('UpdatedText', string.format('Updated %s%s | next poll %ds', os.date('%H:%M:%S', heartbeat), sourceText, remaining)) end
 end
 
 function Initialize()
     local configured = SELF:GetOption('StateFile', '#@#Generated\\state.kv')
     local heartbeatConfigured = SELF:GetOption('HeartbeatFile', '#@#Generated\\last-update.txt')
+    local preferencesConfigured = SELF:GetOption('PreferencesFile', '#@#..\\data\\runtime\\preferences.json')
     local configuredPoll = tonumber(SELF:GetOption('PollInterval', '60')) or 60
     local configuredFailureRetry = tonumber(SELF:GetOption('FailureRetryInterval', '15')) or 15
     local configuredMaxExpanded = tonumber(SELF:GetOption('MaxExpandedCards', '2')) or 2
@@ -469,59 +412,44 @@ function Initialize()
     if configuredMaxExpanded < 1 then configuredMaxExpanded = 1 end
     if configuredMaxExpanded > 4 then configuredMaxExpanded = 4 end
 
-    statePath = SKIN:MakePathAbsolute(configured)
-    heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
-    pollInterval = math.floor(configuredPoll)
-    failureRetryInterval = math.floor(configuredFailureRetry)
-    maxExpandedCards = math.floor(configuredMaxExpanded)
-    failureRetryArmed = false
-    nextPollAt = os.time() + pollInterval
-
-    cardExpanded.UKPrimary = maxExpandedCards >= 1
-    cardExpanded.JPPrimary = maxExpandedCards >= 2
-    cardExpanded.UKSecondary = false
-    cardExpanded.JPSecondary = false
+    statePath = SKIN:MakePathAbsolute(configured); heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured); preferencesPath = SKIN:MakePathAbsolute(preferencesConfigured)
+    pollInterval = math.floor(configuredPoll); failureRetryInterval = math.floor(configuredFailureRetry); maxExpandedCards = math.floor(configuredMaxExpanded)
+    failureRetryArmed = false; nextPollAt = os.time() + pollInterval; pinnedMarket = readPinnedPreference(preferencesPath)
+    cardExpanded.UKPrimary = maxExpandedCards >= 1; cardExpanded.JPPrimary = maxExpandedCards >= 2; cardExpanded.UKSecondary = false; cardExpanded.JPSecondary = false
 end
 
 function ToggleCard(cardKey)
     if cardExpanded[cardKey] == nil or not isCardVisible(cardKey) then return end
-
+    local pinKey = pinnedCardKey()
     if cardExpanded[cardKey] then
+        if cardKey == pinKey then return end
         cardExpanded[cardKey] = false
     else
-        if countExpandedCards() >= maxExpandedCards then collapseForRequestedCard(cardKey) end
+        if countExpandedCards() >= maxExpandedCards and not collapseForRequestedCard(cardKey) then return end
         cardExpanded[cardKey] = true
     end
+    applyCardLayout(); SKIN:Bang('!UpdateMeter', '*'); SKIN:Bang('!Redraw')
+end
 
+function TogglePin(cardKey)
+    if cardMarket[cardKey] == nil or not baseCardVisible(cardKey) then return end
+    local market = cardMarket[cardKey]
+    if pinnedMarket == market then pinnedMarket = '' else pinnedMarket = market; cardExpanded[cardKey] = true end
+    setVariable('PinRequest', pinnedMarket)
     applyCardLayout()
-    SKIN:Bang('!UpdateMeter', '*')
-    SKIN:Bang('!Redraw')
+    SKIN:Bang('!CommandMeasure', 'MeasurePinPreference', 'Run')
+    SKIN:Bang('!UpdateMeter', '*'); SKIN:Bang('!Redraw')
 end
 
 function Update()
-    local now = os.time()
-    local data = readState()
-    local sourceStatus = safeText(data.UpdatedText, '')
-    local sourceFailed = sourceStatus:find('failed', 1, true) ~= nil
+    local now = os.time(); local data = readState(); local sourceStatus = safeText(data.UpdatedText, ''); local sourceFailed = sourceStatus:find('failed', 1, true) ~= nil
     if nextPollAt == nil then nextPollAt = now + pollInterval end
-    if sourceFailed and not failureRetryArmed then
-        local retryAt = now + failureRetryInterval
-        if retryAt < nextPollAt then nextPollAt = retryAt end
-        failureRetryArmed = true
-    elseif not sourceFailed then
-        failureRetryArmed = false
-    end
-    if now >= nextPollAt then
-        nextPollAt = now + pollInterval
-        SKIN:Bang('!CommandMeasure', 'MeasureUpdate', 'Run')
-    end
+    if sourceFailed and not failureRetryArmed then local retryAt = now + failureRetryInterval; if retryAt < nextPollAt then nextPollAt = retryAt end; failureRetryArmed = true
+    elseif not sourceFailed then failureRetryArmed = false end
+    if now >= nextPollAt then nextPollAt = now + pollInterval; SKIN:Bang('!CommandMeasure', 'MeasureUpdate', 'Run') end
 
+    if number(data.TravelFilterActive) == 1 then travelFilterCountryId = safeText(data.TravelDestinationCountryId, '') else travelFilterCountryId = '' end
     setVariable('TravelModeText', safeText(data.TravelModeLabel, 'Airstrip'))
-    updateHeartbeatText(data, now)
-    updateDestination(data, 'UK')
-    updateSecondaryItem(data, 'UK')
-    updateDestination(data, 'JP')
-    updateSecondaryItem(data, 'JP')
-    applyCardLayout()
+    updateHeartbeatText(data, now); updateDestination(data, 'UK'); updateSecondaryItem(data, 'UK'); updateDestination(data, 'JP'); updateSecondaryItem(data, 'JP'); applyCardLayout()
     return 0
 end
