@@ -46,10 +46,8 @@ local function copyProjectionFields(data)
 end
 
 local function stabilizeProjection(data)
-    -- UpdateTracker still publishes compatibility fields before OpportunityState
-    -- completes. During that short interval Opportunity/UI keys are absent, not
-    -- intentionally zero. Keep the last complete projection until a new explicit
-    -- OpportunityCount arrives so the skin never flashes back to "Learning".
+    -- UpdateTracker publishes compatibility fields before OpportunityState completes.
+    -- Keep the last complete opportunity/UI projection during that short interval.
     if data.OpportunityCount ~= nil then
         lastProjectionData = copyProjectionFields(data)
     elseif lastProjectionData ~= nil then
@@ -136,8 +134,6 @@ local function updateFilters(data)
     setVariable('TripMediumColor', number(data.UITripMediumOn) == 1 and '82,174,255,255' or '145,152,164,255')
     setVariable('TripLongColor', number(data.UITripLongOn) == 1 and '82,174,255,255' or '145,152,164,255')
 
-    -- Keep control markers ASCII. Rainmeter may interpret UTF-8 skin literals as
-    -- ANSI on some installations, which renders the old triangle as mojibake.
     SKIN:Bang('!SetOption', 'MeterItemFilter', 'Text', 'ITEM  ' .. itemText .. '  v')
     SKIN:Bang('!SetOption', 'MeterTripExpand', 'Text', 'v')
     SKIN:Bang('!SetOption', 'MeterCategoryFilter', 'Text', 'CAT  ' .. categoryText .. '  v')
@@ -146,14 +142,13 @@ end
 local function applySortColors(mode)
     local active = '82,174,255,255'
     local inactive = '145,152,164,255'
-    setVariable('SortOptimalColor', mode == 'optimal' and active or inactive)
     setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
-    setVariable('SortProfitColor', mode == 'profit' and active or inactive)
-    setVariable('SortTimeColor', mode == 'time' and active or inactive)
+    setVariable('SortGrossColor', mode == 'gross' and active or inactive)
+    setVariable('SortProfitHourColor', mode == 'profit_per_hour' and active or inactive)
 end
 
 local function updateSort(data, now)
-    local projected = safeText(data.OpportunitySortMode, 'optimal'):lower()
+    local projected = safeText(data.OpportunitySortMode, 'upcoming'):lower()
     if pendingSortMode ~= nil then
         if projected == pendingSortMode or now >= pendingSortUntil then
             pendingSortMode = nil
@@ -163,42 +158,16 @@ local function updateSort(data, now)
     applySortColors(pendingSortMode or projected)
 end
 
-local function parseMoney(value)
-    local text = safeText(value, '')
-    local negative = text:find('^%-') ~= nil
-    local digits = text:gsub('[^0-9]', '')
-    local n = tonumber(digits) or 0
-    if negative then n = -n end
-    return n
-end
-
 local function updateOpportunityGrossMeter(data, prefix, index)
     local grossText = safeText(data[prefix .. 'GrossText'], '')
-    local foreign = parseMoney(data[prefix .. 'PriceText'])
-    local marketValue = parseMoney(data[prefix .. 'MarketValueText'])
-    local gross = parseMoney(grossText)
-    local unitSpread = marketValue - foreign
-    local quantity = 0
-    if unitSpread ~= 0 and gross ~= 0 then
-        quantity = math.floor(math.abs(gross / unitSpread) + 0.5)
-    end
-
+    local quantityText = safeText(data[prefix .. 'QuantityText'], '')
     local display = grossText
     if display ~= '' then
-        display = display .. ' trip'
-        if quantity > 0 then display = display .. ' x' .. tostring(quantity) end
+        display = display .. ' gross'
+        if quantityText ~= '' then display = display .. ' ' .. quantityText end
     end
     SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'Text', display)
-
-    local tooltip = safeText(data[prefix .. 'Tooltip'], '')
-    if quantity > 0 and unitSpread ~= 0 then
-        local sign = unitSpread < 0 and '-' or ''
-        local absolute = math.abs(unitSpread)
-        local formatted = tostring(absolute):reverse():gsub('(%d%d%d)', '%1,'):reverse():gsub('^,', '')
-        local arithmetic = string.format('Unit spread %s$%s x %d = %s trip gross before travel cost', sign, formatted, quantity, grossText)
-        if tooltip ~= '' then tooltip = arithmetic .. ' | ' .. tooltip else tooltip = arithmetic end
-    end
-    SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'ToolTipText', tooltip)
+    SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'ToolTipText', safeText(data[prefix .. 'Tooltip'], ''))
 end
 
 local function updateOpportunities(data)
@@ -209,8 +178,8 @@ local function updateOpportunities(data)
     for i = 1, 8 do
         local prefix = 'Opportunity' .. i
         for _, suffix in ipairs({
-            'Key','RankText','OptimalText','Name','Country','CountryCode','WindowText','LeaveText',
-            'ChanceText','TimeText','GrossText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip'
+            'Key','RankText','Name','Country','CountryCode','WindowText','LeaveText',
+            'ChanceText','TimeText','GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip'
         }) do
             local fallback = ''
             if suffix == 'PriceColor' then fallback = '145,152,164,255' end
@@ -274,8 +243,8 @@ function ResetFilters()
 end
 
 function SetSortMode(mode)
-    mode = safeText(mode, 'optimal'):lower()
-    if mode ~= 'optimal' and mode ~= 'upcoming' and mode ~= 'profit' and mode ~= 'time' then mode = 'optimal' end
+    mode = safeText(mode, 'upcoming'):lower()
+    if mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
     deferPolling(10)
     pendingSortMode = mode
     pendingSortUntil = os.time() + 10
@@ -283,10 +252,9 @@ function SetSortMode(mode)
     setVariable('PreferenceAction', 'SetSortMode')
     setVariable('PreferenceValue', mode)
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
-    SKIN:Bang('!UpdateMeter', 'MeterSortOptimal')
     SKIN:Bang('!UpdateMeter', 'MeterSortUpcoming')
-    SKIN:Bang('!UpdateMeter', 'MeterSortProfit')
-    SKIN:Bang('!UpdateMeter', 'MeterSortTime')
+    SKIN:Bang('!UpdateMeter', 'MeterSortGross')
+    SKIN:Bang('!UpdateMeter', 'MeterSortProfitHour')
     SKIN:Bang('!Redraw')
 end
 
