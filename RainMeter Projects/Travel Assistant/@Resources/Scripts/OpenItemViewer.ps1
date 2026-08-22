@@ -127,8 +127,11 @@ function Get-ViewerMarketValue {
     return 0L
 }
 
-$marketRows = New-Object System.Collections.Generic.List[object]
-foreach ($property in @($engine.observedMarkets.PSObject.Properties)) {
+# Use ordinary arrays for Windows PowerShell 5.1 compatibility. Generic List<T>
+# values can throw PSEnumerableBinder "Argument types do not match" when they
+# are enumerated inside @(...).
+$marketRows = @()
+foreach ($property in $engine.observedMarkets.PSObject.Properties) {
     $market = $property.Value
     if ($null -eq $market) { continue }
     if (($market.PSObject.Properties['catalogActive'] -and $market.catalogActive -eq $false) -or ($market.PSObject.Properties['catalogStatus'] -and [string]$market.catalogStatus -eq 'legacy_removed')) { continue }
@@ -153,7 +156,7 @@ foreach ($property in @($engine.observedMarkets.PSObject.Properties)) {
     if ($countryNames.ContainsKey($countryId)) { $countryName = [string]$countryNames[$countryId] }
     $name = Get-ViewerItemName -ItemId $itemId -Market $market
     $category = Get-ViewerCategory -ItemId $itemId
-    $marketRows.Add([pscustomobject]@{
+    $marketRows += [pscustomobject]@{
         key = ($countryId + ':' + [string]$itemId)
         countryId = $countryId
         countryName = $countryName
@@ -169,7 +172,7 @@ foreach ($property in @($engine.observedMarkets.PSObject.Properties)) {
         sourceTimestamp = $sourceTimestamp
         source = [string](Get-ViewerProperty $market 'source')
         market = $market
-    })
+    }
 }
 
 $sortedRows = @($marketRows | Sort-Object @{Expression={ if ($_.profitKnown) { 0 } else { 1 } };Ascending=$true}, @{Expression='profitPerItem';Descending=$true}, name, countryName)
@@ -195,30 +198,30 @@ foreach ($path in @($SeedObservationFile,$RuntimeObservationFile)) {
                 if (-not $baseline.ContainsKey($key) -or [long](Get-ViewerProperty $baseline[$key] 'timestamp') -lt $timestamp) { $baseline[$key] = $row }
                 continue
             }
-            if (-not $history.ContainsKey($key)) { $history[$key] = New-Object System.Collections.Generic.List[object] }
-            $history[$key].Add($row)
+            if (-not $history.ContainsKey($key)) { $history[$key] = @() }
+            $history[$key] = @($history[$key] + $row)
         } catch { }
     }
 }
 
 function Get-ViewerGraphRows {
     param([object]$Selection)
-    $rows = New-Object System.Collections.Generic.List[object]
+    $graphRows = @()
     $seen = New-Object 'System.Collections.Generic.HashSet[string]'
     $selectionKey = [string]$Selection.key
     if ($baseline.ContainsKey($selectionKey)) {
         $base = $baseline[$selectionKey]
-        $rows.Add([pscustomobject]@{
+        $graphRows += [pscustomobject]@{
             timestamp = $cutoff
             stock = [long](Get-ViewerProperty $base 'stock')
             foreignPrice = [long](Get-ViewerProperty $base 'foreignPrice')
             source = 'carry_forward'
-        })
+        }
     }
     if ($history.ContainsKey($selectionKey)) {
         foreach ($row in @($history[$selectionKey] | Sort-Object timestamp)) {
             $key = ('{0}|{1}|{2}|{3}' -f [long](Get-ViewerProperty $row 'timestamp'),[long](Get-ViewerProperty $row 'stock'),[long](Get-ViewerProperty $row 'foreignPrice'),[string](Get-ViewerProperty $row 'source'))
-            if ($seen.Add($key)) { $rows.Add($row) }
+            if ($seen.Add($key)) { $graphRows += $row }
         }
     }
     $snapshotTs = [long]$Selection.sourceTimestamp
@@ -226,10 +229,10 @@ function Get-ViewerGraphRows {
     if ($snapshotTs -ge $cutoff) {
         $snapshotKey = ('{0}|{1}|{2}|{3}' -f $snapshotTs,[long]$Selection.stock,[long]$Selection.foreignPrice,[string]$Selection.source)
         if ($seen.Add($snapshotKey)) {
-            $rows.Add([pscustomobject]@{ timestamp=$snapshotTs; stock=[long]$Selection.stock; foreignPrice=[long]$Selection.foreignPrice; source=[string]$Selection.source })
+            $graphRows += [pscustomobject]@{ timestamp=$snapshotTs; stock=[long]$Selection.stock; foreignPrice=[long]$Selection.foreignPrice; source=[string]$Selection.source }
         }
     }
-    return @($rows | Sort-Object timestamp)
+    return @($graphRows | Sort-Object timestamp)
 }
 
 function New-ViewerGraphBitmap {
