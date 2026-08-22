@@ -2,98 +2,108 @@
 
 **Checkpoint:** 2026-08-21
 
-**Active run:** first visible multi-item release + parenthesized Torn market reference. See `docs/NEXT_CODEX_RUN.md`.
+**Active run:** independent multi-item card correction. See `docs/NEXT_CODEX_RUN.md`.
 
-## Accepted data/economics baseline
+## Accepted foundation
 
-Target Windows has accepted the broad catalog/market-validity foundation:
-
-```text
-provider:                    prometheus
-countriesSeen:               11
-provider country-item rows:  232
-verified legacy rows:          5
-active candidate markets:    227
-observed item IDs:            202
-metadata rows:                202
-categoriesResolved:           202
-unresolvedItems:                0
-nameConflicts:                  0
-```
-
-The five verified legacy rows remain observable for provenance but are excluded from new history/cycle/resale/candidate work.
-
-Torn catalog metadata network requests remain rejected for heartbeat use after all tested catalog strategies timed out on the target host. `ItemMetadata.ps1` is maintenance-only; normal catalog data is local/offline.
-
-## Broad resale queue — LIVE ACCEPTED
-
-Target Windows completed a successful bounded queue request:
+Target Windows acceptance already covers:
 
 ```text
-activeMarkets : 227
-activeItems   : 197
-pricedItems   : 2
-freshItems    : 2
-staleItems    : 195
-successCount  : 1
-failureCount  : 0
-status        : OK
+11 foreign countries collected
+232 provider country-item rows at last live check
+227 active market relationships
+202 distinct observed items
+202 metadata rows
+202 categories resolved
+5 verified legacy provider rows excluded from new learning/economics work
 ```
 
-The returned row used the expected `torn_itemmarket` schema. Queue bounds remain one request per normal update, 60-second minimum cadence, 6-hour broad freshness, 1-hour failure backoff and 6-second request timeout.
+Also accepted:
 
-The queue now additionally prioritizes configured `visible=true` items among otherwise eligible stale/unpriced candidates. This does **not** increase request frequency.
+- existing UK/Japan Xanax collection/history/model path;
+- current `/user/perks` general capacity behavior;
+- category-specific Flower/Toy capacity isolation;
+- broad one-request-at-a-time Torn Item Market transport;
+- current Xanax graph/timing presentation.
 
-## Category-aware capacity — WINDOWS ACCEPTED
+## First multi-item screenshot — STRUCTURE REJECTED
 
-User reported all focused tests passed at `d30e1af`:
+The first 0.3.0 screenshot successfully displayed:
+
+- Nessie Plushie and Cherry Blossom;
+- their live foreign values and stock;
+- parenthesized Torn market values;
+- existing Xanax behavior.
+
+However, the new items were rendered as indented rows inside the existing Xanax country cards.
+
+That presentation is rejected because the durable opportunity identity is `country + itemId`; each item must therefore own its own card.
+
+## Independent item cards — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+
+Skin candidate version:
 
 ```text
-Run-CurrentCapacityTests.ps1
-Run-TravelProfileTests.ps1
-Validate-RainmeterSkin.ps1
+0.3.1
 ```
 
-Accepted semantics:
+Current intended cards:
 
 ```text
-Airstrip general/Xanax capacity = 18
-Standard general/Xanax capacity = 13
-Flower Shop 7★ -> +5 only for Flower
-Toy Shop    7★ -> +5 only for Plushie
+UK + Xanax
+UK + Nessie Plushie
+JP + Xanax
+JP + Cherry Blossom
 ```
 
-Thus with current general `+3`:
+Each card has its own:
+
+- border/background;
+- country flag;
+- item name;
+- foreign shop price;
+- smaller muted parenthesized Torn market reference;
+- stock/out-of-stock header;
+- expand/collapse control.
+
+The two Xanax cards retain their established graph/timing bodies.
+
+Nessie/Cherry now own item-specific graph images generated locally from retained `country + itemId` observations. They still do not emit actionable departure timing; their expanded bodies remain learning/economics-only.
+
+## Expansion/resource cap
+
+Current default:
 
 ```text
-Airstrip Flower at qualifying Flower Shop = 23
-Airstrip Plushie at qualifying Toy Shop    = 23
-Standard qualifying Flower/Plushie         = 18
-Xanax remains unchanged                    = 18 / 13
+MaxExpandedCards=2
 ```
 
-Positive explicit `profitability.capacityOverride` remains authoritative.
-
-## First visible multi-item release — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
-
-Skin version is now `0.3.0`.
-
-Implemented visible rows:
+Initial state:
 
 ```text
-United Kingdom: Xanax + Nessie Plushie
-Japan:          Xanax + Cherry Blossom
+UK Xanax       expanded
+UK Nessie      collapsed
+JP Xanax       expanded
+JP Cherry      collapsed
 ```
 
-Nessie and Cherry are `visible=true` but remain `enabled=false` and `optimizerEligible=false`, so the established primary Xanax collector/model is not replaced.
+`StateReader.lua` enforces the maximum interactively. Expanding a third card collapses another expanded card first, preferring the same-country companion card.
 
-New local-only presentation layer:
+The cap affects only Rainmeter presentation. Collection, history, metadata and resale population continue for all active markets.
+
+## Market-value display
+
+All visible card headers use:
 
 ```text
-@Resources/Scripts/VisibleItems.ps1
+foreignPrice (marketValue)
 ```
 
-Runtime order:
+The foreign price remains primary/profitability-colored. The parenthesized market reference is smaller and muted.
+
+Missing/stale broad market values remain displayable/unresolved according to existing cache semantics and never become zero economics.
+
+## Runtime order
 
 ```text
 UpdateTracker
@@ -101,45 +111,34 @@ ShadowCollector
 LocalCatalog
 FinalizeState
 VisibleItems
-visible heartbeat
+heartbeat
 ResaleQueue
 ```
 
-`VisibleItems.ps1` makes no network calls. It reads current provider-observed stock/foreign price, market validity, local metadata, shared `resaleCache`, saved company stars, and category-aware capacity/economics.
+`VisibleItems.ps1` is local-only. It may render secondary graphs but performs no network access and writes no synthetic history.
 
-### Price convention
+Broad resale remains bounded to one Torn Item Market request per normal update.
 
-Every visible item now renders:
+## Current validation boundary
 
-```text
-foreign shop price (Torn Item Market reference)
-```
+The independent-card code has been committed, but Windows/Rainmeter acceptance has not yet been reported.
 
-The foreign price keeps profitability coloring. The parenthesized market reference is smaller and muted. Missing market references render as `-` until the bounded queue populates them. Stale broad references may remain visible as context but do not drive secondary profitability coloring.
-
-### Deliberate first-release limits
-
-- UK/JP 8-hour graphs remain Xanax graphs.
-- Existing plane/restock/decision row remains Xanax timing/model output.
-- Secondary Nessie/Cherry rows expose stock, foreign price, market reference, and economics/capacity context; they do not yet claim independent trained departure timing.
-- No filters yet.
-- No secondary item is optimizer eligible.
-
-## Focused tests added/pending target Windows
+Focused checks now required:
 
 ```text
-tests/Validate-VisibleItems.ps1
-tests/Run-VisibleItemsTests.ps1
+Validate-VisibleItems.ps1
+Run-VisibleItemsTests.ps1
+Validate-RainmeterSkin.ps1
 ```
 
-Existing resale/skin validators were extended for visible-item priority and the new market-value layout.
+Then one normal `RunUpdate.ps1 -Action Update`, Rainmeter refresh and visual interaction check.
 
-Required target-Windows acceptance is defined in `docs/NEXT_CODEX_RUN.md`. A Rainmeter screenshot is required for final layout confidence because static validation cannot prove text geometry/overlap.
+Do not mark 0.3.1 accepted until the user confirms separate card boundaries, correct expand/collapse reflow and preserved stock/market-value rendering.
 
-## Next phases after UI acceptance
+## Next after acceptance
 
-1. country/category presentation filters;
-2. travel-state destination filtering and arrival countdown;
-3. broader item timing/economics presentation when evidence supports it;
-4. full-country opportunity matrix;
-5. `Optimal` scheduling only after sufficient evidence/economics exist.
+1. generalize independent card enumeration beyond the two proof secondary items;
+2. add country/category presentation filters;
+3. add Torn travel-state destination filtering and arrival countdown;
+4. generalize timing/economics per item where evidence is sufficient;
+5. build `Optimal` later as a bounded scheduling layer, not a simple sort.
