@@ -37,7 +37,8 @@ $observationFile = Join-Path $runtimeDir 'observations.jsonl'
     [pscustomobject]@{schemaVersion=1;timestamp=100000;country='alpha';itemId=1;stock=5;foreignPrice=100;source='fixture';sourceTimestamp=100000},
     [pscustomobject]@{schemaVersion=1;timestamp=19900000;country='alpha';itemId=1;stock=3;foreignPrice=100;source='fixture';sourceTimestamp=19900000},
     [pscustomobject]@{schemaVersion=1;timestamp=200000;country='beta';itemId=2;stock=7;foreignPrice=200;source='fixture';sourceTimestamp=200000},
-    [pscustomobject]@{schemaVersion=1;timestamp=19999000;country='delta';itemId=4;stock=4;foreignPrice=400;source='history_bootstrap';sourceTimestamp=19999000}
+    [pscustomobject]@{schemaVersion=1;timestamp=19999000;country='delta';itemId=4;stock=4;foreignPrice=400;source='history_bootstrap';sourceTimestamp=19999000},
+    [pscustomobject]@{schemaVersion=1;timestamp=19999500;country='gamma';itemId=3;stock=9;foreignPrice=300;source='history_repair_baseline';sourceTimestamp=19999500}
 ) | ForEach-Object { $_ | ConvertTo-Json -Compress } | Set-Content -LiteralPath $observationFile -Encoding UTF8
 
 $cycleFile = Join-Path $runtimeDir 'cycles.jsonl'
@@ -56,36 +57,34 @@ try {
     $alphaRecent = @($rows | Where-Object { $_.country -eq 'alpha' -and [long]$_.timestamp -eq 19900000 })
     if ($alphaRecent.Count -ne 1 -or [int]$alphaRecent[0].stock -ne 3) { throw 'Alpha in-window change was not retained.' }
     $betaBaseline = @($rows | Where-Object { $_.country -eq 'beta' -and [long]$_.timestamp -eq $observationCutoff -and $_.source -eq 'retention_baseline' })
-    if ($betaBaseline.Count -ne 1 -or [int]$betaBaseline[0].stock -ne 7) { throw 'Beta unchanged state lost its retention baseline.' }
+    if ($betaBaseline.Count -ne 1 -or [int]$betaBaseline[0].stock -ne 7) { throw 'Beta unchanged state lost its real predecessor retention baseline.' }
+
+    if (@($rows | Where-Object { $_.source -in @('history_bootstrap','history_repair_baseline') }).Count -ne 0) {
+        throw 'Migration-era synthetic history was not removed before retention processing.'
+    }
+    if (@($rows | Where-Object { $_.country -eq 'gamma' -or $_.country -eq 'delta' }).Count -ne 0) {
+        throw 'Markets with only fabricated history must become unknown rather than receive a replacement baseline.'
+    }
 
     $cycles = @(Get-Content -LiteralPath $cycleFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
     if ($cycles.Count -ne 1 -or [long]$cycles[0].soldOutAt -ne ($cycleCutoff+1)) { throw 'Cycle retention pruning changed unexpectedly.' }
 
     $engineAfterPre = Get-Content -LiteralPath (Join-Path $runtimeDir 'engine-state.json') -Raw | ConvertFrom-Json
-    if ([long]$engineAfterPre.lastPruneAt -ne $now) { throw 'PreUpdate did not advance lastPruneAt to suppress the destructive legacy prune.' }
+    if ([long]$engineAfterPre.lastPruneAt -ne $now) { throw 'PreUpdate did not advance lastPruneAt.' }
 
+    # PostUpdate is cleanup-only. It must not fabricate a baseline for markets that
+    # still have current engine state but no actual retained observation.
     & $testScript -Phase PostUpdate -Now $now
     $rowsAfterPost = @(Get-Content -LiteralPath $observationFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
-    $gamma = @($rowsAfterPost | Where-Object { $_.country -eq 'gamma' -and [int]$_.itemId -eq 3 })
-    if ($gamma.Count -ne 1 -or $gamma[0].source -ne 'history_repair_baseline' -or [int]$gamma[0].stock -ne 9 -or [long]$gamma[0].timestamp -ne $observationCutoff) {
-        throw 'Missing-market first-seen carried baseline was not repaired at the retention boundary.'
-    }
-
-    $deltaBaseline = @($rowsAfterPost | Where-Object { $_.country -eq 'delta' -and [int]$_.itemId -eq 4 -and $_.source -eq 'history_repair_baseline' })
-    $deltaBootstrap = @($rowsAfterPost | Where-Object { $_.country -eq 'delta' -and [int]$_.itemId -eq 4 -and $_.source -eq 'history_bootstrap' })
-    if ($deltaBaseline.Count -ne 1 -or [long]$deltaBaseline[0].timestamp -ne $observationCutoff -or [int]$deltaBaseline[0].stock -ne 4) {
-        throw 'Bootstrap-only market did not receive a carried repair baseline.'
-    }
-    if ($deltaBootstrap.Count -ne 1 -or [long]$deltaBootstrap[0].timestamp -ne 19999000) {
-        throw 'Bootstrap-only repair must preserve the truthful original bootstrap point.'
+    if (@($rowsAfterPost | Where-Object { $_.country -eq 'gamma' -or $_.country -eq 'delta' }).Count -ne 0) {
+        throw 'PostUpdate fabricated missing-market history.'
     }
 
     & $testScript -Phase PostUpdate -Now $now
     $rowsAfterSecondPost = @(Get-Content -LiteralPath $observationFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
-    if (@($rowsAfterSecondPost | Where-Object { $_.country -eq 'gamma' -and [int]$_.itemId -eq 3 }).Count -ne 1) { throw 'Missing-market history repair is not idempotent.' }
-    if (@($rowsAfterSecondPost | Where-Object { $_.country -eq 'delta' -and [int]$_.itemId -eq 4 }).Count -ne 2) { throw 'Bootstrap-only history repair is not idempotent.' }
+    if ($rowsAfterSecondPost.Count -ne $rowsAfterPost.Count) { throw 'Synthetic-history cleanup is not idempotent.' }
 
-    Write-Host 'Change-only observation retention, missing-market repair, and bootstrap-only migration tests passed.' -ForegroundColor Green
+    Write-Host 'Observed predecessor retention, synthetic-history purge, unknown-gap preservation, and cycle pruning tests passed.' -ForegroundColor Green
     exit 0
 } finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
