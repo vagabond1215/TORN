@@ -1,12 +1,25 @@
 local statePath = nil
 local heartbeatPath = nil
+local generatedDir = nil
 local pollInterval = 60
 local failureRetryInterval = 15
 local failureRetryArmed = false
 local nextPollAt = nil
 local lastProjectionData = nil
 local lastRenderData = nil
+local lastDisplayedData = nil
 local pendingSortMode = nil
+local expandedKey = ''
+local expandedRow = 0
+local lastInlineRenderRequestAt = 0
+local lastLayoutSignature = ''
+local lastFlagKeys = {}
+local lastGraphSignature = ''
+
+local graphExtra = 122
+local collapsedCardHeight = 50
+local expandedCardHeight = collapsedCardHeight + graphExtra
+local invisibleShape = 'Rectangle 0,0,0,0 | Fill Color 0,0,0,0 | StrokeWidth 0'
 
 local opportunitySuffixes = {
     'Key','RankText','Name','Country','CountryCode','WindowText','LeaveText',
@@ -39,9 +52,9 @@ local function moneyNumber(v)
     return sign * (tonumber(text) or 0)
 end
 
-local function readState()
+local function readKv(path)
     local out = {}
-    local file = io.open(statePath, 'r')
+    local file = io.open(path, 'r')
     if not file then return out end
     for line in file:lines() do
         local key, value = line:match('^([^=]+)=(.*)$')
@@ -49,6 +62,10 @@ local function readState()
     end
     file:close()
     return out
+end
+
+local function readState()
+    return readKv(statePath)
 end
 
 local function copyTable(data)
@@ -66,9 +83,6 @@ local function copyProjectionFields(data)
 end
 
 local function stabilizeProjection(data)
-    -- Never let an intermediate writer erase a complete projection. A transient
-    -- zero-row "Learning ..." pass is also non-authoritative once valid rows have
-    -- already been shown; retain those rows until a real empty-state reason arrives.
     if data.OpportunityCount ~= nil then
         local incomingCount = math.max(0, math.floor(number(data.OpportunityCount)))
         local incomingMessage = safeText(data.OpportunityMessage, '')
@@ -119,6 +133,11 @@ end
 local function setMeterVisible(meter, visible)
     if visible then SKIN:Bang('!ShowMeter', meter)
     else SKIN:Bang('!HideMeter', meter) end
+end
+
+local function setShape(meter, index, value)
+    local option = index == 1 and 'Shape' or ('Shape' .. index)
+    SKIN:Bang('!SetOption', meter, option, value)
 end
 
 local function providerLabel(provider)
@@ -208,13 +227,13 @@ local function configureInteractiveMeters()
     SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'Text', 'GROSS PROFIT')
     SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'X', '130')
     SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'W', '92')
-    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'ToolTipText', 'Highest total trip gross first; gross is unit spread times purchasable quantity')
+    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'ToolTipText', 'Highest total trip gross first')
     SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('gross')\"]")
 
     SKIN:Bang('!SetOption', 'MeterSortProfit', 'Text', 'PROFIT/HR')
     SKIN:Bang('!SetOption', 'MeterSortProfit', 'X', '226')
     SKIN:Bang('!SetOption', 'MeterSortProfit', 'W', '78')
-    SKIN:Bang('!SetOption', 'MeterSortProfit', 'ToolTipText', 'Trip gross divided by total elapsed hours; hit likelihood remains separate')
+    SKIN:Bang('!SetOption', 'MeterSortProfit', 'ToolTipText', 'Trip gross divided by total elapsed hours; likelihood stays separate')
     SKIN:Bang('!SetOption', 'MeterSortProfit', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('profit_per_hour')\"]")
     SKIN:Bang('!HideMeter', 'MeterSortTime')
 
@@ -226,10 +245,41 @@ local function configureInteractiveMeters()
     end
 
     for i = 1, 8 do
-        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Optimal')
-        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'X', '48')
-        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'W', '238')
-        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Graph', 'SolidColor', '0,0,0,1')
+        local p = 'MeterOpportunity' .. i
+        SKIN:Bang('!SetOption', p .. 'Rank', 'X', '30')
+        SKIN:Bang('!SetOption', p .. 'Rank', 'W', '36')
+        SKIN:Bang('!SetOption', p .. 'Rank', 'StringAlign', 'Center')
+        SKIN:Bang('!SetOption', p .. 'Rank', 'FontFace', 'Segoe UI Semibold')
+        SKIN:Bang('!SetOption', p .. 'Rank', 'FontSize', '7')
+        SKIN:Bang('!SetOption', p .. 'Rank', 'FontColor', '24,27,31,255')
+        SKIN:Bang('!SetOption', p .. 'Rank', 'Text', '#Opportunity' .. i .. 'TimeText#')
+
+        SKIN:Bang('!SetOption', p .. 'Name', 'X', '56')
+        SKIN:Bang('!SetOption', p .. 'Name', 'W', '248')
+        SKIN:Bang('!SetOption', p .. 'Gross', 'X', '504')
+        SKIN:Bang('!SetOption', p .. 'Gross', 'W', '130')
+        SKIN:Bang('!SetOption', p .. 'Gross', 'StringAlign', 'Right')
+        SKIN:Bang('!SetOption', p .. 'Window', 'X', '56')
+        SKIN:Bang('!SetOption', p .. 'Window', 'W', '86')
+        SKIN:Bang('!SetOption', p .. 'Leave', 'X', '146')
+        SKIN:Bang('!SetOption', p .. 'Leave', 'W', '88')
+        SKIN:Bang('!SetOption', p .. 'Chance', 'X', '238')
+        SKIN:Bang('!SetOption', p .. 'Chance', 'W', '58')
+        SKIN:Bang('!SetOption', p .. 'Price', 'X', '300')
+        SKIN:Bang('!SetOption', p .. 'Price', 'W', '198')
+
+        SKIN:Bang('!SetOption', p .. 'Graph', 'X', '520')
+        SKIN:Bang('!SetOption', p .. 'Graph', 'W', '18')
+        SKIN:Bang('!SetOption', p .. 'Graph', 'StringAlign', 'Center')
+        SKIN:Bang('!SetOption', p .. 'Graph', 'FontSize', '11')
+        SKIN:Bang('!SetOption', p .. 'Graph', 'Text', 'v')
+        SKIN:Bang('!SetOption', p .. 'Graph', 'ToolTipText', 'Expand 8-hour stock history in this card')
+        SKIN:Bang('!SetOption', p .. 'Graph', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"ToggleInlineGraph(" .. i .. ")\"]")
+        SKIN:Bang('!SetOption', p .. 'Graph', 'SolidColor', '0,0,0,1')
+
+        SKIN:Bang('!HideMeter', p .. 'Country')
+        SKIN:Bang('!HideMeter', p .. 'Time')
+        SKIN:Bang('!HideMeter', p .. 'Optimal')
     end
 end
 
@@ -301,7 +351,7 @@ local function locallySortedProjection(data, mode)
         for _, suffix in ipairs(opportunitySuffixes) do
             out[targetPrefix .. suffix] = data[sourcePrefix .. suffix] or ''
         end
-        out[targetPrefix .. 'RankText'] = '#' .. displayIndex
+        out[targetPrefix .. 'RankText'] = ''
     end
     out.OpportunitySortMode = mode
     return out
@@ -311,15 +361,219 @@ local function updateSort(mode)
     applySortColors(mode)
 end
 
+local function countryIdFromKey(key)
+    return safeText(key, ''):match('^([a-z0-9_]+):') or ''
+end
+
+local function applyFlagForRow(index, key)
+    if lastFlagKeys[index] == key then return end
+    lastFlagKeys[index] = key
+    local meter = 'MeterOpportunity' .. index .. 'Card'
+    for shapeIndex = 2, 7 do setShape(meter, shapeIndex, invisibleShape) end
+
+    local country = countryIdFromKey(key)
+    if country == 'mexico' then
+        setShape(meter,2,'Rectangle 4,4,12,28 | Fill Color 0,104,71,255 | StrokeWidth 0')
+        setShape(meter,3,'Rectangle 16,4,12,28 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,4,'Rectangle 28,4,12,28 | Fill Color 206,17,38,255 | StrokeWidth 0')
+        setShape(meter,5,'Ellipse 22,18,2.5,2.5 | Fill Color 76,112,72,255 | StrokeWidth 0')
+    elseif country == 'cayman_islands' then
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 0,36,125,255 | StrokeWidth 0')
+        setShape(meter,3,'Line 4,10,20,10 | StrokeWidth 3 | Stroke Color 255,255,255,255')
+        setShape(meter,4,'Line 12,4,12,16 | StrokeWidth 3 | Stroke Color 255,255,255,255')
+        setShape(meter,5,'Line 4,10,20,10 | StrokeWidth 1 | Stroke Color 207,20,43,255')
+        setShape(meter,6,'Line 12,4,12,16 | StrokeWidth 1 | Stroke Color 207,20,43,255')
+        setShape(meter,7,'Ellipse 32,20,4,5 | Fill Color 112,183,226,255 | StrokeWidth 1 | Stroke Color 255,255,255,255')
+    elseif country == 'canada' then
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 216,36,45,255 | StrokeWidth 0')
+        setShape(meter,3,'Rectangle 13,4,18,28 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,4,'Rectangle 20,11,4,14 | Fill Color 216,36,45,255 | StrokeWidth 0')
+        setShape(meter,5,'Rectangle 17,16,10,4 | Fill Color 216,36,45,255 | StrokeWidth 0')
+    elseif country == 'hawaii' then
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 204,20,43,255 | StrokeWidth 0')
+        setShape(meter,3,'Rectangle 4,8,36,4 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,4,'Rectangle 4,16,36,4 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,5,'Rectangle 4,24,36,4 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,6,'Rectangle 4,4,16,12 | Fill Color 0,40,104,255 | StrokeWidth 0')
+        setShape(meter,7,'Line 4,10,20,10 | StrokeWidth 2 | Stroke Color 255,255,255,255')
+    elseif country == 'united_kingdom' then
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 1,33,105,255 | StrokeWidth 0')
+        setShape(meter,3,'Line 4,4,40,32 | StrokeWidth 5 | Stroke Color 255,255,255,255')
+        setShape(meter,4,'Line 40,4,4,32 | StrokeWidth 5 | Stroke Color 255,255,255,255')
+        setShape(meter,5,'Rectangle 4,15,36,6 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,6,'Rectangle 4,17,36,3 | Fill Color 200,16,46,255 | StrokeWidth 0')
+        setShape(meter,7,'Rectangle 20,4,4,28 | Fill Color 200,16,46,255 | StrokeWidth 0')
+    elseif country == 'argentina' then
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 116,172,223,255 | StrokeWidth 0')
+        setShape(meter,3,'Rectangle 4,13,36,10 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,4,'Ellipse 22,18,2.5,2.5 | Fill Color 246,180,14,255 | StrokeWidth 0')
+    elseif country == 'switzerland' then
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 218,41,28,255 | StrokeWidth 0')
+        setShape(meter,3,'Rectangle 13,15,18,6 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,4,'Rectangle 19,9,6,18 | Fill Color 255,255,255,255 | StrokeWidth 0')
+    elseif country == 'japan' then
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,3,'Ellipse 22,18,7,7 | Fill Color 188,0,45,255 | StrokeWidth 0')
+    elseif country == 'china' then
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 222,41,16,255 | StrokeWidth 0')
+        setShape(meter,3,'Ellipse 11,11,3,3 | Fill Color 255,222,0,255 | StrokeWidth 0')
+        setShape(meter,4,'Ellipse 17,8,1.2,1.2 | Fill Color 255,222,0,255 | StrokeWidth 0')
+        setShape(meter,5,'Ellipse 19,12,1.2,1.2 | Fill Color 255,222,0,255 | StrokeWidth 0')
+        setShape(meter,6,'Ellipse 18,16,1.2,1.2 | Fill Color 255,222,0,255 | StrokeWidth 0')
+    elseif country == 'united_arab_emirates' then
+        setShape(meter,2,'Rectangle 4,4,36,9.4 | Fill Color 0,122,61,255 | StrokeWidth 0')
+        setShape(meter,3,'Rectangle 4,13.3,36,9.4 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,4,'Rectangle 4,22.6,36,9.4 | Fill Color 0,0,0,255 | StrokeWidth 0')
+        setShape(meter,5,'Rectangle 4,4,10,28 | Fill Color 206,17,38,255 | StrokeWidth 0')
+    elseif country == 'south_africa' then
+        setShape(meter,2,'Rectangle 4,4,36,14 | Fill Color 222,56,49,255 | StrokeWidth 0')
+        setShape(meter,3,'Rectangle 4,18,36,14 | Fill Color 0,35,149,255 | StrokeWidth 0')
+        setShape(meter,4,'Rectangle 4,14,36,8 | Fill Color 255,255,255,255 | StrokeWidth 0')
+        setShape(meter,5,'Rectangle 4,16,36,4 | Fill Color 0,119,73,255 | StrokeWidth 0')
+        setShape(meter,6,'Line 4,5,18,18 | StrokeWidth 8 | Stroke Color 0,0,0,255')
+        setShape(meter,7,'Line 4,31,18,18 | StrokeWidth 8 | Stroke Color 0,0,0,255')
+    else
+        setShape(meter,2,'Rectangle 4,4,36,28 | Fill Color 90,96,106,255 | StrokeWidth 0')
+    end
+
+    setShape(meter,8,'Rectangle 4,32,36,14 | Fill Color 248,248,248,255 | StrokeWidth 0')
+    setShape(meter,9,'Rectangle 4,4,36,42,2 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color 255,255,255,70')
+end
+
+local function graphSpecPath(key)
+    if generatedDir == nil then return '' end
+    local safe = safeText(key, ''):gsub('[^%w_-]', '_')
+    return generatedDir .. 'inline-graph-' .. safe .. '.kv'
+end
+
+local function readGraphSpec(key)
+    local path = graphSpecPath(key)
+    if path == '' then return nil end
+    local values = readKv(path)
+    if safeText(values.MarketKey, '') ~= key then return nil end
+    return values
+end
+
+local function clearGraphShapes(index)
+    local meter = 'MeterOpportunity' .. index .. 'Card'
+    for shapeIndex = 10, 18 do setShape(meter, shapeIndex, invisibleShape) end
+    SKIN:Bang('!SetOption', meter, 'GraphPath', '44,150 | LineTo 520,150')
+end
+
+local function applyGraphShapes(index, spec)
+    local meter = 'MeterOpportunity' .. index .. 'Card'
+    setShape(meter,10,'Rectangle 8,54,520,116,4 | Fill Color 20,23,27,255 | StrokeWidth 1 | Stroke Color 58,64,73,255')
+    setShape(meter,11,'Line 44,76,520,76 | StrokeWidth 1 | Stroke Color 58,64,73,180')
+    setShape(meter,12,'Line 44,113,520,113 | StrokeWidth 1 | Stroke Color 58,64,73,140')
+    setShape(meter,13,'Line 44,150,520,150 | StrokeWidth 1 | Stroke Color 58,64,73,180')
+    setShape(meter,14,'Line 44,76,44,150 | StrokeWidth 1 | Stroke Color 58,64,73,180')
+    setShape(meter,15,'Line 203,76,203,150 | StrokeWidth 1 | Stroke Color 58,64,73,120')
+    setShape(meter,16,'Line 361,76,361,150 | StrokeWidth 1 | Stroke Color 58,64,73,120')
+    setShape(meter,17,'Line 520,76,520,150 | StrokeWidth 1 | Stroke Color 58,64,73,180')
+    if spec ~= nil and safeText(spec.GraphPath, '') ~= '' then
+        SKIN:Bang('!SetOption', meter, 'GraphPath', safeText(spec.GraphPath, '44,150 | LineTo 520,150'))
+        setShape(meter,18,'Path GraphPath | StrokeWidth 2 | Stroke Color 82,174,255,255 | Fill Color 0,0,0,0')
+    else
+        setShape(meter,18,invisibleShape)
+    end
+end
+
+local function syncExpandedRow(data, count)
+    if expandedKey == '' then expandedRow = 0 return end
+    local found = 0
+    for i = 1, count do
+        if safeText(data['Opportunity' .. i .. 'Key'], '') == expandedKey then found = i break end
+    end
+    if found == 0 then
+        expandedKey = ''
+        expandedRow = 0
+        lastGraphSignature = ''
+    else
+        expandedRow = found
+    end
+end
+
+local function layoutRows(data, count)
+    syncExpandedRow(data, count)
+    local signature = tostring(count) .. ':' .. tostring(expandedRow)
+    if signature ~= lastLayoutSignature then
+        lastLayoutSignature = signature
+        for i = 1, 8 do
+            local p = 'MeterOpportunity' .. i
+            local extraBefore = (expandedRow > 0 and i > expandedRow) and graphExtra or 0
+            local y = 120 + ((i-1) * 54) + extraBefore
+            local isExpanded = (i == expandedRow)
+            local cardHeight = isExpanded and expandedCardHeight or collapsedCardHeight
+            SKIN:Bang('!SetOption', p .. 'Card', 'Y', tostring(y))
+            SKIN:Bang('!SetOption', p .. 'Card', 'H', tostring(cardHeight))
+            setShape(p .. 'Card',1,'Rectangle 0,0,536,' .. cardHeight .. ',5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Opportunity' .. i .. 'AccentColor#')
+            SKIN:Bang('!SetOption', p .. 'Rank', 'Y', tostring(y+35))
+            SKIN:Bang('!SetOption', p .. 'Name', 'Y', tostring(y+6))
+            SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+6))
+            SKIN:Bang('!SetOption', p .. 'Window', 'Y', tostring(y+27))
+            SKIN:Bang('!SetOption', p .. 'Leave', 'Y', tostring(y+27))
+            SKIN:Bang('!SetOption', p .. 'Chance', 'Y', tostring(y+27))
+            SKIN:Bang('!SetOption', p .. 'Price', 'Y', tostring(y+26))
+            SKIN:Bang('!SetOption', p .. 'Graph', 'Y', tostring(y+24))
+            SKIN:Bang('!SetOption', p .. 'Graph', 'Text', isExpanded and '^' or 'v')
+
+            if isExpanded then
+                SKIN:Bang('!SetOption', p .. 'Country', 'X', '48')
+                SKIN:Bang('!SetOption', p .. 'Country', 'Y', tostring(y+57))
+                SKIN:Bang('!SetOption', p .. 'Country', 'W', '430')
+                SKIN:Bang('!SetOption', p .. 'Country', 'FontSize', '7')
+                SKIN:Bang('!SetOption', p .. 'Country', 'FontColor', '#Muted#')
+                SKIN:Bang('!SetOption', p .. 'Country', 'StringAlign', 'Left')
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'X', '44')
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'Y', tostring(y+154))
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'W', '44')
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'FontSize', '7')
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'FontColor', '#Muted#')
+                SKIN:Bang('!SetOption', p .. 'Optimal', 'Text', '-8h')
+                SKIN:Bang('!SetOption', p .. 'Time', 'X', '520')
+                SKIN:Bang('!SetOption', p .. 'Time', 'Y', tostring(y+154))
+                SKIN:Bang('!SetOption', p .. 'Time', 'W', '44')
+                SKIN:Bang('!SetOption', p .. 'Time', 'StringAlign', 'Right')
+                SKIN:Bang('!SetOption', p .. 'Time', 'FontSize', '7')
+                SKIN:Bang('!SetOption', p .. 'Time', 'FontColor', '#Muted#')
+                SKIN:Bang('!SetOption', p .. 'Time', 'Text', 'now')
+            else
+                SKIN:Bang('!HideMeter', p .. 'Country')
+                SKIN:Bang('!HideMeter', p .. 'Optimal')
+                SKIN:Bang('!HideMeter', p .. 'Time')
+                clearGraphShapes(i)
+            end
+        end
+    end
+
+    local panelHeight = 164
+    if count > 0 then panelHeight = 120 + (count * 54) + ((expandedRow > 0) and graphExtra or 0) + 8 end
+    setVariable('PanelHeight', panelHeight)
+end
+
+local function updateExpandedGraph(data)
+    if expandedRow <= 0 or expandedKey == '' then
+        if lastGraphSignature ~= '' then lastGraphSignature = '' end
+        return
+    end
+    local p = 'MeterOpportunity' .. expandedRow
+    local spec = readGraphSpec(expandedKey)
+    local signature = expandedKey .. ':' .. safeText(spec and spec.UpdatedAt or '', '')
+    if signature ~= lastGraphSignature then
+        lastGraphSignature = signature
+        applyGraphShapes(expandedRow, spec)
+        local summary = 'Loading 8-hour stock history...'
+        if spec ~= nil then summary = safeText(spec.Summary, summary) end
+        SKIN:Bang('!SetOption', p .. 'Country', 'Text', summary)
+    end
+    SKIN:Bang('!ShowMeter', p .. 'Country')
+    SKIN:Bang('!ShowMeter', p .. 'Optimal')
+    SKIN:Bang('!ShowMeter', p .. 'Time')
+end
+
 local function updateOpportunityGrossMeter(data, prefix, index)
     local grossText = safeText(data[prefix .. 'GrossText'], '')
-    local quantityText = safeText(data[prefix .. 'QuantityText'], '')
-    local display = grossText
-    if display ~= '' then
-        display = display .. ' gross'
-        if quantityText ~= '' then display = display .. ' ' .. quantityText end
-    end
-    SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'Text', display)
+    SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'Text', grossText)
     SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'ToolTipText', safeText(data[prefix .. 'Tooltip'], ''))
 end
 
@@ -338,18 +592,33 @@ local function updateOpportunities(data)
         end
         SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
         updateOpportunityGrossMeter(data, prefix, i)
-        setGroupVisible('OpportunityRow' .. i, i <= count)
+        local visible = i <= count
+        setGroupVisible('OpportunityRow' .. i, visible)
+        if visible then applyFlagForRow(i, safeText(data[prefix .. 'Key'], '')) end
     end
 
-    local panelHeight = 164
-    if count > 0 then panelHeight = 120 + count * 54 + 8 end
-    setVariable('PanelHeight', panelHeight)
+    layoutRows(data, count)
+    for i = 1, 8 do
+        if i ~= expandedRow then
+            SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Country')
+            SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Optimal')
+            SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Time')
+        end
+    end
+    updateExpandedGraph(data)
 end
 
 local function deferPolling(seconds)
     local now = os.time()
     local target = now + (seconds or 5)
     if nextPollAt == nil or nextPollAt < target then nextPollAt = target end
+end
+
+local function requestInlineGraph(key)
+    if key == '' then return end
+    lastInlineRenderRequestAt = os.time()
+    setVariable('ViewerMarketKey', 'inline_' .. key)
+    SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')
 end
 
 function Initialize()
@@ -363,11 +632,14 @@ function Initialize()
 
     statePath = SKIN:MakePathAbsolute(configured)
     heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
+    generatedDir = statePath:match('^(.*[\\/])') or ''
     pollInterval = math.floor(configuredPoll)
     failureRetryInterval = math.floor(configuredFailureRetry)
     failureRetryArmed = false
     nextPollAt = os.time() + pollInterval
     pendingSortMode = nil
+    expandedKey = ''
+    expandedRow = 0
 
     configureInteractiveMeters()
     local initial = readState()
@@ -406,12 +678,37 @@ function SetSortMode(mode)
 
     if lastRenderData ~= nil then
         local immediate = locallySortedProjection(lastRenderData, mode)
+        lastDisplayedData = immediate
         updateOpportunities(immediate)
     end
 
     setVariable('PreferenceAction', 'SetSortMode')
     setVariable('PreferenceValue', mode)
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
+    SKIN:Bang('!UpdateMeter', '*')
+    SKIN:Bang('!Redraw')
+end
+
+function ToggleInlineGraph(index)
+    if lastDisplayedData == nil then return end
+    local row = math.floor(number(index))
+    if row < 1 or row > 8 then return end
+    local key = safeText(lastDisplayedData['Opportunity' .. row .. 'Key'], '')
+    if key == '' then return end
+
+    if expandedKey == key then
+        expandedKey = ''
+        expandedRow = 0
+        lastGraphSignature = ''
+        lastLayoutSignature = ''
+    else
+        expandedKey = key
+        expandedRow = row
+        lastGraphSignature = ''
+        lastLayoutSignature = ''
+        requestInlineGraph(key)
+    end
+    updateOpportunities(lastDisplayedData)
     SKIN:Bang('!UpdateMeter', '*')
     SKIN:Bang('!Redraw')
 end
@@ -432,6 +729,7 @@ function Update()
     if pendingSortMode ~= nil and projectedMode == pendingSortMode then pendingSortMode = nil end
     local renderMode = pendingSortMode or projectedMode
     local data = locallySortedProjection(baseData, renderMode)
+    lastDisplayedData = data
 
     local sourceStatus = safeText(data.UpdatedText, '')
     local sourceFailed = sourceStatus:find('failed', 1, true) ~= nil
@@ -449,6 +747,8 @@ function Update()
         nextPollAt = now + pollInterval
         SKIN:Bang('!CommandMeasure', 'MeasureUpdate', 'Run')
     end
+
+    if expandedKey ~= '' and (now - lastInlineRenderRequestAt) >= 60 then requestInlineGraph(expandedKey) end
 
     updateHeartbeatText(data, now)
     updateFilters(data)
