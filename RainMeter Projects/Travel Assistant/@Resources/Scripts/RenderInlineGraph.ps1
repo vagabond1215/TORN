@@ -174,11 +174,13 @@ $labelFont = New-Object System.Drawing.Font('Segoe UI',7,[System.Drawing.FontSty
 # Eight one-hour segments: seven internal vertical separators plus both boundaries.
 for ($i=0; $i -le 8; $i++) {
     $x = [single]($plotLeft + ($plotWidth * $i / 8.0))
-    $graphics.DrawLine($(if ($i -eq 0 -or $i -eq 8) { $gridMajor } else { $gridMinor }),$x,[single]$plotTop,$x,[single]$plotBottom)
+    $pen = if ($i -eq 0 -or $i -eq 8) { $gridMajor } else { $gridMinor }
+    $graphics.DrawLine($pen,$x,[single]$plotTop,$x,[single]$plotBottom)
 }
 for ($i=0; $i -le 3; $i++) {
     $y = [single]($plotTop + ($plotHeight * $i / 3.0))
-    $graphics.DrawLine($(if ($i -eq 0 -or $i -eq 3) { $gridMajor } else { $gridMinor }),[single]$plotLeft,$y,[single]$plotRight,$y)
+    $pen = if ($i -eq 0 -or $i -eq 3) { $gridMajor } else { $gridMinor }
+    $graphics.DrawLine($pen,[single]$plotLeft,$y,[single]$plotRight,$y)
 }
 
 function Get-InlineX([long]$Timestamp) {
@@ -215,12 +217,14 @@ $graphics.DrawString('now',$labelFont,$labelBrush,[single]($plotRight-18),82)
 $safeName = ($MarketKey -replace '[^a-zA-Z0-9_-]','_')
 $imageFile = ('inline-graph-{0}-{1}.png' -f $safeName,$now)
 $imagePath = Join-Path $GeneratedDir $imageFile
+$stableImagePath = Join-Path $GeneratedDir ('inline-graph-' + $safeName + '.png')
 $tmpImage = $imagePath + '.tmp'
 $bitmap.Save($tmpImage,[System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()
 $gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $restockPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
 Move-Item -LiteralPath $tmpImage -Destination $imagePath -Force
+Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force
 
 $changes = 0
 for ($i=1; $i -lt $rows.Count; $i++) {
@@ -232,6 +236,7 @@ Write-InlineKvAtomic -Path $specPath -Values @{
     MarketKey = $MarketKey
     UpdatedAt = $now
     ImageFile = $imageFile
+    StableImageFile = ('inline-graph-' + $safeName + '.png')
     HistorySource = $historySource
     MaxStock = $maxStock
     CurrentStock = $currentStock
@@ -239,7 +244,7 @@ Write-InlineKvAtomic -Path $specPath -Values @{
     ChangeCount = $changes
 }
 
-Get-ChildItem -LiteralPath $GeneratedDir -Filter 'inline-graph-*.png' -File -ErrorAction SilentlyContinue |
+Get-ChildItem -LiteralPath $GeneratedDir -Filter 'inline-graph-*-*.png' -File -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
     Select-Object -Skip 24 |
     Remove-Item -Force -ErrorAction SilentlyContinue
