@@ -3,6 +3,7 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $optimizerPath = Join-Path $ProjectRoot '@Resources\Scripts\OptimalRoute.ps1'
+$opportunityPath = Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 $settingsPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
 $preferencesPath = Join-Path $ProjectRoot '@Resources\Scripts\FilterPreferences.ps1'
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
@@ -11,7 +12,7 @@ $baseSettingsPath = Join-Path $ProjectRoot 'config\settings.example.json'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($optimizerPath,$settingsPath,$preferencesPath,$wrapperPath)) {
+foreach ($path in @($optimizerPath,$opportunityPath,$settingsPath,$preferencesPath,$wrapperPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing $(Split-Path $path -Leaf)."; continue }
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
@@ -25,27 +26,23 @@ if (Test-Path -LiteralPath $optimizerPath) {
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'OptimalRoute.ps1 must remain local-only.' }
     foreach ($token in @(
-        "PSObject.Properties['average']",
-        'marketValue = $marketValue',
-        'use95PercentMarketValue',
-        '-EnergyStackBypass',
-        'energyWastePolicy',
-        'nerveWastePolicy',
-        'showProfitableOnly',
-        'catalogActive',
-        'legacy_removed',
-        'availabilitySeconds',
-        'restockDelaySeconds',
-        'expectedTripProfit',
-        '$priceColor = ''224,90,90,255''',
-        '$priceColor = ''86,190,116,255''',
-        'pricingPriorityItemIds'
+        "PSObject.Properties['average']",'marketValue = $marketValue','use95PercentMarketValue','-EnergyStackBypass',
+        'energyWastePolicy','nerveWastePolicy','showProfitableOnly','catalogActive','legacy_removed','availabilitySeconds',
+        'restockDelaySeconds','expectedTripProfit','$priceColor = ''224,90,90,255''','$priceColor = ''86,190,116,255''','pricingPriorityItemIds'
     )) {
         if (-not $text.Contains($token)) { Fail "Optimal route contract missing '$token'." }
     }
     foreach ($forbidden in @('itemMarketFeePercent','minimumProfitPerItem','minimumMarginPercent','LOW_MARGIN','UNPROFITABLE')) {
         if ($text.Contains($forbidden)) { Fail "Optimal route must not gate on legacy profitability token '$forbidden'." }
     }
+}
+
+if (Test-Path -LiteralPath $opportunityPath) {
+    $text=Get-Content -LiteralPath $opportunityPath -Raw
+    foreach ($token in @('expectedGross','optimalScore','grossProfit','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Write-OpportunityProjection')) {
+        if (-not $text.Contains($token)) { Fail "Opportunity ranking contract missing '$token'." }
+    }
+    if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'OpportunityState.ps1 must remain local-only.' }
 }
 
 if (Test-Path -LiteralPath $settingsPath) {
@@ -59,7 +56,7 @@ if (Test-Path -LiteralPath $settingsPath) {
 
 if (Test-Path -LiteralPath $preferencesPath) {
     $text=Get-Content -LiteralPath $preferencesPath -Raw
-    foreach ($token in @('schemaVersion = 3','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss')) {
+    foreach ($token in @('schemaVersion = 4','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss','sortMode')) {
         if (-not $text.Contains($token)) { Fail "Preference schema missing '$token'." }
     }
 }
@@ -93,20 +90,21 @@ if (Test-Path -LiteralPath $wrapperPath) {
     $finalizer=$wrapper.IndexOf('& $Finalizer')
     $travel=$wrapper.IndexOf('Invoke-FailSoftScript -Path $TravelContext')
     $optimal=$wrapper.IndexOf('Invoke-FailSoftScript -Path $OptimalRoute')
+    $opportunity=$wrapper.IndexOf('Invoke-FailSoftScript -Path $OpportunityState')
     $filter=$wrapper.IndexOf('& $FilterState')
     $heartbeat=$wrapper.LastIndexOf('Write-UpdateHeartbeat')
     $resale=$wrapper.IndexOf('& $ResaleQueue')
-    if (@($finalizer,$travel,$optimal,$filter,$heartbeat,$resale) -contains -1 -or -not ($finalizer -lt $travel -and $travel -lt $optimal -and $optimal -lt $filter -and $filter -lt $heartbeat -and $heartbeat -lt $resale)) {
-        Fail 'Runtime order must remain FinalizeState -> TravelContext -> OptimalRoute -> FilterState -> heartbeat -> ResaleQueue.'
+    if (@($finalizer,$travel,$optimal,$opportunity,$filter,$heartbeat,$resale) -contains -1 -or -not ($finalizer -lt $travel -and $travel -lt $optimal -and $optimal -lt $opportunity -and $opportunity -lt $filter -and $filter -lt $heartbeat -and $heartbeat -lt $resale)) {
+        Fail 'Runtime order must remain FinalizeState -> TravelContext -> OptimalRoute -> OpportunityState -> FilterState -> heartbeat -> ResaleQueue.'
     }
-    if ($wrapper.Contains('VisibleItems.ps1')) { Fail 'Minimal runtime must not invoke retired graph/card enrichment.' }
+    if ($wrapper.Contains('VisibleItems.ps1')) { Fail 'Normal runtime must not regenerate old embedded card graphs through VisibleItems.ps1.' }
 }
 
 if ($errors.Count -gt 0) {
     foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
-    Write-Host "Optimal-route validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    Write-Host "Optimizer/opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Optimal-route configuration validation passed.' -ForegroundColor Green
-Write-Host 'Route selection is local-only, MV-based, capacity-aware, evidence-aware, and independently constrained by Energy/Nerve waste policy.'
+Write-Host 'Background optimal-route model and primary opportunity ranking validation passed.' -ForegroundColor Green
+Write-Host 'OPTIMAL presentation ranking uses probability-weighted gross opportunity value per total elapsed hour; route internals remain local-only.'
 exit 0
