@@ -107,43 +107,44 @@ function Normalize-UiPreferences {
     $pin = [string]$Preferences.pinnedMarket
     if (-not [string]::IsNullOrWhiteSpace($pin) -and $pin -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { Set-FilterProperty $Preferences 'pinnedMarket' '' }
 
-    $itemIds = New-Object 'System.Collections.Generic.HashSet[int]'
+    # Windows PowerShell 5.1 can throw PSEnumerableBinder "Argument types do not match"
+    # when a generic HashSet/List is fed through @(...). Preference collections are
+    # small, so use ordinary PowerShell arrays plus Sort-Object -Unique here.
+    $itemIds = @()
     foreach ($id in @($Preferences.selectedItemIds)) {
         $n = 0
-        if ([int]::TryParse([string]$id, [ref]$n) -and $n -gt 0) { [void]$itemIds.Add($n) }
+        if ([int]::TryParse([string]$id, [ref]$n) -and $n -gt 0) { $itemIds += $n }
     }
-    Set-FilterProperty $Preferences 'selectedItemIds' ([int[]]@($itemIds | Sort-Object))
+    Set-FilterProperty $Preferences 'selectedItemIds' ([int[]]@($itemIds | Sort-Object -Unique))
 
-    $bands = New-Object 'System.Collections.Generic.HashSet[string]'
+    $bands = @()
     foreach ($band in @($Preferences.selectedTripBands)) {
         $value = ([string]$band).ToLowerInvariant()
-        if ($value -in @('short','medium','long')) { [void]$bands.Add($value) }
+        if ($value -in @('short','medium','long')) { $bands += $value }
     }
-    Set-FilterProperty $Preferences 'selectedTripBands' ([string[]]@($bands | Sort-Object))
+    Set-FilterProperty $Preferences 'selectedTripBands' ([string[]]@($bands | Sort-Object -Unique))
 
     $availableCountries = [string[]]@(Get-FilterAvailableCountryIds)
-    $availableCountrySet = New-Object 'System.Collections.Generic.HashSet[string]'
-    foreach ($id in $availableCountries) { [void]$availableCountrySet.Add($id) }
-    $countries = New-Object 'System.Collections.Generic.HashSet[string]'
+    $countries = @()
     foreach ($id in @($Preferences.selectedCountryIds)) {
         $value = [string]$id
-        if ($availableCountrySet.Contains($value)) { [void]$countries.Add($value) }
+        if ($availableCountries -contains $value) { $countries += $value }
     }
-    Set-FilterProperty $Preferences 'selectedCountryIds' ([string[]]@($countries | Sort-Object))
+    Set-FilterProperty $Preferences 'selectedCountryIds' ([string[]]@($countries | Sort-Object -Unique))
 
-    $categories = New-Object 'System.Collections.Generic.HashSet[string]'
+    $categories = @()
     foreach ($category in @($Preferences.selectedCategories)) {
         $value = [string]$category
-        if (-not [string]::IsNullOrWhiteSpace($value)) { [void]$categories.Add($value) }
+        if (-not [string]::IsNullOrWhiteSpace($value)) { $categories += $value }
     }
-    Set-FilterProperty $Preferences 'selectedCategories' ([string[]]@($categories | Sort-Object))
+    Set-FilterProperty $Preferences 'selectedCategories' ([string[]]@($categories | Sort-Object -Unique))
 
-    $ignored = New-Object 'System.Collections.Generic.HashSet[int]'
+    $ignored = @()
     foreach ($id in @($Preferences.ignoredItemIds)) {
         $n = 0
-        if ([int]::TryParse([string]$id, [ref]$n) -and $n -gt 0) { [void]$ignored.Add($n) }
+        if ([int]::TryParse([string]$id, [ref]$n) -and $n -gt 0) { $ignored += $n }
     }
-    Set-FilterProperty $Preferences 'ignoredItemIds' ([int[]]@($ignored | Sort-Object))
+    Set-FilterProperty $Preferences 'ignoredItemIds' ([int[]]@($ignored | Sort-Object -Unique))
     Set-FilterProperty $Preferences 'itemFilterAll' ([bool]$Preferences.itemFilterAll)
     Set-FilterProperty $Preferences 'categoryFilterAll' ([bool]$Preferences.categoryFilterAll)
     Set-FilterProperty $Preferences 'showProfitableOnly' ([bool]$Preferences.showProfitableOnly)
@@ -173,10 +174,13 @@ function Toggle-TripBandPreference {
     $normalized = Normalize-UiPreferences -Preferences $Preferences
     $bandName = $Band.ToLowerInvariant()
     if ($bandName -notin @('short','medium','long')) { throw 'Trip band must be short, medium, or long.' }
-    $set = New-Object 'System.Collections.Generic.HashSet[string]'
-    foreach ($value in @($normalized.selectedTripBands)) { [void]$set.Add([string]$value) }
-    if ($set.Contains($bandName)) { [void]$set.Remove($bandName) } else { [void]$set.Add($bandName) }
-    Set-FilterProperty $normalized 'selectedTripBands' ([string[]]@($set | Sort-Object))
+    $bands = [string[]]@($normalized.selectedTripBands)
+    if ($bands -contains $bandName) {
+        $bands = [string[]]@($bands | Where-Object { $_ -ne $bandName })
+    } else {
+        $bands = [string[]]@($bands + $bandName)
+    }
+    Set-FilterProperty $normalized 'selectedTripBands' ([string[]]@($bands | Sort-Object -Unique))
     return $normalized
 }
 
