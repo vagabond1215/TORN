@@ -11,6 +11,7 @@ $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
 $TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
 $OptimalRoute = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
+$OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
@@ -21,6 +22,7 @@ $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
 $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
 $OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
+$OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
@@ -134,8 +136,6 @@ try {
     Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile
     Invoke-FailSoftScript -Path $LocalCatalog -ErrorPath $LocalCatalogErrorFile
 
-    # Legacy Xanax post-processing is retained as background compatibility data,
-    # but the 0.5 minimalist UI does not use profitability statuses as route gates.
     & $Finalizer
     if (-not $?) { exit 1 }
 
@@ -143,13 +143,15 @@ try {
     # internally while preserving the last successful destination/bar context.
     if ($Action -eq 'Update') { Invoke-FailSoftScript -Path $TravelContext -ErrorPath $TravelContextErrorFile -ClearErrorOnSuccess $false }
 
-    # OptimalRoute is local-only. It reads retained stock/history, current bars,
-    # local preferences, capacity, and cached MV. It performs no network calls.
+    # Keep the route optimizer as a background decision/pricing-priority model.
     Invoke-FailSoftScript -Path $OptimalRoute -ErrorPath $OptimalRouteErrorFile
+
+    # Primary presentation is the sortable opportunity surface. OPTIMAL is one
+    # ordering over evidence-backed item/country windows rather than the only view.
+    Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
 
     if (Test-Path -LiteralPath $FilterState) { try { & $FilterState } catch { } }
 
-    # User-visible freshness is committed before the lower-priority broad market queue.
     Write-UpdateHeartbeat
 
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
