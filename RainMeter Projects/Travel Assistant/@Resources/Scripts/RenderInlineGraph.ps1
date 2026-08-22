@@ -17,7 +17,6 @@ $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
 $SettingsFile = Join-Path $ConfigDir 'settings.example.json'
-$HistoryMaintenanceScript = Join-Path $PSScriptRoot 'MaintainObservationHistory.ps1'
 
 function Read-InlineJson {
     param([string]$Path)
@@ -62,18 +61,33 @@ function Read-MarketHistory {
             $row = $line | ConvertFrom-Json
             $timestamp = [long](Get-InlineProperty $row 'timestamp')
             if ($timestamp -le 0) { continue }
+            $source = [string](Get-InlineProperty $row 'source')
+            # Older migration builds wrote current stock backward through time as
+            # history_bootstrap/history_repair_baseline. Those are not observations
+            # and must never be rendered as historical truth.
+            if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
             $rows += [pscustomobject]@{
                 timestamp = $timestamp
                 stock = [long](Get-InlineProperty $row 'stock')
-                source = [string](Get-InlineProperty $row 'source')
+                source = $source
             }
         } catch { }
     }
     return $rows
 }
 
-if (Test-Path -LiteralPath $HistoryMaintenanceScript) {
-    try { & $HistoryMaintenanceScript -Phase PostUpdate | Out-Null } catch { }
+function Compress-StockHistory {
+    param([object[]]$Rows)
+    $compressed = @()
+    $previousStock = $null
+    foreach ($row in @($Rows | Sort-Object timestamp)) {
+        $stock = [long]$row.stock
+        if ($null -eq $previousStock -or [long]$previousStock -ne $stock) {
+            $compressed += $row
+            $previousStock = $stock
+        }
+    }
+    return @($compressed)
 }
 
 $settings = Read-InlineJson $SettingsFile
@@ -93,16 +107,16 @@ if ($null -eq $market) { throw ('Market not found in observedMarkets: ' + $Marke
 $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $cutoff = $now - ([long]$windowHours * 3600L)
 
-# Runtime observations are the shared high-resolution collector database and are
-# authoritative for the inline graph. Seed evidence is used only when this market
-# has no retained runtime rows at all.
+# Runtime observations are the shared high-resolution ShadowCollector database and
+# are authoritative. Seed evidence is used only if this market has no real retained
+# runtime rows after synthetic migration rows are excluded.
 $allRows = @(Read-MarketHistory -Path $RuntimeObservationFile -Country $country -ItemId $itemId)
 $historySource = 'runtime_observations'
 if ($allRows.Count -eq 0) {
     $allRows = @(Read-MarketHistory -Path $SeedObservationFile -Country $country -ItemId $itemId)
     $historySource = 'seed_fallback'
 }
-$allRows = @($allRows | Sort-Object timestamp)
+$allRows = @(Compress-StockHistory -Rows $allRows)
 
 $rows = @()
 $predecessor = @($allRows | Where-Object { [long]$_.timestamp -lt $cutoff } | Select-Object -Last 1)
@@ -110,35 +124,16 @@ if ($predecessor.Count -gt 0) {
     $rows += [pscustomobject]@{ timestamp=$cutoff; stock=[long]$predecessor[0].stock; source='carry_forward' }
 }
 $rows += @($allRows | Where-Object { [long]$_.timestamp -ge $cutoff -and [long]$_.timestamp -le ($now+60) })
+$rows = @(Compress-StockHistory -Rows $rows)
 
-# If old retention damage left no predecessor, carry an unchanged synthetic
-# baseline only when the retained history does not contain a real transition.
-if ($predecessor.Count -eq 0 -and $rows.Count -le 1) {
-    $firstSeenAt = [long](Get-InlineProperty $market 'firstSeenAt')
-    if ($firstSeenAt -gt 0 -and $firstSeenAt -lt $now) {
-        $baselineAt = [Math]::Max($cutoff,$firstSeenAt)
-        $baselineStock = [long](Get-InlineProperty $market 'lastStock')
-        if ($rows.Count -eq 1) { $baselineStock = [long]$rows[0].stock }
-        $rows = @([pscustomobject]@{ timestamp=$baselineAt; stock=$baselineStock; source='display_carry' }) + $rows
-    }
-}
-
-# Always close the series with the same current market snapshot used by the card.
+# Never paint current stock backward through an interval with no retained sample.
+# If there is no predecessor, the left side of the graph remains genuinely unknown.
 $currentStock = [long](Get-InlineProperty $market 'lastStock')
 $currentTimestamp = [long](Get-InlineProperty $market 'sourceTimestamp')
 if ($currentTimestamp -le 0) { $currentTimestamp = [long](Get-InlineProperty $market 'lastSeenAt') }
 if ($currentTimestamp -le 0 -or $currentTimestamp -lt $cutoff -or $currentTimestamp -gt ($now+60)) { $currentTimestamp = $now }
 $rows += [pscustomobject]@{ timestamp=$currentTimestamp; stock=$currentStock; source='current_snapshot' }
-
-$dedupe = @{}
-$normalized = @()
-foreach ($row in @($rows | Sort-Object timestamp)) {
-    $key = ('{0}|{1}' -f [long]$row.timestamp,[long]$row.stock)
-    if ($dedupe.ContainsKey($key)) { continue }
-    $dedupe[$key] = $true
-    $normalized += $row
-}
-$rows = @($normalized | Sort-Object timestamp)
+$rows = @(Compress-StockHistory -Rows $rows)
 
 $maxStock = 0L
 if ($rows.Count -gt 0) {
@@ -230,6 +225,9 @@ $changes = 0
 for ($i=1; $i -lt $rows.Count; $i++) {
     if ([long]$rows[$i].stock -ne [long]$rows[$i-1].stock) { $changes++ }
 }
+$earliestTimestamp = if ($rows.Count -gt 0) { [long]$rows[0].timestamp } else { 0L }
+$latestTimestamp = if ($rows.Count -gt 0) { [long]$rows[$rows.Count-1].timestamp } else { 0L }
+$unknownBefore = if ($predecessor.Count -gt 0) { 0L } else { $earliestTimestamp }
 
 $specPath = Join-Path $GeneratedDir ('inline-graph-' + $safeName + '.kv')
 Write-InlineKvAtomic -Path $specPath -Values @{
@@ -242,6 +240,10 @@ Write-InlineKvAtomic -Path $specPath -Values @{
     CurrentStock = $currentStock
     PointCount = $rows.Count
     ChangeCount = $changes
+    EarliestTimestamp = $earliestTimestamp
+    LatestTimestamp = $latestTimestamp
+    UnknownBeforeTimestamp = $unknownBefore
+    WindowStartTimestamp = $cutoff
 }
 
 Get-ChildItem -LiteralPath $GeneratedDir -Filter 'inline-graph-*-*.png' -File -ErrorAction SilentlyContinue |
