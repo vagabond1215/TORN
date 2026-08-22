@@ -169,14 +169,16 @@ function Write-OpportunityProjection {
     for ($i=0; $i -lt $count; $i++) {
         $row = $Rows[$i]
         $n = $i+1
+        $probabilityKnown = $true
+        if ($row.PSObject.Properties['probabilityKnown']) { $probabilityKnown = [bool]$row.probabilityKnown }
         $State['Opportunity'+$n+'Key'] = [string]$row.key
-        $State['Opportunity'+$n+'RankText'] = ('#{0}' -f $n)
+        $State['Opportunity'+$n+'RankText'] = ''
         $State['Opportunity'+$n+'Name'] = [string]$row.name
         $State['Opportunity'+$n+'Country'] = [string]$row.countryName
         $State['Opportunity'+$n+'CountryCode'] = [string]$row.countryCode
         $State['Opportunity'+$n+'WindowText'] = [string]$row.windowText
         $State['Opportunity'+$n+'LeaveText'] = [string]$row.leaveText
-        $State['Opportunity'+$n+'ChanceText'] = ('{0:N0}%' -f (100.0*[double]$row.probability))
+        $State['Opportunity'+$n+'ChanceText'] = if ($probabilityKnown) { ('{0:N0}%' -f (100.0*[double]$row.probability)) } else { 'LEARNING' }
         $State['Opportunity'+$n+'TimeText'] = Format-OpportunityDuration ([long]$row.elapsedSeconds)
         $State['Opportunity'+$n+'GrossText'] = Format-OpportunityMoney ([long]$row.grossProfit)
         $State['Opportunity'+$n+'QuantityText'] = ('x{0}' -f [int]$row.quantity)
@@ -189,7 +191,7 @@ function Write-OpportunityProjection {
         $State['Opportunity'+$n+'GrossValue'] = [long]$row.grossProfit
         $State['Opportunity'+$n+'ProfitHourValue'] = ('{0:R}' -f [double]$row.profitPerHour)
         $State['Opportunity'+$n+'WindowStartAt'] = [long]$row.windowStartAt
-        $State['Opportunity'+$n+'ProbabilityValue'] = ('{0:R}' -f [double]$row.probability)
+        $State['Opportunity'+$n+'ProbabilityValue'] = if ($probabilityKnown) { ('{0:R}' -f [double]$row.probability) } else { '-1' }
         $State['Opportunity'+$n+'ElapsedSeconds'] = [long]$row.elapsedSeconds
     }
 }
@@ -308,6 +310,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         }
 
         $probability = -1.0
+        $probabilityKnown = $false
         $availableQuantity = 0L
         $purchaseAtSeconds = 0L
         $windowStartAt = $Now
@@ -318,9 +321,21 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         if ($stock -gt 0) {
             $purchaseAtSeconds = $initialWait + $outboundSeconds
             $forecast = Get-OptimalArrivalForecast -MarketKey $marketKey -Market $market -DestinationState $destinationState -Evidence $evidence -ArrivalSeconds $purchaseAtSeconds -NowEpoch $Now -MinimumSamples $minimumSamples
-            if (-not [bool]$forecast.probabilityKnown) { $learning++; continue }
-            $probability = [double]$forecast.probability
-            $availableQuantity = [long]$forecast.estimatedQuantity
+            if ([bool]$forecast.probabilityKnown) {
+                $probabilityKnown = $true
+                $probability = [double]$forecast.probability
+                $availableQuantity = [long]$forecast.estimatedQuantity
+                if ($availableQuantity -le 0) { $availableQuantity = $stock }
+            } else {
+                # Current observed stock is still useful even when there is not yet
+                # enough completed availability history to estimate arrival survival.
+                # Keep the row visible and expose likelihood as LEARNING instead of
+                # converting uncertainty into a fake percentage or hiding the market.
+                $learning++
+                $probabilityKnown = $false
+                $probability = -1.0
+                $availableQuantity = $stock
+            }
             $windowText = 'IN STOCK'
         } else {
             if ($cycles.Count -lt $minimumSamples) { $learning++; continue }
@@ -339,6 +354,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             $targetAge = [Math]::Max(0L,$targetPurchaseAt-$lastSellOutAt)
             $probability = Get-OpportunityProbabilityAtAge -Cycles $cycles -AgeSeconds $targetAge
             if ($probability -le 0) { continue }
+            $probabilityKnown = $true
             if ($evidence.restockStock.ContainsKey($marketKey)) {
                 $samples = [long[]]@($evidence.restockStock[$marketKey] | ForEach-Object { [long]$_ })
                 $availableQuantity = Get-OptimalMedian $samples
@@ -348,7 +364,8 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             else { $windowText = 'WINDOW '+(Format-OpportunityDuration ($windowStartAt-$Now)) }
         }
 
-        if ($probability -le 0 -or $availableQuantity -le 0) { continue }
+        if ($availableQuantity -le 0) { continue }
+        if ($stock -le 0 -and (-not $probabilityKnown -or $probability -le 0)) { continue }
         $quantity = [Math]::Min($capacity,[int]$availableQuantity)
         if ($quantity -le 0) { continue }
 
@@ -369,7 +386,8 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         if ($travelState -in @('abroad','foreign') -and $outboundSeconds -eq 0) { $leaveText = 'AT DEST.' }
         if ($travelState -eq 'traveling' -and $outboundSeconds -gt 0) { $leaveText = 'EN ROUTE' }
         $wasteText = Get-OpportunityWasteText -Energy $energy -Nerve $nerve
-        $tooltip = ('{0} - {1} | {2} | {3:N0}% modeled hit | {4} total elapsed | unit spread {5} x {6} = {7} gross at {8}% MV | {9}/hr | {10} | foreign {11}, MV {12}' -f [string]$metadata.name,[string]$country.name,$windowText,(100.0*$probability),(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney $grossProfit),$basisPercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resale.marketValue)))
+        $chanceText = if ($probabilityKnown) { ('{0:N0}% modeled hit' -f (100.0*$probability)) } else { 'hit likelihood learning' }
+        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | unit spread {5} x {6} = {7} gross at {8}% MV | {9}/hr | {10} | foreign {11}, MV {12}' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney $grossProfit),$basisPercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resale.marketValue)))
 
         $rows.Add([pscustomobject]@{
             key=$marketKey
@@ -380,6 +398,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             name=[string]$metadata.name
             category=[string]$metadata.category
             probability=[double]$probability
+            probabilityKnown=[bool]$probabilityKnown
             quantity=[int]$quantity
             grossProfit=$grossProfit
             profitPerHour=[double]$profitPerHour
@@ -413,7 +432,7 @@ $message = ''
 if ($sorted.Count -eq 0) {
     $message = 'No evidence-backed opportunities match current filters'
     if ($missingMv -gt 0) { $message = 'Learning market values - opportunity pricing is still filling' }
-    elseif ($learning -gt 0) { $message = 'Learning availability - more completed stock cycles are needed' }
+    elseif ($learning -gt 0) { $message = 'Learning future restock windows - fresh in-stock markets remain visible while likelihood learns' }
     elseif ($wasteBlocked -gt 0) { $message = 'Current Energy/Nerve waste limits block the available opportunities' }
     elseif ($stale -gt 0) { $message = 'Foreign stock is stale - waiting for a fresh provider poll' }
 }
