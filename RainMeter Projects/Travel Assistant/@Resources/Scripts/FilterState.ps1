@@ -65,10 +65,13 @@ function Get-FilterStateCategoryText {
     return ('{0} cats' -f $count)
 }
 
-function Get-OldestActiveMarketSourceTimestamp {
+function Get-ActiveMarketSourceRange {
     param([object]$Engine)
-    if ($null -eq $Engine -or -not $Engine.PSObject.Properties['observedMarkets']) { return 0L }
     $oldest = 0L
+    $freshest = 0L
+    if ($null -eq $Engine -or -not $Engine.PSObject.Properties['observedMarkets']) {
+        return [pscustomobject]@{ oldest=0L; freshest=0L }
+    }
     foreach ($property in @($Engine.observedMarkets.PSObject.Properties)) {
         $market = $property.Value
         if ($null -eq $market) { continue }
@@ -78,8 +81,9 @@ function Get-OldestActiveMarketSourceTimestamp {
         $timestamp = [long]$market.sourceTimestamp
         if ($timestamp -le 0) { continue }
         if ($oldest -le 0 -or $timestamp -lt $oldest) { $oldest = $timestamp }
+        if ($timestamp -gt $freshest) { $freshest = $timestamp }
     }
-    return $oldest
+    return [pscustomobject]@{ oldest=$oldest; freshest=$freshest }
 }
 
 if ($SkipMain) { return }
@@ -88,6 +92,7 @@ $state = Read-FilterStateKv $StateKvFile
 if ($state.Count -eq 0) { return }
 $prefs = Read-UiPreferences
 $engine = Read-FilterStateJson $EngineStateFile
+$sourceRange = Get-ActiveMarketSourceRange -Engine $engine
 
 $state['UIItemFilterAll'] = if ([bool]$prefs.itemFilterAll) { 1 } else { 0 }
 $state['UISelectedItemIds'] = (@($prefs.selectedItemIds | ForEach-Object { [string][int]$_ }) -join ',')
@@ -97,7 +102,14 @@ $state['UICategoryFilterAll'] = if ([bool]$prefs.categoryFilterAll) { 1 } else {
 $state['UISelectedCategories'] = (@($prefs.selectedCategories | ForEach-Object { [string]$_ }) -join '|')
 $state['UIShowProfitableOnly'] = if ([bool]$prefs.showProfitableOnly) { 1 } else { 0 }
 $state['UIIgnoredItemIds'] = (@($prefs.ignoredItemIds | ForEach-Object { [string][int]$_ }) -join ',')
-$state['UIOldestMarketSourceTimestamp'] = Get-OldestActiveMarketSourceTimestamp -Engine $engine
+
+# StateReader historically reads UIOldestMarketSourceTimestamp as the provider-age
+# timestamp. Keep that key for compatibility, but feed it the newest active market
+# sample so one lagging country cannot label the entire provider stale. Preserve the
+# actual oldest sample separately for diagnostics.
+$state['UIOldestMarketSourceTimestamp'] = [long]$sourceRange.freshest
+$state['UIOldestActiveMarketSourceTimestamp'] = [long]$sourceRange.oldest
+$state['UIFreshestMarketSourceTimestamp'] = [long]$sourceRange.freshest
 
 # Pin state is intentionally not mirrored through state.kv. StateReader owns the
 # live pin and persists it directly to ignored preferences.json. Projecting an
