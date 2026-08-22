@@ -4,6 +4,8 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
+$inlineRendererPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
+$viewerLauncherPath = Join-Path $ProjectRoot '@Resources\Scripts\LaunchItemViewer.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
@@ -28,7 +30,7 @@ if ($settingsBody -notmatch '(?im)^Parameter=.*LaunchOptimizerSettings\.ps1') { 
 $popupBody=[regex]::Match($ini,'(?ms)^\[MeasureFilterPopup\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($popupBody -notmatch '(?im)^Parameter=.*LaunchFilterPopup\.ps1.*#FilterRequest#') { Fail 'Filter popup must use its detached launcher and dynamic request.' }
 $viewerBody=[regex]::Match($ini,'(?ms)^\[MeasureItemViewer\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-if ($viewerBody -notmatch '(?im)^Parameter=.*LaunchItemViewer\.ps1.*-MarketKey.*#ViewerMarketKey#') { Fail 'Item viewer must route through its stable market-key launcher.' }
+if ($viewerBody -notmatch '(?im)^Parameter=.*LaunchItemViewer\.ps1.*-MarketKey.*#ViewerMarketKey#') { Fail 'Item viewer/inline history transport must route through the stable market-key launcher.' }
 $prefBody=[regex]::Match($ini,'(?ms)^\[MeasurePreferenceAction\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($prefBody -notmatch '(?im)^Parameter=.*FilterPreferences\.ps1.*#PreferenceAction#.*#PreferenceValue#') { Fail 'Quick actions must route through FilterPreferences.ps1.' }
 
@@ -52,6 +54,25 @@ foreach ($launcherName in @('LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in ${launcherName}: $($parseError.Message)" }
+}
+
+if (-not (Test-Path -LiteralPath $inlineRendererPath)) { Fail 'Missing RenderInlineGraph.ps1.' }
+else {
+    $tokens=$null; $parseErrors=$null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($inlineRendererPath,[ref]$tokens,[ref]$parseErrors)
+    foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in RenderInlineGraph.ps1: $($parseError.Message)" }
+    $renderer=Get-Content -LiteralPath $inlineRendererPath -Raw
+    foreach($token in @('RuntimeObservationFile','SeedObservationFile','GraphPath','history_bootstrap','display_carry','inline-graph-','PointCount','ChangeCount')) {
+        if(-not $renderer.Contains($token)){Fail "Inline renderer missing '$token'."}
+    }
+    if($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt'){Fail 'Inline graph renderer must remain local-only.'}
+}
+
+if (Test-Path -LiteralPath $viewerLauncherPath) {
+    $launcher=Get-Content -LiteralPath $viewerLauncherPath -Raw
+    foreach($token in @("$inlinePrefix = 'inline_'",'RenderInlineGraph.ps1','& $renderer -MarketKey $actualKey','-Popup ItemViewer')) {
+        if(-not $launcher.Contains($token)){Fail "LaunchItemViewer.ps1 missing separate inline/popup routing token '$token'."}
+    }
 }
 
 $title=[regex]::Match($ini,'(?ms)^\[MeterTitle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -78,9 +99,6 @@ for ($i=1; $i -le 8; $i++) {
     }
     $priceBody=[regex]::Match($ini,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     if ($priceBody -notmatch '(?im)^InlineSetting=Size\s*\|\s*7\s*$' -or $priceBody -notmatch '(?im)^InlineSetting2=Color\s*\|\s*#Muted#\s*$') { Fail "Opportunity $i must render parenthesized MV smaller and muted." }
-    if ($priceBody -notmatch ('(?im)^Text=#Opportunity'+$i+'PriceText# \(#Opportunity'+$i+'MarketValueText#\)\s*$')) { Fail "Opportunity $i price must show foreign value followed by MV in parentheses." }
-    $graphBody=[regex]::Match($ini,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if ($graphBody -notmatch '(?im)^Text=GRAPH\s*$' -or -not $graphBody.Contains("OpenViewer('#Opportunity${i}Key#')")) { Fail "Opportunity $i GRAPH control must open its stable market-key viewer." }
 }
 
 foreach ($retiredSection in @('MeterRouteCard','MeterRouteTitle','MeterRouteValue','MeterRouteMeta','MeterRouteMessage','MeterOptimalItem1Name','MeterUKCard','MeterJPCard')) {
@@ -97,20 +115,21 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
         'local function configureInteractiveMeters()',
         "'NAME'","'UPCOMING'","'GROSS PROFIT'","'PROFIT/HR'","SetSortMode('name')","SetSortMode('profit_per_hour')",
         "SKIN:Bang('!HideMeter', 'MeterSortTime')",
-        "SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Optimal')",
-        "SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'X', '48')",
-        "'SolidColor', '0,0,0,1'",
         'local function currentOpportunityRows(data)',
         'local function sortOpportunityRows(rows, mode)',
         'local function locallySortedProjection(data, mode)',
-        'local function updateSort(mode)',
-        'pendingSortMode = mode',
-        'local function updateOpportunities(data)',
-        'local function updateOpportunityGrossMeter(data, prefix, index)',
-        "display = display .. ' gross'",
-        'QuantityText','ProfitHourText','GrossValue','ProfitHourValue','WindowStartAt',
-        "setGroupVisible('OpportunityRow' .. i, i <= count)",
-        'function SetSortMode(mode)',
+        'local function applyFlagForRow(index, key)',
+        "country == 'canada'","country == 'japan'","country == 'united_kingdom'",
+        "setShape(meter,8,'Rectangle 4,32,36,14 | Fill Color 248,248,248,255",
+        "SKIN:Bang('!SetOption', p .. 'Rank', 'Text', '#Opportunity' .. i .. 'TimeText#')",
+        "SKIN:Bang('!SetOption', p .. 'Gross', 'Text', grossText)",
+        "SKIN:Bang('!SetOption', p .. 'Graph', 'Text', 'v')",
+        'function ToggleInlineGraph(index)',
+        "setVariable('ViewerMarketKey', 'inline_' .. key)",
+        'local function applyGraphShapes(index, spec)',
+        "setShape(meter,18,'Path GraphPath",
+        "summary = 'Loading 8-hour stock history...'",
+        'expandedKey','expandedRow','graphExtra',
         'function OpenViewer(marketKey)',
         'function OpenFilter(filterName)',
         'function ToggleTripBand(band)',
@@ -118,10 +137,10 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
         'local function deferPolling(seconds)',
         "setVariable('PanelHeight'"
     )) {
-        if (-not $stateReader.Contains($token)) { Fail "StateReader.lua missing opportunity-list contract: $token" }
+        if (-not $stateReader.Contains($token)) { Fail "StateReader.lua missing compact-card contract: $token" }
     }
-    foreach ($retiredToken in @('updateOptimal(data, now)','OptimalItemRow','MeterRouteMessage','ToggleCard(','cardExpanded')) {
-        if ($stateReader.Contains($retiredToken)) { Fail "StateReader.lua must not retain retired primary-view token '$retiredToken'." }
+    foreach ($retiredToken in @("display = display .. ' gross'","display = display .. ' ' .. quantityText","Text=#Opportunity1RankText#")) {
+        if ($stateReader.Contains($retiredToken)) { Fail "StateReader.lua retains retired card-label behavior '$retiredToken'." }
     }
 }
 
@@ -130,5 +149,5 @@ if ($errors.Count -gt 0) {
     Write-Host "Rainmeter opportunity skin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Rainmeter opportunity surface + immediate four-sort controls + refresh-stable projection + responsive hitboxes + hidden popup host validation passed.' -ForegroundColor Green
+Write-Host 'Rainmeter compact opportunity cards, country flag rails, exclusive inline 8-hour graph expansion, immediate sorting, and separate Viewer validation passed.' -ForegroundColor Green
 exit 0
