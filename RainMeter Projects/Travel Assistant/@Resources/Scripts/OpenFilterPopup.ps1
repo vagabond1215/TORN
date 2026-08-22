@@ -8,11 +8,13 @@ Set-StrictMode -Version 2.0
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot 'FilterPreferences.ps1') -SkipMain
+. (Join-Path $PSScriptRoot 'RuntimeLog.ps1')
 
 $ProjectRoot=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir=Join-Path $ProjectRoot 'config'
 $RuntimeDir=Join-Path $ProjectRoot 'data\runtime'
 $EngineStateFile=Join-Path $RuntimeDir 'engine-state.json'
+$logComponent='popup-filter'
 
 function Read-PopupJson([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
@@ -68,6 +70,7 @@ if ($Filter -eq 'Item') {
         $rows.Add((New-PopupRow $category $category ([bool]$prefs.categoryFilterAll -or $selected.Contains($category))))
     }
 } elseif ($Filter -eq 'Country') {
+    if ($null -eq $countries -or -not $countries.PSObject.Properties['countries']) { throw 'countries.json is missing or invalid.' }
     $titleText='Countries in selected trip bands'; $allLabel='All countries in selected bands'
     $bands=New-Object 'System.Collections.Generic.HashSet[string]'; foreach ($b in @($prefs.selectedTripBands)) { [void]$bands.Add([string]$b) }
     $selected=New-Object 'System.Collections.Generic.HashSet[string]'; foreach ($id in @($prefs.selectedCountryIds)) { [void]$selected.Add([string]$id) }
@@ -114,18 +117,27 @@ $save=New-Object System.Windows.Forms.Button; $save.Text='Save'; $save.Location=
 $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'; $cancel.Location=New-Object System.Drawing.Point(384,518); $cancel.Size=New-Object System.Drawing.Size(82,30); $form.Controls.Add($cancel); $cancel.Add_Click({$form.Close()})
 
 $save.Add_Click({
-    $selected=New-Object System.Collections.Generic.List[string]; for($i=0;$i-lt$rows.Count;$i++){if($list.GetItemChecked($i)){$selected.Add([string]$rows[$i].Id)}}
-    if($Filter -eq 'Item') { Set-FilterProperty $prefs 'itemFilterAll' ($rows.Count -gt 0 -and $selected.Count -eq $rows.Count); Set-FilterProperty $prefs 'selectedItemIds' ([int[]]@($selected|ForEach-Object{[int]$_})) }
-    elseif($Filter -eq 'Category') { Set-FilterProperty $prefs 'categoryFilterAll' ($rows.Count -gt 0 -and $selected.Count -eq $rows.Count); Set-FilterProperty $prefs 'selectedCategories' ([string[]]@($selected)) }
-    elseif($Filter -eq 'Country') {
-        $displayed=New-Object 'System.Collections.Generic.HashSet[string]'; foreach($row in @($rows)){[void]$displayed.Add([string]$row.Id)}
-        $result=New-Object 'System.Collections.Generic.HashSet[string]'; foreach($id in @($prefs.selectedCountryIds)){if(-not$displayed.Contains([string]$id)){[void]$result.Add([string]$id)}}; foreach($id in @($selected)){[void]$result.Add([string]$id)}
-        Set-FilterProperty $prefs 'selectedCountryIds' ([string[]]@($result|Sort-Object))
-    } else { Set-FilterProperty $prefs 'ignoredItemIds' ([int[]]@($selected|ForEach-Object{[int]$_}|Sort-Object -Unique)) }
-    [void](Save-UiPreferences $prefs)
-    $optimizer=Join-Path $PSScriptRoot 'OptimalRoute.ps1'; if(Test-Path -LiteralPath $optimizer){try{& $optimizer}catch{}}
-    $opportunities=Join-Path $PSScriptRoot 'OpportunityState.ps1'; if(Test-Path -LiteralPath $opportunities){try{& $opportunities}catch{}}
-    $filterState=Join-Path $PSScriptRoot 'FilterState.ps1'; if(Test-Path -LiteralPath $filterState){try{& $filterState}catch{}}
-    $form.Close()
+    try {
+        $selected=New-Object System.Collections.Generic.List[string]; for($i=0;$i-lt$rows.Count;$i++){if($list.GetItemChecked($i)){$selected.Add([string]$rows[$i].Id)}}
+        if($Filter -eq 'Item') { Set-FilterProperty $prefs 'itemFilterAll' ($rows.Count -gt 0 -and $selected.Count -eq $rows.Count); Set-FilterProperty $prefs 'selectedItemIds' ([int[]]@($selected|ForEach-Object{[int]$_})) }
+        elseif($Filter -eq 'Category') { Set-FilterProperty $prefs 'categoryFilterAll' ($rows.Count -gt 0 -and $selected.Count -eq $rows.Count); Set-FilterProperty $prefs 'selectedCategories' ([string[]]@($selected)) }
+        elseif($Filter -eq 'Country') {
+            $displayed=New-Object 'System.Collections.Generic.HashSet[string]'; foreach($row in @($rows)){[void]$displayed.Add([string]$row.Id)}
+            $result=New-Object 'System.Collections.Generic.HashSet[string]'; foreach($id in @($prefs.selectedCountryIds)){if(-not$displayed.Contains([string]$id)){[void]$result.Add([string]$id)}}; foreach($id in @($selected)){[void]$result.Add([string]$id)}
+            Set-FilterProperty $prefs 'selectedCountryIds' ([string[]]@($result|Sort-Object))
+        } else { Set-FilterProperty $prefs 'ignoredItemIds' ([int[]]@($selected|ForEach-Object{[int]$_}|Sort-Object -Unique)) }
+        [void](Save-UiPreferences $prefs)
+
+        foreach($scriptName in @('OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1')) {
+            $scriptPath=Join-Path $PSScriptRoot $scriptName
+            if(-not(Test-Path -LiteralPath $scriptPath)){continue}
+            try { & $scriptPath }
+            catch { Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message (($scriptName+': ')+$_.Exception.ToString()) }
+        }
+        Clear-TravelAssistantLatestError -Component $logComponent
+        $form.Close()
+    } catch {
+        Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message $_.Exception.ToString()
+    }
 })
 $form.AcceptButton=$save; $form.CancelButton=$cancel; [void]$form.ShowDialog()
