@@ -18,16 +18,37 @@ function Protect-TravelAssistantLogText {
     param([string]$Text)
     $value = ([string]$Text).Replace("`r",' ').Replace("`n",' ').Trim()
     $value = [regex]::Replace($value,'(?i)(api[_-]?key|key|token)(\s*[=:]\s*)[^\s&;]+','$1$2<redacted>')
-    if ($value.Length -gt 2000) { $value = $value.Substring(0,2000) }
+    if ($value.Length -gt 4000) { $value = $value.Substring(0,4000) }
     return $value
+}
+
+function Format-TravelAssistantErrorRecord {
+    param([System.Management.Automation.ErrorRecord]$ErrorRecord)
+    if ($null -eq $ErrorRecord) { return 'Unknown PowerShell error.' }
+    $parts = @()
+    if ($null -ne $ErrorRecord.Exception) { $parts += $ErrorRecord.Exception.ToString() }
+    if ($null -ne $ErrorRecord.InvocationInfo) {
+        $scriptName = [string]$ErrorRecord.InvocationInfo.ScriptName
+        $line = [int]$ErrorRecord.InvocationInfo.ScriptLineNumber
+        $position = ([string]$ErrorRecord.InvocationInfo.PositionMessage).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($scriptName) -or $line -gt 0) { $parts += ('source={0}:{1}' -f $scriptName,$line) }
+        if (-not [string]::IsNullOrWhiteSpace($position)) { $parts += $position }
+    }
+    $stack = ([string]$ErrorRecord.ScriptStackTrace).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($stack)) { $parts += ('stack=' + $stack) }
+    return ($parts -join ' | ')
 }
 
 function Invoke-TravelAssistantLogMaintenance {
     try {
         New-Item -ItemType Directory -Force -Path $TravelAssistantLogDir | Out-Null
+        $cutoff = [DateTime]::UtcNow.AddDays(-$TravelAssistantLogRetentionDays)
+        foreach ($marker in @(Get-ChildItem -LiteralPath $TravelAssistantLogDir -Filter '*-error.txt' -File -ErrorAction SilentlyContinue)) {
+            if ($marker.LastWriteTimeUtc -lt $cutoff) { Remove-Item -LiteralPath $marker.FullName -Force -ErrorAction SilentlyContinue }
+        }
         if (-not (Test-Path -LiteralPath $TravelAssistantLogFile)) { return }
         $item = Get-Item -LiteralPath $TravelAssistantLogFile -ErrorAction Stop
-        if ($item.LastWriteTimeUtc -lt [DateTime]::UtcNow.AddDays(-$TravelAssistantLogRetentionDays)) {
+        if ($item.LastWriteTimeUtc -lt $cutoff) {
             Remove-Item -LiteralPath $TravelAssistantLogFile -Force -ErrorAction SilentlyContinue
             return
         }
