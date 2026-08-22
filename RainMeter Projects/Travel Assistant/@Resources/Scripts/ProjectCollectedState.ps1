@@ -106,7 +106,10 @@ $enabledItem = @($items.items | Where-Object { $_.enabled -eq $true } | Select-O
 $itemId = if ($enabledItem.Count -gt 0) { [int]$enabledItem[0].itemId } else { 0 }
 $staleAfter = [Math]::Max(60L,[long](Get-ProjectionProperty $settings 'staleAfterSeconds'))
 
-foreach ($country in @($countries.countries | Where-Object { $_.enabled -eq $true })) {
+# Every collect=true country participates in the opportunity surface, even when
+# it is not one of the legacy enabled compatibility destinations. Project travel
+# time for all of them so flag tooltips never depend on UK/JP-only state.
+foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $true })) {
     $countryId = [string]$country.id
     $prefix = Get-ProjectionPrefix $countryId
     $travelSeconds = 0L
