@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
+$CollectedState = Join-Path $PSScriptRoot 'ProjectCollectedState.ps1'
 $ObservationHistory = Join-Path $PSScriptRoot 'MaintainObservationHistory.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
@@ -23,6 +24,7 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $HistoryErrorFile = Join-Path $RuntimeDir 'history-maintenance-error.txt'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
+$CollectedStateErrorFile = Join-Path $RuntimeDir 'collected-state-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
 $EngineStateSchemaErrorFile = Join-Path $RuntimeDir 'engine-state-schema-error.txt'
 $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
@@ -185,16 +187,26 @@ try {
     $acquired = $mutex.WaitOne(0)
     if (-not $acquired) { exit 0 }
 
-    # UpdateTracker's legacy prune discards every pre-cutoff change-only sample.
-    # Roll one state baseline per market to the retention boundary first and advance
-    # lastPruneAt so the destructive legacy prune is skipped on this update.
+    # Preserve one predecessor per market before any legacy maintenance can prune
+    # the shared high-resolution evidence store.
     Invoke-HistoryMaintenance -Phase 'PreUpdate'
 
-    & $Updater -Action $Action
-    if (-not $?) { throw 'UpdateTracker returned failure.' }
+    if ($Action -eq 'Update') {
+        # ShadowCollector is the sole live foreign-stock request on the main path
+        # and owns stock-transition history for every active market.
+        Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile -ClearErrorOnSuccess $false
 
-    # ShadowCollector catches provider failures internally and owns its error file.
-    Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile -ClearErrorOnSuccess $false
+        # The legacy UK/JP state keys are still useful to compatibility readers,
+        # but they are projected locally from the collector state. Do not issue a
+        # second provider request or a second history write through UpdateTracker.
+        Invoke-FailSoftScript -Path $CollectedState -ErrorPath $CollectedStateErrorFile
+    } else {
+        # Retain the explicit legacy action only for callers that still cycle its
+        # travel-mode preference. It is not part of the normal one-minute heartbeat.
+        & $Updater -Action $Action
+        if (-not $?) { throw 'UpdateTracker returned failure.' }
+        Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile -ClearErrorOnSuccess $false
+    }
 
     # Bootstrap truthful current snapshots for active markets whose older baseline
     # was already lost by previous retention pruning. Deleted history is not invented.
@@ -202,9 +214,8 @@ try {
 
     Invoke-FailSoftScript -Path $LocalCatalog -ErrorPath $LocalCatalogErrorFile
 
-    # Persist engine-state schema normalization even when ShadowCollector is inside
-    # its provider-poll throttle window. This keeps local readers from seeing an
-    # older state shape solely because no network request is due yet.
+    # Persist engine-state schema normalization even when collection failed and the
+    # UI is temporarily operating from the last known state.
     Invoke-FailSoftScript -Path $EngineStateSchema -ErrorPath $EngineStateSchemaErrorFile
 
     & $Finalizer
@@ -217,8 +228,7 @@ try {
     # Keep the route optimizer as a background decision/pricing-priority model.
     Invoke-FailSoftScript -Path $OptimalRoute -ErrorPath $OptimalRouteErrorFile
 
-    # Primary presentation is the sortable opportunity surface. OPTIMAL is one
-    # ordering over evidence-backed item/country windows rather than the only view.
+    # Primary presentation is the sortable opportunity surface.
     Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
 
     # OpportunityState must always leave an explicit projection, even when the
@@ -238,6 +248,8 @@ try {
         catch { Write-CompactFailure -Path $FilterStateErrorFile -Message $_.Exception.ToString() }
     }
 
+    # Heartbeat marks completion of the current stock/context/opportunity projection.
+    # ResaleQueue runs afterward and cannot make the visible list falsely stale.
     Write-UpdateHeartbeat
 
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
