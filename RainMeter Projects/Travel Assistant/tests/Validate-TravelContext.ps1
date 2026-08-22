@@ -11,24 +11,27 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
     Fail 'Missing TravelContext.ps1.'
 } else {
     $text = Get-Content -LiteralPath $scriptPath -Raw
-    $tokens=$null; $parseErrors=$null
-    [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath,[ref]$tokens,[ref]$parseErrors)
+    $tokens = $null
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "TravelContext.ps1 parse error: $($parseError.Message)" }
 
-    foreach ($fn in @('Resolve-TravelCountryId','Convert-TornTravelContext','Invoke-TornTravelCurl','Project-TravelContextToState')) {
-        if ($text -notmatch ('(?m)^function\s+'+[regex]::Escape($fn)+'\s*\{')) { Fail "Missing $fn." }
+    foreach ($fn in @('Resolve-TravelCountryId','Convert-TornUserBar','Convert-TornTravelContext','Invoke-TornTravelCurl','Set-ProjectedBar','Project-TravelContextToState')) {
+        if ($text -notmatch ('(?m)^function\s+' + [regex]::Escape($fn) + '\s*\{')) { Fail "Missing $fn." }
     }
     foreach ($token in @(
-        'https://api.torn.com/v2/user?selections=travel,basic',
+        'https://api.torn.com/v2/user?selections=travel,basic,bars',
         "`$psi.Arguments = '-q --config -'",
         'Authorization: ApiKey {0}',
         'destinationCountryId',
         'filterActive',
+        "Set-ProjectedBar -State `$state -Prefix 'Energy'",
+        "Set-ProjectedBar -State `$state -Prefix 'Nerve'",
         'TravelDestinationCountryId',
         'TravelFilterActive',
         'TravelArrivalAt',
         'TravelTimeLeft',
-        'Preserve the last successful foreign'
+        'Preserve the last successful foreign destination and bars on transient failures.'
     )) {
         if (-not $text.Contains($token)) { Fail "Travel context contract missing '$token'." }
     }
@@ -42,10 +45,11 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
 } else {
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
     $finalizer = $wrapper.IndexOf('& $Finalizer')
-    $travel = $wrapper.IndexOf('& $TravelContext')
-    $visible = $wrapper.IndexOf('& $VisibleItems')
-    if ($finalizer -lt 0 -or $travel -lt 0 -or $visible -lt 0 -or -not ($finalizer -lt $travel -and $travel -lt $visible)) {
-        Fail 'Runtime order must keep FinalizeState -> TravelContext -> VisibleItems.'
+    $travel = $wrapper.IndexOf('Invoke-FailSoftScript -Path $TravelContext')
+    $optimal = $wrapper.IndexOf('Invoke-FailSoftScript -Path $OptimalRoute')
+    $filterState = $wrapper.IndexOf('& $FilterState')
+    if ($finalizer -lt 0 -or $travel -lt 0 -or $optimal -lt 0 -or $filterState -lt 0 -or -not ($finalizer -lt $travel -and $travel -lt $optimal -and $optimal -lt $filterState)) {
+        Fail 'Runtime order must keep FinalizeState -> TravelContext -> OptimalRoute -> FilterState.'
     }
 }
 
@@ -55,5 +59,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Travel context configuration validation passed.' -ForegroundColor Green
-Write-Host 'Destination filtering uses one bounded fail-soft Torn user request and preserves the last successful foreign context on transient failures.'
+Write-Host 'One bounded user request supplies destination plus Energy/Nerve bars; transient failures preserve the last successful context.'
 exit 0
