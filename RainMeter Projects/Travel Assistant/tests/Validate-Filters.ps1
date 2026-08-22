@@ -78,7 +78,7 @@ if (Test-Path -LiteralPath $files.Opportunities) {
     )) {
         if (-not $text.Contains($token)) { Fail "OpportunityState.ps1 missing '$token'." }
     }
-    foreach ($mode in @("sortMode -eq 'upcoming'","sortMode -eq 'profit'","sortMode -eq 'time'","optimalScore';Descending=$true")) {
+    foreach ($mode in @("sortMode -eq 'upcoming'","sortMode -eq 'profit'","sortMode -eq 'time'",'optimalScore'';Descending=$true')) {
         if (-not $text.Contains($mode)) { Fail "OpportunityState.ps1 missing sort contract '$mode'." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'OpportunityState.ps1 must remain local-only.' }
