@@ -27,6 +27,7 @@ $tests = @(
     'Run-FilterPreferenceTests.ps1',
     'Run-TravelContextTests.ps1',
     'Run-OptimalRouteTests.ps1',
+    'Run-OpportunityStateTests.ps1',
     'Run-TravelProfileTests.ps1',
     'Run-TornProfileSyncTests.ps1',
     'Run-CurrentCapacityTests.ps1',
@@ -45,6 +46,6 @@ foreach ($name in $tests) {
 }
 
 Write-Host ''
-Write-Host 'All Travel Assistant 0.5 deterministic/static validations passed.' -ForegroundColor Green
+Write-Host 'All Travel Assistant 0.6 deterministic/static validations passed.' -ForegroundColor Green
 Write-Host 'This still does not replace live Rainmeter/provider/API validation on Windows.' -ForegroundColor Yellow
 exit 0
