@@ -26,9 +26,9 @@ if (Test-Path -LiteralPath $launcherPath) {
 }
 
 if (Test-Path -LiteralPath $hostPath) {
-    $host = Get-Content -LiteralPath $hostPath -Raw
+    $hostText = Get-Content -LiteralPath $hostPath -Raw
     foreach($token in @('OpenItemViewer.ps1','RuntimeLog.ps1','Write-TravelAssistantLog','ItemViewer')) {
-        if(-not $host.Contains($token)){Fail "PopupHost viewer contract missing '$token'."}
+        if(-not $hostText.Contains($token)){Fail "PopupHost viewer contract missing '$token'."}
     }
 }
 
