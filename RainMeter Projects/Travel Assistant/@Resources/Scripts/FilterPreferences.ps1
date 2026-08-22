@@ -12,7 +12,9 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $PreferenceFile = Join-Path $RuntimeDir 'preferences.json'
+$StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeLogScript = Join-Path $PSScriptRoot 'RuntimeLog.ps1'
 if (Test-Path -LiteralPath $RuntimeLogScript) { . $RuntimeLogScript }
 
@@ -38,6 +40,30 @@ function Set-FilterProperty {
     $property = $Object.PSObject.Properties[$Name]
     if ($null -eq $property) { $Object | Add-Member NoteProperty $Name $Value }
     else { $property.Value = $Value }
+}
+
+function Set-FilterStateKvValueAtomic {
+    param([string]$Name,[string]$Value)
+    $values = @{}
+    if (Test-Path -LiteralPath $StateKvFile) {
+        foreach ($line in Get-Content -LiteralPath $StateKvFile) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $index = $line.IndexOf('=')
+            if ($index -lt 1) { continue }
+            $key = $line.Substring(0,$index).Trim([char]0xFEFF).Trim()
+            $values[$key] = $line.Substring($index+1).Trim()
+        }
+    }
+    $values[$Name] = $Value
+    New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
+    $tmp = $StateKvFile + '.preference.tmp'
+    $lines = @()
+    foreach ($key in @($values.Keys | Sort-Object)) {
+        $safe = ([string]$values[$key]).Replace("`r",' ').Replace("`n",' ')
+        $lines += ($key + '=' + $safe)
+    }
+    [System.IO.File]::WriteAllLines($tmp,[string[]]$lines,[System.Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $tmp -Destination $StateKvFile -Force
 }
 
 function Get-FilterAvailableCountryIds {
@@ -90,11 +116,10 @@ function Normalize-WastePolicy {
 function Normalize-SortMode {
     param([object]$Value)
     $mode = ([string]$Value).Trim().ToLowerInvariant()
-    # Migrate 0.6 pre-change sort values without losing the user's intent.
     if ($mode -eq 'optimal') { return 'profit_per_hour' }
     if ($mode -eq 'profit') { return 'gross' }
     if ($mode -eq 'time') { return 'upcoming' }
-    if ($mode -notin @('upcoming','gross','profit_per_hour')) { return 'upcoming' }
+    if ($mode -notin @('name','upcoming','gross','profit_per_hour')) { return 'upcoming' }
     return $mode
 }
 
@@ -113,9 +138,6 @@ function Normalize-UiPreferences {
     $pin = [string]$Preferences.pinnedMarket
     if (-not [string]::IsNullOrWhiteSpace($pin) -and $pin -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { Set-FilterProperty $Preferences 'pinnedMarket' '' }
 
-    # Windows PowerShell 5.1 can throw PSEnumerableBinder "Argument types do not match"
-    # when a generic HashSet/List is fed through @(...). Preference collections are
-    # small, so use ordinary PowerShell arrays plus Sort-Object -Unique here.
     $itemIds = @()
     foreach ($id in @($Preferences.selectedItemIds)) {
         $n = 0
@@ -213,23 +235,25 @@ if ($Action -eq 'ToggleTripBand') {
     [void](Save-UiPreferences -Preferences $prefs)
     $changed = $true
 } elseif ($Action -eq 'SetSortMode') {
-    Set-FilterProperty $prefs 'sortMode' (Normalize-SortMode $Value)
+    $sortMode = Normalize-SortMode $Value
+    Set-FilterProperty $prefs 'sortMode' $sortMode
     [void](Save-UiPreferences -Preferences $prefs)
+    try { Set-FilterStateKvValueAtomic -Name 'OpportunitySortMode' -Value $sortMode }
+    catch {
+        if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+            Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('Persist OpportunitySortMode: ' + $_.Exception.ToString())
+        }
+    }
     $changed = $true
 }
 
-if ($changed) {
-    # A pure sort change does not alter filters, collection, or route economics.
-    # Reproject the opportunity order directly so the shared Rainmeter RunCommand
-    # measure is released as quickly as possible.
-    if ($Action -ne 'SetSortMode') {
-        $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
-        if (Test-Path -LiteralPath $filterState) {
-            try { & $filterState }
-            catch {
-                if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
-                    Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('FilterState.ps1: ' + $_.Exception.ToString())
-                }
+if ($changed -and $Action -ne 'SetSortMode') {
+    $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
+    if (Test-Path -LiteralPath $filterState) {
+        try { & $filterState }
+        catch {
+            if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+                Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('FilterState.ps1: ' + $_.Exception.ToString())
             }
         }
     }
