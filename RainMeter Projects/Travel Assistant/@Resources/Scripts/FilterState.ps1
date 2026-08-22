@@ -11,6 +11,7 @@ $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
+$CountriesFile = Join-Path $ConfigDir 'countries.json'
 
 function Read-FilterStateKv {
     param([string]$Path)
@@ -45,6 +46,14 @@ function Write-FilterStateKvAtomic {
     }
     [System.IO.File]::WriteAllLines($tmp,$lines.ToArray(),[System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $tmp -Destination $Path -Force
+}
+
+function Get-FilterStateProperty {
+    param([object]$Object,[string]$Name)
+    if ($null -eq $Object) { return $null }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
 }
 
 function Get-FilterStateItemText {
@@ -86,12 +95,81 @@ function Get-ActiveMarketSourceRange {
     return [pscustomobject]@{ oldest=$oldest; freshest=$freshest }
 }
 
+function Get-FilterStateCountryPrefix {
+    param([string]$CountryId)
+    if ($CountryId -eq 'united_kingdom') { return 'UK' }
+    if ($CountryId -eq 'japan') { return 'JP' }
+    return $CountryId.ToUpperInvariant()
+}
+
+function Project-AllCollectedTravelSeconds {
+    param([hashtable]$State,[object]$Countries,[object]$Preferences)
+    if ($null -eq $Countries -or -not $Countries.PSObject.Properties['countries']) { return }
+    $mode = [string]$Preferences.travelMode
+    if ([string]::IsNullOrWhiteSpace($mode) -and $State.ContainsKey('TravelMode')) { $mode = [string]$State['TravelMode'] }
+    if ([string]::IsNullOrWhiteSpace($mode)) { return }
+
+    foreach ($country in @($Countries.countries | Where-Object { $_.collect -eq $true })) {
+        $countryId = [string](Get-FilterStateProperty $country 'id')
+        if ([string]::IsNullOrWhiteSpace($countryId) -or -not $country.PSObject.Properties['travelSeconds']) { continue }
+        $travelProperty = $country.travelSeconds.PSObject.Properties[$mode]
+        if ($null -eq $travelProperty) { continue }
+        $State[(Get-FilterStateCountryPrefix $countryId) + 'TravelSeconds'] = [long]$travelProperty.Value
+    }
+}
+
+function Resolve-OpportunityPresentationName {
+    param([hashtable]$State,[object]$Engine,[int]$Index)
+    $nameKey = 'Opportunity' + $Index + 'Name'
+    if ($State.ContainsKey($nameKey)) {
+        $current = ([string]$State[$nameKey]).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($current)) { return $current }
+    }
+
+    $keyKey = 'Opportunity' + $Index + 'Key'
+    if (-not $State.ContainsKey($keyKey)) { return '' }
+    $marketKey = ([string]$State[$keyKey]).Trim().ToLowerInvariant()
+    if ($marketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { return '' }
+    $parts = $marketKey.Split(':')
+    $itemId = 0
+    if (-not [int]::TryParse($parts[$parts.Count-1],[ref]$itemId) -or $itemId -le 0) { return '' }
+
+    if ($null -ne $Engine -and $Engine.PSObject.Properties['itemMetadata']) {
+        $metadata = Get-FilterStateProperty $Engine.itemMetadata ([string]$itemId)
+        if ($null -ne $metadata -and $metadata.PSObject.Properties['name']) {
+            $name = ([string]$metadata.name).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($name)) { return $name }
+        }
+    }
+
+    if ($null -ne $Engine -and $Engine.PSObject.Properties['observedMarkets']) {
+        $market = Get-FilterStateProperty $Engine.observedMarkets $marketKey
+        if ($null -ne $market -and $market.PSObject.Properties['providerName']) {
+            $providerName = ([string]$market.providerName).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($providerName)) { return $providerName }
+        }
+    }
+
+    return ('Item {0}' -f $itemId)
+}
+
+function Repair-OpportunityPresentationNames {
+    param([hashtable]$State,[object]$Engine)
+    for ($i=1; $i -le 8; $i++) {
+        $key = 'Opportunity' + $i + 'Key'
+        if (-not $State.ContainsKey($key) -or [string]::IsNullOrWhiteSpace([string]$State[$key])) { continue }
+        $name = Resolve-OpportunityPresentationName -State $State -Engine $Engine -Index $i
+        if (-not [string]::IsNullOrWhiteSpace($name)) { $State['Opportunity' + $i + 'Name'] = $name }
+    }
+}
+
 if ($SkipMain) { return }
 
 $state = Read-FilterStateKv $StateKvFile
 if ($state.Count -eq 0) { return }
 $prefs = Read-UiPreferences
 $engine = Read-FilterStateJson $EngineStateFile
+$countries = Read-FilterStateJson $CountriesFile
 $sourceRange = Get-ActiveMarketSourceRange -Engine $engine
 
 $state['UIItemFilterAll'] = if ([bool]$prefs.itemFilterAll) { 1 } else { 0 }
@@ -110,6 +188,15 @@ $state['UIIgnoredItemIds'] = (@($prefs.ignoredItemIds | ForEach-Object { [string
 $state['UIOldestMarketSourceTimestamp'] = [long]$sourceRange.freshest
 $state['UIOldestActiveMarketSourceTimestamp'] = [long]$sourceRange.oldest
 $state['UIFreshestMarketSourceTimestamp'] = [long]$sourceRange.freshest
+
+# Redundant final projection keeps flag tooltips correct even if an older or partial
+# compatibility projection reached state.kv before the opportunity layer completed.
+Project-AllCollectedTravelSeconds -State $state -Countries $countries -Preferences $prefs
+
+# A provider row can legally expose an empty providerName. Never let that erase the
+# item label in the Rainmeter card: prefer local catalog metadata, then a non-empty
+# provider label, then an explicit Item <id> fallback.
+Repair-OpportunityPresentationNames -State $state -Engine $engine
 
 # Pin state is intentionally not mirrored through state.kv. StateReader owns the
 # live pin and persists it directly to ignored preferences.json. Projecting an
