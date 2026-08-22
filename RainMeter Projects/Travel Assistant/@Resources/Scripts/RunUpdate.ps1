@@ -9,6 +9,7 @@ Set-StrictMode -Version 2.0
 $Updater = Join-Path $PSScriptRoot 'UpdateTracker.ps1'
 $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
+$EngineStateSchema = Join-Path $PSScriptRoot 'EnsureEngineStateSchema.ps1'
 $TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
 $OptimalRoute = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
 $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
@@ -20,6 +21,7 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
+$EngineStateSchemaErrorFile = Join-Path $RuntimeDir 'engine-state-schema-error.txt'
 $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
 $OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
@@ -136,6 +138,11 @@ try {
 
     Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile
     Invoke-FailSoftScript -Path $LocalCatalog -ErrorPath $LocalCatalogErrorFile
+
+    # Persist engine-state schema normalization even when ShadowCollector is inside
+    # its provider-poll throttle window. This keeps local readers from seeing an
+    # older state shape solely because no network request is due yet.
+    Invoke-FailSoftScript -Path $EngineStateSchema -ErrorPath $EngineStateSchemaErrorFile
 
     & $Finalizer
     if (-not $?) { exit 1 }
