@@ -12,10 +12,10 @@
       "travelSeconds": { "standard": 9060, "airstrip": 6360, "wlt": 4560, "business": 2700 },
       "travelCosts": { "standard": 18000, "airstrip": 0, "wlt": 0, "business": null },
       "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
-      "travelTimeSource": "https://wiki.torn.com/wiki/United_Kingdom",
-      "travelTimeVerifiedAt": "2026-08-19",
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
       "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
-      "travelEconomicsVerifiedAt": "2026-08-19"
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "japan",
@@ -28,82 +28,154 @@
       "travelSeconds": { "standard": 12780, "airstrip": 8940, "wlt": 6420, "business": 3840 },
       "travelCosts": { "standard": 32000, "airstrip": 0, "wlt": 0, "business": null },
       "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
-      "travelTimeSource": "https://wiki.torn.com/wiki/Japan",
-      "travelTimeVerifiedAt": "2026-08-19",
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
       "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
-      "travelEconomicsVerifiedAt": "2026-08-19"
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "mexico",
       "name": "Mexico",
+      "city": "Ciudad Juarez",
       "tripBand": "short",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "mex", "yata": "mex" }
+      "providerCodes": { "prometheus": "mex", "yata": "mex" },
+      "travelSeconds": { "standard": 1440, "airstrip": 1020, "wlt": 720, "business": 420 },
+      "travelCosts": { "standard": 6500, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "cayman_islands",
       "name": "Cayman Islands",
+      "city": "George Town",
       "tripBand": "short",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "cay", "yata": "cay" }
+      "providerCodes": { "prometheus": "cay", "yata": "cay" },
+      "travelSeconds": { "standard": 1980, "airstrip": 1380, "wlt": 1020, "business": 600 },
+      "travelCosts": { "standard": 10000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "canada",
       "name": "Canada",
+      "city": "Toronto",
       "tripBand": "short",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "can", "yata": "can" }
+      "providerCodes": { "prometheus": "can", "yata": "can" },
+      "travelSeconds": { "standard": 2340, "airstrip": 1620, "wlt": 1140, "business": 720 },
+      "travelCosts": { "standard": 9000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "hawaii",
       "name": "Hawaii",
+      "city": "Honolulu",
       "tripBand": "medium",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "haw", "yata": "haw" }
+      "providerCodes": { "prometheus": "haw", "yata": "haw" },
+      "travelSeconds": { "standard": 7620, "airstrip": 5340, "wlt": 3780, "business": 2280 },
+      "travelCosts": { "standard": 11000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "argentina",
       "name": "Argentina",
+      "city": "Buenos Aires",
       "tripBand": "medium",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "arg", "yata": "arg" }
+      "providerCodes": { "prometheus": "arg", "yata": "arg" },
+      "travelSeconds": { "standard": 9480, "airstrip": 6660, "wlt": 4740, "business": 2820 },
+      "travelCosts": { "standard": 21000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "switzerland",
       "name": "Switzerland",
+      "city": "Zurich",
       "tripBand": "medium",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "swi", "yata": "swi" }
+      "providerCodes": { "prometheus": "swi", "yata": "swi" },
+      "travelSeconds": { "standard": 9960, "airstrip": 6960, "wlt": 4980, "business": 3000 },
+      "travelCosts": { "standard": 27000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "china",
       "name": "China",
+      "city": "Beijing",
       "tripBand": "long",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "chi", "yata": "chi" }
+      "providerCodes": { "prometheus": "chi", "yata": "chi" },
+      "travelSeconds": { "standard": 13740, "airstrip": 9600, "wlt": 6840, "business": 4140 },
+      "travelCosts": { "standard": 35000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "united_arab_emirates",
       "name": "United Arab Emirates",
+      "city": "Dubai",
       "tripBand": "long",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "uae", "yata": "uae" }
+      "providerCodes": { "prometheus": "uae", "yata": "uae" },
+      "travelSeconds": { "standard": 15420, "airstrip": 10800, "wlt": 7680, "business": 4620 },
+      "travelCosts": { "standard": 32000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     },
     {
       "id": "south_africa",
       "name": "South Africa",
+      "city": "Johannesburg",
       "tripBand": "long",
       "enabled": false,
       "collect": true,
-      "providerCodes": { "prometheus": "sou", "yata": "sou" }
+      "providerCodes": { "prometheus": "sou", "yata": "sou" },
+      "travelSeconds": { "standard": 16920, "airstrip": 11820, "wlt": 8460, "business": 5100 },
+      "travelCosts": { "standard": 40000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
+      "travelTimeSource": "https://wiki.torn.com/wiki/Travel",
+      "travelTimeVerifiedAt": "2026-08-21",
+      "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
+      "travelEconomicsVerifiedAt": "2026-08-21"
     }
   ]
 }
