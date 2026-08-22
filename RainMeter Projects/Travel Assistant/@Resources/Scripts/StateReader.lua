@@ -4,6 +4,25 @@ local pollInterval = 60
 local failureRetryInterval = 15
 local failureRetryArmed = false
 local nextPollAt = nil
+local maxExpandedCards = 2
+
+local cardExpanded = {
+    UKPrimary = true,
+    UKSecondary = false,
+    JPPrimary = true,
+    JPSecondary = false
+}
+
+local secondaryVisible = { UK = false, JP = false }
+local restockWanted = { UK = false, JP = false }
+
+local cardOrder = { 'UKPrimary', 'UKSecondary', 'JPPrimary', 'JPSecondary' }
+local cardVariablePrefix = {
+    UKPrimary = 'UKCard',
+    UKSecondary = 'UKSecondaryCard',
+    JPPrimary = 'JPCard',
+    JPSecondary = 'JPSecondaryCard'
+}
 
 local function trim(s)
     s = s:gsub('^\239\187\191', '')
@@ -90,6 +109,14 @@ local function setVariable(name, value)
     SKIN:Bang('!SetVariable', name, tostring(value or ''))
 end
 
+local function setMeterGroupVisible(group, visible)
+    if visible then
+        SKIN:Bang('!ShowMeterGroup', group)
+    else
+        SKIN:Bang('!HideMeterGroup', group)
+    end
+end
+
 local function setRestockVisibility(prefix, visible)
     local iconMeter = 'Meter' .. prefix .. 'RestockIcon'
     local textMeter = 'Meter' .. prefix .. 'Restock'
@@ -99,13 +126,6 @@ local function setRestockVisibility(prefix, visible)
     else
         SKIN:Bang('!HideMeter', iconMeter)
         SKIN:Bang('!HideMeter', textMeter)
-    end
-end
-
-local function setSecondaryVisibility(prefix, visible)
-    for _, suffix in ipairs({ 'SecondaryTitle', 'SecondaryPrice', 'SecondaryStockHeader' }) do
-        local meter = 'Meter' .. prefix .. suffix
-        if visible then SKIN:Bang('!ShowMeter', meter) else SKIN:Bang('!HideMeter', meter) end
     end
 end
 
@@ -160,10 +180,96 @@ local function secondaryPriceColor(priceClass)
     return '145,152,164,255'
 end
 
+local function isCardVisible(cardKey)
+    if cardKey == 'UKSecondary' then return secondaryVisible.UK end
+    if cardKey == 'JPSecondary' then return secondaryVisible.JP end
+    return cardKey == 'UKPrimary' or cardKey == 'JPPrimary'
+end
+
+local function countExpandedCards()
+    local count = 0
+    for _, key in ipairs(cardOrder) do
+        if isCardVisible(key) and cardExpanded[key] then count = count + 1 end
+    end
+    return count
+end
+
+local function collapseForRequestedCard(requested)
+    local prefix = requested:sub(1, 2)
+    local companion = nil
+    if requested:find('Secondary', 1, true) then companion = prefix .. 'Primary'
+    else companion = prefix .. 'Secondary' end
+
+    if companion ~= requested and isCardVisible(companion) and cardExpanded[companion] then
+        cardExpanded[companion] = false
+        return
+    end
+
+    for _, key in ipairs(cardOrder) do
+        if key ~= requested and isCardVisible(key) and cardExpanded[key] then
+            cardExpanded[key] = false
+            return
+        end
+    end
+end
+
+local function applyCardLayout()
+    local top = 52
+    local gap = 8
+    local expandedHeight = 182
+    local collapsedHeight = 42
+    local y = top
+
+    for _, key in ipairs(cardOrder) do
+        if isCardVisible(key) then
+            local h = cardExpanded[key] and expandedHeight or collapsedHeight
+            local variablePrefix = cardVariablePrefix[key]
+            setVariable(variablePrefix .. 'Y', y)
+            setVariable(variablePrefix .. 'Height', h)
+
+            if key == 'UKPrimary' then
+                setVariable('UKExpandText', cardExpanded[key] and 'v' or '>')
+                setMeterGroupVisible('UKPrimaryBody', cardExpanded[key])
+            elseif key == 'JPPrimary' then
+                setVariable('JPExpandText', cardExpanded[key] and 'v' or '>')
+                setMeterGroupVisible('JPPrimaryBody', cardExpanded[key])
+            elseif key == 'UKSecondary' then
+                setVariable('UKSecondaryExpandText', cardExpanded[key] and 'v' or '>')
+                setMeterGroupVisible('UKSecondaryHeader', true)
+                setMeterGroupVisible('UKSecondaryBody', cardExpanded[key])
+            elseif key == 'JPSecondary' then
+                setVariable('JPSecondaryExpandText', cardExpanded[key] and 'v' or '>')
+                setMeterGroupVisible('JPSecondaryHeader', true)
+                setMeterGroupVisible('JPSecondaryBody', cardExpanded[key])
+            end
+
+            y = y + h + gap
+        else
+            local variablePrefix = cardVariablePrefix[key]
+            setVariable(variablePrefix .. 'Y', y)
+            setVariable(variablePrefix .. 'Height', 0)
+            if key == 'UKSecondary' then
+                setMeterGroupVisible('UKSecondaryHeader', false)
+                setMeterGroupVisible('UKSecondaryBody', false)
+            elseif key == 'JPSecondary' then
+                setMeterGroupVisible('JPSecondaryHeader', false)
+                setMeterGroupVisible('JPSecondaryBody', false)
+            end
+        end
+    end
+
+    setVariable('PanelHeight', y)
+    setRestockVisibility('UK', cardExpanded.UKPrimary and restockWanted.UK)
+    setRestockVisibility('JP', cardExpanded.JPPrimary and restockWanted.JP)
+end
+
 local function updateSecondaryItem(data, prefix)
     local visible = number(data[prefix .. 'SecondaryVisible']) == 1
-    setSecondaryVisibility(prefix, visible)
-    if not visible then return end
+    secondaryVisible[prefix] = visible
+    if not visible then
+        cardExpanded[prefix .. 'Secondary'] = false
+        return
+    end
 
     local now = os.time()
     local name = safeText(data[prefix .. 'SecondaryName'], 'Item')
@@ -177,11 +283,13 @@ local function updateSecondaryItem(data, prefix)
     local capacity = number(data[prefix .. 'SecondaryCapacity'])
     local tripProfit = number(data[prefix .. 'SecondaryTripProfit'])
     local priceClass = safeText(data[prefix .. 'SecondaryPriceClass'], 'UNKNOWN')
+    local graphName = safeText(data[prefix .. 'SecondaryGraphName'], '')
 
     setVariable(prefix .. 'SecondaryName', name)
     setVariable(prefix .. 'SecondaryPriceText', formatMoney(foreignPrice))
     setVariable(prefix .. 'SecondaryMarketValueText', formatMoney(marketValue))
     setVariable(prefix .. 'SecondaryPriceColor', secondaryPriceColor(priceClass))
+    setVariable(prefix .. 'SecondaryGraphName', graphName)
 
     if stock > 0 then
         setVariable(prefix .. 'SecondaryStockHeaderText', 'Stock: ' .. formatInteger(stock))
@@ -190,6 +298,19 @@ local function updateSecondaryItem(data, prefix)
     else
         setVariable(prefix .. 'SecondaryStockHeaderText', 'Out of Stock')
     end
+
+    local decision = 'Learning - no departure recommendation'
+    if marketValue <= 0 then
+        decision = 'Market value pending - no departure recommendation'
+    elseif priceClass == 'UNPROFITABLE' then
+        decision = 'Unprofitable - no departure recommendation'
+    elseif priceClass == 'LOW_MARGIN' then
+        decision = 'Low margin - no departure recommendation'
+    elseif priceClass == 'GOOD' then
+        decision = 'Economics positive - timing model learning'
+    end
+    setVariable(prefix .. 'SecondaryDecisionText', decision)
+    setVariable(prefix .. 'SecondaryOverlayText', 'TIMING MODEL LEARNING')
 
     local tooltip = { name }
     if category ~= '' then table.insert(tooltip, category) end
@@ -203,6 +324,7 @@ local function updateSecondaryItem(data, prefix)
     if capacity > 0 then table.insert(tooltip, 'Capacity ' .. formatInteger(capacity)) end
     if priceClass ~= 'UNKNOWN' then table.insert(tooltip, 'Trip net ' .. formatMoney(tripProfit)) end
     if sourceTimestamp > 0 then table.insert(tooltip, 'Stock source ' .. formatShortElapsed(now - sourceTimestamp) .. ' old') end
+    table.insert(tooltip, 'Departure timing is not enabled for this item yet')
     setVariable(prefix .. 'SecondaryTooltipText', table.concat(tooltip, ' | '))
 end
 
@@ -250,9 +372,7 @@ local function updateDestination(data, prefix)
         restockText = 'due / variable'
     end
     setVariable(prefix .. 'RestockText', restockText)
-
-    local showRestock = stock <= 0 and restockEta > 0 and travelSeconds > 0 and restockEta > travelSeconds
-    setRestockVisibility(prefix, showRestock)
+    restockWanted[prefix] = stock <= 0 and restockEta > 0 and travelSeconds > 0 and restockEta > travelSeconds
 
     local decision = message
     if status == 'SAFE_WINDOW' then
@@ -342,15 +462,40 @@ function Initialize()
     local heartbeatConfigured = SELF:GetOption('HeartbeatFile', '#@#Generated\\last-update.txt')
     local configuredPoll = tonumber(SELF:GetOption('PollInterval', '60')) or 60
     local configuredFailureRetry = tonumber(SELF:GetOption('FailureRetryInterval', '15')) or 15
+    local configuredMaxExpanded = tonumber(SELF:GetOption('MaxExpandedCards', '2')) or 2
     if configuredPoll < 15 then configuredPoll = 15 end
     if configuredFailureRetry < 5 then configuredFailureRetry = 5 end
     if configuredFailureRetry > configuredPoll then configuredFailureRetry = configuredPoll end
+    if configuredMaxExpanded < 1 then configuredMaxExpanded = 1 end
+    if configuredMaxExpanded > 4 then configuredMaxExpanded = 4 end
+
     statePath = SKIN:MakePathAbsolute(configured)
     heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
     pollInterval = math.floor(configuredPoll)
     failureRetryInterval = math.floor(configuredFailureRetry)
+    maxExpandedCards = math.floor(configuredMaxExpanded)
     failureRetryArmed = false
     nextPollAt = os.time() + pollInterval
+
+    cardExpanded.UKPrimary = maxExpandedCards >= 1
+    cardExpanded.JPPrimary = maxExpandedCards >= 2
+    cardExpanded.UKSecondary = false
+    cardExpanded.JPSecondary = false
+end
+
+function ToggleCard(cardKey)
+    if cardExpanded[cardKey] == nil or not isCardVisible(cardKey) then return end
+
+    if cardExpanded[cardKey] then
+        cardExpanded[cardKey] = false
+    else
+        if countExpandedCards() >= maxExpandedCards then collapseForRequestedCard(cardKey) end
+        cardExpanded[cardKey] = true
+    end
+
+    applyCardLayout()
+    SKIN:Bang('!UpdateMeter', '*')
+    SKIN:Bang('!Redraw')
 end
 
 function Update()
@@ -370,11 +515,13 @@ function Update()
         nextPollAt = now + pollInterval
         SKIN:Bang('!CommandMeasure', 'MeasureUpdate', 'Run')
     end
+
     setVariable('TravelModeText', safeText(data.TravelModeLabel, 'Airstrip'))
     updateHeartbeatText(data, now)
     updateDestination(data, 'UK')
     updateSecondaryItem(data, 'UK')
     updateDestination(data, 'JP')
     updateSecondaryItem(data, 'JP')
+    applyCardLayout()
     return 0
 end
