@@ -128,6 +128,17 @@ function Get-OpportunityCountryCode {
     return $CountryId.ToUpperInvariant()
 }
 
+function Get-OpportunityWasteText {
+    param([object]$Energy,[object]$Nerve)
+    $parts = New-Object System.Collections.Generic.List[string]
+    if ($null -ne $Energy -and [bool](Get-OptimalProperty $Energy 'bypass')) { $parts.Add('E stacked') }
+    elseif ($null -ne $Energy -and [bool](Get-OptimalProperty $Energy 'known')) { $parts.Add(('E loss {0}' -f [long](Get-OptimalProperty $Energy 'loss'))) }
+    else { $parts.Add('E ?') }
+    if ($null -ne $Nerve -and [bool](Get-OptimalProperty $Nerve 'known')) { $parts.Add(('N loss {0}' -f [long](Get-OptimalProperty $Nerve 'loss'))) }
+    else { $parts.Add('N ?') }
+    return ($parts -join ', ')
+}
+
 function Write-OpportunityProjection {
     param(
         [hashtable]$State,
@@ -217,6 +228,7 @@ $rows = New-Object System.Collections.Generic.List[object]
 $learning = 0
 $stale = 0
 $missingMv = 0
+$wasteBlocked = 0
 
 foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $true })) {
     $countryId = [string]$country.id
@@ -321,16 +333,26 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         if ($probability -le 0 -or $availableQuantity -le 0) { continue }
         $quantity = [Math]::Min($capacity,[int]$availableQuantity)
         if ($quantity -le 0) { continue }
+
+        $elapsedSeconds = [Math]::Max(1L,$purchaseAtSeconds+$returnSeconds+$purchaseBuffer)
+        $energy = Get-OptimalBarWaste -Bar (Get-OptimalProperty $travelContext 'energy') -HorizonSeconds $elapsedSeconds -NowEpoch $Now -EnergyStackBypass
+        $nerve = Get-OptimalBarWaste -Bar (Get-OptimalProperty $travelContext 'nerve') -HorizonSeconds $elapsedSeconds -NowEpoch $Now
+        $constraintsApply = [string]::IsNullOrWhiteSpace($fixedCountry)
+        if ($constraintsApply) {
+            if (-not (Test-OptimalWastePolicy -Waste $energy -Policy ([string]$preferences.energyWastePolicy) -MaximumLoss ([int]$preferences.maxEnergyLoss))) { $wasteBlocked++; continue }
+            if (-not (Test-OptimalWastePolicy -Waste $nerve -Policy ([string]$preferences.nerveWastePolicy) -MaximumLoss ([int]$preferences.maxNerveLoss))) { $wasteBlocked++; continue }
+        }
+
         $grossProfit = [long]($quantity*$profitPerItem)
         $expectedGross = [double]$grossProfit*[double]$probability
-        $elapsedSeconds = [Math]::Max(1L,$purchaseAtSeconds+$returnSeconds+$purchaseBuffer)
         $elapsedHours = [Math]::Max(1.0/60.0,$elapsedSeconds/3600.0)
         $optimalScore = $expectedGross/$elapsedHours
         $priceColor = if ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
         $leaveText = if ($leaveDelaySeconds -le 60) { 'LEAVE NOW' } else { 'LEAVE '+(Format-OpportunityDuration $leaveDelaySeconds) }
         if ($travelState -in @('abroad','foreign') -and $outboundSeconds -eq 0) { $leaveText = 'AT DEST.' }
         if ($travelState -eq 'traveling' -and $outboundSeconds -gt 0) { $leaveText = 'EN ROUTE' }
-        $tooltip = ('{0} - {1} | {2} | {3:N0}% modeled hit | {4} total elapsed | {5} gross at {6}% MV | foreign {7}, MV {8}, qty {9}' -f [string]$metadata.name,[string]$country.name,$windowText,(100.0*$probability),(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $grossProfit),$basisPercent,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resale.marketValue)),$quantity)
+        $wasteText = Get-OpportunityWasteText -Energy $energy -Nerve $nerve
+        $tooltip = ('{0} - {1} | {2} | {3:N0}% modeled hit | {4} total elapsed | {5} gross at {6}% MV | {7} | foreign {8}, MV {9}, qty {10}' -f [string]$metadata.name,[string]$country.name,$windowText,(100.0*$probability),(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $grossProfit),$basisPercent,$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resale.marketValue)),$quantity)
 
         $rows.Add([pscustomobject]@{
             key=$marketKey
@@ -380,6 +402,7 @@ if ($sorted.Count -eq 0) {
     $message = 'No evidence-backed opportunities match current filters'
     if ($missingMv -gt 0) { $message = 'Learning market values - opportunity pricing is still filling' }
     elseif ($learning -gt 0) { $message = 'Learning availability - more completed stock cycles are needed' }
+    elseif ($wasteBlocked -gt 0) { $message = 'Current Energy/Nerve waste limits block the available opportunities' }
     elseif ($stale -gt 0) { $message = 'Foreign stock is stale - waiting for a fresh provider poll' }
 }
 Write-OpportunityProjection -State $state -Rows $sorted -SortMode $sortMode -Message $message -BestKey $bestKey
