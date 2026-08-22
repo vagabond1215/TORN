@@ -168,7 +168,12 @@ foreach ($row in $rows) {
 if ($null -ne $previous -and [double]$previous.x -lt $plotRight) {
     $pathParts += ('LineTo {0:0.0},{1:0.0}' -f $plotRight,[double]$previous.y)
 }
-if ($pathParts.Count -eq 0) { $pathParts = @('{0:0.0},{1:0.0}' -f $plotLeft,$plotBottom,('LineTo {0:0.0},{1:0.0}' -f $plotRight,$plotBottom)) }
+if ($pathParts.Count -eq 0) {
+    $pathParts = @(
+        ('{0:0.0},{1:0.0}' -f $plotLeft,$plotBottom),
+        ('LineTo {0:0.0},{1:0.0}' -f $plotRight,$plotBottom)
+    )
+}
 
 $changes = 0
 for ($i=1; $i -lt $rows.Count; $i++) {
