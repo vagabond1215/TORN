@@ -85,21 +85,16 @@ function Normalize-WastePolicy {
 
 function Normalize-UiPreferences {
     param([object]$Preferences)
-
     $defaults = New-DefaultUiPreferences
     if ($null -eq $Preferences) { $Preferences = [pscustomobject]@{} }
 
     foreach ($property in @($defaults.PSObject.Properties)) {
-        if (-not $Preferences.PSObject.Properties[$property.Name]) {
-            $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value
-        }
+        if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
-
     Set-FilterProperty $Preferences 'schemaVersion' 3
 
     $mode = [string]$Preferences.travelMode
     if ($mode -notin @('standard','airstrip','wlt','business')) { Set-FilterProperty $Preferences 'travelMode' 'airstrip' }
-
     $pin = [string]$Preferences.pinnedMarket
     if (-not [string]::IsNullOrWhiteSpace($pin) -and $pin -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { Set-FilterProperty $Preferences 'pinnedMarket' '' }
 
@@ -112,8 +107,8 @@ function Normalize-UiPreferences {
 
     $bands = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($band in @($Preferences.selectedTripBands)) {
-        $b = ([string]$band).ToLowerInvariant()
-        if ($b -in @('short','medium','long')) { [void]$bands.Add($b) }
+        $value = ([string]$band).ToLowerInvariant()
+        if ($value -in @('short','medium','long')) { [void]$bands.Add($value) }
     }
     Set-FilterProperty $Preferences 'selectedTripBands' ([string[]]@($bands | Sort-Object))
 
@@ -122,8 +117,8 @@ function Normalize-UiPreferences {
     foreach ($id in $availableCountries) { [void]$availableCountrySet.Add($id) }
     $countries = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($id in @($Preferences.selectedCountryIds)) {
-        $c = [string]$id
-        if ($availableCountrySet.Contains($c)) { [void]$countries.Add($c) }
+        $value = [string]$id
+        if ($availableCountrySet.Contains($value)) { [void]$countries.Add($value) }
     }
     Set-FilterProperty $Preferences 'selectedCountryIds' ([string[]]@($countries | Sort-Object))
 
@@ -146,9 +141,8 @@ function Normalize-UiPreferences {
     Set-FilterProperty $Preferences 'use95PercentMarketValue' ([bool]$Preferences.use95PercentMarketValue)
     Set-FilterProperty $Preferences 'energyWastePolicy' (Normalize-WastePolicy $Preferences.energyWastePolicy)
     Set-FilterProperty $Preferences 'nerveWastePolicy' (Normalize-WastePolicy $Preferences.nerveWastePolicy)
-    Set-FilterProperty $Preferences 'maxEnergyLoss' ([Math]::Max(0,[Math]::Min(1000,[int]$Preferences.maxEnergyLoss)))
-    Set-FilterProperty $Preferences 'maxNerveLoss' ([Math]::Max(0,[Math]::Min(32767,[int]$Preferences.maxNerveLoss)))
-
+    Set-FilterProperty $Preferences 'maxEnergyLoss' ([Math]::Max(0, [Math]::Min(1000, [int]$Preferences.maxEnergyLoss)))
+    Set-FilterProperty $Preferences 'maxNerveLoss' ([Math]::Max(0, [Math]::Min(32767, [int]$Preferences.maxNerveLoss)))
     return $Preferences
 }
 
@@ -167,11 +161,11 @@ function Save-UiPreferences {
 function Toggle-TripBandPreference {
     param([object]$Preferences, [string]$Band)
     $normalized = Normalize-UiPreferences -Preferences $Preferences
-    $band = $Band.ToLowerInvariant()
-    if ($band -notin @('short','medium','long')) { throw 'Trip band must be short, medium, or long.' }
+    $bandName = $Band.ToLowerInvariant()
+    if ($bandName -notin @('short','medium','long')) { throw 'Trip band must be short, medium, or long.' }
     $set = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($value in @($normalized.selectedTripBands)) { [void]$set.Add([string]$value) }
-    if ($set.Contains($band)) { [void]$set.Remove($band) } else { [void]$set.Add($band) }
+    if ($set.Contains($bandName)) { [void]$set.Remove($bandName) } else { [void]$set.Add($bandName) }
     Set-FilterProperty $normalized 'selectedTripBands' ([string[]]@($set | Sort-Object))
     return $normalized
 }
@@ -202,7 +196,7 @@ if ($Action -eq 'ToggleTripBand') {
 
 if ($changed) {
     $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
-    if (Test-Path -LiteralPath $filterState) {
-        try { & $filterState } catch { }
-    }
+    if (Test-Path -LiteralPath $filterState) { try { & $filterState } catch { } }
+    $optimizer = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
+    if (Test-Path -LiteralPath $optimizer) { try { & $optimizer } catch { } }
 }
