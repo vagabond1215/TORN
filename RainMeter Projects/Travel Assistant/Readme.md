@@ -1,94 +1,68 @@
 # Travel Assistant
 
-Rainmeter-based Torn foreign-market next-trip assistant.
+Rainmeter-based Torn foreign-market opportunity assistant.
 
-The current committed **0.5.0 candidate** replaces the earlier multi-card graph view with one compact optimal next-trip recommendation. It is pending target-Windows/Rainmeter acceptance.
+The current committed **0.6.0 candidate** presents a ranked list of evidence-backed item/country opportunities. Optimizer intelligence is an ordering/highlight layer rather than a single-route replacement screen.
 
-## What it does
+## Main view
 
-Travel Assistant continuously learns foreign stock/restock behavior across all 11 destinations, keeps a local item/category catalog, gradually caches Torn MV, and chooses the best currently supportable next trip under the user's filters and bar-waste constraints.
+```text
+Travel                                      SETTINGS >
+Updated ...
+
+ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
+SORT  OPTIMAL  UPCOMING  PROFIT  TIME                 VIEWER >
+
+#1  OPTIMAL  <item>   <country>                     <gross>
+    <window>  <leave>  <hit likelihood>  <elapsed>  <foreign> (<MV>)  GRAPH
+#2           <item>   <country>                     <gross>
+    ...
+```
+
+Up to eight opportunities are shown.
+
+## Sort modes
+
+- **OPTIMAL** — probability-weighted gross trip profit per total elapsed hour.
+- **UPCOMING** — earliest current/modeled stock window first.
+- **PROFIT** — highest gross trip profit first.
+- **TIME** — shortest full elapsed opportunity first.
+
+There is no separate Chance sort. Hit likelihood is shown on every opportunity and is already part of OPTIMAL. The globally best economic opportunity keeps an `OPTIMAL` marker even while another ordering is selected.
+
+Gross profit is trade spread × modeled purchasable quantity and intentionally excludes travel cost. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
+
+## Evidence model
+
+Travel Assistant learns from foreign stock/restock behavior across all 11 destinations and retains historical evidence independently of the visible UI.
 
 ```text
 COLLECTED provider rows
         !=
 ACTIVE market relationships
         !=
-OPTIMIZER candidates
+ELIGIBLE opportunity candidates
         !=
-CURRENT purchase recommendation
+VISIBLE ranked opportunities
 ```
 
-## Minimal main view
+Current in-stock opportunities require evidence that stock is likely to survive until arrival. Sold-out opportunities require completed sellout→restock and availability history; supported future windows are derived from overlap of those completed historical live intervals. Forecasts never become history.
 
-```text
-Travel                                      SETTINGS >
-Updated ...
-ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
+## Graphs
 
-OPTIMAL • <destination>              <expected value>
-<arrival/out> • <slots> • <hit chance> • E loss • N loss
-<item>          xN   $foreign ($MV)   <arrival chance>
-```
+Graphs remain available on demand:
 
-Only the item(s) the selected trip should purchase are shown. Item names are consistently left-aligned. MV is shown in parentheses at a smaller muted size.
-
-The old default UK/Japan card stack and graphs are not part of the 0.5 main surface.
-
-## Route inputs
-
-The current next-trip planner considers:
-
-- active foreign markets and current stock;
-- foreign shop price;
-- Torn MV (`itemmarket.item.average_price`);
-- travel method/time/cost;
-- general and category-only carrying capacity;
-- retained restock/sellout/availability history;
-- modeled chance an item is available on arrival;
-- Energy/Nerve regeneration waste;
-- Item/Trip/Country/Category filters;
-- Ignore List.
-
-It currently scores **next trips**, not full multi-trip sequences. A later scheduler can compare repeated short trips, fewer long trips, and mixed-country sequences over a bounded horizon.
-
-## Value / color behavior
-
-Default:
-
-```text
-100% Torn MV basis
-no Item Market fee deduction
-no minimum-profit or minimum-margin timing gate
-negative-value candidates allowed
-```
-
-Settings can switch to 95% MV.
-
-```text
-foreign price <= selected MV basis -> green
-foreign price > selected MV basis  -> red
-```
-
-`Show profitable items only` explicitly excludes non-positive item spreads. Otherwise users may still choose/receive negative-value trade candidates when they are optimal under the active filter set.
-
-## Energy / Nerve settings
-
-Settings supports independently:
-
-```text
-Energy Waste: Allowed / Forbidden / Limited
-Max Energy Loss
-Nerve Waste:  Allowed / Forbidden / Limited
-Max Nerve Loss
-```
-
-If Energy is already above its natural maximum, the Energy waste restriction is bypassed to support stacking scenarios. Nerve does not receive that bypass.
-
-The same bounded Torn user request supplies travel state plus bar data (`travel,basic,bars`).
+- `VIEWER >` opens the broad item/market viewer;
+- every visible opportunity has `GRAPH`;
+- row graph targeting uses stable `country:itemId` identity;
+- graphs display the last 8 hours with hourly markers;
+- change-only history carries the last pre-window observation into the graph’s left edge;
+- learning retention remains ~48h raw observations / ~90d completed cycles;
+- viewing a graph makes no provider or Torn request.
 
 ## Filters / Ignore List
 
-Filter bar:
+Primary filters:
 
 ```text
 ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
@@ -102,9 +76,62 @@ Medium: Hawaii, United Kingdom, Argentina, Switzerland
 Long:   Japan, China, UAE, South Africa
 ```
 
-Ignore List uses the complete local metadata catalog. Ignored items are excluded from optimizer candidates and broad per-item MV requests. Shared Prometheus/YATA country-stock collection/history continues because ignoring one item does not save those shared provider calls.
+Ignore List excludes items from opportunities/background optimizer candidates and broad per-item MV requests. Shared provider stock/history collection continues.
 
-## Current accepted data baseline
+## Value and capacity
+
+Default value basis:
+
+```text
+100% Torn MV
+no Item Market fee deduction
+no minimum-profit or minimum-margin timing gate
+negative-value candidates allowed
+```
+
+Settings can switch to 95% MV or explicitly show profitable items only.
+
+Capacity remains profile-aware and category-aware. Current accepted profile behavior includes:
+
+```text
+Airstrip general/Xanax = 18
+Standard general/Xanax = 13
+Flower Shop 7★ -> +5 Flower only
+Toy Shop    7★ -> +5 Plushie only
+```
+
+## Energy / Nerve
+
+Settings support independently:
+
+```text
+Energy Waste: Allowed / Forbidden / Limited
+Max Energy Loss
+Nerve Waste:  Allowed / Forbidden / Limited
+Max Nerve Loss
+```
+
+Energy above natural maximum bypasses Energy waste restriction. Nerve does not. Waste policies constrain new outbound opportunities but do not remove purchase guidance once travel is already committed to a recognized destination.
+
+## Runtime layering
+
+```text
+UpdateTracker
+ShadowCollector
+LocalCatalog
+FinalizeState
+TravelContext
+OptimalRoute        # background route / MV-priority model
+OpportunityState    # primary ranked opportunity projection
+FilterState
+visible heartbeat
+ResalePriority
+ResaleQueue
+```
+
+The one-second Rainmeter loop and graph viewer are local-only. Normal runtime keeps one bounded travel/bars request and at most one broad Torn Item Market request/update.
+
+## Current data baseline
 
 Last target-Windows acceptance:
 
@@ -119,67 +146,11 @@ Prometheus
 227 active country-item markets
 ```
 
-Provider presence is provenance, not unconditional proof of current shop membership. Verified inactive relationships remain retained but are excluded from new learning/resale/optimizer work.
-
-## Broad MV queue
-
-```text
-max Torn Item Market requests/update: 1
-minimum attempt interval:             60 seconds
-MV freshness target:                   6 hours
-general failure backoff:               1 hour
-optimizer-priority failure retry:      5 minutes
-request timeout:                       6 seconds
-```
-
-Optimizer MV blockers are prioritized without increasing the request cap.
-
-## Capacity
-
-Accepted current-capacity behavior:
-
-```text
-Airstrip general/Xanax = 18
-Standard general/Xanax = 13
-Flower Shop 7★ -> +5 Flower only
-Toy Shop    7★ -> +5 Plushie only
-```
-
-The planner fills general slots first, then matching category-only slots.
-
-## Runtime layering
-
-```text
-UpdateTracker
-ShadowCollector
-LocalCatalog
-FinalizeState
-TravelContext
-OptimalRoute
-FilterState
-visible heartbeat
-ResalePriority
-ResaleQueue
-```
-
-`OptimalRoute`, `FilterState`, and `ResalePriority` are local-only. Catalog metadata network maintenance remains manual-only.
-
-## Local files / secrets
-
-Ignored/local state includes:
-
-```text
-config/settings.local.json
-data/runtime/preferences.json
-runtime observations/cycles/cache/state/errors
-@Resources/Generated/
-```
-
-API keys are never committed or packaged.
+These are recorded baseline counts, not timeless constants.
 
 ## Installation
 
-Repository source is expected at approximately:
+Repository source is expected approximately at:
 
 ```text
 C:\Codex\TORN\RainMeter Projects\Travel Assistant\
@@ -197,19 +168,17 @@ Load:
 Travel Assistant\TravelAssistant.ini
 ```
 
-A whitelist-based `.rmskin` builder exists for sharing without local credentials/history/preferences.
-
 ## Current validation
 
-The 0.5 candidate requires focused Windows tests plus one live update and Rainmeter screenshot. Use `docs/NEXT_CODEX_RUN.md` for the current commands; static validation does not replace actual Rainmeter rendering/API behavior.
+The 0.6 candidate is pending target-Windows/Rainmeter acceptance. Run:
 
-## Documentation
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-CurrentAcceptance.ps1
+```
 
-Read in order:
+Then run one production update, refresh Rainmeter, test all four sort controls, Settings/filters/Viewer, and at least one row `GRAPH` action. See `docs/NEXT_CODEX_RUN.md` for the current acceptance procedure.
 
-1. `AGENTS.md`
-2. `docs/README.md`
-3. `docs/NEXT_CODEX_RUN.md`
-4. `docs/ARCHITECTURE.md`
-5. `docs/IMPLEMENTATION_STATUS.md`
-6. `Readme.md`
+## Future notifications
+
+Optional Chrome/browser notifications remain planned after the 0.6 opportunity surface is accepted. They should consume the same accepted local opportunity timing projection rather than maintain a second forecasting model.
