@@ -7,6 +7,7 @@ Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot 'TravelProfile.ps1')
 . (Join-Path $PSScriptRoot 'TornProfileSync.ps1')
 . (Join-Path $PSScriptRoot 'CurrentCapacity.ps1')
+. (Join-Path $PSScriptRoot 'FilterPreferences.ps1') -SkipMain
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
@@ -15,6 +16,7 @@ $LocalSettingsPath = Join-Path $ConfigDir 'settings.local.json'
 $PreferencePath = Join-Path $RuntimeDir 'preferences.json'
 $SettingsErrorFile = Join-Path $RuntimeDir 'settings-error.txt'
 $RunUpdatePath = Join-Path $PSScriptRoot 'RunUpdate.ps1'
+$FilterLauncherPath = Join-Path $PSScriptRoot 'LaunchFilterPopup.ps1'
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
 if (Test-Path -LiteralPath $SettingsErrorFile) { Remove-Item -LiteralPath $SettingsErrorFile -Force -ErrorAction SilentlyContinue }
@@ -86,14 +88,14 @@ if ($null -eq $local) {
 $profile = Get-TravelProfile -BaseSettings $base -LocalSettings $local
 $enabledItem = @($items.items | Where-Object { $_.enabled -eq $true } | Select-Object -First 1)
 $item = if ($enabledItem.Count -gt 0) { $enabledItem[0] } else { $null }
+$prefs = Read-UiPreferences
 $currentMode = if ($local.PSObject.Properties['travelMode']) { [string]$local.travelMode } else { [string]$base.travelMode }
-$prefs = Read-JsonFile $PreferencePath
 if ($null -ne $prefs -and $prefs.PSObject.Properties['travelMode']) { $currentMode = [string]$prefs.travelMode }
 if ($currentMode -notin @('standard','airstrip','wlt','business')) { $currentMode = 'airstrip' }
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Travel Assistant Settings'
-$form.Size = New-Object System.Drawing.Size(560, 610)
+$form.Size = New-Object System.Drawing.Size(560, 650)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -122,9 +124,31 @@ function Style-Input {
 $title = New-Label -Text 'TRAVEL ASSISTANT' -X 16 -Y 14 -W 280 -H 28
 $title.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 14)
 
-New-Label -Text 'Torn API key' -X 18 -Y 58 | Out-Null
+$profitableOnly = New-Object System.Windows.Forms.CheckBox
+$profitableOnly.Text = 'Show profitable items only'
+$profitableOnly.Location = New-Object System.Drawing.Point(18,48)
+$profitableOnly.Size = New-Object System.Drawing.Size(180,24)
+$profitableOnly.ForeColor = $form.ForeColor
+$profitableOnly.Checked = [bool]$prefs.showProfitableOnly
+$form.Controls.Add($profitableOnly)
+
+$ignoreButton = New-Object System.Windows.Forms.Button
+$ignoreButton.Text = 'Ignore List...'
+$ignoreButton.Location = New-Object System.Drawing.Point(210,44)
+$ignoreButton.Size = New-Object System.Drawing.Size(105,30)
+$form.Controls.Add($ignoreButton)
+$ignoreNote = New-Label -Text 'Ignored items are hidden and skip broad per-item market pricing.' -X 325 -Y 49 -W 215 -H 32
+$ignoreNote.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+$ignoreNote.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
+$ignoreButton.Add_Click({
+    try {
+        if (Test-Path -LiteralPath $FilterLauncherPath) { & $FilterLauncherPath -Filter Ignore }
+    } catch { Write-SettingsError $_ }
+})
+
+New-Label -Text 'Torn API key' -X 18 -Y 92 | Out-Null
 $keyBox = New-Object System.Windows.Forms.TextBox
-$keyBox.Location = New-Object System.Drawing.Point(190,55)
+$keyBox.Location = New-Object System.Drawing.Point(190,89)
 $keyBox.Size = New-Object System.Drawing.Size(280,24)
 $keyBox.UseSystemPasswordChar = $true
 if ($local.PSObject.Properties['tornApiKey']) { $keyBox.Text = [string]$local.tornApiKey }
@@ -132,26 +156,26 @@ Style-Input $keyBox
 $form.Controls.Add($keyBox)
 $showKey = New-Object System.Windows.Forms.CheckBox
 $showKey.Text = 'Show'
-$showKey.Location = New-Object System.Drawing.Point(478,57)
+$showKey.Location = New-Object System.Drawing.Point(478,91)
 $showKey.Size = New-Object System.Drawing.Size(60,22)
 $showKey.ForeColor = $form.ForeColor
 $showKey.Add_CheckedChanged({ $keyBox.UseSystemPasswordChar = -not $showKey.Checked })
 $form.Controls.Add($showKey)
-$keyNote = New-Label -Text 'Stored only in ignored local settings; never committed to Git.' -X 190 -Y 80 -W 330 -H 18
+$keyNote = New-Label -Text 'Stored only in ignored local settings; never committed to Git.' -X 190 -Y 114 -W 330 -H 18
 $keyNote.Font = New-Object System.Drawing.Font('Segoe UI', 8)
 $keyNote.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 
-New-Label -Text 'Travel mode' -X 18 -Y 111 | Out-Null
+New-Label -Text 'Travel mode' -X 18 -Y 145 | Out-Null
 $modeCombo = New-Object System.Windows.Forms.ComboBox
-$modeCombo.Location = New-Object System.Drawing.Point(190,108)
+$modeCombo.Location = New-Object System.Drawing.Point(190,142)
 $modeCombo.Size = New-Object System.Drawing.Size(280,24)
 $modeCombo.DropDownStyle = 'DropDownList'
 Style-Input $modeCombo
 $form.Controls.Add($modeCombo)
 
-New-Label -Text 'Company' -X 18 -Y 154 | Out-Null
+New-Label -Text 'Company' -X 18 -Y 188 | Out-Null
 $companyCombo = New-Object System.Windows.Forms.ComboBox
-$companyCombo.Location = New-Object System.Drawing.Point(190,151)
+$companyCombo.Location = New-Object System.Drawing.Point(190,185)
 $companyCombo.Size = New-Object System.Drawing.Size(280,24)
 $companyCombo.DropDownStyle = 'DropDownList'
 Style-Input $companyCombo
@@ -164,9 +188,9 @@ for ($i = 0; $i -lt $companyRows.Count; $i++) {
 }
 $companyCombo.SelectedIndex = $companyIndex
 
-New-Label -Text 'Company stars' -X 18 -Y 197 | Out-Null
+New-Label -Text 'Company stars' -X 18 -Y 231 | Out-Null
 $stars = New-Object System.Windows.Forms.NumericUpDown
-$stars.Location = New-Object System.Drawing.Point(190,194)
+$stars.Location = New-Object System.Drawing.Point(190,228)
 $stars.Size = New-Object System.Drawing.Size(90,24)
 $stars.Minimum = 0
 $stars.Maximum = 10
@@ -174,42 +198,42 @@ $stars.Value = [decimal][int]$profile.companyStars
 Style-Input $stars
 $form.Controls.Add($stars)
 
-$capacityTitle = New-Label -Text 'CURRENT TRAVEL CAPACITY' -X 18 -Y 239 -W 260
+$capacityTitle = New-Label -Text 'CURRENT TRAVEL CAPACITY' -X 18 -Y 273 -W 260
 $capacityTitle.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
-New-Label -Text 'Current Xanax capacity' -X 18 -Y 270 -W 165 | Out-Null
+New-Label -Text 'Current Xanax capacity' -X 18 -Y 304 -W 165 | Out-Null
 $capacity = New-Object System.Windows.Forms.NumericUpDown
-$capacity.Location = New-Object System.Drawing.Point(190,267)
+$capacity.Location = New-Object System.Drawing.Point(190,301)
 $capacity.Size = New-Object System.Drawing.Size(90,24)
 $capacity.Minimum = 0
 $capacity.Maximum = 99
 Style-Input $capacity
 $form.Controls.Add($capacity)
 $capacityDetail = New-Object System.Windows.Forms.Label
-$capacityDetail.Location = New-Object System.Drawing.Point(290,263)
+$capacityDetail.Location = New-Object System.Drawing.Point(290,297)
 $capacityDetail.Size = New-Object System.Drawing.Size(240,38)
 $capacityDetail.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 $form.Controls.Add($capacityDetail)
 
 $sync = New-Object System.Windows.Forms.Button
 $sync.Text = 'Sync from Torn'
-$sync.Location = New-Object System.Drawing.Point(18,315)
+$sync.Location = New-Object System.Drawing.Point(18,349)
 $sync.Size = New-Object System.Drawing.Size(112,30)
 $form.Controls.Add($sync)
 $syncStatus = New-Object System.Windows.Forms.Label
-$syncStatus.Location = New-Object System.Drawing.Point(142,309)
+$syncStatus.Location = New-Object System.Drawing.Point(142,343)
 $syncStatus.Size = New-Object System.Drawing.Size(390,48)
 $syncStatus.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 $syncStatus.Text = 'Reads current /user/perks and job data. No faction API permission required.'
 $form.Controls.Add($syncStatus)
 
-$summaryTitle = New-Label -Text 'Effective travel profile' -X 18 -Y 370 -W 240
+$summaryTitle = New-Label -Text 'Effective travel profile' -X 18 -Y 404 -W 240
 $summaryTitle.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
 $summary = New-Object System.Windows.Forms.Label
-$summary.Location = New-Object System.Drawing.Point(18,395)
+$summary.Location = New-Object System.Drawing.Point(18,429)
 $summary.Size = New-Object System.Drawing.Size(515,82)
 $summary.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 $form.Controls.Add($summary)
-$note = New-Label -Text 'Current capacity uses active perks only. Flower/Toy item-specific bonuses do not increase Xanax capacity.' -X 18 -Y 481 -W 515 -H 36
+$note = New-Label -Text 'Current capacity uses active perks only. Flower/Toy item-specific bonuses do not increase Xanax capacity.' -X 18 -Y 515 -W 515 -H 36
 $note.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72)
 
 $script:modeIds = @()
@@ -243,8 +267,6 @@ function Get-PreviewProfile {
         currentCapacity = $currentValue
         currentCapacityBonus = if ($script:capacityKnown) { [int]$script:capacityBonus } else { 0 }
         currentCapacitySyncedAt = if ($script:capacityKnown) { [long]$script:capacitySyncedAt } else { 0 }
-        # Preserve legacy fields for backwards compatibility only. Once current
-        # capacity is known, TravelProfile ignores these for slot calculations.
         factionState = [string]$profile.factionState
         factionExcursionLevel = [int]$profile.factionExcursionLevel
         factionTravelCostLevel = [int]$profile.factionTravelCostLevel
@@ -423,14 +445,14 @@ $sync.Add_Click({
 
 $save = New-Object System.Windows.Forms.Button
 $save.Text = 'Save'
-$save.Location = New-Object System.Drawing.Point(354,525)
+$save.Location = New-Object System.Drawing.Point(354,565)
 $save.Size = New-Object System.Drawing.Size(82,30)
 $save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255)
 $save.ForeColor = [System.Drawing.Color]::Black
 $form.Controls.Add($save)
 $cancel = New-Object System.Windows.Forms.Button
 $cancel.Text = 'Cancel'
-$cancel.Location = New-Object System.Drawing.Point(446,525)
+$cancel.Location = New-Object System.Drawing.Point(446,565)
 $cancel.Size = New-Object System.Drawing.Size(82,30)
 $form.Controls.Add($cancel)
 $cancel.Add_Click({ $form.Close() })
@@ -444,7 +466,14 @@ $save.Add_Click({
         Set-ObjectProperty -Object $local -Name 'travelMode' -Value $selectedMode
         Set-ObjectProperty -Object $local -Name 'travelProfile' -Value $preview
         Write-JsonAtomic -Path $LocalSettingsPath -Value $local
-        Write-JsonAtomic -Path $PreferencePath -Value ([pscustomobject]@{ schemaVersion = 1; travelMode = $selectedMode })
+
+        # Re-read immediately so an Ignore List popup opened while Settings was
+        # visible cannot be overwritten by a stale in-memory preference object.
+        $currentPrefs = Read-UiPreferences
+        Set-FilterProperty $currentPrefs 'travelMode' $selectedMode
+        Set-FilterProperty $currentPrefs 'showProfitableOnly' ([bool]$profitableOnly.Checked)
+        [void](Save-UiPreferences -Preferences $currentPrefs)
+
         Start-BackgroundUpdate
         $form.Close()
     } catch {
