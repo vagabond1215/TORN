@@ -12,11 +12,10 @@ if (-not (Test-Path -LiteralPath $target)) { throw 'OpenItemViewer.ps1 is missin
 if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
 
 $quotedTarget = '"' + $target.Replace('"','\"') + '"'
-$arguments = @(
-    '-NoProfile',
-    '-ExecutionPolicy','Bypass',
-    '-File',$quotedTarget,
-    '-Row',[string]$Row,
-    '-MarketKey',$MarketKey
-)
-Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Normal | Out-Null
+$arguments = New-Object System.Collections.Generic.List[string]
+foreach ($value in @('-NoProfile','-ExecutionPolicy','Bypass','-File',$quotedTarget,'-Row',[string]$Row)) { $arguments.Add([string]$value) }
+if (-not [string]::IsNullOrWhiteSpace($MarketKey)) {
+    $arguments.Add('-MarketKey')
+    $arguments.Add($MarketKey)
+}
+Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments.ToArray() -WindowStyle Normal | Out-Null
