@@ -32,13 +32,23 @@ if ($viewerBody -notmatch '(?im)^Parameter=.*LaunchItemViewer\.ps1.*-MarketKey.*
 $prefBody=[regex]::Match($ini,'(?ms)^\[MeasurePreferenceAction\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($prefBody -notmatch '(?im)^Parameter=.*FilterPreferences\.ps1.*#PreferenceAction#.*#PreferenceValue#') { Fail 'Quick actions must route through FilterPreferences.ps1.' }
 
+$popupHostPath=Join-Path $ProjectRoot '@Resources\Scripts\PopupHost.ps1'
+if (-not (Test-Path -LiteralPath $popupHostPath)) { Fail 'Missing PopupHost.ps1.' }
+else {
+    $hostText=Get-Content -LiteralPath $popupHostPath -Raw
+    foreach($token in @('OpenOptimizerSettings.ps1','OpenFilterPopup.ps1','OpenItemViewer.ps1','RuntimeLog.ps1')) {
+        if(-not $hostText.Contains($token)){Fail "PopupHost.ps1 missing '$token'."}
+    }
+}
+
 foreach ($launcherName in @('LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','LaunchItemViewer.ps1')) {
     $path=Join-Path $ProjectRoot ('@Resources\Scripts\'+$launcherName)
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing $launcherName."; continue }
     $text=Get-Content -LiteralPath $path -Raw
-    if (-not $text.Contains('Start-Process')) { Fail "$launcherName must detach its long-lived UI process." }
-    if (-not $text.Contains('$quotedTarget')) { Fail "$launcherName must explicitly quote its script path because the project path contains spaces." }
-    if (-not $text.Contains('$arguments')) { Fail "$launcherName must build an explicit argument collection." }
+    foreach($token in @('PopupHost.ps1','Start-Process','-WindowStyle Hidden','-STA','$arguments','exit 0')) {
+        if (-not $text.Contains($token)) { Fail "$launcherName missing hidden popup-host contract '$token'." }
+    }
+    if ($text.Contains('-WindowStyle Normal')) { Fail "$launcherName must not leave a visible PowerShell console." }
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in ${launcherName}: $($parseError.Message)" }
@@ -106,5 +116,5 @@ if ($errors.Count -gt 0) {
     Write-Host "Rainmeter opportunity skin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Rainmeter sortable opportunity surface + on-demand viewer static validation passed.' -ForegroundColor Green
+Write-Host 'Rainmeter sortable opportunity surface + hidden popup host static validation passed.' -ForegroundColor Green
 exit 0
