@@ -1,5 +1,5 @@
 param(
-    [int]$MinimumPollIntervalSeconds = 120,
+    [int]$MinimumPollIntervalSeconds = 60,
     [switch]$Force
 )
 
@@ -250,11 +250,6 @@ function Update-CycleState {
     return $completed
 }
 
-function Test-IsPrimaryMarket {
-    param([string]$CountryId, [int]$ItemId, [object]$PrimaryCountryIds, [object]$PrimaryItemIds)
-    return ($PrimaryCountryIds.Contains($CountryId) -and $PrimaryItemIds.Contains($ItemId))
-}
-
 function Get-InactiveMarketIndex {
     param([object]$OverrideConfig)
     $index = @{}
@@ -270,9 +265,10 @@ function Get-InactiveMarketIndex {
 
 function Test-ObservationChanged {
     param([object]$DestState, [object]$Observation)
-    if ([int]$DestState.lastStock -ne [int]$Observation.stock) { return $true }
-    if ([long]$DestState.lastForeignPrice -ne [long]$Observation.foreignPrice) { return $true }
-    return $false
+    # The retained observation database is stock-transition evidence. Foreign
+    # prices belong to current observed-market state and must not create dozens
+    # of duplicate zero-stock history rows merely because pricing moved.
+    return ([int]$DestState.lastStock -ne [int]$Observation.stock)
 }
 
 function Update-ObservedMarketMetadata {
@@ -329,19 +325,14 @@ $engineState = Get-EngineState
 $lastPollAt = [long]$engineState.shadowCollection.lastPollAt
 if (-not $Force -and $lastPollAt -gt 0 -and ($now - $lastPollAt) -lt $MinimumPollIntervalSeconds) { return }
 
-$itemsConfig = Read-JsonFile (Join-Path $ConfigDir 'items.json')
 $countriesConfig = Read-JsonFile (Join-Path $ConfigDir 'countries.json')
 $marketOverrideConfig = Read-JsonFile (Join-Path $ConfigDir 'foreign-market-overrides.json')
-if ($null -eq $itemsConfig -or $null -eq $countriesConfig) {
+if ($null -eq $countriesConfig) {
     Write-ShadowError -EngineState $engineState -Now $now -Message 'Shadow collection configuration is missing.'
     Write-JsonAtomic -Path $EngineStateFile -Value $engineState
     return
 }
 
-$primaryItemIds = New-Object 'System.Collections.Generic.HashSet[int]'
-foreach ($item in @($itemsConfig.items | Where-Object { $_.enabled -eq $true })) { [void]$primaryItemIds.Add([int]$item.itemId) }
-$primaryCountryIds = New-Object 'System.Collections.Generic.HashSet[string]'
-foreach ($country in @($countriesConfig.countries | Where-Object { $_.enabled -eq $true })) { [void]$primaryCountryIds.Add([string]$country.id) }
 $collectionCountries = @($countriesConfig.countries | Where-Object { $_.PSObject.Properties['collect'] -and $_.collect -eq $true })
 $inactiveMarketIndex = Get-InactiveMarketIndex -OverrideConfig $marketOverrideConfig
 
@@ -367,12 +358,11 @@ try {
                 continue
             }
 
-            if (Test-IsPrimaryMarket -CountryId ([string]$observation.country) -ItemId ([int]$observation.itemId) -PrimaryCountryIds $primaryCountryIds -PrimaryItemIds $primaryItemIds) {
-                continue
-            }
-
+            # One collector now owns stock-transition history for every active
+            # foreign market, including the legacy "primary" Xanax paths.
             $destState = Get-DestinationState -EngineState $engineState -Key $key
             if (-not (Test-ObservationChanged -DestState $destState -Observation $observation)) {
+                $destState.lastForeignPrice = [long]$observation.foreignPrice
                 $destState.lastSourceTimestamp = [long]$observation.sourceTimestamp
                 continue
             }
