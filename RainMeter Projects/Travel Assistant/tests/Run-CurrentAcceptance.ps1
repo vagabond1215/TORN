@@ -6,6 +6,7 @@ $tests = @(
     'Validate-TravelAssistant.ps1',
     'Validate-RainmeterSkin.ps1',
     'Validate-ItemViewer.ps1',
+    'Validate-RuntimeDiagnostics.ps1',
     'Validate-Filters.ps1',
     'Validate-TravelContext.ps1',
     'Run-TravelContextTests.ps1',
@@ -34,5 +35,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update, refresh Rainmeter, test all four sort controls, then open SETTINGS, filters, VIEWER, and a row GRAPH action.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update, refresh Rainmeter, test all four sort controls, then open SETTINGS, filters, VIEWER, and a row GRAPH action. Runtime failures are logged under data\runtime\logs.' -ForegroundColor Yellow
 exit 0
