@@ -26,7 +26,7 @@ if (Test-Path -LiteralPath $optimizerPath) {
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'OptimalRoute.ps1 must remain local-only.' }
     foreach ($token in @(
         "PSObject.Properties['average']",
-        'marketValue=$mv',
+        'marketValue = $marketValue',
         'use95PercentMarketValue',
         '-EnergyStackBypass',
         'energyWastePolicy',
@@ -37,7 +37,8 @@ if (Test-Path -LiteralPath $optimizerPath) {
         'availabilitySeconds',
         'restockDelaySeconds',
         'expectedTripProfit',
-        "if (`$foreignPrice -le `$sellBasis) { '86,190,116,255' }",
+        "$priceColor = '224,90,90,255'",
+        "$priceColor = '86,190,116,255'",
         'pricingPriorityItemIds'
     )) {
         if (-not $text.Contains($token)) { Fail "Optimal route contract missing '$token'." }
