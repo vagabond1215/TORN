@@ -11,9 +11,9 @@ $target = Join-Path $PSScriptRoot 'OpenItemViewer.ps1'
 if (-not (Test-Path -LiteralPath $target)) { throw 'OpenItemViewer.ps1 is missing.' }
 if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
 
-$quotedTarget = '"' + $target.Replace('"','\"') + '"'
+$quotedTarget = '"' + $target + '"'
 $arguments = New-Object System.Collections.Generic.List[string]
-foreach ($value in @('-NoProfile','-ExecutionPolicy','Bypass','-File',$quotedTarget,'-Row',[string]$Row)) { $arguments.Add([string]$value) }
+foreach ($value in @('-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',$quotedTarget,'-Row',[string]$Row)) { $arguments.Add([string]$value) }
 if (-not [string]::IsNullOrWhiteSpace($MarketKey)) {
     $arguments.Add('-MarketKey')
     $arguments.Add($MarketKey)
