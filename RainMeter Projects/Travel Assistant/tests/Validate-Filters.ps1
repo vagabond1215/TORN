@@ -33,10 +33,13 @@ foreach ($path in @($files.Preferences,$files.Popup,$files.Launcher,$files.State
 if (Test-Path -LiteralPath $files.Preferences) {
     $text = Get-Content -LiteralPath $files.Preferences -Raw
     foreach ($token in @(
-        'schemaVersion = 4','itemFilterAll','selectedItemIds','selectedTripBands','selectedCountryIds',
+        'schemaVersion = 5','itemFilterAll','selectedItemIds','selectedTripBands','selectedCountryIds',
         'categoryFilterAll','selectedCategories','showProfitableOnly','ignoredItemIds',
         'use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',
-        "sortMode = 'optimal'",'Normalize-SortMode',"@('optimal','upcoming','profit','time')",'SetSortMode',
+        "sortMode = 'upcoming'",'Normalize-SortMode',"@('upcoming','gross','profit_per_hour')",'SetSortMode',
+        "if (`$mode -eq 'optimal') { return 'profit_per_hour' }",
+        "if (`$mode -eq 'profit') { return 'gross' }",
+        "if (`$mode -eq 'time') { return 'upcoming' }",
         'Reset-UiFilterPreferences','Toggle-TripBandPreference','OpportunityState.ps1',
         "if (`$Action -ne 'SetSortMode')",'preference-action'
     )) {
@@ -77,20 +80,21 @@ if (Test-Path -LiteralPath $files.State) {
 if (Test-Path -LiteralPath $files.Opportunities) {
     $text = Get-Content -LiteralPath $files.Opportunities -Raw
     foreach ($token in @(
-        'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','grossProfit','expectedGross','optimalScore','elapsedSeconds','windowStartAt','Write-OpportunityProjection',
-        'Get-OptimalBarWaste','Test-OptimalWastePolicy','energyWastePolicy','nerveWastePolicy','$constraintsApply = [string]::IsNullOrWhiteSpace($fixedCountry)','Get-OpportunityWasteText'
+        'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','grossProfit','profitPerHour','quantity','elapsedSeconds','windowStartAt','Write-OpportunityProjection',
+        'Get-OptimalBarWaste','Test-OptimalWastePolicy','energyWastePolicy','nerveWastePolicy','$constraintsApply = [string]::IsNullOrWhiteSpace($fixedCountry)','Get-OpportunityWasteText',
+        "sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'OpportunityBestKey',"Opportunity'+`$n+'QuantityText", "Opportunity'+`$n+'ProfitHourText"
     )) {
         if (-not $text.Contains($token)) { Fail "OpportunityState.ps1 missing '$token'." }
     }
-    foreach ($mode in @("sortMode -eq 'upcoming'","sortMode -eq 'profit'","sortMode -eq 'time'",'optimalScore'';Descending=$true')) {
-        if (-not $text.Contains($mode)) { Fail "OpportunityState.ps1 missing sort contract '$mode'." }
+    foreach ($retired in @('expectedGross=','optimalScore=','SortMode $sortMode -Message $message -BestKey')) {
+        if ($text.Contains($retired)) { Fail "OpportunityState.ps1 retains retired hidden-ranking contract '$retired'." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'OpportunityState.ps1 must remain local-only.' }
 }
 
 if (Test-Path -LiteralPath $files.Settings) {
     $text = Get-Content -LiteralPath $files.Settings -Raw
-    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Ignore List...','Profile / API...','OPTIMAL is a sort','RuntimeLog.ps1')) {
+    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Ignore List...','Profile / API...','RuntimeLog.ps1')) {
         if (-not $text.Contains($token)) { Fail "OpenOptimizerSettings.ps1 missing '$token'." }
     }
     if($text.Contains('-WindowStyle Normal')){Fail 'Optimizer Settings must not spawn visible PowerShell consoles.'}
@@ -106,7 +110,11 @@ if (Test-Path -LiteralPath $files.SettingsLauncher) {
 
 if (Test-Path -LiteralPath $files.StateReader) {
     $text = Get-Content -LiteralPath $files.StateReader -Raw
-    foreach ($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)','local function updateSort(data, now)','local function updateOpportunities(data)','local function stabilizeProjection(data)','UIOldestMarketSourceTimestamp')) {
+    foreach ($token in @(
+        'function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)',
+        'local function updateSort(data, now)','local function updateOpportunities(data)','local function stabilizeProjection(data)','local function configureInteractiveMeters()',
+        "'UPCOMING'","'GROSS PROFIT'","'PROFIT/HR'","SetSortMode('profit_per_hour')",'UIOldestMarketSourceTimestamp','SolidColor'
+    )) {
         if (-not $text.Contains($token)) { Fail "StateReader.lua missing '$token'." }
     }
     foreach ($legacy in @('TogglePin(','pinnedCardKey','cardExpanded','updateOptimal(data, now)')) {
@@ -118,9 +126,8 @@ if (Test-Path -LiteralPath $files.Ini) {
     $ini = Get-Content -LiteralPath $files.Ini -Raw
     if ($ini -notmatch '(?m)^Version=0\.6\.0\s*$') { Fail 'Opportunity/filter candidate must report version 0.6.0.' }
     foreach ($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeterFilterTopLine','MeterItemFilter','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine','MeterSortOptimal','MeterSortUpcoming','MeterSortProfit','MeterSortTime')) {
-        if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($section) + '\]\s*$')) { Fail "TravelAssistant.ini missing [$section]." }
+        if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($section) + '\]\s*$')) { Fail "TravelAssistant.ini missing internal compatibility section [$section]." }
     }
-    foreach ($action in @("SetSortMode('optimal')","SetSortMode('upcoming')","SetSortMode('profit')","SetSortMode('time')")) { if (-not $ini.Contains($action)) { Fail "TravelAssistant.ini missing sort action $action." } }
     if ($ini -notmatch '(?im)^Parameter=.*LaunchOptimizerSettings\.ps1') { Fail 'Main Settings button must use optimizer settings launcher.' }
 }
 
@@ -139,6 +146,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Opportunity filters, four explicit sort modes, stable projection, responsive sort path, hidden popup host, waste policies, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
-Write-Host 'OPTIMAL ranks expected gross value per elapsed hour; likelihood is folded into that score rather than exposed as a separate sort.'
+Write-Host 'Opportunity filters, three transparent sort modes, stable projection, responsive hitboxes, hidden popup host, waste policies, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
+Write-Host 'UPCOMING, GROSS PROFIT, and PROFIT/HR do not fold hit likelihood into a hidden score.'
 exit 0
