@@ -17,27 +17,31 @@ foreach ($path in @($viewerPath,$launcherPath)) {
 
 if (Test-Path -LiteralPath $launcherPath) {
     $launcher = Get-Content -LiteralPath $launcherPath -Raw
-    foreach ($token in @('OpenItemViewer.ps1','Start-Process','-Row {1}')) { if (-not $launcher.Contains($token)) { Fail "Viewer launcher missing '$token'." } }
+    foreach ($token in @('OpenItemViewer.ps1','Start-Process','$arguments = @(','-MarketKey',$MarketKey)) { if (-not $launcher.Contains([string]$token)) { Fail "Viewer launcher missing '$token'." } }
+    if (-not $launcher.Contains("MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$'")) { Fail 'Viewer launcher must validate stable country:itemId keys.' }
 }
 
 if (Test-Path -LiteralPath $viewerPath) {
     $viewer = Get-Content -LiteralPath $viewerPath -Raw
     foreach ($token in @(
+        '[string]$MarketKey',
         'RuntimeObservationFile',
         'SeedObservationFile',
         'graphWindowHours',
         'use95PercentMarketValue',
-        'selectedCountryId',
         'observedMarkets',
         'resaleCache',
         'sourceTimestamp',
         'catalogStatus',
         'legacy_removed',
+        '$baseline = @{}',
+        "source = 'carry_forward'",
         'timestamp += 3600',
         "ToString('HH:mm')",
         'Green: observed restock',
         'Red: observed sellout',
-        'Dropdown is sorted by known profit/item.'
+        'Dropdown is sorted by known profit/item.',
+        '[string]$sortedRows[$i].key -eq $MarketKey'
     )) {
         if (-not $viewer.Contains($token)) { Fail "Item viewer contract missing '$token'." }
     }
@@ -59,6 +63,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Item viewer validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'On-demand eight-hour item viewer static validation passed.' -ForegroundColor Green
+Write-Host 'Stable-key on-demand eight-hour item viewer static validation passed.' -ForegroundColor Green
 Write-Host 'Viewer is local-only; retained 48h/90d learning remains independent of the 8h display.' -ForegroundColor DarkGreen
 exit 0
