@@ -57,7 +57,7 @@ function Get-FilterVisibleCategories {
 
 function New-DefaultUiPreferences {
     return [pscustomobject]@{
-        schemaVersion = 2
+        schemaVersion = 3
         travelMode = 'airstrip'
         pinnedMarket = ''
         itemFilterAll = $true
@@ -68,7 +68,19 @@ function New-DefaultUiPreferences {
         selectedCategories = [string[]]@(Get-FilterVisibleCategories)
         showProfitableOnly = $false
         ignoredItemIds = [int[]]@()
+        use95PercentMarketValue = $false
+        energyWastePolicy = 'allowed'
+        maxEnergyLoss = 0
+        nerveWastePolicy = 'allowed'
+        maxNerveLoss = 0
     }
+}
+
+function Normalize-WastePolicy {
+    param([object]$Value)
+    $policy = ([string]$Value).Trim().ToLowerInvariant()
+    if ($policy -notin @('allowed','forbidden','limited')) { return 'allowed' }
+    return $policy
 }
 
 function Normalize-UiPreferences {
@@ -83,7 +95,7 @@ function Normalize-UiPreferences {
         }
     }
 
-    Set-FilterProperty $Preferences 'schemaVersion' 2
+    Set-FilterProperty $Preferences 'schemaVersion' 3
 
     $mode = [string]$Preferences.travelMode
     if ($mode -notin @('standard','airstrip','wlt','business')) { Set-FilterProperty $Preferences 'travelMode' 'airstrip' }
@@ -131,6 +143,11 @@ function Normalize-UiPreferences {
     Set-FilterProperty $Preferences 'itemFilterAll' ([bool]$Preferences.itemFilterAll)
     Set-FilterProperty $Preferences 'categoryFilterAll' ([bool]$Preferences.categoryFilterAll)
     Set-FilterProperty $Preferences 'showProfitableOnly' ([bool]$Preferences.showProfitableOnly)
+    Set-FilterProperty $Preferences 'use95PercentMarketValue' ([bool]$Preferences.use95PercentMarketValue)
+    Set-FilterProperty $Preferences 'energyWastePolicy' (Normalize-WastePolicy $Preferences.energyWastePolicy)
+    Set-FilterProperty $Preferences 'nerveWastePolicy' (Normalize-WastePolicy $Preferences.nerveWastePolicy)
+    Set-FilterProperty $Preferences 'maxEnergyLoss' ([Math]::Max(0,[Math]::Min(1000,[int]$Preferences.maxEnergyLoss)))
+    Set-FilterProperty $Preferences 'maxNerveLoss' ([Math]::Max(0,[Math]::Min(32767,[int]$Preferences.maxNerveLoss)))
 
     return $Preferences
 }
