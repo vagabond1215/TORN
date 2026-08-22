@@ -49,8 +49,12 @@ if(Test-Path -LiteralPath $inlineRendererPath){
 
 if(Test-Path -LiteralPath $historyPath){
  $history=Get-Content -LiteralPath $historyPath -Raw
- foreach($token in @('Write-BaselineAwareObservationPrune','retention_baseline','latestBefore',"if (`$Phase -eq 'PostUpdate') { return }")){if(-not$history.Contains($token)){Fail "History maintenance missing '$token'."}}
- foreach($forbidden in @('history_bootstrap','history_repair_baseline','Add-MissingMarketBaselines')){if($history.Contains($forbidden)){Fail "History maintenance must not fabricate '$forbidden' rows."}}
+ foreach($token in @(
+  'Write-BaselineAwareObservationPrune','retention_baseline','latestBefore','Test-IsSyntheticHistorySource',
+  'Remove-SyntheticObservationArtifacts',"@('history_bootstrap','history_repair_baseline')",'[void](Remove-SyntheticObservationArtifacts)',
+  "if (`$Phase -eq 'PostUpdate') { return }"
+ )){if(-not$history.Contains($token)){Fail "History maintenance missing '$token'."}}
+ if($history.Contains('Add-MissingMarketBaselines')){Fail 'History maintenance must not recreate migration-era synthetic baselines.'}
 }
 
 if(-not(Test-Path -LiteralPath $settingsPath)){Fail 'Missing settings.example.json.'}
@@ -63,5 +67,5 @@ else{
 
 if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Item viewer validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
 Write-Host 'Standalone Viewer and separate observed-only runtime PNG inline-history validation passed.' -ForegroundColor Green
-Write-Host 'Retention carry-forward is allowed only from an actual predecessor observation; missing intervals remain unknown.' -ForegroundColor DarkGreen
+Write-Host 'Legacy synthetic rows are purged; retention carry-forward is allowed only from an actual predecessor observation.' -ForegroundColor DarkGreen
 exit 0
