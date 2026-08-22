@@ -116,7 +116,7 @@ $note.Location = New-Object System.Drawing.Point(16,42)
 $note.Size = New-Object System.Drawing.Size(450,36)
 $note.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 if ($Filter -eq 'Ignore') {
-    $note.Text = 'Checked items are hidden and excluded from broad per-item Torn market-price requests. Country-level stock collection continues.'
+    $note.Text = 'Checked items are hidden and excluded from broad per-item Torn market-price requests. A favorite is preserved and returns when unignored.'
 } elseif ($Filter -eq 'Country') {
     $note.Text = 'The main Short / Medium / Long toggles choose bands. Use this list for country-level exceptions inside those bands.'
 } else {
@@ -210,10 +210,9 @@ $save.Add_Click({
         foreach ($id in @($selectedIds)) { [void]$result.Add([string]$id) }
         Set-FilterProperty $prefs 'selectedCountryIds' ([string[]]@($result | Sort-Object))
     } else {
+        # Ignore List outranks pin for visibility/API work but does not destroy
+        # the favorite. If the item is later unignored the same pin returns.
         Set-FilterProperty $prefs 'ignoredItemIds' ([int[]]@($selectedIds | ForEach-Object { [int]$_ } | Sort-Object -Unique))
-        if (-not [string]::IsNullOrWhiteSpace([string]$prefs.pinnedMarket) -and $prefs.pinnedMarket -match ':([1-9][0-9]*)$') {
-            if (@($selectedIds | ForEach-Object { [int]$_ }) -contains [int]$Matches[1]) { Set-FilterProperty $prefs 'pinnedMarket' '' }
-        }
     }
 
     [void](Save-UiPreferences -Preferences $prefs)
