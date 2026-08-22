@@ -7,15 +7,11 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
-$target = Join-Path $PSScriptRoot 'OpenItemViewer.ps1'
-if (-not (Test-Path -LiteralPath $target)) { throw 'OpenItemViewer.ps1 is missing.' }
+$hostScript = Join-Path $PSScriptRoot 'PopupHost.ps1'
+if (-not (Test-Path -LiteralPath $hostScript)) { throw 'PopupHost.ps1 is missing.' }
 if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
 
-$quotedTarget = '"' + $target + '"'
-$arguments = New-Object System.Collections.Generic.List[string]
-foreach ($value in @('-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',$quotedTarget,'-Row',[string]$Row)) { $arguments.Add([string]$value) }
-if (-not [string]::IsNullOrWhiteSpace($MarketKey)) {
-    $arguments.Add('-MarketKey')
-    $arguments.Add($MarketKey)
-}
-Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments.ToArray() -WindowStyle Normal | Out-Null
+$arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -STA -File "{0}" -Popup ItemViewer -Row {1}' -f $hostScript,$Row
+if (-not [string]::IsNullOrWhiteSpace($MarketKey)) { $arguments += (' -MarketKey "{0}"' -f $MarketKey) }
+Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+exit 0
