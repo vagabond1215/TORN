@@ -8,6 +8,7 @@ $tests = @(
     'Validate-ItemViewer.ps1',
     'Validate-RuntimeDiagnostics.ps1',
     'Validate-Filters.ps1',
+    'Run-PowerShell51CompatibilityTests.ps1',
     'Validate-TravelContext.ps1',
     'Run-TravelContextTests.ps1',
     'Validate-OptimalRoute.ps1',
