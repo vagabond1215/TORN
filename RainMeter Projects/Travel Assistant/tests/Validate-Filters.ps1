@@ -43,7 +43,11 @@ if(Test-Path -LiteralPath $files.Launcher){
 
 if(Test-Path -LiteralPath $files.State){
  $text=Get-Content -LiteralPath $files.State -Raw
- foreach($token in @('UIItemFilterAll','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UIShowProfitableOnly','UIOldestMarketSourceTimestamp','observedMarkets','sourceTimestamp')){if(-not$text.Contains($token)){Fail "FilterState.ps1 missing '$token'."}}
+ foreach($token in @(
+  'UIItemFilterAll','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UIShowProfitableOnly',
+  'Get-ActiveMarketSourceRange','UIOldestMarketSourceTimestamp','UIOldestActiveMarketSourceTimestamp','UIFreshestMarketSourceTimestamp',
+  '$state[''UIOldestMarketSourceTimestamp''] = [long]$sourceRange.freshest','observedMarkets','sourceTimestamp'
+ )){if(-not$text.Contains($token)){Fail "FilterState.ps1 missing '$token'."}}
 }
 
 if(Test-Path -LiteralPath $files.Opportunities){
@@ -54,7 +58,7 @@ if(Test-Path -LiteralPath $files.Opportunities){
 
 if(Test-Path -LiteralPath $files.StateReader){
  $text=Get-Content -LiteralPath $files.StateReader -Raw
- foreach($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)','currentOpportunityRows','sortOpportunityRows','locallySortedProjection','collapseInlineGraph','MeasureInlineGraph','MeasureItemViewer','safeLeaveText')){if(-not$text.Contains($token)){Fail "StateReader.lua missing '$token'."}}
+ foreach($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)','currentOpportunityRows','sortOpportunityRows','locallySortedProjection','collapseInlineGraph','MeasureInlineGraph','MeasureItemViewer','safeLeaveText','UIOldestMarketSourceTimestamp')){if(-not$text.Contains($token)){Fail "StateReader.lua missing '$token'."}}
  if($text.Contains("runViewerMeasure('inline_'")){Fail 'Sort/filter UI must not route inline history through the popup Viewer.'}
 }
 
@@ -71,5 +75,5 @@ if(Test-Path -LiteralPath $files.Countries){
 }
 
 if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Opportunity filter/sort/settings validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Opportunity filters, NAME/UPCOMING/GROSS PROFIT/PROFIT-HR local sorts, sort-collapse behavior, and hidden popup contracts passed.' -ForegroundColor Green
+Write-Host 'Opportunity filters, local sorts, sort-collapse behavior, and provider freshness-range projection passed.' -ForegroundColor Green
 exit 0
