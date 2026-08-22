@@ -59,8 +59,11 @@ if (Test-Path -LiteralPath $files.Launcher) {
 
 if (Test-Path -LiteralPath $files.State) {
     $text = Get-Content -LiteralPath $files.State -Raw
-    foreach ($key in @('UIItemFilterAll','UISelectedItemIds','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UISelectedCategories','UIShowProfitableOnly','UIIgnoredItemIds')) {
+    foreach ($key in @('UIItemFilterAll','UISelectedItemIds','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UISelectedCategories','UIShowProfitableOnly','UIIgnoredItemIds','UIOldestMarketSourceTimestamp')) {
         if (-not $text.Contains($key)) { Fail "FilterState.ps1 missing state key $key." }
+    }
+    foreach ($token in @('Get-OldestActiveMarketSourceTimestamp','observedMarkets','catalogActive','legacy_removed','sourceTimestamp')) {
+        if (-not $text.Contains($token)) { Fail "FilterState.ps1 missing optimizer-wide freshness token '$token'." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'FilterState.ps1 must remain local-only.' }
 }
@@ -79,7 +82,7 @@ if (Test-Path -LiteralPath $files.SettingsLauncher) {
 
 if (Test-Path -LiteralPath $files.StateReader) {
     $text = Get-Content -LiteralPath $files.StateReader -Raw
-    foreach ($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','local function updateOptimal(data, now)')) {
+    foreach ($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','local function updateOptimal(data, now)','UIOldestMarketSourceTimestamp')) {
         if (-not $text.Contains($token)) { Fail "StateReader.lua missing '$token'." }
     }
     foreach ($legacy in @('TogglePin(','pinnedCardKey','cardExpanded')) {
@@ -111,6 +114,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Optimizer filters, settings, and ignore-list configuration validation passed.' -ForegroundColor Green
+Write-Host 'Optimizer filters, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
 Write-Host 'Filters shape route candidates only; Ignore List suppresses broad per-item pricing without erasing shared stock/history collection.'
 exit 0
