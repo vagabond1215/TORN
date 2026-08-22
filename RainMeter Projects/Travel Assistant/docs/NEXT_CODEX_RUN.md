@@ -1,6 +1,6 @@
-# Next Codex Run: First Visible Multi-Item Release
+# Next Codex Run: Independent Multi-Item Cards
 
-**Status: ACTIVE**
+**Status: ACTIVE — PENDING TARGET-WINDOWS ACCEPTANCE**
 
 ## Expansion rule
 
@@ -10,149 +10,150 @@ show narrowly
 optimize only after evidence/economics are ready
 ```
 
-## Accepted prerequisites
+## Accepted baseline before this UI correction
 
-Target Windows has accepted:
+The target Windows machine has already accepted:
 
-```text
-11 foreign countries
-232 provider country-item rows
-5 verified legacy/inactive provider rows
-227 active country-item markets
-202 distinct observed item IDs
-202 / 202 categories resolved
-0 unresolved
-0 name conflicts
-```
+- full 11-country shadow collection;
+- 232 provider country-item rows / 227 active markets at the last live check;
+- 202 locally resolved item metadata rows;
+- verified legacy-market suppression;
+- bounded broad resale transport;
+- category-aware capacity with Xanax/general capacity isolated from Flower/Toy bonuses;
+- the original UK/Japan Xanax graph/timing cards.
 
-Broad resale pricing is also accepted live:
+The first multi-item screenshot then exposed a presentation error: Nessie Plushie and Cherry Blossom were rendered as subordinate rows inside the existing Xanax country cards.
 
-```text
-activeMarkets: 227
-activeItems:   197
-status: OK
-one bounded Torn Item Market request succeeded
-```
+That composition is rejected.
 
-Category-aware carrying capacity passed target-Windows focused tests:
+## Correct item-card identity
+
+The presentation identity is now the same durable market identity used by the data model:
 
 ```text
-synced Airstrip general/Xanax capacity = 18
-synced Standard general/Xanax capacity = 13
-Flower Shop 7★: Flower +5 only
-Toy Shop 7★: Plushie +5 only
+country + itemId
 ```
 
-Therefore with current general `+3`:
+Each visible opportunity owns a separate Rainmeter card.
+
+Current configured cards:
 
 ```text
-Airstrip Flower/Plushie with matching 7★ company = 23
-Standard Flower/Plushie with matching 7★ company = 18
-Xanax remains 18 Airstrip / 13 Standard
+United Kingdom + 206 Xanax
+United Kingdom + 266 Nessie Plushie
+Japan          + 206 Xanax
+Japan          + 277 Cherry Blossom
 ```
 
-## Implemented UI release pending Windows acceptance
-
-Skin version:
+The new intended layout is:
 
 ```text
-0.3.0
+[ UK flag | XANAX          | foreign price (market value) | stock ]
+  expanded Xanax body / graph
+
+[ UK flag | Nessie Plushie | foreign price (market value) | stock ]
+  collapsed by default
+
+[ JP flag | XANAX          | foreign price (market value) | stock ]
+  expanded Xanax body / graph
+
+[ JP flag | Cherry Blossom | foreign price (market value) | stock ]
+  collapsed by default
 ```
 
-Visible destination rows are now:
+No secondary item should appear indented inside a Xanax card again.
+
+## Expansion cap
+
+`TravelAssistant.ini` now defines:
 
 ```text
-United Kingdom
-  Xanax
-  Nessie Plushie
-
-Japan
-  Xanax
-  Cherry Blossom
+MaxExpandedCards=2
 ```
 
-Nessie and Cherry are deliberately:
+`StateReader.lua` owns the interactive card state.
+
+Rules:
+
+- initial expanded cards are UK Xanax and Japan Xanax;
+- every item header has an expand/collapse control;
+- at most `MaxExpandedCards` visible cards may be expanded;
+- opening a third card collapses another expanded card first;
+- when expanding a secondary card, the same-country companion card is the preferred collapse target;
+- collapsed cards retain their own independent border/header/stock/price state.
+
+The cap is a presentation/resource limit only. It does not affect collection or history.
+
+## Market value display
+
+Every item header renders:
 
 ```text
-visible=true
-enabled=false
-optimizerEligible=false
+foreign shop price (Torn Item Market reference)
 ```
 
-They therefore do not replace or broaden the established primary Xanax collector/model path.
+The parenthesized market value is smaller and muted. The foreign price remains the primary profitability-colored value.
 
-### Price display
+Missing market value remains unresolved/displayed as `-`; it is never treated as zero economics.
 
-Every visible item row displays:
+The broad resale queue still makes at most one bounded Torn Item Market request per normal update and prioritizes configured visible items before hidden catalog items.
+
+## Secondary item graphs
+
+`VisibleItems.ps1` remains local-only and now generates an item-specific graph image from retained `country + itemId` observations:
 
 ```text
-FOREIGN SHOP PRICE (TORN ITEM MARKET REFERENCE)
+uk-266-stock.png
+jp-277-stock.png
 ```
 
-The foreign shop price remains the primary value and keeps profitability coloring.
-The parenthesized Torn market reference is muted and rendered slightly smaller.
+Important evidence rule:
 
-Examples:
+- graph generation may add the current `observedMarkets` provider snapshot at its real provider/source timestamp for display continuity;
+- it does not write synthetic observations/cycles or turn predictions into history;
+- it makes no network request.
+
+The secondary graphs are present so a collapsed card can be expanded immediately without waiting for another provider request.
+
+## Recommendation boundary
+
+This UI correction does **not** promote Nessie/Cherry into the existing Xanax timing model.
+
+Expanded secondary cards may show:
+
+- current stock;
+- foreign price;
+- Torn market value;
+- category-aware capacity/economics class;
+- flight duration;
+- retained item-specific stock graph.
+
+Their decision text remains conservative, e.g.:
 
 ```text
-XANAX          $830,000 ($842,500)
-Nessie Plushie  $10,000  ($64,000)
+Economics positive - timing model learning
+Low margin - no departure recommendation
+Unprofitable - no departure recommendation
+Market value pending - no departure recommendation
 ```
 
-Missing resale data displays as `(-)` until the bounded resale queue populates it. A stale broad-market reference may remain visible for context but does not drive green/yellow/red profitability classification.
+No LEAVE NOW / safe-window timing should be generated for these secondary items yet.
 
-### Resale priority
-
-The broad queue remains bounded to **one request per normal update**. It now prioritizes configured `visible=true` items among otherwise eligible stale/unpriced items. This lets Nessie/Cherry receive market references before hidden catalog items without increasing request frequency.
-
-Xanax continues to use its existing independent/fresher resale path.
-
-## Presentation architecture
-
-New local-only script:
-
-```text
-@Resources/Scripts/VisibleItems.ps1
-```
-
-Runtime order:
+## Runtime order remains
 
 ```text
 UpdateTracker
 ShadowCollector (fail-soft)
 LocalCatalog (fail-soft / local-only)
 FinalizeState
-VisibleItems (fail-soft / local-only)
+VisibleItems (local-only independent cards + secondary graphs)
 visible heartbeat
-ResaleQueue (fail-soft / max one request)
+ResaleQueue (fail-soft, max one request/run)
 ```
 
-`VisibleItems.ps1` performs **no network calls**. It consumes already-existing:
+## Focused target-Windows validation
 
-- `observedMarkets` stock/foreign price;
-- market-validity flags;
-- local canonical metadata;
-- `resaleCache`;
-- saved travel profile/company stars;
-- category-aware capacity/economics.
-
-A VisibleItems failure must leave the existing Xanax state intact.
-
-## Current first-release limitations
-
-This is intentionally a narrow UI proof:
-
-- existing 8-hour graphs remain **Xanax graphs**;
-- existing departure/restock recommendation row remains **Xanax timing**;
-- secondary rows show current stock, foreign price, Torn market reference and profitability/capacity context via tooltip;
-- Nessie/Cherry remain non-optimizer-eligible;
-- no country/category filters yet.
-
-Do not imply secondary rows have independent trained departure timing until that modeling/presentation layer is deliberately added.
-
-## Focused Windows acceptance
-
-Pull current `main`, then run:
+After pulling current `main`, run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
@@ -160,12 +161,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Run-VisibleItemsTests.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-ResaleQueue.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-ResaleQueueTests.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-RainmeterSkin.ps1
@@ -178,49 +173,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
 ```
 
-Inspect generated state without exposing local settings/API key:
+Refresh Rainmeter and visually verify:
 
-```powershell
-$state = @{}
-Get-Content .\@Resources\Generated\state.kv | ForEach-Object {
-  $i = $_.IndexOf('=')
-  if ($i -gt 0) { $state[$_.Substring(0,$i)] = $_.Substring($i + 1) }
-}
+1. four independent card boundaries are visible;
+2. UK/JP Xanax start expanded;
+3. Nessie/Cherry start collapsed;
+4. market value remains smaller in parentheses;
+5. clicking Nessie expands its own graph and collapses UK Xanax when the two-card cap is already full;
+6. clicking Cherry does the analogous Japan swap;
+7. the panel height reflows rather than leaving a country-sized blank area;
+8. out-of-stock header text still fits;
+9. no secondary item receives actionable departure timing.
 
-@(
-  'UKMarketValue',
-  'UKSecondaryName','UKSecondaryForeignPrice','UKSecondaryMarketValue','UKSecondaryStock','UKSecondaryCapacity','UKSecondaryPriceClass',
-  'JPMarketValue',
-  'JPSecondaryName','JPSecondaryForeignPrice','JPSecondaryMarketValue','JPSecondaryStock','JPSecondaryCapacity','JPSecondaryPriceClass'
-) | ForEach-Object { '{0}={1}' -f $_, $state[$_] }
-```
-
-Expected identities:
-
-```text
-UKSecondaryName=Nessie Plushie
-JPSecondaryName=Cherry Blossom
-```
-
-Market values may initially be `0`/display `-` if those items have not yet reached the bounded resale queue. Do not force repeated API calls merely to fill the display; normal one-minute updates now prioritize visible missing/stale prices.
-
-Finally refresh Rainmeter and visually verify:
-
-- no price/stock overlap;
-- long out-of-stock text remains uncut;
-- parenthesized market reference is visibly smaller/muted;
-- Nessie appears only under UK;
-- Cherry appears only under Japan;
-- existing Xanax timing/graphs remain intact.
-
-A screenshot is useful for layout acceptance because static tests cannot prove Rainmeter text geometry.
+Do not call this corrected UI accepted until the user reports those Windows/Rainmeter checks.
 
 ## After acceptance
 
-Next phases:
-
-1. country/category presentation filters;
-2. travel-state target-country filtering and arrival countdown;
-3. broader per-item timing/economics presentation as evidence matures;
-4. full-country opportunity matrix;
-5. `Optimal` bounded route scheduler only after sufficient availability/economic evidence exists.
+Next UI work can generalize the item-card list beyond the two proof items, then add country/category filters and travel-state destination filtering/countdown. `Optimal` remains later and must stay separate from collection/visibility.
