@@ -51,6 +51,8 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     if ($finalizer -lt 0 -or $travel -lt 0 -or $optimal -lt 0 -or $filterState -lt 0 -or -not ($finalizer -lt $travel -and $travel -lt $optimal -and $optimal -lt $filterState)) {
         Fail 'Runtime order must keep FinalizeState -> TravelContext -> OptimalRoute -> FilterState.'
     }
+    if ($wrapper -notmatch '(?m)^\s*\[bool\]\$ClearErrorOnSuccess\s*=\s*\$true') { Fail 'Fail-soft helper must expose explicit error-file clearing policy.' }
+    if ($wrapper -notmatch '(?m)Invoke-FailSoftScript -Path \$TravelContext -ErrorPath \$TravelContextErrorFile -ClearErrorOnSuccess \$false') { Fail 'TravelContext must retain ownership of its diagnostic file after internally caught API failures.' }
 }
 
 if ($errors.Count -gt 0) {
@@ -59,5 +61,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Travel context configuration validation passed.' -ForegroundColor Green
-Write-Host 'One bounded user request supplies destination plus Energy/Nerve bars; transient failures preserve the last successful context.'
+Write-Host 'One bounded user request supplies destination plus Energy/Nerve bars; transient failures preserve the last successful context and diagnostics.'
 exit 0
