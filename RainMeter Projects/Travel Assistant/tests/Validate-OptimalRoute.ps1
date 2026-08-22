@@ -39,8 +39,11 @@ if (Test-Path -LiteralPath $optimizerPath) {
 
 if (Test-Path -LiteralPath $opportunityPath) {
     $text=Get-Content -LiteralPath $opportunityPath -Raw
-    foreach ($token in @('expectedGross','optimalScore','grossProfit','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Write-OpportunityProjection')) {
+    foreach ($token in @('grossProfit','profitPerHour','quantity','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Write-OpportunityProjection',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'")) {
         if (-not $text.Contains($token)) { Fail "Opportunity ranking contract missing '$token'." }
+    }
+    foreach ($retired in @('expectedGross=','optimalScore=')) {
+        if ($text.Contains($retired)) { Fail "Opportunity presentation must not retain hidden weighting token '$retired'." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'OpportunityState.ps1 must remain local-only.' }
 }
@@ -56,7 +59,7 @@ if (Test-Path -LiteralPath $settingsPath) {
 
 if (Test-Path -LiteralPath $preferencesPath) {
     $text=Get-Content -LiteralPath $preferencesPath -Raw
-    foreach ($token in @('schemaVersion = 4','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss','sortMode')) {
+    foreach ($token in @('schemaVersion = 5','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'")) {
         if (-not $text.Contains($token)) { Fail "Preference schema missing '$token'." }
     }
 }
@@ -105,6 +108,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Optimizer/opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Background optimal-route model and primary opportunity ranking validation passed.' -ForegroundColor Green
-Write-Host 'OPTIMAL presentation ranking uses probability-weighted gross opportunity value per total elapsed hour; route internals remain local-only.'
+Write-Host 'Background route model and transparent opportunity economics validation passed.' -ForegroundColor Green
+Write-Host 'Visible ordering is UPCOMING, GROSS PROFIT, or PROFIT/HR; hit likelihood remains separate.'
 exit 0
