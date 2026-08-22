@@ -3,6 +3,7 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $scriptPath = Join-Path $ProjectRoot '@Resources\Scripts\VisibleItems.ps1'
+$stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $itemsPath = Join-Path $ProjectRoot 'config\items.json'
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
@@ -16,13 +17,33 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
     $tokens = $null; $parseErrors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "VisibleItems.ps1 parse error: $($parseError.Message)" }
-    foreach ($fn in @('Get-VisibleSecondaryItem','Get-VisibleItemsResaleSnapshot','Get-VisibleSecondaryPresentation','Set-VisibleSecondaryState')) {
+
+    foreach ($fn in @(
+        'Get-VisibleSecondaryItem',
+        'Get-VisibleItemsResaleSnapshot',
+        'Get-VisibleItemGraphRows',
+        'Write-VisibleItemStockGraph',
+        'Get-VisibleSecondaryPresentation',
+        'Set-VisibleSecondaryState'
+    )) {
         if ($text -notmatch ('(?m)^function\s+' + [regex]::Escape($fn) + '\s*\{')) { Fail "Missing $fn." }
     }
+
     foreach ($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','https://','http://')) {
         if ($text.Contains($networkToken)) { Fail "VisibleItems.ps1 must remain local-only; found '$networkToken'." }
     }
-    foreach ($token in @('SecondaryMarketValue','SecondaryPriceClass','Get-TravelProfileEffects','Get-EffectiveTravelEconomics','catalogActive','legacy_removed')) {
+
+    foreach ($token in @(
+        'SecondaryMarketValue',
+        'SecondaryPriceClass',
+        'SecondaryGraphName',
+        'Get-TravelProfileEffects',
+        'Get-EffectiveTravelEconomics',
+        'catalogActive',
+        'legacy_removed',
+        'sourceTimestamp',
+        'observations.jsonl'
+    )) {
         if (-not $text.Contains($token)) { Fail "Visible presentation contract missing '$token'." }
     }
 }
@@ -43,13 +64,47 @@ if ($finalizerCall -lt 0 -or $visibleCall -lt 0 -or $heartbeatCall -lt 0 -or $re
 }
 
 $ini = Get-Content -LiteralPath $iniPath -Raw
-foreach ($section in @('MeterUKSecondaryTitle','MeterUKSecondaryPrice','MeterUKSecondaryStockHeader','MeterJPSecondaryTitle','MeterJPSecondaryPrice','MeterJPSecondaryStockHeader')) {
-    if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($section) + '\]\s*$')) { Fail "Missing [$section]." }
+foreach ($section in @(
+    'MeterUKCard','MeterUKSecondaryCard','MeterJPCard','MeterJPSecondaryCard',
+    'MeterUKSecondaryFlag','MeterJPSecondaryFlag',
+    'MeterUKSecondaryGraph','MeterJPSecondaryGraph',
+    'MeterUKSecondaryExpand','MeterJPSecondaryExpand'
+)) {
+    if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($section) + '\]\s*$')) { Fail "Missing independent item-card meter [$section]." }
 }
+
 foreach ($token in @('#UKMarketValueText#','#JPMarketValueText#','#UKSecondaryMarketValueText#','#JPSecondaryMarketValueText#')) {
     if (-not $ini.Contains($token)) { Fail "Skin is missing market-value variable $token." }
 }
-if ($ini -notmatch '(?m)^Version=0\.3\.0\s*$') { Fail 'Multi-item release should report skin version 0.3.0.' }
+if ($ini -notmatch '(?m)^Version=0\.3\.1\s*$') { Fail 'Independent-card release should report skin version 0.3.1.' }
+if ($ini -notmatch '(?m)^MaxExpandedCards=2\s*$') { Fail 'Default expanded-card cap must be two.' }
+if ($ini -notmatch '(?m)^MaxExpandedCards=#MaxExpandedCards#\s*$') { Fail 'MeasureState must pass the expanded-card cap into StateReader.lua.' }
+
+foreach ($group in @('UKPrimaryBody','UKSecondaryHeader','UKSecondaryBody','JPPrimaryBody','JPSecondaryHeader','JPSecondaryBody')) {
+    if ($ini -notmatch ('(?m)^Group=' + [regex]::Escape($group) + '\s*$')) { Fail "Skin is missing independent card group '$group'." }
+}
+
+if ($ini -notmatch '(?m)^ImageName=#@#Generated\\#UKSecondaryGraphName#\s*$') { Fail 'UK secondary card must own its own graph image.' }
+if ($ini -notmatch '(?m)^ImageName=#@#Generated\\#JPSecondaryGraphName#\s*$') { Fail 'JP secondary card must own its own graph image.' }
+if ($ini -notmatch "ToggleCard\('UKSecondary'\)" -or $ini -notmatch "ToggleCard\('JPSecondary'\)") { Fail 'Secondary card headers must be expandable through StateReader.lua.' }
+
+if (-not (Test-Path -LiteralPath $stateReaderPath)) {
+    Fail 'Missing StateReader.lua.'
+} else {
+    $stateReader = Get-Content -LiteralPath $stateReaderPath -Raw
+    foreach ($token in @(
+        "local maxExpandedCards = 2",
+        "local function countExpandedCards()",
+        "local function collapseForRequestedCard(requested)",
+        "local function applyCardLayout()",
+        "function ToggleCard(cardKey)",
+        "if countExpandedCards() >= maxExpandedCards then collapseForRequestedCard(cardKey) end",
+        "setMeterGroupVisible('UKSecondaryHeader', true)",
+        "setMeterGroupVisible('JPSecondaryHeader', true)"
+    )) {
+        if (-not $stateReader.Contains($token)) { Fail "StateReader.lua is missing independent-card contract: $token" }
+    }
+}
 
 if ($errors.Count -gt 0) {
     foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
@@ -57,5 +112,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Visible-item configuration validation passed.' -ForegroundColor Green
-Write-Host 'Nessie and Cherry are presentation-only secondary rows; market values come from local resaleCache and VisibleItems performs no network work.'
+Write-Host 'Nessie and Cherry are independent expandable cards with local history graphs; at most two cards are expanded by default.'
 exit 0
