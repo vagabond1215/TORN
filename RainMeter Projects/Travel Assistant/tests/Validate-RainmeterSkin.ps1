@@ -68,7 +68,7 @@ $tokens=$null; $parseErrors=$null
 [void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
 foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
 foreach ($token in @(
-    'RuntimeObservationFile','SeedObservationFile',"$historySource = 'runtime_observations'",'if ($allRows.Count -eq 0)',
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
     "source='current_snapshot'",'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap',
     'for ($i=0; $i -le 8; $i++)','Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force',
     'StableImageFile','PointCount','ChangeCount'
