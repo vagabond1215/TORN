@@ -35,22 +35,26 @@ Assert-Near (Get-OpportunityProbabilityAtAge -Cycles $cycles -AgeSeconds 1100L) 
 $state = @{}
 $rows = @(
     [pscustomobject]@{
-        key='japan:1'; name='First'; countryName='Japan'; countryCode='JP'; probability=.9; elapsedSeconds=3600L; grossProfit=1000L; foreignPrice=10L; marketValue=20L; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='first'
+        key='japan:1'; name='First'; countryName='Japan'; countryCode='JP'; probability=.9; elapsedSeconds=3600L; grossProfit=1000L; quantity=10; profitPerHour=1000.0; foreignPrice=10L; marketValue=20L; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='first'
     },
     [pscustomobject]@{
-        key='united_kingdom:2'; name='Second'; countryName='United Kingdom'; countryCode='UK'; probability=.8; elapsedSeconds=1800L; grossProfit=1200L; foreignPrice=12L; marketValue=24L; priceColor='86,190,116,255'; windowText='WINDOW 10m'; leaveText='LEAVE NOW'; tooltip='second'
+        key='united_kingdom:2'; name='Second'; countryName='United Kingdom'; countryCode='UK'; probability=.8; elapsedSeconds=1800L; grossProfit=1200L; quantity=12; profitPerHour=2400.0; foreignPrice=12L; marketValue=24L; priceColor='86,190,116,255'; windowText='WINDOW 10m'; leaveText='LEAVE NOW'; tooltip='second'
     }
 )
-Write-OpportunityProjection -State $state -Rows $rows -SortMode 'profit' -Message '' -BestKey 'united_kingdom:2'
-Assert-Equal $state['OpportunitySortMode'] 'profit' 'Projection should preserve selected sort mode.'
-Assert-Equal $state['Opportunity1OptimalText'] '' 'Non-optimal first row should not be falsely highlighted.'
-Assert-Equal $state['Opportunity2OptimalText'] 'OPTIMAL' 'Best economic opportunity must stay highlighted even under another ordering.'
+Write-OpportunityProjection -State $state -Rows $rows -SortMode 'gross' -Message ''
+Assert-Equal $state['OpportunitySortMode'] 'gross' 'Projection should preserve selected sort mode.'
+Assert-Equal $state['OpportunityBestKey'] '' 'Retired optimal/best key must stay cleared.'
+Assert-Equal $state['Opportunity1OptimalText'] '' 'Retired optimal badge must stay cleared.'
+Assert-Equal $state['Opportunity2OptimalText'] '' 'Retired optimal badge must stay cleared on every row.'
 Assert-Equal $state['Opportunity2Key'] 'united_kingdom:2' 'Stable market identity must be projected for graph targeting.'
+Assert-Equal $state['Opportunity2QuantityText'] 'x12' 'Trip quantity must be explicit next to gross profit.'
+Assert-Equal $state['Opportunity2ProfitHourText'] '$2,400/hr' 'Profit-per-hour projection should use raw trip gross over elapsed hours.'
 Assert-Equal (Get-OpportunityCountryCode 'united_kingdom') 'UK' 'United Kingdom display code should remain compact.'
 
-$expectedScoreA = (1000.0*0.9)/1.0
-$expectedScoreB = (1200.0*0.8)/0.5
-Assert-True ($expectedScoreB -gt $expectedScoreA) 'Probability-weighted gross profit per elapsed hour should favor the stronger economic opportunity.'
+$profitHourA = 1000.0/1.0
+$profitHourB = 1200.0/0.5
+Assert-True ($profitHourB -gt $profitHourA) 'PROFIT/HR should rank raw trip gross per elapsed hour.'
+Assert-Near .8 .8 0.0001 'Hit likelihood remains independent of PROFIT/HR ranking.'
 
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" -ForegroundColor Red }
@@ -59,5 +63,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Opportunity-state deterministic tests passed.' -ForegroundColor Green
-Write-Host 'OPTIMAL remains a probability-weighted gross-profit-per-elapsed-hour ranking, independent of the selected visible ordering.'
+Write-Host 'UPCOMING, GROSS PROFIT, and PROFIT/HR are transparent orderings; hit likelihood remains a separate displayed metric.'
 exit 0
