@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Travel Assistant is a lightweight Rainmeter-facing Torn foreign-market decision system. Broad observation is intentionally separated from market validity, valuation, opportunity eligibility, ordering and presentation.
+Travel Assistant is a lightweight Rainmeter-facing Torn foreign-market decision system. Collection, market validity, valuation, opportunity eligibility, ordering, and presentation remain separate concerns.
 
 ```text
 COLLECTED provider rows
@@ -14,41 +14,37 @@ ELIGIBLE opportunity candidates
 VISIBLE opportunities
 ```
 
-The current 0.6 product is a compact opportunity browser. It does not collapse the UI to one route and does not hide likelihood inside a composite `OPTIMAL` score.
+The current 0.6 product is a compact opportunity browser with explicit `NAME`, `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR` ordering.
 
-## Layering
+## Runtime layering
 
 ```text
 Prometheus / YATA foreign stock
         ↓
-provider normalization
+ShadowCollector (single live-stock owner)
         ↓
-country + itemId observed rows
+observedMarkets + transition-only observations/cycles
         ↓
-verified market-validity overrides
+ProjectCollectedState (local compatibility projection)
         ↓
-bounded observations / restock-sellout cycles
+local catalog + engine schema
         ↓
-local offline item metadata catalog
+FinalizeState
         ↓
-bounded Torn MV cache
+TravelContext
         ↓
-current travel + Energy/Nerve context
+OptimalRoute compatibility model
         ↓
-capacity/profile effects
+OpportunityState
         ↓
-background compatibility route model
+FilterState
         ↓
-current/future opportunity projection
+visible heartbeat
         ↓
-filters + transparent visible ordering
-        ↓
-compact Rainmeter cards
-        ↙                         ↘
-one-at-a-time inline graph     standalone Viewer
+ResalePriority / ResaleQueue
 ```
 
-Settings/preferences are side inputs. They never rewrite observation history.
+Inline graph rendering and the standalone Viewer are local side paths. They make no provider/Torn request.
 
 ## Market identity / validity
 
@@ -58,21 +54,9 @@ Identity is:
 country + itemId
 ```
 
-Provider presence is not proof a foreign shop still sells an item. Verified overrides in `config/foreign-market-overrides.json` supersede provider presence for new history/resale/opportunity work while preserving provenance.
+Verified overrides in `config/foreign-market-overrides.json` supersede provider presence for new history/resale/opportunity work while preserving provenance.
 
-Recorded target baseline:
-
-```text
-11 countries
-232 provider country-item rows
-5 verified legacy rows
-227 active relationships
-232/232 provider names
-202 item IDs
-202/202 categories resolved
-```
-
-Observed truth:
+Observed stock truth is limited to actual provider samples:
 
 ```text
 0 -> positive = observed restock
@@ -81,26 +65,87 @@ positive -> 0 = observed sellout
 
 Predictions never become history.
 
-## Collection / retention
+## Collection ownership
 
-`UpdateTracker.ps1` keeps compatibility evidence/state. `ShadowCollector.ps1` observes all 11 countries and valid provider rows while preventing duplicate primary writes.
+`ShadowCollector.ps1` is the normal heartbeat's sole live foreign-stock request path. It observes all 11 configured countries and all active provider market rows.
 
-Filters, Ignore List, ordering and graph expansion never narrow shared provider collection.
+For every active market it updates current `engine-state.json` market metadata, including stock, foreign price, provider, and source timestamp. The retained observation database is stock-transition evidence: a new row is written when stock changes, not merely because provider timestamp or foreign price changed.
 
-Retention:
+`UpdateTracker.ps1` is retained only for explicit legacy compatibility actions such as `CycleTravelMode`; it is not called during a normal `Action=Update` heartbeat.
+
+`ProjectCollectedState.ps1` projects legacy `state.kv` stock/travel fields locally from the ShadowCollector engine state, avoiding a second provider request and a second history writer.
+
+Filters, Ignore List, sort order, graph expansion, and Viewer selection never narrow shared provider collection.
+
+## Retention and historical truth
+
+Retention remains:
 
 ```text
-high-resolution raw observations: ~48h
-completed cycles:                 ~90d
-stale live-provider guard:         5m
-visible graph window:              8h
+high-resolution observations: ~48h
+completed cycles:             ~90d
+stale live-provider guard:     5m
+visible graph window:          8h
 ```
 
-The graph horizon is display-only. Change-only pruning preserves one predecessor/baseline per market so unchanged state remains drawable across the retention boundary.
+At the 48-hour boundary, `MaintainObservationHistory.ps1` may carry the final **actual observation** before the cutoff to the cutoff as `retention_baseline`. This is a safe state carry because it is derived from observed evidence.
+
+Migration-era rows named `history_bootstrap` and `history_repair_baseline` are removed. They previously projected current market state backward through periods with no retained evidence and could create false flat stock histories. Missing historical intervals now remain unknown.
+
+## Graph surfaces
+
+### Inline card graph
+
+The row chevron uses a dedicated local `MeasureInlineGraph` and `RenderInlineGraph.ps1`. It never routes through the standalone Viewer launcher.
+
+The renderer:
+
+- reads `data/runtime/observations.jsonl` first;
+- uses committed seed evidence only when the market has no runtime evidence;
+- ignores migration-era synthetic rows defensively;
+- compresses consecutive identical stock levels;
+- carries a state to the left edge only when a real predecessor observation exists;
+- appends the current `observedMarkets` stock snapshot at the right edge;
+- renders a generated PNG consumed by a native Rainmeter Image meter;
+- draws seven internal vertical separators for eight one-hour segments;
+- shows sparse numeric Y labels plus `-8h` / `now` X labels.
+
+If the first real retained sample occurs inside the 8-hour window, the earlier portion is deliberately left without a fabricated stock line.
+
+Changing sort order collapses the open inline graph. At most one row is expanded.
+
+### Standalone Viewer
+
+`VIEWER >` remains a detached WinForms market browser with its own market dropdown and richer diagnostics. It reads the same retained local observation file. History maintenance purges synthetic migration rows before it renders, so both graph surfaces converge on the same observed evidence.
+
+## Card presentation
+
+Each compact row is:
+
+```text
+[FlagKit flag]  Item name                         $gross   v
+                window   leave   chance       foreign (MV)
+```
+
+- No rank/place number.
+- No country name/code in the card body.
+- No duplicate travel/elapsed-time text in the body.
+- Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license.
+- Hovering the flag exposes country + configured one-way travel time.
+- Gross is a bare dollar amount; projected quantity remains available to economics/tooltips.
+- A known 0% arrival case displays `NO HIT` rather than `LEAVE NOW`; unknown likelihood displays `WAIT DATA`.
+
+`OpportunityRows.inc` is included after the full-panel background so cards render above, not beneath, the panel layer.
+
+## Provider and heartbeat freshness
+
+`FilterState.ps1` records both the oldest and freshest active market source timestamps. The legacy header timestamp key is fed from the **freshest** active sample so one lagging country does not label the entire provider feed stale. The actual oldest timestamp is retained separately for diagnostics.
+
+The visible heartbeat is written after current collection/context/opportunity projection and before broad MV queue work. A slow MV refresh therefore does not make otherwise-current foreign-stock state appear unrefreshed.
 
 ## Local catalog and MV
 
-Catalog network maintenance stays outside the normal heartbeat. `LocalCatalog.ps1` resolves metadata from committed/local sources.
+Catalog network maintenance stays outside the one-second Rainmeter loop. `LocalCatalog.ps1` resolves metadata from committed/local sources.
 
 `ResaleQueue.ps1` is the sole broad Torn Item Market request path. The opportunity layer consumes cached `itemmarket.item.average_price` as MV.
 
@@ -113,235 +158,27 @@ Default value basis:
 0 minimum margin gate
 ```
 
-Optional preference changes sell basis to 95% MV.
+Optional preference changes the sell basis to 95% MV.
 
-## Capacity
+## Capacity / economics
 
-General capacity derives from travel-mode base plus synced profile effects:
-
-```text
-Standard: 10 base
-Airstrip/WLT/qualified Business: 15 base
-```
-
-Category-only company effects remain isolated. Opportunity quantity uses item-appropriate capacity and current/modelled available quantity. Quantity remains projected internally even though the compact card no longer prints `xN` beside gross.
-
-## Travel + bars
-
-`TravelContext.ps1` performs one bounded fail-soft request:
-
-```text
-/v2/user?selections=travel,basic,bars
-```
-
-Transient failures preserve the last successful foreign restriction and bars. While outbound/abroad to a recognized destination, opportunity selection is restricted to that destination. `traveling_unknown` / `abroad_unknown` fails closed.
-
-## Availability model
-
-### Fresh current stock
-
-Current observed stock is useful before enough completed cycles exist to model arrival survival.
-
-For a fresh in-stock market:
-
-- calculate trip economics from current foreign price, current stock/capacity and cached MV;
-- if arrival probability is trained, display the modeled percentage;
-- if not trained, keep the row visible with likelihood `LEARNING`;
-- never substitute an invented percentage for unknown likelihood.
-
-This separates observed present state from learned future survival confidence.
-
-### Sold-out / future windows
-
-For sold-out markets, `OpportunityState.ps1` uses completed:
-
-```text
-restockDelaySeconds
-availabilitySeconds
-```
-
-Each cycle contributes:
-
-```text
-[restock delay, restock delay + availability duration)
-```
-
-Overlap yields modeled hit probability at a target purchase time. A future sold-out opportunity still requires sufficient completed evidence; the relaxed `LEARNING` rule applies to current observed stock, not invented future windows.
-
-Restock quantity may use the median observed `0 -> positive` quantity.
-
-## Opportunity economics / ordering
-
-For each eligible market the projection derives:
-
-```text
-current/future purchase time
-leave timing
-hit probability or LEARNING
-purchasable quantity
-selected MV basis
-unit spread
-gross trip profit
-total elapsed time
-profit per hour
-```
+General capacity derives from travel-mode base plus synced profile effects. Opportunity quantity is bounded by both configured capacity and modeled/current available quantity.
 
 ```text
 gross = quantity × (selected MV basis - foreign price)
 profit/hr = gross / total elapsed hours
 ```
 
-Gross intentionally excludes travel cost. Hit probability is **not** multiplied into `PROFIT/HR`.
+Gross intentionally excludes travel cost. Hit probability is displayed separately and is not multiplied into `PROFIT/HR`.
 
-Visible sorts:
+## Travel + bars
 
-```text
-NAME          item name ascending, then destination
-UPCOMING      earliest current/modeled window first
-GROSS PROFIT  gross trip profit descending
-PROFIT/HR     gross / elapsed hours descending
-```
+`TravelContext.ps1` performs one bounded fail-soft user request for travel/basic/bars. Transient failures preserve the last successful destination/bar context. While outbound/abroad to a recognized destination, opportunity selection is restricted to that destination. `traveling_unknown` / `abroad_unknown` fails closed.
 
-Sorts are applied immediately in `StateReader.lua` to the current projection. PowerShell persistence is not on the visual critical path.
+Energy/Nerve waste policies remain local decision constraints and never mutate observation history.
 
-## Compact card presentation
+## Projection / interaction
 
-Each row is intentionally sparse:
+`StateReader.lua` performs immediate local sorting so button response does not wait for PowerShell persistence. It retains the last complete opportunity projection through transient intermediate writes, while genuine zero-result projections still replace the list.
 
-```text
-[flag]  Item name                              $gross   v
-[time]  window   leave   chance/LEARNING   foreign (MV)
-```
-
-- No visible rank/place number.
-- No country name/code in the body.
-- No duplicate elapsed-time field in the body.
-- Destination is encoded by a vector flag tile.
-- The flag's white lower strip carries the elapsed/travel-time text.
-- Gross is a bare dollar value; quantity remains in tooltip/projected state.
-- Right-side `v`/`^` controls inline graph expansion.
-
-The flag graphics are local Rainmeter Shape approximations for all 11 destinations; no binary flag assets are required.
-
-## Inline graph architecture
-
-`RenderInlineGraph.ps1` is a local-only renderer. It reads seed/runtime observations + engine state and writes a bounded generated key/value graph specification:
-
-```text
-@Resources/Generated/inline-graph-<country_item>.kv
-```
-
-The spec contains a Rainmeter Shape path, summary, max stock and retained point/change counts.
-
-`StateReader.lua`:
-
-- tracks `expandedKey` by stable market identity;
-- allows at most one expanded graph;
-- reflows lower rows and panel height;
-- applies compact grid/path Shape options to the expanded card;
-- follows the expanded market if sorting moves it;
-- locally refreshes an open graph around once/minute.
-
-The existing `MeasureItemViewer`/`LaunchItemViewer.ps1` transport is reused. `inline_<marketKey>` routes synchronously to `RenderInlineGraph.ps1` and exits; ordinary market keys still route to the standalone popup host.
-
-No provider/Torn request is made by inline rendering.
-
-## Standalone Viewer
-
-`VIEWER >` remains a separate detached WinForms browser. It retains:
-
-- market dropdown;
-- richer labels/diagnostics;
-- 8-hour graph with hourly markers;
-- restock/sellout visual markers;
-- truthful zero-stock axis;
-- stable `country:itemId` targeting.
-
-The standalone Viewer and inline graph share retained local truth but are separate UI surfaces.
-
-## Energy / Nerve waste
-
-Policies remain:
-
-```text
-Allowed
-Forbidden
-Limited(max loss)
-```
-
-- Energy above natural maximum bypasses Energy restriction.
-- Nerve has no stacking bypass.
-- Unknown bars fail safe for Forbidden/Limited.
-- Constraints apply to new outbound opportunities.
-- After travel is committed to a recognized destination, constraints do not erase destination purchase guidance.
-
-## Background route planner
-
-`OptimalRoute.ps1` remains local-only and builds one best next-trip plan for compatibility, diagnostics and MV-priority behavior. Its name does not imply a user-facing `OPTIMAL` mode.
-
-## Filters / local state
-
-Preferences live in ignored:
-
-```text
-data/runtime/preferences.json
-```
-
-Primary controls:
-
-```text
-ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
-NAME   UPCOMING   GROSS PROFIT   PROFIT/HR
-```
-
-Ignore List excludes items from opportunity/background optimizer candidates and broad per-item MV requests but not shared provider collection/history.
-
-## Projection stability / interaction
-
-`UpdateTracker.ps1` can publish compatibility state before `OpportunityState.ps1` completes. `StateReader.lua` therefore retains the last complete opportunity/UI projection through intermediate writes and through transient learning-only zero projections.
-
-Interactive ordering and expansion are local UI operations and should not wait on the normal network update pipeline.
-
-## Runtime order
-
-```text
-UpdateTracker
-      ↓
-ShadowCollector
-      ↓
-LocalCatalog
-      ↓
-FinalizeState
-      ↓
-TravelContext
-      ↓
-OptimalRoute
-      ↓
-OpportunityState
-      ↓
-FilterState
-      ↓
-visible heartbeat
-      ↓
-ResalePriority
-      ↓
-ResaleQueue
-```
-
-Inline graph rendering is an on-demand local side path, not a network heartbeat stage.
-
-## Performance / secrets
-
-- one-second Rainmeter work: local-only;
-- sort/expand UI state: local-only;
-- inline graph render: local/on-demand and at most roughly once/minute while open;
-- normal update: roughly once/minute;
-- shadow collection: roughly 120s minimum;
-- one bounded travel/bars request/update;
-- at most one broad MV request after heartbeat;
-- no permanent background process;
-- API key stays ignored/local and is sent by stdin/header, never URL/process args.
-
-## Future browser notifications
-
-Notifications remain an optional future consumer of accepted opportunity timing state. They must not duplicate the forecasting model or add provider/Torn request paths.
+One-second Rainmeter work remains local-only. Normal foreign-stock collection is approximately once per minute; inline rendering is local/on-demand; API credentials remain ignored/local.
