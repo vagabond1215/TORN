@@ -89,8 +89,11 @@ function Get-OptimalMedian {
 
 function Add-EvidenceRow {
     param([hashtable]$Map, [string]$Key, [object]$Value)
-    if (-not $Map.ContainsKey($Key)) { $Map[$Key] = New-Object System.Collections.Generic.List[object] }
-    $Map[$Key].Add($Value)
+    # Keep evidence values as ordinary object[] arrays. Windows PowerShell 5.1
+    # can throw "Argument types do not match" when generic List<T> values are
+    # later wrapped in @(...), which both route and opportunity projections do.
+    if (-not $Map.ContainsKey($Key)) { $Map[$Key] = [object[]]@() }
+    $Map[$Key] = [object[]](@($Map[$Key]) + @($Value))
 }
 
 function Get-OptimalEvidence {
@@ -126,14 +129,14 @@ function Get-OptimalEvidence {
 
     $restockStock = @{}
     foreach ($key in @($observations.Keys)) {
-        $samples = New-Object System.Collections.Generic.List[long]
+        $samples = [long[]]@()
         $previousStock = $null
         foreach ($row in @($observations[$key] | Sort-Object timestamp)) {
             $stock = [long](Get-OptimalProperty $row 'stock')
-            if ($null -ne $previousStock -and [long]$previousStock -eq 0 -and $stock -gt 0) { $samples.Add($stock) }
+            if ($null -ne $previousStock -and [long]$previousStock -eq 0 -and $stock -gt 0) { $samples = [long[]]($samples + $stock) }
             $previousStock = $stock
         }
-        $restockStock[$key] = $samples
+        $restockStock[$key] = [long[]]$samples
     }
 
     return [pscustomobject]@{
