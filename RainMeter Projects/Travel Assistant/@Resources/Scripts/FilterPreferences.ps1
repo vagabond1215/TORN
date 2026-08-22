@@ -60,7 +60,7 @@ function Get-FilterVisibleCategories {
 
 function New-DefaultUiPreferences {
     return [pscustomobject]@{
-        schemaVersion = 4
+        schemaVersion = 5
         travelMode = 'airstrip'
         pinnedMarket = ''
         itemFilterAll = $true
@@ -76,7 +76,7 @@ function New-DefaultUiPreferences {
         maxEnergyLoss = 0
         nerveWastePolicy = 'allowed'
         maxNerveLoss = 0
-        sortMode = 'optimal'
+        sortMode = 'upcoming'
     }
 }
 
@@ -90,7 +90,11 @@ function Normalize-WastePolicy {
 function Normalize-SortMode {
     param([object]$Value)
     $mode = ([string]$Value).Trim().ToLowerInvariant()
-    if ($mode -notin @('optimal','upcoming','profit','time')) { return 'optimal' }
+    # Migrate 0.6 pre-change sort values without losing the user's intent.
+    if ($mode -eq 'optimal') { return 'profit_per_hour' }
+    if ($mode -eq 'profit') { return 'gross' }
+    if ($mode -eq 'time') { return 'upcoming' }
+    if ($mode -notin @('upcoming','gross','profit_per_hour')) { return 'upcoming' }
     return $mode
 }
 
@@ -102,7 +106,7 @@ function Normalize-UiPreferences {
     foreach ($property in @($defaults.PSObject.Properties)) {
         if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
-    Set-FilterProperty $Preferences 'schemaVersion' 4
+    Set-FilterProperty $Preferences 'schemaVersion' 5
 
     $mode = [string]$Preferences.travelMode
     if ($mode -notin @('standard','airstrip','wlt','business')) { Set-FilterProperty $Preferences 'travelMode' 'airstrip' }
