@@ -17,6 +17,7 @@ $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
+$RuntimeLogScript = Join-Path $PSScriptRoot 'RuntimeLog.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
@@ -25,12 +26,21 @@ $EngineStateSchemaErrorFile = Join-Path $RuntimeDir 'engine-state-schema-error.t
 $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
 $OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
+$FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
 $acquired = $false
+
+if (Test-Path -LiteralPath $RuntimeLogScript) { . $RuntimeLogScript }
+
+function Get-UpdateFailureComponent {
+    param([string]$Path)
+    $name = [System.IO.Path]::GetFileNameWithoutExtension([string]$Path)
+    return ($name -replace '-error$','')
+}
 
 function Invoke-TornJsonWithCurl {
     param(
@@ -108,12 +118,24 @@ function Write-UpdateHeartbeat {
 
 function Write-CompactFailure {
     param([string]$Path, [string]$Message)
+    $component = Get-UpdateFailureComponent $Path
     try {
         New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
         $clean = ([string]$Message).Replace("`r", ' ').Replace("`n", ' ').Trim()
         if ($clean.Length -gt 600) { $clean = $clean.Substring(0, 600) }
         [System.IO.File]::WriteAllText($Path, $clean, [System.Text.UTF8Encoding]::new($false))
     } catch { }
+    if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+        Write-TravelAssistantLog -Level ERROR -Component $component -Message $Message
+    }
+}
+
+function Clear-CompactFailure {
+    param([string]$Path)
+    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue }
+    if (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue) {
+        Clear-TravelAssistantLatestError -Component (Get-UpdateFailureComponent $Path)
+    }
 }
 
 function Invoke-FailSoftScript {
@@ -125,8 +147,11 @@ function Invoke-FailSoftScript {
     if (-not (Test-Path -LiteralPath $Path)) { return }
     try {
         & $Path
-        if ($ClearErrorOnSuccess -and (Test-Path -LiteralPath $ErrorPath)) { Remove-Item -LiteralPath $ErrorPath -Force -ErrorAction SilentlyContinue }
-    } catch { Write-CompactFailure -Path $ErrorPath -Message $_.Exception.Message }
+        if ($ClearErrorOnSuccess) { Clear-CompactFailure -Path $ErrorPath }
+        elseif (-not (Test-Path -LiteralPath $ErrorPath) -and (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue)) {
+            Clear-TravelAssistantLatestError -Component (Get-UpdateFailureComponent $ErrorPath)
+        }
+    } catch { Write-CompactFailure -Path $ErrorPath -Message $_.Exception.ToString() }
 }
 
 try {
@@ -134,7 +159,7 @@ try {
     if (-not $acquired) { exit 0 }
 
     & $Updater -Action $Action
-    if (-not $?) { exit 1 }
+    if (-not $?) { throw 'UpdateTracker returned failure.' }
 
     Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile
     Invoke-FailSoftScript -Path $LocalCatalog -ErrorPath $LocalCatalogErrorFile
@@ -145,7 +170,7 @@ try {
     Invoke-FailSoftScript -Path $EngineStateSchema -ErrorPath $EngineStateSchemaErrorFile
 
     & $Finalizer
-    if (-not $?) { exit 1 }
+    if (-not $?) { throw 'FinalizeState returned failure.' }
 
     # TravelContext owns its diagnostic file because it catches transient API failures
     # internally while preserving the last successful destination/bar context.
@@ -167,10 +192,13 @@ try {
         }
     } catch { $hasOpportunityProjection = $false }
     if (-not $hasOpportunityProjection) {
-        Write-CompactFailure -Path $OpportunityStateErrorFile -Message 'OpportunityState completed without writing OpportunityCount to state.kv. Run OpportunityState.ps1 directly to identify the missing local prerequisite.'
+        Write-CompactFailure -Path $OpportunityStateErrorFile -Message 'OpportunityState completed without writing OpportunityCount to state.kv.'
     }
 
-    if (Test-Path -LiteralPath $FilterState) { try { & $FilterState } catch { } }
+    if (Test-Path -LiteralPath $FilterState) {
+        try { & $FilterState; Clear-CompactFailure -Path $FilterStateErrorFile }
+        catch { Write-CompactFailure -Path $FilterStateErrorFile -Message $_.Exception.ToString() }
+    }
 
     Write-UpdateHeartbeat
 
@@ -181,13 +209,19 @@ try {
             if (Test-Path -LiteralPath $ResaleQueueErrorFile) {
                 try {
                     $queueState = Get-Content -LiteralPath (Join-Path $RuntimeDir 'engine-state.json') -Raw | ConvertFrom-Json
-                    if ($queueState.PSObject.Properties['resaleQueue'] -and [string]$queueState.resaleQueue.status -ne 'ERROR') { Remove-Item -LiteralPath $ResaleQueueErrorFile -Force -ErrorAction SilentlyContinue }
+                    if ($queueState.PSObject.Properties['resaleQueue'] -and [string]$queueState.resaleQueue.status -ne 'ERROR') { Clear-CompactFailure -Path $ResaleQueueErrorFile }
                 } catch { }
-            }
-        } catch { Write-CompactFailure -Path $ResaleQueueErrorFile -Message $_.Exception.Message }
+            } else { Clear-CompactFailure -Path $ResaleQueueErrorFile }
+        } catch { Write-CompactFailure -Path $ResaleQueueErrorFile -Message $_.Exception.ToString() }
     }
 
+    if (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue) { Clear-TravelAssistantLatestError -Component 'run-update' }
     exit 0
+} catch {
+    if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+        Write-TravelAssistantLog -Level ERROR -Component 'run-update' -Message $_.Exception.ToString()
+    }
+    throw
 } finally {
     if ($acquired) { try { $mutex.ReleaseMutex() } catch { } }
     $mutex.Dispose()
