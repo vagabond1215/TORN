@@ -33,6 +33,7 @@ if (Test-Path -LiteralPath $files.Preferences) {
     foreach ($token in @('itemFilterAll','selectedItemIds','selectedTripBands','selectedCountryIds','categoryFilterAll','selectedCategories','showProfitableOnly','ignoredItemIds','pinnedMarket','Reset-UiFilterPreferences','Toggle-TripBandPreference')) {
         if (-not $text.Contains($token)) { Fail "FilterPreferences.ps1 missing '$token'." }
     }
+    if (-not $text.Contains("Join-Path `$PSScriptRoot 'FilterState.ps1'")) { Fail 'Trip toggles/reset must project updated preferences immediately through FilterState.ps1.' }
 }
 
 if (Test-Path -LiteralPath $files.Popup) {
@@ -51,9 +52,11 @@ if (Test-Path -LiteralPath $files.Launcher) {
 
 if (Test-Path -LiteralPath $files.State) {
     $text = Get-Content -LiteralPath $files.State -Raw
-    foreach ($key in @('UIItemFilterAll','UISelectedItemIds','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UISelectedCategories','UIShowProfitableOnly','UIIgnoredItemIds','UIPinnedMarket')) {
+    foreach ($key in @('UIItemFilterAll','UISelectedItemIds','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UISelectedCategories','UIShowProfitableOnly','UIIgnoredItemIds')) {
         if (-not $text.Contains($key)) { Fail "FilterState.ps1 missing state key $key." }
     }
+    if (-not $text.Contains("Remove('UIPinnedMarket')")) { Fail 'FilterState.ps1 must remove stale UIPinnedMarket projection so a one-second state refresh cannot undo a direct pin click.' }
+    if ($text -match "\$state\['UIPinnedMarket'\]\s*=") { Fail 'Pin must not be mirrored into state.kv.' }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'FilterState.ps1 must remain local-only.' }
 }
 
@@ -74,6 +77,7 @@ if (Test-Path -LiteralPath $files.StateReader) {
         'if pinKey==cardKey then return true end',
         'showProfitableOnly and not cardProfitable[cardKey]',
         'function TogglePin(cardKey)',
+        'writePinnedPreference(preferencesPath,pinnedMarket)',
         'function OpenFilter(filterName)',
         'function ToggleTripBand(band)',
         'function ResetFilters()',
@@ -117,5 +121,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Filter, pin, Settings, and ignore-list configuration validation passed.' -ForegroundColor Green
-Write-Host 'Presentation filters remain local/persistent; Ignore List suppresses broad per-item market pricing without stopping shared foreign-stock collection.'
+Write-Host 'Presentation filters remain local/persistent; direct pin state is not overwritten by stale state.kv projection; Ignore List suppresses broad per-item market pricing.'
 exit 0
