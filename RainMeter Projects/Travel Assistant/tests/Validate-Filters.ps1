@@ -83,7 +83,8 @@ if (Test-Path -LiteralPath $files.Opportunities) {
         'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','grossProfit','profitPerHour','quantity','elapsedSeconds','windowStartAt','Write-OpportunityProjection',
         'Get-OptimalBarWaste','Test-OptimalWastePolicy','energyWastePolicy','nerveWastePolicy','$constraintsApply = [string]::IsNullOrWhiteSpace($fixedCountry)','Get-OpportunityWasteText',
         "sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'OpportunityBestKey',
-        "Opportunity'+`$n+'QuantityText", "Opportunity'+`$n+'ProfitHourText", "Opportunity'+`$n+'GrossValue", "Opportunity'+`$n+'WindowStartAt"
+        "Opportunity'+`$n+'QuantityText", "Opportunity'+`$n+'ProfitHourText", "Opportunity'+`$n+'GrossValue", "Opportunity'+`$n+'WindowStartAt",
+        'probabilityKnown',"'LEARNING'",'$availableQuantity = $stock',"Opportunity'+`$n+'RankText'] = ''"
     )) {
         if (-not $text.Contains($token)) { Fail "OpportunityState.ps1 missing '$token'." }
     }
@@ -116,7 +117,8 @@ if (Test-Path -LiteralPath $files.StateReader) {
         'local function updateSort(mode)','local function updateOpportunities(data)','local function stabilizeProjection(data)','local function configureInteractiveMeters()',
         'local function currentOpportunityRows(data)','local function sortOpportunityRows(rows, mode)','local function locallySortedProjection(data, mode)',
         "'NAME'","'UPCOMING'","'GROSS PROFIT'","'PROFIT/HR'","SetSortMode('name')","SetSortMode('profit_per_hour')",
-        'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds','UIOldestMarketSourceTimestamp','SolidColor'
+        'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds','UIOldestMarketSourceTimestamp','SolidColor',
+        'function ToggleInlineGraph(index)','local function applyFlagForRow(index, key)',"setVariable('ViewerMarketKey', 'inline_' .. key)",'expandedKey'
     )) {
         if (-not $text.Contains($token)) { Fail "StateReader.lua missing '$token'." }
     }
@@ -149,6 +151,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Opportunity filters, four transparent sort modes, immediate local reordering, stable projection, responsive hitboxes, hidden popup host, waste policies, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
-Write-Host 'NAME, UPCOMING, GROSS PROFIT, and PROFIT/HR are explicit orderings; hit likelihood remains a separate displayed metric.'
+Write-Host 'Opportunity filters, four transparent sort modes, visible fresh in-stock learning rows, immediate local reordering, compact flag cards, and exclusive inline graph interaction validation passed.' -ForegroundColor Green
+Write-Host 'NAME, UPCOMING, GROSS PROFIT, and PROFIT/HR remain explicit; hit likelihood can be LEARNING without hiding current stock.'
 exit 0
