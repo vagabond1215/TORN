@@ -1,6 +1,6 @@
 # Travel Assistant Implementation Status
 
-**Checkpoint:** 2026-08-21
+**Checkpoint:** 2026-08-22
 
 **Active run:** 0.6.0 ranked opportunity surface. See `docs/NEXT_CODEX_RUN.md`.
 
@@ -29,21 +29,21 @@ Also accepted:
 
 ## 0.6 opportunity UI — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-The rejected 0.5 single-route card has been replaced by a ranked opportunity list.
+The rejected 0.5 single-route card has been replaced by a ranked opportunity list. The later user-facing `OPTIMAL` composite ranking has also been removed.
 
 Primary controls:
 
 ```text
-ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
-SORT  OPTIMAL  UPCOMING  PROFIT  TIME                 VIEWER >
+ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
+SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 ```
 
 Up to eight rows show:
 
 ```text
-rank / OPTIMAL marker
+rank
 item + destination
-gross trip profit
+gross trip profit + quantity
 current or modeled stock window
 leave timing
 modeled hit likelihood
@@ -52,7 +52,12 @@ foreign price (Torn MV)
 GRAPH
 ```
 
-`OPTIMAL` is a sort and highlight, not a separate screen. It ranks `(gross profit × hit probability) / elapsed hours`. There is no separate Chance sort. The global optimum remains marked even while UPCOMING, PROFIT or TIME ordering is active.
+Ordering is intentionally transparent:
+
+- `UPCOMING`: earliest supported/current window first.
+- `GROSS PROFIT`: total trip gross descending.
+- `PROFIT/HR`: total trip gross divided by total elapsed hours.
+- Hit likelihood remains a separate displayed percentage and is not folded into any hidden score.
 
 ## Opportunity evidence — IMPLEMENTED
 
@@ -71,6 +76,38 @@ The opportunity layer:
 - fails closed for unresolved foreign destination states;
 - never writes predicted history.
 
+## Gross / profit-per-hour semantics — IMPLEMENTED
+
+Gross trip profit is:
+
+```text
+(selected MV basis - foreign price) × modeled purchasable quantity
+```
+
+It intentionally excludes travel cost. The row now exposes quantity beside gross, and the tooltip explains the arithmetic.
+
+`PROFIT/HR` is:
+
+```text
+gross trip profit / total elapsed hours
+```
+
+It is not probability-weighted. Likelihood is left visible for the player to judge independently.
+
+## Projection / interaction stability — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+
+Recent target screenshots showed the opportunity rows disappearing to `Learning opportunities...` for a large portion of a polling cycle. The cause is intermediate compatibility-state publication while the full update pipeline is still running.
+
+`StateReader.lua` now:
+
+- captures the last complete `Opportunity*`/`UI*` projection during initialization;
+- preserves it while the minute updater is between compatibility and opportunity projections;
+- updates the selected sort highlight immediately;
+- briefly defers the next automatic poll after an interactive action;
+- gives text controls transparent rectangular hitboxes for more reliable clicking.
+
+Pure sort changes also skip unnecessary `FilterState.ps1` recomputation and directly rebuild only the opportunity ordering.
+
 ## Graph viewer — IMPLEMENTED
 
 The item viewer remains an 8-hour diagnostic surface with hourly markers.
@@ -79,18 +116,24 @@ The item viewer remains an 8-hour diagnostic surface with hourly markers.
 - Every opportunity row has `GRAPH`.
 - Row targeting uses stable `country:itemId`, not row number.
 - The last observation before the 8-hour cutoff is carried to the left edge for change-only history continuity.
+- Change-only 48h pruning now preserves one boundary baseline per market.
+- Markets whose old baseline was already lost receive a truthful retained/current bootstrap rather than invented intermediate history.
 - Viewer is local-only and consumes no provider/Torn request.
 - Learning retention remains 48h raw / 90d completed cycles.
 
 ## Popup reliability changes — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-Detached Settings, filter and viewer launchers explicitly quote script paths containing spaces. Filter saves recompute the opportunity projection immediately.
+Detached Settings, filter and viewer launchers use one hidden STA popup host. Runtime/popup failures go to:
 
-The Windows screenshot that motivated 0.6 showed `SETTINGS > ERROR` and non-opening popups, so these controls require explicit target-host retest before acceptance.
+```text
+data/runtime/logs/travel-assistant.log
+```
+
+Windows PowerShell 5.1 generic collection enumeration bugs found during validation were removed from the preference/evidence/viewer/filter paths.
 
 ## Background optimizer — RETAINED
 
-`OptimalRoute.ps1` remains the background one-best-next-trip planner for compatibility, diagnostics and MV-priority work. It is no longer the primary presentation surface.
+`OptimalRoute.ps1` remains the background one-best-next-trip planner for compatibility, diagnostics and MV-priority work. Its name no longer maps to a user-facing sort or badge.
 
 ## Runtime order
 
@@ -122,20 +165,22 @@ negative-value candidates allowed
 
 Optional setting uses 95% MV. `Show profitable items only` explicitly removes non-positive candidates.
 
-Gross opportunity profit intentionally excludes travel cost. The OPTIMAL score probability-weights gross profit and normalizes it by full elapsed opportunity time.
-
 ## Validation status
 
-Static/deterministic validators have been converted to the 0.6 opportunity contract, including:
+Static/deterministic validators now cover:
 
-- four explicit sort modes;
-- no Chance sort;
-- persistent global OPTIMAL marker;
+- three transparent sort modes;
+- migration from old `optimal/profit/time` sort IDs;
+- no user-facing OPTIMAL badge/hidden score;
+- gross quantity projection;
+- raw gross-per-hour math;
 - stable market-key graph targeting;
-- graph carry-forward baseline;
+- graph carry-forward baseline and retention repair;
+- Windows PowerShell 5.1 collection compatibility;
 - opportunity-model deterministic overlap/probability tests;
 - Energy/Nerve integration;
-- popup launcher quoting.
+- hidden popup/logging contract;
+- refresh-stable projection and responsive sort path.
 
 0.6 still requires target-Windows validation. Do not mark accepted until `tests/Run-CurrentAcceptance.ps1`, one normal production update, all popups/sort controls, row graphs and a Rainmeter screenshot pass.
 
