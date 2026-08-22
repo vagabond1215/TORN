@@ -122,6 +122,140 @@ function Get-OpportunityProbabilityAtAge {
     return ($hits / [double]$usable.Count)
 }
 
+function Get-OpportunityRecurringCycles {
+    param([object[]]$Cycles)
+    return @($Cycles | Where-Object {
+        $null -ne $_ -and
+        $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0 -and
+        $_.PSObject.Properties['availabilitySeconds'] -and [long]$_.availabilitySeconds -gt 0
+    })
+}
+
+function Get-OpportunityRecurringWindowSegments {
+    param(
+        [object[]]$Cycles,
+        [ValidateSet('sellout','restock')][string]$AnchorPhase = 'sellout',
+        [long]$HorizonSeconds = 86400L
+    )
+    $usable = @(Get-OpportunityRecurringCycles -Cycles $Cycles)
+    if ($usable.Count -eq 0 -or $HorizonSeconds -le 0) { return @() }
+
+    $deltas = @{}
+    foreach ($cycle in $usable) {
+        $delay = [long]$cycle.restockDelaySeconds
+        $available = [long]$cycle.availabilitySeconds
+        $period = $delay + $available
+        if ($period -le 0) { continue }
+
+        $start = if ($AnchorPhase -eq 'restock') { 0L } else { $delay }
+        $iterations = 0
+        while ($start -lt $HorizonSeconds -and $iterations -lt 2048) {
+            $end = [Math]::Min($HorizonSeconds,$start+$available)
+            if ($end -gt $start) {
+                Add-OpportunityDelta -Map $deltas -At $start -Delta 1
+                Add-OpportunityDelta -Map $deltas -At $end -Delta -1
+            }
+            $start += $period
+            $iterations++
+        }
+    }
+    if ($deltas.Count -lt 2) { return @() }
+
+    $times = [long[]]@($deltas.Keys | ForEach-Object { [long]$_ } | Sort-Object -Unique)
+    $segments = New-Object System.Collections.Generic.List[object]
+    $active = 0
+    for ($i=0; $i -lt ($times.Count-1); $i++) {
+        $at = [long]$times[$i]
+        $active += [int]$deltas[[string]$at]
+        $next = [long]$times[$i+1]
+        if ($next -le $at -or $active -le 0) { continue }
+        $segments.Add([pscustomobject]@{
+            startAgeSeconds = $at
+            endAgeSeconds = $next
+            probability = ($active / [double]$usable.Count)
+            sampleCount = $usable.Count
+            anchorPhase = $AnchorPhase
+        })
+    }
+    return $segments.ToArray()
+}
+
+function Get-OpportunityRecurringProbabilityAtAge {
+    param(
+        [object[]]$Cycles,
+        [long]$AgeSeconds,
+        [ValidateSet('sellout','restock')][string]$AnchorPhase = 'sellout'
+    )
+    $usable = @(Get-OpportunityRecurringCycles -Cycles $Cycles)
+    if ($usable.Count -eq 0) { return -1.0 }
+    $age = [Math]::Max(0L,$AgeSeconds)
+    $hits = 0
+    foreach ($cycle in $usable) {
+        $delay = [long]$cycle.restockDelaySeconds
+        $available = [long]$cycle.availabilitySeconds
+        $period = $delay + $available
+        if ($period -le 0) { continue }
+        $phase = $age % $period
+        $hit = if ($AnchorPhase -eq 'restock') {
+            $phase -lt $available
+        } else {
+            $phase -ge $delay -and $phase -lt ($delay+$available)
+        }
+        if ($hit) { $hits++ }
+    }
+    return ($hits / [double]$usable.Count)
+}
+
+function Get-OpportunityNextRecurringWindow {
+    param(
+        [object[]]$Cycles,
+        [long]$AnchorAt,
+        [ValidateSet('sellout','restock')][string]$AnchorPhase,
+        [long]$NowEpoch,
+        [long]$EarliestArrivalAt,
+        [double]$PreferredProbability = 0.5,
+        [long]$SearchHorizonSeconds = 86400L
+    )
+    if ($AnchorAt -le 0 -or $EarliestArrivalAt -le 0) { return $null }
+    $earliestAge = [Math]::Max(0L,$EarliestArrivalAt-$AnchorAt)
+    $currentAge = [Math]::Max(0L,$NowEpoch-$AnchorAt)
+    $horizon = [Math]::Max($earliestAge,$currentAge) + [Math]::Max(3600L,$SearchHorizonSeconds)
+    $segments = @(Get-OpportunityRecurringWindowSegments -Cycles $Cycles -AnchorPhase $AnchorPhase -HorizonSeconds ($horizon+1))
+    if ($segments.Count -eq 0) { return $null }
+
+    $future = @($segments | Where-Object { [long]$_.endAgeSeconds -gt $earliestAge })
+    if ($future.Count -eq 0) { return $null }
+
+    $qualified = @($future | Where-Object { [double]$_.probability -ge $PreferredProbability } | Sort-Object @{Expression={ [Math]::Max($earliestAge,[long]$_.startAgeSeconds) };Ascending=$true},@{Expression='probability';Descending=$true})
+    $chosen = $null
+    if ($qualified.Count -gt 0) {
+        $chosen = $qualified[0]
+    } else {
+        $chosen = @($future | Sort-Object @{Expression='probability';Descending=$true},@{Expression={ [Math]::Max($earliestAge,[long]$_.startAgeSeconds) };Ascending=$true} | Select-Object -First 1)[0]
+    }
+
+    $targetAge = [Math]::Max($earliestAge,[long]$chosen.startAgeSeconds)
+    return [pscustomobject]@{
+        startAt = $AnchorAt + [long]$chosen.startAgeSeconds
+        targetAt = $AnchorAt + $targetAge
+        endAt = $AnchorAt + [long]$chosen.endAgeSeconds
+        probability = [double]$chosen.probability
+        sampleCount = [int]$chosen.sampleCount
+        startAgeSeconds = [long]$chosen.startAgeSeconds
+        targetAgeSeconds = [long]$targetAge
+        endAgeSeconds = [long]$chosen.endAgeSeconds
+        anchorPhase = $AnchorPhase
+    }
+}
+
+function Get-OpportunityActiveRestockAt {
+    param([object]$DestinationState)
+    if ($null -eq $DestinationState) { return 0L }
+    $activeCycle = Get-OptimalProperty $DestinationState 'activeCycle'
+    if ($null -eq $activeCycle -or -not $activeCycle.PSObject.Properties['restockAt']) { return 0L }
+    return [Math]::Max(0L,[long]$activeCycle.restockAt)
+}
+
 function Get-OpportunityCountryCode {
     param([string]$CountryId)
     $map = @{
@@ -293,6 +427,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $marketKey = $countryId+':'+[string]$itemId
         $cycles = @()
         if ($evidence.cycles.ContainsKey($marketKey)) { $cycles = @($evidence.cycles[$marketKey]) }
+        $recurringCycles = @(Get-OpportunityRecurringCycles -Cycles $cycles)
         $destinationState = $null
         if ($engine.PSObject.Properties['destinations']) { $destinationState = Get-OptimalProperty $engine.destinations $marketKey }
         $stock = [long](Get-OptimalProperty $market 'lastStock')
@@ -317,42 +452,61 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $windowEndAt = 0L
         $windowText = ''
         $leaveDelaySeconds = $initialWait
+        $earliestArrivalAt = $Now + $initialWait + $outboundSeconds
 
         if ($stock -gt 0) {
-            $purchaseAtSeconds = $initialWait + $outboundSeconds
-            $forecast = Get-OptimalArrivalForecast -MarketKey $marketKey -Market $market -DestinationState $destinationState -Evidence $evidence -ArrivalSeconds $purchaseAtSeconds -NowEpoch $Now -MinimumSamples $minimumSamples
-            if ([bool]$forecast.probabilityKnown) {
-                $probabilityKnown = $true
-                $probability = [double]$forecast.probability
-                $availableQuantity = [long]$forecast.estimatedQuantity
-                if ($availableQuantity -le 0) { $availableQuantity = $stock }
-            } else {
-                # Current observed stock is still useful even when there is not yet
-                # enough completed availability history to estimate arrival survival.
-                # Keep the row visible and expose likelihood as LEARNING instead of
-                # converting uncertainty into a fake percentage or hiding the market.
-                $learning++
-                $probabilityKnown = $false
-                $probability = -1.0
-                $availableQuantity = $stock
+            $activeRestockAt = Get-OpportunityActiveRestockAt -DestinationState $destinationState
+            $window = $null
+            if ($activeRestockAt -gt 0 -and $recurringCycles.Count -ge $minimumSamples) {
+                $window = Get-OpportunityNextRecurringWindow -Cycles $recurringCycles -AnchorAt $activeRestockAt -AnchorPhase 'restock' -NowEpoch $Now -EarliestArrivalAt $earliestArrivalAt
             }
-            $windowText = 'IN STOCK'
+
+            if ($null -ne $window) {
+                $windowStartAt = [long]$window.startAt
+                $windowEndAt = [long]$window.endAt
+                $targetPurchaseAt = [long]$window.targetAt
+                $purchaseAtSeconds = [Math]::Max(0L,$targetPurchaseAt-$Now)
+                $leaveDelaySeconds = [Math]::Max($initialWait,$purchaseAtSeconds-$outboundSeconds)
+                $probabilityKnown = $true
+                $probability = [double]$window.probability
+                $availableQuantity = $stock
+                if ($targetPurchaseAt -le ($earliestArrivalAt+1) -and $windowStartAt -le $earliestArrivalAt) {
+                    $windowText = 'IN STOCK'
+                } elseif ($windowStartAt -le $Now) {
+                    $windowText = 'WINDOW NOW'
+                } else {
+                    $windowText = 'WINDOW '+(Format-OpportunityDuration ($windowStartAt-$Now))
+                }
+            } else {
+                $purchaseAtSeconds = $initialWait + $outboundSeconds
+                $forecast = Get-OptimalArrivalForecast -MarketKey $marketKey -Market $market -DestinationState $destinationState -Evidence $evidence -ArrivalSeconds $purchaseAtSeconds -NowEpoch $Now -MinimumSamples $minimumSamples
+                if ([bool]$forecast.probabilityKnown) {
+                    $probabilityKnown = $true
+                    $probability = [double]$forecast.probability
+                    $availableQuantity = [long]$forecast.estimatedQuantity
+                    if ($availableQuantity -le 0) { $availableQuantity = $stock }
+                } else {
+                    $learning++
+                    $probabilityKnown = $false
+                    $probability = -1.0
+                    $availableQuantity = $stock
+                }
+                $windowText = 'IN STOCK'
+            }
         } else {
-            if ($cycles.Count -lt $minimumSamples) { $learning++; continue }
+            if ($recurringCycles.Count -lt $minimumSamples) { $learning++; continue }
             $lastSellOutAt = 0L
             if ($null -ne $destinationState -and $destinationState.PSObject.Properties['lastSellOutAt']) { $lastSellOutAt = [long]$destinationState.lastSellOutAt }
-            $window = Get-OpportunityNextWindow -Cycles $cycles -LastSellOutAt $lastSellOutAt -NowEpoch $Now
+            $window = Get-OpportunityNextRecurringWindow -Cycles $recurringCycles -AnchorAt $lastSellOutAt -AnchorPhase 'sellout' -NowEpoch $Now -EarliestArrivalAt $earliestArrivalAt
             if ($null -eq $window) { $learning++; continue }
+
             $windowStartAt = [long]$window.startAt
             $windowEndAt = [long]$window.endAt
-
-            $earliestArrivalAt = $Now + $initialWait + $outboundSeconds
-            $targetPurchaseAt = [Math]::Max($earliestArrivalAt,$windowStartAt)
+            $targetPurchaseAt = [long]$window.targetAt
             if ($windowEndAt -gt 0 -and $targetPurchaseAt -ge $windowEndAt) { continue }
             $purchaseAtSeconds = [Math]::Max(0L,$targetPurchaseAt-$Now)
             $leaveDelaySeconds = [Math]::Max($initialWait,$purchaseAtSeconds-$outboundSeconds)
-            $targetAge = [Math]::Max(0L,$targetPurchaseAt-$lastSellOutAt)
-            $probability = Get-OpportunityProbabilityAtAge -Cycles $cycles -AgeSeconds $targetAge
+            $probability = [double]$window.probability
             if ($probability -le 0) { continue }
             $probabilityKnown = $true
             if ($evidence.restockStock.ContainsKey($marketKey)) {
@@ -432,7 +586,7 @@ $message = ''
 if ($sorted.Count -eq 0) {
     $message = 'No evidence-backed opportunities match current filters'
     if ($missingMv -gt 0) { $message = 'Learning market values - opportunity pricing is still filling' }
-    elseif ($learning -gt 0) { $message = 'Learning future restock windows - fresh in-stock markets remain visible while likelihood learns' }
+    elseif ($learning -gt 0) { $message = 'Learning recurring restock windows - fresh in-stock markets remain visible while likelihood learns' }
     elseif ($wasteBlocked -gt 0) { $message = 'Current Energy/Nerve waste limits block the available opportunities' }
     elseif ($stale -gt 0) { $message = 'Foreign stock is stale - waiting for a fresh provider poll' }
 }
