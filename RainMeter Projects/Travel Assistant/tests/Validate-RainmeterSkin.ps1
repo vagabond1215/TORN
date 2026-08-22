@@ -124,7 +124,7 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
         "country == 'canada'","country == 'japan'","country == 'united_kingdom'",
         "setShape(meter,8,'Rectangle 4,32,36,14 | Fill Color 248,248,248,255",
         "SKIN:Bang('!SetOption', p .. 'Rank', 'Text', '#Opportunity' .. i .. 'TimeText#')",
-        "SKIN:Bang('!SetOption', p .. 'Gross', 'Text', grossText)",
+        "SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'Text', grossText)",
         "SKIN:Bang('!SetOption', p .. 'Graph', 'Text', 'v')",
         'function ToggleInlineGraph(index)',
         "setVariable('ViewerMarketKey', 'inline_' .. key)",
