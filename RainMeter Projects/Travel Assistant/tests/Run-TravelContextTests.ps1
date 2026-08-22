@@ -25,6 +25,10 @@ $outbound = [pscustomobject]@{
         time_left = 1000
     }
     status = [pscustomobject]@{ state='Traveling' }
+    bars = [pscustomobject]@{
+        energy = [pscustomobject]@{ current=1000; maximum=150; increment=5; interval=600; tick_time=240; full_time=0 }
+        nerve = [pscustomobject]@{ current=40; maximum=45; increment=1; interval=300; tick_time=120; full_time=1500 }
+    }
 }
 $ctx = Convert-TornTravelContext -Payload $outbound -CountriesConfig $countries -NowEpoch $now
 Assert-Equal 'Outbound destination country normalized' ([string]$ctx.destinationCountryId) 'japan'
@@ -32,6 +36,12 @@ Assert-Equal 'Outbound state is traveling' ([string]$ctx.state) 'traveling'
 Assert-True 'Outbound foreign filter is active' ([bool]$ctx.filterActive)
 Assert-Equal 'Outbound arrival retained' ([long]$ctx.arrivalAt) ($now + 1000)
 Assert-Equal 'Outbound time left retained' ([long]$ctx.timeLeft) 1000
+Assert-Equal 'Energy current is normalized' ([long]$ctx.energy.current) 1000
+Assert-Equal 'Energy natural maximum is normalized separately from stacked current' ([long]$ctx.energy.maximum) 150
+Assert-Equal 'Energy tick interval is normalized' ([long]$ctx.energy.interval) 600
+Assert-Equal 'Nerve current is normalized' ([long]$ctx.nerve.current) 40
+Assert-Equal 'Nerve maximum is normalized' ([long]$ctx.nerve.maximum) 45
+Assert-Equal 'Nerve increment is normalized' ([long]$ctx.nerve.increment) 1
 
 $abroad = [pscustomobject]@{
     travel = [pscustomobject]@{ destination='United Kingdom'; method='Airstrip'; departed_at=$now-7000; arrival_at=$now-100; time_left=0 }
@@ -41,6 +51,7 @@ $ctx = Convert-TornTravelContext -Payload $abroad -CountriesConfig $countries -N
 Assert-Equal 'Abroad destination normalized' ([string]$ctx.destinationCountryId) 'united_kingdom'
 Assert-Equal 'Abroad state is abroad' ([string]$ctx.state) 'abroad'
 Assert-True 'Abroad foreign filter stays active' ([bool]$ctx.filterActive)
+Assert-True 'Missing bars remain unresolved instead of invented' ($null -eq $ctx.energy -and $null -eq $ctx.nerve)
 
 $returning = [pscustomobject]@{
     travel = [pscustomobject]@{ destination='Torn'; method='Airstrip'; arrival_at=$now+400; time_left=400 }
@@ -59,5 +70,5 @@ $ctx = Convert-TornTravelContext -Payload $unknown -CountriesConfig $countries -
 Assert-Equal 'Unknown traveling destination is explicit' ([string]$ctx.state) 'traveling_unknown'
 Assert-True 'Unknown destination does not force an unsafe country filter' (-not [bool]$ctx.filterActive)
 
-Write-Host 'Travel context normalization tests passed.' -ForegroundColor Green
+Write-Host 'Travel context and bar normalization tests passed.' -ForegroundColor Green
 exit 0
