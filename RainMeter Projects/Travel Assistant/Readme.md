@@ -2,7 +2,7 @@
 
 Rainmeter-based Torn foreign-market opportunity assistant.
 
-The current committed **0.6.0 candidate** presents a ranked list of evidence-backed item/country opportunities. Optimizer intelligence is an ordering/highlight layer rather than a single-route replacement screen.
+The current committed **0.6.0 candidate** presents a ranked list of evidence-backed item/country opportunities. The user-facing ordering is explicit rather than a single-route screen or hidden composite optimizer score.
 
 ## Main view
 
@@ -10,12 +10,12 @@ The current committed **0.6.0 candidate** presents a ranked list of evidence-bac
 Travel                                      SETTINGS >
 Updated ...
 
-ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
-SORT  OPTIMAL  UPCOMING  PROFIT  TIME                 VIEWER >
+ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
+SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
-#1  OPTIMAL  <item>   <country>                     <gross>
+#1  <item>   <country>                     <gross> <qty>
     <window>  <leave>  <hit likelihood>  <elapsed>  <foreign> (<MV>)  GRAPH
-#2           <item>   <country>                     <gross>
+#2  <item>   <country>                     <gross> <qty>
     ...
 ```
 
@@ -23,14 +23,19 @@ Up to eight opportunities are shown.
 
 ## Sort modes
 
-- **OPTIMAL** — probability-weighted gross trip profit per total elapsed hour.
 - **UPCOMING** — earliest current/modeled stock window first.
-- **PROFIT** — highest gross trip profit first.
-- **TIME** — shortest full elapsed opportunity first.
+- **GROSS PROFIT** — highest total trip gross first.
+- **PROFIT/HR** — gross trip profit divided by total elapsed hours.
 
-There is no separate Chance sort. Hit likelihood is shown on every opportunity and is already part of OPTIMAL. The globally best economic opportunity keeps an `OPTIMAL` marker even while another ordering is selected.
+Hit likelihood is shown separately on every opportunity. It is **not** multiplied into `PROFIT/HR` or any other hidden presentation score.
 
-Gross profit is trade spread × modeled purchasable quantity and intentionally excludes travel cost. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
+Gross profit is:
+
+```text
+(selected MV basis - foreign price) × modeled purchasable quantity
+```
+
+It intentionally excludes travel cost. Quantity is displayed beside gross so the arithmetic is inspectable. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
 
 ## Evidence model
 
@@ -57,6 +62,7 @@ Graphs remain available on demand:
 - row graph targeting uses stable `country:itemId` identity;
 - graphs display the last 8 hours with hourly markers;
 - change-only history carries the last pre-window observation into the graph’s left edge;
+- 48-hour pruning preserves a market baseline so unchanged items do not lose graph continuity;
 - learning retention remains ~48h raw observations / ~90d completed cycles;
 - viewing a graph makes no provider or Torn request.
 
@@ -65,7 +71,7 @@ Graphs remain available on demand:
 Primary filters:
 
 ```text
-ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
+ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
 ```
 
 Item/Category selectors use the active local catalog. Trip bands are presentation labels only:
@@ -77,6 +83,12 @@ Long:   Japan, China, UAE, South Africa
 ```
 
 Ignore List excludes items from opportunities/background optimizer candidates and broad per-item MV requests. Shared provider stock/history collection continues.
+
+## Interaction stability
+
+The Rainmeter reader retains the last complete opportunity/UI projection while the minute updater is publishing intermediate compatibility state. Normal polls should therefore not blank the list back to `Learning opportunities...`.
+
+Sort controls update their highlight immediately and use a shortened local re-projection path. Text controls also receive transparent rectangular hitboxes for more reliable clicking.
 
 ## Value and capacity
 
@@ -121,13 +133,15 @@ ShadowCollector
 LocalCatalog
 FinalizeState
 TravelContext
-OptimalRoute        # background route / MV-priority model
+OptimalRoute        # background route / MV-priority compatibility model
 OpportunityState    # primary ranked opportunity projection
 FilterState
 visible heartbeat
 ResalePriority
 ResaleQueue
 ```
+
+`OptimalRoute.ps1` remains an internal/background compatibility component; it does not imply a user-facing `OPTIMAL` sort.
 
 The one-second Rainmeter loop and graph viewer are local-only. Normal runtime keeps one bounded travel/bars request and at most one broad Torn Item Market request/update.
 
@@ -177,7 +191,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Run-CurrentAcceptance.ps1
 ```
 
-Then run one production update, refresh Rainmeter, test all four sort controls, Settings/filters/Viewer, and at least one row `GRAPH` action. See `docs/NEXT_CODEX_RUN.md` for the current acceptance procedure.
+Then run one production update, refresh Rainmeter, test `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR`, Settings/filters/Viewer, and at least one row `GRAPH` action. See `docs/NEXT_CODEX_RUN.md` for the current acceptance procedure.
 
 ## Future notifications
 
