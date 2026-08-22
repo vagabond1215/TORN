@@ -5,8 +5,14 @@ local failureRetryInterval = 15
 local failureRetryArmed = false
 local nextPollAt = nil
 local lastProjectionData = nil
+local lastRenderData = nil
 local pendingSortMode = nil
-local pendingSortUntil = 0
+
+local opportunitySuffixes = {
+    'Key','RankText','Name','Country','CountryCode','WindowText','LeaveText',
+    'ChanceText','TimeText','GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText',
+    'PriceColor','AccentColor','Tooltip','GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds'
+}
 
 local function trim(s)
     s = tostring(s or ''):gsub('^\239\187\191', '')
@@ -25,6 +31,14 @@ local function safeText(v, fallback)
     return value:gsub('[\r\n]', ' ')
 end
 
+local function moneyNumber(v)
+    local text = safeText(v, ''):gsub(',', ''):gsub('%$', ''):gsub('/hr', '')
+    local sign = 1
+    if text:sub(1,1) == '-' then sign = -1 end
+    text = text:gsub('[^%d%.]', '')
+    return sign * (tonumber(text) or 0)
+end
+
 local function readState()
     local out = {}
     local file = io.open(statePath, 'r')
@@ -37,6 +51,12 @@ local function readState()
     return out
 end
 
+local function copyTable(data)
+    local out = {}
+    for key, value in pairs(data or {}) do out[key] = value end
+    return out
+end
+
 local function copyProjectionFields(data)
     local out = {}
     for key, value in pairs(data) do
@@ -46,8 +66,8 @@ local function copyProjectionFields(data)
 end
 
 local function stabilizeProjection(data)
-    -- UpdateTracker publishes compatibility fields before OpportunityState completes.
-    -- Keep the last complete opportunity/UI projection during that short interval.
+    -- UpdateTracker may publish compatibility fields before OpportunityState completes.
+    -- Keep the last complete opportunity/UI projection through that interval.
     if data.OpportunityCount ~= nil then
         lastProjectionData = copyProjectionFields(data)
     elseif lastProjectionData ~= nil then
@@ -142,8 +162,7 @@ end
 local function applySortColors(mode)
     local active = '82,174,255,255'
     local inactive = '145,152,164,255'
-    -- Existing section names are retained internally to avoid another large skin
-    -- rewrite; their visible labels/actions are repurposed below.
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'FontColor', mode == 'name' and active or inactive)
     setVariable('SortOptimalColor', mode == 'upcoming' and active or inactive)
     setVariable('SortUpcomingColor', mode == 'gross' and active or inactive)
     setVariable('SortProfitColor', mode == 'profit_per_hour' and active or inactive)
@@ -151,29 +170,39 @@ local function applySortColors(mode)
 end
 
 local function configureInteractiveMeters()
+    -- Reuse the existing sort meter sections so the skin file stays compact.
+    -- The old SORT label becomes the left-most NAME sort.
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'Text', 'NAME')
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'X', '12')
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'Y', '89')
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'W', '40')
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'FontFace', 'Segoe UI Semibold')
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'FontSize', '9')
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'ToolTipText', 'Alphabetical item name')
+    SKIN:Bang('!SetOption', 'MeterSortLabel', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('name')\"]")
+
     SKIN:Bang('!SetOption', 'MeterSortOptimal', 'Text', 'UPCOMING')
-    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'X', '50')
-    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'W', '72')
+    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'X', '56')
+    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'W', '70')
     SKIN:Bang('!SetOption', 'MeterSortOptimal', 'ToolTipText', 'Soonest modeled stock windows first')
     SKIN:Bang('!SetOption', 'MeterSortOptimal', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('upcoming')\"]")
 
     SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'Text', 'GROSS PROFIT')
-    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'X', '126')
+    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'X', '130')
     SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'W', '92')
     SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'ToolTipText', 'Highest total trip gross first; gross is unit spread times purchasable quantity')
     SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('gross')\"]")
 
     SKIN:Bang('!SetOption', 'MeterSortProfit', 'Text', 'PROFIT/HR')
-    SKIN:Bang('!SetOption', 'MeterSortProfit', 'X', '222')
+    SKIN:Bang('!SetOption', 'MeterSortProfit', 'X', '226')
     SKIN:Bang('!SetOption', 'MeterSortProfit', 'W', '78')
-    SKIN:Bang('!SetOption', 'MeterSortProfit', 'ToolTipText', 'Trip gross divided by total elapsed hours; hit likelihood remains a separate displayed percentage')
+    SKIN:Bang('!SetOption', 'MeterSortProfit', 'ToolTipText', 'Trip gross divided by total elapsed hours; hit likelihood remains separate')
     SKIN:Bang('!SetOption', 'MeterSortProfit', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('profit_per_hour')\"]")
     SKIN:Bang('!HideMeter', 'MeterSortTime')
 
-    -- Transparent SolidColor gives the text controls a stable rectangular hitbox.
     for _, meter in ipairs({
         'MeterSettings','MeterItemFilter','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand',
-        'MeterCategoryFilter','MeterFilterReset','MeterSortOptimal','MeterSortUpcoming','MeterSortProfit','MeterViewer'
+        'MeterCategoryFilter','MeterFilterReset','MeterSortLabel','MeterSortOptimal','MeterSortUpcoming','MeterSortProfit','MeterViewer'
     }) do
         SKIN:Bang('!SetOption', meter, 'SolidColor', '0,0,0,1')
     end
@@ -186,15 +215,84 @@ local function configureInteractiveMeters()
     end
 end
 
-local function updateSort(data, now)
-    local projected = safeText(data.OpportunitySortMode, 'upcoming'):lower()
-    if pendingSortMode ~= nil then
-        if projected == pendingSortMode or now >= pendingSortUntil then
-            pendingSortMode = nil
-            pendingSortUntil = 0
-        end
+local function currentOpportunityRows(data)
+    local count = math.max(0, math.min(8, math.floor(number(data.OpportunityCount))))
+    local rows = {}
+    for i = 1, count do
+        local prefix = 'Opportunity' .. i
+        table.insert(rows, {
+            sourceIndex = i,
+            key = safeText(data[prefix .. 'Key'], ''),
+            name = safeText(data[prefix .. 'Name'], ''),
+            country = safeText(data[prefix .. 'Country'], ''),
+            gross = number(data[prefix .. 'GrossValue']),
+            profitHour = number(data[prefix .. 'ProfitHourValue']),
+            windowStart = number(data[prefix .. 'WindowStartAt']),
+            probability = number(data[prefix .. 'ProbabilityValue']),
+            elapsed = number(data[prefix .. 'ElapsedSeconds']),
+            grossFallback = moneyNumber(data[prefix .. 'GrossText']),
+            profitHourFallback = moneyNumber(data[prefix .. 'ProfitHourText'])
+        })
     end
-    applySortColors(pendingSortMode or projected)
+    for _, row in ipairs(rows) do
+        if row.gross == 0 and row.grossFallback ~= 0 then row.gross = row.grossFallback end
+        if row.profitHour == 0 and row.profitHourFallback ~= 0 then row.profitHour = row.profitHourFallback end
+    end
+    return rows
+end
+
+local function sortOpportunityRows(rows, mode)
+    table.sort(rows, function(a, b)
+        if mode == 'name' then
+            local an, bn = string.lower(a.name), string.lower(b.name)
+            if an ~= bn then return an < bn end
+            local ac, bc = string.lower(a.country), string.lower(b.country)
+            if ac ~= bc then return ac < bc end
+            return a.key < b.key
+        elseif mode == 'gross' then
+            if a.gross ~= b.gross then return a.gross > b.gross end
+            if a.probability ~= b.probability then return a.probability > b.probability end
+            if a.elapsed ~= b.elapsed then return a.elapsed < b.elapsed end
+            return string.lower(a.name) < string.lower(b.name)
+        elseif mode == 'profit_per_hour' then
+            if a.profitHour ~= b.profitHour then return a.profitHour > b.profitHour end
+            if a.gross ~= b.gross then return a.gross > b.gross end
+            if a.probability ~= b.probability then return a.probability > b.probability end
+            return string.lower(a.name) < string.lower(b.name)
+        else
+            -- Old projections do not have WindowStartAt. In that migration case,
+            -- retain their existing upcoming order until the next normal update.
+            if a.windowStart > 0 and b.windowStart > 0 and a.windowStart ~= b.windowStart then return a.windowStart < b.windowStart end
+            if a.probability ~= b.probability then return a.probability > b.probability end
+            if a.gross ~= b.gross then return a.gross > b.gross end
+            return a.sourceIndex < b.sourceIndex
+        end
+    end)
+end
+
+local function locallySortedProjection(data, mode)
+    local rows = currentOpportunityRows(data)
+    if #rows <= 1 then
+        local out = copyTable(data)
+        out.OpportunitySortMode = mode
+        return out
+    end
+    sortOpportunityRows(rows, mode)
+    local out = copyTable(data)
+    for displayIndex, row in ipairs(rows) do
+        local sourcePrefix = 'Opportunity' .. row.sourceIndex
+        local targetPrefix = 'Opportunity' .. displayIndex
+        for _, suffix in ipairs(opportunitySuffixes) do
+            out[targetPrefix .. suffix] = data[sourcePrefix .. suffix] or ''
+        end
+        out[targetPrefix .. 'RankText'] = '#' .. displayIndex
+    end
+    out.OpportunitySortMode = mode
+    return out
+end
+
+local function updateSort(mode)
+    applySortColors(mode)
 end
 
 local function updateOpportunityGrossMeter(data, prefix, index)
@@ -216,10 +314,7 @@ local function updateOpportunities(data)
 
     for i = 1, 8 do
         local prefix = 'Opportunity' .. i
-        for _, suffix in ipairs({
-            'Key','RankText','Name','Country','CountryCode','WindowText','LeaveText',
-            'ChanceText','TimeText','GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip'
-        }) do
+        for _, suffix in ipairs(opportunitySuffixes) do
             local fallback = ''
             if suffix == 'PriceColor' then fallback = '145,152,164,255' end
             if suffix == 'AccentColor' then fallback = '58,64,73,255' end
@@ -237,7 +332,7 @@ end
 
 local function deferPolling(seconds)
     local now = os.time()
-    local target = now + (seconds or 10)
+    local target = now + (seconds or 5)
     if nextPollAt == nil or nextPollAt < target then nextPollAt = target end
 end
 
@@ -257,28 +352,30 @@ function Initialize()
     failureRetryArmed = false
     nextPollAt = os.time() + pollInterval
     pendingSortMode = nil
-    pendingSortUntil = 0
 
     configureInteractiveMeters()
     local initial = readState()
-    if initial.OpportunityCount ~= nil then lastProjectionData = copyProjectionFields(initial) end
+    if initial.OpportunityCount ~= nil then
+        lastProjectionData = copyProjectionFields(initial)
+        lastRenderData = stabilizeProjection(initial)
+    end
 end
 
 function OpenFilter(filterName)
-    deferPolling(10)
+    deferPolling(5)
     setVariable('FilterRequest', filterName)
     SKIN:Bang('!CommandMeasure', 'MeasureFilterPopup', 'Run')
 end
 
 function ToggleTripBand(band)
-    deferPolling(10)
+    deferPolling(5)
     setVariable('PreferenceAction', 'ToggleTripBand')
     setVariable('PreferenceValue', band)
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
 end
 
 function ResetFilters()
-    deferPolling(10)
+    deferPolling(5)
     setVariable('PreferenceAction', 'ResetFilters')
     setVariable('PreferenceValue', '')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
@@ -286,29 +383,40 @@ end
 
 function SetSortMode(mode)
     mode = safeText(mode, 'upcoming'):lower()
-    if mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
-    deferPolling(10)
+    if mode ~= 'name' and mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
+    deferPolling(5)
     pendingSortMode = mode
-    pendingSortUntil = os.time() + 10
     applySortColors(mode)
+
+    if lastRenderData ~= nil then
+        local immediate = locallySortedProjection(lastRenderData, mode)
+        updateOpportunities(immediate)
+    end
+
     setVariable('PreferenceAction', 'SetSortMode')
     setVariable('PreferenceValue', mode)
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
-    SKIN:Bang('!UpdateMeter', 'MeterSortOptimal')
-    SKIN:Bang('!UpdateMeter', 'MeterSortUpcoming')
-    SKIN:Bang('!UpdateMeter', 'MeterSortProfit')
+    SKIN:Bang('!UpdateMeter', '*')
     SKIN:Bang('!Redraw')
 end
 
 function OpenViewer(marketKey)
-    deferPolling(10)
+    deferPolling(5)
     setVariable('ViewerMarketKey', marketKey or '')
     SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')
 end
 
 function Update()
     local now = os.time()
-    local data = stabilizeProjection(readState())
+    local baseData = stabilizeProjection(readState())
+    lastRenderData = baseData
+
+    local projectedMode = safeText(baseData.OpportunitySortMode, 'upcoming'):lower()
+    if projectedMode ~= 'name' and projectedMode ~= 'upcoming' and projectedMode ~= 'gross' and projectedMode ~= 'profit_per_hour' then projectedMode = 'upcoming' end
+    if pendingSortMode ~= nil and projectedMode == pendingSortMode then pendingSortMode = nil end
+    local renderMode = pendingSortMode or projectedMode
+    local data = locallySortedProjection(baseData, renderMode)
+
     local sourceStatus = safeText(data.UpdatedText, '')
     local sourceFailed = sourceStatus:find('failed', 1, true) ~= nil
 
@@ -328,7 +436,7 @@ function Update()
 
     updateHeartbeatText(data, now)
     updateFilters(data)
-    updateSort(data, now)
+    updateSort(renderMode)
     updateOpportunities(data)
     return 0
 end
