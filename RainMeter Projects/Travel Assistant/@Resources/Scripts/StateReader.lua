@@ -102,11 +102,19 @@ local function updateHeartbeatText(data, now)
 end
 
 local function updateFilters(data)
-    setVariable('ItemFilterText', safeText(data.UIItemFilterText, 'All'))
-    setVariable('CategoryFilterText', safeText(data.UICategoryFilterText, 'All'))
+    local itemText = safeText(data.UIItemFilterText, 'All')
+    local categoryText = safeText(data.UICategoryFilterText, 'All')
+    setVariable('ItemFilterText', itemText)
+    setVariable('CategoryFilterText', categoryText)
     setVariable('TripShortColor', number(data.UITripShortOn) == 1 and '82,174,255,255' or '145,152,164,255')
     setVariable('TripMediumColor', number(data.UITripMediumOn) == 1 and '82,174,255,255' or '145,152,164,255')
     setVariable('TripLongColor', number(data.UITripLongOn) == 1 and '82,174,255,255' or '145,152,164,255')
+
+    -- Keep control markers ASCII. Rainmeter may interpret UTF-8 skin literals as
+    -- ANSI on some installations, which renders the old triangle as mojibake.
+    SKIN:Bang('!SetOption', 'MeterItemFilter', 'Text', 'ITEM  ' .. itemText .. '  v')
+    SKIN:Bang('!SetOption', 'MeterTripExpand', 'Text', 'v')
+    SKIN:Bang('!SetOption', 'MeterCategoryFilter', 'Text', 'CAT  ' .. categoryText .. '  v')
 end
 
 local function updateSort(data)
