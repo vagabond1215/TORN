@@ -59,6 +59,9 @@ function Write-BaselineAwareObservationPrune {
     param([long]$Cutoff)
     if (-not (Test-Path -LiteralPath $ObservationFile)) { return }
 
+    # A retention baseline is safe only when it comes from a real observation
+    # immediately before the cutoff. It carries an actually observed state across
+    # the boundary; it never backfills from current engine state.
     $latestBefore = @{}
     foreach ($line in Get-Content -LiteralPath $ObservationFile) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -122,116 +125,27 @@ function Write-CyclePrune {
     Move-Item -LiteralPath $tmp -Destination $CycleFile -Force
 }
 
-function Add-MissingMarketBaselines {
-    param([object]$EngineState,[long]$RetentionCutoff)
-    if ($null -eq $EngineState -or -not $EngineState.PSObject.Properties['observedMarkets']) { return 0 }
-
-    # Track the earliest retained row, not just whether a row exists. Older builds
-    # could leave a market with exactly one history_bootstrap point near "now";
-    # treating that as complete history prevented the baseline repair from running.
-    $earliestByKey = @{}
-    if (Test-Path -LiteralPath $ObservationFile) {
-        foreach ($line in Get-Content -LiteralPath $ObservationFile) {
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-            try {
-                $row = $line | ConvertFrom-Json
-                $key = Get-HistoryMarketKey $row
-                if ([string]::IsNullOrWhiteSpace($key)) { continue }
-                $timestamp = [long](Get-HistoryProperty $row 'timestamp')
-                if (-not $earliestByKey.ContainsKey($key) -or [long](Get-HistoryProperty $earliestByKey[$key] 'timestamp') -gt $timestamp) {
-                    $earliestByKey[$key] = $row
-                }
-            } catch { }
-        }
-    }
-
-    New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
-    $written = 0
-    foreach ($property in @($EngineState.observedMarkets.PSObject.Properties)) {
-        $market = $property.Value
-        if ($null -eq $market) { continue }
-        if (($market.PSObject.Properties['catalogActive'] -and $market.catalogActive -eq $false) -or ($market.PSObject.Properties['catalogStatus'] -and [string]$market.catalogStatus -eq 'legacy_removed')) { continue }
-
-        $country = ([string](Get-HistoryProperty $market 'country')).Trim().ToLowerInvariant()
-        $itemId = [int](Get-HistoryProperty $market 'itemId')
-        if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0) { continue }
-        $key = $country + ':' + [string]$itemId
-        $firstSeenAt = [long](Get-HistoryProperty $market 'firstSeenAt')
-        $existing = if ($earliestByKey.ContainsKey($key)) { $earliestByKey[$key] } else { $null }
-
-        $timestamp = 0L
-        $rowSource = ''
-        $rowSourceTimestamp = 0L
-        $stock = [int](Get-HistoryProperty $market 'lastStock')
-        $foreignPrice = [long](Get-HistoryProperty $market 'lastForeignPrice')
-
-        if ($null -eq $existing) {
-            # No retained row at all: repair from firstSeenAt when possible.
-            if ($firstSeenAt -gt 0) {
-                $timestamp = [Math]::Max($RetentionCutoff,$firstSeenAt)
-                $rowSource = 'history_repair_baseline'
-                $rowSourceTimestamp = $timestamp
-            } else {
-                $timestamp = [long](Get-HistoryProperty $market 'sourceTimestamp')
-                if ($timestamp -le 0) { $timestamp = [long](Get-HistoryProperty $market 'lastSeenAt') }
-                if ($timestamp -le 0) { $timestamp = $Now }
-                $rowSource = 'history_bootstrap'
-                $rowSourceTimestamp = [long](Get-HistoryProperty $market 'sourceTimestamp')
-            }
-        } else {
-            # Migrate the earlier repair format. A history_bootstrap row was written
-            # only because no observation existed. If firstSeenAt predates it, carry
-            # that same known state back to the retention/first-seen boundary.
-            $existingSource = [string](Get-HistoryProperty $existing 'source')
-            $existingTimestamp = [long](Get-HistoryProperty $existing 'timestamp')
-            if ($existingSource -ne 'history_bootstrap' -or $firstSeenAt -le 0) { continue }
-            $candidateTimestamp = [Math]::Max($RetentionCutoff,$firstSeenAt)
-            if ($candidateTimestamp -ge $existingTimestamp) { continue }
-            $timestamp = $candidateTimestamp
-            $rowSource = 'history_repair_baseline'
-            $rowSourceTimestamp = $timestamp
-            $stock = [int](Get-HistoryProperty $existing 'stock')
-            $foreignPrice = [long](Get-HistoryProperty $existing 'foreignPrice')
-        }
-
-        $row = [ordered]@{
-            schemaVersion = 1
-            timestamp = [long]$timestamp
-            country = $country
-            itemId = $itemId
-            stock = $stock
-            foreignPrice = $foreignPrice
-            source = $rowSource
-            sourceTimestamp = [long]$rowSourceTimestamp
-        }
-        $providerName = [string](Get-HistoryProperty $market 'providerName')
-        if (-not [string]::IsNullOrWhiteSpace($providerName)) { $row['itemName'] = $providerName }
-        Add-Content -LiteralPath $ObservationFile -Value (ConvertTo-HistoryLine ([pscustomobject]$row)) -Encoding UTF8
-        $earliestByKey[$key] = [pscustomobject]$row
-        $written++
-    }
-    return $written
-}
-
 $settings = Read-HistoryJson $SettingsFile
 $engine = Read-HistoryJson $EngineStateFile
 if ($null -eq $settings -or $null -eq $engine) { return }
+
+# PostUpdate intentionally performs no baseline fabrication. If a market has no
+# retained observation before its first real sample, that earlier interval is
+# unknown and graph surfaces must leave it unknown rather than painting current
+# stock backward through time.
+if ($Phase -eq 'PostUpdate') { return }
 
 $retentionHours = [Math]::Max(1,[int]$settings.highResolutionRetentionHours)
 $cycleDays = [Math]::Max(1,[int]$settings.cycleRetentionDays)
 $retentionCutoff = $Now-([long]$retentionHours*3600)
 
-if ($Phase -eq 'PreUpdate') {
-    $lastPruneAt = 0L
-    if ($engine.PSObject.Properties['lastPruneAt']) { $lastPruneAt = [long]$engine.lastPruneAt }
-    if (($Now-$lastPruneAt) -lt 3600) { return }
+$lastPruneAt = 0L
+if ($engine.PSObject.Properties['lastPruneAt']) { $lastPruneAt = [long]$engine.lastPruneAt }
+if (($Now-$lastPruneAt) -lt 3600) { return }
 
-    Write-BaselineAwareObservationPrune -Cutoff $retentionCutoff
-    Write-CyclePrune -Cutoff ($Now-([long]$cycleDays*86400))
-    if ($engine.PSObject.Properties['lastPruneAt']) { $engine.lastPruneAt = $Now }
-    else { $engine | Add-Member NoteProperty lastPruneAt $Now }
-    Write-HistoryJsonAtomic -Path $EngineStateFile -Value $engine
-    return
-}
-
-[void](Add-MissingMarketBaselines -EngineState $engine -RetentionCutoff $retentionCutoff)
+Write-BaselineAwareObservationPrune -Cutoff $retentionCutoff
+Write-CyclePrune -Cutoff ($Now-([long]$cycleDays*86400))
+if ($engine.PSObject.Properties['lastPruneAt']) { $engine.lastPruneAt = $Now }
+else { $engine | Add-Member NoteProperty lastPruneAt $Now }
+Write-HistoryJsonAtomic -Path $EngineStateFile -Value $engine
+return
