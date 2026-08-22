@@ -67,7 +67,7 @@ $allRows = @()
 
 foreach ($path in @($SeedObservationFile,$RuntimeObservationFile)) {
     if (-not (Test-Path -LiteralPath $path)) { continue }
-    foreach ($line in Get-Content -LiteralPath $path) {
+    foreach ($line in [System.IO.File]::ReadLines($path)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         try {
             $row = $line | ConvertFrom-Json
@@ -92,10 +92,7 @@ if ($predecessor.Count -gt 0) {
 }
 $rows += @($allRows | Where-Object { [long]$_.timestamp -ge $cutoff })
 
-# Repair the display surface for the old bootstrap-only migration hole without
-# inventing a market transition. When only a synthetic bootstrap/current point
-# survived, the change-only model permits carrying that unchanged state back to
-# max(firstSeenAt, cutoff).
+# Repair the old bootstrap-only migration hole without inventing a transition.
 if ($predecessor.Count -eq 0) {
     $syntheticOnly = $false
     if ($rows.Count -le 1) {
@@ -141,7 +138,9 @@ if ($rows.Count -gt 0) {
     $measure = $rows | Measure-Object stock -Maximum
     if ($null -ne $measure.Maximum) { $maxStock = [long]$measure.Maximum }
 }
-$scaleMax = if ($maxStock -gt 0) { [double]$maxStock * 1.05 } else { 0.0 }
+
+# Literal Y-axis: the top axis value is the actual retained maximum.
+$scaleMax = [double]$maxStock
 
 function Get-InlineX([long]$Timestamp) {
     $clamped = [Math]::Max($cutoff,[Math]::Min($now,$Timestamp))
@@ -175,26 +174,13 @@ if ($pathParts.Count -eq 0) {
     )
 }
 
-$changes = 0
-for ($i=1; $i -lt $rows.Count; $i++) {
-    if ([long]$rows[$i].stock -ne [long]$rows[$i-1].stock) { $changes++ }
-}
-$summary = if ($maxStock -le 0) {
-    ('{0}H STOCK  |  SOLD OUT  |  {1} retained point(s)' -f $windowHours,$rows.Count)
-} else {
-    ('{0}H STOCK  |  max {1:N0}  |  {2} retained point(s)  |  {3} change(s)' -f $windowHours,$maxStock,$rows.Count,$changes)
-}
-
 $safeName = ($MarketKey -replace '[^a-zA-Z0-9_-]','_')
 $output = Join-Path $GeneratedDir ('inline-graph-' + $safeName + '.kv')
 Write-InlineKvAtomic -Path $output -Values @{
     MarketKey = $MarketKey
     UpdatedAt = $now
     GraphPath = ($pathParts -join ' | ')
-    Summary = $summary
     MaxStock = $maxStock
-    PointCount = $rows.Count
-    ChangeCount = $changes
 }
 
 # Keep generated inline graph specs bounded.
