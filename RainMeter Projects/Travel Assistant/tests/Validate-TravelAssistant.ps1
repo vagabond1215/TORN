@@ -90,7 +90,7 @@ if (Test-Path -LiteralPath $readerPath) {
 $rendererPath=Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 if (Test-Path -LiteralPath $rendererPath) {
     $renderer=Get-Content -LiteralPath $rendererPath -Raw
-    foreach($token in @('RuntimeObservationFile',"$historySource = 'runtime_observations'",'Add-Type -AssemblyName System.Drawing','current_snapshot','for ($i=0; $i -le 8; $i++)','stableImagePath')) {
+    foreach($token in @('RuntimeObservationFile','$historySource = ''runtime_observations''','Add-Type -AssemblyName System.Drawing','current_snapshot','for ($i=0; $i -le 8; $i++)','stableImagePath')) {
         if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
     }
     if ($renderer -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Inline renderer must remain local-only.' }
