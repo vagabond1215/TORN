@@ -55,6 +55,34 @@ function ConvertTo-HistoryLine {
     return ($Value | ConvertTo-Json -Compress -Depth 10)
 }
 
+function Test-IsSyntheticHistorySource {
+    param([object]$Row)
+    $source = [string](Get-HistoryProperty $Row 'source')
+    return ($source -in @('history_bootstrap','history_repair_baseline'))
+}
+
+function Remove-SyntheticObservationArtifacts {
+    if (-not (Test-Path -LiteralPath $ObservationFile)) { return 0 }
+    $tmp = $ObservationFile + '.cleanup.tmp'
+    $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
+    $removed = 0
+    try {
+        foreach ($line in Get-Content -LiteralPath $ObservationFile) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $row = $line | ConvertFrom-Json
+                if (Test-IsSyntheticHistorySource $row) { $removed++; continue }
+                $writer.WriteLine($line)
+            } catch {
+                # Invalid JSON is not useful evidence; omit it during the same cleanup.
+                $removed++
+            }
+        }
+    } finally { $writer.Dispose() }
+    Move-Item -LiteralPath $tmp -Destination $ObservationFile -Force
+    return $removed
+}
+
 function Write-BaselineAwareObservationPrune {
     param([long]$Cutoff)
     if (-not (Test-Path -LiteralPath $ObservationFile)) { return }
@@ -67,6 +95,7 @@ function Write-BaselineAwareObservationPrune {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         try {
             $row = $line | ConvertFrom-Json
+            if (Test-IsSyntheticHistorySource $row) { continue }
             $key = Get-HistoryMarketKey $row
             if ([string]::IsNullOrWhiteSpace($key)) { continue }
             $timestamp = [long](Get-HistoryProperty $row 'timestamp')
@@ -101,6 +130,7 @@ function Write-BaselineAwareObservationPrune {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             try {
                 $row = $line | ConvertFrom-Json
+                if (Test-IsSyntheticHistorySource $row) { continue }
                 if ([long](Get-HistoryProperty $row 'timestamp') -ge $Cutoff) { $writer.WriteLine($line) }
             } catch { }
         }
@@ -129,10 +159,13 @@ $settings = Read-HistoryJson $SettingsFile
 $engine = Read-HistoryJson $EngineStateFile
 if ($null -eq $settings -or $null -eq $engine) { return }
 
-# PostUpdate intentionally performs no baseline fabrication. If a market has no
-# retained observation before its first real sample, that earlier interval is
-# unknown and graph surfaces must leave it unknown rather than painting current
-# stock backward through time.
+# Remove migration-era rows that painted current state backward through time. This
+# is safe on every update and makes all consumers (inline graph, Viewer, forecasts)
+# operate on the same observed evidence without each maintaining a private ignore list.
+[void](Remove-SyntheticObservationArtifacts)
+
+# PostUpdate performs cleanup only. If a market has no retained predecessor, that
+# earlier interval remains unknown; no current-state baseline is fabricated.
 if ($Phase -eq 'PostUpdate') { return }
 
 $retentionHours = [Math]::Max(1,[int]$settings.highResolutionRetentionHours)
