@@ -17,7 +17,7 @@ foreach ($path in @($viewerPath,$launcherPath)) {
 
 if (Test-Path -LiteralPath $launcherPath) {
     $launcher = Get-Content -LiteralPath $launcherPath -Raw
-    foreach ($token in @('OpenItemViewer.ps1','Start-Process','$arguments = @(','-MarketKey',$MarketKey)) { if (-not $launcher.Contains([string]$token)) { Fail "Viewer launcher missing '$token'." } }
+    foreach ($token in @('OpenItemViewer.ps1','Start-Process','$arguments = @(','-MarketKey','$MarketKey')) { if (-not $launcher.Contains([string]$token)) { Fail "Viewer launcher missing '$token'." } }
     if (-not $launcher.Contains("MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$'")) { Fail 'Viewer launcher must validate stable country:itemId keys.' }
 }
 
