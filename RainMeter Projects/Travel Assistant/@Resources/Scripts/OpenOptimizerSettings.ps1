@@ -98,7 +98,7 @@ $profile.Add_Click({
     } catch { Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message $_.Exception.ToString() }
 })
 
-$info=Add-Label 'OPTIMAL is a sort: modeled hit likelihood x gross trip profit, normalized by total elapsed time. UPCOMING, PROFIT, and TIME remain directly selectable in the main skin.' 18 310 468 50
+$info=Add-Label 'Main sort choices are UPCOMING, GROSS PROFIT, and PROFIT/HR. Hit likelihood stays visible as a separate percentage and is not hidden inside the sort score.' 18 310 468 50
 $info.ForeColor=[System.Drawing.Color]::FromArgb(145,152,164)
 
 $save=New-Object System.Windows.Forms.Button
