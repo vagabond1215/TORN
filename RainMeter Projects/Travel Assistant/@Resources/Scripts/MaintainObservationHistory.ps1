@@ -126,7 +126,7 @@ function Write-CyclePrune {
 }
 
 function Add-MissingMarketBaselines {
-    param([object]$EngineState)
+    param([object]$EngineState,[long]$RetentionCutoff)
     if ($null -eq $EngineState -or -not $EngineState.PSObject.Properties['observedMarkets']) { return 0 }
 
     $seen = @{}
@@ -154,22 +154,33 @@ function Add-MissingMarketBaselines {
         $key = $country + ':' + [string]$itemId
         if ($seen.ContainsKey($key)) { continue }
 
-        # Old versions could know the current state without ever persisting an
-        # observation. We cannot reconstruct deleted history, so bootstrap only
-        # the actual current snapshot and let change-only history grow truthfully.
-        $timestamp = [long](Get-HistoryProperty $market 'sourceTimestamp')
-        if ($timestamp -le 0) { $timestamp = [long](Get-HistoryProperty $market 'lastSeenAt') }
-        if ($timestamp -le 0) { $timestamp = $Now }
-        $source = [string](Get-HistoryProperty $market 'source')
+        # A market with zero retained rows but a known firstSeenAt is a migration/
+        # retention hole in a change-only series. If any recorded stock/price change
+        # had occurred since firstSeenAt, a row would still exist. Therefore the
+        # current state is also the carried state from max(firstSeenAt, cutoff).
+        $firstSeenAt = [long](Get-HistoryProperty $market 'firstSeenAt')
+        $timestamp = 0L
+        $rowSource = 'history_bootstrap'
+        $rowSourceTimestamp = [long](Get-HistoryProperty $market 'sourceTimestamp')
+        if ($firstSeenAt -gt 0) {
+            $timestamp = [Math]::Max($RetentionCutoff,$firstSeenAt)
+            $rowSource = 'history_repair_baseline'
+            $rowSourceTimestamp = $timestamp
+        } else {
+            $timestamp = [long](Get-HistoryProperty $market 'sourceTimestamp')
+            if ($timestamp -le 0) { $timestamp = [long](Get-HistoryProperty $market 'lastSeenAt') }
+            if ($timestamp -le 0) { $timestamp = $Now }
+        }
+
         $row = [ordered]@{
             schemaVersion = 1
-            timestamp = $timestamp
+            timestamp = [long]$timestamp
             country = $country
             itemId = $itemId
             stock = [int](Get-HistoryProperty $market 'lastStock')
             foreignPrice = [long](Get-HistoryProperty $market 'lastForeignPrice')
-            source = 'history_bootstrap'
-            sourceTimestamp = [long](Get-HistoryProperty $market 'sourceTimestamp')
+            source = $rowSource
+            sourceTimestamp = [long]$rowSourceTimestamp
         }
         $providerName = [string](Get-HistoryProperty $market 'providerName')
         if (-not [string]::IsNullOrWhiteSpace($providerName)) { $row['itemName'] = $providerName }
@@ -186,13 +197,14 @@ if ($null -eq $settings -or $null -eq $engine) { return }
 
 $retentionHours = [Math]::Max(1,[int]$settings.highResolutionRetentionHours)
 $cycleDays = [Math]::Max(1,[int]$settings.cycleRetentionDays)
+$retentionCutoff = $Now-([long]$retentionHours*3600)
 
 if ($Phase -eq 'PreUpdate') {
     $lastPruneAt = 0L
     if ($engine.PSObject.Properties['lastPruneAt']) { $lastPruneAt = [long]$engine.lastPruneAt }
     if (($Now-$lastPruneAt) -lt 3600) { return }
 
-    Write-BaselineAwareObservationPrune -Cutoff ($Now-([long]$retentionHours*3600))
+    Write-BaselineAwareObservationPrune -Cutoff $retentionCutoff
     Write-CyclePrune -Cutoff ($Now-([long]$cycleDays*86400))
     if ($engine.PSObject.Properties['lastPruneAt']) { $engine.lastPruneAt = $Now }
     else { $engine | Add-Member NoteProperty lastPruneAt $Now }
@@ -200,4 +212,4 @@ if ($Phase -eq 'PreUpdate') {
     return
 }
 
-[void](Add-MissingMarketBaselines -EngineState $engine)
+[void](Add-MissingMarketBaselines -EngineState $engine -RetentionCutoff $retentionCutoff)
