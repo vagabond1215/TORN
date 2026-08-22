@@ -37,8 +37,8 @@ if (Test-Path -LiteralPath $optimizerPath) {
         'availabilitySeconds',
         'restockDelaySeconds',
         'expectedTripProfit',
-        "$priceColor = '224,90,90,255'",
-        "$priceColor = '86,190,116,255'",
+        '$priceColor = ''224,90,90,255''',
+        '$priceColor = ''86,190,116,255''',
         'pricingPriorityItemIds'
     )) {
         if (-not $text.Contains($token)) { Fail "Optimal route contract missing '$token'." }
