@@ -4,14 +4,14 @@ Set-StrictMode -Version 2.0
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot 'FilterPreferences.ps1') -SkipMain
+. (Join-Path $PSScriptRoot 'RuntimeLog.ps1')
 
 $ProjectRoot=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RunUpdatePath=Join-Path $PSScriptRoot 'RunUpdate.ps1'
 $FilterLauncher=Join-Path $PSScriptRoot 'LaunchFilterPopup.ps1'
 $ProfileLauncher=Join-Path $PSScriptRoot 'LaunchSettings.ps1'
 $prefs=Read-UiPreferences
-
-function Quote-ProcessArgument([string]$Value) { return ('"' + $Value.Replace('"','\"') + '"') }
+$logComponent='popup-optimizersettings'
 
 $form=New-Object System.Windows.Forms.Form
 $form.Text='Travel Assistant Settings'
@@ -83,19 +83,19 @@ Refresh-Limits
 $ignore=New-Object System.Windows.Forms.Button
 $ignore.Text='Ignore List...'; $ignore.Location=New-Object System.Drawing.Point(18,260); $ignore.Size=New-Object System.Drawing.Size(120,32); $form.Controls.Add($ignore)
 $ignore.Add_Click({
-    if (Test-Path -LiteralPath $FilterLauncher) {
-        $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Quote-ProcessArgument $FilterLauncher),'-Filter','Ignore')
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Normal | Out-Null
-    }
+    try {
+        if (-not (Test-Path -LiteralPath $FilterLauncher)) { throw 'LaunchFilterPopup.ps1 is missing.' }
+        & $FilterLauncher -Filter 'Ignore'
+    } catch { Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message $_.Exception.ToString() }
 })
 
 $profile=New-Object System.Windows.Forms.Button
 $profile.Text='Profile / API...'; $profile.Location=New-Object System.Drawing.Point(154,260); $profile.Size=New-Object System.Drawing.Size(120,32); $form.Controls.Add($profile)
 $profile.Add_Click({
-    if (Test-Path -LiteralPath $ProfileLauncher) {
-        $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Quote-ProcessArgument $ProfileLauncher))
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Normal | Out-Null
-    }
+    try {
+        if (-not (Test-Path -LiteralPath $ProfileLauncher)) { throw 'LaunchSettings.ps1 is missing.' }
+        & $ProfileLauncher
+    } catch { Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message $_.Exception.ToString() }
 })
 
 $info=Add-Label 'OPTIMAL is a sort: modeled hit likelihood x gross trip profit, normalized by total elapsed time. UPCOMING, PROFIT, and TIME remain directly selectable in the main skin.' 18 310 468 50
@@ -108,19 +108,24 @@ $cancel.Text='Cancel'; $cancel.Location=New-Object System.Drawing.Point(412,372)
 $cancel.Add_Click({ $form.Close() })
 
 $save.Add_Click({
-    $current=Read-UiPreferences
-    Set-FilterProperty $current 'showProfitableOnly' ([bool]$profitable.Checked)
-    Set-FilterProperty $current 'use95PercentMarketValue' ([bool]$mv95.Checked)
-    Set-FilterProperty $current 'energyWastePolicy' (Get-ComboPolicy $energyPolicy)
-    Set-FilterProperty $current 'maxEnergyLoss' ([int]$energyMax.Value)
-    Set-FilterProperty $current 'nerveWastePolicy' (Get-ComboPolicy $nervePolicy)
-    Set-FilterProperty $current 'maxNerveLoss' ([int]$nerveMax.Value)
-    [void](Save-UiPreferences $current)
-    if (Test-Path -LiteralPath $RunUpdatePath) {
-        $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Quote-ProcessArgument $RunUpdatePath),'-Action','Update')
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Hidden | Out-Null
+    try {
+        $current=Read-UiPreferences
+        Set-FilterProperty $current 'showProfitableOnly' ([bool]$profitable.Checked)
+        Set-FilterProperty $current 'use95PercentMarketValue' ([bool]$mv95.Checked)
+        Set-FilterProperty $current 'energyWastePolicy' (Get-ComboPolicy $energyPolicy)
+        Set-FilterProperty $current 'maxEnergyLoss' ([int]$energyMax.Value)
+        Set-FilterProperty $current 'nerveWastePolicy' (Get-ComboPolicy $nervePolicy)
+        Set-FilterProperty $current 'maxNerveLoss' ([int]$nerveMax.Value)
+        [void](Save-UiPreferences $current)
+        if (Test-Path -LiteralPath $RunUpdatePath) {
+            $arguments='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $RunUpdatePath
+            Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+        }
+        Clear-TravelAssistantLatestError -Component $logComponent
+        $form.Close()
+    } catch {
+        Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message $_.Exception.ToString()
     }
-    $form.Close()
 })
 
 $form.AcceptButton=$save; $form.CancelButton=$cancel
