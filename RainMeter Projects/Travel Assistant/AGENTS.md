@@ -15,77 +15,72 @@ Before changing code or data, read:
 
 If older plans conflict with an **ACTIVE** `NEXT_CODEX_RUN.md`, follow the active run while preserving every invariant here.
 
-## Connector-first execution
+## Execution
 
-- Prefer the connected GitHub connector for repository inspection, edits, tests/contracts, and commits.
-- Use the target Windows host only for actual Rainmeter rendering, Windows PowerShell behavior, local provider/API behavior, and resource checks that cannot be proven through repository inspection.
-- Never claim Windows/Rainmeter/live-provider validation that did not run.
-- Work only inside this subtree unless explicitly asked otherwise.
-- Direct `main` edits are allowed while the project remains isolated/pre-use. Never force-push or rewrite unrelated work.
+- Prefer the connected GitHub connector for repository inspection/edits/contracts/commits.
+- Use the target Windows host only for real Rainmeter, Windows PowerShell, and live provider/Torn validation.
+- Never claim Windows/live validation that did not run.
+- Work only inside this subtree unless explicitly broadened.
+- Direct `main` edits are allowed; never force-push or rewrite unrelated work.
+- Never expose/request an API key or full local settings file.
 
-## Product direction
+## Core population split
 
-Travel Assistant is expanding from the UK/Japan Xanax proof into a generic Torn foreign-market assistant.
-
-Keep these populations distinct:
+Never conflate:
 
 ```text
 COLLECTED provider rows
         !=
-ACTIVE market candidates
-        !=
-VISIBLE opportunities
+ACTIVE market relationships
         !=
 OPTIMIZER candidates
+        !=
+CURRENT recommended purchase rows
 ```
 
-### Collection
+- Collection remains broad across every valid provider row and all 11 foreign countries.
+- Market identity is `country + itemId`.
+- Provider presence is evidence about a feed, not proof a shop relationship is still active.
+- Verified legacy relationships remain observable for provenance but receive no new history/resale/optimizer work.
+- UI filters, Ignore List, profitability display, and travel destination never delete retained history.
 
-- Observe every valid foreign-shop row returned by live providers for every configured foreign country, irrespective of UI filters.
-- Market identity is always `country + itemId`.
-- Provider presence is evidence about the provider dataset, not proof that the relationship is still purchasable.
-- Verified inactive/legacy markets remain observable for provenance but must not receive new learning/history/resale/display/optimizer work.
-- UI filters, pinning, profitable-only, Ignore List, and current travel destination must not erase retained history.
-- Shared country-level Prometheus/YATA collection remains broad even for ignored items because individual item suppression does not reduce those provider requests.
+## Current product: 0.5 minimalist next-trip optimizer
 
-### Visibility
+The rejected 0.4 four-card/graph layout is **not** the active product surface.
 
-Accepted independent proof cards:
+Main Rainmeter UI is intentionally compact:
 
 ```text
-United Kingdom + 206 Xanax
-United Kingdom + 266 Nessie Plushie
-Japan          + 206 Xanax
-Japan          + 277 Cherry Blossom
+Travel                                      SETTINGS >
+Updated ...
+
+ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
+
+OPTIMAL • <country>                    <expected value>
+<arrival/out> • <capacity> • <hit chance> • <Energy loss> • <Nerve loss>
+<item>             xN   <foreign price> (<Torn MV>)   <arrival chance>
+[additional purchase rows only if the selected route needs them]
 ```
 
-Each visible opportunity is its own card. Never render Nessie/Cherry as subordinate rows inside a Xanax country card again.
+Rules:
 
-Nessie/Cherry remain presentation-only until deliberately promoted:
+- Show only the item(s) the selected next trip should purchase.
+- Do not restore destination card stacks or default graphs without an explicit product-direction change.
+- Item names share one left-aligned column with consistent typography/padding.
+- Foreign shop price is primary; Torn MV appears immediately after it in parentheses, smaller and muted.
+- The one-second Lua loop is local-only and may update countdowns/reflow strings but never poll APIs.
 
-```text
-visible=true
-enabled=false
-optimizerEligible=false
-```
+The 0.5 optimizer is a **next-trip planner**, not yet the final multi-trip sequence scheduler. Future work may compare repeated short trips, fewer long trips, and mixed-country sequences over a bounded horizon; do not overclaim the current single-route scorer as that final scheduler.
 
-They may show stock, foreign price, resale reference, category-aware economics, flight duration, and their own graph, but they must not inherit Xanax actionable departure timing.
+## Filters
 
-### Current 0.4.0 presentation candidate
+Persistent local filter/preferences state lives in ignored `data/runtime/preferences.json`.
 
-The filter bar sits below the update/source line:
-
-```text
-ITEM  All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
-```
-
-Persistent UI state lives in ignored `data/runtime/preferences.json`.
-
-Current fields:
+Current schema includes:
 
 ```text
 travelMode
-pinnedMarket
+pinnedMarket                 # legacy/migration compatibility; no active card UI
 itemFilterAll
 selectedItemIds
 selectedTripBands
@@ -94,13 +89,16 @@ categoryFilterAll
 selectedCategories
 showProfitableOnly
 ignoredItemIds
+use95PercentMarketValue
+energyWastePolicy
+maxEnergyLoss
+nerveWastePolicy
+maxNerveLoss
 ```
 
-Settings Save must merge owned fields; it must never replace this preference object with a narrow travel-mode-only object.
+Item and Category popups use the active local catalog, not only old proof-card seeds.
 
-Current Item/Category selectors expose only items/categories the four-card renderer can actually display. Generalize the renderer before exposing the full catalog through those selectors.
-
-Trip bands are presentation taxonomy only:
+Trip bands are presentation/filter taxonomy only:
 
 ```text
 Short:  Mexico, Cayman Islands, Canada
@@ -108,67 +106,119 @@ Medium: Hawaii, United Kingdom, Argentina, Switzerland
 Long:   Japan, China, UAE, South Africa
 ```
 
-Do not use this taxonomy as travel-time/economics authority.
-
-### Pin/favorite
-
-- Only one `country:itemId` may be pinned.
-- Right-click item title/expand glyph toggles the pin.
-- Pinned card displays `★`, stays expanded, sorts first, and consumes one `MaxExpandedCards` slot.
-- Automatic collapse must never collapse the pin.
-- Pin overrides ordinary Item/Trip/Country/Category/profitable-only filters at home.
-- Travel destination relevance and Ignore List override pin.
-- Pin is persisted directly in `preferences.json`; do not mirror it through `state.kv` in a way that can overwrite a just-clicked pin with stale state.
-
-Visibility precedence:
-
-```text
-travel destination relevance
-        >
-Ignore List
-        >
-pin
-        >
-ordinary presentation filters
-```
+Never use these labels as travel-time/economics authority.
 
 ### Ignore List
 
-- Ignore popup should enumerate the complete local metadata catalog.
-- Ignored items are hidden and excluded from broad per-item Torn Item Market pricing.
-- Ignored items remain part of shared foreign-stock observation/history unless a future provider architecture can actually save a request by excluding them.
-- Unignore must make the item eligible for resale work again without deleting prior evidence.
+- Enumerates the complete local metadata catalog when available.
+- Ignored items are excluded from optimizer eligibility and broad per-item Torn MV requests.
+- Shared country-level Prometheus/YATA stock collection remains broad because suppressing one item does not save that provider request.
+- Ignore/unignore never deletes historical evidence.
 
-### Optimizer
+## Value/profitability semantics
 
-`Optimal` remains a future scheduling layer, not a sort by profit/item or profit/trip.
+Profitability is ranking/context, **not permission to learn and not a timing-window gate**.
 
-Do not make a market optimizer-eligible until economics, capacity semantics, availability, current market validity, and evidence quality are adequate.
+Default route value basis:
 
-Eventually compare repeated short trips, fewer longer trips, and mixed-country sequences over a bounded planning horizon.
+```text
+sell basis = 100% Torn MV (itemmarket.item.average_price)
+Item Market fee deduction = 0
+minimum profit gate = 0
+minimum margin gate = 0
+```
 
-## Non-negotiable data/recommendation invariants
+Optional preference:
 
-1. Prefer no recommendation over weak/unsafe advice.
-2. `0 -> positive` is an observed restock; `positive -> 0` is an observed sellout. Forecasts never become history.
-3. Keep history/model state isolated by `country + itemId`.
-4. Foreign price is first-class evidence; radically different price regimes are not equivalent.
-5. Current depletion may shorten safety but never expand conservative support beyond history.
-6. `BEST_ODDS` is not `SAFE_WINDOW`.
-7. Profitability gates timing, not learning.
-8. Unknown economics are not zero economics.
-9. Provider provenance is retained at normalization boundaries.
-10. Collection/enrichment/presentation failures must fail gracefully and must not break the accepted Xanax path.
-11. Runtime observations, cycles, caches, generated state/graphs, local preferences/settings, credentials, and errors stay ignored/local.
-12. Storage/compute remain bounded. The one-second Rainmeter loop performs only local state/string/countdown/visibility/reflow work.
-13. Verified inactive market overrides supersede provider presence for new learning/display/resale/optimizer work while preserving provenance/history.
-14. Broad resale population must never create an API burst; missing/no-price responses remain unresolved.
-15. Market/resale reference is distinct from foreign shop price. Display them distinctly and never overwrite one with the other.
-16. UI filters never become collection filters.
-17. Ignore List may suppress per-item resale API work but must not silently delete history or claim to save shared provider requests it cannot save.
-18. Travel destination filtering may narrow presentation, never background learning.
+```text
+Use 95% MV profit calculation = OFF by default
+```
 
-## Current collection/catalog baseline
+Price color is deliberately simple:
+
+```text
+foreign price <= selected MV basis  -> green
+foreign price >  selected MV basis  -> red
+```
+
+No LOW_MARGIN yellow blocker in the minimalist optimizer.
+
+Negative-value items remain legal optimizer candidates unless `Show profitable items only` is explicitly enabled. Profit/value details belong in tooltip/context; they must not erase stock timing/evidence.
+
+Legacy `FinalizeState.ps1` economics are informational only and must not rewrite timing status or clear timing fields.
+
+## Availability/evidence semantics
+
+1. Prefer no recommendation over invented confidence.
+2. `0 -> positive` is an observed restock; `positive -> 0` is an observed sellout.
+3. Forecasts never become history.
+4. History is isolated by `country + itemId`.
+5. Foreign price is first-class evidence.
+6. Current depletion may shorten support, never expand conservative historical support.
+7. In-stock markets from Torn/home or in-flight require enough completed availability evidence to produce a modeled arrival probability.
+8. If already at the destination, fresh current stock is direct current-state evidence.
+9. Sold-out arrival forecasts require completed sellout→restock plus availability evidence; estimated restock quantity may use observed 0→positive quantities.
+10. Stale provider markets are not optimizer candidates.
+
+## Energy / Nerve constraints
+
+Travel context obtains bars in the existing bounded user request (`travel,basic,bars`).
+
+Policies are independent:
+
+```text
+Energy Waste: Allowed | Forbidden | Limited
+Max Energy Loss: N     # used when Limited
+
+Nerve Waste:  Allowed | Forbidden | Limited
+Max Nerve Loss: N      # used when Limited
+```
+
+- Loss is modeled natural regeneration that would be wasted during the planned trip horizon.
+- If `energy.current > energy.maximum`, Energy waste policy is bypassed (stacking for war/happy-jump use cases).
+- Nerve does **not** receive that bypass even if current nerve is above maximum.
+- Unknown bar data fails safe for any non-Allowed policy.
+- After travel is already committed to a destination, waste constraints must not make destination purchase guidance disappear.
+
+## Capacity authority
+
+Prefer current `/user/perks` sync for carrying capacity.
+
+Mode base:
+
+```text
+Standard: 10
+Airstrip/WLT/qualified Business: 15
+```
+
+Accepted synced example:
+
+```text
+Airstrip general/Xanax = 18
+Standard general/Xanax = 13
+```
+
+Category-only company effects remain isolated:
+
+- Flower Shop 7★: +5 Flower only.
+- Toy Shop 7★: +5 Plushie only.
+- Neither increases Xanax/general capacity.
+
+An optimizer route fills general slots first, then may use valid category-only slots on matching item categories. Positive explicit `profitability.capacityOverride` remains authoritative where supported.
+
+## Travel context
+
+`TravelContext.ps1` may make one bounded fail-soft Torn user request per normal update:
+
+```text
+/v2/user?selections=travel,basic,bars
+```
+
+It retains destination/travel timestamps plus Energy/Nerve bar fields. On transient failure preserve the last successful foreign restriction and bar context rather than releasing safety constraints because a request failed.
+
+While outbound/abroad to a recognized destination, optimizer candidates are restricted to that destination. On the return leg, the next outbound route is deferred until arrival. Arrival countdown ticks locally from stored timestamps.
+
+## Catalog baseline
 
 Accepted target-Windows baseline on 2026-08-21:
 
@@ -176,14 +226,14 @@ Accepted target-Windows baseline on 2026-08-21:
 Prometheus
 11 countries
 232 observed country-item provider rows
-232 / 232 rows with provider names
+232/232 provider names
 202 distinct item IDs
-202 / 202 categories resolved
+202/202 categories resolved
 5 verified legacy rows
 227 active country-item markets
 ```
 
-Current verified legacy rows:
+Verified legacy rows:
 
 ```text
 mexico:21
@@ -195,110 +245,39 @@ united_arab_emirates:440
 
 Do not hard-code these live counts as timeless constants.
 
-## Item metadata contract
+Catalog network maintenance remains manual-only because target-host Torn metadata requests repeatedly timed out. `RunUpdate.ps1` must not invoke `ItemMetadata.ps1`.
 
-Catalog metadata network maintenance must not run inside the Rainmeter heartbeat.
-
-Target-host attempts timed out for:
-
-```text
-v2 specific-items | 150 IDs | 20s
-v2 specific-items |  40 IDs | 30s
-classic torn/items bulk      | 12s
-```
-
-Therefore:
-
-- `RunUpdate.ps1` must not invoke `ItemMetadata.ps1`;
-- `ItemMetadata.ps1` remains explicit/manual maintenance only;
-- do not keep increasing metadata timeout/batch size;
-- normal catalog authority is committed/offline references plus provider names/verified overrides.
-
-Current local precedence:
+Local metadata precedence:
 
 ```text
 richer manual Torn metadata
     > explicit config seed
     > verified item override
-    > offline YATA-derived category snapshot
+    > offline category snapshot
     > provider name + Unknown
 ```
 
-## Broad resale contract
+## Broad resale/MV queue
 
-`ResaleQueue.ps1` must:
+`ResaleQueue.ps1`:
 
-- run only for normal `Update` actions;
-- run after the visible heartbeat;
-- derive distinct items from active observed markets only;
-- defensively skip legacy/inactive relationships;
-- make at most one Torn Item Market request per run path;
-- default to 60s attempt cadence, 6h broad freshness, 1h general failure backoff, 6s request timeout;
-- use bounded `curl.exe --config -` with the API key only in stdin Authorization header;
-- preserve successful cache rows across later failures;
-- keep missing/zero outcomes unresolved.
+- runs after visible heartbeat;
+- active relationships only;
+- at most one Torn Item Market request per update;
+- default cadence 60s, freshness 6h, general failure backoff 1h, timeout 6s;
+- key only via stdin curl config + Authorization header;
+- successful cache survives later failures;
+- missing/zero price remains unresolved.
 
-`ResalePriority.ps1` runs locally before the queue and may:
+`ResalePriority.ps1` is local-only and may:
 
-- prioritize visible/pinned items;
-- shorten failed visible/pinned retry eligibility to 5 minutes;
-- park ignored IDs outside the queue horizon;
-- release holds when unignored.
+- prioritize `engine.optimizer.pricingPriorityItemIds`;
+- retain compatibility priority for configured visible/pinned items;
+- shorten failed priority-item retry eligibility to 5 minutes;
+- park ignored IDs outside the queue;
+- release synthetic holds immediately on unignore.
 
-It must never make its own market request or increase the one-request cap.
-
-## Capacity authority
-
-Prefer current `/user/perks` for carrying capacity.
-
-Mode base:
-
-```text
-Standard: 10
-Airstrip/WLT/qualified Business: 15
-```
-
-A synced current-capacity bonus is authoritative for general/Xanax capacity and replaces legacy inferred general additions.
-
-Category-specific effects excluded from general capacity remain isolated:
-
-- Flower Shop 7★: +5 Flower only;
-- Toy Shop 7★: +5 Plushie only;
-- neither increases Xanax.
-
-Accepted example:
-
-```text
-Airstrip general/Xanax = 18
-Standard general/Xanax = 13
-qualifying Airstrip Flower/Plushie = 23
-qualifying Standard Flower/Plushie = 18
-```
-
-Positive explicit `profitability.capacityOverride` remains authoritative where supported.
-
-## Travel context
-
-`TravelContext.ps1` may make one small bounded fail-soft Torn user request per normal update to resolve travel/basic state.
-
-Projected fields:
-
-```text
-TravelState
-TravelDestination
-TravelDestinationCountryId
-TravelFilterActive
-TravelMethod
-TravelDepartedAt
-TravelArrivalAt
-TravelTimeLeft
-```
-
-Current use is presentation relevance. While traveling/abroad to a recognized destination, show only that country’s renderable cards even if another card is pinned.
-
-On transient failure preserve the last successful foreign restriction.
-
-Future arrival countdown must tick locally from stored timestamps; do not poll Torn every second.
+It must never make its own request or increase the one-request cap.
 
 ## Runtime order
 
@@ -308,51 +287,47 @@ Current production order:
 UpdateTracker
 ShadowCollector
 LocalCatalog
-FinalizeState
-TravelContext
-VisibleItems
-FilterState
+FinalizeState           # compatibility economics are informational only
+TravelContext           # one bounded user/bars request on Update
+OptimalRoute            # local-only
+FilterState             # local-only
 heartbeat
-ResalePriority
-ResaleQueue
+ResalePriority          # local-only
+ResaleQueue             # <= 1 market request
 ```
 
-Network catalog metadata remains outside this order.
+`VisibleItems.ps1`/card-graph enrichment is no longer part of production runtime. Item metadata network maintenance remains outside runtime.
 
-## API keys / secrets
+## Secrets / local files
 
-- API keys remain local and ignored; never commit them.
-- Settings masks the key by default.
-- Never ask the user to paste a full key into chat.
-- Do not broaden permissions for convenience.
-- Never put a key in process arguments or request URLs when stdin/header transport is available.
+- API key and `config/settings.local.json` stay local/ignored.
+- Runtime observations, cycles, caches, preferences, state, errors, and generated artifacts stay ignored/local.
+- Never put the key in URL/process arguments when stdin/header transport is available.
+- Do not broaden API permissions for convenience.
 
 ## Performance budget
 
-- one-second Rainmeter work: local only;
-- main serialized updater: about once/minute;
+- one-second Rainmeter loop: local only;
+- serialized updater: roughly once/minute;
 - shadow collection: no more often than ~120s unless revalidated;
-- travel context: one bounded user request per normal update;
-- broad resale: at most one lower-priority market request per normal update after heartbeat;
-- item metadata network maintenance: manual-only;
-- no permanent background PowerShell/browser processes.
+- travel/bars: one bounded request per normal update;
+- broad MV queue: at most one lower-priority request after heartbeat;
+- no permanent background PowerShell/browser process.
 
 ## Distribution
 
-The `.rmskin` builder is whitelist-based. It must include runtime scripts/config/catalog references and exclude:
+`.rmskin` packaging is whitelist-based. It must include runtime scripts/config/catalog references and exclude:
 
 ```text
 config/settings.local.json
 API key
 runtime preferences/history/state
 cache/errors
-generated graphs/state
+generated state/graphs
 ```
-
-Recipient-local preferences survive upgrades because runtime state is not packaged.
 
 ## Current validation boundary
 
-Independent cards are visually accepted. Current `0.4.0` filter/pin/settings/travel-context candidate still requires target-Windows focused tests and Rainmeter interaction acceptance.
+The 0.5 minimalist optimizer implementation is **pending target-Windows validation**. Do not call it accepted until the focused parser/deterministic tests, one production update, and a Rainmeter screenshot pass.
 
-See `docs/NEXT_CODEX_RUN.md` for the exact commands and visual checks.
+See `docs/NEXT_CODEX_RUN.md` for the current exact acceptance commands.
