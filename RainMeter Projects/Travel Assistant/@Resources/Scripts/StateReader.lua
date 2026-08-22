@@ -52,6 +52,11 @@ local function setGroupVisible(group, visible)
     else SKIN:Bang('!HideMeterGroup', group) end
 end
 
+local function setMeterVisible(meter, visible)
+    if visible then SKIN:Bang('!ShowMeter', meter)
+    else SKIN:Bang('!HideMeter', meter) end
+end
+
 local function formatCountdown(seconds)
     seconds = math.max(0, math.floor(number(seconds)))
     local h = math.floor(seconds / 3600)
@@ -145,6 +150,10 @@ local function updateOptimal(data, now)
     setVariable('OptimalValueText', valueText)
     setVariable('OptimalMessageText', safeText(data.OptimalMessage, 'Learning current markets...'))
 
+    -- A route uses the body for purchase rows. Learning/no-route state uses the
+    -- same space for its explanatory message, never both at once.
+    setMeterVisible('MeterRouteMessage', not visible or itemCount == 0)
+
     for i = 1, 8 do
         local prefix = 'OptimalItem' .. i
         setVariable(prefix .. 'Name', safeText(data[prefix .. 'Name'], ''))
@@ -154,10 +163,9 @@ local function updateOptimal(data, now)
         setVariable(prefix .. 'ChanceText', safeText(data[prefix .. 'ChanceText'], ''))
         setVariable(prefix .. 'PriceColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
         setVariable(prefix .. 'Tooltip', safeText(data[prefix .. 'Tooltip'], ''))
-        setGroupVisible('OptimalItemRow' .. i, i <= itemCount)
+        setGroupVisible('OptimalItemRow' .. i, visible and i <= itemCount)
     end
 
-    -- Base route block is 76 px; every item row adds 28 px.
     local routeHeight = 82 + itemCount * 28
     if itemCount == 0 then routeHeight = 92 end
     setVariable('RouteHeight', routeHeight)
