@@ -1,6 +1,6 @@
-# Next Codex Run: Independent Multi-Item Cards
+# Next Codex Run: Persistent Filters, Pinning, and Ignore List
 
-**Status: ACTIVE — PENDING TARGET-WINDOWS ACCEPTANCE**
+**Status: ACTIVE — PENDING TARGET-WINDOWS / RAINMETER ACCEPTANCE**
 
 ## Expansion rule
 
@@ -10,183 +10,286 @@ show narrowly
 optimize only after evidence/economics are ready
 ```
 
-## Accepted baseline before this UI correction
+## Accepted baseline
 
 The target Windows machine has already accepted:
 
-- full 11-country shadow collection;
+- 11-country shadow collection;
 - 232 provider country-item rows / 227 active markets at the last live check;
 - 202 locally resolved item metadata rows;
-- verified legacy-market suppression;
-- bounded broad resale transport;
-- category-aware capacity with Xanax/general capacity isolated from Flower/Toy bonuses;
-- the original UK/Japan Xanax graph/timing cards.
+- five verified legacy markets suppressed from new learning/resale/display work;
+- bounded one-request-at-a-time broad Torn Item Market pricing;
+- category-aware carrying capacity;
+- four **independent** item cards:
+  - UK Xanax;
+  - UK Nessie Plushie;
+  - Japan Xanax;
+  - Japan Cherry Blossom;
+- a global two-expanded-card cap;
+- item-specific secondary graphs;
+- foreign shop price followed by a smaller muted parenthesized Torn market reference.
 
-The first multi-item screenshot then exposed a presentation error: Nessie Plushie and Cherry Blossom were rendered as subordinate rows inside the existing Xanax country cards.
+The earlier subordinate-row composition is rejected and must not return.
 
-That composition is rejected.
+## Current 0.4.0 candidate
 
-## Correct item-card identity
+### Horizontal filter bar
 
-The presentation identity is now the same durable market identity used by the data model:
+Immediately below the update/source line:
+
+```text
+ITEM  All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
+```
+
+Two thin horizontal separators bound the bar.
+
+The filter bar is presentation state only. It must never stop broad stock/history collection.
+
+### Item filter
+
+Clicking `ITEM` opens a detached checkbox popup.
+
+Current UI limitation:
+
+- the popup lists only items that the committed card renderer can currently display;
+- this prevents users selecting one of the ~202 catalog items and seeing no card because generalized card enumeration is not implemented yet.
+
+State persists in ignored `data/runtime/preferences.json` until reset.
+
+### Trip bands
+
+The 11 destinations currently use a presentation taxonomy:
+
+```text
+Short:
+  Mexico
+  Cayman Islands
+  Canada
+
+Medium:
+  Hawaii
+  United Kingdom
+  Argentina
+  Switzerland
+
+Long:
+  Japan
+  China
+  United Arab Emirates
+  South Africa
+```
+
+These bands are filter labels only. Existing country travel-time/economics data remains authoritative.
+
+`SHORT`, `MED`, and `LONG` are independent toggles. The adjacent `▾` opens a detached country popup for individual country exceptions inside enabled bands.
+
+### Category filter
+
+`CAT` opens a detached checkbox popup using categories represented by currently renderable cards.
+
+Like Item selection, this is already stored generically so later generalized card enumeration can widen the available choices without changing the preference schema.
+
+### Reset
+
+`RESET` restores:
+
+- Item = All;
+- Short/Medium/Long = all enabled;
+- all countries enabled;
+- Category = All;
+- profitable-only = off.
+
+Reset deliberately preserves:
+
+- pinned market;
+- Ignore List;
+- travel mode.
+
+## Pin / favorite behavior
+
+Presentation identity remains:
 
 ```text
 country + itemId
 ```
 
-Each visible opportunity owns a separate Rainmeter card.
+Only one market may be pinned.
 
-Current configured cards:
+Current interaction:
 
-```text
-United Kingdom + 206 Xanax
-United Kingdom + 266 Nessie Plushie
-Japan          + 206 Xanax
-Japan          + 277 Cherry Blossom
-```
+- left-click item title / chevron: expand or collapse;
+- right-click item title / chevron: pin or unpin;
+- pinned card displays `★`;
+- pinned card stays expanded;
+- pinned card sorts to the top;
+- pinned card consumes one of `MaxExpandedCards=2` slots;
+- automatic collapse must never collapse the pinned card.
 
-The new intended layout is:
+Pin overrides ordinary Item / Trip / Category / profitable-only presentation filters at home.
 
-```text
-[ UK flag | XANAX          | foreign price (market value) | stock ]
-  expanded Xanax body / graph
-
-[ UK flag | Nessie Plushie | foreign price (market value) | stock ]
-  collapsed by default
-
-[ JP flag | XANAX          | foreign price (market value) | stock ]
-  expanded Xanax body / graph
-
-[ JP flag | Cherry Blossom | foreign price (market value) | stock ]
-  collapsed by default
-```
-
-No secondary item should appear indented inside a Xanax card again.
-
-## Expansion cap
-
-`TravelAssistant.ini` now defines:
+Priority rules:
 
 ```text
-MaxExpandedCards=2
+travel destination relevance
+        >
+Ignore List
+        >
+pin
+        >
+ordinary presentation filters
 ```
 
-`StateReader.lua` owns the interactive card state.
+Therefore a pinned UK item must disappear while the user is traveling/abroad in Japan. The stored preference remains available for the next home/unfiltered view.
 
-Rules:
+Pin state is persisted directly in ignored `preferences.json`. It is intentionally **not mirrored through `state.kv`**, because an older projected value could overwrite a just-clicked pin on the next one-second Lua update.
 
-- initial expanded cards are UK Xanax and Japan Xanax;
-- every item header has an expand/collapse control;
-- at most `MaxExpandedCards` visible cards may be expanded;
-- opening a third card collapses another expanded card first;
-- when expanding a secondary card, the same-country companion card is the preferred collapse target;
-- collapsed cards retain their own independent border/header/stock/price state.
+## Travel-context boundary
 
-The cap is a presentation/resource limit only. It does not affect collection or history.
-
-## Market value display
-
-Every item header renders:
+`TravelContext.ps1` now performs one bounded fail-soft Torn user request:
 
 ```text
-foreign shop price (Torn Item Market reference)
+/user?selections=travel,basic
 ```
 
-The parenthesized market value is smaller and muted. The foreign price remains the primary profitability-colored value.
-
-Missing market value remains unresolved/displayed as `-`; it is never treated as zero economics.
-
-The broad resale queue still makes at most one bounded Torn Item Market request per normal update and prioritizes configured visible items before hidden catalog items.
-
-## Secondary item graphs
-
-`VisibleItems.ps1` remains local-only and now generates an item-specific graph image from retained `country + itemId` observations:
+It normalizes and projects:
 
 ```text
-uk-266-stock.png
-jp-277-stock.png
+TravelState
+TravelDestination
+TravelDestinationCountryId
+TravelFilterActive
+TravelMethod
+TravelDepartedAt
+TravelArrivalAt
+TravelTimeLeft
 ```
 
-Important evidence rule:
+Current use is destination-card filtering only.
 
-- graph generation may add the current `observedMarkets` provider snapshot at its real provider/source timestamp for display continuity;
-- it does not write synthetic observations/cycles or turn predictions into history;
-- it makes no network request.
+Not yet implemented in this release:
 
-The secondary graphs are present so a collapsed card can be expanded immediately without waiting for another provider request.
+- replacing static outbound flight duration with local arrival countdown;
+- generalizing actionable timing while already traveling;
+- broad all-country card rendering.
 
-## Recommendation boundary
+A transient travel-context failure preserves the last successful foreign filter rather than suddenly revealing irrelevant pinned cards.
 
-This UI correction does **not** promote Nessie/Cherry into the existing Xanax timing model.
+## Settings additions
 
-Expanded secondary cards may show:
-
-- current stock;
-- foreign price;
-- Torn market value;
-- category-aware capacity/economics class;
-- flight duration;
-- retained item-specific stock graph.
-
-Their decision text remains conservative, e.g.:
+Top of Settings now includes:
 
 ```text
-Economics positive - timing model learning
-Low margin - no departure recommendation
-Unprofitable - no departure recommendation
-Market value pending - no departure recommendation
+[ ] Show profitable items only
+[ Ignore List... ]
 ```
 
-No LEAVE NOW / safe-window timing should be generated for these secondary items yet.
+Settings Save must merge the fields it owns into the existing preference object. It must never replace `preferences.json` with a narrow travel-mode-only object and erase pin/filter/ignore state.
 
-## Runtime order remains
+### Profitable-only
+
+For current primary Xanax cards, positive modeled trip profit gates visibility.
+
+For current secondary Nessie/Cherry cards, profitability requires a fresh usable broad resale reference plus positive trip profit. Unknown/stale economics do not become profitable by assumption.
+
+### Ignore List
+
+Ignore List popup enumerates the complete local metadata catalog (currently 202 rows at the accepted baseline).
+
+Ignored items:
+
+- are hidden from the card view;
+- cannot use pin to force display;
+- are parked outside broad per-item Torn Item Market requests;
+- become queue-eligible immediately after being unignored.
+
+Ignore List does **not** suppress shared country-level Prometheus/YATA stock payloads. Those calls already return many items together, so filtering one item would not reduce provider requests and would destroy useful observation history.
+
+## Resale priority / pending market values
+
+Broad pricing remains:
+
+```text
+max requests per normal update: 1
+broad freshness target:          6h
+hidden/general failure backoff:  1h
+visible/pinned failure retry:    5m
+request timeout:                 6s
+```
+
+`ResalePriority.ps1` is local-only policy and runs immediately before the established `ResaleQueue.ps1`. It never makes a request itself.
+
+This shorter visible-item retry addresses the observed Nessie `(-)` condition after Cherry successfully populated. It does not increase the global request rate.
+
+## Runtime order
 
 ```text
 UpdateTracker
-ShadowCollector (fail-soft)
-LocalCatalog (fail-soft / local-only)
+ShadowCollector                 # fail-soft
+LocalCatalog                    # local-only / fail-soft
 FinalizeState
-VisibleItems (local-only independent cards + secondary graphs)
+TravelContext                   # bounded / fail-soft, Update only
+VisibleItems                    # local-only
+FilterState                     # local-only preference projection
 visible heartbeat
-ResaleQueue (fail-soft, max one request/run)
+ResalePriority                  # local-only queue policy
+ResaleQueue                     # fail-soft; max one request / Update
 ```
 
-## Focused target-Windows validation
+`ItemMetadata.ps1` remains manual-only and outside the heartbeat.
 
-After pulling current `main`, run:
+## Focused target-Windows acceptance
+
+After pulling current `main`, run from the Travel Assistant project directory:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-VisibleItems.ps1
+  -File .\tests\Validate-Filters.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-VisibleItemsTests.ps1
+  -File .\tests\Run-FilterPreferenceTests.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Validate-TravelContext.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-TravelContextTests.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Validate-VisibleItems.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-Then run one normal production pass:
+Then run one normal update before interacting with the new bar:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
 ```
 
-Refresh Rainmeter and visually verify:
+Refresh Rainmeter and verify:
 
-1. four independent card boundaries are visible;
-2. UK/JP Xanax start expanded;
-3. Nessie/Cherry start collapsed;
-4. market value remains smaller in parentheses;
-5. clicking Nessie expands its own graph and collapses UK Xanax when the two-card cap is already full;
-6. clicking Cherry does the analogous Japan swap;
-7. the panel height reflows rather than leaving a country-sized blank area;
-8. out-of-stock header text still fits;
-9. no secondary item receives actionable departure timing.
+1. filter bar appears between Updated and the first card;
+2. Item popup opens detached and persists selection;
+3. Short/Med/Long toggles update immediately;
+4. country popup respects enabled trip bands and persists individual selections;
+5. Category popup persists selection;
+6. Reset restores presentation filters while keeping pin / Ignore List;
+7. right-clicking a card title or chevron shows `★`, pins it expanded, and moves it to the top;
+8. expanding another card never auto-collapses the pinned card;
+9. Settings shows profitable-only and Ignore List;
+10. ignoring a visible item hides it and prevents broad resale work for it;
+11. current destination filtering hides a pinned card from the wrong country when Torn reports traveling/abroad;
+12. existing market-value typography, OOS text, graphs, and Xanax recommendations remain intact.
 
-Do not call this corrected UI accepted until the user reports those Windows/Rainmeter checks.
+Do not call 0.4.0 accepted until those Windows/Rainmeter interactions are reported.
 
-## After acceptance
+## Next after acceptance
 
-Next UI work can generalize the item-card list beyond the two proof items, then add country/category filters and travel-state destination filtering/countdown. `Optimal` remains later and must stay separate from collection/visibility.
+1. generalize card enumeration beyond the four proof markets;
+2. make Item/Category selectors expose the full filtered catalog once those cards can render;
+3. replace outbound static flight duration with a locally ticking arrival countdown;
+4. generalize per-item timing where evidence is sufficient;
+5. build the broader opportunity matrix;
+6. implement `Optimal` later as a bounded route scheduler, never as a simple profit sort.
