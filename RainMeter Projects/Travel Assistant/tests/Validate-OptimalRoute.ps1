@@ -39,7 +39,7 @@ if (Test-Path -LiteralPath $optimizerPath) {
 
 if (Test-Path -LiteralPath $opportunityPath) {
     $text=Get-Content -LiteralPath $opportunityPath -Raw
-    foreach ($token in @('grossProfit','profitPerHour','quantity','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Write-OpportunityProjection',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'")) {
+    foreach ($token in @('grossProfit','profitPerHour','quantity','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Write-OpportunityProjection',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'GrossValue','ProfitHourValue','WindowStartAt')) {
         if (-not $text.Contains($token)) { Fail "Opportunity ranking contract missing '$token'." }
     }
     foreach ($retired in @('expectedGross=','optimalScore=')) {
@@ -59,7 +59,7 @@ if (Test-Path -LiteralPath $settingsPath) {
 
 if (Test-Path -LiteralPath $preferencesPath) {
     $text=Get-Content -LiteralPath $preferencesPath -Raw
-    foreach ($token in @('schemaVersion = 5','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'")) {
+    foreach ($token in @('schemaVersion = 5','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'","@('name','upcoming','gross','profit_per_hour')")) {
         if (-not $text.Contains($token)) { Fail "Preference schema missing '$token'." }
     }
 }
@@ -109,5 +109,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Background route model and transparent opportunity economics validation passed.' -ForegroundColor Green
-Write-Host 'Visible ordering is UPCOMING, GROSS PROFIT, or PROFIT/HR; hit likelihood remains separate.'
+Write-Host 'Visible ordering is NAME, UPCOMING, GROSS PROFIT, or PROFIT/HR; hit likelihood remains separate.'
 exit 0
