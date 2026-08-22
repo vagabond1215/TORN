@@ -139,7 +139,7 @@ if (Test-Path -LiteralPath $stateReaderPath) {
     foreach ($token in @(
         "'NAME'","'UPCOMING'","'GROSS PROFIT'","'PROFIT/HR'","SetSortMode('profit_per_hour')",
         'configureInteractiveMeters','lastProjectionData = copyProjectionFields(initial)','ToggleInlineGraph','applyFlagForRow','graphExtra',
-        "setVariable('ViewerMarketKey', 'inline_' .. key)","SKIN:Bang('!SetOption', p .. 'Gross', 'Text', grossText)"
+        "setVariable('ViewerMarketKey', 'inline_' .. key)","SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'Text', grossText)"
     )) {
         if (-not $reader.Contains($token)) { Fail "StateReader compact-card/inline-graph contract missing '$token'." }
     }
