@@ -95,17 +95,20 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
         'local function stabilizeProjection(data)',
         'lastProjectionData = copyProjectionFields(initial)',
         'local function configureInteractiveMeters()',
-        "'UPCOMING'","'GROSS PROFIT'","'PROFIT/HR'","SetSortMode('profit_per_hour')",
+        "'NAME'","'UPCOMING'","'GROSS PROFIT'","'PROFIT/HR'","SetSortMode('name')","SetSortMode('profit_per_hour')",
         "SKIN:Bang('!HideMeter', 'MeterSortTime')",
         "SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Optimal')",
         "SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'X', '48')",
         "'SolidColor', '0,0,0,1'",
-        'local function updateSort(data, now)',
+        'local function currentOpportunityRows(data)',
+        'local function sortOpportunityRows(rows, mode)',
+        'local function locallySortedProjection(data, mode)',
+        'local function updateSort(mode)',
         'pendingSortMode = mode',
         'local function updateOpportunities(data)',
         'local function updateOpportunityGrossMeter(data, prefix, index)',
         "display = display .. ' gross'",
-        'QuantityText','ProfitHourText',
+        'QuantityText','ProfitHourText','GrossValue','ProfitHourValue','WindowStartAt',
         "setGroupVisible('OpportunityRow' .. i, i <= count)",
         'function SetSortMode(mode)',
         'function OpenViewer(marketKey)',
@@ -127,5 +130,5 @@ if ($errors.Count -gt 0) {
     Write-Host "Rainmeter opportunity skin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Rainmeter opportunity surface + transparent three-sort controls + refresh-stable projection + responsive hitboxes + hidden popup host validation passed.' -ForegroundColor Green
+Write-Host 'Rainmeter opportunity surface + immediate four-sort controls + refresh-stable projection + responsive hitboxes + hidden popup host validation passed.' -ForegroundColor Green
 exit 0
