@@ -42,7 +42,7 @@ if (Test-Path -LiteralPath $files.Popup) {
     if (-not $text.Contains('itemMetadata')) { Fail 'Ignore List must enumerate the full local metadata catalog when available.' }
     if (-not $text.Contains('FilterState.ps1')) { Fail 'Popup saves must project updated filter state immediately.' }
     if (-not $text.Contains('A favorite is preserved and returns when unignored.')) { Fail 'Ignore List UI must explain that an existing favorite is preserved.' }
-    if ($text -match "Set-FilterProperty\s+\$prefs\s+'pinnedMarket'\s+''") { Fail 'Ignore List must hide a pinned item without deleting the favorite.' }
+    if ($text -match 'Set-FilterProperty\s+\$prefs\s+''pinnedMarket''\s+''''') { Fail 'Ignore List must hide a pinned item without deleting the favorite.' }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Filter popup must remain local-only.' }
 }
 
