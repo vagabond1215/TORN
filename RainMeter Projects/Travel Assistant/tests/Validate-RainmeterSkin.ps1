@@ -93,8 +93,13 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
 } else {
     $stateReader=Get-Content -LiteralPath $stateReaderPath -Raw
     foreach ($token in @(
-        'local function updateSort(data)',
+        'local function stabilizeProjection(data)',
+        'lastProjectionData = copyProjectionFields(data)',
+        'local function updateSort(data, now)',
+        'pendingSortMode = mode',
         'local function updateOpportunities(data)',
+        'local function updateOpportunityGrossMeter(data, prefix, index)',
+        "display = display .. ' trip'",
         "setGroupVisible('OpportunityRow' .. i, i <= count)",
         "SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor'",
         'function SetSortMode(mode)',
@@ -102,6 +107,7 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
         'function OpenFilter(filterName)',
         'function ToggleTripBand(band)',
         'function ResetFilters()',
+        'local function deferPolling(seconds)',
         "setVariable('PanelHeight'"
     )) {
         if (-not $stateReader.Contains($token)) { Fail "StateReader.lua missing opportunity-list contract: $token" }
@@ -116,5 +122,5 @@ if ($errors.Count -gt 0) {
     Write-Host "Rainmeter opportunity skin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Rainmeter sortable opportunity surface + hidden popup host static validation passed.' -ForegroundColor Green
+Write-Host 'Rainmeter sortable opportunity surface + stable poll projection + hidden popup host validation passed.' -ForegroundColor Green
 exit 0
