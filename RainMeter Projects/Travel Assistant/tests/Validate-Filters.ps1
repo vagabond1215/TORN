@@ -72,7 +72,10 @@ if (Test-Path -LiteralPath $files.State) {
 
 if (Test-Path -LiteralPath $files.Opportunities) {
     $text = Get-Content -LiteralPath $files.Opportunities -Raw
-    foreach ($token in @('Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','grossProfit','expectedGross','optimalScore','elapsedSeconds','windowStartAt','Write-OpportunityProjection')) {
+    foreach ($token in @(
+        'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','grossProfit','expectedGross','optimalScore','elapsedSeconds','windowStartAt','Write-OpportunityProjection',
+        'Get-OptimalBarWaste','Test-OptimalWastePolicy','energyWastePolicy','nerveWastePolicy','$constraintsApply = [string]::IsNullOrWhiteSpace($fixedCountry)','Get-OpportunityWasteText'
+    )) {
         if (-not $text.Contains($token)) { Fail "OpportunityState.ps1 missing '$token'." }
     }
     foreach ($mode in @("sortMode -eq 'upcoming'","sortMode -eq 'profit'","sortMode -eq 'time'","optimalScore';Descending=$true")) {
@@ -83,7 +86,7 @@ if (Test-Path -LiteralPath $files.Opportunities) {
 
 if (Test-Path -LiteralPath $files.Settings) {
     $text = Get-Content -LiteralPath $files.Settings -Raw
-    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Ignore List...','Profile / API...')) {
+    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Ignore List...','Profile / API...','OPTIMAL is a sort')) {
         if (-not $text.Contains($token)) { Fail "OpenOptimizerSettings.ps1 missing '$token'." }
     }
 }
@@ -128,6 +131,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Opportunity filters, four explicit sort modes, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
+Write-Host 'Opportunity filters, four explicit sort modes, waste policies, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
 Write-Host 'OPTIMAL ranks expected gross value per elapsed hour; likelihood is folded into that score rather than exposed as a separate sort.'
 exit 0
