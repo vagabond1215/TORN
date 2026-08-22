@@ -23,8 +23,8 @@ Assert-Equal 'Japan selects Cherry as secondary visible item' ([int](Get-Visible
 $now = 2000000000L
 $engine = [pscustomobject]@{
     observedMarkets = [pscustomobject]@{
-        'united_kingdom:266' = [pscustomobject]@{ country='united_kingdom'; itemId=266; lastStock=80; lastForeignPrice=10000; source='prometheus'; sourceTimestamp=1999999940; catalogActive=$true }
-        'japan:277' = [pscustomobject]@{ country='japan'; itemId=277; lastStock=120; lastForeignPrice=500; source='prometheus'; sourceTimestamp=1999999940; catalogActive=$true }
+        'united_kingdom:266' = [pscustomobject]@{ country='united_kingdom'; itemId=266; lastStock=80; lastForeignPrice=10000; source='prometheus'; sourceTimestamp=1999999940; lastSeenAt=1999999945; catalogActive=$true }
+        'japan:277' = [pscustomobject]@{ country='japan'; itemId=277; lastStock=120; lastForeignPrice=500; source='prometheus'; sourceTimestamp=1999999940; lastSeenAt=1999999945; catalogActive=$true }
     }
     destinations = [pscustomobject]@{
         'united_kingdom:266' = [pscustomobject]@{ lastSellOutAt=0 }
@@ -51,7 +51,7 @@ Assert-Equal 'Nessie keeps provider stock' ([int]$nessieView.stock) 80
 Assert-Equal 'Nessie keeps foreign shop price' ([long]$nessieView.foreignPrice) 10000
 Assert-Equal 'Nessie exposes Torn market value' ([long]$nessieView.marketValue) 65000
 Assert-Equal 'Toy Shop applies Plushie category capacity' ([int]$nessieView.capacity) 23
-Assert-Equal 'Profitable fresh Nessie row is green-class eligible' ([string]$nessieView.priceClass) 'GOOD'
+Assert-Equal 'Profitable fresh Nessie card is green-class eligible' ([string]$nessieView.priceClass) 'GOOD'
 
 $flowerProfile = Get-TravelProfile -BaseSettings $settings -LocalSettings ([pscustomobject]@{ travelProfile=[pscustomobject]@{
     companyType='flower_shop'; companyStars=7; currentCapacityKnown=$true; currentCapacityMode='airstrip'; currentCapacity=18; currentCapacityBonus=3; currentCapacitySyncedAt=$now
@@ -72,10 +72,27 @@ $legacyEngine = $engine | ConvertTo-Json -Depth 10 | ConvertFrom-Json
 $legacyEngine.observedMarkets.'united_kingdom:266' | Add-Member NoteProperty catalogStatus 'legacy_removed' -Force
 $legacyEngine.observedMarkets.'united_kingdom:266'.catalogActive = $false
 $legacyView = Get-VisibleSecondaryPresentation -Country $uk -Item $nessie -EngineState $legacyEngine -TravelProfile $toyProfile -PerksConfig $perks -Profitability $profitability -TravelMode 'airstrip' -NowEpoch $now
-Assert-True 'Inactive market is suppressed from visible secondary row' (-not [bool]$legacyView.visible)
+Assert-True 'Inactive market is suppressed from visible item card' (-not [bool]$legacyView.visible)
 
 $primaryResale = Get-VisibleItemsResaleSnapshot -EngineState $engine -ItemId 206 -NowEpoch $now
 Assert-Equal 'Primary Xanax market reference is exposed from shared resale cache' ([long]$primaryResale.price) 850000
+
+$graphMarket = [pscustomobject]@{
+    lastStock=42
+    lastForeignPrice=1234
+    source='prometheus'
+    sourceTimestamp=$now - 30
+    lastSeenAt=$now - 20
+}
+$graphRows = @(Get-VisibleItemGraphRows -CountryId 'fixture_country' -ItemId 999999 -Cutoff ($now - 3600) -Market $graphMarket)
+Assert-Equal 'Graph snapshot adds one current provider observation for an otherwise unknown fixture market' $graphRows.Count 1
+Assert-Equal 'Graph snapshot keeps source timestamp instead of inventing now-time history' ([long]$graphRows[0].timestamp) ($now - 30)
+Assert-Equal 'Graph snapshot keeps current stock' ([int]$graphRows[0].stock) 42
+
+$state = @{}
+Set-VisibleSecondaryState -State $state -Prefix 'UK' -Presentation $nessieView
+Assert-Equal 'UK secondary card owns an item-specific graph name' ([string]$state['UKSecondaryGraphName']) 'uk-266-stock.png'
+Assert-Equal 'UK secondary state remains independently visible' ([int]$state['UKSecondaryVisible']) 1
 
 Write-Host 'Visible-item presentation tests passed.' -ForegroundColor Green
 exit 0
