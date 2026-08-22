@@ -16,7 +16,7 @@ This directory separates durable architecture from the active implementation han
 ## Instruction precedence
 
 - `AGENTS.md` invariants/safety always apply.
-- an **ACTIVE** `NEXT_CODEX_RUN.md` controls the current implementation/acceptance scope.
+- an **ACTIVE** `NEXT_CODEX_RUN.md` controls current implementation/acceptance scope.
 - `ARCHITECTURE.md` controls durable structure unless the active run intentionally changes and updates it.
 - `IMPLEMENTATION_STATUS.md` records evidence, not future authority.
 - provider/bootstrap docs do not override architecture/safety.
@@ -24,7 +24,7 @@ This directory separates durable architecture from the active implementation han
 
 ## Current project state
 
-Accepted data foundation at the last target-Windows check:
+Recorded data foundation at the last target-Windows check:
 
 ```text
 11 foreign countries
@@ -35,22 +35,18 @@ Accepted data foundation at the last target-Windows check:
 5 verified legacy relationships
 ```
 
-The active **0.6.0 candidate** uses the opportunity list as the primary surface with transparent selectable ordering rather than a replacement route card or hidden composite score.
+The active **0.6.0 candidate** is now a compact opportunity-card surface:
 
-Current primary behavior:
+- `NAME`, `UPCOMING`, `GROSS PROFIT`, `PROFIT/HR` sort locally/immediately;
+- no user-facing OPTIMAL score or row place numbers;
+- fresh current in-stock rows stay visible even when likelihood is `LEARNING`;
+- each card uses a destination flag rail with a white elapsed-time strip;
+- country name/code and duplicate elapsed time are removed from the card body;
+- gross is displayed as a bare dollar amount, while quantity remains available in tooltip/internal projection;
+- each row has a `v`/`^` control for a one-at-a-time **inline 8-hour graph**;
+- `VIEWER >` remains a separate standalone market browser;
+- inline and standalone graphs are local-only and share retained observation truth;
+- 48h raw / 90d completed-cycle retention remains independent of the 8h display;
+- background `OptimalRoute.ps1` remains compatibility/MV-priority infrastructure only.
 
-- up to eight evidence-backed country/item opportunities;
-- persistent Item/Trip/Country/Category filters;
-- `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR` orderings;
-- hit likelihood displayed independently rather than folded into a hidden ranking score;
-- gross trip profit shown with explicit modeled purchase quantity;
-- `PROFIT/HR` = gross trip profit / total elapsed hours;
-- current/future window timing plus leave timing, likelihood, elapsed time, foreign price and MV in each row;
-- Energy/Nerve waste constraints for new outbound opportunities;
-- stable `country:itemId` graph actions;
-- 8-hour on-demand graphs with hourly markers and left-edge carry-forward;
-- change-only retention baseline preservation;
-- refresh-stable opportunity projection and enlarged text-control hitboxes;
-- background route optimizer retained only for compatibility and MV-priority work.
-
-This 0.6 candidate is pending target-Windows/Rainmeter acceptance. See `NEXT_CODEX_RUN.md` for the exact focused acceptance commands.
+This candidate is pending target-Windows/Rainmeter acceptance. See `NEXT_CODEX_RUN.md` for the focused acceptance commands and current visual checklist.
