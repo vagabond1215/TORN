@@ -5,32 +5,13 @@
       "id": "united_kingdom",
       "name": "United Kingdom",
       "city": "London",
+      "tripBand": "medium",
       "enabled": true,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "uni",
-        "yata": "uni",
-        "droqsdb": "United Kingdom",
-        "weav3r": "United Kingdom"
-      },
-      "travelSeconds": {
-        "standard": 9060,
-        "airstrip": 6360,
-        "wlt": 4560,
-        "business": 2700
-      },
-      "travelCosts": {
-        "standard": 18000,
-        "airstrip": 0,
-        "wlt": 0,
-        "business": null
-      },
-      "baseTravelCapacity": {
-        "standard": 10,
-        "airstrip": 15,
-        "wlt": 15,
-        "business": 15
-      },
+      "providerCodes": { "prometheus": "uni", "yata": "uni", "droqsdb": "United Kingdom", "weav3r": "United Kingdom" },
+      "travelSeconds": { "standard": 9060, "airstrip": 6360, "wlt": 4560, "business": 2700 },
+      "travelCosts": { "standard": 18000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
       "travelTimeSource": "https://wiki.torn.com/wiki/United_Kingdom",
       "travelTimeVerifiedAt": "2026-08-19",
       "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
@@ -40,32 +21,13 @@
       "id": "japan",
       "name": "Japan",
       "city": "Tokyo",
+      "tripBand": "long",
       "enabled": true,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "jap",
-        "yata": "jap",
-        "droqsdb": "Japan",
-        "weav3r": "Japan"
-      },
-      "travelSeconds": {
-        "standard": 12780,
-        "airstrip": 8940,
-        "wlt": 6420,
-        "business": 3840
-      },
-      "travelCosts": {
-        "standard": 32000,
-        "airstrip": 0,
-        "wlt": 0,
-        "business": null
-      },
-      "baseTravelCapacity": {
-        "standard": 10,
-        "airstrip": 15,
-        "wlt": 15,
-        "business": 15
-      },
+      "providerCodes": { "prometheus": "jap", "yata": "jap", "droqsdb": "Japan", "weav3r": "Japan" },
+      "travelSeconds": { "standard": 12780, "airstrip": 8940, "wlt": 6420, "business": 3840 },
+      "travelCosts": { "standard": 32000, "airstrip": 0, "wlt": 0, "business": null },
+      "baseTravelCapacity": { "standard": 10, "airstrip": 15, "wlt": 15, "business": 15 },
       "travelTimeSource": "https://wiki.torn.com/wiki/Japan",
       "travelTimeVerifiedAt": "2026-08-19",
       "travelEconomicsSource": "https://wiki.torn.com/wiki/Travel",
@@ -74,92 +36,74 @@
     {
       "id": "mexico",
       "name": "Mexico",
+      "tripBand": "short",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "mex",
-        "yata": "mex"
-      }
+      "providerCodes": { "prometheus": "mex", "yata": "mex" }
     },
     {
       "id": "cayman_islands",
       "name": "Cayman Islands",
+      "tripBand": "short",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "cay",
-        "yata": "cay"
-      }
+      "providerCodes": { "prometheus": "cay", "yata": "cay" }
     },
     {
       "id": "canada",
       "name": "Canada",
+      "tripBand": "short",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "can",
-        "yata": "can"
-      }
+      "providerCodes": { "prometheus": "can", "yata": "can" }
     },
     {
       "id": "hawaii",
       "name": "Hawaii",
+      "tripBand": "medium",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "haw",
-        "yata": "haw"
-      }
+      "providerCodes": { "prometheus": "haw", "yata": "haw" }
     },
     {
       "id": "argentina",
       "name": "Argentina",
+      "tripBand": "medium",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "arg",
-        "yata": "arg"
-      }
+      "providerCodes": { "prometheus": "arg", "yata": "arg" }
     },
     {
       "id": "switzerland",
       "name": "Switzerland",
+      "tripBand": "medium",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "swi",
-        "yata": "swi"
-      }
+      "providerCodes": { "prometheus": "swi", "yata": "swi" }
     },
     {
       "id": "china",
       "name": "China",
+      "tripBand": "long",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "chi",
-        "yata": "chi"
-      }
+      "providerCodes": { "prometheus": "chi", "yata": "chi" }
     },
     {
       "id": "united_arab_emirates",
       "name": "United Arab Emirates",
+      "tripBand": "long",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "uae",
-        "yata": "uae"
-      }
+      "providerCodes": { "prometheus": "uae", "yata": "uae" }
     },
     {
       "id": "south_africa",
       "name": "South Africa",
+      "tripBand": "long",
       "enabled": false,
       "collect": true,
-      "providerCodes": {
-        "prometheus": "sou",
-        "yata": "sou"
-      }
+      "providerCodes": { "prometheus": "sou", "yata": "sou" }
     }
   ]
 }
