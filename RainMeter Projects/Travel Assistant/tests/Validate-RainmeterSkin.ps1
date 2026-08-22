@@ -30,7 +30,7 @@ if ($settingsBody -notmatch '(?im)^Parameter=.*LaunchOptimizerSettings\.ps1') { 
 $popupBody=[regex]::Match($ini,'(?ms)^\[MeasureFilterPopup\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($popupBody -notmatch '(?im)^Parameter=.*LaunchFilterPopup\.ps1.*#FilterRequest#') { Fail 'Filter popup must use its detached launcher and dynamic request.' }
 $viewerBody=[regex]::Match($ini,'(?ms)^\[MeasureItemViewer\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-if ($viewerBody -notmatch '(?im)^Parameter=.*LaunchItemViewer\.ps1.*-MarketKey.*#ViewerMarketKey#') { Fail 'Item viewer/inline history transport must route through the stable market-key launcher.' }
+if ($viewerBody -notmatch '(?im)^Parameter=.*LaunchItemViewer\.ps1.*-MarketKey.*#ViewerMarketKey#') { Fail 'Viewer/inline transport must route through its stable market-key launcher.' }
 $prefBody=[regex]::Match($ini,'(?ms)^\[MeasurePreferenceAction\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($prefBody -notmatch '(?im)^Parameter=.*FilterPreferences\.ps1.*#PreferenceAction#.*#PreferenceValue#') { Fail 'Quick actions must route through FilterPreferences.ps1.' }
 
@@ -62,18 +62,19 @@ else {
     [void][System.Management.Automation.Language.Parser]::ParseFile($inlineRendererPath,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in RenderInlineGraph.ps1: $($parseError.Message)" }
     $renderer=Get-Content -LiteralPath $inlineRendererPath -Raw
-    foreach($token in @('RuntimeObservationFile','SeedObservationFile','GraphPath','history_bootstrap','display_carry','inline-graph-','PointCount','ChangeCount')) {
+    foreach($token in @('RuntimeObservationFile','SeedObservationFile','GraphPath','MaxStock','history_bootstrap','display_carry','inline-graph-','[System.IO.File]::ReadLines')) {
         if(-not $renderer.Contains($token)){Fail "Inline renderer missing '$token'."}
+    }
+    foreach($retired in @('PointCount','ChangeCount','H STOCK  |','retained point(s)','change(s)')) {
+        if($renderer.Contains($retired)){Fail "Inline renderer retains retired visible summary token '$retired'."}
     }
     if($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt'){Fail 'Inline graph renderer must remain local-only.'}
 }
 
 if (Test-Path -LiteralPath $viewerLauncherPath) {
     $launcher=Get-Content -LiteralPath $viewerLauncherPath -Raw
-    foreach($token in @('`$inlinePrefix = ''inline_''','RenderInlineGraph.ps1','& $renderer -MarketKey $actualKey','-Popup ItemViewer')) {
-        $expected=$token
-        if($expected.StartsWith('`$')){$expected=$expected.Substring(1)}
-        if(-not $launcher.Contains($expected)){Fail "LaunchItemViewer.ps1 missing separate inline/popup routing token '$expected'."}
+    foreach($token in @('$inlinePrefix = ''inline_''','RenderInlineGraph.ps1','& $renderer -MarketKey $actualKey','exit 0','-Popup ItemViewer')) {
+        if(-not $launcher.Contains($token)){Fail "LaunchItemViewer.ps1 missing separate inline/popup routing token '$token'."}
     }
 }
 
@@ -122,15 +123,21 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
         'local function locallySortedProjection(data, mode)',
         'local function applyFlagForRow(index, key)',
         "country == 'canada'","country == 'japan'","country == 'united_kingdom'",
-        "setShape(meter,8,'Rectangle 4,32,36,14 | Fill Color 248,248,248,255",
-        "SKIN:Bang('!SetOption', p .. 'Rank', 'Text', '#Opportunity' .. i .. 'TimeText#')",
+        "SKIN:Bang('!SetOption', p .. 'Rank', 'FontColor', '#Muted#')",
+        "SKIN:Bang('!SetOption', p .. 'Rank', 'Text', safeText(data[prefix .. 'TimeText'], ''))",
         "SKIN:Bang('!SetOption', 'MeterOpportunity' .. index .. 'Gross', 'Text', grossText)",
         "SKIN:Bang('!SetOption', p .. 'Graph', 'Text', 'v')",
         'function ToggleInlineGraph(index)',
-        "setVariable('ViewerMarketKey', 'inline_' .. key)",
+        'local function runViewerMeasure(marketKey)',
+        "SKIN:Bang('!UpdateMeasure', 'MeasureItemViewer')",
+        "runViewerMeasure('inline_' .. key)",
         'local function applyGraphShapes(index, spec)',
-        "setShape(meter,18,'Path GraphPath",
-        "summary = 'Loading 8-hour stock history...'",
+        "setShape(meter,15,'Line 103.5,76,103.5,150",
+        "setShape(meter,21,'Line 460.5,76,460.5,150",
+        "setShape(meter,23,'Path GraphPath",
+        "SKIN:Bang('!SetOption', p .. 'Optimal', 'Text', '0')",
+        "SKIN:Bang('!SetOption', p .. 'Time', 'Text', '-8h')",
+        'formatInteger(spec.MaxStock)',
         'expandedKey','expandedRow','graphExtra',
         'function OpenViewer(marketKey)',
         'function OpenFilter(filterName)',
@@ -139,10 +146,16 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
         'local function deferPolling(seconds)',
         "setVariable('PanelHeight'"
     )) {
-        if (-not $stateReader.Contains($token)) { Fail "StateReader.lua missing compact-card contract: $token" }
+        if (-not $stateReader.Contains($token)) { Fail "StateReader.lua missing compact-card/chart contract: $token" }
     }
-    foreach ($retiredToken in @("display = display .. ' gross'","display = display .. ' ' .. quantityText")) {
-        if ($stateReader.Contains($retiredToken)) { Fail "StateReader.lua retains retired card-label behavior '$retiredToken'." }
+    foreach ($retiredToken in @(
+        "setShape(meter,8,'Rectangle 4,32,36,14 | Fill Color 248,248,248,255",
+        "summary = 'Loading 8-hour stock history...'",
+        "'Text', 'now'",
+        "display = display .. ' gross'",
+        "display = display .. ' ' .. quantityText"
+    )) {
+        if ($stateReader.Contains($retiredToken)) { Fail "StateReader.lua retains retired card/chart behavior '$retiredToken'." }
     }
 }
 
@@ -151,5 +164,5 @@ if ($errors.Count -gt 0) {
     Write-Host "Rainmeter opportunity skin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Rainmeter compact opportunity cards, country flag rails, exclusive inline 8-hour graph expansion, immediate sorting, and separate Viewer validation passed.' -ForegroundColor Green
+Write-Host 'Rainmeter compact flag cards, direct inline-only chevron history, hourly 8-hour grid, sparse axis labels, immediate sorting, and separate Viewer validation passed.' -ForegroundColor Green
 exit 0
