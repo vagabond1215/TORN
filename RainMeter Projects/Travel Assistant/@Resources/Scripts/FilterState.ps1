@@ -7,8 +7,10 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
+$RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
+$EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 
 function Read-FilterStateKv {
     param([string]$Path)
@@ -22,6 +24,14 @@ function Read-FilterStateKv {
         $values[$key] = $line.Substring($i + 1).Trim()
     }
     return $values
+}
+
+function Read-FilterStateJson {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+    return ($raw | ConvertFrom-Json)
 }
 
 function Write-FilterStateKvAtomic {
@@ -55,11 +65,29 @@ function Get-FilterStateCategoryText {
     return ('{0} cats' -f $count)
 }
 
+function Get-OldestActiveMarketSourceTimestamp {
+    param([object]$Engine)
+    if ($null -eq $Engine -or -not $Engine.PSObject.Properties['observedMarkets']) { return 0L }
+    $oldest = 0L
+    foreach ($property in @($Engine.observedMarkets.PSObject.Properties)) {
+        $market = $property.Value
+        if ($null -eq $market) { continue }
+        if (($market.PSObject.Properties['catalogActive'] -and $market.catalogActive -eq $false) -or
+            ($market.PSObject.Properties['catalogStatus'] -and [string]$market.catalogStatus -eq 'legacy_removed')) { continue }
+        if (-not $market.PSObject.Properties['sourceTimestamp']) { continue }
+        $timestamp = [long]$market.sourceTimestamp
+        if ($timestamp -le 0) { continue }
+        if ($oldest -le 0 -or $timestamp -lt $oldest) { $oldest = $timestamp }
+    }
+    return $oldest
+}
+
 if ($SkipMain) { return }
 
 $state = Read-FilterStateKv $StateKvFile
 if ($state.Count -eq 0) { return }
 $prefs = Read-UiPreferences
+$engine = Read-FilterStateJson $EngineStateFile
 
 $state['UIItemFilterAll'] = if ([bool]$prefs.itemFilterAll) { 1 } else { 0 }
 $state['UISelectedItemIds'] = (@($prefs.selectedItemIds | ForEach-Object { [string][int]$_ }) -join ',')
@@ -69,6 +97,7 @@ $state['UICategoryFilterAll'] = if ([bool]$prefs.categoryFilterAll) { 1 } else {
 $state['UISelectedCategories'] = (@($prefs.selectedCategories | ForEach-Object { [string]$_ }) -join '|')
 $state['UIShowProfitableOnly'] = if ([bool]$prefs.showProfitableOnly) { 1 } else { 0 }
 $state['UIIgnoredItemIds'] = (@($prefs.ignoredItemIds | ForEach-Object { [string][int]$_ }) -join ',')
+$state['UIOldestMarketSourceTimestamp'] = Get-OldestActiveMarketSourceTimestamp -Engine $engine
 
 # Pin state is intentionally not mirrored through state.kv. StateReader owns the
 # live pin and persists it directly to ignored preferences.json. Projecting an
