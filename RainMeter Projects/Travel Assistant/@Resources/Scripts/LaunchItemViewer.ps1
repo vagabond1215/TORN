@@ -11,10 +11,11 @@ $target = Join-Path $PSScriptRoot 'OpenItemViewer.ps1'
 if (-not (Test-Path -LiteralPath $target)) { throw 'OpenItemViewer.ps1 is missing.' }
 if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
 
+$quotedTarget = '"' + $target.Replace('"','\"') + '"'
 $arguments = @(
     '-NoProfile',
     '-ExecutionPolicy','Bypass',
-    '-File',$target,
+    '-File',$quotedTarget,
     '-Row',[string]$Row,
     '-MarketKey',$MarketKey
 )
