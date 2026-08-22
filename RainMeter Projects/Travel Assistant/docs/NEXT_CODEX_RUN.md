@@ -1,164 +1,77 @@
-# Next Codex Run: Minimalist Optimal Next-Trip View
+# Next Codex Run: Ranked Opportunity Surface
 
-**Status: ACTIVE — PENDING TARGET-WINDOWS / RAINMETER ACCEPTANCE**
+**Status: ACTIVE — 0.6.0 PENDING TARGET-WINDOWS / RAINMETER ACCEPTANCE**
 
-## Accepted baseline before this candidate
+## Product correction
 
-Already accepted on the target Windows machine:
+The 0.5 single `OPTIMAL` route card was rejected as the primary UI. The intended product is the opportunity surface with optimizer intelligence layered onto its ordering.
 
-```text
-11-country shadow collection
-232 provider country-item rows
-232/232 provider names
-202 distinct item IDs
-202/202 categories resolved
-5 verified legacy rows
-227 active country-item markets
-bounded one-request broad Torn Item Market queue
-category-aware capacity
-Airstrip general/Xanax capacity 18
-Standard general/Xanax capacity 13
-```
+`OPTIMAL` is a sort mode, not a separate screen.
 
-The earlier multi-card UI is no longer the target product.
-
-## Current candidate: 0.5.0
-
-Main UI is now one minimalist next-trip recommendation:
+Current main view:
 
 ```text
 Travel                                      SETTINGS >
 Updated ...
 
 ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
+SORT  OPTIMAL  UPCOMING  PROFIT  TIME                 VIEWER >
 
-OPTIMAL • <destination>              <expected value>
-<arrival/out time> • <used/capacity> • <hit chance> • E loss • N loss
-<item>          xN   <foreign price> (<Torn MV>)   <arrival probability>
-[additional purchase rows only if required]
+#1  OPTIMAL  <item>   <country>                     <gross>
+    <window>  <leave>  <hit likelihood>  <elapsed>  <foreign> (<MV>)  GRAPH
+#2           <item>   <country>                     <gross>
+    ...
 ```
 
-No UK/JP default card stack and no default stock graphs.
+Up to eight evidence-backed opportunities are shown.
 
-### Value basis
+## Ordering semantics
 
-Default:
+- `OPTIMAL`: `(gross trip profit × modeled hit probability) / total elapsed hours`.
+- `UPCOMING`: earliest current/modeled stock window first.
+- `PROFIT`: highest gross trip profit first.
+- `TIME`: shortest total elapsed opportunity first.
+- There is **no separate Chance sort**. Hit likelihood is displayed and folded into `OPTIMAL`.
+- The globally best optimal opportunity remains marked `OPTIMAL` even while another ordering is selected.
 
-```text
-100% Torn MV = itemmarket.item.average_price
-no Item Market fee deduction
-no minimum-profit timing gate
-no minimum-margin timing gate
-```
+Gross profit is item resale spread × modeled purchasable quantity and intentionally does not subtract travel cost. Total elapsed time includes required wait, outbound travel, return travel, and purchase buffer; a current return leg is included before the next outbound opportunity.
 
-Optional Settings toggle:
+## Opportunity evidence
 
-```text
-Use 95% MV profit calculation
-```
-
-It is OFF by default.
-
-Price color:
-
-```text
-foreign <= selected MV basis -> green
-foreign >  selected MV basis -> red
-```
-
-Negative-value items remain legal unless `Show profitable items only` is enabled.
-
-Legacy `FinalizeState` economics are informational only and must not rewrite timing status or clear timing fields.
-
-### Optimizer scope
-
-Current implementation selects the best **next trip**, not a full multi-trip sequence.
-
-It compares destination plans using:
-
-- current active foreign markets;
-- current foreign shop price;
-- cached Torn MV;
-- general/category capacity;
-- travel method/time/cost;
-- observed availability and restock history;
-- modeled chance stock is available on arrival;
-- Energy/Nerve waste policy;
-- Item/Trip/Country/Category filters;
-- Ignore List.
-
-Route score is expected trip value normalized by trip duration. Full future optimization across repeated short trips, fewer long trips, and mixed-country sequences remains later work.
-
-### Availability confidence
-
-- From Torn/home or while outbound, a currently stocked item is actionable only after enough completed availability cycles exist to estimate arrival survival.
-- If already abroad at the destination, fresh current stock is direct current-state evidence.
-- Sold-out forecasting requires completed restock-delay + availability evidence.
+- Fresh current stock uses the existing arrival-survival model.
+- Sold-out opportunities require completed sellout→restock plus availability evidence.
+- Upcoming windows come from overlap of completed historical live intervals after sellout.
+- Minimum availability samples remain controlled by optimizer settings.
 - Forecasts never become history.
 - Stale provider rows are excluded.
+- Unresolved foreign travel (`traveling_unknown` / `abroad_unknown`) fails closed in the primary opportunity projection.
 
-### Capacity
+## Energy / Nerve
 
-General capacity fills first. Matching category-only slots may then be used, e.g. qualifying Flower/Toy company bonuses.
-
-### Energy / Nerve
-
-Settings:
+The opportunity layer uses the same policies as the route model:
 
 ```text
-Energy Waste  Allowed | Forbidden | Limited
-Max Energy Loss
-
-Nerve Waste   Allowed | Forbidden | Limited
-Max Nerve Loss
+Energy Waste: Allowed | Forbidden | Limited
+Nerve Waste:  Allowed | Forbidden | Limited
 ```
 
-Rules:
+Energy stacked above natural maximum bypasses Energy restriction; Nerve has no equivalent bypass. Unknown bars fail safe under Forbidden/Limited. Constraints apply to new outbound opportunities but must not remove guidance after travel is committed to a recognized destination.
 
-- If Energy current is already above natural maximum, Energy restriction is bypassed.
-- Nerve never receives that stacking bypass.
-- Unknown bars fail safe under Forbidden/Limited.
-- Once already committed to a foreign destination, these constraints do not make destination purchase guidance disappear.
+## Graphs
 
-`TravelContext.ps1` obtains destination plus bars in one bounded request:
+Graphs remain part of the product as on-demand diagnostics:
 
-```text
-/v2/user?selections=travel,basic,bars
-```
+- every visible opportunity row has `GRAPH`;
+- `VIEWER >` opens the general market browser;
+- graph targeting uses stable `country:itemId`, not visible row number;
+- visible window is 8 hours with hourly markers;
+- last known observation before the cutoff is carried into the left edge;
+- 48h raw-learning and 90d completed-cycle retention remain independent;
+- graph viewing is local-only and consumes no provider/Torn API request.
 
-### Filters / Ignore List
+## Popups
 
-The bar remains:
-
-```text
-ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
-```
-
-Item/Category popups now enumerate the active local catalog rather than the retired four-card proof set.
-
-Trip taxonomy remains presentation-only:
-
-```text
-Short:  Mexico, Cayman Islands, Canada
-Medium: Hawaii, United Kingdom, Argentina, Switzerland
-Long:   Japan, China, UAE, South Africa
-```
-
-Ignore List uses the complete local metadata catalog. Ignored items are excluded from optimizer candidates and broad per-item MV requests but remain in shared provider stock/history collection.
-
-### Settings popup
-
-Main Settings opens the lightweight optimizer popup:
-
-```text
-[ ] Show profitable items only
-[ ] Use 95% MV profit calculation
-Energy Waste [Allowed/Forbidden/Limited]  Max Energy Loss
-Nerve Waste  [Allowed/Forbidden/Limited]  Max Nerve Loss
-[ Ignore List... ]  [ Profile / API... ]
-```
-
-`Profile / API...` opens the existing detailed capacity/company/API editor.
+Settings, Item/Country/Category filters, Ignore List, Profile/API, and Viewer are detached PowerShell/WinForms surfaces. Launcher script paths must remain explicitly quoted because the repository path contains spaces.
 
 ## Runtime order
 
@@ -168,21 +81,13 @@ ShadowCollector
 LocalCatalog
 FinalizeState
 TravelContext
-OptimalRoute
+OptimalRoute          # background route / pricing-priority model
+OpportunityState      # primary sortable UI projection
 FilterState
 heartbeat
 ResalePriority
 ResaleQueue
 ```
-
-Important:
-
-- `OptimalRoute.ps1` is local-only.
-- `VisibleItems.ps1` is not in production runtime.
-- `ItemMetadata.ps1` remains manual-only.
-- `ResalePriority.ps1` is local-only.
-- `ResaleQueue.ps1` remains the sole broad Item Market request path, max one request/update.
-- Optimizer MV blockers receive priority and a bounded five-minute failed-item retry policy; general catalog failures retain one-hour backoff.
 
 ## Target-Windows acceptance
 
@@ -194,92 +99,41 @@ git pull --ff-only origin main
 git rev-parse --short HEAD
 
 cd "C:\Codex\TORN\RainMeter Projects\Travel Assistant"
-```
-
-Run these focused static/deterministic checks:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-TravelAssistant.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-RainmeterSkin.ps1
+  -File .\tests\Run-CurrentAcceptance.ps1
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-Filters.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-TravelContext.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-TravelContextTests.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-OptimalRoute.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-OptimalRouteTests.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Validate-ResaleQueue.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-ResalePriorityTests.ps1
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tests\Run-FinalizeStateTests.ps1
-```
-
-Do not run the full aggregate suite unless one of these focused tests points to a broader compatibility regression.
-
-Then run one production update:
-
-```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
-```
-
-Inspect only non-secret runtime summaries:
-
-```powershell
-$e = Get-Content .\data\runtime\engine-state.json -Raw | ConvertFrom-Json
-$e.travelContext | Format-List state,destination,destinationCountryId,filterActive,lastSuccessAt,lastError
-$e.optimizer | Format-List
 
 Select-String .\@Resources\Generated\state.kv `
-  -Pattern '^(Optimal|Travel|Energy|Nerve)'
+  -Pattern '^(Opportunity|UIOldestMarketSourceTimestamp)'
+
+if (Test-Path .\data\runtime\opportunity-state-error.txt) {
+  Get-Content .\data\runtime\opportunity-state-error.txt
+}
 ```
 
-Expected characteristics:
+Then refresh Rainmeter and verify:
 
-- no parser errors;
-- `travelContext.lastError` empty after successful API call;
-- Energy/Nerve fields are present when Torn supplies bars;
-- optimizer records `lastRunAt`, MV basis, candidate route count, and either a selected country or learning reason;
-- if many active items still lack fresh MV, `pricingPriorityItemIds` may be populated and the UI may say the MV queue is learning;
-- this is normal and does not justify forcing hundreds of market requests.
+1. no single-route `OPTIMAL` card;
+2. ranked opportunity rows are visible when evidence supports them;
+3. `OPTIMAL`, `UPCOMING`, `PROFIT`, and `TIME` visibly reorder rows;
+4. there is no Chance sort;
+5. the globally best economic row retains its `OPTIMAL` badge under other sorts;
+6. Item/Country/Category filter popups open and update the list;
+7. `SETTINGS >` opens;
+8. `VIEWER >` opens;
+9. each row `GRAPH` opens the correct `country:itemId` graph;
+10. graphs span 8 hours with hourly markers and left-edge continuity;
+11. no controls or opportunity-row fields overlap;
+12. no persistent `ERROR` remains after a successful normal update.
 
-Refresh Rainmeter and verify visually:
+Send the acceptance output and a screenshot before marking 0.6 accepted.
 
-1. no four-card UK/Japan graph stack;
-2. filter bar remains directly under Updated;
-3. one compact Optimal route panel;
-4. only purchase rows needed by the selected route are visible;
-5. all item names share the same left alignment/font;
-6. price format is `$foreign ($MV)` with parenthesized MV smaller/muted;
-7. foreign price is green when <= selected MV basis, red otherwise;
-8. no LOW_MARGIN warning blocks the recommendation;
-9. Settings exposes Energy/Nerve policies, max loss controls, profitable-only, 95% MV, Ignore List, and Profile/API;
-10. outbound travel shows a locally ticking arrival countdown;
-11. while abroad, only the destination route is considered;
-12. no route message overlaps a visible purchase row.
+## After 0.6 acceptance
 
-Send test output plus a screenshot before marking 0.5 accepted.
-
-## Next after 0.5 acceptance
-
-1. observe the broad MV queue until enough active catalog items have fresh MV to make all-country ranking useful;
-2. refine availability probability/calibration from accumulating cycles;
-3. validate category-capacity mixed-item plans on real Flower/Toy profiles if available;
-4. add route diagnostics/tooltips only where they improve decisions without expanding the default surface;
-5. later implement the true bounded multi-trip scheduler comparing repeated short, fewer long, and mixed-country sequences.
+1. refine row density/visual hierarchy based on the real Rainmeter render;
+2. calibrate availability probabilities as more cycles accumulate;
+3. add optional browser notifications by consuming the accepted opportunity projection rather than duplicating timing logic;
+4. later consider bounded multi-trip sequencing as a separate optimization layer.
