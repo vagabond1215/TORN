@@ -3,7 +3,24 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
+$StateKvFile = Join-Path $GeneratedDir 'state.kv'
+
+# OpportunityState preserves and extends state.kv, so guarantee that it has a
+# minimal local bootstrap record even before another projector has populated it.
+New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
+$stateKvNeedsBootstrap = $true
+if (Test-Path -LiteralPath $StateKvFile) {
+    try {
+        $stateKvNeedsBootstrap = [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $StateKvFile -Raw -ErrorAction Stop))
+    } catch { $stateKvNeedsBootstrap = $true }
+}
+if ($stateKvNeedsBootstrap) {
+    $tmpState = $StateKvFile + '.tmp'
+    [System.IO.File]::WriteAllText($tmpState, "OpportunityBootstrap=1`r`n", [System.Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $tmpState -Destination $StateKvFile -Force
+}
 
 if (-not (Test-Path -LiteralPath $EngineStateFile)) { return }
 $raw = Get-Content -LiteralPath $EngineStateFile -Raw -ErrorAction Stop
