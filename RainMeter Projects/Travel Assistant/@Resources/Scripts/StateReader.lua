@@ -1,644 +1,225 @@
 local statePath = nil
 local heartbeatPath = nil
-local preferencesPath = nil
 local pollInterval = 60
 local failureRetryInterval = 15
 local failureRetryArmed = false
 local nextPollAt = nil
-local maxExpandedCards = 2
-local pinnedMarket = ''
-local travelFilterCountryId = ''
-
-local cardExpanded = { UKPrimary = true, UKSecondary = false, JPPrimary = true, JPSecondary = false }
-local secondaryVisible = { UK = false, JP = false }
-local restockWanted = { UK = false, JP = false }
-local cardProfitable = { UKPrimary=false, UKSecondary=false, JPPrimary=false, JPSecondary=false }
-local cardOrder = { 'UKPrimary', 'UKSecondary', 'JPPrimary', 'JPSecondary' }
-local cardVariablePrefix = { UKPrimary='UKCard', UKSecondary='UKSecondaryCard', JPPrimary='JPCard', JPSecondary='JPSecondaryCard' }
-local cardMarket = { UKPrimary='united_kingdom:206', UKSecondary='united_kingdom:266', JPPrimary='japan:206', JPSecondary='japan:277' }
-local cardCountry = { UKPrimary='united_kingdom', UKSecondary='united_kingdom', JPPrimary='japan', JPSecondary='japan' }
-local cardItemId = { UKPrimary=206, UKSecondary=266, JPPrimary=206, JPSecondary=277 }
-local cardCategory = { UKPrimary='Drug', UKSecondary='Plushie', JPPrimary='Drug', JPSecondary='Flower' }
-local cardTripBand = { UKPrimary='medium', UKSecondary='medium', JPPrimary='long', JPSecondary='long' }
-local primaryHeaderMeters = {
-    UKPrimary={ 'MeterUKCard','MeterUKFlag','MeterUKTitle','MeterUKPrice','MeterUKStockHeader','MeterUKExpand' },
-    JPPrimary={ 'MeterJPCard','MeterJPFlag','MeterJPTitle','MeterJPPrice','MeterJPStockHeader','MeterJPExpand' }
-}
-local pinActionMeters = {
-    UKPrimary={ 'MeterUKTitle','MeterUKExpand' }, UKSecondary={ 'MeterUKSecondaryTitle','MeterUKSecondaryExpand' },
-    JPPrimary={ 'MeterJPTitle','MeterJPExpand' }, JPSecondary={ 'MeterJPSecondaryTitle','MeterJPSecondaryExpand' }
-}
-
-local filterItemAll = true
-local filterItems = {}
-local filterTripBands = { short=true, medium=true, long=true }
-local filterCountries = nil
-local filterCategoryAll = true
-local filterCategories = {}
-local showProfitableOnly = false
-local ignoredItems = {}
 
 local function trim(s)
-    s = s:gsub('^\239\187\191', '')
+    s = tostring(s or ''):gsub('^\239\187\191', '')
     return (s:gsub('^%s+', ''):gsub('%s+$', ''))
+end
+
+local function number(v)
+    local n = tonumber(v)
+    if n == nil then return 0 end
+    return n
+end
+
+local function safeText(v, fallback)
+    local value = trim(v)
+    if value == '' then return fallback or '' end
+    return value:gsub('[\r\n]', ' ')
 end
 
 local function readState()
     local out = {}
-    local f = io.open(statePath, 'r')
-    if not f then return out end
-    for line in f:lines() do
-        local key,value=line:match('^([^=]+)=(.*)$')
-        if key then out[trim(key)] = trim(value or '') end
+    local file = io.open(statePath, 'r')
+    if not file then return out end
+    for line in file:lines() do
+        local key, value = line:match('^([^=]+)=(.*)$')
+        if key then out[trim(key)] = trim(value) end
     end
-    f:close()
+    file:close()
     return out
 end
 
 local function readEpochFile(path)
     if path == nil then return 0 end
-    local f=io.open(path,'r')
-    if not f then return 0 end
-    local raw=f:read('*a') or ''
-    f:close()
+    local file = io.open(path, 'r')
+    if not file then return 0 end
+    local raw = file:read('*a') or ''
+    file:close()
     return tonumber(trim(raw)) or 0
 end
 
-local function readPinnedPreference(path)
-    if path == nil then return '' end
-    local f=io.open(path,'r')
-    if not f then return '' end
-    local raw=f:read('*a') or ''
-    f:close()
-    local value=raw:match('"pinnedMarket"%s*:%s*"([^"]*)"') or ''
-    if value:match('^[a-z0-9_]+:[1-9][0-9]*$') then return value end
-    return ''
+local function setVariable(name, value)
+    SKIN:Bang('!SetVariable', name, tostring(value or ''))
 end
 
-local function writePinnedPreference(path, value)
-    if path == nil then return end
-    if value ~= '' and not value:match('^[a-z0-9_]+:[1-9][0-9]*$') then return end
-    local raw = ''
-    local f=io.open(path,'r')
-    if f then raw=f:read('*a') or ''; f:close() end
-    if trim(raw) == '' then raw='{"schemaVersion":2}' end
-    local replacement='"pinnedMarket": "' .. value .. '"'
-    local changed=0
-    raw,changed=raw:gsub('"pinnedMarket"%s*:%s*"[^"]*"',replacement,1)
-    if changed == 0 then
-        if raw:match('^%s*{%s*}%s*$') then raw='{"schemaVersion":2,"pinnedMarket":"' .. value .. '"}'
-        else raw=raw:gsub('}%s*$', ',\n  "pinnedMarket": "' .. value .. '"\n}') end
-    end
-    local tmp=path .. '.tmp'
-    local out=io.open(tmp,'w')
-    if not out then return end
-    out:write(raw)
-    out:close()
-    os.remove(path)
-    os.rename(tmp,path)
+local function setGroupVisible(group, visible)
+    if visible then SKIN:Bang('!ShowMeterGroup', group)
+    else SKIN:Bang('!HideMeterGroup', group) end
 end
 
-local function number(v)
-    local n=tonumber(v)
-    if n==nil then return 0 end
-    return n
-end
-
-local function parseSet(raw, separatorPattern, numericKeys)
-    local set = {}
-    if raw == nil or raw == '' then return set end
-    for token in tostring(raw):gmatch(separatorPattern) do
-        local value = trim(token)
-        if value ~= '' then
-            if numericKeys then
-                local n=tonumber(value)
-                if n~=nil then set[math.floor(n)] = true end
-            else
-                set[value] = true
-            end
-        end
-    end
-    return set
-end
-
-local function formatDuration(seconds)
-    seconds=math.max(0,math.floor(number(seconds)+0.5))
-    local h=math.floor(seconds/3600)
-    local m=math.floor((seconds%3600)/60)
-    local s=seconds%60
-    if h>0 then return string.format('%d:%02d:%02d',h,m,s) end
-    return string.format('%02d:%02d',m,s)
-end
-
-local function formatShortElapsed(seconds)
-    seconds=math.max(0,math.floor(number(seconds)))
-    if seconds<60 then return '<1m' end
-    if seconds<3600 then return string.format('%dm',math.floor(seconds/60)) end
-    if seconds<86400 then
-        local h=math.floor(seconds/3600)
-        local m=math.floor((seconds%3600)/60)
-        if m>0 then return string.format('%dh %dm',h,m) end
-        return string.format('%dh',h)
-    end
-    return string.format('%dd',math.floor(seconds/86400))
-end
-
-local function formatHoursMinutes(seconds)
-    seconds=math.max(0,math.floor(number(seconds)))
-    local total=math.floor(seconds/60)
-    return string.format('%d:%02d',math.floor(total/60),total%60)
-end
-
-local function formatInteger(value)
-    local s=tostring(math.floor(number(value)+0.5))
-    local sign,digits=s:match('^([%-]?)(%d+)$')
-    if not digits then return s end
-    local reversed=digits:reverse():gsub('(%d%d%d)','%1,'):reverse()
-    if reversed:sub(1,1)==',' then reversed=reversed:sub(2) end
-    return (sign or '')..reversed
-end
-
-local function formatMoney(value)
-    if number(value)<=0 then return '-' end
-    return '$'..formatInteger(value)
-end
-
-local function safeText(v,fallback)
-    if v==nil or v=='' then return fallback or '-' end
-    return v:gsub('[\r\n]',' ')
-end
-
-local function setVariable(name,value)
-    SKIN:Bang('!SetVariable',name,tostring(value or ''))
-end
-
-local function setMeterGroupVisible(group,visible)
-    if visible then SKIN:Bang('!ShowMeterGroup',group) else SKIN:Bang('!HideMeterGroup',group) end
-end
-
-local function setMeterVisible(meter,visible)
-    if visible then SKIN:Bang('!ShowMeter',meter) else SKIN:Bang('!HideMeter',meter) end
-end
-
-local function setRestockVisibility(prefix,visible)
-    local icon='Meter'..prefix..'RestockIcon'
-    local text='Meter'..prefix..'Restock'
-    if visible then
-        SKIN:Bang('!ShowMeter',icon)
-        SKIN:Bang('!ShowMeter',text)
-    else
-        SKIN:Bang('!HideMeter',icon)
-        SKIN:Bang('!HideMeter',text)
-    end
+local function formatCountdown(seconds)
+    seconds = math.max(0, math.floor(number(seconds)))
+    local h = math.floor(seconds / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    local s = seconds % 60
+    if h > 0 then return string.format('%d:%02d:%02d', h, m, s) end
+    return string.format('%02d:%02d', m, s)
 end
 
 local function providerLabel(provider)
-    if provider=='prometheus' then return 'Prometheus' end
-    if provider=='yata' then return 'YATA' end
-    if provider==nil or provider=='' or provider=='none' then return '' end
-    return provider
-end
-
-local function getStatusPresentation(status)
-    if status=='SAFE_WINDOW' then return '86,190,116,255',''
-    elseif status=='BEST_ODDS' or status=='LOW_MARGIN' then return '232,178,72,255',''
-    elseif status=='UNPROFITABLE' or status=='WINDOW_CLOSED' then return '224,90,90,255',''
-    elseif status=='STALE_DATA' then return '232,178,72,255','STALE DATA - CHECK WEAV3R'
-    elseif status=='SOURCE_DISAGREEMENT' then return '232,178,72,255','SOURCE ISSUE - CHECK WEAV3R'
-    elseif status=='PRICE_REGIME_UNVERIFIED' then return '232,178,72,255','PRICE REGIME UNVERIFIED - CHECK WEAV3R'
-    elseif status=='CHECK_EXTERNAL' then return '232,178,72,255','CHECK WEAV3R'
-    elseif status=='INSUFFICIENT_HISTORY' then return '145,152,164,255','LEARNING - CHECK WEAV3R' end
-    return '145,152,164,255',''
-end
-
-local function getPriceColor(data,prefix,status)
-    local profitRaw=data[prefix..'TripProfit']
-    local marginRaw=data[prefix..'TripMarginPercent']
-    local has=profitRaw~=nil and profitRaw~='' and marginRaw~=nil and marginRaw~=''
-    if has then
-        local profit=number(profitRaw)
-        local margin=number(marginRaw)
-        if profit<=0 or margin<=0 then return '224,90,90,255' end
-        if status=='LOW_MARGIN' then return '232,178,72,255' end
-        return '86,190,116,255'
-    end
-    if status=='UNPROFITABLE' then return '224,90,90,255' end
-    if status=='LOW_MARGIN' then return '232,178,72,255' end
-    return '145,152,164,255'
-end
-
-local function secondaryPriceColor(priceClass)
-    if priceClass=='GOOD' then return '86,190,116,255' end
-    if priceClass=='LOW_MARGIN' then return '232,178,72,255' end
-    if priceClass=='UNPROFITABLE' then return '224,90,90,255' end
-    return '145,152,164,255'
-end
-
-local function refreshFilters(data)
-    filterItemAll = data.UIItemFilterAll == nil or number(data.UIItemFilterAll) == 1
-    filterItems = parseSet(data.UISelectedItemIds,'[^,]+',true)
-
-    if data.UISelectedTripBands == nil then
-        filterTripBands = { short=true, medium=true, long=true }
-    else
-        filterTripBands = parseSet(data.UISelectedTripBands,'[^,]+',false)
-    end
-
-    if data.UISelectedCountryIds == nil then
-        filterCountries = nil
-    else
-        filterCountries = parseSet(data.UISelectedCountryIds,'[^,]+',false)
-    end
-
-    filterCategoryAll = data.UICategoryFilterAll == nil or number(data.UICategoryFilterAll) == 1
-    filterCategories = parseSet(data.UISelectedCategories,'[^|]+',false)
-    showProfitableOnly = number(data.UIShowProfitableOnly) == 1
-    ignoredItems = parseSet(data.UIIgnoredItemIds,'[^,]+',true)
-
-    if data.UIPinnedMarket ~= nil then pinnedMarket = safeText(data.UIPinnedMarket,'') end
-
-    setVariable('ItemFilterText',safeText(data.UIItemFilterText,'All'))
-    setVariable('CategoryFilterText',safeText(data.UICategoryFilterText,'All'))
-    setVariable('TripShortColor',number(data.UITripShortOn)==1 and '82,174,255,255' or '145,152,164,255')
-    setVariable('TripMediumColor',number(data.UITripMediumOn)==1 and '82,174,255,255' or '145,152,164,255')
-    setVariable('TripLongColor',number(data.UITripLongOn)==1 and '82,174,255,255' or '145,152,164,255')
-end
-
-local function baseCardVisible(cardKey)
-    if cardKey=='UKSecondary' then return secondaryVisible.UK end
-    if cardKey=='JPSecondary' then return secondaryVisible.JP end
-    return cardKey=='UKPrimary' or cardKey=='JPPrimary'
-end
-
-local function pinnedCardKey()
-    if pinnedMarket=='' then return nil end
-    for key,market in pairs(cardMarket) do if market==pinnedMarket then return key end end
-    return nil
-end
-
-local function isCardVisible(cardKey)
-    if not baseCardVisible(cardKey) then return false end
-    if travelFilterCountryId~='' and cardCountry[cardKey]~=travelFilterCountryId then return false end
-    if ignoredItems[cardItemId[cardKey]] then return false end
-
-    local pinKey=pinnedCardKey()
-    if pinKey==cardKey then return true end
-
-    if not filterItemAll and not filterItems[cardItemId[cardKey]] then return false end
-    if not filterTripBands[cardTripBand[cardKey]] then return false end
-    if filterCountries~=nil and not filterCountries[cardCountry[cardKey]] then return false end
-    if not filterCategoryAll and not filterCategories[cardCategory[cardKey]] then return false end
-    if showProfitableOnly and not cardProfitable[cardKey] then return false end
-    return true
-end
-
-local function countExpandedCards()
-    local count=0
-    for _,key in ipairs(cardOrder) do if isCardVisible(key) and cardExpanded[key] then count=count+1 end end
-    return count
-end
-
-local function collapseForRequestedCard(requested)
-    local pinKey=pinnedCardKey()
-    local prefix=requested:sub(1,2)
-    local companion=requested:find('Secondary',1,true) and (prefix..'Primary') or (prefix..'Secondary')
-    if companion~=requested and companion~=pinKey and isCardVisible(companion) and cardExpanded[companion] then
-        cardExpanded[companion]=false
-        return true
-    end
-    for _,key in ipairs(cardOrder) do
-        if key~=requested and key~=pinKey and isCardVisible(key) and cardExpanded[key] then
-            cardExpanded[key]=false
-            return true
-        end
-    end
-    return false
-end
-
-local function enforcePinnedExpansion()
-    local pinKey=pinnedCardKey()
-    if pinKey~=nil and isCardVisible(pinKey) then cardExpanded[pinKey]=true end
-    while countExpandedCards()>maxExpandedCards do
-        if not collapseForRequestedCard(pinKey or '') then break end
-    end
-end
-
-local function displayOrder()
-    local ordered={}
-    local pinKey=pinnedCardKey()
-    if pinKey~=nil and isCardVisible(pinKey) then table.insert(ordered,pinKey) end
-    for _,key in ipairs(cardOrder) do if key~=pinKey then table.insert(ordered,key) end end
-    return ordered
-end
-
-local function setHeaderVisibility(key,visible)
-    if primaryHeaderMeters[key]~=nil then
-        for _,meter in ipairs(primaryHeaderMeters[key]) do setMeterVisible(meter,visible) end
-    elseif key=='UKSecondary' then setMeterGroupVisible('UKSecondaryHeader',visible)
-    elseif key=='JPSecondary' then setMeterGroupVisible('JPSecondaryHeader',visible) end
-end
-
-local function setBodyVisibility(key,visible)
-    if key=='UKPrimary' then setMeterGroupVisible('UKPrimaryBody',visible)
-    elseif key=='JPPrimary' then setMeterGroupVisible('JPPrimaryBody',visible)
-    elseif key=='UKSecondary' then setMeterGroupVisible('UKSecondaryBody',visible)
-    elseif key=='JPSecondary' then setMeterGroupVisible('JPSecondaryBody',visible) end
-end
-
-local function expansionText(key)
-    if pinnedMarket~='' and cardMarket[key]==pinnedMarket then return '★' end
-    return cardExpanded[key] and 'v' or '>'
-end
-
-local function applyCardLayout()
-    enforcePinnedExpansion()
-    local top=88
-    local gap=8
-    local expandedHeight=182
-    local collapsedHeight=42
-    local y=top
-
-    for _,key in ipairs(displayOrder()) do
-        local variablePrefix=cardVariablePrefix[key]
-        if isCardVisible(key) then
-            local h=cardExpanded[key] and expandedHeight or collapsedHeight
-            setVariable(variablePrefix..'Y',y)
-            setVariable(variablePrefix..'Height',h)
-            setHeaderVisibility(key,true)
-            setBodyVisibility(key,cardExpanded[key])
-            if key=='UKPrimary' then setVariable('UKExpandText',expansionText(key))
-            elseif key=='JPPrimary' then setVariable('JPExpandText',expansionText(key))
-            elseif key=='UKSecondary' then setVariable('UKSecondaryExpandText',expansionText(key))
-            elseif key=='JPSecondary' then setVariable('JPSecondaryExpandText',expansionText(key)) end
-            y=y+h+gap
-        else
-            setVariable(variablePrefix..'Y',y)
-            setVariable(variablePrefix..'Height',0)
-            setHeaderVisibility(key,false)
-            setBodyVisibility(key,false)
-        end
-    end
-
-    setVariable('PanelHeight',y)
-    setRestockVisibility('UK',isCardVisible('UKPrimary') and cardExpanded.UKPrimary and restockWanted.UK)
-    setRestockVisibility('JP',isCardVisible('JPPrimary') and cardExpanded.JPPrimary and restockWanted.JP)
-end
-
-local function configurePinActions()
-    for key,meters in pairs(pinActionMeters) do
-        local action="[!CommandMeasure MeasureState \"TogglePin('"..key.."')\"]"
-        for _,meter in ipairs(meters) do SKIN:Bang('!SetOption',meter,'RightMouseUpAction',action) end
-    end
-end
-
-local function updateSecondaryItem(data,prefix)
-    local key=prefix..'Secondary'
-    local visible=number(data[prefix..'SecondaryVisible'])==1
-    secondaryVisible[prefix]=visible
-    if not visible then cardExpanded[key]=false; cardProfitable[key]=false; return end
-
-    local now=os.time()
-    local name=safeText(data[prefix..'SecondaryName'],'Item')
-    local category=safeText(data[prefix..'SecondaryCategory'],'')
-    local stock=number(data[prefix..'SecondaryStock'])
-    local foreignPrice=number(data[prefix..'SecondaryForeignPrice'])
-    local marketValue=number(data[prefix..'SecondaryMarketValue'])
-    local marketFetchedAt=number(data[prefix..'SecondaryMarketValueFetchedAt'])
-    local sourceTimestamp=number(data[prefix..'SecondarySourceTimestamp'])
-    local lastSoldOutAt=number(data[prefix..'SecondaryLastSoldOutAt'])
-    local capacity=number(data[prefix..'SecondaryCapacity'])
-    local tripProfit=number(data[prefix..'SecondaryTripProfit'])
-    local marketFresh=number(data[prefix..'SecondaryMarketValueFresh'])==1
-    local priceClass=safeText(data[prefix..'SecondaryPriceClass'],'UNKNOWN')
-    local graphName=safeText(data[prefix..'SecondaryGraphName'],'')
-    cardProfitable[key]=marketFresh and marketValue>0 and tripProfit>0
-
-    setVariable(prefix..'SecondaryName',name)
-    setVariable(prefix..'SecondaryPriceText',formatMoney(foreignPrice))
-    setVariable(prefix..'SecondaryMarketValueText',formatMoney(marketValue))
-    setVariable(prefix..'SecondaryPriceColor',secondaryPriceColor(priceClass))
-    setVariable(prefix..'SecondaryGraphName',graphName)
-
-    if stock>0 then setVariable(prefix..'SecondaryStockHeaderText','Stock: '..formatInteger(stock))
-    elseif lastSoldOutAt>0 then setVariable(prefix..'SecondaryStockHeaderText','Out of Stock for '..formatHoursMinutes(now-lastSoldOutAt)..' since '..os.date('%H:%M',lastSoldOutAt))
-    else setVariable(prefix..'SecondaryStockHeaderText','Out of Stock') end
-
-    local decision='Learning - no departure recommendation'
-    if marketValue<=0 then decision='Market value pending - no departure recommendation'
-    elseif priceClass=='UNPROFITABLE' then decision='Unprofitable - no departure recommendation'
-    elseif priceClass=='LOW_MARGIN' then decision='Low margin - no departure recommendation'
-    elseif priceClass=='GOOD' then decision='Economics positive - timing model learning' end
-    setVariable(prefix..'SecondaryDecisionText',decision)
-    setVariable(prefix..'SecondaryOverlayText','TIMING MODEL LEARNING')
-
-    local tooltip={name}
-    if category~='' then table.insert(tooltip,category) end
-    table.insert(tooltip,'Foreign '..formatMoney(foreignPrice))
-    if marketValue>0 then
-        local age=marketFetchedAt>0 and formatShortElapsed(now-marketFetchedAt) or 'unknown age'
-        table.insert(tooltip,'Torn market '..formatMoney(marketValue)..' ('..age..')')
-    else table.insert(tooltip,'Torn market value pending background pricing') end
-    if capacity>0 then table.insert(tooltip,'Capacity '..formatInteger(capacity)) end
-    if priceClass~='UNKNOWN' then table.insert(tooltip,'Trip net '..formatMoney(tripProfit)) end
-    if sourceTimestamp>0 then table.insert(tooltip,'Stock source '..formatShortElapsed(now-sourceTimestamp)..' old') end
-    table.insert(tooltip,'Departure timing is not enabled for this item yet')
-    setVariable(prefix..'SecondaryTooltipText',table.concat(tooltip,' | '))
-end
-
-local function updateDestination(data,prefix)
-    local key=prefix..'Primary'
-    local now=os.time()
-    local travelSeconds=number(data[prefix..'TravelSeconds'])
-    local stock=number(data[prefix..'Stock'])
-    local foreignPrice=number(data[prefix..'ForeignPrice'])
-    local marketValue=number(data[prefix..'MarketValue'])
-    local tripProfit=number(data[prefix..'TripProfit'])
-    local lastSoldOutAt=number(data[prefix..'LastSoldOutAt'])
-    local restockAt=number(data[prefix..'RestockEstimateAt'])
-    local windowOpenAt=number(data[prefix..'WindowOpenAt'])
-    local windowCloseAt=number(data[prefix..'WindowCloseAt'])
-    local bestDepartureAt=number(data[prefix..'BestDepartureAt'])
-    local hitRate=number(data[prefix..'HitRate'])
-    local status=safeText(data[prefix..'Status'],'INSUFFICIENT_HISTORY')
-    local message=safeText(data[prefix..'Message'],'')
-    local statusColor,overlayText=getStatusPresentation(status)
-    cardProfitable[key]=marketValue>0 and tripProfit>0
-
-    setVariable(prefix..'TravelText',formatDuration(travelSeconds))
-    setVariable(prefix..'StockText',formatInteger(stock))
-    setVariable(prefix..'PriceText',formatMoney(foreignPrice))
-    setVariable(prefix..'MarketValueText',formatMoney(marketValue))
-    setVariable(prefix..'PriceColor',getPriceColor(data,prefix,status))
-    setVariable(prefix..'StatusText',status:gsub('_',' '))
-    setVariable(prefix..'StatusColor',statusColor)
-    setVariable(prefix..'OverlayText',overlayText)
-
-    if stock>0 then setVariable(prefix..'StockHeaderText','Stock: '..formatInteger(stock))
-    elseif lastSoldOutAt>0 then setVariable(prefix..'StockHeaderText','Out of Stock for '..formatHoursMinutes(now-lastSoldOutAt)..' since '..os.date('%H:%M',lastSoldOutAt))
-    else setVariable(prefix..'StockHeaderText','Out of Stock') end
-
-    local restockText='learning'
-    local restockEta=0
-    if stock>0 and restockAt>0 and restockAt<=now then restockText='live +'..formatDuration(now-restockAt)
-    elseif restockAt>now then restockEta=restockAt-now; restockText='~'..formatDuration(restockEta)
-    elseif restockAt>0 then restockText='due / variable' end
-    setVariable(prefix..'RestockText',restockText)
-    restockWanted[prefix]=stock<=0 and restockEta>0 and travelSeconds>0 and restockEta>travelSeconds
-
-    local decision=message
-    if status=='SAFE_WINDOW' then
-        if windowOpenAt>now then decision='Window opens in '..formatDuration(windowOpenAt-now)
-        elseif windowCloseAt>now then decision='Leave before '..formatDuration(windowCloseAt-now)
-        else decision='Window closed' end
-    elseif status=='BEST_ODDS' then
-        if bestDepartureAt>now then decision='Leave in '..formatDuration(bestDepartureAt-now)
-        elseif bestDepartureAt>0 and bestDepartureAt>=(now-60) then decision='LEAVE NOW'
-        else decision=message~='' and message or 'Best window passed' end
-        if hitRate>0 then decision=decision..string.format(' | %.0f%% hist.',hitRate*100) end
-    elseif status=='LOW_MARGIN' or status=='UNPROFITABLE' then decision=message~='' and message or 'No departure recommendation'
-    elseif status=='STALE_DATA' then decision=message~='' and message or 'Data stale - check source'
-    elseif decision=='' then decision='Learning - no departure recommendation' end
-    setVariable(prefix..'DecisionText',decision)
-
-    local tooltip={decision}
-    if travelSeconds>0 then table.insert(tooltip,'Flight '..formatDuration(travelSeconds)) end
-    if marketValue>0 then table.insert(tooltip,'Torn market reference '..formatMoney(marketValue)) end
-    if restockAt>now then table.insert(tooltip,'Restock estimate '..formatDuration(restockAt-now)..' ('..os.date('%H:%M',restockAt)..')')
-    elseif stock>0 and restockAt>0 then table.insert(tooltip,'Current restock began '..formatShortElapsed(now-restockAt)..' ago ('..os.date('%H:%M',restockAt)..')')
-    elseif restockAt>0 then table.insert(tooltip,'Restock estimate due / variable ('..os.date('%H:%M',restockAt)..')') end
-    if stock<=0 and lastSoldOutAt>0 then table.insert(tooltip,'Sold out '..formatShortElapsed(now-lastSoldOutAt)..' ago ('..os.date('%H:%M',lastSoldOutAt)..')') end
-    table.insert(tooltip,'Departure/window timing uses retained availability and depletion history')
-    setVariable(prefix..'DecisionTooltipText',table.concat(tooltip,' | '))
+    if provider == 'prometheus' then return 'Prometheus' end
+    if provider == 'yata' then return 'YATA' end
+    return safeText(provider, '')
 end
 
 local function oldestSourceTimestamp(data)
-    local uk=number(data.UKSourceTimestamp)
-    local jp=number(data.JPSourceTimestamp)
-    if uk>0 and jp>0 then return math.min(uk,jp) end
-    if uk>0 then return uk end
-    if jp>0 then return jp end
-    return 0
+    local values = {}
+    for _, key in ipairs({'UKSourceTimestamp','JPSourceTimestamp'}) do
+        local value = number(data[key])
+        if value > 0 then table.insert(values, value) end
+    end
+    if #values == 0 then return 0 end
+    local oldest = values[1]
+    for i = 2, #values do if values[i] < oldest then oldest = values[i] end end
+    return oldest
 end
 
-local function updateHeartbeatText(data,now)
-    local remaining=0
-    if nextPollAt~=nil then remaining=math.max(0,nextPollAt-now) end
-    local sourceStatus=safeText(data.UpdatedText,'')
-    if sourceStatus:find('failed',1,true) then
-        setVariable('UpdatedText',sourceStatus..string.format(' | retry %ds',remaining))
+local function updateHeartbeatText(data, now)
+    local remaining = 0
+    if nextPollAt ~= nil then remaining = math.max(0, nextPollAt - now) end
+    local heartbeat = readEpochFile(heartbeatPath)
+    if heartbeat <= 0 then
+        setVariable('UpdatedText', string.format('Waiting for first update | next poll %ds', remaining))
         return
     end
-    local heartbeat=readEpochFile(heartbeatPath)
-    if heartbeat<=0 then
-        setVariable('UpdatedText',string.format('Waiting for first update | next poll %ds',remaining))
-        return
+    local provider = providerLabel(data.LiveProvider)
+    local sourceTimestamp = oldestSourceTimestamp(data)
+    local sourceText = ''
+    if provider ~= '' and sourceTimestamp > 0 then
+        sourceText = string.format(' | %s %ds old', provider, math.max(0, now - sourceTimestamp))
+    elseif provider ~= '' then
+        sourceText = ' | ' .. provider
     end
-    local provider=providerLabel(safeText(data.LiveProvider,''))
-    local sourceTimestamp=oldestSourceTimestamp(data)
-    local sourceText=''
-    if provider~='' and sourceTimestamp>0 then sourceText=string.format(' | %s %ds old',provider,math.max(0,now-sourceTimestamp))
-    elseif provider~='' then sourceText=' | '..provider end
-    local age=math.max(0,now-heartbeat)
-    if age>(pollInterval*2) then setVariable('UpdatedText',string.format('UPDATE STALE - last %s (%ds ago)%s | retry %ds',os.date('%H:%M:%S',heartbeat),age,sourceText,remaining))
-    else setVariable('UpdatedText',string.format('Updated %s%s | next poll %ds',os.date('%H:%M:%S',heartbeat),sourceText,remaining)) end
+    local age = math.max(0, now - heartbeat)
+    if age > pollInterval * 2 then
+        setVariable('UpdatedText', string.format('UPDATE STALE - last %s (%ds ago)%s | retry %ds', os.date('%H:%M:%S', heartbeat), age, sourceText, remaining))
+    else
+        setVariable('UpdatedText', string.format('Updated %s%s | next poll %ds', os.date('%H:%M:%S', heartbeat), sourceText, remaining))
+    end
+end
+
+local function updateFilters(data)
+    setVariable('ItemFilterText', safeText(data.UIItemFilterText, 'All'))
+    setVariable('CategoryFilterText', safeText(data.UICategoryFilterText, 'All'))
+    setVariable('TripShortColor', number(data.UITripShortOn) == 1 and '82,174,255,255' or '145,152,164,255')
+    setVariable('TripMediumColor', number(data.UITripMediumOn) == 1 and '82,174,255,255' or '145,152,164,255')
+    setVariable('TripLongColor', number(data.UITripLongOn) == 1 and '82,174,255,255' or '145,152,164,255')
+end
+
+local function updateOptimal(data, now)
+    local visible = number(data.OptimalVisible) == 1
+    local itemCount = math.max(0, math.min(8, math.floor(number(data.OptimalItemCount))))
+    if not visible then itemCount = 0 end
+
+    local title = 'OPTIMAL'
+    if visible then title = 'OPTIMAL  •  ' .. safeText(data.OptimalCountryName, 'Route') end
+    setVariable('OptimalTitleText', title)
+
+    local arrival = safeText(data.OptimalArrivalText, '')
+    if safeText(data.TravelState, '') == 'traveling' then
+        local arrivalAt = number(data.TravelArrivalAt)
+        if arrivalAt > now then arrival = 'arrive ' .. formatCountdown(arrivalAt - now) end
+    end
+
+    local metaParts = {}
+    for _, value in ipairs({
+        arrival,
+        safeText(data.OptimalCapacityText, ''),
+        safeText(data.OptimalChanceText, ''),
+        safeText(data.OptimalEnergyText, ''),
+        safeText(data.OptimalNerveText, '')
+    }) do
+        if value ~= '' then table.insert(metaParts, value) end
+    end
+    setVariable('OptimalMetaText', table.concat(metaParts, '  •  '))
+
+    local valueText = ''
+    if visible and safeText(data.OptimalExpectedProfitText, '') ~= '' then
+        valueText = safeText(data.OptimalExpectedProfitText, '') .. ' EV  @ ' .. safeText(data.OptimalProfitBasisText, '100% MV')
+    end
+    setVariable('OptimalValueText', valueText)
+    setVariable('OptimalMessageText', safeText(data.OptimalMessage, 'Learning current markets...'))
+
+    for i = 1, 8 do
+        local prefix = 'OptimalItem' .. i
+        setVariable(prefix .. 'Name', safeText(data[prefix .. 'Name'], ''))
+        setVariable(prefix .. 'QtyText', safeText(data[prefix .. 'QtyText'], ''))
+        setVariable(prefix .. 'PriceText', safeText(data[prefix .. 'PriceText'], '-'))
+        setVariable(prefix .. 'MarketValueText', safeText(data[prefix .. 'MarketValueText'], '-'))
+        setVariable(prefix .. 'ChanceText', safeText(data[prefix .. 'ChanceText'], ''))
+        setVariable(prefix .. 'PriceColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
+        setVariable(prefix .. 'Tooltip', safeText(data[prefix .. 'Tooltip'], ''))
+        setGroupVisible('OptimalItemRow' .. i, i <= itemCount)
+    end
+
+    -- Base route block is 76 px; every item row adds 28 px.
+    local routeHeight = 82 + itemCount * 28
+    if itemCount == 0 then routeHeight = 92 end
+    setVariable('RouteHeight', routeHeight)
+    setVariable('PanelHeight', 90 + routeHeight + 8)
 end
 
 function Initialize()
-    local configured=SELF:GetOption('StateFile','#@#Generated\\state.kv')
-    local heartbeatConfigured=SELF:GetOption('HeartbeatFile','#@#Generated\\last-update.txt')
-    local preferencesConfigured=SELF:GetOption('PreferencesFile','')
-    local configuredPoll=tonumber(SELF:GetOption('PollInterval','60')) or 60
-    local configuredFailureRetry=tonumber(SELF:GetOption('FailureRetryInterval','15')) or 15
-    local configuredMaxExpanded=tonumber(SELF:GetOption('MaxExpandedCards','2')) or 2
-    if configuredPoll<15 then configuredPoll=15 end
-    if configuredFailureRetry<5 then configuredFailureRetry=5 end
-    if configuredFailureRetry>configuredPoll then configuredFailureRetry=configuredPoll end
-    if configuredMaxExpanded<1 then configuredMaxExpanded=1 end
-    if configuredMaxExpanded>4 then configuredMaxExpanded=4 end
+    local configured = SELF:GetOption('StateFile', '#@#Generated\\state.kv')
+    local heartbeatConfigured = SELF:GetOption('HeartbeatFile', '#@#Generated\\last-update.txt')
+    local configuredPoll = tonumber(SELF:GetOption('PollInterval', '60')) or 60
+    local configuredFailureRetry = tonumber(SELF:GetOption('FailureRetryInterval', '15')) or 15
+    if configuredPoll < 15 then configuredPoll = 15 end
+    if configuredFailureRetry < 5 then configuredFailureRetry = 5 end
+    if configuredFailureRetry > configuredPoll then configuredFailureRetry = configuredPoll end
 
-    statePath=SKIN:MakePathAbsolute(configured)
-    heartbeatPath=SKIN:MakePathAbsolute(heartbeatConfigured)
-    if preferencesConfigured~='' then preferencesPath=SKIN:MakePathAbsolute(preferencesConfigured)
-    else preferencesPath=statePath:gsub('[\\/]@Resources[\\/]Generated[\\/]state%.kv$','\\data\\runtime\\preferences.json') end
-    pollInterval=math.floor(configuredPoll)
-    failureRetryInterval=math.floor(configuredFailureRetry)
-    maxExpandedCards=math.floor(configuredMaxExpanded)
-    failureRetryArmed=false
-    nextPollAt=os.time()+pollInterval
-    pinnedMarket=readPinnedPreference(preferencesPath)
-    cardExpanded.UKPrimary=maxExpandedCards>=1
-    cardExpanded.JPPrimary=maxExpandedCards>=2
-    cardExpanded.UKSecondary=false
-    cardExpanded.JPSecondary=false
-    configurePinActions()
-end
-
-function ToggleCard(cardKey)
-    if cardExpanded[cardKey]==nil or not isCardVisible(cardKey) then return end
-    local pinKey=pinnedCardKey()
-    if cardExpanded[cardKey] then
-        if cardKey==pinKey then return end
-        cardExpanded[cardKey]=false
-    else
-        if countExpandedCards()>=maxExpandedCards and not collapseForRequestedCard(cardKey) then return end
-        cardExpanded[cardKey]=true
-    end
-    applyCardLayout()
-    SKIN:Bang('!UpdateMeter','*')
-    SKIN:Bang('!Redraw')
-end
-
-function TogglePin(cardKey)
-    if cardMarket[cardKey]==nil or not baseCardVisible(cardKey) then return end
-    local market=cardMarket[cardKey]
-    if pinnedMarket==market then pinnedMarket='' else pinnedMarket=market; cardExpanded[cardKey]=true end
-    writePinnedPreference(preferencesPath,pinnedMarket)
-    applyCardLayout()
-    SKIN:Bang('!UpdateMeter','*')
-    SKIN:Bang('!Redraw')
+    statePath = SKIN:MakePathAbsolute(configured)
+    heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
+    pollInterval = math.floor(configuredPoll)
+    failureRetryInterval = math.floor(configuredFailureRetry)
+    failureRetryArmed = false
+    nextPollAt = os.time() + pollInterval
 end
 
 function OpenFilter(filterName)
-    setVariable('FilterRequest',filterName)
-    SKIN:Bang('!CommandMeasure','MeasureFilterPopup','Run')
+    setVariable('FilterRequest', filterName)
+    SKIN:Bang('!CommandMeasure', 'MeasureFilterPopup', 'Run')
 end
 
 function ToggleTripBand(band)
-    setVariable('PreferenceAction','ToggleTripBand')
-    setVariable('PreferenceValue',band)
-    SKIN:Bang('!CommandMeasure','MeasurePreferenceAction','Run')
+    setVariable('PreferenceAction', 'ToggleTripBand')
+    setVariable('PreferenceValue', band)
+    SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
 end
 
 function ResetFilters()
-    setVariable('PreferenceAction','ResetFilters')
-    setVariable('PreferenceValue','')
-    SKIN:Bang('!CommandMeasure','MeasurePreferenceAction','Run')
+    setVariable('PreferenceAction', 'ResetFilters')
+    setVariable('PreferenceValue', '')
+    SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
 end
 
 function Update()
-    local now=os.time()
-    local data=readState()
-    local sourceStatus=safeText(data.UpdatedText,'')
-    local sourceFailed=sourceStatus:find('failed',1,true)~=nil
-    if nextPollAt==nil then nextPollAt=now+pollInterval end
+    local now = os.time()
+    local data = readState()
+    local sourceStatus = safeText(data.UpdatedText, '')
+    local sourceFailed = sourceStatus:find('failed', 1, true) ~= nil
+
+    if nextPollAt == nil then nextPollAt = now + pollInterval end
     if sourceFailed and not failureRetryArmed then
-        local retryAt=now+failureRetryInterval
-        if retryAt<nextPollAt then nextPollAt=retryAt end
-        failureRetryArmed=true
-    elseif not sourceFailed then failureRetryArmed=false end
-    if now>=nextPollAt then
-        nextPollAt=now+pollInterval
-        SKIN:Bang('!CommandMeasure','MeasureUpdate','Run')
+        local retryAt = now + failureRetryInterval
+        if retryAt < nextPollAt then nextPollAt = retryAt end
+        failureRetryArmed = true
+    elseif not sourceFailed then
+        failureRetryArmed = false
     end
 
-    if number(data.TravelFilterActive)==1 then travelFilterCountryId=safeText(data.TravelDestinationCountryId,'') else travelFilterCountryId='' end
-    refreshFilters(data)
-    setVariable('TravelModeText',safeText(data.TravelModeLabel,'Airstrip'))
-    updateHeartbeatText(data,now)
-    updateDestination(data,'UK')
-    updateSecondaryItem(data,'UK')
-    updateDestination(data,'JP')
-    updateSecondaryItem(data,'JP')
-    applyCardLayout()
+    if now >= nextPollAt then
+        nextPollAt = now + pollInterval
+        SKIN:Bang('!CommandMeasure', 'MeasureUpdate', 'Run')
+    end
+
+    updateHeartbeatText(data, now)
+    updateFilters(data)
+    updateOptimal(data, now)
     return 0
 end
