@@ -35,20 +35,20 @@ ACTIVE market relationships
         !=
 ELIGIBLE opportunity candidates
         !=
-VISIBLE ranked opportunities
+VISIBLE opportunities
 ```
 
 - Collection remains broad across every valid provider row and all 11 foreign countries.
 - Market identity is `country + itemId`.
 - Provider presence is evidence about a feed, not proof a shop relationship is still active.
 - Verified legacy relationships remain observable for provenance but receive no new history/resale/opportunity work.
-- UI filters, Ignore List, sorting, profitability display, and travel destination never delete retained history.
+- UI filters, Ignore List, sorting, profitability display, travel destination, and graph expansion never delete retained history.
 
-## Current product: 0.6 ranked opportunity surface
+## Current product: 0.6 compact opportunity surface
 
-The rejected 0.5 single `OPTIMAL` route card is **not** the active product surface. The later probability-weighted `OPTIMAL` presentation mode was also removed. Do not restore either concept to the user-facing UI.
+The rejected single `OPTIMAL` route card and later user-facing `OPTIMAL` composite sort are both retired. Do not restore either.
 
-Main Rainmeter UI:
+Main Rainmeter UI concept:
 
 ```text
 Travel                                      SETTINGS >
@@ -57,38 +57,99 @@ Updated ...
 ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
 NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
-#1  <item>   <country>                     <trip gross> <qty>
-    <window>  <leave>  <hit likelihood>  <elapsed>  <foreign> (<MV>)  GRAPH
-#2  <item>   <country>                     <trip gross> <qty>
-    ...
+[FLAG]
+[time]  <item>                         <$trip gross>   v
+        <window>  <leave>  <hit likelihood>  <foreign> (<MV>)
+
+[FLAG]
+[time]  <item>                         <$trip gross>   v
+        ...
 ```
 
-Rules:
+Card rules:
 
-- Show a ranked list of evidence-backed `country:itemId` trade opportunities; do not collapse the primary UI to one recommended route.
-- Visible ordering is selectable and persistent:
-  - `NAME`: alphabetical item name, then destination.
-  - `UPCOMING`: soonest modeled/current stock window first.
-  - `GROSS PROFIT`: highest total trip gross first.
-  - `PROFIT/HR`: gross trip profit divided by total elapsed hours.
-- Modeled hit likelihood remains visible as a separate percentage. It is **not** folded into any hidden user-facing sort score.
-- There is no `OPTIMAL`, Chance, or shortest-Time sort in the user-facing surface.
-- Gross profit means `(selected MV basis - foreign price) × modeled purchasable quantity`; it intentionally does not subtract travel cost. Quantity must remain explicit enough that gross arithmetic is inspectable.
-- Total elapsed time includes any required wait, outbound travel, return travel, and purchase buffer. If returning to Torn, remaining return time precedes the next outbound opportunity.
+- No visible row/place numbers (`#1`, `#2`, etc.).
+- Left rail is a recognizable destination flag with a white strip across its bottom.
+- The existing total elapsed/travel-time text is shown on that white strip in dark text.
+- Do not duplicate country name/code or elapsed time in the card body.
+- Gross display is the dollar amount only. Do not append `gross`, `x18`, or other quantity text to the visible row.
+- Quantity still exists in projected data/tooltips so the gross calculation remains inspectable.
+- The far-right row control is a compact chevron/chart affordance (`v` collapsed, `^` expanded), not the word `GRAPH`.
+- Clicking the row control expands that market's 8-hour graph **inside the list/card**.
+- At most one inline card graph is expanded at a time; opening another collapses the previous graph.
+- Expansion identity is stable `country:itemId`, so sorting may move the expanded market without retargeting it.
+- `VIEWER >` remains a separate standalone broader market browser. Do not replace it with inline expansion.
+
+Ordering is selectable and persistent:
+
+- `NAME`: alphabetical item name, then destination.
+- `UPCOMING`: soonest current/modeled stock window first.
+- `GROSS PROFIT`: highest total trip gross first.
+- `PROFIT/HR`: gross trip profit divided by total elapsed hours.
+- Hit likelihood is a separate displayed metric; do not fold it into a hidden sort score.
+- There is no user-facing `OPTIMAL`, Chance, or shortest-Time sort.
+- Sort controls reorder already-projected rows immediately in Lua; persistence is a tiny local write and must not wait on a full opportunity recompute.
+
+Economic semantics:
+
+```text
+gross = (selected MV basis - foreign price) × modeled/current purchasable quantity
+profit/hr = gross / total elapsed hours
+```
+
+Gross intentionally does not subtract travel cost. Total elapsed includes required wait, outbound travel, return travel, and purchase buffer; if returning to Torn, remaining return time precedes the next outbound opportunity.
+
+Travel restrictions:
+
 - While outbound/abroad to a recognized destination, visible opportunities are restricted to that destination.
-- `traveling_unknown` / unresolved foreign destination must fail closed in the primary opportunity projection rather than suggesting an unrelated new outbound trip.
-- Each visible row has an on-demand `GRAPH` action keyed by stable `country:itemId` identity.
-- `VIEWER >` opens the broader market browser.
-- Stock graphs use an 8-hour display with hourly markers. The last retained observation before the display cutoff is carried into the left edge so change-only history does not create a false blank plateau.
-- Viewer work is local-only and never performs provider/Torn requests. It may repair a synthetic carried baseline for migration/retention continuity, but it must never invent a restock/sellout transition or turn a forecast into observed history.
-- The one-second Lua loop is local-only and may update visibility/reflow/sorting but never poll APIs.
-- The last complete opportunity/UI projection must remain visible during intermediate minute-update writes. Do not let the skin flash back to `Learning opportunities...` simply because `UpdateTracker` is still running.
-- Sort controls must reorder the already-projected rows immediately in Lua. Persist the sort choice with a tiny local write; do not run the full opportunity evidence pass on every sort click.
-- Keep stable rectangular hitboxes on text controls.
+- `traveling_unknown` / unresolved foreign destination fails closed rather than suggesting an unrelated trip.
 
-`OptimalRoute.ps1` remains a background compatibility/pricing-priority route model. Its name is not permission to reintroduce an `OPTIMAL` UI mode. `OpportunityState.ps1` is the primary presentation/ranking projection.
+## Current-stock vs forecast evidence
 
-## Filters and ordering
+Fresh current stock is useful even before enough cycles exist to estimate arrival survival.
+
+- A fresh in-stock market may remain visible with `ChanceText=LEARNING` / unknown probability.
+- Never fabricate a percentage for an untrained current market.
+- `LEARNING` likelihood must not erase the row or collapse the entire surface.
+- Known arrival probabilities remain displayed as percentages.
+- Sold-out/future opportunities still require completed sellout→restock + availability evidence before a future window is shown.
+- If already at a recognized destination, fresh current stock remains direct current-state evidence.
+
+This distinction is deliberate: current observed stock is a fact; future survival/restock confidence is learned context.
+
+## Graphs and history
+
+There are two graph surfaces:
+
+### Inline card graph
+
+- Opened with the row chevron.
+- Rendered inside the Rainmeter card/list.
+- One expanded market at a time.
+- Uses `RenderInlineGraph.ps1` and generated local Shape-path data.
+- Reuses the existing hidden Viewer launcher transport with an `inline_` stable-key prefix; it must not open the popup in this branch.
+- Refreshing an open graph is local-only and may occur at approximately one-minute cadence.
+
+### Standalone Viewer
+
+- `VIEWER >` opens the general browser.
+- It remains a detached hidden-host WinForms surface.
+- It can browse all active markets independently of inline expansion.
+
+Both graph surfaces:
+
+- display an 8-hour history window;
+- use retained observations only plus truthful carried-baseline continuity;
+- never poll Prometheus/YATA/Torn;
+- never turn a forecast into observed history;
+- never invent a restock or sellout transition;
+- preserve learning retention independently (48h high-resolution observations / 90d completed cycles).
+
+Change-only history must carry the last predecessor across the display/retention cutoff. A previous bootstrap-only migration hole may be repaired to a carried baseline using recorded `firstSeenAt` and unchanged current state; this is continuity metadata, not a fabricated transition.
+
+A sold-out-only graph must remain visually flat at zero, not use a fake `0..1` stock axis.
+
+## Filters and local UI state
 
 Persistent local UI state lives in ignored `data/runtime/preferences.json`.
 
@@ -136,13 +197,13 @@ Never use these labels as travel-time/economics authority.
 ### Ignore List
 
 - Enumerates the complete local metadata catalog when available.
-- Ignored items are excluded from opportunity/optimizer eligibility and broad per-item Torn MV requests.
+- Ignored items are excluded from opportunity/background optimizer eligibility and broad per-item Torn MV requests.
 - Shared country-level Prometheus/YATA stock collection remains broad because suppressing one item does not save that provider request.
 - Ignore/unignore never deletes historical evidence.
 
 ## Value/profitability semantics
 
-Profitability is ranking/context, **not permission to learn and not a timing-window gate**.
+Profitability is presentation/ranking context, not permission to learn and not a timing-window gate.
 
 Default value basis:
 
@@ -159,33 +220,29 @@ Optional preference:
 Use 95% MV profit calculation = OFF by default
 ```
 
-Price/economic color is deliberately simple:
+Economic color:
 
 ```text
 foreign price <= selected MV basis  -> green
 foreign price >  selected MV basis  -> red
 ```
 
-Negative-value items remain legal candidates unless `Show profitable items only` is explicitly enabled. Profit/value details belong in visible context/tooltips; they must not erase stock timing/evidence.
+Negative-value items remain legal candidates unless `Show profitable items only` is explicitly enabled. Legacy `FinalizeState.ps1` economics are informational only and must not rewrite timing status/history.
 
-Legacy `FinalizeState.ps1` economics are informational only and must not rewrite timing status or clear timing fields.
+## Availability/evidence invariants
 
-## Availability/evidence semantics
-
-1. Prefer no opportunity over invented confidence.
+1. Prefer unknown likelihood over invented confidence.
 2. `0 -> positive` is an observed restock; `positive -> 0` is an observed sellout.
 3. Forecasts never become history.
 4. History is isolated by `country + itemId`.
 5. Foreign price is first-class evidence.
 6. Current depletion may shorten support, never expand conservative historical support.
-7. In-stock markets from Torn/home or in-flight require enough completed availability evidence to produce a modeled arrival probability.
-8. If already at the destination, fresh current stock is direct current-state evidence.
-9. Sold-out opportunities require completed sellout→restock plus availability evidence. Upcoming windows are derived from the overlap of observed historical live intervals after sellout.
-10. Estimated restock quantity may use observed `0 -> positive` quantities.
-11. Stale provider markets are not visible opportunity candidates.
-12. Forecasted windows and presentation sorting never write observation/cycle history.
-13. Change-only observation pruning must preserve one predecessor/baseline per market across the high-resolution retention boundary.
-14. A prior `history_bootstrap`-only migration hole may be repaired to a carried `history_repair_baseline` using the market's recorded first-seen/current unchanged state. Such repair is continuity metadata, not an observed market transition.
+7. Fresh current in-stock rows can be visible while arrival likelihood is `LEARNING`.
+8. Sold-out future opportunities require completed cycle evidence.
+9. Estimated future restock quantity may use observed `0 -> positive` quantities.
+10. Stale provider markets are not visible opportunity candidates.
+11. Change-only pruning preserves one predecessor/baseline per market.
+12. Sorting, inline graph expansion and Viewer use never write forecast history.
 
 ## Energy / Nerve constraints
 
@@ -201,12 +258,12 @@ Nerve Waste:  Allowed | Forbidden | Limited
 Max Nerve Loss: N
 ```
 
-- Loss is modeled natural regeneration that would be wasted over the full opportunity horizon, including wait/travel where relevant.
+- Loss is modeled natural regeneration wasted over the full opportunity horizon.
 - If `energy.current > energy.maximum`, Energy waste policy is bypassed.
-- Nerve does **not** receive that bypass even if current nerve is above maximum.
+- Nerve does not receive that bypass.
 - Unknown bar data fails safe for any non-Allowed policy.
 - Waste constraints filter new outbound opportunities.
-- After travel is already committed to a recognized destination, waste constraints must not make destination purchase guidance disappear.
+- After travel is committed to a recognized destination, waste constraints must not make destination guidance disappear.
 
 ## Capacity authority
 
@@ -232,7 +289,7 @@ Category-only company effects remain isolated:
 - Toy Shop 7★: +5 Plushie only.
 - Neither increases Xanax/general capacity.
 
-Opportunity quantity may use valid category-aware capacity. Positive explicit `profitability.capacityOverride` remains authoritative where supported.
+Positive explicit `profitability.capacityOverride` remains authoritative where supported.
 
 ## Travel context
 
@@ -242,13 +299,11 @@ Opportunity quantity may use valid category-aware capacity. Positive explicit `p
 /v2/user?selections=travel,basic,bars
 ```
 
-It retains destination/travel timestamps plus Energy/Nerve bar fields. On transient failure preserve the last successful foreign restriction and bar context rather than releasing safety constraints because a request failed. Its diagnostic file is child-owned and must survive internally caught request failures.
-
-While outbound/abroad to a recognized destination, opportunity candidates are restricted to that destination. On the return leg, the next outbound opportunity may be ranked with the remaining return time included in total elapsed time.
+It retains destination/travel timestamps plus Energy/Nerve bars. On transient failure preserve the last successful foreign restriction/bar context. Its diagnostic file is child-owned and must survive internally caught request failures.
 
 ## Catalog baseline
 
-Accepted target-Windows baseline on 2026-08-21:
+Recorded target-Windows baseline from 2026-08-21:
 
 ```text
 Prometheus
@@ -273,7 +328,7 @@ united_arab_emirates:440
 
 Do not hard-code these live counts as timeless constants.
 
-Catalog network maintenance remains manual-only because target-host Torn metadata requests repeatedly timed out. `RunUpdate.ps1` must not invoke `ItemMetadata.ps1`.
+Catalog network maintenance remains manual-only. `RunUpdate.ps1` must not invoke `ItemMetadata.ps1`.
 
 Local metadata precedence:
 
@@ -289,7 +344,6 @@ richer manual Torn metadata
 
 `ResaleQueue.ps1`:
 
-- runs after visible heartbeat;
 - active relationships only;
 - at most one Torn Item Market request per update;
 - default cadence 60s, freshness 6h, general failure backoff 1h, timeout 6s;
@@ -297,15 +351,7 @@ richer manual Torn metadata
 - successful cache survives later failures;
 - missing/zero price remains unresolved.
 
-`ResalePriority.ps1` is local-only and may:
-
-- prioritize background optimizer MV blockers;
-- retain compatibility priority for configured visible/pinned seeds;
-- shorten failed priority-item retry eligibility to 5 minutes;
-- park ignored IDs outside the queue;
-- release synthetic holds immediately on unignore.
-
-It must never make its own request or increase the one-request cap.
+`ResalePriority.ps1` is local-only and may prioritize pricing blockers or park ignored IDs. It never makes its own request or increases the one-request cap.
 
 ## Runtime order
 
@@ -315,62 +361,65 @@ Current production order:
 UpdateTracker
 ShadowCollector
 LocalCatalog
-FinalizeState           # compatibility economics informational only
-TravelContext           # one bounded user/bars request on Update
-OptimalRoute            # local-only background route / MV-priority model
-OpportunityState        # local-only primary ranking projection
-FilterState             # local-only UI/freshness projection
+FinalizeState
+TravelContext
+OptimalRoute            # background compatibility / MV priority
+OpportunityState        # primary opportunity projection
+FilterState
 heartbeat
-ResalePriority          # local-only policy
-ResaleQueue             # <= 1 market request
+ResalePriority
+ResaleQueue              # <= 1 market request
 ```
 
-`VisibleItems.ps1`/old embedded card-graph enrichment is not part of production runtime. On-demand graph viewing is handled separately by `OpenItemViewer.ps1`. Item metadata network maintenance remains outside runtime.
+`VisibleItems.ps1` is not part of the production heartbeat. Inline graph rendering is handled separately by `RenderInlineGraph.ps1`; standalone graph browsing is `OpenItemViewer.ps1`.
 
-## Runtime diagnostics / popup process contract
+## Projection / interaction stability
 
-- Repo-local rolling log: `data/runtime/logs/travel-assistant.log`.
-- Runtime/popup failures should be logged there with component and source context.
-- Stale compact error markers may be cleared after successful component runs.
-- Popups launch through hidden STA PowerShell and no visible console should remain open.
-- Runtime log/history/preferences/generated files remain ignored and local.
+- The one-second Lua loop is local-only.
+- Preserve the last complete opportunity/UI projection while minute-update writers publish intermediate state.
+- Never flash an already-populated surface to `Learning opportunities...` because a child stage is still running.
+- A transient learning-only zero pass is not authoritative over a previously valid nonzero projection.
+- Sorts are immediate local Lua reorderings.
+- Text/chevron controls need stable rectangular hitboxes.
+- Inline expansion should reflow the skin immediately without a provider/Torn call.
+
+## Runtime diagnostics / popup contract
+
+- Rolling local log: `data/runtime/logs/travel-assistant.log`.
+- Runtime/popup failures should include component and source context.
+- Stale compact error markers may clear after successful component runs.
+- Popups launch through hidden STA PowerShell; no visible console should persist.
+- Runtime logs/history/preferences/generated graph specs remain ignored/local.
 
 ## Secrets / local files
 
 - API key and `config/settings.local.json` stay local/ignored.
-- Runtime observations, cycles, caches, preferences, state, errors, and generated artifacts stay ignored/local.
+- Runtime observations, cycles, caches, preferences, state, errors and generated artifacts stay ignored/local.
 - Never put the key in URL/process arguments when stdin/header transport is available.
 - Do not broaden API permissions for convenience.
 
 ## Performance budget
 
 - one-second Rainmeter loop: local only;
-- sorting already-projected rows in Lua is local and immediate;
+- immediate row sorting: local Lua only;
+- inline graph renderer: local/on demand, roughly no more often than once/minute while expanded;
 - serialized updater: roughly once/minute;
 - shadow collection: no more often than ~120s unless revalidated;
 - travel/bars: one bounded request per normal update;
 - broad MV queue: at most one lower-priority request after heartbeat;
-- viewer/graphs: on demand and local-only;
+- standalone Viewer: local/on demand;
 - no permanent background PowerShell/browser process.
 
 ## Browser notifications
 
-Browser/Chrome notifications are a future optional companion feature. Do not duplicate the availability model in a browser component. When implemented, notifications should consume the accepted local opportunity projection/timing state, remain opt-in, dedupe repeated polls, and add no provider/Torn request path.
+Browser/Chrome notifications remain a future optional companion. They must consume accepted local opportunity timing state, remain opt-in, dedupe repeated windows, and add no provider/Torn request path.
 
 ## Distribution
 
-`.rmskin` packaging is whitelist-based. It must include runtime scripts/config/catalog references and exclude:
-
-```text
-config/settings.local.json
-API key
-runtime preferences/history/state
-cache/errors
-generated state/graphs
-```
+`.rmskin` packaging must include runtime scripts/config/catalog references and exclude secrets and local runtime/generated data. Ensure `RenderInlineGraph.ps1` is packaged automatically with other runtime scripts; generated `inline-graph-*.kv` files must not be packaged.
 
 ## Current validation boundary
 
-The 0.6 ranked opportunity implementation is **pending target-Windows/Rainmeter acceptance**. Do not call it accepted until focused parser/deterministic tests, one production update, working popups/sort controls, stable poll rendering, repaired viewer continuity, and a Rainmeter screenshot pass.
+The 0.6 compact opportunity implementation is **pending target-Windows/Rainmeter acceptance**. Do not call it accepted until focused parser/deterministic tests, one production update, visible current-stock rows, flag rails, exclusive inline expansion, separate Viewer, sort/filter controls and screenshots pass on the target host.
 
 See `docs/NEXT_CODEX_RUN.md` for the current exact acceptance commands.
