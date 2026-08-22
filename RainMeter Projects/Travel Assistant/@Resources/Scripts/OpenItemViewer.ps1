@@ -20,6 +20,7 @@ $PreferenceFile = Join-Path $RuntimeDir 'preferences.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
+$HistoryMaintenanceScript = Join-Path $PSScriptRoot 'MaintainObservationHistory.ps1'
 
 if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
 
@@ -68,6 +69,17 @@ function Format-ViewerAge {
     return ('{0}h {1}m' -f [Math]::Floor($Seconds/3600),[Math]::Floor(($Seconds%3600)/60))
 }
 
+function Get-ViewerNiceAxisMax {
+    param([double]$Maximum)
+    if ($Maximum -le 0) { return 0.0 }
+    $target = [Math]::Max(1.0,$Maximum*1.05)
+    $power = [Math]::Floor([Math]::Log10($target))
+    $magnitude = [Math]::Pow(10.0,$power)
+    $normalized = $target/$magnitude
+    $nice = if ($normalized -le 1.0) { 1.0 } elseif ($normalized -le 2.0) { 2.0 } elseif ($normalized -le 2.5) { 2.5 } elseif ($normalized -le 5.0) { 5.0 } else { 10.0 }
+    return $nice*$magnitude
+}
+
 $settings = Read-ViewerJson (Join-Path $ConfigDir 'settings.example.json')
 $engine = Read-ViewerJson $EngineStateFile
 $countries = Read-ViewerJson (Join-Path $ConfigDir 'countries.json')
@@ -93,6 +105,13 @@ $basisPercent = 100
 if ($null -ne $preferences -and $preferences.PSObject.Properties['use95PercentMarketValue'] -and [bool]$preferences.use95PercentMarketValue) { $basisPercent = 95 }
 $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $cutoff = $now - ([long]$windowHours * 3600)
+
+# Viewer opening is local-only, so it may safely repair migration/retention baselines
+# before reading history. This never polls Prometheus/YATA/Torn and never invents
+# an observed transition.
+if (Test-Path -LiteralPath $HistoryMaintenanceScript) {
+    try { & $HistoryMaintenanceScript -Phase PostUpdate -Now $now } catch { }
+}
 
 $countryNames = @{}
 if ($null -ne $countries -and $countries.PSObject.Properties['countries']) {
@@ -127,9 +146,6 @@ function Get-ViewerMarketValue {
     return 0L
 }
 
-# Use ordinary arrays for Windows PowerShell 5.1 compatibility. Generic List<T>
-# values can throw PSEnumerableBinder "Argument types do not match" when they
-# are enumerated inside @(...).
 $marketRows = @()
 foreach ($property in $engine.observedMarkets.PSObject.Properties) {
     $market = $property.Value
@@ -245,6 +261,9 @@ function New-ViewerGraphBitmap {
     $bottom = 42
     $plotW = $width - $left - $right
     $plotH = $height - $top - $bottom
+    $plotTop = $top + 2
+    $plotBottom = $top + $plotH - 2
+    $effectiveH = $plotBottom - $plotTop
     $windowStart = $now - ([long]$windowHours * 3600)
 
     $bitmap = New-Object System.Drawing.Bitmap($width,$height)
@@ -263,9 +282,23 @@ function New-ViewerGraphBitmap {
     $smallFont = New-Object System.Drawing.Font('Segoe UI',7)
 
     try {
+        $hasRows = ($null -ne $Rows -and $Rows.Count -gt 0)
+        $maxStock = 0.0
+        if ($hasRows) { $maxStock = [double](($Rows | Measure-Object stock -Maximum).Maximum) }
+        $axisMax = Get-ViewerNiceAxisMax $maxStock
+
         for ($i=0; $i -le 4; $i++) {
             $y = [single]($top + ($plotH * $i / 4.0))
             $g.DrawLine($gridPen,$left,$y,$left+$plotW,$y)
+            if ($axisMax -gt 0) {
+                $tickValue = [long][Math]::Round($axisMax * (1.0-($i/4.0)))
+                $label = ('{0:N0}' -f $tickValue)
+                $size = $g.MeasureString($label,$smallFont)
+                $g.DrawString($label,$smallFont,$textBrush,[single]($left-$size.Width-6),[single]($y-7))
+            }
+        }
+        if ($axisMax -le 0) {
+            $g.DrawString('0',$smallFont,$textBrush,34,[single]($plotBottom-7))
         }
 
         $firstHour = [long]([Math]::Ceiling($windowStart / 3600.0) * 3600)
@@ -277,17 +310,12 @@ function New-ViewerGraphBitmap {
             $g.DrawString($label,$smallFont,$textBrush,[single]($x-($size.Width/2)),[single]($top+$plotH+8))
         }
 
-        if ($null -eq $Rows -or $Rows.Count -eq 0) {
+        if (-not $hasRows) {
             $message = 'No retained observations inside this display window.'
             $size = $g.MeasureString($message,$font)
             $g.DrawString($message,$font,$emptyBrush,[single]($left+(($plotW-$size.Width)/2)),[single]($top+(($plotH-$size.Height)/2)))
             return $bitmap
         }
-
-        $maxStock = [double](($Rows | Measure-Object stock -Maximum).Maximum)
-        if ($maxStock -lt 1) { $maxStock = 1 }
-        $g.DrawString(([string][long]$maxStock),$smallFont,$textBrush,4,[single]($top-5))
-        $g.DrawString('0',$smallFont,$textBrush,30,[single]($top+$plotH-7))
 
         $previous = $null
         foreach ($row in $Rows) {
@@ -296,7 +324,11 @@ function New-ViewerGraphBitmap {
             $x = [single]($left + (($timestamp-$windowStart) / [double]($windowHours*3600)) * $plotW)
             if ($x -lt $left) { $x = $left }
             if ($x -gt ($left+$plotW)) { $x = $left+$plotW }
-            $y = [single]($top + $plotH - (($stock/$maxStock)*$plotH))
+            $y = if ($axisMax -gt 0) {
+                [single]($plotBottom - (($stock/$axisMax)*$effectiveH))
+            } else {
+                [single]$plotBottom
+            }
             if ($null -ne $previous) {
                 $g.DrawLine($linePen,[single]$previous.x,[single]$previous.y,$x,[single]$previous.y)
                 $g.DrawLine($linePen,$x,[single]$previous.y,$x,$y)
@@ -309,6 +341,16 @@ function New-ViewerGraphBitmap {
         }
         if ($null -ne $previous -and [single]$previous.x -lt ($left+$plotW)) {
             $g.DrawLine($linePen,[single]$previous.x,[single]$previous.y,[single]($left+$plotW),[single]$previous.y)
+        }
+
+        if ($axisMax -le 0 -and $Rows.Count -ge 2) {
+            $message = 'SOLD OUT THROUGHOUT VISIBLE RETAINED HISTORY'
+            $size = $g.MeasureString($message,$font)
+            $g.DrawString($message,$font,$textBrush,[single]($left+(($plotW-$size.Width)/2)),[single]($top+8))
+        } elseif ($Rows.Count -eq 1) {
+            $message = 'Only one retained observation; no earlier baseline is available.'
+            $size = $g.MeasureString($message,$font)
+            $g.DrawString($message,$font,$textBrush,[single]($left+(($plotW-$size.Width)/2)),[single]($top+8))
         }
         return $bitmap
     } finally {
@@ -430,7 +472,19 @@ function Update-ViewerSelection {
         $ageText = 'source ' + (Format-ViewerAge $age) + ' old'
         if ($age -gt $staleAfterSeconds) { $ageText += ' (STALE)' }
     }
-    $subMetric.Text = ('{0} | {1} | {2} plotted point(s), including carried baseline when available' -f [string]$selection.category,$ageText,$rows.Count)
+
+    $changeCount = 0
+    for ($i=1; $i -lt $rows.Count; $i++) {
+        if ([long](Get-ViewerProperty $rows[$i-1] 'stock') -ne [long](Get-ViewerProperty $rows[$i] 'stock')) { $changeCount++ }
+    }
+    $spanText = 'no retained span'
+    if ($rows.Count -gt 0) {
+        $firstAt = [long](Get-ViewerProperty $rows[0] 'timestamp')
+        $lastAt = [long](Get-ViewerProperty $rows[$rows.Count-1] 'timestamp')
+        $spanText = ([DateTimeOffset]::FromUnixTimeSeconds($firstAt).ToLocalTime().ToString('HH:mm') + ' -> ' + [DateTimeOffset]::FromUnixTimeSeconds($lastAt).ToLocalTime().ToString('HH:mm'))
+    }
+    $subMetric.Text = ('{0} | {1} | {2} plotted point(s), {3} stock change(s) | {4}' -f [string]$selection.category,$ageText,$rows.Count,$changeCount,$spanText)
+
     $old = $picture.Image
     $picture.Image = New-ViewerGraphBitmap -Selection $selection -Rows $rows
     if ($null -ne $old) { $old.Dispose() }
