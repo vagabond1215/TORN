@@ -37,7 +37,8 @@ if (Test-Path -LiteralPath $files.Preferences) {
         'categoryFilterAll','selectedCategories','showProfitableOnly','ignoredItemIds',
         'use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',
         "sortMode = 'optimal'",'Normalize-SortMode',"@('optimal','upcoming','profit','time')",'SetSortMode',
-        'Reset-UiFilterPreferences','Toggle-TripBandPreference','OpportunityState.ps1'
+        'Reset-UiFilterPreferences','Toggle-TripBandPreference','OpportunityState.ps1',
+        "if (`$Action -ne 'SetSortMode')",'preference-action'
     )) {
         if (-not $text.Contains($token)) { Fail "FilterPreferences.ps1 missing '$token'." }
     }
@@ -105,7 +106,7 @@ if (Test-Path -LiteralPath $files.SettingsLauncher) {
 
 if (Test-Path -LiteralPath $files.StateReader) {
     $text = Get-Content -LiteralPath $files.StateReader -Raw
-    foreach ($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)','local function updateSort(data)','local function updateOpportunities(data)','UIOldestMarketSourceTimestamp')) {
+    foreach ($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)','local function updateSort(data, now)','local function updateOpportunities(data)','local function stabilizeProjection(data)','UIOldestMarketSourceTimestamp')) {
         if (-not $text.Contains($token)) { Fail "StateReader.lua missing '$token'." }
     }
     foreach ($legacy in @('TogglePin(','pinnedCardKey','cardExpanded','updateOptimal(data, now)')) {
@@ -138,6 +139,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Opportunity filters, four explicit sort modes, hidden popup host, waste policies, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
+Write-Host 'Opportunity filters, four explicit sort modes, stable projection, responsive sort path, hidden popup host, waste policies, settings, ignore-list, and all-market freshness validation passed.' -ForegroundColor Green
 Write-Host 'OPTIMAL ranks expected gross value per elapsed hour; likelihood is folded into that score rather than exposed as a separate sort.'
 exit 0
