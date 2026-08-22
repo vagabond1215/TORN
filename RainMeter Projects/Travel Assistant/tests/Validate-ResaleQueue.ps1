@@ -21,14 +21,15 @@ if (-not (Test-Path -LiteralPath $queuePath)) {
     }
     if ($text -notmatch '(?m)^\s*\[int\]\$MinimumAttemptIntervalSeconds\s*=\s*60') { Fail 'Resale queue default attempt interval must be 60 seconds.' }
     if ($text -notmatch '(?m)^\s*\[int\]\$CacheFreshSeconds\s*=\s*21600') { Fail 'Broad resale cache default freshness must be six hours.' }
-    if ($text -notmatch '(?m)^\s*\[int\]\$FailureBackoffSeconds\s*=\s*3600') { Fail 'Hidden/general failed items must retain one-hour backoff.' }
+    if ($text -notmatch '(?m)^\s*\[int\]\$FailureBackoffSeconds\s*=\s*3600') { Fail 'General failed items must retain one-hour backoff.' }
     if ($text -notmatch '(?m)^\s*\[int\]\$RequestTimeoutSeconds\s*=\s*6') { Fail 'Broad resale request timeout must be six seconds.' }
-    foreach ($token in @('catalogActive','legacy_removed','resaleCache','resaleQueue','attempts','torn_itemmarket','IDLE_FRESH_OR_BACKOFF','PriorityItemIds','visible')) {
+    foreach ($token in @('catalogActive','legacy_removed','resaleCache','resaleQueue','attempts','torn_itemmarket','IDLE_FRESH_OR_BACKOFF','PriorityItemIds','pricingPriorityItemIds','average_price')) {
         if (-not $text.Contains($token)) { Fail "Resale queue contract missing '$token'." }
     }
-    if (-not $text.Contains('Sort-Object priority, eligibleAt, fetchedAt, lastAttemptAt, itemId')) { Fail 'Visible items must sort ahead of hidden eligible catalog items.' }
+    if (-not $text.Contains('Get-VisibleResalePriorityIds -ItemsConfig $itemsConfig -EngineState $engineState')) { Fail 'Resale queue must merge optimizer MV needs into its priority set.' }
+    if ($text -notmatch 'Sort-Object\s+priority,\s*eligibleAt,\s*fetchedAt,\s*lastAttemptAt,\s*itemId') { Fail 'Priority items must sort ahead of broad hidden catalog items.' }
     if (-not $text.Contains('https://api.torn.com/v2/market/{0}/itemmarket?limit=1')) { Fail 'Resale queue must use the specific-item Torn Item Market endpoint.' }
-    if (-not $text.Contains("`$psi.Arguments = '-q --config -'")) { Fail 'Resale queue must pass curl configuration through stdin.' }
+    if (-not $text.Contains("`$psi.Arguments='-q --config -'") -and -not $text.Contains("`$psi.Arguments = '-q --config -'")) { Fail 'Resale queue must pass curl configuration through stdin.' }
     if (-not $text.Contains('Authorization: ApiKey {0}')) { Fail 'Resale queue must use Authorization header.' }
     if ($text -match '(?i)[?&](key|api_key|apikey)=') { Fail 'Resale queue must never put key in URL.' }
     if ($text -match '(?i)Arguments\s*=.*ApiKey') { Fail 'Resale queue must never put key in process arguments.' }
@@ -43,8 +44,8 @@ if (-not (Test-Path -LiteralPath $priorityPath)) {
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($priorityPath,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in ResalePriority.ps1: $($parseError.Message)" }
-    if ($text -notmatch '(?m)^\s*\[int\]\$PriorityBackoffSeconds\s*=\s*300') { Fail 'Visible/pinned failed items must default to five-minute retry eligibility.' }
-    foreach ($token in @('ignoredItemIds','ignored_by_user','315360000','pinnedMarket','priorityVisibleItems','ignoredItems')) {
+    if ($text -notmatch '(?m)^\s*\[int\]\$PriorityBackoffSeconds\s*=\s*300') { Fail 'Optimizer-needed failed items must default to five-minute retry eligibility.' }
+    foreach ($token in @('ignoredItemIds','ignored_by_user','315360000','pricingPriorityItemIds','priorityOptimizerItems','pinnedMarket')) {
         if (-not $text.Contains($token)) { Fail "ResalePriority.ps1 missing '$token'." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'ResalePriority.ps1 must remain local-only and never add a second request path.' }
@@ -54,7 +55,7 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     Fail 'Missing RunUpdate.ps1.'
 } else {
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
-    foreach ($token in @('ResalePriority.ps1','ResaleQueue.ps1','Write-ResaleQueueFailure','Write-UpdateHeartbeat')) {
+    foreach ($token in @('ResalePriority.ps1','ResaleQueue.ps1','Write-UpdateHeartbeat')) {
         if (-not $wrapper.Contains($token)) { Fail "RunUpdate.ps1 missing $token." }
     }
     $heartbeatCalls=[regex]::Matches($wrapper,'(?m)^\s*Write-UpdateHeartbeat\s*$')
@@ -75,5 +76,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Resale queue configuration validation passed.' -ForegroundColor Green
-Write-Host 'Broad pricing remains one bounded request per update; visible/pinned failures can retry after five minutes and ignored items are parked out of the per-item queue.'
+Write-Host 'Optimizer MV blockers are prioritized inside the same one-request-per-update queue; ignored items remain parked.'
 exit 0
