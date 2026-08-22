@@ -5,11 +5,12 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $viewerPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenItemViewer.ps1'
 $launcherPath = Join-Path $ProjectRoot '@Resources\Scripts\LaunchItemViewer.ps1'
 $hostPath = Join-Path $ProjectRoot '@Resources\Scripts\PopupHost.ps1'
+$historyPath = Join-Path $ProjectRoot '@Resources\Scripts\MaintainObservationHistory.ps1'
 $settingsPath = Join-Path $ProjectRoot 'config\settings.example.json'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($viewerPath,$launcherPath,$hostPath)) {
+foreach ($path in @($viewerPath,$launcherPath,$hostPath,$historyPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing $path."; continue }
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
@@ -36,27 +37,24 @@ if (Test-Path -LiteralPath $viewerPath) {
     $viewer = Get-Content -LiteralPath $viewerPath -Raw
     foreach ($token in @(
         '[string]$MarketKey',
-        'RuntimeObservationFile',
-        'SeedObservationFile',
-        'graphWindowHours',
-        'use95PercentMarketValue',
-        'observedMarkets',
-        'resaleCache',
-        'sourceTimestamp',
-        'catalogStatus',
-        'legacy_removed',
-        '$baseline = @{}',
-        "source = 'carry_forward'",
-        'timestamp += 3600',
-        "ToString('HH:mm')",
-        'Green: observed restock',
-        'Red: observed sellout',
-        'Dropdown is sorted by known profit/item.',
+        'RuntimeObservationFile','SeedObservationFile','HistoryMaintenanceScript',
+        'MaintainObservationHistory.ps1','-Phase PostUpdate',
+        'graphWindowHours','use95PercentMarketValue','observedMarkets','resaleCache','sourceTimestamp','catalogStatus','legacy_removed',
+        '$baseline = @{}',"source = 'carry_forward'",'timestamp += 3600',"ToString('HH:mm')",
+        'Get-ViewerNiceAxisMax','plotBottom','SOLD OUT THROUGHOUT VISIBLE RETAINED HISTORY','Only one retained observation',
+        'stock change(s)','Green: observed restock','Red: observed sellout','Dropdown is sorted by known profit/item.',
         '[string]$sortedRows[$i].key -eq $MarketKey'
     )) {
         if (-not $viewer.Contains($token)) { Fail "Item viewer contract missing '$token'." }
     }
     if ($viewer -match '(?i)Invoke-RestMethod|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Item viewer must remain local-only and must not make network requests.' }
+}
+
+if (Test-Path -LiteralPath $historyPath) {
+    $history = Get-Content -LiteralPath $historyPath -Raw
+    foreach ($token in @('earliestByKey',"existingSource -ne 'history_bootstrap'",'history_repair_baseline','RetentionCutoff')) {
+        if (-not $history.Contains($token)) { Fail "History maintenance missing viewer-repair token '$token'." }
+    }
 }
 
 if (-not (Test-Path -LiteralPath $settingsPath)) {
@@ -74,6 +72,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Item viewer validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Stable-key hidden-host eight-hour item viewer static validation passed.' -ForegroundColor Green
+Write-Host 'Stable-key hidden-host eight-hour item viewer with self-healing baseline and truthful zero-stock axis validation passed.' -ForegroundColor Green
 Write-Host 'Viewer is local-only; retained 48h/90d learning remains independent of the 8h display.' -ForegroundColor DarkGreen
 exit 0
