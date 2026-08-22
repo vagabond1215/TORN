@@ -114,7 +114,7 @@ if (Test-Path -LiteralPath $iniPath) {
     $ini = Get-Content -LiteralPath $iniPath -Raw
     if ($ini -notmatch '(?m)^Version=0\.6\.0\s*$') { Fail 'Rainmeter skin must report version 0.6.0.' }
     foreach ($section in @('[Rainmeter]','[MeasureUpdate]','[MeasureState]','[MeasureItemViewer]','[MeterSettings]','[MeterFilterTopLine]','[MeterSortOptimal]','[MeterSortUpcoming]','[MeterSortProfit]','[MeterSortTime]','[MeterViewer]','[MeterOpportunity1Name]','[MeterOpportunity1Price]','[MeterOpportunity1Graph]')) {
-        if (-not $ini.Contains($section)) { Fail "Rainmeter skin missing opportunity/viewer section $section" }
+        if (-not $ini.Contains($section)) { Fail "Rainmeter skin missing opportunity/viewer compatibility section $section" }
     }
     foreach ($retired in @('[MeterRouteCard]','[MeterOptimalItem1Name]','[MeterUKCard]','[MeterJPCard]','[MeterUKGraph]','[MeterJPGraph]','MaxExpandedCards=')) {
         if ($ini.Contains($retired)) { Fail "Opportunity skin still contains retired primary-view contract '$retired'." }
@@ -126,8 +126,23 @@ if (Test-Path -LiteralPath $iniPath) {
 $opportunityPath = Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 if (Test-Path -LiteralPath $opportunityPath) {
     $opportunity = Get-Content -LiteralPath $opportunityPath -Raw
-    foreach ($token in @('grossProfit','expectedGross','optimalScore','elapsedSeconds','Get-OpportunityNextWindow','Write-OpportunityProjection')) { if (-not $opportunity.Contains($token)) { Fail "Opportunity model missing '$token'." } }
+    foreach ($token in @('grossProfit','profitPerHour','quantity','elapsedSeconds','Get-OpportunityNextWindow','Write-OpportunityProjection',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'")) { if (-not $opportunity.Contains($token)) { Fail "Opportunity model missing '$token'." } }
+    foreach ($retired in @('expectedGross=','optimalScore=')) { if ($opportunity.Contains($retired)) { Fail "Opportunity model retains hidden weighting token '$retired'." } }
     if ($opportunity -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Opportunity projection must remain local-only.' }
+}
+
+$stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
+if (Test-Path -LiteralPath $stateReaderPath) {
+    $reader = Get-Content -LiteralPath $stateReaderPath -Raw
+    foreach ($token in @("'UPCOMING'","'GROSS PROFIT'","'PROFIT/HR'","SetSortMode('profit_per_hour')",'configureInteractiveMeters','lastProjectionData = copyProjectionFields(initial)')) {
+        if (-not $reader.Contains($token)) { Fail "StateReader transparent-sort/stability contract missing '$token'." }
+    }
+}
+
+$preferencesPath = Join-Path $ProjectRoot '@Resources\Scripts\FilterPreferences.ps1'
+if (Test-Path -LiteralPath $preferencesPath) {
+    $prefs = Get-Content -LiteralPath $preferencesPath -Raw
+    foreach ($token in @('schemaVersion = 5',"sortMode = 'upcoming'",'profit_per_hour')) { if (-not $prefs.Contains($token)) { Fail "Preference migration contract missing '$token'." } }
 }
 
 $optimizerSettingsPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
@@ -162,5 +177,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Travel Assistant 0.6 static architecture validation passed.' -ForegroundColor Green
-Write-Host 'Sortable opportunity UI, on-demand 8-hour viewer, background route model, full-country travel economics, local policy, and parse-clean runtime contracts are present.'
+Write-Host 'Transparent UPCOMING/GROSS PROFIT/PROFIT-HR opportunity UI, on-demand 8-hour viewer, background route model, full-country economics, local policy, and parse-clean runtime contracts are present.'
 exit 0
