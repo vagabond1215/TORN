@@ -2,7 +2,8 @@ param(
     [ValidateSet('None','ToggleTripBand','ResetFilters','SetSortMode')]
     [string]$Action = 'None',
     [string]$Value = '',
-    [switch]$SkipMain
+    [Alias('SkipMain')]
+    [switch]$FilterPreferencesSkipMain
 )
 
 $ErrorActionPreference = 'Stop'
@@ -189,7 +190,7 @@ function Reset-UiFilterPreferences {
     return $normalized
 }
 
-if ($SkipMain) { return }
+if ($FilterPreferencesSkipMain) { return }
 
 $prefs = Read-UiPreferences
 $changed = $false
