@@ -2,7 +2,7 @@
 
 **Checkpoint:** 2026-08-21
 
-**Active run:** 0.5.0 minimalist next-trip optimizer. See `docs/NEXT_CODEX_RUN.md`.
+**Active run:** 0.6.0 ranked opportunity surface. See `docs/NEXT_CODEX_RUN.md`.
 
 ## Accepted data foundation
 
@@ -27,128 +27,70 @@ Also accepted:
 - Flower/Toy category-capacity isolation;
 - Airstrip general/Xanax 18 and Standard 13 on the target profile.
 
-The 0.4 independent-card/graph surface was an intermediate proof and is no longer the active product direction.
+## 0.6 opportunity UI — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-## 0.5 minimalist UI — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
+The rejected 0.5 single-route card has been replaced by a ranked opportunity list.
 
-Main skin now shows one compact selected next trip and only its purchase rows.
+Primary controls:
 
 ```text
-Travel                                      SETTINGS >
-Updated ...
 ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
-
-OPTIMAL • destination                 expected value
-arrival/out • slots • hit chance • Energy loss • Nerve loss
-item      xN    foreign price (Torn MV)    modeled arrival chance
+SORT  OPTIMAL  UPCOMING  PROFIT  TIME                 VIEWER >
 ```
 
-- no default UK/JP card stack;
-- no default stock graphs;
-- item names use one left-aligned column and consistent typography;
-- parenthesized MV is smaller/muted;
-- route body and learning/no-route message never overlap.
-
-## Next-trip optimizer — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
-
-`OptimalRoute.ps1` is local-only and consumes:
-
-- active observed foreign markets;
-- canonical local item metadata;
-- Torn MV cache (`average_price`);
-- current foreign price/stock;
-- retained restock/sellout cycles;
-- travel time/cost;
-- general/category carrying capacity;
-- current destination and Energy/Nerve bars;
-- persistent filters and Ignore List.
-
-It produces one best **next-trip** plan. This is not yet the eventual multi-trip sequence scheduler.
-
-Availability behavior:
-
-- trained in-stock market: probability stock survives until arrival from completed availability durations;
-- at destination: fresh current stock is direct evidence;
-- sold out: requires completed restock-delay + availability evidence;
-- insufficient history: learning, not fake confidence;
-- stale provider market: excluded.
-
-Route scoring currently uses expected trip value normalized by trip duration.
-
-## Value semantics — IMPLEMENTED
-
-Default optimizer basis:
+Up to eight rows show:
 
 ```text
-100% Torn MV
-0% Item Market fee deduction
-0 minimum profit gate
-0 minimum margin gate
-negative-value candidates allowed
+rank / OPTIMAL marker
+item + destination
+gross trip profit
+current or modeled stock window
+leave timing
+modeled hit likelihood
+total elapsed time
+foreign price (Torn MV)
+GRAPH
 ```
 
-Optional setting uses 95% MV.
+`OPTIMAL` is a sort and highlight, not a separate screen. It ranks `(gross profit × hit probability) / elapsed hours`. There is no separate Chance sort. The global optimum remains marked even while UPCOMING, PROFIT or TIME ordering is active.
 
-Price color:
+## Opportunity evidence — IMPLEMENTED
 
-```text
-foreign <= chosen MV basis -> green
-foreign > chosen MV basis  -> red
-```
+`OpportunityState.ps1` is local-only and consumes retained stock/cycles, cached MV, current travel/bars, filters and capacity.
 
-`Show profitable items only` explicitly removes non-positive item spreads. Without it, negative-value purchases remain legal candidates.
+Current stock uses arrival-survival evidence. Sold-out markets use overlap of completed historical live intervals after sellout to locate supported future windows. Estimated restock quantity uses observed restock quantities when available.
 
-Legacy `FinalizeState.ps1` was changed so economics are informational only and do not rewrite/clear timing state.
+The opportunity layer:
 
-## Energy / Nerve constraints — IMPLEMENTED
+- excludes stale markets;
+- requires fresh cached MV;
+- honors Item/Trip/Country/Category filters and Ignore List;
+- honors profitable-only when explicitly enabled;
+- honors Energy/Nerve waste constraints for new outbound opportunities;
+- preserves destination purchase guidance after travel is committed;
+- fails closed for unresolved foreign destination states;
+- never writes predicted history.
 
-Preferences/UI support independently:
+## Graph viewer — IMPLEMENTED
 
-```text
-Energy Waste: Allowed / Forbidden / Limited
-Max Energy Loss
-Nerve Waste:  Allowed / Forbidden / Limited
-Max Nerve Loss
-```
+The item viewer remains an 8-hour diagnostic surface with hourly markers.
 
-`TravelContext.ps1` now requests `travel,basic,bars` in the same bounded user call and normalizes Energy/Nerve bar values.
+- General `VIEWER >` browses active markets.
+- Every opportunity row has `GRAPH`.
+- Row targeting uses stable `country:itemId`, not row number.
+- The last observation before the 8-hour cutoff is carried to the left edge for change-only history continuity.
+- Viewer is local-only and consumes no provider/Torn request.
+- Learning retention remains 48h raw / 90d completed cycles.
 
-Special rule:
+## Popup reliability changes — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-- Energy current > natural maximum => bypass Energy waste restriction.
-- Nerve receives no equivalent bypass.
-- unknown bars fail safe for non-Allowed policies.
+Detached Settings, filter and viewer launchers explicitly quote script paths containing spaces. Filter saves recompute the opportunity projection immediately.
 
-## Filters / Ignore List — IMPLEMENTED
+The Windows screenshot that motivated 0.6 showed `SETTINGS > ERROR` and non-opening popups, so these controls require explicit target-host retest before acceptance.
 
-The horizontal Item / Trip / Country / Category controls remain persistent/local.
+## Background optimizer — RETAINED
 
-Item/Category popups use the active local catalog instead of the old four-card set.
-
-Ignore List:
-
-- complete local metadata catalog;
-- excluded from optimizer;
-- excluded from broad per-item MV requests;
-- shared provider stock/history still collected.
-
-Trip bands remain presentation taxonomy only.
-
-## Broad resale priority — IMPLEMENTED
-
-Still one Torn Item Market request maximum per normal update.
-
-Priority now includes optimizer MV blockers (`engine.optimizer.pricingPriorityItemIds`).
-
-```text
-optimizer/configured priority failure retry: 5m
-unrelated/general failure backoff:             1h
-ignored item:                                  parked
-broad MV freshness:                            6h
-request timeout:                               6s
-```
-
-`ResalePriority.ps1` remains local-only and never makes a request.
+`OptimalRoute.ps1` remains the background one-best-next-trip planner for compatibility, diagnostics and MV-priority work. It is no longer the primary presentation surface.
 
 ## Runtime order
 
@@ -159,44 +101,47 @@ LocalCatalog
 FinalizeState
 TravelContext
 OptimalRoute
+OpportunityState
 FilterState
 heartbeat
 ResalePriority
 ResaleQueue
 ```
 
-`VisibleItems.ps1` is retired from production runtime. `ItemMetadata.ps1` remains manual-only.
+## Value semantics
 
-## Settings surface
-
-Main Settings now opens a lightweight optimizer dialog:
+Default basis remains:
 
 ```text
-Show profitable items only
-Use 95% MV profit calculation
-Energy Waste + Max Energy Loss
-Nerve Waste + Max Nerve Loss
-Ignore List...
-Profile / API...
+100% Torn MV
+0% Item Market fee deduction
+0 minimum profit gate
+0 minimum margin gate
+negative-value candidates allowed
 ```
 
-The existing detailed settings editor remains behind `Profile / API...` for API key, profile, current capacity and company/travel-mode controls.
+Optional setting uses 95% MV. `Show profitable items only` explicitly removes non-positive candidates.
+
+Gross opportunity profit intentionally excludes travel cost. The OPTIMAL score probability-weights gross profit and normalizes it by full elapsed opportunity time.
 
 ## Validation status
 
-The user-reported 0.4 validator defects were fixed in the 0.5 validators:
+Static/deterministic validators have been converted to the 0.6 opportunity contract, including:
 
-- stale travel-context exact-string check removed/replaced;
-- invalid `$launcherName:` strict parser interpolation fixed with safe literal handling.
+- four explicit sort modes;
+- no Chance sort;
+- persistent global OPTIMAL marker;
+- stable market-key graph targeting;
+- graph carry-forward baseline;
+- opportunity-model deterministic overlap/probability tests;
+- Energy/Nerve integration;
+- popup launcher quoting.
 
-0.5 still requires target-Windows validation. Do not mark accepted until the focused tests, one normal production update, and a Rainmeter screenshot pass.
+0.6 still requires target-Windows validation. Do not mark accepted until `tests/Run-CurrentAcceptance.ps1`, one normal production update, all popups/sort controls, row graphs and a Rainmeter screenshot pass.
 
-See `docs/NEXT_CODEX_RUN.md` for exact commands.
+## After 0.6 acceptance
 
-## After 0.5 acceptance
-
-1. let broad MV coverage improve without increasing API rate;
-2. calibrate availability probabilities as cycles accumulate;
-3. validate real mixed general/category capacity plans;
-4. keep default UI minimal while improving tooltips/diagnostics;
-5. later build the bounded multi-trip sequence scheduler comparing repeated short, long and mixed-country route sequences.
+1. refine visual row density/alignment from the actual Rainmeter render;
+2. continue probability calibration from accumulated cycles;
+3. add optional Chrome/browser notifications as a consumer of the accepted opportunity state;
+4. later evaluate bounded multi-trip sequence scheduling separately from the opportunity browser.
