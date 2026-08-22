@@ -11,6 +11,7 @@ $tests = @(
     'Run-TravelContextTests.ps1',
     'Validate-OptimalRoute.ps1',
     'Run-OptimalRouteTests.ps1',
+    'Run-OpportunityStateTests.ps1',
     'Validate-ResaleQueue.ps1',
     'Run-ResalePriorityTests.ps1',
     'Run-FinalizeStateTests.ps1'
@@ -32,6 +33,6 @@ foreach ($name in $tests) {
 }
 
 Write-Host ''
-Write-Host 'Focused Travel Assistant candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update, open the item viewer, refresh Rainmeter, and inspect the rendered controls.' -ForegroundColor Yellow
+Write-Host 'Focused Travel Assistant 0.6 opportunity candidate validations passed.' -ForegroundColor Green
+Write-Host 'Next: run one production update, refresh Rainmeter, test all four sort controls, then open SETTINGS, filters, VIEWER, and a row GRAPH action.' -ForegroundColor Yellow
 exit 0
