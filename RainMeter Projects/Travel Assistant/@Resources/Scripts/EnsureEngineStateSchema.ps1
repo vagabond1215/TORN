@@ -5,6 +5,7 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
+$ObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 
 # OpportunityState preserves and extends state.kv, so guarantee that it has a
@@ -36,6 +37,21 @@ function Ensure-StateProperty {
     }
 }
 
+function Get-StateProperty {
+    param([object]$Object,[string]$Name)
+    if ($null -eq $Object) { return $null }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
+}
+
+function Set-StateProperty {
+    param([object]$Object,[string]$Name,[object]$Value)
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) { $Object | Add-Member NoteProperty $Name $Value }
+    else { $property.Value = $Value }
+}
+
 Ensure-StateProperty -Object $state -Name 'destinations' -DefaultValue ([pscustomobject]@{})
 Ensure-StateProperty -Object $state -Name 'resaleCache' -DefaultValue ([pscustomobject]@{})
 Ensure-StateProperty -Object $state -Name 'observedMarkets' -DefaultValue ([pscustomobject]@{})
@@ -54,6 +70,54 @@ Ensure-StateProperty -Object $state -Name 'shadowCollection' -DefaultValue ([psc
 foreach ($name in @('lastPollAt','lastProvider','countriesSeen','marketsSeen','legacyMarketsSeen','observationsWritten','cyclesCompleted','lastErrorAt','lastError')) {
     $default = if ($name -in @('lastProvider','lastError')) { '' } else { 0 }
     Ensure-StateProperty -Object $state.shadowCollection -Name $name -DefaultValue $default
+}
+
+# Migration/self-heal: a state file can be inherited while an item is already in
+# stock, leaving destinations.<market>.activeCycle null even though retained real
+# observations contain a later 0 -> positive transition. Reconstruct only the
+# current restock anchor from those observed transitions; never invent a transition.
+if (Test-Path -LiteralPath $ObservationFile) {
+    $previousStock = @{}
+    $latestRestock = @{}
+    foreach ($line in Get-Content -LiteralPath $ObservationFile) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        try { $row = $line | ConvertFrom-Json } catch { continue }
+        $country = [string](Get-StateProperty $row 'country')
+        $itemId = [int](Get-StateProperty $row 'itemId')
+        $timestamp = [long](Get-StateProperty $row 'timestamp')
+        $stock = [long](Get-StateProperty $row 'stock')
+        if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $timestamp -le 0) { continue }
+        $key = ($country + ':' + $itemId).ToLowerInvariant()
+        if ($previousStock.ContainsKey($key) -and [long]$previousStock[$key] -eq 0 -and $stock -gt 0) {
+            $latestRestock[$key] = $row
+        }
+        $previousStock[$key] = $stock
+    }
+
+    foreach ($property in @($state.observedMarkets.PSObject.Properties)) {
+        $key = ([string]$property.Name).ToLowerInvariant()
+        $market = $property.Value
+        if ($null -eq $market -or [long](Get-StateProperty $market 'lastStock') -le 0) { continue }
+        if (-not $latestRestock.ContainsKey($key)) { continue }
+        $destProperty = $state.destinations.PSObject.Properties[$key]
+        if ($null -eq $destProperty -or $null -eq $destProperty.Value) { continue }
+        $dest = $destProperty.Value
+        if ($null -ne (Get-StateProperty $dest 'activeCycle')) { continue }
+
+        $restock = $latestRestock[$key]
+        $restockAt = [long](Get-StateProperty $restock 'timestamp')
+        if ($restockAt -le 0) { continue }
+        $previousSoldOutAt = [long](Get-StateProperty $dest 'lastSellOutAt')
+        if ($previousSoldOutAt -ge $restockAt) { $previousSoldOutAt = 0L }
+        $dest.activeCycle = [pscustomobject]@{
+            previousSoldOutAt = $previousSoldOutAt
+            restockAt = $restockAt
+            restockQuantity = [long](Get-StateProperty $restock 'stock')
+            foreignPrice = [long](Get-StateProperty $restock 'foreignPrice')
+            source = [string](Get-StateProperty $restock 'source')
+        }
+        $changed = $true
+    }
 }
 
 if (-not $changed) { return }
