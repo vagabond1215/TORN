@@ -10,9 +10,9 @@ $files = @{
     Popup = Join-Path $ProjectRoot '@Resources\Scripts\OpenFilterPopup.ps1'
     Launcher = Join-Path $ProjectRoot '@Resources\Scripts\LaunchFilterPopup.ps1'
     State = Join-Path $ProjectRoot '@Resources\Scripts\FilterState.ps1'
-    Priority = Join-Path $ProjectRoot '@Resources\Scripts\ResalePriority.ps1'
+    Settings = Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
+    SettingsLauncher = Join-Path $ProjectRoot '@Resources\Scripts\LaunchOptimizerSettings.ps1'
     StateReader = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
-    Settings = Join-Path $ProjectRoot '@Resources\Scripts\OpenSettings.ps1'
     Ini = Join-Path $ProjectRoot 'TravelAssistant.ini'
     Countries = Join-Path $ProjectRoot 'config\countries.json'
 }
@@ -21,35 +21,40 @@ foreach ($entry in $files.GetEnumerator()) {
     if (-not (Test-Path -LiteralPath $entry.Value)) { Fail "Missing $($entry.Key) file: $($entry.Value)" }
 }
 
-foreach ($path in @($files.Preferences,$files.Popup,$files.Launcher,$files.State,$files.Priority,$files.Settings)) {
+foreach ($path in @($files.Preferences,$files.Popup,$files.Launcher,$files.State,$files.Settings,$files.SettingsLauncher)) {
     if (-not (Test-Path -LiteralPath $path)) { continue }
-    $tokens=$null; $parseErrors=$null
+    $tokens = $null
+    $parseErrors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "PowerShell parse error in $(Split-Path $path -Leaf): $($parseError.Message)" }
 }
 
 if (Test-Path -LiteralPath $files.Preferences) {
     $text = Get-Content -LiteralPath $files.Preferences -Raw
-    foreach ($token in @('itemFilterAll','selectedItemIds','selectedTripBands','selectedCountryIds','categoryFilterAll','selectedCategories','showProfitableOnly','ignoredItemIds','pinnedMarket','Reset-UiFilterPreferences','Toggle-TripBandPreference')) {
+    foreach ($token in @(
+        'schemaVersion = 3','itemFilterAll','selectedItemIds','selectedTripBands','selectedCountryIds',
+        'categoryFilterAll','selectedCategories','showProfitableOnly','ignoredItemIds',
+        'use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',
+        'Reset-UiFilterPreferences','Toggle-TripBandPreference'
+    )) {
         if (-not $text.Contains($token)) { Fail "FilterPreferences.ps1 missing '$token'." }
     }
-    if (-not $text.Contains("Join-Path `$PSScriptRoot 'FilterState.ps1'")) { Fail 'Trip toggles/reset must project updated preferences immediately through FilterState.ps1.' }
 }
 
 if (Test-Path -LiteralPath $files.Popup) {
     $text = Get-Content -LiteralPath $files.Popup -Raw
-    foreach ($filter in @("'Item'","'Country'","'Category'","'Ignore'")) { if (-not $text.Contains($filter)) { Fail "OpenFilterPopup.ps1 missing filter $filter." } }
-    if (-not $text.Contains('itemMetadata')) { Fail 'Ignore List must enumerate the full local metadata catalog when available.' }
-    if (-not $text.Contains('FilterState.ps1')) { Fail 'Popup saves must project updated filter state immediately.' }
-    if (-not $text.Contains('A favorite is preserved and returns when unignored.')) { Fail 'Ignore List UI must explain that an existing favorite is preserved.' }
-    if ($text -match 'Set-FilterProperty\s+\$prefs\s+''pinnedMarket''\s+''''') { Fail 'Ignore List must hide a pinned item without deleting the favorite.' }
+    foreach ($filter in @("'Item'","'Country'","'Category'","'Ignore'")) {
+        if (-not $text.Contains($filter)) { Fail "OpenFilterPopup.ps1 missing filter $filter." }
+    }
+    foreach ($token in @('Get-ActiveCatalogRows','observedMarkets','itemMetadata','OptimalRoute.ps1','ignoredItemIds')) {
+        if (-not $text.Contains($token)) { Fail "Filter popup missing '$token'." }
+    }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Filter popup must remain local-only.' }
 }
 
 if (Test-Path -LiteralPath $files.Launcher) {
     $text = Get-Content -LiteralPath $files.Launcher -Raw
-    if (-not $text.Contains('Start-Process')) { Fail 'Filter popup launcher must detach from Rainmeter RunCommand.' }
-    if (-not $text.Contains('OpenFilterPopup.ps1')) { Fail 'Filter popup launcher must start OpenFilterPopup.ps1.' }
+    if (-not $text.Contains('Start-Process') -or -not $text.Contains('OpenFilterPopup.ps1')) { Fail 'Filter popup launcher must detach OpenFilterPopup.ps1.' }
 }
 
 if (Test-Path -LiteralPath $files.State) {
@@ -57,54 +62,38 @@ if (Test-Path -LiteralPath $files.State) {
     foreach ($key in @('UIItemFilterAll','UISelectedItemIds','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UISelectedCategories','UIShowProfitableOnly','UIIgnoredItemIds')) {
         if (-not $text.Contains($key)) { Fail "FilterState.ps1 missing state key $key." }
     }
-    if (-not $text.Contains("Remove('UIPinnedMarket')")) { Fail 'FilterState.ps1 must remove stale UIPinnedMarket projection so a one-second state refresh cannot undo a direct pin click.' }
-    if ($text -match '\$state\[''UIPinnedMarket''\]\s*=') { Fail 'Pin must not be mirrored into state.kv.' }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'FilterState.ps1 must remain local-only.' }
-}
-
-if (Test-Path -LiteralPath $files.Priority) {
-    $text = Get-Content -LiteralPath $files.Priority -Raw
-    foreach ($token in @('ignoredItemIds','ignored_by_user','PriorityBackoffSeconds = 300','pinnedMarket')) {
-        if (-not $text.Contains($token)) { Fail "ResalePriority.ps1 missing '$token'." }
-    }
-    if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'ResalePriority.ps1 must not perform network work.' }
-}
-
-if (Test-Path -LiteralPath $files.StateReader) {
-    $text = Get-Content -LiteralPath $files.StateReader -Raw
-    foreach ($token in @(
-        "cardMarket = { UKPrimary='united_kingdom:206'",
-        "travelFilterCountryId~='' and cardCountry[cardKey]~=travelFilterCountryId",
-        'ignoredItems[cardItemId[cardKey]]',
-        'if pinKey==cardKey then return true end',
-        'showProfitableOnly and not cardProfitable[cardKey]',
-        'function TogglePin(cardKey)',
-        'writePinnedPreference(preferencesPath,pinnedMarket)',
-        'function OpenFilter(filterName)',
-        'function ToggleTripBand(band)',
-        'function ResetFilters()',
-        "return '★'",
-        'local top=88'
-    )) {
-        if (-not $text.Contains($token)) { Fail "StateReader.lua missing filter/pin contract: $token" }
-    }
 }
 
 if (Test-Path -LiteralPath $files.Settings) {
     $text = Get-Content -LiteralPath $files.Settings -Raw
-    foreach ($token in @('Show profitable items only','Ignore List...','Read-UiPreferences','Save-UiPreferences','showProfitableOnly','LaunchFilterPopup.ps1')) {
-        if (-not $text.Contains($token)) { Fail "OpenSettings.ps1 missing '$token'." }
+    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Ignore List...','Profile / API...')) {
+        if (-not $text.Contains($token)) { Fail "OpenOptimizerSettings.ps1 missing '$token'." }
     }
-    if ($text -match 'Write-JsonAtomic\s+-Path\s+\$PreferencePath\s+-Value\s+\(\[pscustomobject\]') { Fail 'Settings must not replace preferences.json with a narrow object and erase pin/filter/ignore state.' }
+}
+
+if (Test-Path -LiteralPath $files.SettingsLauncher) {
+    $text = Get-Content -LiteralPath $files.SettingsLauncher -Raw
+    if (-not $text.Contains('Start-Process') -or -not $text.Contains('OpenOptimizerSettings.ps1')) { Fail 'Optimizer settings launcher must detach OpenOptimizerSettings.ps1.' }
+}
+
+if (Test-Path -LiteralPath $files.StateReader) {
+    $text = Get-Content -LiteralPath $files.StateReader -Raw
+    foreach ($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','local function updateOptimal(data, now)')) {
+        if (-not $text.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+    }
+    foreach ($legacy in @('TogglePin(','pinnedCardKey','cardExpanded')) {
+        if ($text.Contains($legacy)) { Fail "Minimal optimizer StateReader.lua must not depend on legacy card/pin UI token '$legacy'." }
+    }
 }
 
 if (Test-Path -LiteralPath $files.Ini) {
     $ini = Get-Content -LiteralPath $files.Ini -Raw
-    if ($ini -notmatch '(?m)^Version=0\.4\.0\s*$') { Fail 'Filter-bar candidate must report version 0.4.0.' }
+    if ($ini -notmatch '(?m)^Version=0\.5\.0\s*$') { Fail 'Minimal optimizer/filter candidate must report version 0.5.0.' }
     foreach ($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeterFilterTopLine','MeterItemFilter','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine')) {
-        if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "TravelAssistant.ini missing [$section]." }
+        if ($ini -notmatch ('(?m)^\[' + [regex]::Escape($section) + '\]\s*$')) { Fail "TravelAssistant.ini missing [$section]." }
     }
-    if ($ini -notmatch '(?m)^PreferencesFile=#CURRENTPATH#data\\runtime\\preferences\.json\s*$') { Fail 'StateReader must receive the ignored local preferences path.' }
+    if ($ini -notmatch '(?im)^Parameter=.*LaunchOptimizerSettings\.ps1') { Fail 'Main Settings button must use optimizer settings launcher.' }
 }
 
 if (Test-Path -LiteralPath $files.Countries) {
@@ -118,10 +107,10 @@ if (Test-Path -LiteralPath $files.Countries) {
 
 if ($errors.Count -gt 0) {
     foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
-    Write-Host "Filter/pin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    Write-Host "Optimizer filter/settings validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
 
-Write-Host 'Filter, pin, Settings, and ignore-list configuration validation passed.' -ForegroundColor Green
-Write-Host 'Presentation filters remain local/persistent; Ignore List outranks but preserves favorites and suppresses broad per-item market pricing.'
+Write-Host 'Optimizer filters, settings, and ignore-list configuration validation passed.' -ForegroundColor Green
+Write-Host 'Filters shape route candidates only; Ignore List suppresses broad per-item pricing without erasing shared stock/history collection.'
 exit 0
