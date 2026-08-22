@@ -62,12 +62,11 @@ foreach ($section in @(
     'MeterFilterTopLine','MeterItemFilter','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine',
     'MeterSortLabel','MeterSortOptimal','MeterSortUpcoming','MeterSortProfit','MeterSortTime','MeterViewer','MeterSortBottomLine','MeterOpportunityMessage'
 )) {
-    if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing [$section]." }
+    if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing internal compatibility section [$section]." }
 }
 
 foreach ($action in @(
-    "OpenFilter('Item')","OpenFilter('Country')","OpenFilter('Category')","ToggleTripBand('short')","ToggleTripBand('medium')","ToggleTripBand('long')","ResetFilters()",
-    "SetSortMode('optimal')","SetSortMode('upcoming')","SetSortMode('profit')","SetSortMode('time')","OpenViewer('')"
+    "OpenFilter('Item')","OpenFilter('Country')","OpenFilter('Category')","ToggleTripBand('short')","ToggleTripBand('medium')","ToggleTripBand('long')","ResetFilters()","OpenViewer('')"
 )) {
     if (-not $ini.Contains($action)) { Fail "Opportunity surface is missing action $action." }
 }
@@ -75,7 +74,7 @@ foreach ($action in @(
 for ($i=1; $i -le 8; $i++) {
     foreach ($suffix in @('Card','Rank','Optimal','Name','Country','Gross','Window','Leave','Chance','Time','Price','Graph')) {
         $section='MeterOpportunity'+$i+$suffix
-        if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing opportunity row meter [$section]." }
+        if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing opportunity row compatibility meter [$section]." }
     }
     $priceBody=[regex]::Match($ini,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     if ($priceBody -notmatch '(?im)^InlineSetting=Size\s*\|\s*7\s*$' -or $priceBody -notmatch '(?im)^InlineSetting2=Color\s*\|\s*#Muted#\s*$') { Fail "Opportunity $i must render parenthesized MV smaller and muted." }
@@ -94,14 +93,20 @@ if (-not (Test-Path -LiteralPath $stateReaderPath)) {
     $stateReader=Get-Content -LiteralPath $stateReaderPath -Raw
     foreach ($token in @(
         'local function stabilizeProjection(data)',
-        'lastProjectionData = copyProjectionFields(data)',
+        'lastProjectionData = copyProjectionFields(initial)',
+        'local function configureInteractiveMeters()',
+        "'UPCOMING'","'GROSS PROFIT'","'PROFIT/HR'","SetSortMode('profit_per_hour')",
+        "SKIN:Bang('!HideMeter', 'MeterSortTime')",
+        "SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Optimal')",
+        "SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'X', '48')",
+        "'SolidColor', '0,0,0,1'",
         'local function updateSort(data, now)',
         'pendingSortMode = mode',
         'local function updateOpportunities(data)',
         'local function updateOpportunityGrossMeter(data, prefix, index)',
-        "display = display .. ' trip'",
+        "display = display .. ' gross'",
+        'QuantityText','ProfitHourText',
         "setGroupVisible('OpportunityRow' .. i, i <= count)",
-        "SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor'",
         'function SetSortMode(mode)',
         'function OpenViewer(marketKey)',
         'function OpenFilter(filterName)',
@@ -122,5 +127,5 @@ if ($errors.Count -gt 0) {
     Write-Host "Rainmeter opportunity skin validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Rainmeter sortable opportunity surface + stable poll projection + hidden popup host validation passed.' -ForegroundColor Green
+Write-Host 'Rainmeter opportunity surface + transparent three-sort controls + refresh-stable projection + responsive hitboxes + hidden popup host validation passed.' -ForegroundColor Green
 exit 0
