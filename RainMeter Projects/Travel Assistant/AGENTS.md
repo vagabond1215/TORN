@@ -46,7 +46,7 @@ VISIBLE ranked opportunities
 
 ## Current product: 0.6 ranked opportunity surface
 
-The rejected 0.5 single `OPTIMAL` route card is **not** the active product surface. `OPTIMAL` is a ranking mode over the same opportunity list, not a separate screen and not the only view.
+The rejected 0.5 single `OPTIMAL` route card is **not** the active product surface. The later probability-weighted `OPTIMAL` presentation mode was also removed. Do not restore either concept to the user-facing UI.
 
 Main Rainmeter UI:
 
@@ -54,12 +54,12 @@ Main Rainmeter UI:
 Travel                                      SETTINGS >
 Updated ...
 
-ITEM All ▾   TRIP SHORT MED LONG ▾   CAT All ▾   RESET
-SORT  OPTIMAL  UPCOMING  PROFIT  TIME                 VIEWER >
+ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
+SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
-#1  OPTIMAL  <item>   <country>                     <gross>
+#1  <item>   <country>                     <trip gross> <qty>
     <window>  <leave>  <hit likelihood>  <elapsed>  <foreign> (<MV>)  GRAPH
-#2           <item>   <country>                     <gross>
+#2  <item>   <country>                     <trip gross> <qty>
     ...
 ```
 
@@ -67,13 +67,12 @@ Rules:
 
 - Show a ranked list of evidence-backed `country:itemId` trade opportunities; do not collapse the primary UI to one recommended route.
 - Visible ordering is selectable and persistent:
-  - `OPTIMAL`: probability-weighted gross trip profit per total elapsed hour.
   - `UPCOMING`: soonest modeled/current stock window first.
-  - `PROFIT`: highest gross trip profit first.
-  - `TIME`: shortest total elapsed opportunity first.
-- There is no separate Chance sort. Modeled hit likelihood is displayed and is already part of `OPTIMAL`.
-- The globally best `OPTIMAL` opportunity remains visibly marked/highlighted even while another sort is active.
-- Gross profit means item resale spread x modeled purchasable quantity; it intentionally does not subtract travel cost. Expected value used by `OPTIMAL` multiplies gross profit by modeled hit probability.
+  - `GROSS PROFIT`: highest total trip gross first.
+  - `PROFIT/HR`: gross trip profit divided by total elapsed hours.
+- Modeled hit likelihood remains visible as a separate percentage. It is **not** folded into any hidden user-facing sort score.
+- There is no `OPTIMAL`, Chance, or shortest-Time sort in the user-facing surface.
+- Gross profit means `(selected MV basis - foreign price) × modeled purchasable quantity`; it intentionally does not subtract travel cost. Quantity must remain explicit enough that gross arithmetic is inspectable.
 - Total elapsed time includes any required wait, outbound travel, return travel, and purchase buffer. If returning to Torn, remaining return time precedes the next outbound opportunity.
 - While outbound/abroad to a recognized destination, visible opportunities are restricted to that destination.
 - `traveling_unknown` / unresolved foreign destination must fail closed in the primary opportunity projection rather than suggesting an unrelated new outbound trip.
@@ -82,8 +81,10 @@ Rules:
 - Stock graphs use an 8-hour display with hourly markers. The last retained observation before the display cutoff is carried into the left edge so change-only history does not create a false blank plateau.
 - Graph/viewer work is local-only and never creates observations or performs provider/Torn requests.
 - The one-second Lua loop is local-only and may update visibility/reflow but never poll APIs.
+- The last complete opportunity/UI projection must remain visible during intermediate minute-update writes. Do not let the skin flash back to `Learning opportunities...` simply because `UpdateTracker` is still running.
+- Sort controls should respond immediately at the UI layer, then finish local re-projection. Keep stable clickable hitboxes on text controls.
 
-`OptimalRoute.ps1` remains a background compatibility/pricing-priority route model. `OpportunityState.ps1` is the primary presentation/ranking projection.
+`OptimalRoute.ps1` remains a background compatibility/pricing-priority route model. Its name is not permission to reintroduce an `OPTIMAL` UI mode. `OpportunityState.ps1` is the primary presentation/ranking projection.
 
 ## Filters and ordering
 
@@ -107,7 +108,15 @@ energyWastePolicy
 maxEnergyLoss
 nerveWastePolicy
 maxNerveLoss
-sortMode                     # optimal | upcoming | profit | time
+sortMode                     # upcoming | gross | profit_per_hour
+```
+
+Legacy sort migration:
+
+```text
+optimal -> profit_per_hour
+profit  -> gross
+time    -> upcoming
 ```
 
 Item and Category popups use the active local catalog, not only old proof-card seeds.
@@ -172,7 +181,8 @@ Legacy `FinalizeState.ps1` economics are informational only and must not rewrite
 9. Sold-out opportunities require completed sellout→restock plus availability evidence. Upcoming windows are derived from the overlap of observed historical live intervals after sellout.
 10. Estimated restock quantity may use observed `0 -> positive` quantities.
 11. Stale provider markets are not visible opportunity candidates.
-12. Forecasted windows and scores never write observation/cycle history.
+12. Forecasted windows and presentation sorting never write observation/cycle history.
+13. Change-only observation pruning must preserve one predecessor/baseline per market across the high-resolution retention boundary.
 
 ## Energy / Nerve constraints
 
@@ -314,6 +324,14 @@ ResaleQueue             # <= 1 market request
 
 `VisibleItems.ps1`/old embedded card-graph enrichment is not part of production runtime. On-demand graph viewing is handled separately by `OpenItemViewer.ps1`. Item metadata network maintenance remains outside runtime.
 
+## Runtime diagnostics / popup process contract
+
+- Repo-local rolling log: `data/runtime/logs/travel-assistant.log`.
+- Runtime/popup failures should be logged there with component and source context.
+- Stale compact error markers may be cleared after successful component runs.
+- Popups launch through hidden STA PowerShell and no visible console should remain open.
+- Runtime log/history/preferences/generated files remain ignored and local.
+
 ## Secrets / local files
 
 - API key and `config/settings.local.json` stay local/ignored.
@@ -349,6 +367,6 @@ generated state/graphs
 
 ## Current validation boundary
 
-The 0.6 ranked opportunity implementation is **pending target-Windows/Rainmeter acceptance**. Do not call it accepted until focused parser/deterministic tests, one production update, working popups/sort controls, and a Rainmeter screenshot pass.
+The 0.6 ranked opportunity implementation is **pending target-Windows/Rainmeter acceptance**. Do not call it accepted until focused parser/deterministic tests, one production update, working popups/sort controls, stable poll rendering, and a Rainmeter screenshot pass.
 
 See `docs/NEXT_CODEX_RUN.md` for the current exact acceptance commands.
