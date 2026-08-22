@@ -10,7 +10,7 @@ $required = @(
     'config\countries.json','config\travel-modes.json','config\travel-perks.json','config\settings.example.json','config\settings.local.example.json',
     'data\seed\metadata.json','data\seed\observations.jsonl','data\seed\cycles.jsonl',
     '@Resources\Includes\OpportunityRows.inc',
-    '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\TravelContext.ps1',
+    '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\ProjectCollectedState.ps1','@Resources\Scripts\MaintainObservationHistory.ps1','@Resources\Scripts\TravelContext.ps1',
     '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1',
     '@Resources\Scripts\StateReader.lua','@Resources\Scripts\LaunchItemViewer.ps1','@Resources\Scripts\OpenItemViewer.ps1','@Resources\Scripts\RenderInlineGraph.ps1',
     '@Resources\Images\Flags\LICENSE-FlagKit.txt',
@@ -62,11 +62,54 @@ foreach($file in $parsePaths) {
 $iniPath=Join-Path $ProjectRoot 'TravelAssistant.ini'
 if (Test-Path -LiteralPath $iniPath) {
     $ini=Get-Content -LiteralPath $iniPath -Raw
-    foreach($token in @('@Include=#@#Includes\OpportunityRows.inc','[MeasureItemViewer]','[MeasureInlineGraph]','[MeterSortName]','[MeterSortUpcoming]','[MeterSortGross]','[MeterSortProfitHour]','[MeterViewer]')) {
+    foreach($token in @('@IncludeRows=#@#Includes\OpportunityRows.inc','[MeasureItemViewer]','[MeasureInlineGraph]','[MeterSortName]','[MeterSortUpcoming]','[MeterSortGross]','[MeterSortProfitHour]','[MeterViewer]')) {
         if (-not $ini.Contains($token)) { Fail "Rainmeter skin missing '$token'." }
     }
+    if ($ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'Opportunity rows must not be included before MeterBackground.' }
     foreach($retired in @('[MeterRouteCard]','[MeterUKCard]','[MeterJPCard]','[MeterSortOptimal]','[MeterOpportunity1Rank]')) {
         if ($ini.Contains($retired)) { Fail "Rainmeter skin contains retired UI token '$retired'." }
+    }
+}
+
+$wrapperPath=Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
+if (Test-Path -LiteralPath $wrapperPath) {
+    $wrapper=Get-Content -LiteralPath $wrapperPath -Raw
+    foreach($token in @('ProjectCollectedState.ps1','$CollectedState',"if (`$Action -eq 'Update')",'ShadowCollector is the sole live foreign-stock request','UpdateTracker returned failure.')) {
+        if (-not $wrapper.Contains($token)) { Fail "RunUpdate single-owner collection contract missing '$token'." }
+    }
+    $normalBlock=[regex]::Match($wrapper,'(?ms)if \(\$Action -eq ''Update''\) \{(.*?)\} else \{').Groups[1].Value
+    if ([string]::IsNullOrWhiteSpace($normalBlock)) { Fail 'Could not identify normal Update block in RunUpdate.ps1.' }
+    elseif ($normalBlock -match '&\s*\$Updater') { Fail 'Normal Update must not invoke UpdateTracker; it would duplicate provider requests/history writes.' }
+}
+
+$collectorPath=Join-Path $ProjectRoot '@Resources\Scripts\ShadowCollector.ps1'
+if (Test-Path -LiteralPath $collectorPath) {
+    $collector=Get-Content -LiteralPath $collectorPath -Raw
+    foreach($token in @('[int]$MinimumPollIntervalSeconds = 60','One collector now owns stock-transition history','return ([int]$DestState.lastStock -ne [int]$Observation.stock)')) {
+        if (-not $collector.Contains($token)) { Fail "ShadowCollector authoritative-history contract missing '$token'." }
+    }
+    foreach($retired in @('Test-IsPrimaryMarket','primaryItemIds','primaryCountryIds')) {
+        if ($collector.Contains($retired)) { Fail "ShadowCollector retains split-history ownership token '$retired'." }
+    }
+}
+
+$projectorPath=Join-Path $ProjectRoot '@Resources\Scripts\ProjectCollectedState.ps1'
+if (Test-Path -LiteralPath $projectorPath) {
+    $projector=Get-Content -LiteralPath $projectorPath -Raw
+    foreach($token in @('observedMarkets','TravelMode','TravelSeconds','LiveProvider','shadowCollection','Write-ProjectionKvAtomic')) {
+        if (-not $projector.Contains($token)) { Fail "ProjectCollectedState.ps1 missing '$token'." }
+    }
+    if ($projector -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'ProjectCollectedState.ps1 must remain local-only.' }
+}
+
+$historyPath=Join-Path $ProjectRoot '@Resources\Scripts\MaintainObservationHistory.ps1'
+if (Test-Path -LiteralPath $historyPath) {
+    $history=Get-Content -LiteralPath $historyPath -Raw
+    foreach($token in @('Write-BaselineAwareObservationPrune','latestBefore','retention_baseline',"if (`$Phase -eq 'PostUpdate') { return }")) {
+        if (-not $history.Contains($token)) { Fail "History maintenance missing '$token'." }
+    }
+    foreach($forbidden in @('history_bootstrap','history_repair_baseline','Add-MissingMarketBaselines')) {
+        if ($history.Contains($forbidden)) { Fail "History maintenance must not fabricate '$forbidden' evidence." }
     }
 }
 
@@ -90,9 +133,10 @@ if (Test-Path -LiteralPath $readerPath) {
 $rendererPath=Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 if (Test-Path -LiteralPath $rendererPath) {
     $renderer=Get-Content -LiteralPath $rendererPath -Raw
-    foreach($token in @('RuntimeObservationFile','$historySource = ''runtime_observations''','Add-Type -AssemblyName System.Drawing','current_snapshot','for ($i=0; $i -le 8; $i++)','stableImagePath')) {
+    foreach($token in @('RuntimeObservationFile','$historySource = ''runtime_observations''','Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot','UnknownBeforeTimestamp','Add-Type -AssemblyName System.Drawing','stableImagePath')) {
         if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
     }
+    if ($renderer.Contains('display_carry')) { Fail 'Inline renderer must not paint current state backward through unknown history.' }
     if ($renderer -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Inline renderer must remain local-only.' }
 }
 
@@ -113,5 +157,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Travel Assistant 0.6 static architecture validation passed.' -ForegroundColor Green
-Write-Host 'Native FlagKit cards, separate inline PNG history, runtime-observation authority, transparent sorts, and safe departure display contracts are present.'
+Write-Host 'Single-owner foreign-stock collection, transition-only history, non-fabricated retention, correct card layering, and observed-only graph contracts are present.'
 exit 0
