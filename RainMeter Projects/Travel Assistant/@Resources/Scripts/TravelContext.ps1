@@ -114,6 +114,25 @@ function Get-TravelStatusState {
     return ''
 }
 
+function Convert-TornUserBar {
+    param([object]$Bar)
+    if ($null -eq $Bar) { return $null }
+    $values = @{}
+    foreach ($name in @('current','maximum','increment','interval','tick_time','full_time')) {
+        $value = Get-TravelDynamicProperty $Bar $name
+        if ($null -eq $value) { return $null }
+        $values[$name] = [long]$value
+    }
+    return [pscustomobject]@{
+        current = [long]$values.current
+        maximum = [long]$values.maximum
+        increment = [long]$values.increment
+        interval = [long]$values.interval
+        tickTime = [long]$values.tick_time
+        fullTime = [long]$values.full_time
+    }
+}
+
 function Convert-TornTravelContext {
     param([object]$Payload, [object]$CountriesConfig, [long]$NowEpoch)
 
@@ -150,7 +169,26 @@ function Convert-TornTravelContext {
         $state = 'abroad_unknown'
     }
 
-    return [pscustomobject]@{ state=$state; destination=$destinationText; destinationCountryId=$destinationCountryId; filterActive=[bool]$filterActive; method=$method; departedAt=$departedAt; arrivalAt=$arrivalAt; timeLeft=$timeLeft; statusState=$statusState }
+    $bars = Get-TravelDynamicProperty $Payload 'bars'
+    $energy = $null; $nerve = $null
+    if ($null -ne $bars) {
+        $energy = Convert-TornUserBar (Get-TravelDynamicProperty $bars 'energy')
+        $nerve = Convert-TornUserBar (Get-TravelDynamicProperty $bars 'nerve')
+    }
+
+    return [pscustomobject]@{
+        state=$state
+        destination=$destinationText
+        destinationCountryId=$destinationCountryId
+        filterActive=[bool]$filterActive
+        method=$method
+        departedAt=$departedAt
+        arrivalAt=$arrivalAt
+        timeLeft=$timeLeft
+        statusState=$statusState
+        energy=$energy
+        nerve=$nerve
+    }
 }
 
 function Get-TravelApiKey {
@@ -166,7 +204,7 @@ function Invoke-TornTravelCurl {
     if ($null -eq $curl) { throw 'curl.exe is required for Torn travel-context sync.' }
     if ($TimeoutSec -lt 2) { $TimeoutSec = 2 }
     if ($TimeoutSec -gt 8) { $TimeoutSec = 8 }
-    $uri = 'https://api.torn.com/v2/user?selections=travel,basic'
+    $uri = 'https://api.torn.com/v2/user?selections=travel,basic,bars'
     $connectTimeout = [Math]::Min(3,$TimeoutSec)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $curl.Source; $psi.Arguments = '-q --config -'; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
@@ -178,7 +216,7 @@ function Invoke-TornTravelCurl {
         $process.StandardInput.WriteLine(('connect-timeout = {0}' -f $connectTimeout)); $process.StandardInput.WriteLine(('max-time = {0}' -f $TimeoutSec))
         $process.StandardInput.WriteLine(('url = "{0}"' -f $uri)); $process.StandardInput.WriteLine('header = "Accept: application/json"')
         $process.StandardInput.WriteLine(('header = "Authorization: ApiKey {0}"' -f $ApiKey.Replace('"','')))
-        $process.StandardInput.WriteLine('header = "User-Agent: TornTravelAssistant/0.3"'); $process.StandardInput.Close()
+        $process.StandardInput.WriteLine('header = "User-Agent: TornTravelAssistant/0.5"'); $process.StandardInput.Close()
         $waitMs = [Math]::Max(3000,($TimeoutSec+2)*1000)
         if (-not $process.WaitForExit($waitMs)) { try { $process.Kill() } catch { }; throw ('curl.exe exceeded the {0}s Torn travel-context timeout.' -f $TimeoutSec) }
         $stdout = $process.StandardOutput.ReadToEnd(); $stderr = $process.StandardError.ReadToEnd()
@@ -195,6 +233,20 @@ function Write-TravelContextError {
     [System.IO.File]::WriteAllText($ErrorFile,$clean,[System.Text.UTF8Encoding]::new($false))
 }
 
+function Set-ProjectedBar {
+    param([hashtable]$State,[string]$Prefix,[object]$Bar)
+    if ($null -eq $Bar) {
+        foreach ($suffix in @('Current','Maximum','Increment','Interval','TickTime','FullTime')) { $State[$Prefix+$suffix] = 0 }
+        return
+    }
+    $State[$Prefix+'Current'] = [long]$Bar.current
+    $State[$Prefix+'Maximum'] = [long]$Bar.maximum
+    $State[$Prefix+'Increment'] = [long]$Bar.increment
+    $State[$Prefix+'Interval'] = [long]$Bar.interval
+    $State[$Prefix+'TickTime'] = [long]$Bar.tickTime
+    $State[$Prefix+'FullTime'] = [long]$Bar.fullTime
+}
+
 function Project-TravelContextToState {
     param([object]$Context)
     $state = Read-TravelStateKv $StateKvFile
@@ -208,6 +260,8 @@ function Project-TravelContextToState {
     $state['TravelArrivalAt'] = [long](Get-TravelDynamicProperty $Context 'arrivalAt')
     $state['TravelTimeLeft'] = [long](Get-TravelDynamicProperty $Context 'timeLeft')
     $state['TravelContextLastSuccessAt'] = [long](Get-TravelDynamicProperty $Context 'lastSuccessAt')
+    Set-ProjectedBar -State $state -Prefix 'Energy' -Bar (Get-TravelDynamicProperty $Context 'energy')
+    Set-ProjectedBar -State $state -Prefix 'Nerve' -Bar (Get-TravelDynamicProperty $Context 'nerve')
     Write-TravelStateKvAtomic -Values $state -Path $StateKvFile
 }
 
@@ -217,9 +271,11 @@ if ($RequestTimeoutSeconds -lt 2) { $RequestTimeoutSeconds=2 }; if ($RequestTime
 $engineState = Read-TravelJson $EngineStateFile; if ($null -eq $engineState) { return }
 $countries = Read-TravelJson (Join-Path $ConfigDir 'countries.json'); if ($null -eq $countries) { return }
 if (-not $engineState.PSObject.Properties['travelContext']) {
-    $engineState | Add-Member NoteProperty travelContext ([pscustomobject]@{ state='unknown'; destination=''; destinationCountryId=''; filterActive=$false; method=''; departedAt=0; arrivalAt=0; timeLeft=0; statusState=''; lastAttemptAt=0; lastSuccessAt=0; lastErrorAt=0; lastError='' })
+    $engineState | Add-Member NoteProperty travelContext ([pscustomobject]@{ state='unknown'; destination=''; destinationCountryId=''; filterActive=$false; method=''; departedAt=0; arrivalAt=0; timeLeft=0; statusState=''; energy=$null; nerve=$null; lastAttemptAt=0; lastSuccessAt=0; lastErrorAt=0; lastError='' })
 }
-$contextState=$engineState.travelContext; Set-TravelDynamicProperty $contextState 'lastAttemptAt' $Now
+$contextState=$engineState.travelContext
+foreach ($barName in @('energy','nerve')) { if (-not $contextState.PSObject.Properties[$barName]) { $contextState | Add-Member NoteProperty $barName $null } }
+Set-TravelDynamicProperty $contextState 'lastAttemptAt' $Now
 $apiKey=Get-TravelApiKey
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
     Set-TravelDynamicProperty $contextState 'lastErrorAt' $Now; Set-TravelDynamicProperty $contextState 'lastError' 'No local Torn API key is available for travel-context sync.'
@@ -228,10 +284,11 @@ if ([string]::IsNullOrWhiteSpace($apiKey)) {
 try {
     $payload=Invoke-TornTravelCurl -ApiKey $apiKey -TimeoutSec $RequestTimeoutSeconds
     $normalized=Convert-TornTravelContext -Payload $payload -CountriesConfig $countries -NowEpoch $Now
-    foreach ($name in @('state','destination','destinationCountryId','filterActive','method','departedAt','arrivalAt','timeLeft','statusState')) { Set-TravelDynamicProperty $contextState $name (Get-TravelDynamicProperty $normalized $name) }
+    foreach ($name in @('state','destination','destinationCountryId','filterActive','method','departedAt','arrivalAt','timeLeft','statusState','energy','nerve')) { Set-TravelDynamicProperty $contextState $name (Get-TravelDynamicProperty $normalized $name) }
     Set-TravelDynamicProperty $contextState 'lastSuccessAt' $Now; Set-TravelDynamicProperty $contextState 'lastErrorAt' 0; Set-TravelDynamicProperty $contextState 'lastError' ''
     if (Test-Path -LiteralPath $ErrorFile) { Remove-Item -LiteralPath $ErrorFile -Force -ErrorAction SilentlyContinue }
 } catch {
+    # Preserve the last successful foreign destination and bars on transient failures.
     $message=([string]$_.Exception.Message).Replace("`r",' ').Replace("`n",' ').Trim()
     Set-TravelDynamicProperty $contextState 'lastErrorAt' $Now; Set-TravelDynamicProperty $contextState 'lastError' $message
     try { Write-TravelContextError -Message $message } catch { }
