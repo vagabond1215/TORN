@@ -142,9 +142,48 @@ end
 local function applySortColors(mode)
     local active = '82,174,255,255'
     local inactive = '145,152,164,255'
-    setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
-    setVariable('SortGrossColor', mode == 'gross' and active or inactive)
-    setVariable('SortProfitHourColor', mode == 'profit_per_hour' and active or inactive)
+    -- Existing section names are retained internally to avoid another large skin
+    -- rewrite; their visible labels/actions are repurposed below.
+    setVariable('SortOptimalColor', mode == 'upcoming' and active or inactive)
+    setVariable('SortUpcomingColor', mode == 'gross' and active or inactive)
+    setVariable('SortProfitColor', mode == 'profit_per_hour' and active or inactive)
+    setVariable('SortTimeColor', inactive)
+end
+
+local function configureInteractiveMeters()
+    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'Text', 'UPCOMING')
+    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'X', '50')
+    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'W', '72')
+    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'ToolTipText', 'Soonest modeled stock windows first')
+    SKIN:Bang('!SetOption', 'MeterSortOptimal', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('upcoming')\"]")
+
+    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'Text', 'GROSS PROFIT')
+    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'X', '126')
+    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'W', '92')
+    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'ToolTipText', 'Highest total trip gross first; gross is unit spread times purchasable quantity')
+    SKIN:Bang('!SetOption', 'MeterSortUpcoming', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('gross')\"]")
+
+    SKIN:Bang('!SetOption', 'MeterSortProfit', 'Text', 'PROFIT/HR')
+    SKIN:Bang('!SetOption', 'MeterSortProfit', 'X', '222')
+    SKIN:Bang('!SetOption', 'MeterSortProfit', 'W', '78')
+    SKIN:Bang('!SetOption', 'MeterSortProfit', 'ToolTipText', 'Trip gross divided by total elapsed hours; hit likelihood remains a separate displayed percentage')
+    SKIN:Bang('!SetOption', 'MeterSortProfit', 'LeftMouseUpAction', "[!CommandMeasure MeasureState \"SetSortMode('profit_per_hour')\"]")
+    SKIN:Bang('!HideMeter', 'MeterSortTime')
+
+    -- Transparent SolidColor gives the text controls a stable rectangular hitbox.
+    for _, meter in ipairs({
+        'MeterSettings','MeterItemFilter','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand',
+        'MeterCategoryFilter','MeterFilterReset','MeterSortOptimal','MeterSortUpcoming','MeterSortProfit','MeterViewer'
+    }) do
+        SKIN:Bang('!SetOption', meter, 'SolidColor', '0,0,0,1')
+    end
+
+    for i = 1, 8 do
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Optimal')
+        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'X', '48')
+        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'W', '238')
+        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Graph', 'SolidColor', '0,0,0,1')
+    end
 end
 
 local function updateSort(data, now)
@@ -217,9 +256,12 @@ function Initialize()
     failureRetryInterval = math.floor(configuredFailureRetry)
     failureRetryArmed = false
     nextPollAt = os.time() + pollInterval
-    lastProjectionData = nil
     pendingSortMode = nil
     pendingSortUntil = 0
+
+    configureInteractiveMeters()
+    local initial = readState()
+    if initial.OpportunityCount ~= nil then lastProjectionData = copyProjectionFields(initial) end
 end
 
 function OpenFilter(filterName)
@@ -252,9 +294,9 @@ function SetSortMode(mode)
     setVariable('PreferenceAction', 'SetSortMode')
     setVariable('PreferenceValue', mode)
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
+    SKIN:Bang('!UpdateMeter', 'MeterSortOptimal')
     SKIN:Bang('!UpdateMeter', 'MeterSortUpcoming')
-    SKIN:Bang('!UpdateMeter', 'MeterSortGross')
-    SKIN:Bang('!UpdateMeter', 'MeterSortProfitHour')
+    SKIN:Bang('!UpdateMeter', 'MeterSortProfit')
     SKIN:Bang('!Redraw')
 end
 
