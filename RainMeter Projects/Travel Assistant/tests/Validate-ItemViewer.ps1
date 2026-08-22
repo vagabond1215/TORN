@@ -38,7 +38,7 @@ if(Test-Path -LiteralPath $viewerPath){
 if(Test-Path -LiteralPath $inlineRendererPath){
  $inline=Get-Content -LiteralPath $inlineRendererPath -Raw
  foreach($token in @(
-  'RuntimeObservationFile','SeedObservationFile',"$historySource = 'runtime_observations'",'if ($allRows.Count -eq 0)',
+  'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
   'current_snapshot','display_carry','Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap',
   'for ($i=0; $i -le 8; $i++)','PointCount','ChangeCount','StableImageFile','stableImagePath'
  )){if(-not$inline.Contains($token)){Fail "Inline card renderer missing '$token'."}}
