@@ -171,42 +171,30 @@ $prefs = Read-UiPreferences
 $engine = Read-FilterStateJson $EngineStateFile
 $countries = Read-FilterStateJson $CountriesFile
 $sourceRange = Get-ActiveMarketSourceRange -Engine $engine
+$displayBands = @($prefs.displayTripBands)
 
 $state['UIItemFilterAll'] = if ([bool]$prefs.itemFilterAll) { 1 } else { 0 }
 $state['UISelectedItemIds'] = (@($prefs.selectedItemIds | ForEach-Object { [string][int]$_ }) -join ',')
-$state['UISelectedTripBands'] = (@($prefs.selectedTripBands | ForEach-Object { ([string]$_).ToLowerInvariant() }) -join ',')
+$state['UISelectedTripBands'] = (@($displayBands | ForEach-Object { ([string]$_).ToLowerInvariant() }) -join ',')
 $state['UISelectedCountryIds'] = (@($prefs.selectedCountryIds | ForEach-Object { [string]$_ }) -join ',')
 $state['UICategoryFilterAll'] = if ([bool]$prefs.categoryFilterAll) { 1 } else { 0 }
 $state['UISelectedCategories'] = (@($prefs.selectedCategories | ForEach-Object { [string]$_ }) -join '|')
 $state['UIShowProfitableOnly'] = if ([bool]$prefs.showProfitableOnly) { 1 } else { 0 }
 $state['UIIgnoredItemIds'] = (@($prefs.ignoredItemIds | ForEach-Object { [string][int]$_ }) -join ',')
 
-# StateReader historically reads UIOldestMarketSourceTimestamp as the provider-age
-# timestamp. Keep that key for compatibility, but feed it the newest active market
-# sample so one lagging country cannot label the entire provider stale. Preserve the
-# actual oldest sample separately for diagnostics.
 $state['UIOldestMarketSourceTimestamp'] = [long]$sourceRange.freshest
 $state['UIOldestActiveMarketSourceTimestamp'] = [long]$sourceRange.oldest
 $state['UIFreshestMarketSourceTimestamp'] = [long]$sourceRange.freshest
 
-# Redundant final projection keeps flag tooltips correct even if an older or partial
-# compatibility projection reached state.kv before the opportunity layer completed.
 Project-AllCollectedTravelSeconds -State $state -Countries $countries -Preferences $prefs
-
-# A provider row can legally expose an empty providerName. Never let that erase the
-# item label in the Rainmeter card: prefer local catalog metadata, then a non-empty
-# provider label, then an explicit Item <id> fallback.
 Repair-OpportunityPresentationNames -State $state -Engine $engine
 
-# Pin state is intentionally not mirrored through state.kv. StateReader owns the
-# live pin and persists it directly to ignored preferences.json. Projecting an
-# older pin here can overwrite a just-clicked pin on the next one-second update.
 [void]$state.Remove('UIPinnedMarket')
 
 $state['UIItemFilterText'] = Get-FilterStateItemText -Preferences $prefs
 $state['UICategoryFilterText'] = Get-FilterStateCategoryText -Preferences $prefs
-$state['UITripShortOn'] = if (@($prefs.selectedTripBands) -contains 'short') { 1 } else { 0 }
-$state['UITripMediumOn'] = if (@($prefs.selectedTripBands) -contains 'medium') { 1 } else { 0 }
-$state['UITripLongOn'] = if (@($prefs.selectedTripBands) -contains 'long') { 1 } else { 0 }
+$state['UITripShortOn'] = if (@($displayBands) -contains 'short') { 1 } else { 0 }
+$state['UITripMediumOn'] = if (@($displayBands) -contains 'medium') { 1 } else { 0 }
+$state['UITripLongOn'] = if (@($displayBands) -contains 'long') { 1 } else { 0 }
 
 Write-FilterStateKvAtomic -Values $state -Path $StateKvFile
