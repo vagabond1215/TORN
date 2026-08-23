@@ -86,12 +86,15 @@ function Get-FilterVisibleCategories {
 
 function New-DefaultUiPreferences {
     return [pscustomobject]@{
-        schemaVersion = 5
+        schemaVersion = 6
         travelMode = 'airstrip'
         pinnedMarket = ''
         itemFilterAll = $true
         selectedItemIds = [int[]]@(Get-FilterVisibleItemIds)
+        # Candidate projection always retains all bands. displayTripBands is the
+        # local presentation filter used by the instant Rainmeter controls.
         selectedTripBands = [string[]]@('short','medium','long')
+        displayTripBands = [string[]]@('short','medium','long')
         selectedCountryIds = [string[]]@(Get-FilterAvailableCountryIds)
         categoryFilterAll = $true
         selectedCategories = [string[]]@(Get-FilterVisibleCategories)
@@ -123,15 +126,36 @@ function Normalize-SortMode {
     return $mode
 }
 
+function Normalize-TripBands {
+    param([object[]]$Values)
+    $bands = @()
+    foreach ($band in @($Values)) {
+        $value = ([string]$band).ToLowerInvariant()
+        if ($value -in @('short','medium','long')) { $bands += $value }
+    }
+    return [string[]]@($bands | Sort-Object -Unique)
+}
+
 function Normalize-UiPreferences {
     param([object]$Preferences)
     $defaults = New-DefaultUiPreferences
     if ($null -eq $Preferences) { $Preferences = [pscustomobject]@{} }
 
+    # Migrate the old selectedTripBands UI state into displayTripBands once.
+    $legacyDisplayBands = @('short','medium','long')
+    if (-not $Preferences.PSObject.Properties['displayTripBands'] -and $Preferences.PSObject.Properties['selectedTripBands']) {
+        $legacyDisplayBands = @(Normalize-TripBands @($Preferences.selectedTripBands))
+    }
+
     foreach ($property in @($defaults.PSObject.Properties)) {
         if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
-    Set-FilterProperty $Preferences 'schemaVersion' 5
+    Set-FilterProperty $Preferences 'schemaVersion' 6
+
+    if ($legacyDisplayBands.Count -ge 0 -and -not $Preferences.PSObject.Properties['displayTripBandsMigrated']) {
+        Set-FilterProperty $Preferences 'displayTripBands' ([string[]]$legacyDisplayBands)
+        Set-FilterProperty $Preferences 'displayTripBandsMigrated' $true
+    }
 
     $mode = [string]$Preferences.travelMode
     if ($mode -notin @('standard','airstrip','wlt','business')) { Set-FilterProperty $Preferences 'travelMode' 'airstrip' }
@@ -145,12 +169,10 @@ function Normalize-UiPreferences {
     }
     Set-FilterProperty $Preferences 'selectedItemIds' ([int[]]@($itemIds | Sort-Object -Unique))
 
-    $bands = @()
-    foreach ($band in @($Preferences.selectedTripBands)) {
-        $value = ([string]$band).ToLowerInvariant()
-        if ($value -in @('short','medium','long')) { $bands += $value }
-    }
-    Set-FilterProperty $Preferences 'selectedTripBands' ([string[]]@($bands | Sort-Object -Unique))
+    # Do not let presentation toggles prune the candidate projection. All three
+    # bands remain available locally so OFF -> ON is immediate even after polls.
+    Set-FilterProperty $Preferences 'selectedTripBands' ([string[]]@('short','medium','long'))
+    Set-FilterProperty $Preferences 'displayTripBands' (Normalize-TripBands @($Preferences.displayTripBands))
 
     $availableCountries = [string[]]@(Get-FilterAvailableCountryIds)
     $countries = @()
@@ -202,13 +224,13 @@ function Toggle-TripBandPreference {
     $normalized = Normalize-UiPreferences -Preferences $Preferences
     $bandName = $Band.ToLowerInvariant()
     if ($bandName -notin @('short','medium','long')) { throw 'Trip band must be short, medium, or long.' }
-    $bands = [string[]]@($normalized.selectedTripBands)
+    $bands = [string[]]@($normalized.displayTripBands)
     if ($bands -contains $bandName) {
         $bands = [string[]]@($bands | Where-Object { $_ -ne $bandName })
     } else {
         $bands = [string[]]@($bands + $bandName)
     }
-    Set-FilterProperty $normalized 'selectedTripBands' ([string[]]@($bands | Sort-Object -Unique))
+    Set-FilterProperty $normalized 'displayTripBands' ([string[]]@($bands | Sort-Object -Unique))
     return $normalized
 }
 
@@ -216,9 +238,10 @@ function Reset-UiFilterPreferences {
     param([object]$Preferences)
     $normalized = Normalize-UiPreferences -Preferences $Preferences
     $defaults = New-DefaultUiPreferences
-    foreach ($name in @('itemFilterAll','selectedItemIds','selectedTripBands','selectedCountryIds','categoryFilterAll','selectedCategories','showProfitableOnly')) {
+    foreach ($name in @('itemFilterAll','selectedItemIds','displayTripBands','selectedCountryIds','categoryFilterAll','selectedCategories','showProfitableOnly')) {
         Set-FilterProperty $normalized $name $defaults.PSObject.Properties[$name].Value
     }
+    Set-FilterProperty $normalized 'selectedTripBands' ([string[]]@('short','medium','long'))
     return $normalized
 }
 
@@ -258,12 +281,16 @@ if ($changed -and $Action -ne 'SetSortMode') {
         }
     }
 
-    $opportunities = Join-Path $PSScriptRoot 'OpportunityState.ps1'
-    if (Test-Path -LiteralPath $opportunities) {
-        try { & $opportunities }
-        catch {
-            if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
-                Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('OpportunityState.ps1: ' + $_.Exception.ToString())
+    # Trip-band toggles are presentation-only. Do not run the heavy opportunity
+    # evidence model on every click; the Rainmeter Lua layer filters immediately.
+    if ($Action -ne 'ToggleTripBand') {
+        $opportunities = Join-Path $PSScriptRoot 'OpportunityState.ps1'
+        if (Test-Path -LiteralPath $opportunities) {
+            try { & $opportunities }
+            catch {
+                if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+                    Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('OpportunityState.ps1: ' + $_.Exception.ToString())
+                }
             }
         }
     }
