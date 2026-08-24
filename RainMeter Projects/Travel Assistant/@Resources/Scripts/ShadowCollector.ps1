@@ -1,6 +1,9 @@
 param(
     [int]$MinimumPollIntervalSeconds = 60,
-    [switch]$Force
+    [int]$MaximumProviderAgeSeconds = 300,
+    [switch]$Force,
+    [Alias('SkipMain')]
+    [switch]$ShadowCollectorSkipMain
 )
 
 $ErrorActionPreference = 'Stop'
@@ -116,7 +119,42 @@ function Get-DestinationState {
     return $dest
 }
 
+function Get-LivePayloadFreshness {
+    param([object]$Payload, [long]$NowEpoch)
+    $timestamps = @()
+    if ($null -eq $Payload -or $null -eq $Payload.stocks) {
+        return [pscustomobject]@{ timestampCount=0; freshest=0L; oldest=0L; freshestAgeSeconds=[long]::MaxValue }
+    }
+    foreach ($property in @($Payload.stocks.PSObject.Properties)) {
+        $country = $property.Value
+        if ($null -eq $country -or -not $country.PSObject.Properties['update']) { continue }
+        $timestamp = 0L
+        try { $timestamp = [long]$country.update } catch { $timestamp = 0L }
+        if ($timestamp -gt 0) { $timestamps += $timestamp }
+    }
+    if ($timestamps.Count -eq 0) {
+        return [pscustomobject]@{ timestampCount=0; freshest=0L; oldest=0L; freshestAgeSeconds=[long]::MaxValue }
+    }
+    $freshest = [long]($timestamps | Measure-Object -Maximum).Maximum
+    $oldest = [long]($timestamps | Measure-Object -Minimum).Minimum
+    $age = [Math]::Max(0L, $NowEpoch - $freshest)
+    return [pscustomobject]@{ timestampCount=$timestamps.Count; freshest=$freshest; oldest=$oldest; freshestAgeSeconds=$age }
+}
+
+function Assert-LivePayloadFresh {
+    param([object]$Payload, [long]$NowEpoch, [int]$MaximumAgeSeconds, [string]$ProviderName)
+    $freshness = Get-LivePayloadFreshness -Payload $Payload -NowEpoch $NowEpoch
+    if ([int]$freshness.timestampCount -le 0) {
+        throw ('{0} response has no usable country update timestamps' -f $ProviderName)
+    }
+    if ([long]$freshness.freshestAgeSeconds -gt [long]$MaximumAgeSeconds) {
+        throw ('{0} response is stale: freshest country sample is {1}s old (limit {2}s)' -f $ProviderName,[long]$freshness.freshestAgeSeconds,$MaximumAgeSeconds)
+    }
+    return $freshness
+}
+
 function Get-LiveStockPayload {
+    param([long]$NowEpoch, [int]$MaximumAgeSeconds)
     $providers = @(
         [pscustomobject]@{ id = 'prometheus'; uri = 'https://api.prombot.co.uk/api/travel' },
         [pscustomobject]@{ id = 'yata'; uri = 'https://yata.yt/api/v1/travel/export/' }
@@ -125,15 +163,19 @@ function Get-LiveStockPayload {
 
     foreach ($provider in $providers) {
         try {
-            $payload = Invoke-RestMethod -Method Get -Uri ([string]$provider.uri) -Headers @{ Accept = 'application/json' } -TimeoutSec 8
+            # Keep the primary+fallback network budget bounded. RunUpdate's wrapper
+            # may retry YATA once, so five seconds per attempt keeps provider work
+            # comfortably inside the Rainmeter update budget.
+            $payload = Invoke-RestMethod -Method Get -Uri ([string]$provider.uri) -Headers @{ Accept = 'application/json' } -TimeoutSec 5
             if ($null -eq $payload -or $null -eq $payload.stocks) { throw 'response does not contain stocks' }
-            return [pscustomobject]@{ source = [string]$provider.id; payload = $payload }
+            $freshness = Assert-LivePayloadFresh -Payload $payload -NowEpoch $NowEpoch -MaximumAgeSeconds $MaximumAgeSeconds -ProviderName ([string]$provider.id)
+            return [pscustomobject]@{ source = [string]$provider.id; payload = $payload; freshness = $freshness }
         } catch {
             $errors.Add(('{0}: {1}' -f [string]$provider.id, $_.Exception.Message))
         }
     }
 
-    throw ('All live stock providers failed: ' + ($errors -join ' | '))
+    throw ('All live stock providers failed freshness/network validation: ' + ($errors -join ' | '))
 }
 
 function Get-LiveStockObservationsForCountry {
@@ -318,7 +360,9 @@ function Write-ShadowError {
     try { [System.IO.File]::WriteAllText($ErrorFile, $clean, [System.Text.UTF8Encoding]::new($false)) } catch { }
 }
 
+if ($ShadowCollectorSkipMain) { return }
 if ($MinimumPollIntervalSeconds -lt 60) { $MinimumPollIntervalSeconds = 60 }
+if ($MaximumProviderAgeSeconds -lt 60) { $MaximumProviderAgeSeconds = 60 }
 
 $now = Get-NowEpoch
 $engineState = Get-EngineState
@@ -337,7 +381,7 @@ $collectionCountries = @($countriesConfig.countries | Where-Object { $_.PSObject
 $inactiveMarketIndex = Get-InactiveMarketIndex -OverrideConfig $marketOverrideConfig
 
 try {
-    $live = Get-LiveStockPayload
+    $live = Get-LiveStockPayload -NowEpoch $now -MaximumAgeSeconds $MaximumProviderAgeSeconds
     $countriesSeen = 0
     $marketsSeen = 0
     $legacyMarketsSeen = 0
