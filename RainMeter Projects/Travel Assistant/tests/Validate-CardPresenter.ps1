@@ -24,9 +24,10 @@ if ($errors.Count -eq 0) {
     if ($stateAt -lt 0 -or $presenterAt -le $stateAt) { Fail 'MeasureCardPresenter must update after MeasureState so it formats the already sorted/filtered visible rows.' }
 
     foreach ($token in @(
-        'removeCountrySuffix','rowCountryAndTravel','activeOutboundRemaining','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
-        "travelState ~= 'traveling'","destinationId ~= countryId","return formatDuration(remaining) .. ' left'",
-        "setOption(prefix..'Window','FontColor','145,152,164,255')",
+        'removeCountrySuffix','rowCountryAndTravel','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
+        "travelState == 'traveling'","destinationId == countryId","return formatDuration(remaining) .. ' left'",
+        "setOption(prefix..'Window','FontColor','#Muted#')",
+        'isDurationOnly','if isDurationOnly(window) then window = '''' end',
         'quantityFromTooltip','buyPriceFromVisibleText','math.ceil(buyPrice * quantity * 1.05)',
         "equation = equation .. ' x'", "' = ' .. formatMoney(totalProfit)",
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer',
@@ -50,5 +51,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Compact trade-card presentation validation passed.' -ForegroundColor Green
-Write-Host 'Country stays on the flag tooltip; normal cards show muted configured flight time, while recognized outbound travel shows only that destination and a locally decrementing landing countdown.'
+Write-Host 'Flight/countdown time occupies the muted left slot only; bare duration WindowText is suppressed from the actionable status field.'
 exit 0
