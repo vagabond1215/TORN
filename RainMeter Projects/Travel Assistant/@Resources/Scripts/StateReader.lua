@@ -53,8 +53,8 @@ local tripBandsByCountry = {
 }
 
 -- Defensive local names for the most common foreign-shop goods. Normal rendering
--- prefers projected catalog/provider names; this only prevents blank cards when a
--- provider omits its label or an older local catalog has not rebuilt yet.
+-- prefers projected catalog/provider names; this also replaces generic Item <id>
+-- placeholders when the ID is already known locally.
 local itemNameFallbacks = {
     [110]='Leather Bullwhip', [175]='Taser', [206]='Xanax', [226]='Smoke Grenade', [227]='Spear',
     [230]='Flare Gun', [231]='Heckler & Koch SL8', [258]='Jaguar Plushie', [260]='Dahlia',
@@ -291,6 +291,16 @@ local function fallbackItemName(key)
     return 'Unknown item'
 end
 
+local function resolvedItemName(key, projectedName)
+    local name = safeText(projectedName, '')
+    local placeholder = (name == '' or name == 'Unknown item' or name:match('^Item%s+%d+$') ~= nil)
+    if placeholder then
+        local fallback = fallbackItemName(key)
+        if fallback ~= '' then return fallback end
+    end
+    return name
+end
+
 local function currentOpportunityRows(data)
     local count = math.max(0, math.min(maxCandidateRows, math.floor(number(data.OpportunityCount))))
     local rows = {}
@@ -300,7 +310,7 @@ local function currentOpportunityRows(data)
         if key ~= '' then
             local countryId = countryIdFromKey(key)
             local band = safeText(data[prefix .. 'TripBand'], tripBandsByCountry[countryId] or ''):lower()
-            local name = safeText(data[prefix .. 'Name'], fallbackItemName(key))
+            local name = resolvedItemName(key, data[prefix .. 'Name'])
             table.insert(rows, {
                 sourceIndex = i,
                 key = key,
@@ -529,9 +539,9 @@ local function displayChanceText(data, prefix)
 end
 
 local function cardTitle(data, prefix, key)
-    local name = safeText(data[prefix .. 'Name'], fallbackItemName(key))
+    local name = resolvedItemName(key, data[prefix .. 'Name'])
     local country = safeText(data[prefix .. 'Country'], '')
-    if country ~= '' then return name .. ' · ' .. country end
+    if country ~= '' then return name .. ' - ' .. country end
     return name
 end
 
@@ -569,7 +579,7 @@ local function updateOpportunities(data)
             local combinedPrice = ''
             if price ~= '' then combinedPrice = 'BUY ' .. price .. '/ea' end
             if mv ~= '' then
-                if combinedPrice ~= '' then combinedPrice = combinedPrice .. ' · ' end
+                if combinedPrice ~= '' then combinedPrice = combinedPrice .. ' | ' end
                 combinedPrice = combinedPrice .. 'MV ' .. mv
             end
 
