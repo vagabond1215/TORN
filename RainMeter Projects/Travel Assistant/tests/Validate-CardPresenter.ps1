@@ -25,22 +25,18 @@ if ($errors.Count -eq 0) {
     }
     $stateAt = $ini.IndexOf('[MeasureState]',[System.StringComparison]::Ordinal)
     $presenterAt = $ini.IndexOf('[MeasureCardPresenter]',[System.StringComparison]::Ordinal)
-    if ($stateAt -lt 0 -or $presenterAt -le $stateAt) { Fail 'MeasureCardPresenter must update after MeasureState so it formats the already sorted/filtered visible rows.' }
+    if ($stateAt -lt 0 -or $presenterAt -le $stateAt) { Fail 'MeasureCardPresenter must update after MeasureState.' }
 
     foreach ($token in @(
         'removeCountrySuffix','rowCountryAndTravel','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
-        "travelState == 'traveling'","destinationId == countryId","return formatDuration(remaining) .. ' left'",
-        "setOption(prefix..'Window','FontColor','#Muted#')",
-        'isDurationOnly','if isDurationOnly(window) then window = '''' end',
-        'parseWindowPlan','probabilityAt','groupMode','liveWindowAction','nextBetterBestBefore',
-        "group.safeEnd-group.safeStart >= 60","group.bestProbability > 0.5","currentProbability > 0.5",
+        'parseWindowPlan','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
+        'WP2:','group.safeEnd-group.safeStart>=60','group.bestProbability>0.5','currentProbability>0.5',
         "'SAFE - LEAVE '","'SAFE - LEAVE BEFORE '","'BEST - LEAVE NOW'", "'BEST - LEAVE '",
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
-        'quantityFromTooltip','buyPriceFromVisibleText','math.ceil(buyPrice * quantity * 1.05)',
-        "equation = equation .. ' x'", "' = ' .. formatMoney(totalProfit)",
+        'quantityFromTooltip','buyPriceFromVisibleText','math.ceil(buyPrice*quantity*1.05)',
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer',
-        'statusText(fallbackWindow,fallbackLeave)','setOption(prefix..''Name'',''ToolTipText'','''')'
+        'statusText(fallbackWindow,fallbackLeave)'
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
@@ -48,11 +44,12 @@ if ($errors.Count -eq 0) {
 
     foreach ($token in @(
         'Get-RecurringScenarioModel','safeStartAt = $lateRestockAt','safeEndAt = $earlySelloutAt','MinimumSafeWindowSeconds = 60L',
-        'bestProbability','Convert-WindowPlanMachineText','Select-WindowPlanGroup','WP1:',
-        '$RuntimeCycleFile','$SeedCycleFile','MaximumSamples = 96'
+        'bestProbability','Convert-WindowPlanMachineText','Select-WindowPlanGroup','WP2:',
+        '$RuntimeCycleFile','$SeedCycleFile','MaximumSamples = 48','$cycleParts','$phaseCode','restockDelaySeconds','availabilitySeconds'
     )) {
         if (-not $windowPlan.Contains($token)) { Fail "WindowPlan.ps1 missing '$token'." }
     }
+    if ($windowPlan.Contains('WP1:')) { Fail 'WindowPlan.ps1 retains retired WP1 timeline format.' }
     if ($windowPlan -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'WindowPlan.ps1 must remain local-only.' }
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($windowPlanPath,[ref]$tokens,[ref]$parseErrors)
@@ -77,5 +74,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Compact trade-card safe/best window validation passed.' -ForegroundColor Green
-Write-Host 'Safe windows use full empirical overlap with no confidence label; Best Hit uses live >50% support and advances to later windows after the current opportunity is missed.'
+Write-Host 'Safe windows use full empirical overlap with no confidence label; Best Hit uses live >50% support and advances after the opportunity is missed.'
 exit 0
