@@ -183,7 +183,7 @@ local function parseWindowPlan(tooltip)
     local plan = { groups={}, segments={} }
     for _,entry in ipairs(split(groupsText,'/')) do
         local f=split(entry,',')
-        if f[1]=='G' and #f >= 10 then
+        if f[1]=='G' and #f >= 11 then
             table.insert(plan.groups,{
                 ordinal=number(f[2]), earlyRestock=number(f[3]), earlySellout=number(f[4]),
                 lateRestock=number(f[5]), lateSellout=number(f[6]), safeStart=number(f[7]),
@@ -197,6 +197,7 @@ local function parseWindowPlan(tooltip)
         if #f >= 3 then table.insert(plan.segments,{startAt=number(f[1]),endAt=number(f[2]),probability=number(f[3])}) end
     end
     table.sort(plan.groups,function(a,b) return a.ordinal < b.ordinal end)
+    table.sort(plan.segments,function(a,b) return a.startAt < b.startAt end)
     return plan,human or ''
 end
 
@@ -206,6 +207,24 @@ local function probabilityAt(plan,arrivalAt)
         if arrivalAt >= segment.startAt and arrivalAt < segment.endAt then return segment.probability,segment end
     end
     return 0,nil
+end
+
+local function supportRunEndDeparture(plan,currentSegment,flightSeconds)
+    if plan==nil or currentSegment==nil then return 0 end
+    local runEnd=currentSegment.endAt
+    local found=false
+    for _,segment in ipairs(plan.segments) do
+        if not found then
+            if segment.startAt==currentSegment.startAt and segment.endAt==currentSegment.endAt then found=true end
+        elseif segment.startAt <= runEnd+1 and segment.probability > 0.5 then
+            if segment.endAt > runEnd then runEnd=segment.endAt end
+        elseif segment.startAt > runEnd+1 then
+            break
+        else
+            break
+        end
+    end
+    return runEnd-flightSeconds
 end
 
 local function groupMode(group)
@@ -266,13 +285,12 @@ local function findPreferredGroup(plan,flightSeconds,availableAt,now)
     return nil,nil
 end
 
-local function nextBetterBestBefore(plan,currentGroup,currentProbability,currentSegment,flightSeconds,now)
-    if plan==nil or currentGroup==nil or currentSegment==nil then return nil end
-    local dropAt=currentSegment.endAt-flightSeconds
+local function nextBetterBestBefore(plan,currentGroup,currentProbability,supportEndsAt,flightSeconds,now)
+    if plan==nil or currentGroup==nil then return nil end
     for _,group in ipairs(plan.groups) do
         if group.ordinal > currentGroup.ordinal and groupMode(group)=='best' and group.bestProbability > currentProbability then
             local _,_,targetAt=groupDepartureTimes(group,'best',flightSeconds)
-            if targetAt > now and targetAt < dropAt then return group end
+            if targetAt > now and targetAt < supportEndsAt then return group end
         end
     end
     return nil
@@ -286,15 +304,20 @@ local function liveWindowAction(plan,state,country,defaultTravel,now)
     local flightSeconds=countryTravelSeconds(state,country,defaultTravel)
     if flightSeconds <= 0 then return nil,nil,nil end
 
+    local effectiveFlightSeconds=flightSeconds
+    if travelState=='traveling' and destinationId==countryId then
+        local remaining=liveTravelRemainingSeconds(state,now)
+        if remaining>0 then effectiveFlightSeconds=remaining end
+    end
     local availableAt=now
     if travelState=='returning' then availableAt=now+liveTravelRemainingSeconds(state,now) end
-    local group,mode=findPreferredGroup(plan,flightSeconds,availableAt,now)
+    local group,mode=findPreferredGroup(plan,effectiveFlightSeconds,availableAt,now)
     if group==nil then return 'WAIT DATA','',nil end
     local tooltip=formatWindowTooltip(group,now)
 
     if travelState=='traveling' and destinationId==countryId then
         local arrivalAt=number(state.TravelArrivalAt)
-        if arrivalAt <= now then arrivalAt=now+liveTravelRemainingSeconds(state,now) end
+        if arrivalAt <= now then arrivalAt=now+effectiveFlightSeconds end
         local p=probabilityAt(plan,arrivalAt)
         if mode=='safe' and arrivalAt>=group.safeStart and arrivalAt<group.safeEnd then return 'SAFE - EN ROUTE','',tooltip end
         if mode=='best' then return 'BEST - EN ROUTE',p>=0 and string.format('%.0f%%',p*100) or '',tooltip end
@@ -311,7 +334,12 @@ local function liveWindowAction(plan,state,country,defaultTravel,now)
 
     local currentProbability,currentSegment=probabilityAt(plan,now+flightSeconds)
     if currentProbability > 0.5 then
-        local better=nextBetterBestBefore(plan,group,currentProbability,currentSegment,flightSeconds,now)
+        local supportEndsAt=supportRunEndDeparture(plan,currentSegment,flightSeconds)
+        local _,_,sameTarget=groupDepartureTimes(group,'best',flightSeconds)
+        if group.bestProbability > currentProbability and sameTarget > now and sameTarget < supportEndsAt then
+            return 'BEST - LEAVE '..formatDuration(sameTarget-now),string.format('%.0f%%',group.bestProbability*100),tooltip
+        end
+        local better=nextBetterBestBefore(plan,group,currentProbability,supportEndsAt,flightSeconds,now)
         if better~=nil then
             local _,_,betterTarget=groupDepartureTimes(better,'best',flightSeconds)
             return 'BEST - LEAVE '..formatDuration(betterTarget-now),string.format('%.0f%%',better.bestProbability*100),formatWindowTooltip(better,now)
@@ -321,8 +349,6 @@ local function liveWindowAction(plan,state,country,defaultTravel,now)
 
     if targetAt > now then return 'BEST - LEAVE '..formatDuration(targetAt-now),string.format('%.0f%%',group.bestProbability*100),tooltip end
 
-    -- This best-hit opportunity has fallen to 50% or lower or its optimal point
-    -- has passed. Treat it as missed and advance to the next usable cycle.
     for _,nextGroup in ipairs(plan.groups) do
         if nextGroup.ordinal > group.ordinal and groupMode(nextGroup)~=nil then
             local nextMode=groupMode(nextGroup)
