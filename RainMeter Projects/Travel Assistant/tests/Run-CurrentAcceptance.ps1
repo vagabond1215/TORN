@@ -6,6 +6,7 @@ $tests = @(
     'Validate-TravelAssistant.ps1',
     'Validate-RainmeterSkin.ps1',
     'Validate-CardPresenter.ps1',
+    'Validate-CurrentTweaks.ps1',
     'Validate-ItemViewer.ps1',
     'Validate-RuntimeDiagnostics.ps1',
     'Validate-Filters.ps1',
@@ -17,6 +18,7 @@ $tests = @(
     'Run-CycleAnalyticsTests.ps1',
     'Validate-TravelContext.ps1',
     'Run-TravelContextTests.ps1',
+    'Run-CurrentCapacityTests.ps1',
     'Validate-OptimalRoute.ps1',
     'Run-OptimalRouteTests.ps1',
     'Run-OpportunityStateTests.ps1',
@@ -43,5 +45,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify Safe/Best departure tooltips and Safe info anchor, live best-hit confidence, provider freshness/fallback, cycle analytics, white profit-equation punctuation, flag-only country tooltip, flight/remaining time, conditional Take cash buffer (0% for invariant price; 5% after observed price variance), instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify live active-perk capacity (including faction peace/war changes), observation-aligned Safe/Best timing, departure tooltip plus dedicated info glyph, qty in the title, Cost + MV + profit/item header, conditional Take cash buffer, provider freshness/fallback, instant filters/sorts, and the one-at-a-time 528x125 observed-only 8-hour graph.' -ForegroundColor Yellow
 exit 0
