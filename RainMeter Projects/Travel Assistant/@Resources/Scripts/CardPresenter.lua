@@ -68,12 +68,19 @@ end
 
 local function formatDuration(seconds)
     local value = math.max(0,math.floor(number(seconds)))
-    if value <= 0 then return '?' end
+    if value <= 0 then return '<1m' end
     local hours = math.floor(value/3600)
     local minutes = math.floor((value%3600)/60)
     if hours > 0 then return string.format('%dh %dm',hours,minutes) end
     if minutes > 0 then return string.format('%dm',minutes) end
     return '<1m'
+end
+
+local function parseDurationText(text)
+    local value = trim(text):lower()
+    local hours = tonumber(value:match('(%d+)%s*h')) or 0
+    local minutes = tonumber(value:match('(%d+)%s*m')) or 0
+    return (hours*3600)+(minutes*60)
 end
 
 local function removeCountrySuffix(title,country)
@@ -130,6 +137,17 @@ local function rowFlightText(state,country,defaultTravel,now)
     return '?'
 end
 
+local function countryTravelSeconds(state,country,defaultTravel)
+    local countryId = countryIdsByName[country] or ''
+    local key = ''
+    if countryId == 'united_kingdom' then key='UKTravelSeconds'
+    elseif countryId == 'japan' then key='JPTravelSeconds'
+    elseif countryId ~= '' then key=string.upper(countryId)..'TravelSeconds' end
+    local seconds = key ~= '' and number(state[key]) or 0
+    if seconds > 0 then return seconds end
+    return parseDurationText(defaultTravel)
+end
+
 local function isDurationOnly(text)
     local value = trim(text):lower()
     if value == '' then return false end
@@ -143,13 +161,181 @@ end
 local function statusText(windowText,leaveText)
     local window = trim(windowText)
     local leave = trim(leaveText)
-    -- Flight/countdown duration already occupies the muted left timing slot.
-    -- A bare duration in WindowText is therefore redundant and must not be
-    -- repeated in the actionable status field.
     if isDurationOnly(window) then window = '' end
     if window == '' then return leave end
     if leave == '' or leave == window then return window end
     return window .. ' / ' .. leave
+end
+
+local function split(text,separator)
+    local result = {}
+    if text == nil or text == '' then return result end
+    local pattern = '([^'..separator..']+)'
+    for part in tostring(text):gmatch(pattern) do table.insert(result,part) end
+    return result
+end
+
+local function parseWindowPlan(tooltip)
+    local machine,human = tostring(tooltip or ''):match('^WP1:([^#]*)#(.*)$')
+    if machine == nil then return nil,tostring(tooltip or '') end
+    local groupsText,segmentsText = machine:match('^(.-)~(.*)$')
+    if groupsText == nil then return nil,human or '' end
+    local plan = { groups={}, segments={} }
+    for _,entry in ipairs(split(groupsText,'/')) do
+        local f=split(entry,',')
+        if f[1]=='G' and #f >= 10 then
+            table.insert(plan.groups,{
+                ordinal=number(f[2]), earlyRestock=number(f[3]), earlySellout=number(f[4]),
+                lateRestock=number(f[5]), lateSellout=number(f[6]), safeStart=number(f[7]),
+                safeEnd=number(f[8]), bestStart=number(f[9]), bestEnd=number(f[10]),
+                bestProbability=number(f[11])
+            })
+        end
+    end
+    for _,entry in ipairs(split(segmentsText,'/')) do
+        local f=split(entry,',')
+        if #f >= 3 then table.insert(plan.segments,{startAt=number(f[1]),endAt=number(f[2]),probability=number(f[3])}) end
+    end
+    table.sort(plan.groups,function(a,b) return a.ordinal < b.ordinal end)
+    return plan,human or ''
+end
+
+local function probabilityAt(plan,arrivalAt)
+    if plan == nil then return -1,nil end
+    for _,segment in ipairs(plan.segments) do
+        if arrivalAt >= segment.startAt and arrivalAt < segment.endAt then return segment.probability,segment end
+    end
+    return 0,nil
+end
+
+local function groupMode(group)
+    if group == nil then return nil end
+    if group.safeStart > 0 and group.safeEnd-group.safeStart >= 60 then return 'safe' end
+    if group.bestStart > 0 and group.bestEnd > group.bestStart and group.bestProbability > 0.5 then return 'best' end
+    return nil
+end
+
+local function groupDepartureTimes(group,mode,flightSeconds)
+    if mode=='safe' then
+        return group.safeStart-flightSeconds,group.safeEnd-flightSeconds,math.floor(((group.safeStart+group.safeEnd)/2)-flightSeconds)
+    end
+    return group.bestStart-flightSeconds,group.bestEnd-flightSeconds,math.floor(((group.bestStart+group.bestEnd)/2)-flightSeconds)
+end
+
+local function formatMoment(at,now)
+    if at <= 0 then return '?' end
+    local relation
+    if at >= now then relation=formatDuration(at-now)..' away'
+    else relation=formatDuration(now-at)..' ago' end
+    return os.date('%H:%M',at)..' ('..relation..')'
+end
+
+local function formatWindowTooltip(group,now)
+    if group == nil then return 'Window evidence unavailable' end
+    local nl='#CRLF#'
+    local safe='none'
+    if group.safeStart > 0 and group.safeEnd-group.safeStart >= 60 then
+        safe=os.date('%H:%M',group.safeStart)..' - '..os.date('%H:%M',group.safeEnd)..' ('..formatDuration(group.safeEnd-group.safeStart)..')'
+    end
+    local best='none'
+    if group.bestStart > 0 and group.bestEnd > group.bestStart then
+        local target=math.floor((group.bestStart+group.bestEnd)/2)
+        best=formatMoment(target,now)..' ['..string.format('%.0f%%',group.bestProbability*100)..']'
+    end
+    return 'Safe formula: max(restock starts) -> min(sellout ends)'..nl..
+           'Best formula: completed-cycle overlap / usable cycle count'..nl..
+           'Early Restock: '..formatMoment(group.earlyRestock,now)..' - '..formatMoment(group.earlySellout,now)..nl..
+           'Late Restock: '..formatMoment(group.lateRestock,now)..' - '..formatMoment(group.lateSellout,now)..nl..
+           'Safe Window: '..safe..nl..
+           'Best Hit Window: '..best
+end
+
+local function findPreferredGroup(plan,flightSeconds,availableAt,now)
+    if plan == nil then return nil,nil end
+    for _,group in ipairs(plan.groups) do
+        local mode=groupMode(group)
+        if mode ~= nil then
+            local openAt,closeAt,targetAt=groupDepartureTimes(group,mode,flightSeconds)
+            if mode=='safe' then
+                if closeAt > availableAt then return group,mode end
+            elseif closeAt > availableAt and (targetAt > availableAt or closeAt > now) then
+                return group,mode
+            end
+        end
+    end
+    return nil,nil
+end
+
+local function nextBetterBestBefore(plan,currentGroup,currentProbability,currentSegment,flightSeconds,now)
+    if plan==nil or currentGroup==nil or currentSegment==nil then return nil end
+    local dropAt=currentSegment.endAt-flightSeconds
+    for _,group in ipairs(plan.groups) do
+        if group.ordinal > currentGroup.ordinal and groupMode(group)=='best' and group.bestProbability > currentProbability then
+            local _,_,targetAt=groupDepartureTimes(group,'best',flightSeconds)
+            if targetAt > now and targetAt < dropAt then return group end
+        end
+    end
+    return nil
+end
+
+local function liveWindowAction(plan,state,country,defaultTravel,now)
+    if plan==nil or #plan.groups==0 then return nil,nil,nil end
+    local countryId=countryIdsByName[country] or ''
+    local travelState=trim(state.TravelState):lower()
+    local destinationId=trim(state.TravelDestinationCountryId):lower()
+    local flightSeconds=countryTravelSeconds(state,country,defaultTravel)
+    if flightSeconds <= 0 then return nil,nil,nil end
+
+    local availableAt=now
+    if travelState=='returning' then availableAt=now+liveTravelRemainingSeconds(state,now) end
+    local group,mode=findPreferredGroup(plan,flightSeconds,availableAt,now)
+    if group==nil then return 'WAIT DATA','',nil end
+    local tooltip=formatWindowTooltip(group,now)
+
+    if travelState=='traveling' and destinationId==countryId then
+        local arrivalAt=number(state.TravelArrivalAt)
+        if arrivalAt <= now then arrivalAt=now+liveTravelRemainingSeconds(state,now) end
+        local p=probabilityAt(plan,arrivalAt)
+        if mode=='safe' and arrivalAt>=group.safeStart and arrivalAt<group.safeEnd then return 'SAFE - EN ROUTE','',tooltip end
+        if mode=='best' then return 'BEST - EN ROUTE',p>=0 and string.format('%.0f%%',p*100) or '',tooltip end
+        return 'EN ROUTE','',tooltip
+    end
+    if travelState=='abroad' and destinationId==countryId then return 'AT DEST.','',tooltip end
+
+    local openAt,closeAt,targetAt=groupDepartureTimes(group,mode,flightSeconds)
+    if mode=='safe' then
+        if now < openAt then return 'SAFE - LEAVE '..formatDuration(openAt-now),'',tooltip end
+        if now < closeAt then return 'SAFE - LEAVE BEFORE '..formatDuration(closeAt-now),'',tooltip end
+        return 'WAIT DATA','',tooltip
+    end
+
+    local currentProbability,currentSegment=probabilityAt(plan,now+flightSeconds)
+    if currentProbability > 0.5 then
+        local better=nextBetterBestBefore(plan,group,currentProbability,currentSegment,flightSeconds,now)
+        if better~=nil then
+            local _,_,betterTarget=groupDepartureTimes(better,'best',flightSeconds)
+            return 'BEST - LEAVE '..formatDuration(betterTarget-now),string.format('%.0f%%',better.bestProbability*100),formatWindowTooltip(better,now)
+        end
+        return 'BEST - LEAVE NOW',string.format('%.0f%%',currentProbability*100),tooltip
+    end
+
+    if targetAt > now then return 'BEST - LEAVE '..formatDuration(targetAt-now),string.format('%.0f%%',group.bestProbability*100),tooltip end
+
+    -- This best-hit opportunity has fallen to 50% or lower or its optimal point
+    -- has passed. Treat it as missed and advance to the next usable cycle.
+    for _,nextGroup in ipairs(plan.groups) do
+        if nextGroup.ordinal > group.ordinal and groupMode(nextGroup)~=nil then
+            local nextMode=groupMode(nextGroup)
+            local nOpen,nClose,nTarget=groupDepartureTimes(nextGroup,nextMode,flightSeconds)
+            if nextMode=='safe' and nClose>now then
+                if now<nOpen then return 'SAFE - LEAVE '..formatDuration(nOpen-now),'',formatWindowTooltip(nextGroup,now) end
+                return 'SAFE - LEAVE BEFORE '..formatDuration(nClose-now),'',formatWindowTooltip(nextGroup,now)
+            elseif nextMode=='best' and nTarget>now then
+                return 'BEST - LEAVE '..formatDuration(nTarget-now),string.format('%.0f%%',nextGroup.bestProbability*100),formatWindowTooltip(nextGroup,now)
+            end
+        end
+    end
+    return 'WAIT DATA','',tooltip
 end
 
 local function applyCompactLayout(index)
@@ -179,27 +365,24 @@ local function updateRow(index,state,now)
     local country,travel = rowCountryAndTravel(index)
     local itemName = removeCountrySuffix(rawTitle,country)
     local totalProfit = parseMoney(meterOption(prefix..'Gross','Text'))
-    local tooltip = meterOption(prefix..'Gross','ToolTipText')
-    local quantity = quantityFromTooltip(tooltip)
+    local rawTooltip = meterOption(prefix..'Gross','ToolTipText')
+    local plan,humanTooltip = parseWindowPlan(rawTooltip)
+    local quantity = quantityFromTooltip(humanTooltip)
     local unitProfit = 0
     if quantity > 0 then unitProfit = totalProfit / quantity end
 
     local equation = formatMoney(unitProfit) .. '/ea'
-    if quantity > 0 then
-        equation = equation .. ' x' .. tostring(quantity) .. ' = ' .. formatMoney(totalProfit)
-    else
-        equation = formatMoney(totalProfit)
-    end
+    if quantity > 0 then equation = equation .. ' x' .. tostring(quantity) .. ' = ' .. formatMoney(totalProfit)
+    else equation = formatMoney(totalProfit) end
 
     local buyPrice = buyPriceFromVisibleText(meterOption(prefix..'Price','Text'))
     local take = 0
-    if buyPrice > 0 and quantity > 0 then
-        take = math.ceil(buyPrice * quantity * 1.05)
-    end
+    if buyPrice > 0 and quantity > 0 then take = math.ceil(buyPrice * quantity * 1.05) end
 
-    local window = meterOption(prefix..'Window','Text')
-    local leave = meterOption(prefix..'Leave','Text')
-    local certainty = meterOption(prefix..'Chance','Text')
+    local fallbackWindow = meterOption(prefix..'Window','Text')
+    local fallbackLeave = meterOption(prefix..'Leave','Text')
+    local fallbackCertainty = meterOption(prefix..'Chance','Text')
+    local liveAction,liveCertainty,windowTooltip = liveWindowAction(plan,state,country,travel,now)
 
     setOption(prefix..'Name','Text',itemName)
     setOption(prefix..'Name','ToolTipText','')
@@ -207,8 +390,17 @@ local function updateRow(index,state,now)
     setOption(prefix..'Gross','ToolTipText','Net profit per item x planned inventory quantity = total net profit')
     setOption(prefix..'Window','Text',rowFlightText(state,country,travel,now))
     setOption(prefix..'Window','FontColor','#Muted#')
-    setOption(prefix..'Leave','Text',statusText(window,leave))
-    setOption(prefix..'Chance','Text',certainty)
+    if liveAction~=nil then
+        setOption(prefix..'Leave','Text',liveAction)
+        setOption(prefix..'Chance','Text',liveCertainty or '')
+        setOption(prefix..'Leave','ToolTipText',windowTooltip or '')
+        setOption(prefix..'Chance','ToolTipText',windowTooltip or '')
+    else
+        setOption(prefix..'Leave','Text',statusText(fallbackWindow,fallbackLeave))
+        setOption(prefix..'Chance','Text',fallbackCertainty)
+        setOption(prefix..'Leave','ToolTipText','')
+        setOption(prefix..'Chance','ToolTipText','')
+    end
     if take > 0 then
         setOption(prefix..'Price','Text','Take: '..formatMoney(take))
         setOption(prefix..'Price','ToolTipText','Purchase cash required plus a 5% buffer')
@@ -227,9 +419,7 @@ function Update()
     local state = readKv(statePath)
     local now = os.time()
     local travelSignature = trim(state.TravelState)..':'..trim(state.TravelDestinationCountryId)
-    if lastTravelStateSignature ~= '' and travelSignature ~= lastTravelStateSignature then
-        SKIN:Bang('!UpdateMeasure','MeasureState')
-    end
+    if lastTravelStateSignature ~= '' and travelSignature ~= lastTravelStateSignature then SKIN:Bang('!UpdateMeasure','MeasureState') end
     lastTravelStateSignature = travelSignature
     for i=1,8 do updateRow(i,state,now) end
     return 0
