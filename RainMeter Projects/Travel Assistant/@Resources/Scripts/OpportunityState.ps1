@@ -283,15 +283,25 @@ function Write-OpportunityProjection {
         [string]$SortMode,
         [string]$Message
     )
+
+    # Keep a bounded local candidate pool in state.kv. Rainmeter renders only the
+    # first eight after applying its local trip-band filter and selected sort, but
+    # retaining all eligible markets here makes those controls genuinely instant.
+    $maxProjectedRows = 256
+    $previousCount = 0
+    if ($State.ContainsKey('OpportunityCount')) { [void][int]::TryParse([string]$State['OpportunityCount'],[ref]$previousCount) }
+    $projectCount = [Math]::Min($maxProjectedRows,@($Rows).Count)
+    $clearCount = [Math]::Min($maxProjectedRows,[Math]::Max(8,[Math]::Max($previousCount,$projectCount)))
+
     $State['OpportunitySortMode'] = $SortMode
     $State['OpportunitySortText'] = $SortMode.ToUpperInvariant()
     $State['OpportunityMessage'] = $Message
-    $State['OpportunityCount'] = [Math]::Min(8,@($Rows).Count)
+    $State['OpportunityCount'] = $projectCount
     $State['OpportunityBestKey'] = ''
 
-    foreach ($index in 1..8) {
+    foreach ($index in 1..$clearCount) {
         foreach ($suffix in @(
-            'Key','RankText','OptimalText','Name','Country','CountryCode','WindowText','LeaveText','ChanceText','TimeText',
+            'Key','RankText','OptimalText','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
             'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip',
             'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds'
         )) {
@@ -299,17 +309,24 @@ function Write-OpportunityProjection {
         }
     }
 
-    $count = [Math]::Min(8,@($Rows).Count)
-    for ($i=0; $i -lt $count; $i++) {
+    for ($i=0; $i -lt $projectCount; $i++) {
         $row = $Rows[$i]
         $n = $i+1
         $probabilityKnown = $true
         if ($row.PSObject.Properties['probabilityKnown']) { $probabilityKnown = [bool]$row.probabilityKnown }
+        $rowName = ([string]$row.name).Trim()
+        if ([string]::IsNullOrWhiteSpace($rowName)) {
+            $rowItemId = 0
+            if ($row.PSObject.Properties['itemId']) { $rowItemId = [int]$row.itemId }
+            $rowName = if ($rowItemId -gt 0) { 'Item ' + [string]$rowItemId } else { 'Unknown item' }
+        }
+
         $State['Opportunity'+$n+'Key'] = [string]$row.key
         $State['Opportunity'+$n+'RankText'] = ''
-        $State['Opportunity'+$n+'Name'] = [string]$row.name
+        $State['Opportunity'+$n+'Name'] = $rowName
         $State['Opportunity'+$n+'Country'] = [string]$row.countryName
         $State['Opportunity'+$n+'CountryCode'] = [string]$row.countryCode
+        $State['Opportunity'+$n+'TripBand'] = if ($row.PSObject.Properties['tripBand']) { [string]$row.tripBand } else { '' }
         $State['Opportunity'+$n+'WindowText'] = [string]$row.windowText
         $State['Opportunity'+$n+'LeaveText'] = [string]$row.leaveText
         $State['Opportunity'+$n+'ChanceText'] = if ($probabilityKnown) { ('{0:N0}%' -f (100.0*[double]$row.probability)) } else { 'LEARNING' }
@@ -406,6 +423,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $itemId = [int](Get-OptimalProperty $market 'itemId')
         if ($itemId -le 0) { continue }
         $metadata = Get-OptimalMarketMetadata -Engine $engine -ItemId $itemId -Market $market
+        if ([string]::IsNullOrWhiteSpace([string]$metadata.name)) { $metadata.name = 'Item ' + [string]$itemId }
         if (-not (Test-OptimalMarketFilters -Preferences $preferences -CountryId $countryId -TripBand $tripBand -ItemId $itemId -Category ([string]$metadata.category))) { continue }
 
         $resale = Get-OptimalResaleSnapshot -Engine $engine -ItemId $itemId -NowEpoch $Now
@@ -548,6 +566,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             countryId=$countryId
             countryName=[string]$country.name
             countryCode=Get-OpportunityCountryCode $countryId
+            tripBand=$tripBand
             itemId=$itemId
             name=[string]$metadata.name
             category=[string]$metadata.category
