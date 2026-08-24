@@ -124,8 +124,27 @@ local function statusText(windowText,leaveText)
     return window .. ' / ' .. leave
 end
 
+local function applyCompactLayout(index)
+    local prefix = 'MeterOpportunity'..index
+    setOption(prefix..'Name','X',78)
+    setOption(prefix..'Name','W',176)
+    setOption(prefix..'Gross','X',504)
+    setOption(prefix..'Gross','W',244)
+    setOption(prefix..'Gross','ClipString',1)
+    setOption(prefix..'Window','X',78)
+    setOption(prefix..'Window','W',70)
+    setOption(prefix..'Leave','X',150)
+    setOption(prefix..'Leave','W',164)
+    setOption(prefix..'Chance','X',316)
+    setOption(prefix..'Chance','W',48)
+    setOption(prefix..'Chance','ClipString',1)
+    setOption(prefix..'Price','X',366)
+    setOption(prefix..'Price','W',144)
+end
+
 local function updateRow(index,state)
     local prefix = 'MeterOpportunity'..index
+    applyCompactLayout(index)
     local rawTitle = meterOption(prefix..'Name','Text')
     if rawTitle == '' then return end
 
@@ -172,6 +191,7 @@ end
 
 function Initialize()
     statePath = SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
+    for i=1,8 do applyCompactLayout(i) end
 end
 
 function Update()
