@@ -15,8 +15,8 @@ Updated ...
 ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
 NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
-[FLAG]  <item> - <country>                    <$gross>   v
-        <window>  <leave>  <chance>    BUY <$foreign>/ea | MV <$MV>
+[FLAG]  <item>             <$net/ea> x<qty> = <$total net>   v
+        <flight/remaining> <status/window + leave> <certainty> Take: <$buy cash +5%>
 ```
 
 Up to eight cards are visible, but the PowerShell projection retains a bounded local candidate pool so sort/trip controls do not operate on only the previous eight rows.
@@ -25,13 +25,16 @@ Up to eight cards are visible, but the PowerShell projection retains a bounded l
 
 - Remove visible `#1/#2/...` place numbers.
 - Left side is a recognizable FlagKit destination flag with no separate tile/background strip.
-- Hovering the flag shows country name plus configured one-way travel time.
-- Card title shows **item name + country name**; do not show a separate country abbreviation.
-- Visible gross is only `$amount`; no `gross` suffix and no `xN` suffix.
-- Quantity remains in internal projection/tooltips for inspectable economics.
-- Lower-right price text explicitly distinguishes `BUY $foreign/ea` from `MV $marketValue`.
-- Use ASCII separators in card text (`-`, `|`) to avoid Rainmeter encoding regressions.
+- **Country name is visible only in the flag tooltip.** Hovering the flag shows country name plus configured one-way travel time.
+- Card title shows **item name only**.
+- Top-line economics show **net profit per item x planned inventory quantity = total net profit**. Current net-profit basis is the configured Torn MV resale basis less foreign purchase price; no hidden probability weighting is applied.
+- Lower-left timing shows configured one-way flight duration, or remaining flight time when already en route to that row's destination.
+- Lower-middle text combines current/modeled stock window with the leave instruction.
+- Hit likelihood/certainty remains a separate visible field.
+- Lower-right `Take:` is `foreign purchase price x planned quantity x 1.05`, rounded up to the next dollar. This is purchase cash plus a 5% carry buffer; it does not fabricate airfare or resale fees.
+- Keep ASCII separators in visible card text to avoid Rainmeter encoding regressions.
 - Far-right control is a compact `v`/`^` chevron, not the word `GRAPH`.
+- `CardPresenter.lua` is presentation-only. `StateReader.lua` remains authoritative for local sorting, trip filtering, row identity/visibility and graph expansion.
 
 ## Immediate ordering and trip filtering
 
@@ -39,8 +42,8 @@ Ordering:
 
 - `NAME`: item name ascending, then destination.
 - `UPCOMING`: earliest current/modeled stock window first.
-- `GROSS PROFIT`: highest trip gross first.
-- `PROFIT/HR`: trip gross / total elapsed hours, descending.
+- `GROSS PROFIT`: highest total trip profit first. Label is retained for now even though the compact card describes the displayed spread as net profit.
+- `PROFIT/HR`: trip profit / total elapsed hours, descending.
 - Hit likelihood remains a separate decision variable and is not multiplied into any sort score.
 
 Both sort and trip-band clicks must update the visible list immediately in Lua against the already-projected candidate pool.
@@ -89,10 +92,11 @@ Fresh current stock must not vanish because completed-cycle likelihood evidence 
 
 - Fresh in-stock rows may show `LEARNING` in the likelihood field.
 - Unknown likelihood is not a fake 0% or 100%.
-- Gross/profit-hour can still be calculated from current stock, current foreign price, capacity and cached MV.
+- Profit/profit-hour can still be calculated from current stock, current foreign price, capacity and cached MV.
 - Sold-out/future opportunities require completed cycle evidence.
 - Completed cycles are modeled as repeating empirical `out-of-stock delay + stocked duration` pairs so a trip may deliberately target a later stock cycle when the current cycle cannot survive the flight.
-- Stale stock, unresolved MV, explicit filters, waste policy, or travel restriction may still legitimately remove a row.
+- Cycle analytics retain min/max/mean/variance for restock and sellout durations plus material price/sellout regimes for later calibrated forecasting.
+- Stale stock, unresolved MV, explicit filters, waste policy, or travel restriction may still legitimately remove a row. A positive cached MV up to the bounded stale-MV display limit may remain visible as stale while resale refresh catches up.
 
 ## History / Viewer
 
@@ -138,19 +142,21 @@ Then refresh Rainmeter and verify:
 1. Fresh in-stock markets appear even if likelihood says `LEARNING`.
 2. No rank numbers.
 3. Every card has a recognizable FlagKit country flag.
-4. Flag hover shows country + one-way travel time.
-5. Card title visibly shows `item - country`.
-6. Lower-right text clearly reads `BUY $.../ea | MV $...`.
-7. Gross is `$amount` only.
-8. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR reorder immediately against the full projected pool.
-9. SHORT / MED / LONG toggle color and visible rows immediately, including OFF -> ON, without waiting for PowerShell opportunity recomputation.
-10. Row `v` expands only that in-card graph; it does not spawn the standalone Viewer.
-11. The graph has seven internal hourly vertical separators.
-12. Opening another row collapses the first; sorting/trip filtering collapses an open graph.
-13. `VIEWER >` still opens the separate full Viewer popup.
-14. Zero-stock graph stays flat at zero; nonzero retained history shows real transitions.
-15. The list remains populated through normal polling.
-16. SETTINGS and popups still work with no visible PowerShell console.
+4. Flag hover is the only country-name display and shows country + one-way travel time.
+5. Card title visibly shows item name only.
+6. Top-right reads `$net/ea xN = $total net`.
+7. Lower-left shows flight duration or remaining flight time when en route.
+8. Lower-middle shows stock/window plus leave instruction; certainty remains separate.
+9. Lower-right reads `Take: $...` and equals purchase cash plus 5%.
+10. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR reorder immediately against the full projected pool.
+11. SHORT / MED / LONG toggle color and visible rows immediately, including OFF -> ON, without waiting for PowerShell opportunity recomputation.
+12. Row `v` expands only that in-card graph; it does not spawn the standalone Viewer.
+13. The graph has seven internal hourly vertical separators.
+14. Opening another row collapses the first; sorting/trip filtering collapses an open graph.
+15. `VIEWER >` still opens the separate full Viewer popup.
+16. Zero-stock graph stays flat at zero; nonzero retained history shows real transitions.
+17. The list remains populated through normal polling.
+18. SETTINGS and popups still work with no visible PowerShell console.
 
 If anything errors:
 
@@ -163,6 +169,6 @@ Send the focused acceptance output plus one collapsed-card screenshot and one ex
 ## After acceptance
 
 1. Tune card/flag/chart proportions from the real Rainmeter render.
-2. Calibrate recurring probability as completed cycles accumulate.
+2. Calibrate recurring probability using the retained cycle analytics and price/sellout regimes once sample sizes are sufficient.
 3. Add optional Chrome/browser notifications as a consumer of accepted local opportunity timing state.
 4. Consider bounded multi-trip sequencing separately from the opportunity browser.
