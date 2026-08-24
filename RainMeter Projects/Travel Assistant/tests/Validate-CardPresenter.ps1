@@ -35,7 +35,7 @@ if ($errors.Count -eq 0) {
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
         'configureWindowTooltipMeter','ToolTipHidden','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','ⓘ',
-        "InlinePattern','\\\\$", "InlinePattern2','/ea x[0-9]+ =", 'Color | 255,255,255,255',
+        "'InlinePattern'", "'InlinePattern2'", '/ea x[0-9]+ =', 'Color | 255,255,255,255',
         'quantityFromTooltip','buyPriceFromVisibleText','bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
         'statusText(fallbackWindow,fallbackLeave)'
