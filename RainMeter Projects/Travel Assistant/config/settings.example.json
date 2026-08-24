@@ -39,6 +39,14 @@
     "maxPlanItems": 8,
     "allowNegativeValueCandidates": true
   },
+  "cycleAnalytics": {
+    "significantPriceChangePercent": 5.0,
+    "significantSelloutChangePercent": 15.0,
+    "significantSelloutChangeSeconds": 300,
+    "maxRecentSamplesPerMarket": 96,
+    "maxRegimesPerMarket": 24,
+    "maxPriceEventsPerMarket": 48
+  },
   "recommendation": {
     "minimumComparableCycles": 5,
     "minimumSafeCycles": 8,
