@@ -4,15 +4,17 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $presenterPath = Join-Path $ProjectRoot '@Resources\Scripts\CardPresenter.lua'
+$opportunityPath = Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($iniPath,$presenterPath)) {
+foreach ($path in @($iniPath,$presenterPath,$opportunityPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing compact-card file: $path" }
 }
 if ($errors.Count -eq 0) {
     $ini = Get-Content -LiteralPath $iniPath -Raw
     $presenter = Get-Content -LiteralPath $presenterPath -Raw
+    $opportunity = Get-Content -LiteralPath $opportunityPath -Raw
 
     foreach ($token in @('[MeasureCardPresenter]','CardPresenter.lua','StateFile=#@#Generated\state.kv')) {
         if (-not $ini.Contains($token)) { Fail "TravelAssistant.ini missing compact-card token '$token'." }
@@ -22,7 +24,9 @@ if ($errors.Count -eq 0) {
     if ($stateAt -lt 0 -or $presenterAt -le $stateAt) { Fail 'MeasureCardPresenter must update after MeasureState so it formats the already sorted/filtered visible rows.' }
 
     foreach ($token in @(
-        'removeCountrySuffix','rowCountryAndTravel','TravelDestinationCountryId','TravelTimeLeft',
+        'removeCountrySuffix','rowCountryAndTravel','activeOutboundRemaining','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
+        "travelState ~= 'traveling'","destinationId ~= countryId","return formatDuration(remaining) .. ' left'",
+        "setOption(prefix..'Window','FontColor','145,152,164,255')",
         'quantityFromTooltip','buyPriceFromVisibleText','math.ceil(buyPrice * quantity * 1.05)',
         "equation = equation .. ' x'", "' = ' .. formatMoney(totalProfit)",
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer',
@@ -31,6 +35,13 @@ if ($errors.Count -eq 0) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
     if ($presenter -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand|LaunchItemViewer') { Fail 'CardPresenter.lua must remain presentation-only and local.' }
+
+    foreach ($token in @(
+        "if (`$null -ne `$travelContext -and [bool](Get-OptimalProperty `$travelContext 'filterActive')) { `$fixedCountry = [string](Get-OptimalProperty `$travelContext 'destinationCountryId') }",
+        "if (-not [string]::IsNullOrWhiteSpace(`$fixedCountry) -and `$countryId -ne `$fixedCountry) { continue }"
+    )) {
+        if (-not $opportunity.Contains($token)) { Fail "OpportunityState outbound destination filter missing '$token'." }
+    }
 }
 
 if ($errors.Count -gt 0) {
@@ -39,5 +50,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Compact trade-card presentation validation passed.' -ForegroundColor Green
-Write-Host 'Country stays on the flag tooltip; cards show item, per-item net x quantity = total net, flight/remaining time, window/leave state, certainty, and Take cash +5%.'
+Write-Host 'Country stays on the flag tooltip; normal cards show muted configured flight time, while recognized outbound travel shows only that destination and a locally decrementing landing countdown.'
 exit 0
