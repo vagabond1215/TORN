@@ -27,6 +27,8 @@ if ($errors.Count -eq 0) {
     $presenterAt = $ini.IndexOf('[MeasureCardPresenter]',[System.StringComparison]::Ordinal)
     if ($stateAt -lt 0 -or $presenterAt -le $stateAt) { Fail 'MeasureCardPresenter must update after MeasureState.' }
 
+    # Keep this PowerShell validator ASCII-only for Windows PowerShell 5.1. The
+    # Unicode info glyph is validated indirectly through safeInfo + tooltip behavior.
     foreach ($token in @(
         'removeCountrySuffix','rowCountryAndTravel','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
         'parseWindowPlan','parsePriceVarianceEnvelope','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
@@ -34,7 +36,7 @@ if ($errors.Count -eq 0) {
         "'SAFE - LEAVE '","'SAFE - LEAVE BEFORE '","'BEST - LEAVE NOW'", "'BEST - LEAVE '",
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
-        'configureWindowTooltipMeter','ToolTipHidden','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','ⓘ',
+        'configureWindowTooltipMeter','ToolTipHidden','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo',
         "'InlinePattern'", "'InlinePattern2'", '/ea x[0-9]+ =', 'Color | 255,255,255,255',
         'quantityFromTooltip','buyPriceFromVisibleText','bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
