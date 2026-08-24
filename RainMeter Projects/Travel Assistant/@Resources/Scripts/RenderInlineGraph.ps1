@@ -143,12 +143,14 @@ if ($rows.Count -gt 0) {
 $scaleMax = if ($maxStock -gt 0) { [double]$maxStock } else { 1.0 }
 
 Add-Type -AssemblyName System.Drawing
-$width = 470
-$height = 100
+# The image now nearly fills the 536px card width and is exactly 25% taller than
+# the previous 100px renderer. CardTweaks reserves the matching 125px display area.
+$width = 528
+$height = 125
 $plotLeft = 34.0
-$plotRight = 464.0
+$plotRight = 522.0
 $plotTop = 8.0
-$plotBottom = 80.0
+$plotBottom = 98.0
 $plotWidth = $plotRight - $plotLeft
 $plotHeight = $plotBottom - $plotTop
 
@@ -205,9 +207,9 @@ if ($null -ne $previous -and [single]$previous.x -lt [single]$plotRight) {
 
 $maxLabel = if ($maxStock -gt 0) { ('{0:N0}' -f $maxStock) } else { '0' }
 $graphics.DrawString($maxLabel,$labelFont,$labelBrush,0,0)
-$graphics.DrawString('0',$labelFont,$labelBrush,18,70)
-$graphics.DrawString(('-{0}h' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),82)
-$graphics.DrawString('now',$labelFont,$labelBrush,[single]($plotRight-18),82)
+$graphics.DrawString('0',$labelFont,$labelBrush,18,88)
+$graphics.DrawString(('-{0}h' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),104)
+$graphics.DrawString('now',$labelFont,$labelBrush,[single]($plotRight-18),104)
 
 $safeName = ($MarketKey -replace '[^a-zA-Z0-9_-]','_')
 $imageFile = ('inline-graph-{0}-{1}.png' -f $safeName,$now)
