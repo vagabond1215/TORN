@@ -15,6 +15,7 @@ $EngineStateSchema = Join-Path $PSScriptRoot 'EnsureEngineStateSchema.ps1'
 $TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
 $OptimalRoute = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
 $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
+$WindowPlan = Join-Path $PSScriptRoot 'WindowPlan.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
@@ -31,6 +32,7 @@ $EngineStateSchemaErrorFile = Join-Path $RuntimeDir 'engine-state-schema-error.t
 $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
 $OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
+$WindowPlanErrorFile = Join-Path $RuntimeDir 'window-plan-error.txt'
 $FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
 $CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
@@ -232,6 +234,11 @@ try {
 
     # Primary presentation is the sortable opportunity surface.
     Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
+
+    # Refine every projected candidate with conservative safe-window bounds and
+    # empirical best-hit segments. This stage is local-only and writes absolute
+    # times so Rainmeter can update leave/countdown guidance every second.
+    Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
 
     # OpportunityState must always leave an explicit projection, even when the
     # correct result is zero rows. Detect silent early-return states immediately.
