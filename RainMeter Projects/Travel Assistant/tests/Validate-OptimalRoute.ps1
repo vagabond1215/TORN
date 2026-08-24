@@ -39,7 +39,11 @@ if (Test-Path -LiteralPath $optimizerPath) {
 
 if (Test-Path -LiteralPath $opportunityPath) {
     $text=Get-Content -LiteralPath $opportunityPath -Raw
-    foreach ($token in @('grossProfit','profitPerHour','quantity','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Write-OpportunityProjection',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'GrossValue','ProfitHourValue','WindowStartAt')) {
+    foreach ($token in @(
+        'grossProfit','profitPerHour','quantity','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge',
+        'Get-OpportunityResaleUse','resaleFallbackMaxAgeSeconds','marketValueFresh',' STALE','OpportunityStaleMvCount','OpportunityCountry_',
+        'Write-OpportunityProjection',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'GrossValue','ProfitHourValue','WindowStartAt'
+    )) {
         if (-not $text.Contains($token)) { Fail "Opportunity ranking contract missing '$token'." }
     }
     foreach ($retired in @('expectedGross=','optimalScore=')) {
@@ -84,6 +88,8 @@ if (Test-Path -LiteralPath $baseSettingsPath) {
     $settings=Get-Content -LiteralPath $baseSettingsPath -Raw | ConvertFrom-Json
     if ([double]$settings.profitability.itemMarketFeePercent -ne 0) { Fail 'Default legacy fee must be zero for MV valuation.' }
     if ([double]$settings.profitability.minimumProfitPerItem -ne 0 -or [double]$settings.profitability.minimumMarginPercent -ne 0 -or [double]$settings.profitability.minimumTotalTripProfit -ne 0) { Fail 'Default legacy profit gates must all be zero.' }
+    if ([int]$settings.profitability.resaleStaleAfterSeconds -ne 21600) { Fail 'Fresh resale MV window must remain six hours.' }
+    if ([int]$settings.profitability.resaleFallbackMaxAgeSeconds -ne 604800) { Fail 'Opportunity display stale-MV fallback must be bounded to seven days.' }
     if ([int]$settings.optimizer.marketValueBasisPercent -ne 100) { Fail 'Optimizer default MV basis must be 100%.' }
     if ($settings.optimizer.allowNegativeValueCandidates -ne $true) { Fail 'Negative-value candidates must remain allowed by default.' }
 }
@@ -109,5 +115,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Background route model and transparent opportunity economics validation passed.' -ForegroundColor Green
-Write-Host 'Visible ordering is NAME, UPCOMING, GROSS PROFIT, or PROFIT/HR; hit likelihood remains separate.'
+Write-Host 'Visible ordering is NAME, UPCOMING, GROSS PROFIT, or PROFIT/HR; stale MV is bounded/explicit and hit likelihood remains separate.'
 exit 0
