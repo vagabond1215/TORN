@@ -276,6 +276,29 @@ function Get-OpportunityWasteText {
     return ($parts -join ', ')
 }
 
+function Get-OpportunityResaleUse {
+    param([object]$Resale,[long]$NowEpoch,[long]$MaximumAgeSeconds = 604800L)
+    $marketValue = 0L
+    $fetchedAt = 0L
+    $fresh = $false
+    if ($null -ne $Resale) {
+        if ($Resale.PSObject.Properties['marketValue']) { $marketValue = [long]$Resale.marketValue }
+        if ($Resale.PSObject.Properties['fetchedAt']) { $fetchedAt = [long]$Resale.fetchedAt }
+        if ($Resale.PSObject.Properties['fresh']) { $fresh = [bool]$Resale.fresh }
+    }
+    $age = [long]::MaxValue
+    if ($fetchedAt -gt 0) { $age = [Math]::Max(0L,$NowEpoch-$fetchedAt) }
+    $usable = ($marketValue -gt 0 -and $fetchedAt -gt 0 -and $age -le [Math]::Max(60L,$MaximumAgeSeconds))
+    return [pscustomobject]@{
+        marketValue = $marketValue
+        fetchedAt = $fetchedAt
+        ageSeconds = $age
+        fresh = ($usable -and $fresh)
+        stale = ($usable -and -not $fresh)
+        usable = $usable
+    }
+}
+
 function Write-OpportunityProjection {
     param(
         [hashtable]$State,
@@ -320,6 +343,8 @@ function Write-OpportunityProjection {
             if ($row.PSObject.Properties['itemId']) { $rowItemId = [int]$row.itemId }
             $rowName = if ($rowItemId -gt 0) { 'Item ' + [string]$rowItemId } else { 'Unknown item' }
         }
+        $marketValueText = Format-OpportunityMoney ([long]$row.marketValue)
+        if ($row.PSObject.Properties['marketValueFresh'] -and -not [bool]$row.marketValueFresh) { $marketValueText += ' STALE' }
 
         $State['Opportunity'+$n+'Key'] = [string]$row.key
         $State['Opportunity'+$n+'RankText'] = ''
@@ -335,7 +360,7 @@ function Write-OpportunityProjection {
         $State['Opportunity'+$n+'QuantityText'] = ('x{0}' -f [int]$row.quantity)
         $State['Opportunity'+$n+'ProfitHourText'] = ((Format-OpportunityMoney ([long][Math]::Round([double]$row.profitPerHour))) + '/hr')
         $State['Opportunity'+$n+'PriceText'] = Format-OpportunityMoney ([long]$row.foreignPrice)
-        $State['Opportunity'+$n+'MarketValueText'] = Format-OpportunityMoney ([long]$row.marketValue)
+        $State['Opportunity'+$n+'MarketValueText'] = $marketValueText
         $State['Opportunity'+$n+'PriceColor'] = [string]$row.priceColor
         $State['Opportunity'+$n+'AccentColor'] = '58,64,73,255'
         $State['Opportunity'+$n+'Tooltip'] = [string]$row.tooltip
@@ -380,6 +405,10 @@ if ($null -ne $optimizerSettings) {
 $basisPercent = if ([bool]$preferences.use95PercentMarketValue) { 95 } else { 100 }
 $travelMode = [string]$preferences.travelMode
 $staleAfter = [Math]::Max(60L,[long]$settings.staleAfterSeconds)
+$resaleFallbackMaxAge = 604800L
+if ($settings.PSObject.Properties['profitability'] -and $settings.profitability.PSObject.Properties['resaleFallbackMaxAgeSeconds']) {
+    $resaleFallbackMaxAge = [Math]::Max(21600L,[long]$settings.profitability.resaleFallbackMaxAgeSeconds)
+}
 
 $travelContext = Get-OptimalProperty $engine 'travelContext'
 $travelState = 'unknown'
@@ -399,11 +428,14 @@ $rows = New-Object System.Collections.Generic.List[object]
 $learning = 0
 $stale = 0
 $missingMv = 0
+$staleMv = 0
 $wasteBlocked = 0
+$countryStats = @{}
 
 foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $true })) {
     $countryId = [string]$country.id
     $tripBand = [string]$country.tripBand
+    $countryStats[$countryId] = [pscustomobject]@{ observed=0; staleStock=0; missingMv=0; staleMv=0; rows=0 }
     if (-not [string]::IsNullOrWhiteSpace($fixedCountry) -and $countryId -ne $fixedCountry) { continue }
     if (@($preferences.selectedTripBands) -notcontains $tripBand) { continue }
     if (@($preferences.selectedCountryIds) -notcontains $countryId) { continue }
@@ -417,9 +449,14 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $market = $property.Value
         if ($null -eq $market -or [string](Get-OptimalProperty $market 'country') -ne $countryId) { continue }
         if (($market.PSObject.Properties['catalogActive'] -and $market.catalogActive -eq $false) -or ($market.PSObject.Properties['catalogStatus'] -and [string]$market.catalogStatus -eq 'legacy_removed')) { continue }
+        $countryStats[$countryId].observed = [int]$countryStats[$countryId].observed + 1
 
         $sourceTimestamp = [long](Get-OptimalProperty $market 'sourceTimestamp')
-        if ($sourceTimestamp -le 0 -or ($Now-$sourceTimestamp) -gt $staleAfter) { $stale++; continue }
+        if ($sourceTimestamp -le 0 -or ($Now-$sourceTimestamp) -gt $staleAfter) {
+            $stale++
+            $countryStats[$countryId].staleStock = [int]$countryStats[$countryId].staleStock + 1
+            continue
+        }
         $itemId = [int](Get-OptimalProperty $market 'itemId')
         if ($itemId -le 0) { continue }
         $metadata = Get-OptimalMarketMetadata -Engine $engine -ItemId $itemId -Market $market
@@ -427,10 +464,20 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         if (-not (Test-OptimalMarketFilters -Preferences $preferences -CountryId $countryId -TripBand $tripBand -ItemId $itemId -Category ([string]$metadata.category))) { continue }
 
         $resale = Get-OptimalResaleSnapshot -Engine $engine -ItemId $itemId -NowEpoch $Now
-        if (-not [bool]$resale.fresh) { $missingMv++; continue }
+        $resaleUse = Get-OpportunityResaleUse -Resale $resale -NowEpoch $Now -MaximumAgeSeconds $resaleFallbackMaxAge
+        if (-not [bool]$resaleUse.usable) {
+            $missingMv++
+            $countryStats[$countryId].missingMv = [int]$countryStats[$countryId].missingMv + 1
+            continue
+        }
+        $marketValueFresh = [bool]$resaleUse.fresh
+        if (-not $marketValueFresh) {
+            $staleMv++
+            $countryStats[$countryId].staleMv = [int]$countryStats[$countryId].staleMv + 1
+        }
         $foreignPrice = [long](Get-OptimalProperty $market 'lastForeignPrice')
         if ($foreignPrice -le 0) { continue }
-        $sellBasis = [long][Math]::Floor([long]$resale.marketValue * ($basisPercent/100.0))
+        $sellBasis = [long][Math]::Floor([long]$resaleUse.marketValue * ($basisPercent/100.0))
         $profitPerItem = [long]($sellBasis-$foreignPrice)
         if ([bool]$preferences.showProfitableOnly -and $profitPerItem -le 0) { continue }
 
@@ -553,13 +600,14 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $grossProfit = [long]($quantity*$profitPerItem)
         $elapsedHours = [Math]::Max(1.0/60.0,$elapsedSeconds/3600.0)
         $profitPerHour = [double]$grossProfit/$elapsedHours
-        $priceColor = if ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
+        $priceColor = if (-not $marketValueFresh) { '145,152,164,255' } elseif ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
         $leaveText = if ($leaveDelaySeconds -le 60) { 'LEAVE NOW' } else { 'LEAVE '+(Format-OpportunityDuration $leaveDelaySeconds) }
         if ($travelState -in @('abroad','foreign') -and $outboundSeconds -eq 0) { $leaveText = 'AT DEST.' }
         if ($travelState -eq 'traveling' -and $outboundSeconds -gt 0) { $leaveText = 'EN ROUTE' }
         $wasteText = Get-OpportunityWasteText -Energy $energy -Nerve $nerve
         $chanceText = if ($probabilityKnown) { ('{0:N0}% modeled hit' -f (100.0*$probability)) } else { 'hit likelihood learning' }
-        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | unit spread {5} x {6} = {7} gross at {8}% MV | {9}/hr | {10} | foreign {11}, MV {12}' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney $grossProfit),$basisPercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resale.marketValue)))
+        $mvStateText = if ($marketValueFresh) { 'MV fresh' } else { 'MV STALE '+(Format-OpportunityDuration ([long]$resaleUse.ageSeconds))+' old; refresh queued' }
+        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | unit spread {5} x {6} = {7} gross at {8}% MV | {9}/hr | {10} | foreign {11}, MV {12} ({13})' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney $grossProfit),$basisPercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resaleUse.marketValue)),$mvStateText)
 
         $rows.Add([pscustomobject]@{
             key=$marketKey
@@ -582,10 +630,12 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             windowText=$windowText
             leaveText=$leaveText
             foreignPrice=$foreignPrice
-            marketValue=[long]$resale.marketValue
+            marketValue=[long]$resaleUse.marketValue
+            marketValueFresh=[bool]$marketValueFresh
             priceColor=$priceColor
             tooltip=$tooltip
         })
+        $countryStats[$countryId].rows = [int]$countryStats[$countryId].rows + 1
     }
 }
 
@@ -599,6 +649,19 @@ if ($sortMode -eq 'name') {
     $sorted = @($allRows | Sort-Object @{Expression='profitPerHour';Descending=$true},@{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},name)
 } else {
     $sorted = @($allRows | Sort-Object @{Expression='windowStartAt';Ascending=$true},@{Expression='probability';Descending=$true},@{Expression='grossProfit';Descending=$true},name)
+}
+
+$state['OpportunityStaleStockCount'] = $stale
+$state['OpportunityMissingMvCount'] = $missingMv
+$state['OpportunityStaleMvCount'] = $staleMv
+foreach ($countryId in @($countryStats.Keys | Sort-Object)) {
+    $stats = $countryStats[$countryId]
+    $prefix = 'OpportunityCountry_'+$countryId
+    $state[$prefix+'_Observed'] = [int]$stats.observed
+    $state[$prefix+'_StaleStock'] = [int]$stats.staleStock
+    $state[$prefix+'_MissingMv'] = [int]$stats.missingMv
+    $state[$prefix+'_StaleMv'] = [int]$stats.staleMv
+    $state[$prefix+'_Rows'] = [int]$stats.rows
 }
 
 $message = ''
