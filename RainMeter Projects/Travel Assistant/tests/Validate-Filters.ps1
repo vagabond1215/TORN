@@ -27,7 +27,14 @@ foreach($path in @($files.Preferences,$files.Popup,$files.Launcher,$files.State,
 
 if(Test-Path -LiteralPath $files.Preferences){
  $text=Get-Content -LiteralPath $files.Preferences -Raw
- foreach($token in @('schemaVersion = 5','selectedItemIds','selectedTripBands','selectedCountryIds','selectedCategories','showProfitableOnly','ignoredItemIds','use95PercentMarketValue','energyWastePolicy','nerveWastePolicy',"sortMode = 'upcoming'",'Normalize-SortMode',"@('name','upcoming','gross','profit_per_hour')",'SetSortMode')){if(-not$text.Contains($token)){Fail "FilterPreferences.ps1 missing '$token'."}}
+ foreach($token in @(
+  'schemaVersion = 6','selectedItemIds','selectedTripBands','displayTripBands','selectedCountryIds','selectedCategories',
+  'showProfitableOnly','ignoredItemIds','use95PercentMarketValue','energyWastePolicy','nerveWastePolicy',
+  "sortMode = 'upcoming'",'Normalize-SortMode',"@('name','upcoming','gross','profit_per_hour')",'SetSortMode',
+  'Set-FilterStateKvValuesAtomic','UISelectedTripBands','UITripShortOn','UITripMediumOn','UITripLongOn',
+  "$Action -notin @('SetSortMode','ToggleTripBand')"
+ )){if(-not$text.Contains($token)){Fail "FilterPreferences.ps1 missing '$token'."}}
+ if($text -notmatch "(?s)if \(\$Action -eq 'ToggleTripBand'\).*?Save-UiPreferences.*?Set-FilterStateKvValuesAtomic") { Fail 'Trip-band persistence must remain a tiny preference/state write.' }
 }
 
 if(Test-Path -LiteralPath $files.Popup){
@@ -44,7 +51,7 @@ if(Test-Path -LiteralPath $files.Launcher){
 if(Test-Path -LiteralPath $files.State){
  $text=Get-Content -LiteralPath $files.State -Raw
  foreach($token in @(
-  'UIItemFilterAll','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UIShowProfitableOnly',
+  'UIItemFilterAll','UISelectedTripBands','UISelectedCountryIds','UICategoryFilterAll','UIShowProfitableOnly','$prefs.displayTripBands',
   'Get-ActiveMarketSourceRange','UIOldestMarketSourceTimestamp','UIOldestActiveMarketSourceTimestamp','UIFreshestMarketSourceTimestamp',
   '$state[''UIOldestMarketSourceTimestamp''] = [long]$sourceRange.freshest','observedMarkets','sourceTimestamp'
  )){if(-not$text.Contains($token)){Fail "FilterState.ps1 missing '$token'."}}
@@ -52,13 +59,22 @@ if(Test-Path -LiteralPath $files.State){
 
 if(Test-Path -LiteralPath $files.Opportunities){
  $text=Get-Content -LiteralPath $files.Opportunities -Raw
- foreach($token in @('Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','grossProfit','profitPerHour','elapsedSeconds','probabilityKnown',"'LEARNING'",'$availableQuantity = $stock',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'")){if(-not$text.Contains($token)){Fail "OpportunityState.ps1 missing '$token'."}}
+ foreach($token in @(
+  'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Get-OpportunityNextRecurringWindow','grossProfit','profitPerHour','elapsedSeconds','probabilityKnown',
+  "'LEARNING'",'$availableQuantity = $stock',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",
+  '$maxProjectedRows = 256',"'TripBand'",'tripBand=$tripBand','OpportunityCount'
+ )){if(-not$text.Contains($token)){Fail "OpportunityState.ps1 missing '$token'."}}
  foreach($retired in @('expectedGross=','optimalScore=')){if($text.Contains($retired)){Fail "OpportunityState.ps1 retains retired hidden-ranking token '$retired'."}}
 }
 
 if(Test-Path -LiteralPath $files.StateReader){
  $text=Get-Content -LiteralPath $files.StateReader -Raw
- foreach($token in @('function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)','currentOpportunityRows','sortOpportunityRows','locallySortedProjection','collapseInlineGraph','MeasureInlineGraph','MeasureItemViewer','safeLeaveText','UIOldestMarketSourceTimestamp')){if(-not$text.Contains($token)){Fail "StateReader.lua missing '$token'."}}
+ foreach($token in @(
+  'function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)',
+  'currentOpportunityRows','sortOpportunityRows','locallyFilteredSortedProjection','pendingTripBands','activeTripBands','projectedTripBands',
+  'maxCandidateRows = 256','TripBand','collapseInlineGraph','MeasureInlineGraph','MeasureItemViewer','safeLeaveText','UIOldestMarketSourceTimestamp',
+  "combinedPrice = 'BUY ' .. price .. '/ea'","return name .. ' · ' .. country"
+ )){if(-not$text.Contains($token)){Fail "StateReader.lua missing '$token'."}}
  if($text.Contains("runViewerMeasure('inline_'")){Fail 'Sort/filter UI must not route inline history through the popup Viewer.'}
 }
 
@@ -75,5 +91,5 @@ if(Test-Path -LiteralPath $files.Countries){
 }
 
 if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Opportunity filter/sort/settings validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Opportunity filters, local sorts, sort-collapse behavior, and provider freshness-range projection passed.' -ForegroundColor Green
+Write-Host 'Opportunity filters, full local candidate pool, instant trip-band/sort controls, and provider freshness-range projection passed.' -ForegroundColor Green
 exit 0
