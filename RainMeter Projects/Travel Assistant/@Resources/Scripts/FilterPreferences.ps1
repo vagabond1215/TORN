@@ -42,8 +42,8 @@ function Set-FilterProperty {
     else { $property.Value = $Value }
 }
 
-function Set-FilterStateKvValueAtomic {
-    param([string]$Name,[string]$Value)
+function Set-FilterStateKvValuesAtomic {
+    param([hashtable]$Updates)
     $values = @{}
     if (Test-Path -LiteralPath $StateKvFile) {
         foreach ($line in Get-Content -LiteralPath $StateKvFile) {
@@ -54,7 +54,7 @@ function Set-FilterStateKvValueAtomic {
             $values[$key] = $line.Substring($index+1).Trim()
         }
     }
-    $values[$Name] = $Value
+    foreach ($key in @($Updates.Keys)) { $values[[string]$key] = [string]$Updates[$key] }
     New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
     $tmp = $StateKvFile + '.preference.tmp'
     $lines = @()
@@ -64,6 +64,11 @@ function Set-FilterStateKvValueAtomic {
     }
     [System.IO.File]::WriteAllLines($tmp,[string[]]$lines,[System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $tmp -Destination $StateKvFile -Force
+}
+
+function Set-FilterStateKvValueAtomic {
+    param([string]$Name,[string]$Value)
+    Set-FilterStateKvValuesAtomic -Updates @{ $Name = $Value }
 }
 
 function Get-FilterAvailableCountryIds {
@@ -252,6 +257,19 @@ $changed = $false
 if ($Action -eq 'ToggleTripBand') {
     $prefs = Toggle-TripBandPreference -Preferences $prefs -Band $Value
     [void](Save-UiPreferences -Preferences $prefs)
+    $bands = [string[]]@($prefs.displayTripBands)
+    try {
+        Set-FilterStateKvValuesAtomic -Updates @{
+            UISelectedTripBands = ($bands -join ',')
+            UITripShortOn = if ($bands -contains 'short') { '1' } else { '0' }
+            UITripMediumOn = if ($bands -contains 'medium') { '1' } else { '0' }
+            UITripLongOn = if ($bands -contains 'long') { '1' } else { '0' }
+        }
+    } catch {
+        if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+            Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('Persist trip-band UI state: ' + $_.Exception.ToString())
+        }
+    }
     $changed = $true
 } elseif ($Action -eq 'ResetFilters') {
     $prefs = Reset-UiFilterPreferences -Preferences $prefs
@@ -270,7 +288,9 @@ if ($Action -eq 'ToggleTripBand') {
     $changed = $true
 }
 
-if ($changed -and $Action -ne 'SetSortMode') {
+# Sort and trip-band clicks are presentation-only. Their visible result is applied
+# in Lua immediately, so persistence must not launch any projection work.
+if ($changed -and $Action -notin @('SetSortMode','ToggleTripBand')) {
     $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
     if (Test-Path -LiteralPath $filterState) {
         try { & $filterState }
@@ -281,16 +301,12 @@ if ($changed -and $Action -ne 'SetSortMode') {
         }
     }
 
-    # Trip-band toggles are presentation-only. Do not run the heavy opportunity
-    # evidence model on every click; the Rainmeter Lua layer filters immediately.
-    if ($Action -ne 'ToggleTripBand') {
-        $opportunities = Join-Path $PSScriptRoot 'OpportunityState.ps1'
-        if (Test-Path -LiteralPath $opportunities) {
-            try { & $opportunities }
-            catch {
-                if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
-                    Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('OpportunityState.ps1: ' + $_.Exception.ToString())
-                }
+    $opportunities = Join-Path $PSScriptRoot 'OpportunityState.ps1'
+    if (Test-Path -LiteralPath $opportunities) {
+        try { & $opportunities }
+        catch {
+            if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+                Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('OpportunityState.ps1: ' + $_.Exception.ToString())
             }
         }
     }
