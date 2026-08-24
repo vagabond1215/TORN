@@ -73,6 +73,8 @@ function Get-EngineState {
                 legacyMarketsSeen = 0
                 observationsWritten = 0
                 cyclesCompleted = 0
+                countryProviders = [pscustomobject]@{}
+                staleCountries = [string[]]@()
                 lastErrorAt = 0
                 lastError = ''
             }
@@ -90,6 +92,8 @@ function Get-EngineState {
             legacyMarketsSeen = 0
             observationsWritten = 0
             cyclesCompleted = 0
+            countryProviders = [pscustomobject]@{}
+            staleCountries = [string[]]@()
             lastErrorAt = 0
             lastError = ''
         })
@@ -100,6 +104,8 @@ function Get-EngineState {
             $state.shadowCollection | Add-Member NoteProperty $name $default
         }
     }
+    if (-not $state.shadowCollection.PSObject.Properties['countryProviders']) { $state.shadowCollection | Add-Member NoteProperty countryProviders ([pscustomobject]@{}) }
+    if (-not $state.shadowCollection.PSObject.Properties['staleCountries']) { $state.shadowCollection | Add-Member NoteProperty staleCountries ([string[]]@()) }
     return $state
 }
 
@@ -153,6 +159,98 @@ function Assert-LivePayloadFresh {
     return $freshness
 }
 
+function Get-CountryProviderCode {
+    param([object]$Country,[string]$Source)
+    if ($null -eq $Country -or -not $Country.PSObject.Properties['providerCodes']) { return '' }
+    $code = [string](Get-DynamicProperty $Country.providerCodes $Source)
+    if ([string]::IsNullOrWhiteSpace($code) -and $Source -eq 'prometheus') {
+        $code = [string](Get-DynamicProperty $Country.providerCodes 'yata')
+    }
+    return $code
+}
+
+function Get-CountryPayloadStatus {
+    param(
+        [object]$Payload,
+        [object]$Country,
+        [string]$Source,
+        [long]$NowEpoch,
+        [int]$MaximumAgeSeconds
+    )
+    $countryId = if ($null -ne $Country -and $Country.PSObject.Properties['id']) { [string]$Country.id } else { '' }
+    $code = Get-CountryProviderCode -Country $Country -Source $Source
+    if ([string]::IsNullOrWhiteSpace($code) -or $null -eq $Payload -or $null -eq $Payload.stocks) {
+        return [pscustomobject]@{ country=$countryId; source=$Source; code=$code; available=$false; fresh=$false; timestamp=0L; ageSeconds=[long]::MaxValue; countryObject=$null }
+    }
+    $countryObj = Get-DynamicProperty $Payload.stocks $code
+    if ($null -eq $countryObj -or -not $countryObj.PSObject.Properties['stocks']) {
+        return [pscustomobject]@{ country=$countryId; source=$Source; code=$code; available=$false; fresh=$false; timestamp=0L; ageSeconds=[long]::MaxValue; countryObject=$countryObj }
+    }
+    $timestamp = 0L
+    if ($countryObj.PSObject.Properties['update']) {
+        try { $timestamp = [long]$countryObj.update } catch { $timestamp = 0L }
+    }
+    $age = if ($timestamp -gt 0) { [Math]::Max(0L,$NowEpoch-$timestamp) } else { [long]::MaxValue }
+    $fresh = ($timestamp -gt 0 -and $age -le [long]$MaximumAgeSeconds)
+    return [pscustomobject]@{ country=$countryId; source=$Source; code=$code; available=$true; fresh=$fresh; timestamp=$timestamp; ageSeconds=$age; countryObject=$countryObj }
+}
+
+function Invoke-LiveStockProvider {
+    param([string]$Id,[string]$Uri)
+    try {
+        $payload = Invoke-RestMethod -Method Get -Uri $Uri -Headers @{ Accept = 'application/json' } -TimeoutSec 5
+        if ($null -eq $payload -or $null -eq $payload.stocks) { throw 'response does not contain stocks' }
+        return [pscustomobject]@{ source=$Id; payload=$payload; error='' }
+    } catch {
+        return [pscustomobject]@{ source=$Id; payload=$null; error=$_.Exception.Message }
+    }
+}
+
+function Get-LiveStockProviderSet {
+    param([object[]]$CollectionCountries,[long]$NowEpoch,[int]$MaximumAgeSeconds)
+    $snapshots = @{}
+    $errors = @()
+
+    $primary = Invoke-LiveStockProvider -Id 'prometheus' -Uri 'https://api.prombot.co.uk/api/travel'
+    if ($null -ne $primary.payload) { $snapshots['prometheus'] = $primary }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$primary.error)) { $errors += ('prometheus: ' + [string]$primary.error) }
+
+    $needFallback = ($null -eq $primary.payload)
+    if (-not $needFallback) {
+        foreach ($country in @($CollectionCountries)) {
+            $status = Get-CountryPayloadStatus -Payload $primary.payload -Country $country -Source 'prometheus' -NowEpoch $NowEpoch -MaximumAgeSeconds $MaximumAgeSeconds
+            if (-not [bool]$status.fresh) { $needFallback = $true; break }
+        }
+    }
+
+    if ($needFallback) {
+        $fallback = Invoke-LiveStockProvider -Id 'yata' -Uri 'https://yata.yt/api/v1/travel/export/'
+        if ($null -ne $fallback.payload) { $snapshots['yata'] = $fallback }
+        elseif (-not [string]::IsNullOrWhiteSpace([string]$fallback.error)) { $errors += ('yata: ' + [string]$fallback.error) }
+    }
+
+    if ($snapshots.Count -eq 0) {
+        throw ('All live stock providers failed network/shape validation: ' + ($errors -join ' | '))
+    }
+    return [pscustomobject]@{ snapshots=$snapshots; errors=[string[]]$errors }
+}
+
+function Select-LiveCountryProvider {
+    param([object]$ProviderSet,[object]$Country,[long]$NowEpoch,[int]$MaximumAgeSeconds)
+    $candidates = @()
+    foreach ($source in @('prometheus','yata')) {
+        if ($null -eq $ProviderSet -or -not $ProviderSet.snapshots.ContainsKey($source)) { continue }
+        $snapshot = $ProviderSet.snapshots[$source]
+        if ($null -eq $snapshot -or $null -eq $snapshot.payload) { continue }
+        $status = Get-CountryPayloadStatus -Payload $snapshot.payload -Country $Country -Source $source -NowEpoch $NowEpoch -MaximumAgeSeconds $MaximumAgeSeconds
+        if (-not [bool]$status.fresh) { continue }
+        $priority = if ($source -eq 'prometheus') { 0 } else { 1 }
+        $candidates += [pscustomobject]@{ source=$source; payload=$snapshot.payload; status=$status; priority=$priority }
+    }
+    if ($candidates.Count -eq 0) { return $null }
+    return @($candidates | Sort-Object @{Expression={ [long]$_.status.timestamp };Descending=$true},priority | Select-Object -First 1)[0]
+}
+
 function Get-LiveStockPayload {
     param([long]$NowEpoch, [int]$MaximumAgeSeconds)
     $providers = @(
@@ -163,9 +261,6 @@ function Get-LiveStockPayload {
 
     foreach ($provider in $providers) {
         try {
-            # Keep the primary+fallback network budget bounded. RunUpdate's wrapper
-            # may retry YATA once, so five seconds per attempt keeps provider work
-            # comfortably inside the Rainmeter update budget.
             $payload = Invoke-RestMethod -Method Get -Uri ([string]$provider.uri) -Headers @{ Accept = 'application/json' } -TimeoutSec 5
             if ($null -eq $payload -or $null -eq $payload.stocks) { throw 'response does not contain stocks' }
             $freshness = Assert-LivePayloadFresh -Payload $payload -NowEpoch $NowEpoch -MaximumAgeSeconds $MaximumAgeSeconds -ProviderName ([string]$provider.id)
@@ -189,10 +284,7 @@ function Get-LiveStockObservationsForCountry {
     $rows = New-Object System.Collections.Generic.List[object]
     if ($null -eq $Payload -or $null -eq $Payload.stocks -or [string]::IsNullOrWhiteSpace($Source)) { return $rows.ToArray() }
 
-    $code = [string](Get-DynamicProperty $Country.providerCodes $Source)
-    if ([string]::IsNullOrWhiteSpace($code) -and $Source -eq 'prometheus') {
-        $code = [string](Get-DynamicProperty $Country.providerCodes 'yata')
-    }
+    $code = Get-CountryProviderCode -Country $Country -Source $Source
     if ([string]::IsNullOrWhiteSpace($code)) { return $rows.ToArray() }
 
     $countryObj = Get-DynamicProperty $Payload.stocks $code
@@ -381,15 +473,27 @@ $collectionCountries = @($countriesConfig.countries | Where-Object { $_.PSObject
 $inactiveMarketIndex = Get-InactiveMarketIndex -OverrideConfig $marketOverrideConfig
 
 try {
-    $live = Get-LiveStockPayload -NowEpoch $now -MaximumAgeSeconds $MaximumProviderAgeSeconds
+    $providerSet = Get-LiveStockProviderSet -CollectionCountries $collectionCountries -NowEpoch $now -MaximumAgeSeconds $MaximumProviderAgeSeconds
     $countriesSeen = 0
     $marketsSeen = 0
     $legacyMarketsSeen = 0
     $observationsWritten = 0
     $cyclesCompleted = 0
+    $providersUsed = @()
+    $staleCountries = @()
+    $countryProviders = [pscustomobject]@{}
 
     foreach ($country in $collectionCountries) {
-        $observations = @(Get-LiveStockObservationsForCountry -Payload $live.payload -Country $country -Now $now -Source ([string]$live.source))
+        $selection = Select-LiveCountryProvider -ProviderSet $providerSet -Country $country -NowEpoch $now -MaximumAgeSeconds $MaximumProviderAgeSeconds
+        if ($null -eq $selection) {
+            $staleCountries += [string]$country.id
+            continue
+        }
+        $source = [string]$selection.source
+        if ($providersUsed -notcontains $source) { $providersUsed += $source }
+        Set-DynamicProperty -Object $countryProviders -Name ([string]$country.id) -Value $source
+
+        $observations = @(Get-LiveStockObservationsForCountry -Payload $selection.payload -Country $country -Now $now -Source $source)
         if ($observations.Count -gt 0) { $countriesSeen++ }
 
         foreach ($observation in $observations) {
@@ -402,8 +506,9 @@ try {
                 continue
             }
 
-            # One collector now owns stock-transition history for every active
-            # foreign market, including the legacy "primary" Xanax paths.
+            # One collector owns stock-transition history for every active foreign
+            # market. Per-country provider selection only changes the live source;
+            # stable country:item identity keeps cycle evidence continuous.
             $destState = Get-DestinationState -EngineState $engineState -Key $key
             if (-not (Test-ObservationChanged -DestState $destState -Observation $observation)) {
                 $destState.lastForeignPrice = [long]$observation.foreignPrice
@@ -421,13 +526,19 @@ try {
         }
     }
 
+    if ($countriesSeen -le 0) {
+        throw 'No collected country had a fresh usable stock snapshot from Prometheus or YATA.'
+    }
+
     $engineState.shadowCollection.lastPollAt = $now
-    $engineState.shadowCollection.lastProvider = [string]$live.source
+    $engineState.shadowCollection.lastProvider = (@($providersUsed | Sort-Object) -join '+')
     $engineState.shadowCollection.countriesSeen = $countriesSeen
     $engineState.shadowCollection.marketsSeen = $marketsSeen
     $engineState.shadowCollection.legacyMarketsSeen = $legacyMarketsSeen
     $engineState.shadowCollection.observationsWritten = $observationsWritten
     $engineState.shadowCollection.cyclesCompleted = $cyclesCompleted
+    Set-DynamicProperty -Object $engineState.shadowCollection -Name 'countryProviders' -Value $countryProviders
+    Set-DynamicProperty -Object $engineState.shadowCollection -Name 'staleCountries' -Value ([string[]]@($staleCountries | Sort-Object))
     $engineState.shadowCollection.lastErrorAt = 0
     $engineState.shadowCollection.lastError = ''
     if (Test-Path -LiteralPath $ErrorFile) { Remove-Item -LiteralPath $ErrorFile -Force -ErrorAction SilentlyContinue }
