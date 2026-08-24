@@ -11,6 +11,8 @@ local lastRenderData = nil
 local lastDisplayedData = nil
 local pendingSortMode = nil
 local lastSortMode = nil
+local pendingTripBands = nil
+local activeTripBands = { short=true, medium=true, long=true }
 local expandedKey = ''
 local expandedRow = 0
 local lastInlineRenderRequestAt = 0
@@ -22,9 +24,10 @@ local collapsedCardHeight = 50
 local rowStride = 54
 local graphExtra = 108
 local expandedCardHeight = collapsedCardHeight + graphExtra
+local maxCandidateRows = 256
 
 local opportunitySuffixes = {
-    'Key','Name','Country','CountryCode','WindowText','LeaveText','ChanceText','TimeText',
+    'Key','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
     'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor',
     'Tooltip','GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds'
 }
@@ -41,6 +44,32 @@ local flagCodes = {
     china='CN',
     united_arab_emirates='AE',
     south_africa='ZA'
+}
+
+local tripBandsByCountry = {
+    mexico='short', cayman_islands='short', canada='short',
+    hawaii='medium', united_kingdom='medium', argentina='medium', switzerland='medium',
+    japan='long', china='long', united_arab_emirates='long', south_africa='long'
+}
+
+-- Defensive local names for the most common foreign-shop goods. Normal rendering
+-- prefers projected catalog/provider names; this only prevents blank cards when a
+-- provider omits its label or an older local catalog has not rebuilt yet.
+local itemNameFallbacks = {
+    [110]='Leather Bullwhip', [175]='Taser', [206]='Xanax', [226]='Smoke Grenade', [227]='Spear',
+    [230]='Flare Gun', [231]='Heckler & Koch SL8', [258]='Jaguar Plushie', [260]='Dahlia',
+    [261]='Wolverine Plushie', [262]='Hockey Stick', [263]='Crocus', [264]='Orchid', [265]='Pele Charm',
+    [266]='Nessie Plushie', [267]='Heather', [268]='Red Fox Plushie', [269]='Monkey Plushie',
+    [270]='Soccer Ball', [271]='Ceibo Flower', [272]='Edelweiss', [273]='Chamois Plushie',
+    [274]='Panda Plushie', [275]='Jade Buddha', [276]='Peony', [277]='Cherry Blossom',
+    [278]='Kabuki Mask', [279]='Maneki Neko', [280]='Elephant Statue', [281]='Lion Plushie',
+    [282]='African Violet', [294]='Bottle of Sake', [384]='Camel Plushie', [385]='Tribulus Omanense',
+    [406]='Afro Comb', [426]='Bottle of Tequila', [616]='Trout', [617]='Banana Orchid',
+    [618]='Stingray Plushie', [619]='Steel Drum', [620]='Nodding Turtle',
+    [1487]='Patagonian Fossil', [1488]='Meteorite Fragment', [1494]='Pangolin Scales',
+    [1495]='Ambergris Lump', [1496]='Natural Pearls', [1497]='Uncut Diamonds',
+    [1498]='Tiger Bone Powder', [1499]='Obsidian Point', [1500]='Quartzite Point',
+    [1501]='Chert Point', [1502]='Basalt Point', [1503]='Chalcedony Point', [1504]='Quartz Point'
 }
 
 local function trim(s)
@@ -193,14 +222,48 @@ local function updateHeartbeatText(data, now)
     end
 end
 
-local function updateFilters(data)
-    local itemText = safeText(data.UIItemFilterText, 'All')
-    local categoryText = safeText(data.UICategoryFilterText, 'All')
-    setVariable('ItemFilterText', itemText)
-    setVariable('CategoryFilterText', categoryText)
-    setVariable('TripShortColor', number(data.UITripShortOn) == 1 and '82,174,255,255' or '145,152,164,255')
-    setVariable('TripMediumColor', number(data.UITripMediumOn) == 1 and '82,174,255,255' or '145,152,164,255')
-    setVariable('TripLongColor', number(data.UITripLongOn) == 1 and '82,174,255,255' or '145,152,164,255')
+local function copyTripBands(bands)
+    return {
+        short = bands and bands.short == true or false,
+        medium = bands and bands.medium == true or false,
+        long = bands and bands.long == true or false
+    }
+end
+
+local function tripBandSignature(bands)
+    return (bands.short and '1' or '0') .. (bands.medium and '1' or '0') .. (bands.long and '1' or '0')
+end
+
+local function parseTripBandCsv(value)
+    local bands = { short=false, medium=false, long=false }
+    for token in safeText(value, ''):gmatch('[^,]+') do
+        local band = trim(token):lower()
+        if bands[band] ~= nil then bands[band] = true end
+    end
+    return bands
+end
+
+local function projectedTripBands(data)
+    if data.UISelectedTripBands ~= nil then return parseTripBandCsv(data.UISelectedTripBands) end
+    return {
+        short = number(data.UITripShortOn) == 1,
+        medium = number(data.UITripMediumOn) == 1,
+        long = number(data.UITripLongOn) == 1
+    }
+end
+
+local function applyTripColors(bands)
+    local active = '82,174,255,255'
+    local inactive = '145,152,164,255'
+    setVariable('TripShortColor', bands.short and active or inactive)
+    setVariable('TripMediumColor', bands.medium and active or inactive)
+    setVariable('TripLongColor', bands.long and active or inactive)
+end
+
+local function updateFilters(data, bands)
+    setVariable('ItemFilterText', safeText(data.UIItemFilterText, 'All'))
+    setVariable('CategoryFilterText', safeText(data.UICategoryFilterText, 'All'))
+    applyTripColors(bands)
 end
 
 local function applySortColors(mode)
@@ -212,24 +275,47 @@ local function applySortColors(mode)
     setVariable('SortProfitHourColor', mode == 'profit_per_hour' and active or inactive)
 end
 
+local function countryIdFromKey(key)
+    return safeText(key, ''):match('^([a-z0-9_]+):') or ''
+end
+
+local function itemIdFromKey(key)
+    local raw = safeText(key, ''):match(':([1-9][0-9]*)$')
+    return tonumber(raw) or 0
+end
+
+local function fallbackItemName(key)
+    local id = itemIdFromKey(key)
+    if itemNameFallbacks[id] ~= nil then return itemNameFallbacks[id] end
+    if id > 0 then return 'Item ' .. tostring(id) end
+    return 'Unknown item'
+end
+
 local function currentOpportunityRows(data)
-    local count = math.max(0, math.min(8, math.floor(number(data.OpportunityCount))))
+    local count = math.max(0, math.min(maxCandidateRows, math.floor(number(data.OpportunityCount))))
     local rows = {}
     for i = 1, count do
         local prefix = 'Opportunity' .. i
-        table.insert(rows, {
-            sourceIndex = i,
-            key = safeText(data[prefix .. 'Key'], ''),
-            name = safeText(data[prefix .. 'Name'], ''),
-            country = safeText(data[prefix .. 'Country'], ''),
-            gross = number(data[prefix .. 'GrossValue']),
-            profitHour = number(data[prefix .. 'ProfitHourValue']),
-            windowStart = number(data[prefix .. 'WindowStartAt']),
-            probability = number(data[prefix .. 'ProbabilityValue']),
-            elapsed = number(data[prefix .. 'ElapsedSeconds']),
-            grossFallback = moneyNumber(data[prefix .. 'GrossText']),
-            profitHourFallback = moneyNumber(data[prefix .. 'ProfitHourText'])
-        })
+        local key = safeText(data[prefix .. 'Key'], '')
+        if key ~= '' then
+            local countryId = countryIdFromKey(key)
+            local band = safeText(data[prefix .. 'TripBand'], tripBandsByCountry[countryId] or ''):lower()
+            local name = safeText(data[prefix .. 'Name'], fallbackItemName(key))
+            table.insert(rows, {
+                sourceIndex = i,
+                key = key,
+                name = name,
+                country = safeText(data[prefix .. 'Country'], countryId),
+                tripBand = band,
+                gross = number(data[prefix .. 'GrossValue']),
+                profitHour = number(data[prefix .. 'ProfitHourValue']),
+                windowStart = number(data[prefix .. 'WindowStartAt']),
+                probability = number(data[prefix .. 'ProbabilityValue']),
+                elapsed = number(data[prefix .. 'ElapsedSeconds']),
+                grossFallback = moneyNumber(data[prefix .. 'GrossText']),
+                profitHourFallback = moneyNumber(data[prefix .. 'ProfitHourText'])
+            })
+        end
     end
     for _, row in ipairs(rows) do
         if row.gross == 0 and row.grossFallback ~= 0 then row.gross = row.grossFallback end
@@ -270,28 +356,38 @@ local function sortOpportunityRows(rows, mode)
     end)
 end
 
-local function locallySortedProjection(data, mode)
+local function locallyFilteredSortedProjection(data, mode, bands)
     local rows = currentOpportunityRows(data)
-    if #rows <= 1 then
-        local out = copyTable(data)
-        out.OpportunitySortMode = mode
-        return out
+    local filtered = {}
+    for _, row in ipairs(rows) do
+        if bands[row.tripBand] == true then table.insert(filtered, row) end
     end
-    sortOpportunityRows(rows, mode)
+    sortOpportunityRows(filtered, mode)
+
     local out = copyTable(data)
-    for displayIndex, row in ipairs(rows) do
+    for displayIndex = 1, 8 do
+        local targetPrefix = 'Opportunity' .. displayIndex
+        for _, suffix in ipairs(opportunitySuffixes) do out[targetPrefix .. suffix] = '' end
+    end
+
+    local visibleCount = math.min(8, #filtered)
+    for displayIndex = 1, visibleCount do
+        local row = filtered[displayIndex]
         local sourcePrefix = 'Opportunity' .. row.sourceIndex
         local targetPrefix = 'Opportunity' .. displayIndex
         for _, suffix in ipairs(opportunitySuffixes) do
             out[targetPrefix .. suffix] = data[sourcePrefix .. suffix] or ''
         end
+        out[targetPrefix .. 'Name'] = row.name
+        out[targetPrefix .. 'TripBand'] = row.tripBand
     end
-    out.OpportunitySortMode = mode
-    return out
-end
 
-local function countryIdFromKey(key)
-    return safeText(key, ''):match('^([a-z0-9_]+):') or ''
+    out.OpportunityCandidateCount = #rows
+    out.OpportunityFilteredCount = #filtered
+    out.OpportunityCount = visibleCount
+    out.OpportunitySortMode = mode
+    if visibleCount == 0 and #rows > 0 then out.OpportunityMessage = 'No opportunities in selected trip bands' end
+    return out
 end
 
 local function formatDuration(seconds)
@@ -361,7 +457,9 @@ local function collapseInlineGraph()
     lastGraphSignature = ''
     lastLayoutSignature = ''
     for i = 1, 8 do
-        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'InlineGraph')
+        local graphMeter = 'MeterOpportunity' .. i .. 'InlineGraph'
+        SKIN:Bang('!HideMeter', graphMeter)
+        SKIN:Bang('!SetOption', graphMeter, 'ImageName', '')
         SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Graph', 'Text', 'v')
     end
 end
@@ -419,6 +517,24 @@ local function safeLeaveText(data, prefix)
     return leave
 end
 
+local function displayChanceText(data, prefix)
+    local chance = safeText(data[prefix .. 'ChanceText'], '')
+    if chance ~= '' then return chance end
+    local raw = safeText(data[prefix .. 'ProbabilityValue'], '')
+    if raw == '' then return '' end
+    local p = tonumber(raw)
+    if p == nil then return '' end
+    if p < 0 then return 'LEARNING' end
+    return string.format('%.0f%%', p * 100)
+end
+
+local function cardTitle(data, prefix, key)
+    local name = safeText(data[prefix .. 'Name'], fallbackItemName(key))
+    local country = safeText(data[prefix .. 'Country'], '')
+    if country ~= '' then return name .. ' · ' .. country end
+    return name
+end
+
 local function updateExpandedGraph()
     if expandedRow <= 0 or expandedKey == '' then return end
     local spec = readGraphSpec(expandedKey)
@@ -450,17 +566,21 @@ local function updateOpportunities(data)
             local gross = safeText(data[prefix .. 'GrossText'], '')
             local price = safeText(data[prefix .. 'PriceText'], '')
             local mv = safeText(data[prefix .. 'MarketValueText'], '')
-            local combinedPrice = price
-            if mv ~= '' then combinedPrice = price .. ' (' .. mv .. ')' end
+            local combinedPrice = ''
+            if price ~= '' then combinedPrice = 'BUY ' .. price .. '/ea' end
+            if mv ~= '' then
+                if combinedPrice ~= '' then combinedPrice = combinedPrice .. ' · ' end
+                combinedPrice = combinedPrice .. 'MV ' .. mv
+            end
 
-            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'Text', safeText(data[prefix .. 'Name'], ''))
+            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'Text', cardTitle(data, prefix, key))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'ToolTipText', tooltip)
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'Text', gross)
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'ToolTipText', tooltip)
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Window', 'Text', safeText(data[prefix .. 'WindowText'], ''))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Leave', 'Text', safeLeaveText(data, prefix))
-            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Chance', 'Text', safeText(data[prefix .. 'ChanceText'], ''))
+            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Chance', 'Text', displayChanceText(data, prefix))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Price', 'Text', combinedPrice)
             applyFlagForRow(data, i, key)
         end
@@ -484,6 +604,12 @@ local function requestInlineGraph(key)
     SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')
 end
 
+local function currentRenderMode(data)
+    local mode = pendingSortMode or lastSortMode or safeText(data and data.OpportunitySortMode or '', 'upcoming'):lower()
+    if mode ~= 'name' and mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
+    return mode
+end
+
 function Initialize()
     local configured = SELF:GetOption('StateFile', '#@#Generated\\state.kv')
     local heartbeatConfigured = SELF:GetOption('HeartbeatFile', '#@#Generated\\last-update.txt')
@@ -502,6 +628,7 @@ function Initialize()
     nextPollAt = os.time() + pollInterval
 
     local initial = readState()
+    activeTripBands = projectedTripBands(initial)
     if initial.OpportunityCount ~= nil then
         lastProjectionData = copyProjectionFields(initial)
         lastRenderData = stabilizeProjection(initial)
@@ -516,16 +643,37 @@ function OpenFilter(filterName)
 end
 
 function ToggleTripBand(band)
-    deferPolling(5)
+    band = safeText(band, ''):lower()
+    if band ~= 'short' and band ~= 'medium' and band ~= 'long' then return end
+
+    local nextBands = copyTripBands(activeTripBands)
+    nextBands[band] = not nextBands[band]
+    pendingTripBands = copyTripBands(nextBands)
+    activeTripBands = copyTripBands(nextBands)
+    collapseInlineGraph()
+    applyTripColors(activeTripBands)
+    deferPolling(2)
+
+    if lastRenderData ~= nil then
+        local immediate = locallyFilteredSortedProjection(lastRenderData, currentRenderMode(lastRenderData), activeTripBands)
+        lastDisplayedData = immediate
+        updateOpportunities(immediate)
+    end
+
     setVariable('PreferenceAction', 'ToggleTripBand')
     setVariable('PreferenceValue', band)
     SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
+    SKIN:Bang('!UpdateMeter', '*')
+    SKIN:Bang('!Redraw')
 end
 
 function ResetFilters()
     deferPolling(5)
     collapseInlineGraph()
+    activeTripBands = { short=true, medium=true, long=true }
+    pendingTripBands = copyTripBands(activeTripBands)
+    applyTripColors(activeTripBands)
     setVariable('PreferenceAction', 'ResetFilters')
     setVariable('PreferenceValue', '')
     SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
@@ -536,13 +684,13 @@ function SetSortMode(mode)
     mode = safeText(mode, 'upcoming'):lower()
     if mode ~= 'name' and mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
     if lastSortMode ~= mode then collapseInlineGraph() end
-    deferPolling(5)
+    deferPolling(2)
     pendingSortMode = mode
     lastSortMode = mode
     applySortColors(mode)
 
     if lastRenderData ~= nil then
-        local immediate = locallySortedProjection(lastRenderData, mode)
+        local immediate = locallyFilteredSortedProjection(lastRenderData, mode, activeTripBands)
         lastDisplayedData = immediate
         updateOpportunities(immediate)
     end
@@ -597,7 +745,12 @@ function Update()
         lastSortMode = renderMode
     end
 
-    local data = locallySortedProjection(baseData, renderMode)
+    local projectedBands = projectedTripBands(baseData)
+    if pendingTripBands ~= nil and tripBandSignature(projectedBands) == tripBandSignature(pendingTripBands) then pendingTripBands = nil end
+    if pendingTripBands ~= nil then activeTripBands = copyTripBands(pendingTripBands)
+    else activeTripBands = copyTripBands(projectedBands) end
+
+    local data = locallyFilteredSortedProjection(baseData, renderMode, activeTripBands)
     lastDisplayedData = data
 
     local sourceStatus = safeText(data.UpdatedText, '')
@@ -619,7 +772,7 @@ function Update()
     if expandedKey ~= '' and (now - lastInlineRenderRequestAt) >= 60 then requestInlineGraph(expandedKey) end
 
     updateHeartbeatText(data, now)
-    updateFilters(data)
+    updateFilters(data, activeTripBands)
     applySortColors(renderMode)
     updateOpportunities(data)
     return 0
