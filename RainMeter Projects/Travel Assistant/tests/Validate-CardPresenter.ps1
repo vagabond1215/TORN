@@ -29,13 +29,15 @@ if ($errors.Count -eq 0) {
 
     foreach ($token in @(
         'removeCountrySuffix','rowCountryAndTravel','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
-        'parseWindowPlan','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
-        'WP2:','group.safeEnd-group.safeStart>=60','group.bestProbability>0.5','currentProbability>0.5',
+        'parseWindowPlan','parsePriceVarianceEnvelope','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
+        'WP2:','PV([01])','group.safeEnd-group.safeStart>=60','group.bestProbability>0.5','currentProbability>0.5',
         "'SAFE - LEAVE '","'SAFE - LEAVE BEFORE '","'BEST - LEAVE NOW'", "'BEST - LEAVE '",
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
-        'quantityFromTooltip','buyPriceFromVisibleText','math.ceil(buyPrice*quantity*1.05)',
-        "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer',
+        'configureWindowTooltipMeter','ToolTipHidden','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','ⓘ',
+        "InlinePattern','\\\\$", "InlinePattern2','/ea x[0-9]+ =", 'Color | 255,255,255,255',
+        'quantityFromTooltip','buyPriceFromVisibleText','bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
+        "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
         'statusText(fallbackWindow,fallbackLeave)'
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
@@ -45,7 +47,8 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         'Get-RecurringScenarioModel','safeStartAt = $lateRestockAt','safeEndAt = $earlySelloutAt','MinimumSafeWindowSeconds = 60L',
         'bestProbability','Convert-WindowPlanMachineText','Select-WindowPlanGroup','WP2:',
-        '$RuntimeCycleFile','$SeedCycleFile','MaximumSamples = 48','$cycleParts','$phaseCode','restockDelaySeconds','availabilitySeconds'
+        '$RuntimeCycleFile','$SeedCycleFile','MaximumSamples = 48','$cycleParts','$phaseCode','restockDelaySeconds','availabilitySeconds',
+        'Test-WindowPriceVaries','cycleAnalytics','foreignPrice','currentForeignPrice','lastForeignPrice','priceEvents','PV1#','PV0#'
     )) {
         if (-not $windowPlan.Contains($token)) { Fail "WindowPlan.ps1 missing '$token'." }
     }
@@ -74,5 +77,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Compact trade-card safe/best window validation passed.' -ForegroundColor Green
-Write-Host 'Safe windows use full empirical overlap with no confidence label; Best Hit uses live >50% support and advances after the opportunity is missed.'
+Write-Host 'Departure text has a persistent tooltip hitbox; Safe rows expose an info anchor, profit equation punctuation is white, and fixed-price items use exact Take cash.'
 exit 0
