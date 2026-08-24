@@ -43,5 +43,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify safe-vs-best window tooltips/countdowns, live best-hit confidence, provider freshness/fallback, cycle analytics, compact item/profit equation cards, flag-only country tooltip, flight/remaining time, Take cash +5%, instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify Safe/Best departure tooltips and Safe info anchor, live best-hit confidence, provider freshness/fallback, cycle analytics, white profit-equation punctuation, flag-only country tooltip, flight/remaining time, conditional Take cash buffer (0% for invariant price; 5% after observed price variance), instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
 exit 0
