@@ -10,6 +10,7 @@ $tests = @(
     'Validate-Filters.ps1',
     'Run-PresentationProjectionTests.ps1',
     'Run-PowerShell51CompatibilityTests.ps1',
+    'Run-ProviderFreshnessTests.ps1',
     'Run-ObservationHistoryTests.ps1',
     'Validate-TravelContext.ps1',
     'Run-TravelContextTests.ps1',
@@ -38,5 +39,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify item-country titles, BUY per-item price plus MV, instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify provider freshness/fallback, item-country titles, BUY per-item price plus MV, instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
 exit 0
