@@ -71,9 +71,10 @@ $providerSet = [pscustomobject]@{
 }
 $mexSelection = Select-LiveCountryProvider -ProviderSet $providerSet -Country $mexico -NowEpoch $now -MaximumAgeSeconds 300
 $canSelection = Select-LiveCountryProvider -ProviderSet $providerSet -Country $canada -NowEpoch $now -MaximumAgeSeconds 300
+$mexPromStatus = Get-CountryPayloadStatus -Payload $prometheusMixed -Country $mexico -Source 'prometheus' -NowEpoch $now -MaximumAgeSeconds 300
 Assert-Equal ([string]$mexSelection.source) 'yata' 'Stale Mexico on Prometheus should use fresh YATA Mexico.'
 Assert-Equal ([string]$canSelection.source) 'prometheus' 'Fresh Canada should remain on the fresher Prometheus country sample.'
-Assert-True ([bool](Get-CountryPayloadStatus -Payload $prometheusMixed -Country $mexico -Source 'prometheus' -NowEpoch $now -MaximumAgeSeconds 300).fresh -eq $false) 'Country freshness must be evaluated independently.'
+Assert-True (-not [bool]$mexPromStatus.fresh) 'Country freshness must be evaluated independently.'
 
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" -ForegroundColor Red }
