@@ -71,6 +71,9 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         "title=title..'  '..tostring(quantity)..' qty'",
         "local header='Cost '..cost..'   MV:'..mv..' | '..formatMoney(unitProfit)",
+        "setOption(prefix..'Gross','FontColor','#Text#')",
+        "setOption(prefix..'Gross','InlinePattern','\\\\|\\\\s*-?\\\\$[0-9,]+$')",
+        "setOption(prefix..'Gross','InlineSetting','Color | 86,190,116,255')",
         "setOption(prefix..'Info','X',301)",
         "setOption(info,'Text',show and 'ⓘ' or '')",
         "setOption(leave,'ToolTipText',text)",
@@ -105,5 +108,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Current capacity, observation-anchor, card-header, info-anchor, and expanded-graph validation passed.' -ForegroundColor Green
-Write-Host 'Expected live result: active perks refresh inventory capacity; Safe/Best phase follows retained real stock transitions; header shows qty + Cost + MV + profit/item; graph is 528x125; departure text and dedicated info glyph expose the calculation.'
+Write-Host 'Expected live result: active perks refresh inventory capacity; Safe/Best phase follows retained real stock transitions; header shows qty + Cost + MV + profit/item with only profit green; graph is 528x125; departure text and dedicated info glyph expose the calculation.'
 exit 0
