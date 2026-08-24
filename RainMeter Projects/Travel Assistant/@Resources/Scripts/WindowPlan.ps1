@@ -235,6 +235,31 @@ function Get-WindowTravelSeconds {
     return 0L
 }
 
+function Test-WindowPriceVaries {
+    param([object]$Engine,[string]$Key)
+    if ($null -eq $Engine -or [string]::IsNullOrWhiteSpace($Key)) { return $false }
+    $root=Get-WindowProperty $Engine 'cycleAnalytics'
+    $markets=Get-WindowProperty $root 'markets'
+    $market=Get-WindowProperty $markets $Key
+    if ($null -eq $market) { return $false }
+
+    $stats=Get-WindowProperty $market 'foreignPrice'
+    if ($null -ne $stats) {
+        $count=[int](Get-WindowProperty $stats 'count')
+        $min=[long](Get-WindowProperty $stats 'min')
+        $max=[long](Get-WindowProperty $stats 'max')
+        if ($count -ge 2 -and $min -gt 0 -and $max -gt $min) { return $true }
+    }
+
+    $current=[long](Get-WindowProperty $market 'currentForeignPrice')
+    $last=[long](Get-WindowProperty $market 'lastForeignPrice')
+    if ($current -gt 0 -and $last -gt 0 -and $current -ne $last) { return $true }
+
+    $events=Get-WindowProperty $market 'priceEvents'
+    if (@($events).Count -gt 0) { return $true }
+    return $false
+}
+
 function Read-WindowCyclesForKeys {
     param([string[]]$Paths,[hashtable]$Wanted)
     $map=@{}
@@ -304,7 +329,10 @@ for ($i=1; $i -le $count; $i++) {
     $model=Get-RecurringScenarioModel -Cycles $cycles -AnchorAt $anchorAt -AnchorPhase $phase -NowEpoch $Now
     $machine=Convert-WindowPlanMachineText -Model $model
     $oldTooltip=[string]$state[$prefix+'Tooltip']
-    if (-not [string]::IsNullOrWhiteSpace($machine)) { $state[$prefix+'Tooltip']='WP2:'+$machine+'#'+$oldTooltip }
+    $priceVaries=Test-WindowPriceVaries -Engine $engine -Key $key
+    $priceEnvelope=if ($priceVaries) { 'PV1#' } else { 'PV0#' }
+    if (-not [string]::IsNullOrWhiteSpace($machine)) { $state[$prefix+'Tooltip']='WP2:'+$machine+'#'+$priceEnvelope+$oldTooltip }
+    else { $state[$prefix+'Tooltip']=$priceEnvelope+$oldTooltip }
 
     $flightSeconds=Get-WindowTravelSeconds -State $state -CountryId $countryId
     $earliestDeparture=$Now
