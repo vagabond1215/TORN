@@ -16,7 +16,7 @@ ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
 NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
 [FLAG]  <item> - <country>                    <$gross>   v
-        <window>  <leave>  <chance>    BUY <$foreign>/ea · MV <$MV>
+        <window>  <leave>  <chance>    BUY <$foreign>/ea | MV <$MV>
 ```
 
 Up to eight cards are visible, but the PowerShell projection retains a bounded local candidate pool so sort/trip controls do not operate on only the previous eight rows.
@@ -30,6 +30,7 @@ Up to eight cards are visible, but the PowerShell projection retains a bounded l
 - Visible gross is only `$amount`; no `gross` suffix and no `xN` suffix.
 - Quantity remains in internal projection/tooltips for inspectable economics.
 - Lower-right price text explicitly distinguishes `BUY $foreign/ea` from `MV $marketValue`.
+- Use ASCII separators in card text (`-`, `|`) to avoid Rainmeter encoding regressions.
 - Far-right control is a compact `v`/`^` chevron, not the word `GRAPH`.
 
 ## Immediate ordering and trip filtering
@@ -138,8 +139,8 @@ Then refresh Rainmeter and verify:
 2. No rank numbers.
 3. Every card has a recognizable FlagKit country flag.
 4. Flag hover shows country + one-way travel time.
-5. Card title visibly shows item name and country name.
-6. Lower-right text clearly reads `BUY $.../ea · MV $...`.
+5. Card title visibly shows `item - country`.
+6. Lower-right text clearly reads `BUY $.../ea | MV $...`.
 7. Gross is `$amount` only.
 8. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR reorder immediately against the full projected pool.
 9. SHORT / MED / LONG toggle color and visible rows immediately, including OFF -> ON, without waiting for PowerShell opportunity recomputation.
