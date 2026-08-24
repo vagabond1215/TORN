@@ -64,13 +64,28 @@ if ($null -ne $lateWindow) {
 }
 Assert-Near (Get-OpportunityRecurringProbabilityAtAge -Cycles $steadyCycles -AgeSeconds 10000L -AnchorPhase 'sellout') 1.0 0.0001 'Recurring probability must recognize stock in a later cycle.'
 
+# Fresh stock timing should not disappear merely because the resale queue is
+# recovering from an outage. A positive MV is usable for seven days by default,
+# but stale status remains explicit and ancient/no-value snapshots are rejected.
+$mvNow = 2000000L
+$freshUse = Get-OpportunityResaleUse -Resale ([pscustomobject]@{marketValue=1000L;fetchedAt=$mvNow-60;fresh=$true}) -NowEpoch $mvNow -MaximumAgeSeconds 604800
+Assert-True ([bool]$freshUse.usable) 'Fresh cached MV should be usable.'
+Assert-True ([bool]$freshUse.fresh) 'Fresh cached MV should remain marked fresh.'
+$staleUse = Get-OpportunityResaleUse -Resale ([pscustomobject]@{marketValue=1000L;fetchedAt=$mvNow-172800;fresh=$false}) -NowEpoch $mvNow -MaximumAgeSeconds 604800
+Assert-True ([bool]$staleUse.usable) 'Two-day-old positive MV should remain visible during resale-cache recovery.'
+Assert-True ([bool]$staleUse.stale) 'Fallback MV must remain explicitly stale.'
+$expiredUse = Get-OpportunityResaleUse -Resale ([pscustomobject]@{marketValue=1000L;fetchedAt=$mvNow-691200;fresh=$false}) -NowEpoch $mvNow -MaximumAgeSeconds 604800
+Assert-True (-not [bool]$expiredUse.usable) 'MV older than the seven-day fallback bound must not drive opportunity economics.'
+$missingUse = Get-OpportunityResaleUse -Resale ([pscustomobject]@{marketValue=0L;fetchedAt=$mvNow-60;fresh=$false}) -NowEpoch $mvNow -MaximumAgeSeconds 604800
+Assert-True (-not [bool]$missingUse.usable) 'Missing MV must remain excluded until priced.'
+
 $state = @{}
 $rows = @(
     [pscustomobject]@{
-        key='japan:1'; name='First'; countryName='Japan'; countryCode='JP'; tripBand='long'; probability=.9; probabilityKnown=$true; elapsedSeconds=3600L; grossProfit=1000L; quantity=10; profitPerHour=1000.0; windowStartAt=100100L; foreignPrice=10L; marketValue=20L; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='first'
+        key='japan:1'; name='First'; countryName='Japan'; countryCode='JP'; tripBand='long'; probability=.9; probabilityKnown=$true; elapsedSeconds=3600L; grossProfit=1000L; quantity=10; profitPerHour=1000.0; windowStartAt=100100L; foreignPrice=10L; marketValue=20L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='first'
     },
     [pscustomobject]@{
-        key='united_kingdom:2'; name='Second'; countryName='United Kingdom'; countryCode='UK'; tripBand='medium'; probability=.8; probabilityKnown=$true; elapsedSeconds=1800L; grossProfit=1200L; quantity=12; profitPerHour=2400.0; windowStartAt=100200L; foreignPrice=12L; marketValue=24L; priceColor='86,190,116,255'; windowText='WINDOW 10m'; leaveText='LEAVE NOW'; tooltip='second'
+        key='united_kingdom:2'; name='Second'; countryName='United Kingdom'; countryCode='UK'; tripBand='medium'; probability=.8; probabilityKnown=$true; elapsedSeconds=1800L; grossProfit=1200L; quantity=12; profitPerHour=2400.0; windowStartAt=100200L; foreignPrice=12L; marketValue=24L; marketValueFresh=$false; priceColor='145,152,164,255'; windowText='WINDOW 10m'; leaveText='LEAVE NOW'; tooltip='second'
     }
 )
 Write-OpportunityProjection -State $state -Rows $rows -SortMode 'gross' -Message ''
@@ -83,6 +98,7 @@ Assert-Equal $state['Opportunity2Key'] 'united_kingdom:2' 'Stable market identit
 Assert-Equal $state['Opportunity2TripBand'] 'medium' 'Trip band must remain projected for instant local filtering.'
 Assert-Equal $state['Opportunity2QuantityText'] 'x12' 'Trip quantity remains projected for tooltip/economic inspection even though it is no longer printed beside gross.'
 Assert-Equal $state['Opportunity2ProfitHourText'] '$2,400/hr' 'Profit-per-hour projection should use raw trip gross over elapsed hours.'
+Assert-Equal $state['Opportunity2MarketValueText'] '$24 STALE' 'Stale MV must be explicit on the compact card projection.'
 Assert-Equal ([long]$state['Opportunity2GrossValue']) 1200L 'Raw gross value must be available for immediate Lua sorting.'
 Assert-Near ([double]$state['Opportunity2ProfitHourValue']) 2400.0 0.001 'Raw profit/hour must be available for immediate Lua sorting.'
 Assert-Equal ([long]$state['Opportunity2WindowStartAt']) 100200L 'Raw window timestamp must be available for immediate Lua sorting.'
@@ -98,7 +114,7 @@ for ($i=1; $i -le 12; $i++) {
     $poolRows += [pscustomobject]@{
         key=('canada:{0}' -f $i); itemId=$i; name=('Candidate {0}' -f $i); countryName='Canada'; countryCode='CA'; tripBand=$band;
         probability=.5; probabilityKnown=$true; elapsedSeconds=1800L; grossProfit=(1000L+$i); quantity=1; profitPerHour=2000.0;
-        windowStartAt=(100000L+$i); foreignPrice=10L; marketValue=20L; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='pool'
+        windowStartAt=(100000L+$i); foreignPrice=10L; marketValue=20L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='pool'
     }
 }
 Write-OpportunityProjection -State $poolState -Rows $poolRows -SortMode 'upcoming' -Message ''
@@ -109,7 +125,7 @@ Assert-Equal $poolState['Opportunity12TripBand'] 'long' 'Candidate pool must ret
 $learningState = @{}
 $learningRows = @(
     [pscustomobject]@{
-        key='canada:3'; name='Learning Stock'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=-1.0; probabilityKnown=$false; elapsedSeconds=2100L; grossProfit=5000L; quantity=18; profitPerHour=8571.4; windowStartAt=100000L; foreignPrice=100L; marketValue=500L; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='likelihood learning'
+        key='canada:3'; name='Learning Stock'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=-1.0; probabilityKnown=$false; elapsedSeconds=2100L; grossProfit=5000L; quantity=18; profitPerHour=8571.4; windowStartAt=100000L; foreignPrice=100L; marketValue=500L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='likelihood learning'
     }
 )
 Write-OpportunityProjection -State $learningState -Rows $learningRows -SortMode 'upcoming' -Message ''
@@ -129,5 +145,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Opportunity-state deterministic tests passed.' -ForegroundColor Green
-Write-Host 'Recurring availability and the full local candidate pool now support instant transparent sorting and trip-band filtering.'
+Write-Host 'Recurring availability, bounded stale-MV recovery, and the full local candidate pool support transparent opportunity display.'
 exit 0
