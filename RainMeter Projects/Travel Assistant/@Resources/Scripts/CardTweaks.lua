@@ -129,7 +129,10 @@ local function applyHeader(index,lookup)
     setOption(prefix..'Gross','W',298)
     setOption(prefix..'Gross','StringAlign','Right')
     setOption(prefix..'Gross','ClipString',1)
-    setOption(prefix..'Gross','InlinePattern','')
+    setOption(prefix..'Gross','FontColor','#Text#')
+    -- Cost and MV stay neutral; only the final profit-per-item segment is green.
+    setOption(prefix..'Gross','InlinePattern','\\|\\s*-?\\$[0-9,]+$')
+    setOption(prefix..'Gross','InlineSetting','Color | 86,190,116,255')
     setOption(prefix..'Gross','InlinePattern2','')
     setOption(prefix..'Gross','ToolTipText','Cost per item | Torn market value per item | profit per item')
 end
