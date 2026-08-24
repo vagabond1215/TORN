@@ -13,6 +13,8 @@ $ShadowCollector = Join-Path $PSScriptRoot 'ShadowCollector.ps1'
 $LocalCatalog = Join-Path $PSScriptRoot 'LocalCatalog.ps1'
 $EngineStateSchema = Join-Path $PSScriptRoot 'EnsureEngineStateSchema.ps1'
 $TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
+$CurrentCapacityRefresh = Join-Path $PSScriptRoot 'CurrentCapacityRefresh.ps1'
+$CycleAnchorReconciler = Join-Path $PSScriptRoot 'CycleAnchorReconciler.ps1'
 $OptimalRoute = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
 $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
 $WindowPlan = Join-Path $PSScriptRoot 'WindowPlan.ps1'
@@ -30,6 +32,8 @@ $CollectedStateErrorFile = Join-Path $RuntimeDir 'collected-state-error.txt'
 $LocalCatalogErrorFile = Join-Path $RuntimeDir 'local-catalog-error.txt'
 $EngineStateSchemaErrorFile = Join-Path $RuntimeDir 'engine-state-schema-error.txt'
 $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
+$CurrentCapacityRefreshErrorFile = Join-Path $RuntimeDir 'current-capacity-refresh-error.txt'
+$CycleAnchorReconcilerErrorFile = Join-Path $RuntimeDir 'cycle-anchor-reconciler-error.txt'
 $OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $WindowPlanErrorFile = Join-Path $RuntimeDir 'window-plan-error.txt'
@@ -228,6 +232,15 @@ try {
     # TravelContext owns its diagnostic file because it catches transient API failures
     # internally while preserving the last successful destination/bar context.
     if ($Action -eq 'Update') { Invoke-FailSoftScript -Path $TravelContext -ErrorPath $TravelContextErrorFile -ClearErrorOnSuccess $false }
+
+    # Current perks are active-state evidence. Refresh the persisted local capacity
+    # profile before opportunity economics so peace/war faction loadout changes do
+    # not leave the inventory quantity stuck on an older synced value.
+    if ($Action -eq 'Update') { Invoke-FailSoftScript -Path $CurrentCapacityRefresh -ErrorPath $CurrentCapacityRefreshErrorFile }
+
+    # Use the same retained real observation stream as the inline graph to align the
+    # active restock/sellout phase before recurring Safe/Best windows are calculated.
+    Invoke-FailSoftScript -Path $CycleAnchorReconciler -ErrorPath $CycleAnchorReconcilerErrorFile
 
     # Keep the route optimizer as a background decision/pricing-priority model.
     Invoke-FailSoftScript -Path $OptimalRoute -ErrorPath $OptimalRouteErrorFile
