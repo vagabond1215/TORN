@@ -29,7 +29,8 @@
     "minimumMarginPercent": 0.0,
     "minimumTotalTripProfit": 0,
     "capacityOverride": 0,
-    "resaleStaleAfterSeconds": 21600
+    "resaleStaleAfterSeconds": 21600,
+    "resaleFallbackMaxAgeSeconds": 604800
   },
   "optimizer": {
     "enabled": true,
