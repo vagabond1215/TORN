@@ -35,14 +35,14 @@ Assert-True ([double]$market.restockDelay.stdDev -gt 0) 'Restock delay variance 
 Assert-Equal ([long]$market.selloutDuration.min) 2700L 'Minimum stocked/sellout duration must be retained.'
 Assert-Equal ([long]$market.selloutDuration.max) 3600L 'Maximum stocked/sellout duration must be retained.'
 Assert-True ([double]$market.selloutDuration.stdDev -gt 0) 'Sellout-duration variance should be retained.'
-Assert-Equal @($market.regimes).Count 3 'Price and material sellout changes should open new regimes.'
+Assert-Equal (@($market.regimes).Count) 3 'Price and material sellout changes should open new regimes.'
 Assert-Equal ([string]$market.regimes[0].reason) 'initial' 'First regime should be the initial baseline.'
 Assert-Equal ([string]$market.regimes[1].reason) 'price' 'A >=5% price move should start a price regime.'
 Assert-Equal ([string]$market.regimes[2].reason) 'sellout' 'A material sellout-duration move should start a sellout regime.'
 Assert-Equal ([int]$market.regimes[0].sampleCount) 2 'Small price/time changes should remain in the same regime.'
 Assert-Equal ([int]$market.priceToMvRatioBps.count) 4 'Known MV ratios should be sampled with completed cycles.'
 Assert-Near ([double]$market.priceToMvRatioBps.mean) 5287.5 0.1 'Price/MV basis-point ratio should remain item-specific.'
-Assert-Equal @($market.recentSamples).Count 4 'Recent raw cycle summaries should remain available for later model calibration.'
+Assert-Equal (@($market.recentSamples).Count) 4 'Recent raw cycle summaries should remain available for later model calibration.'
 
 $engine = [pscustomobject]@{
     observedMarkets = [pscustomobject]@{
@@ -55,13 +55,13 @@ $engine = [pscustomobject]@{
 $eventRoot = New-CycleAnalyticsRoot -Config $config
 Assert-True (Update-CurrentCycleMarketSnapshots -Root $eventRoot -EngineState $engine -Config $config -NowEpoch 20000L) 'Initial current-price snapshot should be stored.'
 $eventMarket = $eventRoot.markets.'japan:206'
-Assert-Equal @($eventMarket.priceEvents).Count 0 'Initial price snapshot is not itself a change event.'
+Assert-Equal (@($eventMarket.priceEvents).Count) 0 'Initial price snapshot is not itself a change event.'
 $engine.observedMarkets.'japan:206'.lastForeignPrice = 103L
 [void](Update-CurrentCycleMarketSnapshots -Root $eventRoot -EngineState $engine -Config $config -NowEpoch 20100L)
-Assert-Equal @($eventMarket.priceEvents).Count 0 'Sub-threshold price noise should not create an event.'
+Assert-Equal (@($eventMarket.priceEvents).Count) 0 'Sub-threshold price noise should not create an event.'
 $engine.observedMarkets.'japan:206'.lastForeignPrice = 106L
 [void](Update-CurrentCycleMarketSnapshots -Root $eventRoot -EngineState $engine -Config $config -NowEpoch 20200L)
-Assert-Equal @($eventMarket.priceEvents).Count 1 'Cumulative >=5% price movement from the anchor should create an event.'
+Assert-Equal (@($eventMarket.priceEvents).Count) 1 'Cumulative >=5% price movement from the anchor should create an event.'
 Assert-Equal ([long]$eventMarket.priceEvents[0].fromPrice) 100L 'Price event should retain its previous significant anchor.'
 Assert-Equal ([long]$eventMarket.priceEvents[0].toPrice) 106L 'Price event should retain the new significant price.'
 Assert-Equal ([int]$eventMarket.priceEvents[0].priceToMvRatioBps) 5300 'Price event should capture contemporaneous foreign-price/MV ratio.'
