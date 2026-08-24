@@ -16,6 +16,7 @@ $TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
 $OptimalRoute = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
 $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
+$CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
@@ -31,6 +32,7 @@ $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
 $OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
+$CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
@@ -249,8 +251,13 @@ try {
     }
 
     # Heartbeat marks completion of the current stock/context/opportunity projection.
-    # ResaleQueue runs afterward and cannot make the visible list falsely stale.
+    # Local analytics and resale pricing run afterward and cannot make the visible
+    # opportunity list falsely stale.
     Write-UpdateHeartbeat
+
+    if ($Action -eq 'Update') {
+        Invoke-FailSoftScript -Path $CycleAnalytics -ErrorPath $CycleAnalyticsErrorFile
+    }
 
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
         try {
