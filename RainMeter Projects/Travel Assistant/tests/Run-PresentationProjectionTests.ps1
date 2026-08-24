@@ -34,6 +34,10 @@ $state = @{ Opportunity1Key='canada:206'; Opportunity1Name='' }
 $name = Resolve-OpportunityPresentationName -State $state -Engine $engine -Index 1
 if ($name -ne 'Xanax') { throw "Blank opportunity name did not prefer local metadata; got '$name'." }
 
+$placeholderState = @{ Opportunity1Key='canada:206'; Opportunity1Name='Item 206' }
+$name = Resolve-OpportunityPresentationName -State $placeholderState -Engine $engine -Index 1
+if ($name -ne 'Xanax') { throw "Generic Item <id> placeholder did not yield to local metadata; got '$name'." }
+
 $engineProviderOnly = [pscustomobject]@{ itemMetadata=[pscustomobject]@{}; observedMarkets=$observedMarkets }
 $name = Resolve-OpportunityPresentationName -State $state -Engine $engineProviderOnly -Index 1
 if ($name -ne 'Provider Xanax') { throw "Blank opportunity name did not fall back to provider label; got '$name'." }
@@ -43,6 +47,10 @@ $emptyMarket | Add-Member NoteProperty 'canada:206' ([pscustomobject]@{ provider
 $engineIdOnly = [pscustomobject]@{ itemMetadata=[pscustomobject]@{}; observedMarkets=$emptyMarket }
 $name = Resolve-OpportunityPresentationName -State $state -Engine $engineIdOnly -Index 1
 if ($name -ne 'Item 206') { throw "Blank opportunity name did not retain explicit item-id fallback; got '$name'." }
+
+$poolState = @{ OpportunityCount='12'; Opportunity12Key='canada:206'; Opportunity12Name='Item 206' }
+Repair-OpportunityPresentationNames -State $poolState -Engine $engine
+if ($poolState['Opportunity12Name'] -ne 'Xanax') { throw 'Presentation repair did not extend beyond the eight visible cards.' }
 
 $countries = Get-Content -LiteralPath $countriesPath -Raw | ConvertFrom-Json
 $travelState = @{}
@@ -56,5 +64,5 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
     }
 }
 
-Write-Host 'Opportunity item-name fallback and all-country flag travel-time projection tests passed.' -ForegroundColor Green
+Write-Host 'Full-pool opportunity name fallback and all-country flag travel-time projection tests passed.' -ForegroundColor Green
 exit 0
