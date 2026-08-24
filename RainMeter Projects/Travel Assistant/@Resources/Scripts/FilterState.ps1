@@ -118,27 +118,36 @@ function Project-AllCollectedTravelSeconds {
     }
 }
 
+function Test-OpportunityPlaceholderName {
+    param([string]$Name)
+    $value = ([string]$Name).Trim()
+    if ([string]::IsNullOrWhiteSpace($value)) { return $true }
+    if ($value -eq 'Unknown item') { return $true }
+    return ($value -match '^Item\s+[1-9][0-9]*$')
+}
+
 function Resolve-OpportunityPresentationName {
     param([hashtable]$State,[object]$Engine,[int]$Index)
     $nameKey = 'Opportunity' + $Index + 'Name'
+    $current = ''
     if ($State.ContainsKey($nameKey)) {
         $current = ([string]$State[$nameKey]).Trim()
-        if (-not [string]::IsNullOrWhiteSpace($current)) { return $current }
+        if (-not (Test-OpportunityPlaceholderName $current)) { return $current }
     }
 
     $keyKey = 'Opportunity' + $Index + 'Key'
-    if (-not $State.ContainsKey($keyKey)) { return '' }
+    if (-not $State.ContainsKey($keyKey)) { return $current }
     $marketKey = ([string]$State[$keyKey]).Trim().ToLowerInvariant()
-    if ($marketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { return '' }
+    if ($marketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { return $current }
     $parts = $marketKey.Split(':')
     $itemId = 0
-    if (-not [int]::TryParse($parts[$parts.Count-1],[ref]$itemId) -or $itemId -le 0) { return '' }
+    if (-not [int]::TryParse($parts[$parts.Count-1],[ref]$itemId) -or $itemId -le 0) { return $current }
 
     if ($null -ne $Engine -and $Engine.PSObject.Properties['itemMetadata']) {
         $metadata = Get-FilterStateProperty $Engine.itemMetadata ([string]$itemId)
         if ($null -ne $metadata -and $metadata.PSObject.Properties['name']) {
             $name = ([string]$metadata.name).Trim()
-            if (-not [string]::IsNullOrWhiteSpace($name)) { return $name }
+            if (-not (Test-OpportunityPlaceholderName $name)) { return $name }
         }
     }
 
@@ -155,7 +164,12 @@ function Resolve-OpportunityPresentationName {
 
 function Repair-OpportunityPresentationNames {
     param([hashtable]$State,[object]$Engine)
-    for ($i=1; $i -le 8; $i++) {
+    $count = 8
+    if ($State.ContainsKey('OpportunityCount')) {
+        $projected = 0
+        if ([int]::TryParse([string]$State['OpportunityCount'],[ref]$projected)) { $count = [Math]::Min(256,[Math]::Max(0,$projected)) }
+    }
+    for ($i=1; $i -le $count; $i++) {
         $key = 'Opportunity' + $i + 'Key'
         if (-not $State.ContainsKey($key) -or [string]::IsNullOrWhiteSpace([string]$State[$key])) { continue }
         $name = Resolve-OpportunityPresentationName -State $State -Engine $Engine -Index $i
