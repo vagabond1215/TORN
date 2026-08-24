@@ -68,11 +68,32 @@ $usableSafeCycles=@(Get-WindowUsableCycles -Cycles $safeCycles)
 Assert-Equal $usableSafeCycles.Count 3 'Compact live-confidence plan must retain all empirical cycle pairs used to derive the Safe Window.'
 Assert-Near ([double]$g.bestProbability) 1.0 0.0001 'Safe-window geometry must still encode full empirical support after compact-plan serialization.'
 
+function New-TestPriceEngine {
+    param([long]$Minimum,[long]$Maximum,[int]$Count,[long]$Current,[long]$Last,[object[]]$Events=@())
+    $market=[pscustomobject]@{
+        foreignPrice=[pscustomobject]@{ count=$Count; min=$Minimum; max=$Maximum }
+        currentForeignPrice=$Current
+        lastForeignPrice=$Last
+        priceEvents=[object[]]$Events
+    }
+    $markets=[pscustomobject]@{}
+    $markets | Add-Member NoteProperty 'japan:206' $market
+    return [pscustomobject]@{ cycleAnalytics=[pscustomobject]@{ markets=$markets } }
+}
+$fixedPriceEngine=New-TestPriceEngine -Minimum 500 -Maximum 500 -Count 8 -Current 500 -Last 500
+Assert-True (-not (Test-WindowPriceVaries -Engine $fixedPriceEngine -Key 'japan:206')) 'A retained foreign price that is always $500 must not be treated as variable.'
+$variableHistoryEngine=New-TestPriceEngine -Minimum 500 -Maximum 525 -Count 8 -Current 525 -Last 525
+Assert-True (Test-WindowPriceVaries -Engine $variableHistoryEngine -Key 'japan:206') 'Different retained minimum/maximum foreign prices must enable the cash buffer.'
+$variableCurrentEngine=New-TestPriceEngine -Minimum 500 -Maximum 500 -Count 8 -Current 510 -Last 500
+Assert-True (Test-WindowPriceVaries -Engine $variableCurrentEngine -Key 'japan:206') 'Current foreign price differing from the completed-cycle anchor must enable the cash buffer.'
+$eventEngine=New-TestPriceEngine -Minimum 500 -Maximum 500 -Count 1 -Current 500 -Last 500 -Events @([pscustomobject]@{fromPrice=500;toPrice=550})
+Assert-True (Test-WindowPriceVaries -Engine $eventEngine -Key 'japan:206') 'A retained significant price event must enable the cash buffer.'
+
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" -ForegroundColor Red }
     Write-Host "Window-plan deterministic tests failed with $($failures.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Safe-window bounds, strict >50% Best Hit threshold, and compact live-confidence plan tests passed.' -ForegroundColor Green
+Write-Host 'Safe-window bounds, strict >50% Best Hit threshold, compact live-confidence plan, and price-variance tests passed.' -ForegroundColor Green
 Write-Host 'Safe = latest restock to earliest sellout; Best Hit = highest empirical overlap when no nontrivial safe overlap exists.'
 exit 0
