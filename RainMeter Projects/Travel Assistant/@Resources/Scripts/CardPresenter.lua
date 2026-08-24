@@ -104,14 +104,30 @@ local function rowCountryAndTravel(index)
     return trim(country),trim(travel)
 end
 
-local function rowFlightText(state,country,defaultTravel)
-    local countryId = countryIdsByName[country] or ''
+local function activeOutboundRemaining(state,countryId)
     local travelState = trim(state.TravelState):lower()
     local destinationId = trim(state.TravelDestinationCountryId):lower()
+    if travelState ~= 'traveling' or countryId == '' or destinationId ~= countryId then return 0 end
+
+    local now = os.time()
+    local arrivalAt = number(state.TravelArrivalAt)
+    if arrivalAt > now then return arrivalAt - now end
+
+    -- Torn normally supplies arrivalAt. Keep a locally-decrementing fallback for
+    -- payloads that only expose timeLeft, using the last successful context sync
+    -- as the snapshot anchor instead of freezing the displayed countdown.
     local timeLeft = number(state.TravelTimeLeft)
-    if travelState == 'traveling' and countryId ~= '' and destinationId == countryId and timeLeft > 0 then
-        return formatDuration(timeLeft) .. ' left'
+    local syncedAt = number(state.TravelContextLastSuccessAt)
+    if timeLeft > 0 and syncedAt > 0 then
+        return math.max(0,timeLeft-math.max(0,now-syncedAt))
     end
+    return math.max(0,timeLeft)
+end
+
+local function rowFlightText(state,country,defaultTravel)
+    local countryId = countryIdsByName[country] or ''
+    local remaining = activeOutboundRemaining(state,countryId)
+    if remaining > 0 then return formatDuration(remaining) .. ' left' end
     if defaultTravel ~= '' then return defaultTravel end
     return '?'
 end
@@ -133,6 +149,7 @@ local function applyCompactLayout(index)
     setOption(prefix..'Gross','ClipString',1)
     setOption(prefix..'Window','X',78)
     setOption(prefix..'Window','W',70)
+    setOption(prefix..'Window','FontColor','145,152,164,255')
     setOption(prefix..'Leave','X',150)
     setOption(prefix..'Leave','W',164)
     setOption(prefix..'Chance','X',316)
