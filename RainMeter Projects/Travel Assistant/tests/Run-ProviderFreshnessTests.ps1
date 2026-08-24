@@ -45,6 +45,36 @@ try { [void](Assert-LivePayloadFresh -Payload $missingTimestampPayload -NowEpoch
 catch { $missingRejected = $_.Exception.Message -like '*no usable country update timestamps*' }
 Assert-True $missingRejected 'A provider without usable update timestamps must not be treated as fresh evidence.'
 
+# A globally fresh primary payload can still contain a stale individual country.
+# Country selection must therefore fall back independently rather than allowing
+# fresh Canada to mask stale Mexico/Cayman data in the same Prometheus response.
+$mexico = [pscustomobject]@{ id='mexico'; providerCodes=[pscustomobject]@{ prometheus='mex'; yata='mex' } }
+$canada = [pscustomobject]@{ id='canada'; providerCodes=[pscustomobject]@{ prometheus='can'; yata='can' } }
+$prometheusMixed = [pscustomobject]@{
+    stocks = [pscustomobject]@{
+        can = [pscustomobject]@{ update=$now-30; stocks=@([pscustomobject]@{id=1;quantity=1;cost=1}) }
+        mex = [pscustomobject]@{ update=$now-1200; stocks=@([pscustomobject]@{id=2;quantity=2;cost=2}) }
+    }
+}
+$yataFresh = [pscustomobject]@{
+    stocks = [pscustomobject]@{
+        can = [pscustomobject]@{ update=$now-60; stocks=@([pscustomobject]@{id=1;quantity=1;cost=1}) }
+        mex = [pscustomobject]@{ update=$now-45; stocks=@([pscustomobject]@{id=2;quantity=2;cost=2}) }
+    }
+}
+$providerSet = [pscustomobject]@{
+    snapshots = @{
+        prometheus = [pscustomobject]@{ source='prometheus'; payload=$prometheusMixed; error='' }
+        yata = [pscustomobject]@{ source='yata'; payload=$yataFresh; error='' }
+    }
+    errors = [string[]]@()
+}
+$mexSelection = Select-LiveCountryProvider -ProviderSet $providerSet -Country $mexico -NowEpoch $now -MaximumAgeSeconds 300
+$canSelection = Select-LiveCountryProvider -ProviderSet $providerSet -Country $canada -NowEpoch $now -MaximumAgeSeconds 300
+Assert-Equal ([string]$mexSelection.source) 'yata' 'Stale Mexico on Prometheus should use fresh YATA Mexico.'
+Assert-Equal ([string]$canSelection.source) 'prometheus' 'Fresh Canada should remain on the fresher Prometheus country sample.'
+Assert-True ([bool](Get-CountryPayloadStatus -Payload $prometheusMixed -Country $mexico -Source 'prometheus' -NowEpoch $now -MaximumAgeSeconds 300).fresh -eq $false) 'Country freshness must be evaluated independently.'
+
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" -ForegroundColor Red }
     Write-Host "Provider freshness tests failed with $($failures.Count) error(s)." -ForegroundColor Red
@@ -52,5 +82,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Provider freshness validation passed.' -ForegroundColor Green
-Write-Host 'Structurally valid but stale primary-provider payloads are rejected so the configured fallback can be attempted.'
+Write-Host 'Freshness is country-specific: stale/missing primary countries can fall back to YATA without discarding fresh Prometheus countries.'
 exit 0
