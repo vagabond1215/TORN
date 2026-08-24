@@ -85,7 +85,14 @@ if (Test-Path -LiteralPath $wrapperPath) {
 $collectorPath=Join-Path $ProjectRoot '@Resources\Scripts\ShadowCollector.ps1'
 if (Test-Path -LiteralPath $collectorPath) {
     $collector=Get-Content -LiteralPath $collectorPath -Raw
-    foreach($token in @('[int]$MinimumPollIntervalSeconds = 60','One collector now owns stock-transition history','return ([int]$DestState.lastStock -ne [int]$Observation.stock)')) {
+    foreach($token in @(
+        '[int]$MinimumPollIntervalSeconds = 60',
+        'function Test-ObservationChanged',
+        'return ([int]$DestState.lastStock -ne [int]$Observation.stock)',
+        'Append-JsonLine -Path $ObservationFile -Value $observation',
+        'Update-CycleState -DestState $destState -Observation $observation',
+        'Append-JsonLine -Path $CycleFile -Value $completed'
+    )) {
         if (-not $collector.Contains($token)) { Fail "ShadowCollector authoritative-history contract missing '$token'." }
     }
     foreach($retired in @('Test-IsPrimaryMarket','primaryItemIds','primaryCountryIds')) {
