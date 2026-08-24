@@ -5,6 +5,7 @@ $TestRoot = (Resolve-Path $PSScriptRoot).Path
 $tests = @(
     'Validate-TravelAssistant.ps1',
     'Validate-RainmeterSkin.ps1',
+    'Validate-CardPresenter.ps1',
     'Validate-ItemViewer.ps1',
     'Validate-RuntimeDiagnostics.ps1',
     'Validate-Filters.ps1',
@@ -41,5 +42,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify provider freshness/fallback, cycle analytics, item-country titles, BUY per-item price plus MV, instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify provider freshness/fallback, cycle analytics, compact item/profit equation cards, flag-only country tooltip, flight/remaining time, status/window + certainty, Take cash +5%, instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
 exit 0
