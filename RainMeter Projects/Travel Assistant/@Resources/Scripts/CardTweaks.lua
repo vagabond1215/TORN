@@ -139,6 +139,8 @@ local function applySecondLine(index)
     setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',65)
     setOption(prefix..'Leave','X',145); setOption(prefix..'Leave','W',154)
     setOption(prefix..'Info','X',301); setOption(prefix..'Info','W',18)
+    local leaveY=tonumber(meterOption(prefix..'Leave','Y')) or 0
+    if leaveY>0 then setOption(prefix..'Info','Y',math.floor(leaveY)) end
     setOption(prefix..'Chance','X',323); setOption(prefix..'Chance','W',42); setOption(prefix..'Chance','ClipString',1)
     setOption(prefix..'Price','X',367); setOption(prefix..'Price','W',143)
 end
