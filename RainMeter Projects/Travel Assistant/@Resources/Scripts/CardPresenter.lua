@@ -1,4 +1,5 @@
 local statePath = nil
+local lastTravelStateSignature = ''
 
 local countryIdsByName = {
     ['Mexico']='mexico',
@@ -104,37 +105,48 @@ local function rowCountryAndTravel(index)
     return trim(country),trim(travel)
 end
 
-local function activeOutboundRemaining(state,countryId)
-    local travelState = trim(state.TravelState):lower()
-    local destinationId = trim(state.TravelDestinationCountryId):lower()
-    if travelState ~= 'traveling' or countryId == '' or destinationId ~= countryId then return 0 end
-
-    local now = os.time()
+local function liveTravelRemainingSeconds(state,now)
     local arrivalAt = number(state.TravelArrivalAt)
     if arrivalAt > now then return arrivalAt - now end
-
-    -- Torn normally supplies arrivalAt. Keep a locally-decrementing fallback for
-    -- payloads that only expose timeLeft, using the last successful context sync
-    -- as the snapshot anchor instead of freezing the displayed countdown.
-    local timeLeft = number(state.TravelTimeLeft)
-    local syncedAt = number(state.TravelContextLastSuccessAt)
-    if timeLeft > 0 and syncedAt > 0 then
-        return math.max(0,timeLeft-math.max(0,now-syncedAt))
+    local projectedLeft = number(state.TravelTimeLeft)
+    local projectedAt = number(state.TravelContextLastSuccessAt)
+    if projectedLeft > 0 and projectedAt > 0 then
+        return math.max(0,projectedLeft - math.max(0,now-projectedAt))
     end
-    return math.max(0,timeLeft)
+    return 0
 end
 
-local function rowFlightText(state,country,defaultTravel)
+local function rowFlightText(state,country,defaultTravel,now)
     local countryId = countryIdsByName[country] or ''
-    local remaining = activeOutboundRemaining(state,countryId)
-    if remaining > 0 then return formatDuration(remaining) .. ' left' end
+    local travelState = trim(state.TravelState):lower()
+    local destinationId = trim(state.TravelDestinationCountryId):lower()
+    if travelState == 'traveling' and countryId ~= '' and destinationId == countryId then
+        local remaining = liveTravelRemainingSeconds(state,now)
+        if remaining > 0 then return formatDuration(remaining) .. ' left' end
+    elseif travelState == 'abroad' and countryId ~= '' and destinationId == countryId then
+        return 'AT DEST.'
+    end
     if defaultTravel ~= '' then return defaultTravel end
     return '?'
+end
+
+local function isDurationOnly(text)
+    local value = trim(text):lower()
+    if value == '' then return false end
+    if value == '<1m' then return true end
+    if value:match('^%d+%s*m$') then return true end
+    if value:match('^%d+%s*h$') then return true end
+    if value:match('^%d+%s*h%s+%d+%s*m$') then return true end
+    return false
 end
 
 local function statusText(windowText,leaveText)
     local window = trim(windowText)
     local leave = trim(leaveText)
+    -- Flight/countdown duration already occupies the muted left timing slot.
+    -- A bare duration in WindowText is therefore redundant and must not be
+    -- repeated in the actionable status field.
+    if isDurationOnly(window) then window = '' end
     if window == '' then return leave end
     if leave == '' or leave == window then return window end
     return window .. ' / ' .. leave
@@ -149,7 +161,6 @@ local function applyCompactLayout(index)
     setOption(prefix..'Gross','ClipString',1)
     setOption(prefix..'Window','X',78)
     setOption(prefix..'Window','W',70)
-    setOption(prefix..'Window','FontColor','145,152,164,255')
     setOption(prefix..'Leave','X',150)
     setOption(prefix..'Leave','W',164)
     setOption(prefix..'Chance','X',316)
@@ -159,7 +170,7 @@ local function applyCompactLayout(index)
     setOption(prefix..'Price','W',144)
 end
 
-local function updateRow(index,state)
+local function updateRow(index,state,now)
     local prefix = 'MeterOpportunity'..index
     applyCompactLayout(index)
     local rawTitle = meterOption(prefix..'Name','Text')
@@ -194,7 +205,8 @@ local function updateRow(index,state)
     setOption(prefix..'Name','ToolTipText','')
     setOption(prefix..'Gross','Text',equation)
     setOption(prefix..'Gross','ToolTipText','Net profit per item x planned inventory quantity = total net profit')
-    setOption(prefix..'Window','Text',rowFlightText(state,country,travel))
+    setOption(prefix..'Window','Text',rowFlightText(state,country,travel,now))
+    setOption(prefix..'Window','FontColor','#Muted#')
     setOption(prefix..'Leave','Text',statusText(window,leave))
     setOption(prefix..'Chance','Text',certainty)
     if take > 0 then
@@ -213,6 +225,12 @@ end
 
 function Update()
     local state = readKv(statePath)
-    for i=1,8 do updateRow(i,state) end
+    local now = os.time()
+    local travelSignature = trim(state.TravelState)..':'..trim(state.TravelDestinationCountryId)
+    if lastTravelStateSignature ~= '' and travelSignature ~= lastTravelStateSignature then
+        SKIN:Bang('!UpdateMeasure','MeasureState')
+    end
+    lastTravelStateSignature = travelSignature
+    for i=1,8 do updateRow(i,state,now) end
     return 0
 end
