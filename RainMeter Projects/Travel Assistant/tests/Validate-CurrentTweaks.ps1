@@ -68,6 +68,9 @@ if ($errors.Count -eq 0) {
         if (-not $graph.Contains($token)) { Fail "RenderInlineGraph.ps1 missing expanded graph token '$token'." }
     }
 
+    # Keep this validator source ASCII-only for Windows PowerShell 5.1. The actual
+    # info glyph lives in Lua/INI assets; validate its behavior through surrounding
+    # ASCII tokens rather than embedding the Unicode glyph in this .ps1 file.
     foreach ($token in @(
         "title=title..'  '..tostring(quantity)..' qty'",
         "local header='Cost '..cost..'   MV:'..mv..' | '..formatMoney(unitProfit)",
@@ -75,7 +78,9 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Gross','InlinePattern'",
         "setOption(prefix..'Gross','InlineSetting','Color | 86,190,116,255')",
         "setOption(prefix..'Info','X',301)",
-        "setOption(info,'Text',show and 'ⓘ' or '')",
+        "setOption(info,'Text',show and",
+        "setOption(info,'ToolTipTitle','Window calculation')",
+        "setOption(info,'ToolTipText',text)",
         "setOption(leave,'ToolTipText',text)",
         "setOption(graph,'W',528)",
         "setOption(graph,'H',125)",
