@@ -48,16 +48,29 @@ $bestSelected=Select-WindowPlanGroup -Model $bestModel -EarliestArrivalAt $ancho
 Assert-Equal ([string]$bestSelected.mode) 'best' 'Without a Safe Window, a >50% empirical overlap becomes Best Hit.'
 Assert-Near ([double]$bestSelected.probability) (2.0/3.0) 0.0001 'Best-hit selection must expose its confidence.'
 
+# Exactly 50% is not actionable as a Best Hit. User contract is strictly >50%.
+$halfModel=[pscustomobject]@{
+    groups=@([pscustomobject]@{
+        ordinal=0; earlyRestockAt=$anchor+1000L; earlySelloutAt=$anchor+1100L;
+        lateRestockAt=$anchor+1200L; lateSelloutAt=$anchor+1300L;
+        safeStartAt=0L; safeEndAt=0L; safeSeconds=0L;
+        bestStartAt=$anchor+1050L; bestEndAt=$anchor+1150L; bestProbability=.5; sampleCount=4
+    })
+}
+$halfSelected=Select-WindowPlanGroup -Model $halfModel -EarliestArrivalAt $anchor -MinimumBestProbability .5
+Assert-True ($null -eq $halfSelected) 'Exactly 50% confidence must not become an actionable Best Hit Window.'
+
 $machine=Convert-WindowPlanMachineText -Model $safeModel
-Assert-True ($machine.StartsWith('G,')) 'Machine plan must encode conservative group bounds.'
-Assert-True ($machine.Contains('~')) 'Machine plan must separate group geometry from live probability segments.'
-Assert-True (($safeModel.segments | Where-Object { [double]$_.probability -eq 1.0 }).Count -gt 0) 'Probability timeline must retain the 100% support interval.'
+Assert-True ($machine.StartsWith(([string]$anchor+',S,'))) 'Compact machine plan must encode anchor timestamp and sellout phase.'
+Assert-True ($machine.Contains('6600:1800')) 'Compact machine plan must carry empirical restock-delay/availability pairs for live confidence.'
+Assert-True ($machine.Contains('~G,')) 'Compact machine plan must separate cycle pairs from conservative group bounds.'
+Assert-True (($safeModel.segments | Where-Object { [double]$_.probability -eq 1.0 }).Count -gt 0) 'Internal scenario model must retain the 100% support interval used to derive Safe Window.'
 
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" -ForegroundColor Red }
     Write-Host "Window-plan deterministic tests failed with $($failures.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Safe-window bounds and best-hit probability geometry tests passed.' -ForegroundColor Green
+Write-Host 'Safe-window bounds, strict >50% Best Hit threshold, and compact live-confidence plan tests passed.' -ForegroundColor Green
 Write-Host 'Safe = latest restock to earliest sellout; Best Hit = highest empirical overlap when no nontrivial safe overlap exists.'
 exit 0
