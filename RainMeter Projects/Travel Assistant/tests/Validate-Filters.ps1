@@ -73,7 +73,7 @@ if(Test-Path -LiteralPath $files.StateReader){
   'function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)',
   'currentOpportunityRows','sortOpportunityRows','locallyFilteredSortedProjection','pendingTripBands','activeTripBands','projectedTripBands',
   'maxCandidateRows = 256','TripBand','collapseInlineGraph','MeasureInlineGraph','MeasureItemViewer','safeLeaveText','UIOldestMarketSourceTimestamp',
-  "combinedPrice = 'BUY ' .. price .. '/ea'","return name .. ' · ' .. country"
+  'resolvedItemName',"name:match('^Item%s+%d+$')","combinedPrice = 'BUY ' .. price .. '/ea'","combinedPrice = combinedPrice .. ' | '","return name .. ' - ' .. country"
  )){if(-not$text.Contains($token)){Fail "StateReader.lua missing '$token'."}}
  if($text.Contains("runViewerMeasure('inline_'")){Fail 'Sort/filter UI must not route inline history through the popup Viewer.'}
 }
@@ -91,5 +91,5 @@ if(Test-Path -LiteralPath $files.Countries){
 }
 
 if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Opportunity filter/sort/settings validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Opportunity filters, full local candidate pool, instant trip-band/sort controls, and provider freshness-range projection passed.' -ForegroundColor Green
+Write-Host 'Opportunity filters, full local candidate pool, instant trip-band/sort controls, and explicit card detail validation passed.' -ForegroundColor Green
 exit 0
