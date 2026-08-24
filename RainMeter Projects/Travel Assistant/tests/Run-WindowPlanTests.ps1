@@ -64,7 +64,9 @@ $machine=Convert-WindowPlanMachineText -Model $safeModel
 Assert-True ($machine.StartsWith(([string]$anchor+',S,'))) 'Compact machine plan must encode anchor timestamp and sellout phase.'
 Assert-True ($machine.Contains('6600:1800')) 'Compact machine plan must carry empirical restock-delay/availability pairs for live confidence.'
 Assert-True ($machine.Contains('~G,')) 'Compact machine plan must separate cycle pairs from conservative group bounds.'
-Assert-True (($safeModel.segments | Where-Object { [double]$_.probability -eq 1.0 }).Count -gt 0) 'Internal scenario model must retain the 100% support interval used to derive Safe Window.'
+$usableSafeCycles=@(Get-WindowUsableCycles -Cycles $safeCycles)
+Assert-Equal $usableSafeCycles.Count 3 'Compact live-confidence plan must retain all empirical cycle pairs used to derive the Safe Window.'
+Assert-Near ([double]$g.bestProbability) 1.0 0.0001 'Safe-window geometry must still encode full empirical support after compact-plan serialization.'
 
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" -ForegroundColor Red }
