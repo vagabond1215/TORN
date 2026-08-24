@@ -16,7 +16,7 @@ ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
 NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
 [FLAG]  <item>             <$net/ea> x<qty> = <$total net>   v
-        <flight/remaining> <safe/best leave guidance> <certainty when best> Take: <$buy cash +5%>
+        <flight/remaining> <safe/best leave guidance> <certainty/info> Take: <$required cash>
 ```
 
 Up to eight cards are visible, but the PowerShell projection retains a bounded local candidate pool so sort/trip controls do not operate on only the previous eight rows.
@@ -28,13 +28,15 @@ Up to eight cards are visible, but the PowerShell projection retains a bounded l
 - **Country name is visible only in the flag tooltip.** Hovering the flag shows country name plus configured one-way travel time.
 - Card title shows **item name only**.
 - Top-line economics show **net profit per item x planned inventory quantity = total net profit**. Current net-profit basis is the configured Torn MV resale basis less foreign purchase price; no hidden probability weighting is applied.
+- In the top-line profit equation, monetary values retain the row economics color while the `$` symbols and `/ea xN =` connective text are white.
 - Lower-left timing is muted gray. At home/not outbound it shows configured one-way flight duration.
 - When Torn reports recognized **outbound travel** (`TravelState=traveling`, `TravelFilterActive=1`, destination country known), only that destination country's opportunities are valid/visible and the lower-left timing is replaced by a locally decrementing landing countdown derived from `TravelArrivalAt` (falling back to projected `TravelTimeLeft` anchored to `TravelContextLastSuccessAt`).
 - Return travel to Torn must not show the prior foreign-destination countdown and releases the outbound foreign filter.
 - Lower-middle is the actionable Safe/Best leave state. Do not repeat flight duration there.
-- Safe hits suppress the card confidence field. Best Hit shows live confidence.
-- Lower-right `Take:` is `foreign purchase price x planned quantity x 1.05`, rounded up to the next dollar. This is purchase cash plus a 5% carry buffer; it does not fabricate airfare or resale fees.
-- Keep ASCII separators in visible card text to avoid Rainmeter encoding regressions.
+- The actionable departure/status text itself is a tooltip hitbox. Hovering `LEAVE ...`, `LEAVE BEFORE ...`, or `LEAVE NOW` must show the window calculation described below.
+- Safe hits suppress the confidence percentage. The otherwise-empty certainty slot displays a small `ⓘ` fallback tooltip anchor for Safe rows. Best Hit shows live confidence and that confidence text carries the same tooltip.
+- Lower-right `Take:` is exact `foreign purchase price x planned quantity` for markets whose retained foreign price has never varied. Once retained analytics demonstrate real foreign-price variance (historical min/max, current-vs-last, or a retained price-change event), `Take:` becomes `foreign purchase price x planned quantity x 1.05`, rounded up to the next dollar. This buffer does not fabricate airfare or resale fees.
+- Keep ASCII separators in visible card text to avoid Rainmeter encoding regressions except for the dedicated Safe-window `ⓘ` anchor.
 - Far-right control is a compact `v`/`^` chevron, not the word `GRAPH`.
 - `CardPresenter.lua` is presentation-only. `StateReader.lua` remains authoritative for local sorting, trip filtering, row identity/visibility and graph expansion.
 
@@ -94,7 +96,7 @@ The Best Hit percentage is recalculated locally every Rainmeter second from the 
 
 ### Window tooltip contract
 
-Hovering the actionable Safe/Best status (and its Best confidence field) shows the calculation used for that cycle:
+Hovering the actionable Safe/Best status must show the calculation used for that cycle. Best confidence carries the same tooltip; Safe rows also expose the `ⓘ` fallback anchor:
 
 ```text
 Safe formula: max(restock starts) -> min(sellout ends)
@@ -107,7 +109,7 @@ Best Hit Window: <optimal landing time> [confidence]
 
 The tooltip reports **arrival** intervals. The visible card translates the selected arrival interval back by the configured flight duration (or uses the current outbound landing time when already flying) to show the appropriate departure guidance.
 
-`WindowPlan.ps1` is local-only and runs after `OpportunityState.ps1` and before `FilterState`/heartbeat. It projects compact `WP2` empirical cycle pairs plus the next bounded window groups into `state.kv`. `CardPresenter.lua` performs the second-by-second state transitions.
+`WindowPlan.ps1` is local-only and runs after `OpportunityState.ps1` and before `FilterState`/heartbeat. It projects compact `WP2` empirical cycle pairs plus the next bounded window groups into `state.kv`. It also prefixes the row's retained price-variance state for the conditional `Take:` buffer. `CardPresenter.lua` performs the second-by-second state transitions.
 
 ## Immediate ordering and trip filtering
 
@@ -212,11 +214,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 Then refresh Rainmeter and verify:
 
 1. No rank numbers; FlagKit flag remains the only printed country indicator.
-2. Card title is item name only and top-right is `$net/ea xN = $total net`.
+2. Card title is item name only and top-right is `$net/ea xN = $total net`; both `$` symbols and `/ea xN =` render white.
 3. At home, lower-left shows configured flight duration in muted gray.
 4. While actively flying outbound to a recognized destination, only that country's items are shown and lower-left changes to a live countdown to landing.
-5. Safe status hides confidence; Best status shows live confidence.
-6. Hovering Safe/Best status shows Early Restock, Late Restock, Safe Window, Best Hit Window and both formulas.
+5. Safe status hides confidence and exposes `ⓘ`; Best status shows live confidence.
+6. Hovering `LEAVE ...` / `LEAVE BEFORE ...` / `LEAVE NOW`, Best confidence, or Safe `ⓘ` shows Early Restock, Late Restock, Safe Window, Best Hit Window and both formulas.
 7. A Safe window before opening counts down `SAFE - LEAVE ...`.
 8. During Safe departure overlap it becomes `SAFE - LEAVE BEFORE ...` and counts down to close.
 9. After Safe close it automatically targets the next usable cycle.
@@ -224,7 +226,7 @@ Then refresh Rainmeter and verify:
 11. Exactly 50% does not remain actionable.
 12. If a stronger Best point can be reached without support dropping to <=50%, the card switches to the stronger point's countdown.
 13. When an opened Best opportunity drops to <=50%, the card advances to the next usable cycle.
-14. Lower-right `Take: $...` equals purchase cash plus 5%.
+14. `Take:` equals exact purchase cash when retained foreign price is invariant; it includes the 5% buffer only after real foreign-price variance has been observed.
 15. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR reorder immediately against the full projected pool.
 16. SHORT / MED / LONG toggle immediately, including OFF -> ON.
 17. Row `v` expands only that in-card graph; it does not spawn the standalone Viewer.
@@ -245,7 +247,7 @@ Select-String .\@Resources\Generated\state.kv `
   -Pattern '^Opportunity1(Tooltip|WindowText|ChanceText|WindowStartAt|ProbabilityValue)='
 ```
 
-The machine tooltip begins `WP2:`. Send the focused acceptance output plus one screenshot showing a Safe or Best state before marking 0.6 accepted.
+The machine tooltip begins `WP2:` when a timing plan exists and carries a `PV0#` / `PV1#` envelope for fixed/variable foreign-price history. Send the focused acceptance output plus one screenshot showing a Safe or Best state before marking 0.6 accepted.
 
 ## After acceptance
 
