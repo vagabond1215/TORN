@@ -59,7 +59,7 @@ function Get-WindowProperty {
 }
 
 function Get-WindowUsableCycles {
-    param([object[]]$Cycles,[int]$MaximumSamples = 96)
+    param([object[]]$Cycles,[int]$MaximumSamples = 48)
     $usable = @($Cycles | Where-Object {
         $null -ne $_ -and
         $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0 -and
@@ -87,7 +87,7 @@ function Get-RecurringScenarioModel {
     )
     $usable = @(Get-WindowUsableCycles -Cycles $Cycles)
     if ($AnchorAt -le 0 -or $usable.Count -eq 0) {
-        return [pscustomobject]@{ sampleCount=0; groups=@(); segments=@() }
+        return [pscustomobject]@{ sampleCount=0; anchorAt=$AnchorAt; anchorPhase=$AnchorPhase; cycles=@(); groups=@(); segments=@() }
     }
 
     $currentAge = [Math]::Max(0L,$NowEpoch-$AnchorAt)
@@ -177,8 +177,12 @@ function Get-RecurringScenarioModel {
         })
     }
 
+    $cyclePairs = @($usable | ForEach-Object { [pscustomobject]@{ delay=[long]$_.restockDelaySeconds; available=[long]$_.availabilitySeconds } })
     return [pscustomobject]@{
         sampleCount=$usable.Count
+        anchorAt=$AnchorAt
+        anchorPhase=$AnchorPhase
+        cycles=$cyclePairs
         groups=$resultGroups.ToArray()
         segments=$segments.ToArray()
     }
@@ -190,19 +194,18 @@ function Convert-WindowProbabilityText {
 }
 
 function Convert-WindowPlanMachineText {
-    param([object]$Model)
+    param([object]$Model,[int]$MaximumGroups = 8)
     if ($null -eq $Model -or [int]$Model.sampleCount -le 0) { return '' }
+    $phaseCode = if ([string]$Model.anchorPhase -eq 'restock') { 'R' } else { 'S' }
+    $cycleParts = New-Object System.Collections.Generic.List[string]
+    foreach ($cycle in @($Model.cycles)) { $cycleParts.Add(('{0}:{1}' -f [long]$cycle.delay,[long]$cycle.available)) }
     $groupParts = New-Object System.Collections.Generic.List[string]
-    foreach ($group in @($Model.groups)) {
+    foreach ($group in @($Model.groups | Select-Object -First ([Math]::Max(1,$MaximumGroups)))) {
         $groupParts.Add(('G,{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}' -f
             [int]$group.ordinal,[long]$group.earlyRestockAt,[long]$group.earlySelloutAt,[long]$group.lateRestockAt,[long]$group.lateSelloutAt,
             [long]$group.safeStartAt,[long]$group.safeEndAt,[long]$group.bestStartAt,[long]$group.bestEndAt,(Convert-WindowProbabilityText ([double]$group.bestProbability))))
     }
-    $segmentParts = New-Object System.Collections.Generic.List[string]
-    foreach ($segment in @($Model.segments)) {
-        $segmentParts.Add(('{0},{1},{2}' -f [long]$segment.startAt,[long]$segment.endAt,(Convert-WindowProbabilityText ([double]$segment.probability)))
-    }
-    return (($groupParts -join '/') + '~' + ($segmentParts -join '/'))
+    return ('{0},{1},{2}~{3}' -f [long]$Model.anchorAt,$phaseCode,($cycleParts -join '/'),($groupParts -join '/'))
 }
 
 function Select-WindowPlanGroup {
@@ -301,7 +304,7 @@ for ($i=1; $i -le $count; $i++) {
     $model=Get-RecurringScenarioModel -Cycles $cycles -AnchorAt $anchorAt -AnchorPhase $phase -NowEpoch $Now
     $machine=Convert-WindowPlanMachineText -Model $model
     $oldTooltip=[string]$state[$prefix+'Tooltip']
-    if (-not [string]::IsNullOrWhiteSpace($machine)) { $state[$prefix+'Tooltip']='WP1:'+$machine+'#'+$oldTooltip }
+    if (-not [string]::IsNullOrWhiteSpace($machine)) { $state[$prefix+'Tooltip']='WP2:'+$machine+'#'+$oldTooltip }
 
     $flightSeconds=Get-WindowTravelSeconds -State $state -CountryId $countryId
     $earliestDeparture=$Now
