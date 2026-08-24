@@ -32,9 +32,9 @@ if(Test-Path -LiteralPath $files.Preferences){
   'showProfitableOnly','ignoredItemIds','use95PercentMarketValue','energyWastePolicy','nerveWastePolicy',
   "sortMode = 'upcoming'",'Normalize-SortMode',"@('name','upcoming','gross','profit_per_hour')",'SetSortMode',
   'Set-FilterStateKvValuesAtomic','UISelectedTripBands','UITripShortOn','UITripMediumOn','UITripLongOn',
-  "$Action -notin @('SetSortMode','ToggleTripBand')"
+  '$Action -notin @(''SetSortMode'',''ToggleTripBand'')'
  )){if(-not$text.Contains($token)){Fail "FilterPreferences.ps1 missing '$token'."}}
- if($text -notmatch "(?s)if \(\$Action -eq 'ToggleTripBand'\).*?Save-UiPreferences.*?Set-FilterStateKvValuesAtomic") { Fail 'Trip-band persistence must remain a tiny preference/state write.' }
+ if($text -notmatch '(?s)if \(\$Action -eq ''ToggleTripBand''\).*?Save-UiPreferences.*?Set-FilterStateKvValuesAtomic') { Fail 'Trip-band persistence must remain a tiny preference/state write.' }
 }
 
 if(Test-Path -LiteralPath $files.Popup){
