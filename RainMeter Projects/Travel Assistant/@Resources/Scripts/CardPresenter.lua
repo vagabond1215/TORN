@@ -242,7 +242,7 @@ local function liveWindowAction(plan,state,country,defaultTravel,now)
         return 'BEST - LEAVE NOW',string.format('%.0f%%',currentProbability*100),tooltip
     end
 
-    if targetAt>now then return 'BEST - LEAVE '..formatDuration(targetAt-now),string.format('%.0f%%',group.bestProbability*100),tooltip end
+    if now<openAt then return 'BEST - LEAVE '..formatDuration(targetAt-now),string.format('%.0f%%',group.bestProbability*100),tooltip end
     for _,nextGroup in ipairs(plan.groups) do
         if nextGroup.ordinal>group.ordinal and groupMode(nextGroup)~=nil then
             local nextMode=groupMode(nextGroup); local nOpen,nClose,nTarget=groupDepartureTimes(nextGroup,nextMode,flightSeconds)
