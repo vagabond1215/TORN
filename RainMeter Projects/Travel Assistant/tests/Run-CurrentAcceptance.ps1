@@ -20,6 +20,7 @@ $tests = @(
     'Validate-OptimalRoute.ps1',
     'Run-OptimalRouteTests.ps1',
     'Run-OpportunityStateTests.ps1',
+    'Run-WindowPlanTests.ps1',
     'Validate-ResaleQueue.ps1',
     'Run-ResalePriorityTests.ps1',
     'Run-FinalizeStateTests.ps1'
@@ -42,5 +43,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify provider freshness/fallback, cycle analytics, compact item/profit equation cards, flag-only country tooltip, flight/remaining time, status/window + certainty, Take cash +5%, instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify safe-vs-best window tooltips/countdowns, live best-hit confidence, provider freshness/fallback, cycle analytics, compact item/profit equation cards, flag-only country tooltip, flight/remaining time, Take cash +5%, instant SHORT/MED/LONG filtering including OFF->ON, instant NAME/UPCOMING/GROSS PROFIT/PROFIT-HR sorting, graph collapse on sort/trip changes, one-at-a-time observed-only 8-hour graphs, separate VIEWER popup, filters, and SETTINGS.' -ForegroundColor Yellow
 exit 0
