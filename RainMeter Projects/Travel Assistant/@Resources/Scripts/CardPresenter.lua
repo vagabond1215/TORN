@@ -103,10 +103,22 @@ local function split(text,separator)
     local pattern='([^'..separator..']+)'; for part in tostring(text):gmatch(pattern) do table.insert(result,part) end; return result
 end
 
+local function parsePriceVarianceEnvelope(text)
+    local flag,human=tostring(text or ''):match('^PV([01])#(.*)$')
+    if flag==nil then return false,tostring(text or '') end
+    return flag=='1',human or ''
+end
+
 local function parseWindowPlan(tooltip)
-    local machine,human=tostring(tooltip or ''):match('^WP2:([^#]*)#(.*)$'); if machine==nil then return nil,tostring(tooltip or '') end
-    local header,groupsText=machine:match('^(.-)~(.*)$'); if header==nil then return nil,human or '' end
-    local anchorText,phase,pairsText=header:match('^(%d+),([RS]),(.*)$'); if anchorText==nil then return nil,human or '' end
+    local raw=tostring(tooltip or '')
+    local machine,remainder=raw:match('^WP2:([^#]*)#(.*)$')
+    if machine==nil then
+        local priceVaries,human=parsePriceVarianceEnvelope(raw)
+        return nil,human,priceVaries
+    end
+    local priceVaries,human=parsePriceVarianceEnvelope(remainder)
+    local header,groupsText=machine:match('^(.-)~(.*)$'); if header==nil then return nil,human or '',priceVaries end
+    local anchorText,phase,pairsText=header:match('^(%d+),([RS]),(.*)$'); if anchorText==nil then return nil,human or '',priceVaries end
     local plan={anchorAt=number(anchorText),anchorPhase=phase,cycles={},groups={}}
     for _,pair in ipairs(split(pairsText,'/')) do
         local delay,available=pair:match('^(%d+):(%d+)$'); if delay~=nil then table.insert(plan.cycles,{delay=number(delay),available=number(available)}) end
@@ -117,7 +129,7 @@ local function parseWindowPlan(tooltip)
             table.insert(plan.groups,{ordinal=number(f[2]),earlyRestock=number(f[3]),earlySellout=number(f[4]),lateRestock=number(f[5]),lateSellout=number(f[6]),safeStart=number(f[7]),safeEnd=number(f[8]),bestStart=number(f[9]),bestEnd=number(f[10]),bestProbability=number(f[11])})
         end
     end
-    table.sort(plan.groups,function(a,b) return a.ordinal<b.ordinal end); return plan,human or ''
+    table.sort(plan.groups,function(a,b) return a.ordinal<b.ordinal end); return plan,human or '',priceVaries
 end
 
 local function probabilityAt(plan,arrivalAt)
@@ -261,23 +273,46 @@ local function applyCompactLayout(index)
     setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',70); setOption(prefix..'Leave','X',150); setOption(prefix..'Leave','W',164); setOption(prefix..'Chance','X',316); setOption(prefix..'Chance','W',48); setOption(prefix..'Chance','ClipString',1); setOption(prefix..'Price','X',366); setOption(prefix..'Price','W',144)
 end
 
+local function configureWindowTooltipMeter(name,tooltip)
+    setOption(name,'DynamicVariables',1)
+    setOption(name,'ToolTipHidden',0)
+    setOption(name,'ToolTipTitle','Window calculation')
+    setOption(name,'ToolTipWidth',420)
+    setOption(name,'ToolTipText',tooltip or '')
+    setOption(name,'SolidColor','0,0,0,1')
+end
+
 local function updateRow(index,state,now)
     local prefix='MeterOpportunity'..index; applyCompactLayout(index); local rawTitle=meterOption(prefix..'Name','Text'); if rawTitle=='' then return end
     local country,travel=rowCountryAndTravel(index); local itemName=removeCountrySuffix(rawTitle,country); local totalProfit=parseMoney(meterOption(prefix..'Gross','Text'))
-    local rawTooltip=meterOption(prefix..'Gross','ToolTipText'); local plan,humanTooltip=parseWindowPlan(rawTooltip); local quantity=quantityFromTooltip(humanTooltip); local unitProfit=quantity>0 and totalProfit/quantity or 0
+    local rawTooltip=meterOption(prefix..'Gross','ToolTipText'); local plan,humanTooltip,priceVaries=parseWindowPlan(rawTooltip); local quantity=quantityFromTooltip(humanTooltip); local unitProfit=quantity>0 and totalProfit/quantity or 0
     local equation=formatMoney(unitProfit)..'/ea'; if quantity>0 then equation=equation..' x'..tostring(quantity)..' = '..formatMoney(totalProfit) else equation=formatMoney(totalProfit) end
-    local buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')); local take=(buyPrice>0 and quantity>0) and math.ceil(buyPrice*quantity*1.05) or 0
+    local buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')); local bufferRate=priceVaries and 0.05 or 0.0
+    local take=(buyPrice>0 and quantity>0) and math.ceil(buyPrice*quantity*(1.0+bufferRate)) or 0
     local fallbackWindow=meterOption(prefix..'Window','Text'); local fallbackLeave=meterOption(prefix..'Leave','Text'); local fallbackCertainty=meterOption(prefix..'Chance','Text')
     local liveAction,liveCertainty,windowTooltip=liveWindowAction(plan,state,country,travel,now)
 
-    setOption(prefix..'Name','Text',itemName); setOption(prefix..'Name','ToolTipText',''); setOption(prefix..'Gross','Text',equation); setOption(prefix..'Gross','ToolTipText','Net profit per item x planned inventory quantity = total net profit')
+    setOption(prefix..'Name','Text',itemName); setOption(prefix..'Name','ToolTipText','')
+    setOption(prefix..'Gross','Text',equation); setOption(prefix..'Gross','ToolTipText','Net profit per item x planned inventory quantity = total net profit')
+    setOption(prefix..'Gross','InlinePattern','\\$'); setOption(prefix..'Gross','InlineSetting','Color | 255,255,255,255')
+    setOption(prefix..'Gross','InlinePattern2','/ea x[0-9]+ ='); setOption(prefix..'Gross','InlineSetting2','Color | 255,255,255,255')
     setOption(prefix..'Window','Text',rowFlightText(state,country,travel,now)); setOption(prefix..'Window','FontColor','#Muted#')
     if liveAction~=nil then
-        setOption(prefix..'Leave','Text',liveAction); setOption(prefix..'Chance','Text',liveCertainty or ''); setOption(prefix..'Leave','ToolTipText',windowTooltip or ''); setOption(prefix..'Chance','ToolTipText',windowTooltip or '')
+        local certainty=liveCertainty or ''
+        local safeInfo=(liveAction:match('^SAFE')~=nil and certainty=='' and trim(windowTooltip)~='')
+        if safeInfo then certainty='ⓘ' end
+        setOption(prefix..'Leave','Text',liveAction); setOption(prefix..'Chance','Text',certainty)
+        setOption(prefix..'Chance','FontFace',safeInfo and 'Segoe UI Symbol' or 'Segoe UI')
+        configureWindowTooltipMeter(prefix..'Leave',windowTooltip or '')
+        configureWindowTooltipMeter(prefix..'Chance',windowTooltip or '')
     else
-        setOption(prefix..'Leave','Text',statusText(fallbackWindow,fallbackLeave)); setOption(prefix..'Chance','Text',fallbackCertainty); setOption(prefix..'Leave','ToolTipText',''); setOption(prefix..'Chance','ToolTipText','')
+        setOption(prefix..'Leave','Text',statusText(fallbackWindow,fallbackLeave)); setOption(prefix..'Chance','Text',fallbackCertainty); setOption(prefix..'Chance','FontFace','Segoe UI')
+        configureWindowTooltipMeter(prefix..'Leave',''); configureWindowTooltipMeter(prefix..'Chance','')
     end
-    if take>0 then setOption(prefix..'Price','Text','Take: '..formatMoney(take)); setOption(prefix..'Price','ToolTipText','Purchase cash required plus a 5% buffer')
+    if take>0 then
+        setOption(prefix..'Price','Text','Take: '..formatMoney(take))
+        if priceVaries then setOption(prefix..'Price','ToolTipText','Purchase cash required plus a 5% buffer because retained foreign price has varied')
+        else setOption(prefix..'Price','ToolTipText','Exact purchase cash; retained foreign price has not varied') end
     else setOption(prefix..'Price','Text','Take: ?'); setOption(prefix..'Price','ToolTipText','Purchase cash requirement unavailable') end
 end
 
