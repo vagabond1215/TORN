@@ -28,7 +28,9 @@ Up to eight cards are visible, but the PowerShell projection retains a bounded l
 - **Country name is visible only in the flag tooltip.** Hovering the flag shows country name plus configured one-way travel time.
 - Card title shows **item name only**.
 - Top-line economics show **net profit per item x planned inventory quantity = total net profit**. Current net-profit basis is the configured Torn MV resale basis less foreign purchase price; no hidden probability weighting is applied.
-- Lower-left timing shows configured one-way flight duration, or remaining flight time when already en route to that row's destination.
+- Lower-left timing is muted gray. At home/not outbound it shows configured one-way flight duration.
+- When Torn reports recognized **outbound travel** (`TravelState=traveling`, `TravelFilterActive=1`, destination country known), only that destination country's opportunities are valid/visible and the lower-left timing is replaced by a locally decrementing landing countdown derived from `TravelArrivalAt` (falling back to projected `TravelTimeLeft` anchored to `TravelContextLastSuccessAt`).
+- Return travel to Torn must not show the prior foreign-destination countdown and releases the outbound foreign filter.
 - Lower-middle text combines current/modeled stock window with the leave instruction.
 - Hit likelihood/certainty remains a separate visible field.
 - Lower-right `Take:` is `foreign purchase price x planned quantity x 1.05`, rounded up to the next dollar. This is purchase cash plus a 5% carry buffer; it does not fabricate airfare or resale fees.
@@ -145,18 +147,20 @@ Then refresh Rainmeter and verify:
 4. Flag hover is the only country-name display and shows country + one-way travel time.
 5. Card title visibly shows item name only.
 6. Top-right reads `$net/ea xN = $total net`.
-7. Lower-left shows flight duration or remaining flight time when en route.
-8. Lower-middle shows stock/window plus leave instruction; certainty remains separate.
-9. Lower-right reads `Take: $...` and equals purchase cash plus 5%.
-10. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR reorder immediately against the full projected pool.
-11. SHORT / MED / LONG toggle color and visible rows immediately, including OFF -> ON, without waiting for PowerShell opportunity recomputation.
-12. Row `v` expands only that in-card graph; it does not spawn the standalone Viewer.
-13. The graph has seven internal hourly vertical separators.
-14. Opening another row collapses the first; sorting/trip filtering collapses an open graph.
-15. `VIEWER >` still opens the separate full Viewer popup.
-16. Zero-stock graph stays flat at zero; nonzero retained history shows real transitions.
-17. The list remains populated through normal polling.
-18. SETTINGS and popups still work with no visible PowerShell console.
+7. At home, lower-left shows the configured flight duration in muted gray.
+8. While actively flying outbound to a recognized destination, only that country's items are shown and lower-left changes to a live countdown to landing.
+9. Return travel to Torn does not retain the outbound-country countdown/filter.
+10. Lower-middle shows stock/window plus leave instruction; certainty remains separate.
+11. Lower-right reads `Take: $...` and equals purchase cash plus 5%.
+12. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR reorder immediately against the full projected pool.
+13. SHORT / MED / LONG toggle color and visible rows immediately, including OFF -> ON, without waiting for PowerShell opportunity recomputation.
+14. Row `v` expands only that in-card graph; it does not spawn the standalone Viewer.
+15. The graph has seven internal hourly vertical separators.
+16. Opening another row collapses the first; sorting/trip filtering collapses an open graph.
+17. `VIEWER >` still opens the separate full Viewer popup.
+18. Zero-stock graph stays flat at zero; nonzero retained history shows real transitions.
+19. The list remains populated through normal polling.
+20. SETTINGS and popups still work with no visible PowerShell console.
 
 If anything errors:
 
