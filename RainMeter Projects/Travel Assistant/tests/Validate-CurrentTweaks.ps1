@@ -72,7 +72,7 @@ if ($errors.Count -eq 0) {
         "title=title..'  '..tostring(quantity)..' qty'",
         "local header='Cost '..cost..'   MV:'..mv..' | '..formatMoney(unitProfit)",
         "setOption(prefix..'Gross','FontColor','#Text#')",
-        "setOption(prefix..'Gross','InlinePattern','\\\\|\\\\s*-?\\\\$[0-9,]+$')",
+        "setOption(prefix..'Gross','InlinePattern'",
         "setOption(prefix..'Gross','InlineSetting','Color | 86,190,116,255')",
         "setOption(prefix..'Info','X',301)",
         "setOption(info,'Text',show and 'ⓘ' or '')",
