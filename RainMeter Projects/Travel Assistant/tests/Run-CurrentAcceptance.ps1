@@ -14,6 +14,7 @@ $tests = @(
     'Run-PowerShell51CompatibilityTests.ps1',
     'Run-ProviderFreshnessTests.ps1',
     'Run-ObservationHistoryTests.ps1',
+    'Run-CycleAnchorReconcilerTests.ps1',
     'Validate-CycleAnalytics.ps1',
     'Run-CycleAnalyticsTests.ps1',
     'Validate-TravelContext.ps1',
