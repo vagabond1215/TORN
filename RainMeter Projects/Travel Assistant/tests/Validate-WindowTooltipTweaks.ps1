@@ -18,10 +18,11 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         'parseWindowPlan',
         'medianAvailableSeconds',
-        'groupMode',
-        'groupDepartureTimes',
-        'findPreferredGroup',
-        "if mode=='safe' and closeAt>now then return group,mode end",
+        'findPreferredGroup(plan,now)',
+        'group.safeEnd>now',
+        'group.bestEnd>now',
+        "return group,'safe'",
+        "return group,'best'",
         "relative='starts in '..formatDuration(group.safeStart-now)",
         "relative='closes in '..formatDuration(group.safeEnd-now)",
         "'Estimated Arrival in '..arrival",
@@ -42,9 +43,10 @@ if ($errors.Count -eq 0) {
         "meterOption(prefix..'Leave','ToolTipText')",
         "meterOption(prefix..'Info','ToolTipText')",
         'existingTooltip',
-        'tooltipLine(existingTooltip'
+        'tooltipLine(existingTooltip',
+        'groupDepartureTimes'
     )) {
-        if ($script.Contains($forbidden)) { Fail "Home tooltip must be rebuilt from raw state, not prior rendered tooltip text; found '$forbidden'." }
+        if ($script.Contains($forbidden)) { Fail "Home tooltip must track raw market windows without prior tooltip/departure-cutoff coupling; found '$forbidden'." }
     }
 
     if ($script -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') {
@@ -74,6 +76,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Raw five-line home window tooltip validation passed.' -ForegroundColor Green
-Write-Host 'Home shows arrival, stock duration, early/late restock, and one Guaranteed-or-Best line; Safe timing advances from starts-in to closes-in and then to the next actionable group.'
+Write-Host 'Raw five-line home market-window tooltip validation passed.' -ForegroundColor Green
+Write-Host 'Home shows arrival, stock duration, early/late restock, and one Guaranteed-or-Best line; Guaranteed timing advances from starts-in to closes-in and then to the next market window after close.'
 exit 0
