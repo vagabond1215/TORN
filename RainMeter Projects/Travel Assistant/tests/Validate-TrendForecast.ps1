@@ -29,9 +29,10 @@ if ($errors.Count -eq 0) {
     }
     if ($trend -match '(?i)Invoke-RestMethod|Invoke-WebRequest|https?://|curl\.exe') { Fail 'TrendForecast.ps1 must remain local-only.' }
 
-    foreach ($token in @('Test-PVRecentVariation','current-vs-recent','recent-transition','recurring-levels','recent-fixed','Set-PVEnvelope','OpportunityCount','PriceVariationReason')) {
+    foreach ($token in @('Test-PVRecentVariation','current-vs-recent','recurring-levels','recent-fixed','Set-PVEnvelope','OpportunityCount','PriceVariationReason')) {
         if (-not $price.Contains($token)) { Fail "PriceVariationRefiner.ps1 missing '$token'." }
     }
+    if ($price.Contains("reason='recent-transition'")) { Fail 'PriceVariationRefiner.ps1 must not reintroduce single-transition variable classification.' }
     if ($price -match '(?i)Invoke-RestMethod|Invoke-WebRequest|https?://|curl\.exe') { Fail 'PriceVariationRefiner.ps1 must remain local-only.' }
 
     foreach ($token in @('$PriceVariationRefiner','$TrendForecast','$PriceVariationRefinerErrorFile','$TrendForecastErrorFile')) {
@@ -49,10 +50,10 @@ if ($errors.Count -eq 0) {
 }
 
 if ($errors.Count -gt 0) {
-    foreach ($error in $errors) { Write-Host "FAIL: $error" -ForegroundColor Red }
+    foreach ($validationError in $errors) { Write-Host "FAIL: $validationError" -ForegroundColor Red }
     Write-Host "Shadow trend forecast validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
 Write-Host 'Shadow trend forecast and recent price classification validation passed.' -ForegroundColor Green
-Write-Host 'Trend forecasts are logged/scored after heartbeat and cannot change current Safe/Best timing.'
+Write-Host 'Trend forecasts are logged/scored after heartbeat and cannot change current Safe/Best timing; a single historical price transition does not mark a stable item variable.'
 exit 0
