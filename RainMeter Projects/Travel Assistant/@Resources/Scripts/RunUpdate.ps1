@@ -18,8 +18,10 @@ $CycleAnchorReconciler = Join-Path $PSScriptRoot 'CycleAnchorReconciler.ps1'
 $OptimalRoute = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
 $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
 $WindowPlan = Join-Path $PSScriptRoot 'WindowPlan.ps1'
+$PriceVariationRefiner = Join-Path $PSScriptRoot 'PriceVariationRefiner.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
+$TrendForecast = Join-Path $PSScriptRoot 'TrendForecast.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
@@ -37,8 +39,10 @@ $CycleAnchorReconcilerErrorFile = Join-Path $RuntimeDir 'cycle-anchor-reconciler
 $OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $WindowPlanErrorFile = Join-Path $RuntimeDir 'window-plan-error.txt'
+$PriceVariationRefinerErrorFile = Join-Path $RuntimeDir 'price-variation-refiner-error.txt'
 $FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
 $CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
+$TrendForecastErrorFile = Join-Path $RuntimeDir 'trend-forecast-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
@@ -253,6 +257,10 @@ try {
     # times so Rainmeter can update leave/countdown guidance every second.
     Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
 
+    # Classify price variability from recent recurring evidence rather than one old
+    # anomaly. This controls card cost coloring and whether Take gets a 5% buffer.
+    Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
+
     # OpportunityState must always leave an explicit projection, even when the
     # correct result is zero rows. Detect silent early-return states immediately.
     $hasOpportunityProjection = $false
@@ -277,6 +285,9 @@ try {
 
     if ($Action -eq 'Update') {
         Invoke-FailSoftScript -Path $CycleAnalytics -ErrorPath $CycleAnalyticsErrorFile
+        # Shadow forecast only: measure recent direction/correlation and score the
+        # next-cycle prediction. It does not alter WindowPlan or current card timing.
+        Invoke-FailSoftScript -Path $TrendForecast -ErrorPath $TrendForecastErrorFile
     }
 
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
