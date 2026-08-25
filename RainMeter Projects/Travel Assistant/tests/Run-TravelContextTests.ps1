@@ -62,6 +62,28 @@ Assert-Equal 'Return flight is identified' ([string]$ctx.state) 'returning'
 Assert-True 'Return flight releases foreign destination filter' (-not [bool]$ctx.filterActive)
 Assert-Equal 'Return destination country is empty' ([string]$ctx.destinationCountryId) ''
 
+$landed = [pscustomobject]@{
+    travel = [pscustomobject]@{ destination='Torn'; method='Airstrip'; arrival_at=$now-600; time_left=0 }
+    status = [pscustomobject]@{ state='Okay' }
+}
+$ctx = Convert-TornTravelContext -Payload $landed -CountriesConfig $countries -NowEpoch $now
+Assert-Equal 'Completed return flight becomes home' ([string]$ctx.state) 'home'
+Assert-True 'Completed return flight keeps foreign filter released' (-not [bool]$ctx.filterActive)
+
+$staleReturn = [pscustomobject]@{
+    state='returning'
+    destination='Torn'
+    destinationCountryId=''
+    filterActive=$false
+    arrivalAt=$now-600
+    timeLeft=400
+    lastSuccessAt=$now-1000
+}
+Expire-CompletedReturnContext -Context $staleReturn -NowEpoch $now
+Assert-Equal 'Expired cached return state becomes home' ([string]$staleReturn.state) 'home'
+Assert-Equal 'Expired cached return time is cleared' ([long]$staleReturn.timeLeft) 0
+Assert-Equal 'Expired cached return arrival is cleared' ([long]$staleReturn.arrivalAt) 0
+
 $unknown = [pscustomobject]@{
     travel = [pscustomobject]@{ destination='Somewhere New'; arrival_at=$now+500; time_left=500 }
     status = [pscustomobject]@{ state='Traveling' }
@@ -70,5 +92,5 @@ $ctx = Convert-TornTravelContext -Payload $unknown -CountriesConfig $countries -
 Assert-Equal 'Unknown traveling destination is explicit' ([string]$ctx.state) 'traveling_unknown'
 Assert-True 'Unknown destination does not force an unsafe country filter' (-not [bool]$ctx.filterActive)
 
-Write-Host 'Travel context and bar normalization tests passed.' -ForegroundColor Green
+Write-Host 'Travel context, completed-return expiry, and bar normalization tests passed.' -ForegroundColor Green
 exit 0
