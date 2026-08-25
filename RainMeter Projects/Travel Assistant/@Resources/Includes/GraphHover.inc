@@ -2,6 +2,7 @@
 ; GraphHover.lua positions these inside the rendered plot and assigns time/stock tooltips.
 
 [GraphHoverStyle]
+Group=InlineGraphHover
 X=0
 Y=0
 Hidden=1
