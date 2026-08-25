@@ -304,17 +304,26 @@ local function updateRow(index,state,lookup,now)
         return
     end
 
+    if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then
+        setOption(prefix..'Chance','Text','')
+    end
+
     local country=rowCountry(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(name)]
-    if row==nil or row.plan==nil then return end
+    if row==nil or row.plan==nil then
+        if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then applyTooltip(prefix,'','') end
+        return
+    end
 
     local destinationId=trim(state.TravelDestinationCountryId):lower()
     local countryId=countryIdsByName[country] or ''
-    if countryId=='' or countryId~=destinationId then return end
+    if countryId=='' or countryId~=destinationId then
+        if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then applyTooltip(prefix,'','') end
+        return
+    end
 
     if travelState=='traveling' then
         setOption(prefix..'Leave','Text',outboundStatus(row.plan,state,now))
-        setOption(prefix..'Chance','Text','')
         applyTooltip(prefix,outboundTooltip(row,state,now),'Arrival estimate')
         return
     end
@@ -322,7 +331,6 @@ local function updateRow(index,state,lookup,now)
     if travelState=='abroad' or travelState=='foreign' then
         local status,tooltip=currentCycleStatus(row.plan,now)
         setOption(prefix..'Leave','Text',status)
-        setOption(prefix..'Chance','Text','')
         applyTooltip(prefix,tooltip,'Market estimate')
     end
 end
