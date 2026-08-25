@@ -128,3 +128,16 @@ ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
+
+; Final render-time safety fence. This measure updates after StateReader/CardPresenter/
+; CardTweaks because the include is parsed at the end of the skin. It prevents stale
+; provider evidence from remaining visible as actionable cards even if an upstream
+; projection stage fails and leaves an older OpportunityCount in state.kv.
+[MeasureFreshnessGuard]
+Measure=Script
+ScriptFile=#@#Scripts\FreshnessGuard.lua
+StateFile=#@#Generated\state.kv
+HeartbeatFile=#@#Generated\last-update.txt
+StaleAfter=300
+RetryInterval=15
+UpdateDivider=1
