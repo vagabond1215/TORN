@@ -8,6 +8,7 @@ $tests = @(
     'Validate-CardPresenter.ps1',
     'Validate-CurrentTweaks.ps1',
     'Validate-FreshnessGuard.ps1',
+    'Validate-TravelStateWindows.ps1',
     'Validate-WindowTooltipTweaks.ps1',
     'Validate-FinalCardPolish.ps1',
     'Validate-ItemViewer.ps1',
@@ -53,5 +54,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify fixed-price items remain white, stock evidence older than five minutes is blocked, Safe/Best timing remains unchanged by the new shadow forecast, and inspect trendForecast analytics as completed cycles accumulate.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify outbound destination rows show the nearest physical RESTOCK/SELLOUT countdown even when landing misses it; abroad rows use IN STOCK FOR/RESTOCK IN rather than departure language; returning skips windows before home availability; fixed-price items remain white; and shadow trend forecasting remains non-authoritative.' -ForegroundColor Yellow
 exit 0
