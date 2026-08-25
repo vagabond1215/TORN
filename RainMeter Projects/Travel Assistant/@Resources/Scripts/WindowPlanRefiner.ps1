@@ -1,11 +1,15 @@
 param(
-    [switch]$SkipMain,
+    [Alias('SkipMain')]
+    [switch]$WindowPlanRefinerSkipMain,
     [long]$Now = 0
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
+# WindowPlan exposes shared model helpers. Its -SkipMain switch intentionally uses
+# its own variable; keep this refiner's entrypoint switch separately named so the
+# dot-source cannot accidentally suppress normal production execution.
 . (Join-Path $PSScriptRoot 'WindowPlan.ps1') -SkipMain
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -216,7 +220,7 @@ function Remove-WindowMachineEnvelope {
     return $value
 }
 
-if ($SkipMain) { return }
+if ($WindowPlanRefinerSkipMain) { return }
 if ($Now -le 0) { $Now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 $state=Read-WindowStateKv $StateKvFile
 $engine=Read-WindowJson $EngineStateFile
