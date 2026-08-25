@@ -11,11 +11,11 @@ function Write-InfoIconPng {
     param([string]$Path)
     Add-Type -AssemblyName System.Drawing
     New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
-    $bitmap = New-Object System.Drawing.Bitmap 64,64,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb
+    $bitmap = [System.Drawing.Bitmap]::new(64,64,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $blue = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255,82,174,255))
-    $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255,255,255,255))
-    $border = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255,45,105,190)),3
+    $blue = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255,82,174,255))
+    $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255,255,255,255))
+    $border = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255,45,105,190),3)
     try {
         $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $graphics.Clear([System.Drawing.Color]::Transparent)
