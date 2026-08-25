@@ -31,13 +31,42 @@ function Get-StableWindowMedian {
 }
 
 function Get-StableWindowUsableCycles {
-    param([object[]]$Cycles,[int]$MaximumSamples = 48)
+    param(
+        [object[]]$Cycles,
+        [int]$MaximumSamples = 48,
+        [long]$RecentRegimeSeconds = 43200L,
+        [int]$MinimumRecentRegimeSamples = 4
+    )
     $usable = @($Cycles | Where-Object {
         $null -ne $_ -and
         $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0 -and
         $_.PSObject.Properties['availabilitySeconds'] -and [long]$_.availabilitySeconds -gt 0
     } | Sort-Object @{Expression={ if ($_.PSObject.Properties['soldOutAt']) { [long]$_.soldOutAt } else { 0L } };Descending=$true})
     if ($MaximumSamples -gt 0 -and $usable.Count -gt $MaximumSamples) { $usable = @($usable | Select-Object -First $MaximumSamples) }
+
+    # Live Safe/Best geometry should describe the current market regime. Older
+    # cycles remain retained for long-horizon analytics and shadow forecasting,
+    # but a materially different old delay must not widen the immediate restock
+    # band when at least four completed cycles exist inside the latest 12 hours.
+    # Anchor the window to the newest completed cycle rather than wall clock so a
+    # short collector outage does not make all recent evidence disappear at once.
+    if ($usable.Count -ge $MinimumRecentRegimeSamples -and $RecentRegimeSeconds -gt 0) {
+        $latestSoldOutAt = 0L
+        foreach ($cycle in $usable) {
+            if ($cycle.PSObject.Properties['soldOutAt']) {
+                $soldOutAt = [long]$cycle.soldOutAt
+                if ($soldOutAt -gt $latestSoldOutAt) { $latestSoldOutAt = $soldOutAt }
+            }
+        }
+        if ($latestSoldOutAt -gt 0) {
+            $recentCutoff = $latestSoldOutAt - $RecentRegimeSeconds
+            $recent = @($usable | Where-Object {
+                $_.PSObject.Properties['soldOutAt'] -and [long]$_.soldOutAt -ge $recentCutoff
+            })
+            if ($recent.Count -ge $MinimumRecentRegimeSamples) { $usable = $recent }
+        }
+    }
+
     if ($usable.Count -lt 5) { return $usable }
 
     $periods = [long[]]@($usable | ForEach-Object { [long]$_.restockDelaySeconds + [long]$_.availabilitySeconds })
