@@ -1,5 +1,11 @@
 local statePath = nil
 
+local countryIdsByName = {
+    ['Mexico']='mexico', ['Cayman Islands']='cayman_islands', ['Canada']='canada', ['Hawaii']='hawaii',
+    ['United Kingdom']='united_kingdom', ['Argentina']='argentina', ['Switzerland']='switzerland', ['Japan']='japan',
+    ['China']='china', ['United Arab Emirates']='united_arab_emirates', ['South Africa']='south_africa'
+}
+
 local function trim(value)
     local text=tostring(value or ''):gsub('^\239\187\191','')
     return (text:gsub('^%s+',''):gsub('%s+$',''))
@@ -41,6 +47,16 @@ local function formatMoney(value)
     return (negative and '-$' or '$')..out
 end
 
+local function formatDuration(seconds)
+    local value=math.max(0,math.floor(number(seconds)))
+    if value<=0 then return '<1m' end
+    local hours=math.floor(value/3600)
+    local minutes=math.floor((value%3600)/60)
+    if hours>0 then return string.format('%dh %dm',hours,minutes) end
+    if minutes>0 then return string.format('%dm',minutes) end
+    return '<1m'
+end
+
 local function moneyNumber(text)
     local value=trim(text)
     local negative=value:find('%-')~=nil
@@ -61,10 +77,39 @@ local function stripDebugQuantity(value)
     return trim(tostring(value or ''):gsub('%s+%d+%s+qty$',''))
 end
 
-local function rowCountry(index)
+local function rowCountryAndTravel(index)
     local text=meterOption('MeterOpportunity'..index..'Flag','ToolTipText')
-    local country=text:match('^(.-)%s*|%s*travel')
-    return trim(country or '')
+    local country,travel=text:match('^(.-)%s*|%s*travel%s+(.+)$')
+    return trim(country or ''),trim(travel or '')
+end
+
+local function rowCountry(index)
+    local country=rowCountryAndTravel(index)
+    return country
+end
+
+local function liveTravelRemainingSeconds(state,now)
+    local arrivalAt=number(state.TravelArrivalAt)
+    if arrivalAt>now then return arrivalAt-now end
+    local projectedLeft=number(state.TravelTimeLeft)
+    local projectedAt=number(state.TravelContextLastSuccessAt)
+    if projectedLeft>0 and projectedAt>0 then
+        return math.max(0,projectedLeft-math.max(0,now-projectedAt))
+    end
+    return 0
+end
+
+local function relevantArrivalText(state,country,defaultTravel,now)
+    local countryId=countryIdsByName[country] or ''
+    local travelState=trim(state.TravelState):lower()
+    local destinationId=trim(state.TravelDestinationCountryId):lower()
+    if travelState=='traveling' and countryId~='' and destinationId==countryId then
+        local remaining=liveTravelRemainingSeconds(state,now)
+        return formatDuration(remaining)
+    end
+    if travelState=='abroad' and countryId~='' and destinationId==countryId then return '<1m' end
+    if defaultTravel~='' then return defaultTravel end
+    return '?'
 end
 
 local function buildLookup(state)
@@ -83,7 +128,8 @@ local function buildLookup(state)
                 gross=number(state[prefix..'GrossValue']),
                 priceVaries=trim(state[prefix..'PriceVaries'])=='1',
                 minObservedPrice=number(state[prefix..'MinObservedPrice']),
-                maxObservedPrice=number(state[prefix..'MaxObservedPrice'])
+                maxObservedPrice=number(state[prefix..'MaxObservedPrice']),
+                windowPlan=trim(state[prefix..'Tooltip'])
             }
         end
     end
@@ -127,6 +173,60 @@ local function costColor(row)
     return mixColor(warn,bad,(t-0.5)*2)
 end
 
+local function medianAvailableSeconds(rawPlan)
+    local machine=tostring(rawPlan or ''):match('^WP2:([^#]*)#')
+    if machine==nil then return 0 end
+    local pairs=machine:match('^%d+,[RS],(.-)~')
+    if pairs==nil then return 0 end
+    local values={}
+    for part in pairs:gmatch('[^/]+') do
+        local _,available=part:match('^(%d+):(%d+)$')
+        if available~=nil and number(available)>0 then table.insert(values,number(available)) end
+    end
+    if #values==0 then return 0 end
+    table.sort(values)
+    local middle=math.floor((#values+1)/2)
+    if (#values%2)==1 then return values[middle] end
+    return math.floor((values[middle]+values[middle+1])/2+0.5)
+end
+
+local function tooltipLine(text,label)
+    local line=tostring(text or ''):match(label..':%s*(.-)#CRLF#')
+    if line==nil then line=tostring(text or ''):match(label..':%s*(.*)$') end
+    return trim(line or '')
+end
+
+local function restockMomentFromLine(line)
+    local moment=trim(line):match('^(.-)%s+%-%s+')
+    return trim(moment or line)
+end
+
+local function guaranteedWindowText(line)
+    local value=trim(line)
+    if value=='' or value:lower()=='none' then return 'none' end
+    local startAt,endAt=value:match('^(%d%d:%d%d)%s+%-%s+(%d%d:%d%d)')
+    if startAt~=nil and endAt~=nil then return startAt..' to '..endAt end
+    return value
+end
+
+local function buildWindowTooltip(index,rawTooltip,row,state,now)
+    local earlyLine=tooltipLine(rawTooltip,'Early Restock')
+    local lateLine=tooltipLine(rawTooltip,'Late Restock')
+    if earlyLine=='' and lateLine=='' then return '' end
+
+    local safeLine=tooltipLine(rawTooltip,'Safe Window')
+    local country,defaultTravel=rowCountryAndTravel(index)
+    local arrival=relevantArrivalText(state,country,defaultTravel,now)
+    local stockedSeconds=medianAvailableSeconds(row and row.windowPlan or '')
+    local stockedText=stockedSeconds>0 and formatDuration(stockedSeconds) or '?'
+    local nl='#CRLF#'
+    return 'Estimated Arrival in '..arrival..nl..
+        'Estimated In Stock Duration '..stockedText..nl..
+        'Early Restock: '..restockMomentFromLine(earlyLine)..nl..
+        'Late Restock: '..restockMomentFromLine(lateLine)..nl..
+        'Guaranteed Window: '..guaranteedWindowText(safeLine)
+end
+
 local function configureInfo(index,tooltip)
     local prefix='MeterOpportunity'..index
     local info=prefix..'Info'
@@ -136,7 +236,7 @@ local function configureInfo(index,tooltip)
     local show=text~=''
 
     setOption(info,'ImageAlpha',show and 255 or 0)
-    setOption(info,'ToolTipTitle','Window calculation')
+    setOption(info,'ToolTipTitle','Window estimate')
     setOption(info,'ToolTipText',text)
     setOption(info,'ToolTipHidden',show and 0 or 1)
     setOption(info,'ToolTipWidth',420)
@@ -144,7 +244,7 @@ local function configureInfo(index,tooltip)
 
     -- Keep the departure text itself hoverable. The image meter is the stable
     -- fallback target and avoids Unicode/font encoding issues entirely.
-    setOption(leave,'ToolTipTitle','Window calculation')
+    setOption(leave,'ToolTipTitle','Window estimate')
     setOption(leave,'ToolTipText',text)
     setOption(leave,'ToolTipHidden',show and 0 or 1)
     setOption(leave,'ToolTipWidth',420)
@@ -160,10 +260,10 @@ end
 local function applyHeader(index,lookup)
     local prefix='MeterOpportunity'..index
     local currentName=stripDebugQuantity(meterOption(prefix..'Name','Text'))
-    if currentName=='' then return end
+    if currentName=='' then return nil end
     local country=rowCountry(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(currentName)]
-    if row==nil then return end
+    if row==nil then return nil end
 
     local quantity=row.quantity
     local unitProfit=(quantity>0) and (row.gross/quantity) or row.gross
@@ -186,12 +286,15 @@ local function applyHeader(index,lookup)
     setOption(prefix..'Gross','InlinePattern2','-?\\$[0-9,]+$')
     setOption(prefix..'Gross','InlineSetting2','Color | 86,190,116,255')
     setOption(prefix..'Gross','ToolTipText','Foreign cost per item | Torn market value per item | profit per item')
+    return row
 end
 
 local function applySecondLine(index)
     local prefix='MeterOpportunity'..index
-    setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',65)
-    setOption(prefix..'Leave','X',145); setOption(prefix..'Leave','W',154)
+    -- Flight duration is intentionally tooltip-only. Reuse that space for the
+    -- actionable departure guidance instead of duplicating travel time on-card.
+    setOption(prefix..'Window','Text',''); setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',0)
+    setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',220)
     setOption(prefix..'Info','X',303); setOption(prefix..'Info','W',12); setOption(prefix..'Info','H',12)
     local leaveY=tonumber(meterOption(prefix..'Leave','Y')) or 0
     if leaveY>0 then setOption(prefix..'Info','Y',math.floor(leaveY+1)) end
@@ -250,13 +353,15 @@ end
 function Update()
     local state=readKv(statePath)
     local lookup=buildLookup(state)
+    local now=os.time()
     for i=1,8 do
-        applyHeader(i,lookup)
+        local row=applyHeader(i,lookup)
         applySecondLine(i)
         applyGraphSize(i)
         local prefix='MeterOpportunity'..i
-        local tooltip=meterOption(prefix..'Leave','ToolTipText')
-        if tooltip=='' then tooltip=meterOption(prefix..'Chance','ToolTipText') end
+        local rawTooltip=meterOption(prefix..'Leave','ToolTipText')
+        if rawTooltip=='' then rawTooltip=meterOption(prefix..'Chance','ToolTipText') end
+        local tooltip=buildWindowTooltip(i,rawTooltip,row,state,now)
         configureInfo(i,tooltip)
     end
     applyExpandedGraphGeometry()
