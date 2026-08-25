@@ -299,6 +299,22 @@ function Get-OpportunityResaleUse {
     }
 }
 
+function Get-OpportunityStockEvidenceMode {
+    param(
+        [long]$SourceTimestamp,
+        [long]$NowEpoch,
+        [long]$LiveMaximumAgeSeconds = 300L,
+        [long]$ForecastMaximumAgeSeconds = 21600L
+    )
+    if ($SourceTimestamp -le 0) { return 'unusable' }
+    $age = [Math]::Max(0L,$NowEpoch-$SourceTimestamp)
+    $liveBound = [Math]::Max(60L,$LiveMaximumAgeSeconds)
+    $forecastBound = [Math]::Max($liveBound,$ForecastMaximumAgeSeconds)
+    if ($age -le $liveBound) { return 'live' }
+    if ($age -le $forecastBound) { return 'forecast' }
+    return 'unusable'
+}
+
 function Write-OpportunityProjection {
     param(
         [hashtable]$State,
@@ -405,6 +421,10 @@ if ($null -ne $optimizerSettings) {
 $basisPercent = if ([bool]$preferences.use95PercentMarketValue) { 95 } else { 100 }
 $travelMode = [string]$preferences.travelMode
 $staleAfter = [Math]::Max(60L,[long]$settings.staleAfterSeconds)
+$forecastStockMaxAge = 21600L
+if ($settings.PSObject.Properties['forecastOnlyMaxAgeSeconds']) {
+    $forecastStockMaxAge = [Math]::Max($staleAfter,[long]$settings.forecastOnlyMaxAgeSeconds)
+}
 $resaleFallbackMaxAge = 604800L
 if ($settings.PSObject.Properties['profitability'] -and $settings.profitability.PSObject.Properties['resaleFallbackMaxAgeSeconds']) {
     $resaleFallbackMaxAge = [Math]::Max(21600L,[long]$settings.profitability.resaleFallbackMaxAgeSeconds)
@@ -427,6 +447,7 @@ if ($travelState -eq 'returning' -and $null -ne $travelContext) { $returningWait
 $rows = New-Object System.Collections.Generic.List[object]
 $learning = 0
 $stale = 0
+$forecastOnly = 0
 $missingMv = 0
 $staleMv = 0
 $wasteBlocked = 0
@@ -435,7 +456,7 @@ $countryStats = @{}
 foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $true })) {
     $countryId = [string]$country.id
     $tripBand = [string]$country.tripBand
-    $countryStats[$countryId] = [pscustomobject]@{ observed=0; staleStock=0; missingMv=0; staleMv=0; rows=0 }
+    $countryStats[$countryId] = [pscustomobject]@{ observed=0; staleStock=0; forecastStock=0; missingMv=0; staleMv=0; rows=0 }
     if (-not [string]::IsNullOrWhiteSpace($fixedCountry) -and $countryId -ne $fixedCountry) { continue }
     if (@($preferences.selectedTripBands) -notcontains $tripBand) { continue }
     if (@($preferences.selectedCountryIds) -notcontains $countryId) { continue }
@@ -452,11 +473,20 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $countryStats[$countryId].observed = [int]$countryStats[$countryId].observed + 1
 
         $sourceTimestamp = [long](Get-OptimalProperty $market 'sourceTimestamp')
-        if ($sourceTimestamp -le 0 -or ($Now-$sourceTimestamp) -gt $staleAfter) {
+        $stockEvidenceMode = Get-OpportunityStockEvidenceMode -SourceTimestamp $sourceTimestamp -NowEpoch $Now -LiveMaximumAgeSeconds $staleAfter -ForecastMaximumAgeSeconds $forecastStockMaxAge
+        if ($stockEvidenceMode -eq 'unusable') {
             $stale++
             $countryStats[$countryId].staleStock = [int]$countryStats[$countryId].staleStock + 1
             continue
         }
+        $useForecastOnly = ($stockEvidenceMode -eq 'forecast')
+        if ($useForecastOnly) {
+            $stale++
+            $forecastOnly++
+            $countryStats[$countryId].staleStock = [int]$countryStats[$countryId].staleStock + 1
+            $countryStats[$countryId].forecastStock = [int]$countryStats[$countryId].forecastStock + 1
+        }
+
         $itemId = [int](Get-OptimalProperty $market 'itemId')
         if ($itemId -le 0) { continue }
         $metadata = Get-OptimalMarketMetadata -Engine $engine -ItemId $itemId -Market $market
@@ -495,7 +525,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $recurringCycles = @(Get-OpportunityRecurringCycles -Cycles $cycles)
         $destinationState = $null
         if ($engine.PSObject.Properties['destinations']) { $destinationState = Get-OptimalProperty $engine.destinations $marketKey }
-        $stock = [long](Get-OptimalProperty $market 'lastStock')
+        $stock = if ($useForecastOnly) { 0L } else { [long](Get-OptimalProperty $market 'lastStock') }
 
         $initialWait = $returningWait
         $outboundSeconds = $oneWaySeconds
@@ -560,9 +590,23 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             }
         } else {
             if ($recurringCycles.Count -lt $minimumSamples) { $learning++; continue }
-            $lastSellOutAt = 0L
-            if ($null -ne $destinationState -and $destinationState.PSObject.Properties['lastSellOutAt']) { $lastSellOutAt = [long]$destinationState.lastSellOutAt }
-            $window = Get-OpportunityNextRecurringWindow -Cycles $recurringCycles -AnchorAt $lastSellOutAt -AnchorPhase 'sellout' -NowEpoch $Now -EarliestArrivalAt $earliestArrivalAt
+            $window = $null
+
+            -- A stale positive stock count is never carried forward as current stock.
+            -- Its historical active restock timestamp is still a real observed phase
+            -- anchor, so use that anchor for the recurring forecast when available.
+            if ($useForecastOnly) {
+                $activeRestockAt = Get-OpportunityActiveRestockAt -DestinationState $destinationState
+                if ($activeRestockAt -gt 0) {
+                    $window = Get-OpportunityNextRecurringWindow -Cycles $recurringCycles -AnchorAt $activeRestockAt -AnchorPhase 'restock' -NowEpoch $Now -EarliestArrivalAt $earliestArrivalAt
+                }
+            }
+
+            if ($null -eq $window) {
+                $lastSellOutAt = 0L
+                if ($null -ne $destinationState -and $destinationState.PSObject.Properties['lastSellOutAt']) { $lastSellOutAt = [long]$destinationState.lastSellOutAt }
+                $window = Get-OpportunityNextRecurringWindow -Cycles $recurringCycles -AnchorAt $lastSellOutAt -AnchorPhase 'sellout' -NowEpoch $Now -EarliestArrivalAt $earliestArrivalAt
+            }
             if ($null -eq $window) { $learning++; continue }
 
             $windowStartAt = [long]$window.startAt
@@ -607,7 +651,8 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $wasteText = Get-OpportunityWasteText -Energy $energy -Nerve $nerve
         $chanceText = if ($probabilityKnown) { ('{0:N0}% modeled hit' -f (100.0*$probability)) } else { 'hit likelihood learning' }
         $mvStateText = if ($marketValueFresh) { 'MV fresh' } else { 'MV STALE '+(Format-OpportunityDuration ([long]$resaleUse.ageSeconds))+' old; refresh queued' }
-        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | unit spread {5} x {6} = {7} gross at {8}% MV | {9}/hr | {10} | foreign {11}, MV {12} ({13})' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney $grossProfit),$basisPercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resaleUse.marketValue)),$mvStateText)
+        $stockStateText = if ($useForecastOnly) { 'stock forecast only' } else { 'stock live' }
+        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | unit spread {5} x {6} = {7} gross at {8}% MV | {9}/hr | {10} | foreign {11}, MV {12} ({13}); {14}' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney $grossProfit),$basisPercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resaleUse.marketValue)),$mvStateText,$stockStateText)
 
         $rows.Add([pscustomobject]@{
             key=$marketKey
@@ -652,6 +697,7 @@ if ($sortMode -eq 'name') {
 }
 
 $state['OpportunityStaleStockCount'] = $stale
+$state['OpportunityForecastStockCount'] = $forecastOnly
 $state['OpportunityMissingMvCount'] = $missingMv
 $state['OpportunityStaleMvCount'] = $staleMv
 foreach ($countryId in @($countryStats.Keys | Sort-Object)) {
@@ -659,6 +705,7 @@ foreach ($countryId in @($countryStats.Keys | Sort-Object)) {
     $prefix = 'OpportunityCountry_'+$countryId
     $state[$prefix+'_Observed'] = [int]$stats.observed
     $state[$prefix+'_StaleStock'] = [int]$stats.staleStock
+    $state[$prefix+'_ForecastStock'] = [int]$stats.forecastStock
     $state[$prefix+'_MissingMv'] = [int]$stats.missingMv
     $state[$prefix+'_StaleMv'] = [int]$stats.staleMv
     $state[$prefix+'_Rows'] = [int]$stats.rows
@@ -670,7 +717,7 @@ if ($sorted.Count -eq 0) {
     if ($missingMv -gt 0) { $message = 'Learning market values - opportunity pricing is still filling' }
     elseif ($learning -gt 0) { $message = 'Learning recurring restock windows - fresh in-stock markets remain visible while likelihood learns' }
     elseif ($wasteBlocked -gt 0) { $message = 'Current Energy/Nerve waste limits block the available opportunities' }
-    elseif ($stale -gt 0) { $message = 'Foreign stock is stale - waiting for a fresh provider poll' }
+    elseif ($stale -gt 0) { $message = 'Foreign stock is outside the forecast horizon - waiting for a fresh provider poll' }
 }
 Write-OpportunityProjection -State $state -Rows $sorted -SortMode $sortMode -Message $message
 Write-OptimalStateKvAtomic -Values $state -Path $StateKvFile
