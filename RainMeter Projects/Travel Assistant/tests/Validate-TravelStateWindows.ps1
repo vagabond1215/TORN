@@ -21,6 +21,9 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         "travelState=='returning'",
         "'ARRIVE IN TORN: '",
+        'returningTooltip',
+        "'Home in: '..formatDuration(liveTravelRemainingSeconds(state,now))",
+        "applyTooltip(prefix,returningTooltip(state,now),'Return estimate')",
         'averageRestockDelay(plan)',
         'averageAvailability(plan)',
         'landingRelevantGroup(plan,landingAt)',
@@ -32,6 +35,7 @@ if ($errors.Count -eq 0) {
         "'Arrival estimate'",
         "travelState=='traveling'",
         "travelState=='abroad' or travelState=='foreign'",
+        "'Market estimate'",
         'syncPanelHeight()',
         "SKIN:Bang('!SetVariable','PanelHeight'"
     )) {
@@ -67,7 +71,7 @@ if ($errors.Count -eq 0) {
     $polishMeasure = $info.IndexOf('[MeasureFinalCardPolish]')
     if ($travelMeasure -lt 0) { Fail 'OpportunityInfo.inc missing MeasureTravelStateWindowTweaks.' }
     if ($tooltipMeasure -lt 0) { Fail 'OpportunityInfo.inc missing MeasureWindowTooltipTweaks.' }
-    if ($travelMeasure -ge 0 -and $tooltipMeasure -ge 0 -and $travelMeasure -gt $tooltipMeasure) { Fail 'Travel-state window pass must run before generic tooltip finalization.' }
+    if ($travelMeasure -ge 0 -and $tooltipMeasure -ge 0 -and $travelMeasure -gt $tooltipMeasure) { Fail 'Travel-state window pass must run before home tooltip finalization.' }
     if ($travelMeasure -ge 0 -and $polishMeasure -ge 0 -and $travelMeasure -gt $polishMeasure) { Fail 'Travel-state window pass must run before final card polish.' }
 
     $card = Get-Content -LiteralPath $cardPath -Raw
@@ -80,23 +84,25 @@ if ($errors.Count -eq 0) {
 
     $tooltip = Get-Content -LiteralPath $tooltipPath -Raw
     foreach ($token in @(
-        "if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then",
+        "if travelState=='traveling' or travelState=='returning' or travelState=='abroad' or travelState=='foreign' then",
+        'buildHomeTooltip',
+        'findPreferredGroup',
         "setOption(prefix..'Chance','Text','')",
         'return'
     )) {
-        if (-not $tooltip.Contains($token)) { Fail ("WindowTooltipTweaks.lua missing foreign-travel ownership guard '{0}'." -f $token) }
+        if (-not $tooltip.Contains($token)) { Fail ("WindowTooltipTweaks.lua missing home-only ownership contract '{0}'." -f $token) }
     }
-    if (-not $tooltip.Contains("selected=tostring(existingTooltip or ''):match('Best Hit Window:")) {
-        Fail 'WindowTooltipTweaks.lua must retain home-mode selected-cycle confidence fallback.'
+    foreach ($forbidden in @('existingTooltip',"meterOption(prefix..'Leave','ToolTipText')", "meterOption(prefix..'Info','ToolTipText')")) {
+        if ($tooltip.Contains($forbidden)) { Fail ("Home tooltip must not consume prior rendered tooltip text; found '{0}'." -f $forbidden) }
     }
 }
 
 if ($errors.Count -gt 0) {
-    foreach ($error in $errors) { Write-Host ("FAIL: {0}" -f $error) -ForegroundColor Red }
+    foreach ($validationError in $errors) { Write-Host ("FAIL: {0}" -f $validationError) -ForegroundColor Red }
     Write-Host ("Travel-state window validation failed with {0} error(s)." -f $errors.Count) -ForegroundColor Red
     exit 1
 }
 
-Write-Host 'Travel-state window presentation validation passed.' -ForegroundColor Green
-Write-Host 'Outbound tooltips are landing-centric and concise; generic Safe/Best tooltip finalization is home/return-only; panel height is reconciled after final card geometry.' -ForegroundColor Green
+Write-Host 'Four-state window tooltip ownership validation passed.' -ForegroundColor Green
+Write-Host 'Home uses the raw five-line forecast; outbound uses landing estimates; returning uses a Torn-arrival countdown; abroad uses the current foreign-market cycle.' -ForegroundColor Green
 exit 0
