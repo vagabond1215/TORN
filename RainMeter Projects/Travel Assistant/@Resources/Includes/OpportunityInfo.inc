@@ -165,3 +165,22 @@ UpdateDivider=1
 Measure=Script
 ScriptFile=#@#Scripts\FinalCardPolish.lua
 UpdateDivider=1
+
+; Hover lookup is generated only when an inline graph is open. It is local-only and
+; samples the same retained stock observations used by the graph renderer.
+[MeasureGraphHoverData]
+Measure=Plugin
+Plugin=RunCommand
+Program=powershell.exe
+Parameter=-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "#@#Scripts\BuildGraphHoverData.ps1" -MarketKey "#GraphHoverMarketKey#"
+State=Hide
+Timeout=10000
+DynamicVariables=1
+FinishAction=[!UpdateMeasure MeasureGraphHover][!UpdateMeterGroup InlineGraphHover][!Redraw]
+
+[MeasureGraphHover]
+Measure=Script
+ScriptFile=#@#Scripts\GraphHover.lua
+UpdateDivider=1
+
+@IncludeGraphHover=#@#Includes\GraphHover.inc
