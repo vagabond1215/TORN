@@ -19,14 +19,26 @@ if ($errors.Count -eq 0) {
         'UIFreshestMarketSourceTimestamp',
         'UIOldestMarketSourceTimestamp',
         'staleAfter=300',
+        'hardStaleAfter=21600',
         'retryInterval=15',
-        "Foreign stock is stale - waiting for a fresh Prometheus/YATA snapshot",
-        "STOCK STALE - ",
+        'hasCachedOpportunities',
+        'enterDegradedMode',
+        "StockFreshnessMode','degraded'",
+        "StockFreshnessMode','hard-stale'",
+        "FORECAST ONLY - ",
+        "STOCK UNAVAILABLE - ",
+        "Foreign stock cache is too old - waiting for a usable Prometheus/YATA snapshot",
         "!HideMeterGroup','OpportunityRow",
         "!CommandMeasure','MeasureUpdate','Run'"
     )) {
         if (-not $guard.Contains($token)) { Fail "FreshnessGuard.lua missing '$token'." }
     }
+
+    if (-not $guard.Contains("local hardStale=(sourceAt<=0) or (sourceAge>hardStaleAfter) or (not hasCachedOpportunities(data))")) {
+        Fail 'FreshnessGuard.lua must reserve row hiding for missing/very old evidence or missing cached opportunities.'
+    }
+    if (-not $guard.Contains("if hardStale then")) { Fail 'FreshnessGuard.lua must separate degraded and hard-stale UI states.' }
+    if (-not $guard.Contains("SKIN:Bang('!HideMeter','MeterOpportunityMessage')")) { Fail 'Degraded mode must remove the full-panel stale message so cached cards remain visible.' }
     if ($guard -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FreshnessGuard.lua must remain local-only.' }
 
     foreach ($token in @(
@@ -35,6 +47,7 @@ if ($errors.Count -eq 0) {
         'StateFile=#@#Generated\state.kv',
         'HeartbeatFile=#@#Generated\last-update.txt',
         'StaleAfter=300',
+        'HardStaleAfter=21600',
         'RetryInterval=15',
         'UpdateDivider=1'
     )) {
@@ -43,11 +56,11 @@ if ($errors.Count -eq 0) {
 }
 
 if ($errors.Count -gt 0) {
-    foreach ($error in $errors) { Write-Host "FAIL: $error" -ForegroundColor Red }
+    foreach ($validationError in $errors) { Write-Host "FAIL: $validationError" -ForegroundColor Red }
     Write-Host "Freshness-guard validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
 
-Write-Host 'Render-time stock freshness guard validation passed.' -ForegroundColor Green
-Write-Host 'Provider evidence older than five minutes hides actionable cards and retries every 15 seconds while the UI heartbeat remains separately visible.'
+Write-Host 'Degraded stock freshness guard validation passed.' -ForegroundColor Green
+Write-Host 'Five-minute provider freshness remains strict, but cached opportunity cards stay visible as FORECAST ONLY for up to six hours; only missing/very old evidence enters the hard blank safety state.'
 exit 0
