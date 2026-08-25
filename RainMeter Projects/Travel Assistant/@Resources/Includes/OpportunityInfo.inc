@@ -142,8 +142,17 @@ StaleAfter=300
 RetryInterval=15
 UpdateDivider=1
 
-; Final tooltip pass. Runs after the card presenter/tweaks and keeps confidence out
-; of the card while adding live relative timing to the selected guaranteed window.
+; Travel-state-specific status pass. While outbound or abroad, physical upcoming
+; cycle timing is informational and must not skip a nearer cycle merely because the
+; player cannot catch it. Returning/home planning remains handled by CardPresenter.
+[MeasureTravelStateWindowTweaks]
+Measure=Script
+ScriptFile=#@#Scripts\TravelStateWindowTweaks.lua
+StateFile=#@#Generated\state.kv
+UpdateDivider=1
+
+; Final tooltip pass. Runs after the card presenter/tweaks and travel-state status
+; pass, keeps confidence out of the card, and adds live relative Safe-window timing.
 [MeasureWindowTooltipTweaks]
 Measure=Script
 ScriptFile=#@#Scripts\WindowTooltipTweaks.lua
