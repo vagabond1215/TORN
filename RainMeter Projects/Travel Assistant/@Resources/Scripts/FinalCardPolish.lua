@@ -21,6 +21,10 @@ local function moneyPattern(value)
     return tostring(value or ''):gsub('%$','\\$')
 end
 
+local function parenthesizedMoneyPattern(value)
+    return '\\('..moneyPattern(value)..'\\)'
+end
+
 local function polishSafeText(index)
     local leave='MeterOpportunity'..index..'Leave'
     local text=meterOption(leave,'Text')
@@ -52,6 +56,8 @@ local function polishHeader(index)
     setOption(prefix..'Name','FontColor','#Text#')
     setOption(prefix..'Name','InlinePattern',moneyPattern(cost))
     setOption(prefix..'Name','InlineSetting',costColor)
+    setOption(prefix..'Name','InlinePattern2',parenthesizedMoneyPattern(mv))
+    setOption(prefix..'Name','InlineSetting2','Color | #Muted#')
     setOption(prefix..'Name','ToolTipText','Item - foreign cost (Torn market value)')
 
     setOption(prefix..'Gross','Text',profit)
