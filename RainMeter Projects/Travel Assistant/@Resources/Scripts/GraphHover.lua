@@ -1,5 +1,7 @@
 local generatedDir=nil
 local bandCount=48
+local lastRequestedKey=''
+local lastRequestedAt=0
 
 local function trim(value)
     local text=tostring(value or ''):gsub('^\239\187\191','')
@@ -68,6 +70,16 @@ local function tooltipFor(sample)
     return 'Time: '..timeText..'#CRLF#Stock: '..formatNumber(stock)
 end
 
+local function requestHoverData(key)
+    local now=os.time()
+    if key==lastRequestedKey and (now-lastRequestedAt)<3 then return end
+    lastRequestedKey=key
+    lastRequestedAt=now
+    SKIN:Bang('!SetVariable','GraphHoverMarketKey',key)
+    SKIN:Bang('!UpdateMeasure','MeasureGraphHoverData')
+    SKIN:Bang('!CommandMeasure','MeasureGraphHoverData','Run')
+end
+
 function Initialize()
     generatedDir=SKIN:MakePathAbsolute('#@#Generated\\')
     hideAll()
@@ -79,7 +91,11 @@ function Update()
     if row<=0 or key=='' then hideAll(); return 0 end
 
     local spec=readKv(specPath(key))
-    if trim(spec.MarketKey)~=key or number(spec.HoverCount)~=bandCount then hideAll(); return 0 end
+    if trim(spec.MarketKey)~=key or number(spec.HoverCount)~=bandCount then
+        hideAll()
+        requestHoverData(key)
+        return 0
+    end
 
     local graph='MeterOpportunity'..row..'InlineGraph'
     local graphX=number(meterOption(graph,'X'))
