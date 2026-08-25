@@ -12,6 +12,8 @@ $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $CountriesFile = Join-Path $ConfigDir 'countries.json'
+$WindowPlanRefiner = Join-Path $PSScriptRoot 'WindowPlanRefiner.ps1'
+$EnsureUiAssets = Join-Path $PSScriptRoot 'EnsureUiAssets.ps1'
 
 function Read-FilterStateKv {
     param([string]$Path)
@@ -178,6 +180,12 @@ function Repair-OpportunityPresentationNames {
 }
 
 if ($SkipMain) { return }
+
+# The legacy WindowPlan stage still owns the base contract. Refine it here before
+# UI/filter projection so recurring-cycle variance does not accumulate into a
+# many-hour phase drift. This refiner is local-only and reads the same retained cycles.
+if (Test-Path -LiteralPath $WindowPlanRefiner) { & $WindowPlanRefiner }
+if (Test-Path -LiteralPath $EnsureUiAssets) { & $EnsureUiAssets }
 
 $state = Read-FilterStateKv $StateKvFile
 if ($state.Count -eq 0) { return }
