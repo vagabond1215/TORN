@@ -13,6 +13,10 @@ $EngineStateFile = Join-Path $ProjectRoot 'data\runtime\engine-state.json'
 function Get-TFProperty {
     param([object]$Object,[string]$Name)
     if ($null -eq $Object) { return $null }
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $null
+    }
     $property=$Object.PSObject.Properties[$Name]
     if ($null -eq $property) { return $null }
     return $property.Value
@@ -21,6 +25,10 @@ function Get-TFProperty {
 function Set-TFProperty {
     param([object]$Object,[string]$Name,[object]$Value)
     if ($null -eq $Object) { return }
+    if ($Object -is [System.Collections.IDictionary]) {
+        $Object[$Name]=$Value
+        return
+    }
     $property=$Object.PSObject.Properties[$Name]
     if ($null -eq $property) { $Object | Add-Member NoteProperty $Name $Value }
     else { $property.Value=$Value }
@@ -63,9 +71,9 @@ function Get-TFLinearTrend {
     $values=New-Object System.Collections.Generic.List[double]
     foreach ($sample in @($Samples)) {
         if ($null -eq $sample) { continue }
-        $property=$sample.PSObject.Properties[$Property]
-        if ($null -eq $property) { continue }
-        $value=[double]$property.Value
+        $rawValue=Get-TFProperty -Object $sample -Name $Property
+        if ($null -eq $rawValue) { continue }
+        $value=[double]$rawValue
         if ($value -gt 0) { $values.Add($value) }
     }
     $n=$values.Count
@@ -134,9 +142,10 @@ function Get-TFCorrelation {
     $pairs=New-Object System.Collections.Generic.List[object]
     foreach ($sample in @($Samples)) {
         if ($null -eq $sample) { continue }
-        $xp=$sample.PSObject.Properties[$XProperty]; $yp=$sample.PSObject.Properties[$YProperty]
-        if ($null -eq $xp -or $null -eq $yp) { continue }
-        $x=[double]$xp.Value; $y=[double]$yp.Value
+        $xRaw=Get-TFProperty -Object $sample -Name $XProperty
+        $yRaw=Get-TFProperty -Object $sample -Name $YProperty
+        if ($null -eq $xRaw -or $null -eq $yRaw) { continue }
+        $x=[double]$xRaw; $y=[double]$yRaw
         if ($x -gt 0 -and $y -gt 0) { $pairs.Add([pscustomobject]@{x=$x;y=$y}) }
     }
     if ($pairs.Count -lt $MinimumSamples) { return 0.0 }
