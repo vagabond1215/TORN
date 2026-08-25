@@ -30,6 +30,19 @@ $fixedResult=Test-PVRecentVariation -Market $fixed
 Assert-True (-not [bool]$fixedResult.varies) 'one historical anomaly does not permanently mark a fixed-price item variable'
 Assert-True ([string]$fixedResult.reason -eq 'recent-fixed') 'fixed classification reports recent-fixed reason'
 
+$recoveredFixed=[pscustomobject]@{
+    currentForeignPrice=6000L
+    recentSamples=@(
+        New-PriceSample 1 6000
+        New-PriceSample 2 6000
+        New-PriceSample 3 6500  # isolated bad/provider value
+        New-PriceSample 4 6000  # latest sample returns to the stable shop price
+    )
+}
+$recoveredResult=Test-PVRecentVariation -Market $recoveredFixed
+Assert-True (-not [bool]$recoveredResult.varies) 'returning from one anomalous sample to a stable fixed price stays fixed'
+Assert-True ([string]$recoveredResult.reason -eq 'recent-fixed') 'fixed recovery reports recent-fixed reason'
+
 $currentChange=[pscustomobject]@{
     currentForeignPrice=15000L
     recentSamples=@(
