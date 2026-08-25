@@ -93,51 +93,24 @@ local function parseWindowPlan(rawTooltip)
     return plan
 end
 
-local function median(values)
-    local copy={}
-    for _,value in ipairs(values or {}) do
-        local n=number(value)
-        if n>0 then table.insert(copy,n) end
+local function averageCycleValue(plan,field)
+    if plan==nil then return 0 end
+    local total=0
+    local count=0
+    for _,cycle in ipairs(plan.cycles or {}) do
+        local value=number(cycle[field])
+        if value>0 then total=total+value; count=count+1 end
     end
-    if #copy==0 then return 0 end
-    table.sort(copy)
-    local mid=math.floor((#copy+1)/2)
-    if (#copy%2)==1 then return copy[mid] end
-    return math.floor((copy[mid]+copy[mid+1])/2+0.5)
+    if count==0 then return 0 end
+    return math.floor((total/count)+0.5)
 end
 
-local function medianAvailability(plan)
-    local values={}
-    if plan~=nil then
-        for _,cycle in ipairs(plan.cycles or {}) do table.insert(values,cycle.available) end
-    end
-    return median(values)
+local function averageRestockDelay(plan)
+    return averageCycleValue(plan,'delay')
 end
 
-local function expectedTimes(plan,group)
-    if group==nil then return 0,0 end
-    local restock=0
-    if group.earlyRestock>0 and group.lateRestock>0 then
-        restock=math.floor((group.earlyRestock+group.lateRestock)/2)
-    else
-        restock=math.max(group.earlyRestock,group.lateRestock)
-    end
-    local available=medianAvailability(plan)
-    local sellout=restock+available
-    if group.earlySellout>0 and group.lateSellout>0 then
-        if sellout<group.earlySellout then sellout=group.earlySellout end
-        if sellout>group.lateSellout then sellout=group.lateSellout end
-    end
-    return restock,sellout
-end
-
-local function findUpcomingGroup(plan,now)
-    if plan==nil then return nil,0,0 end
-    for _,group in ipairs(plan.groups or {}) do
-        local restock,sellout=expectedTimes(plan,group)
-        if sellout>now then return group,restock,sellout end
-    end
-    return nil,0,0
+local function averageAvailability(plan)
+    return averageCycleValue(plan,'available')
 end
 
 local function formatDuration(seconds)
@@ -149,10 +122,25 @@ local function formatDuration(seconds)
     return string.format('%dm',minutes)
 end
 
+local function formatRelativeTarget(at,now)
+    if at<=0 then return '?' end
+    if at>now then return 'in '..formatDuration(at-now) end
+    return formatDuration(now-at)..' overdue'
+end
+
 local function formatMoment(at,now)
     if at<=0 then return '?' end
     local relation=at>=now and (formatDuration(at-now)..' away') or (formatDuration(now-at)..' ago')
     return os.date('%H:%M',at)..' ('..relation..')'
+end
+
+local function nearestGroup(plan,now)
+    if plan==nil then return nil end
+    for _,group in ipairs(plan.groups or {}) do
+        if number(group.lateSellout)>now then return group end
+    end
+    if #(plan.groups or {})>0 then return plan.groups[#plan.groups] end
+    return nil
 end
 
 local function formatWindowTooltip(group,now)
@@ -202,48 +190,80 @@ local function applyTooltip(prefix,tooltip)
     setOption(prefix..'Info','ToolTipHidden',text=='' and 1 or 0)
 end
 
-local function outboundStatus(plan,now)
-    local group,restock,sellout=findUpcomingGroup(plan,now)
-    if group==nil then return 'WAIT DATA','' end
-    if now<restock then
-        return 'UPCOMING - RESTOCK IN '..formatDuration(restock-now),formatWindowTooltip(group,now)
+local function liveTravelRemainingSeconds(state,now)
+    local arrivalAt=number(state.TravelArrivalAt)
+    if arrivalAt>now then return arrivalAt-now end
+    local projectedLeft=number(state.TravelTimeLeft)
+    local projectedAt=number(state.TravelContextLastSuccessAt)
+    if projectedLeft>0 and projectedAt>0 then
+        return math.max(0,projectedLeft-math.max(0,now-projectedAt))
     end
-    return 'UPCOMING - SELLOUT IN '..formatDuration(sellout-now),formatWindowTooltip(group,now)
+    return math.max(0,projectedLeft)
 end
 
-local function abroadStatus(plan,now)
-    local group,restock,sellout=findUpcomingGroup(plan,now)
-    if group==nil then return 'WAIT DATA','' end
-    if now<restock then
-        return 'RESTOCK IN '..formatDuration(restock-now),formatWindowTooltip(group,now)
+local function returningStatus(state,now)
+    local remaining=liveTravelRemainingSeconds(state,now)
+    if remaining<=0 then return 'ARRIVE IN TORN: <1m' end
+    return 'ARRIVE IN TORN: '..formatDuration(remaining)
+end
+
+local function currentCycleStatus(plan,now)
+    if plan==nil or plan.anchorAt<=0 then return 'WAIT DATA','' end
+    local group=nearestGroup(plan,now)
+    local tooltip=formatWindowTooltip(group,now)
+
+    -- Current market is out of stock. The next restock estimate is always anchored
+    -- to the latest observed >0 -> 0 transition plus the arithmetic mean of retained
+    -- completed-cycle restock delays. Do not advance to a later recurring ordinal
+    -- simply because the mean estimate has already passed while stock remains zero.
+    if plan.anchorPhase=='S' then
+        local delay=averageRestockDelay(plan)
+        if delay<=0 then return 'WAIT DATA',tooltip end
+        local restockAt=plan.anchorAt+delay
+        local outOfStockFor=math.max(0,now-plan.anchorAt)
+        return 'OoS: '..formatDuration(outOfStockFor)..'. Restock: '..formatRelativeTarget(restockAt,now),tooltip
     end
-    return 'IN STOCK FOR '..formatDuration(sellout-now),formatWindowTooltip(group,now)
+
+    -- Current market is still observed in stock. Estimate depletion from the latest
+    -- observed restock plus average stocked duration, but never pretend it is OOS
+    -- until the collector actually observes stock reach zero.
+    local available=averageAvailability(plan)
+    if available<=0 then return 'IN STOCK',tooltip end
+    local selloutAt=plan.anchorAt+available
+    if selloutAt>now then
+        return 'UPCOMING - SELLOUT IN '..formatDuration(selloutAt-now),tooltip
+    end
+    return 'IN STOCK - AVG SELLOUT '..formatDuration(now-selloutAt)..' AGO',tooltip
 end
 
 local function updateRow(index,state,lookup,now)
     local prefix='MeterOpportunity'..index
     local name=meterOption(prefix..'Name','Text')
     if name=='' then return end
-    -- FinalCardPolish runs later. At this point the name meter contains only the item name.
+
+    local travelState=trim(state.TravelState):lower()
+
+    -- Returning to Torn is a recognized API travel state. CardPresenter already
+    -- evaluates every country's actionable window from the return landing time;
+    -- this final pass only replaces departure wording with the live home-arrival
+    -- countdown while the player cannot act from Torn yet.
+    if travelState=='returning' then
+        setOption(prefix..'Leave','Text',returningStatus(state,now))
+        setOption(prefix..'Chance','Text','')
+        return
+    end
+
     local country=rowCountry(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(name)]
     if row==nil or row.plan==nil then return end
 
-    local travelState=trim(state.TravelState):lower()
     local destinationId=trim(state.TravelDestinationCountryId):lower()
     local countryId=countryIdsByName[country] or ''
     if countryId=='' or countryId~=destinationId then return end
 
-    local status=nil
-    local tooltip=''
-    if travelState=='traveling' then
-        status,tooltip=outboundStatus(row.plan,now)
-    elseif travelState=='abroad' or travelState=='foreign' then
-        status,tooltip=abroadStatus(row.plan,now)
-    else
-        return
-    end
+    if travelState~='traveling' and travelState~='abroad' and travelState~='foreign' then return end
 
+    local status,tooltip=currentCycleStatus(row.plan,now)
     setOption(prefix..'Leave','Text',status)
     setOption(prefix..'Chance','Text','')
     applyTooltip(prefix,tooltip)
