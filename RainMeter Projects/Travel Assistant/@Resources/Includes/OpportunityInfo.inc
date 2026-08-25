@@ -1,145 +1,129 @@
-; Stable hover anchors for Safe/Best departure calculations.
-; CardTweaks.lua positions and populates these after CardPresenter each second.
+; Stable image hover anchors for Safe/Best departure calculations.
+; The PNG is generated locally by EnsureUiAssets.ps1 so there is no Unicode/font dependency.
 
 [MeterOpportunity1Info]
-Meter=String
+Meter=Image
 Group=OpportunityRow1
-X=301
-Y=147
-W=18
+X=303
+Y=148
+W=12
+H=12
+PreserveAspectRatio=1
+ImageName=#@#Generated\info-icon.png
+ImageAlpha=0
 Hidden=1
-FontFace=Segoe UI Symbol
-FontSize=9
-FontColor=#Accent#
-AntiAlias=1
-SolidColor=0,0,0,1
-Text=
 ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
 
 [MeterOpportunity2Info]
-Meter=String
+Meter=Image
 Group=OpportunityRow2
-X=301
-Y=201
-W=18
+X=303
+Y=202
+W=12
+H=12
+PreserveAspectRatio=1
+ImageName=#@#Generated\info-icon.png
+ImageAlpha=0
 Hidden=1
-FontFace=Segoe UI Symbol
-FontSize=9
-FontColor=#Accent#
-AntiAlias=1
-SolidColor=0,0,0,1
-Text=
 ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
 
 [MeterOpportunity3Info]
-Meter=String
+Meter=Image
 Group=OpportunityRow3
-X=301
-Y=255
-W=18
+X=303
+Y=256
+W=12
+H=12
+PreserveAspectRatio=1
+ImageName=#@#Generated\info-icon.png
+ImageAlpha=0
 Hidden=1
-FontFace=Segoe UI Symbol
-FontSize=9
-FontColor=#Accent#
-AntiAlias=1
-SolidColor=0,0,0,1
-Text=
 ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
 
 [MeterOpportunity4Info]
-Meter=String
+Meter=Image
 Group=OpportunityRow4
-X=301
-Y=309
-W=18
+X=303
+Y=310
+W=12
+H=12
+PreserveAspectRatio=1
+ImageName=#@#Generated\info-icon.png
+ImageAlpha=0
 Hidden=1
-FontFace=Segoe UI Symbol
-FontSize=9
-FontColor=#Accent#
-AntiAlias=1
-SolidColor=0,0,0,1
-Text=
 ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
 
 [MeterOpportunity5Info]
-Meter=String
+Meter=Image
 Group=OpportunityRow5
-X=301
-Y=363
-W=18
+X=303
+Y=364
+W=12
+H=12
+PreserveAspectRatio=1
+ImageName=#@#Generated\info-icon.png
+ImageAlpha=0
 Hidden=1
-FontFace=Segoe UI Symbol
-FontSize=9
-FontColor=#Accent#
-AntiAlias=1
-SolidColor=0,0,0,1
-Text=
 ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
 
 [MeterOpportunity6Info]
-Meter=String
+Meter=Image
 Group=OpportunityRow6
-X=301
-Y=417
-W=18
+X=303
+Y=418
+W=12
+H=12
+PreserveAspectRatio=1
+ImageName=#@#Generated\info-icon.png
+ImageAlpha=0
 Hidden=1
-FontFace=Segoe UI Symbol
-FontSize=9
-FontColor=#Accent#
-AntiAlias=1
-SolidColor=0,0,0,1
-Text=
 ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
 
 [MeterOpportunity7Info]
-Meter=String
+Meter=Image
 Group=OpportunityRow7
-X=301
-Y=471
-W=18
+X=303
+Y=472
+W=12
+H=12
+PreserveAspectRatio=1
+ImageName=#@#Generated\info-icon.png
+ImageAlpha=0
 Hidden=1
-FontFace=Segoe UI Symbol
-FontSize=9
-FontColor=#Accent#
-AntiAlias=1
-SolidColor=0,0,0,1
-Text=
 ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
 
 [MeterOpportunity8Info]
-Meter=String
+Meter=Image
 Group=OpportunityRow8
-X=301
-Y=525
-W=18
+X=303
+Y=526
+W=12
+H=12
+PreserveAspectRatio=1
+ImageName=#@#Generated\info-icon.png
+ImageAlpha=0
 Hidden=1
-FontFace=Segoe UI Symbol
-FontSize=9
-FontColor=#Accent#
-AntiAlias=1
-SolidColor=0,0,0,1
-Text=
 ToolTipTitle=Window calculation
 ToolTipText=
 ToolTipWidth=420
