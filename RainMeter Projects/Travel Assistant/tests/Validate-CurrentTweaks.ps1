@@ -88,7 +88,7 @@ if ($errors.Count -eq 0) {
     }
 
     foreach ($token in @(
-        'info-icon.png','System.Drawing.Bitmap 64,64','FillEllipse','FillRectangle','ImageFormat]::Png'
+        'info-icon.png','[System.Drawing.Bitmap]::new(64,64','FillEllipse','FillRectangle','ImageFormat]::Png'
     )) {
         if (-not $asset.Contains($token)) { Fail "EnsureUiAssets.ps1 missing '$token'." }
     }
