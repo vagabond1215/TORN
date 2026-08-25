@@ -179,6 +179,10 @@ local function returningStatus(state,now)
     return 'ARRIVE IN TORN: '..formatDuration(remaining)
 end
 
+local function returningTooltip(state,now)
+    return 'Home in: '..formatDuration(liveTravelRemainingSeconds(state,now))
+end
+
 local function expectedRestockAt(plan,group)
     if plan==nil or group==nil then return 0 end
     if group.ordinal==0 and plan.anchorPhase=='S' then
@@ -206,7 +210,6 @@ end
 local function landingRelevantGroup(plan,landingAt)
     if plan==nil then return nil end
     for _,group in ipairs(plan.groups or {}) do
-        -- Skip cycles whose entire empirical stocked interval is over before landing.
         if number(group.lateSellout)>landingAt then return group end
     end
     return nil
@@ -233,9 +236,6 @@ local function outboundTooltip(row,state,now)
     end
     table.insert(lines,'Estimated Stock at arrival: '..estimatedStock)
 
-    -- Only show the transition relevant to the selected landing cycle. If an
-    -- earlier short cycle is guaranteed to finish before landing it is skipped by
-    -- landingRelevantGroup and never appears in this tooltip.
     if restockAt>now then
         table.insert(lines,'Restock in: '..formatDuration(restockAt-now))
     elseif selloutAt>now then
@@ -297,12 +297,10 @@ local function updateRow(index,state,lookup,now)
 
     local travelState=trim(state.TravelState):lower()
 
-    -- A return flight is treated like home planning with a temporary availability
-    -- delay. CardPresenter keeps the normal Safe/Best calculation; only the visible
-    -- status is replaced by the live countdown until the player can act in Torn.
     if travelState=='returning' then
         setOption(prefix..'Leave','Text',returningStatus(state,now))
         setOption(prefix..'Chance','Text','')
+        applyTooltip(prefix,returningTooltip(state,now),'Return estimate')
         return
     end
 
