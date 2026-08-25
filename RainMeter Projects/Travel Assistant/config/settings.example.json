@@ -3,6 +3,7 @@
   "travelMode": "airstrip",
   "pollIntervalSeconds": 60,
   "staleAfterSeconds": 300,
+  "forecastOnlyMaxAgeSeconds": 21600,
   "highResolutionRetentionHours": 48,
   "cycleRetentionDays": 90,
   "graphWindowHours": 8,
