@@ -113,14 +113,6 @@ local function formatDuration(seconds)
     return string.format('%dm',minutes)
 end
 
-local function parseDurationText(text)
-    local value=trim(text):lower()
-    if value=='<1m' then return 0 end
-    local hours=tonumber(value:match('(%d+)%s*h')) or 0
-    local minutes=tonumber(value:match('(%d+)%s*m')) or 0
-    return (hours*3600)+(minutes*60)
-end
-
 local function medianAvailableSeconds(plan)
     if plan==nil then return 0 end
     local values={}
@@ -135,37 +127,22 @@ local function medianAvailableSeconds(plan)
     return math.floor((values[middle]+values[middle+1])/2+0.5)
 end
 
-local function groupMode(group)
-    if group==nil then return nil end
-    if group.safeStart>0 and group.safeEnd-group.safeStart>=60 then return 'safe' end
-    if group.bestStart>0 and group.bestEnd>group.bestStart and group.bestProbability>0.5 then return 'best' end
-    return nil
-end
-
-local function groupDepartureTimes(group,mode,flightSeconds)
-    if mode=='safe' then
-        return group.safeStart-flightSeconds,group.safeEnd-flightSeconds,math.floor(((group.safeStart+group.safeEnd)/2)-flightSeconds)
-    end
-    return group.bestStart-flightSeconds,group.bestEnd-flightSeconds,math.floor(((group.bestStart+group.bestEnd)/2)-flightSeconds)
-end
-
-local function findPreferredGroup(plan,flightSeconds,now)
+local function findPreferredGroup(plan,now)
     if plan==nil then return nil,nil end
     for _,group in ipairs(plan.groups or {}) do
-        local mode=groupMode(group)
-        if mode~=nil then
-            local openAt,closeAt,targetAt=groupDepartureTimes(group,mode,flightSeconds)
-            if mode=='safe' and closeAt>now then return group,mode end
-            if mode=='best' and closeAt>now and (targetAt>now or openAt<=now) then return group,mode end
-        end
+        local safeValid=group.safeStart>0 and group.safeEnd-group.safeStart>=60
+        if safeValid and group.safeEnd>now then return group,'safe' end
+
+        local bestValid=group.bestStart>0 and group.bestEnd>group.bestStart and group.bestProbability>0.5
+        if bestValid and group.bestEnd>now then return group,'best' end
     end
     return nil,nil
 end
 
-local function findFutureEvidenceGroup(plan,arrivalAt)
+local function findFutureEvidenceGroup(plan,now)
     if plan==nil then return nil end
     for _,group in ipairs(plan.groups or {}) do
-        if number(group.lateSellout)>arrivalAt then return group end
+        if number(group.lateSellout)>now then return group end
     end
     return nil
 end
@@ -190,6 +167,9 @@ local function finalWindowLine(group,mode,now)
         return 'Guaranteed Window: '..startClock..' to '..endClock..' ('..relative..')'
     end
 
+    if mode~='best' or group.bestStart<=0 or group.bestEnd<=group.bestStart then
+        return 'Best Hit Window: unavailable'
+    end
     local target=math.floor((group.bestStart+group.bestEnd)/2)
     local chance=string.format('%.0f%%',number(group.bestProbability)*100)
     return 'Best Hit Window: '..formatMoment(target,now)..' ['..chance..']'
@@ -197,9 +177,8 @@ end
 
 local function buildHomeTooltip(plan,travelText,now)
     if plan==nil then return '' end
-    local flightSeconds=parseDurationText(travelText)
-    local group,mode=findPreferredGroup(plan,flightSeconds,now)
-    if group==nil then group=findFutureEvidenceGroup(plan,now+flightSeconds) end
+    local group,mode=findPreferredGroup(plan,now)
+    if group==nil then group=findFutureEvidenceGroup(plan,now) end
     if group==nil then return '' end
 
     local arrival=travelText~='' and travelText or '?'
