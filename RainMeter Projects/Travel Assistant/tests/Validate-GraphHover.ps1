@@ -22,9 +22,9 @@ if ($errors.Count -eq 0) {
     $builder=Get-Content -LiteralPath $builderPath -Raw
     foreach ($token in @(
         '$BandCount=48',
-        "'WindowStartTimestamp'",
-        "'CurrentStock'",
-        "'LatestTimestamp'",
+        '$spec.WindowStartTimestamp',
+        '$spec.CurrentStock',
+        "ContainsKey('LatestTimestamp')",
         "'history_bootstrap','history_repair_baseline'",
         "`$spec['HoverCount']=`$BandCount",
         "'Hover{0:D2}'",
@@ -54,18 +54,18 @@ if ($errors.Count -eq 0) {
     $include=Get-Content -LiteralPath $includePath -Raw
     $meterCount=([regex]::Matches($include,'(?m)^\[MeterGraphHover\d{2}\]$')).Count
     if ($meterCount -ne 48) { Fail ("GraphHover.inc should define 48 hover bands; found {0}." -f $meterCount) }
-    foreach ($token in @('[GraphHoverStyle]','MeterStyle=GraphHoverStyle','Fill Color 0,0,0,1','ToolTipTitle=Stock history')) {
+    foreach ($token in @('[GraphHoverStyle]','Group=InlineGraphHover','MeterStyle=GraphHoverStyle','Fill Color 0,0,0,1','ToolTipTitle=Stock history')) {
         if (-not $include.Contains($token)) { Fail ("GraphHover.inc missing contract '{0}'." -f $token) }
     }
 
     $info=Get-Content -LiteralPath $infoPath -Raw
-    foreach ($token in @('[MeasureGraphHoverData]','BuildGraphHoverData.ps1','[MeasureGraphHover]','GraphHover.lua','@IncludeGraphHover=#@#Includes\GraphHover.inc')) {
+    foreach ($token in @('[MeasureGraphHoverData]','BuildGraphHoverData.ps1','[MeasureGraphHover]','GraphHover.lua','@IncludeGraphHover=#@#Includes\GraphHover.inc','!UpdateMeterGroup InlineGraphHover')) {
         if (-not $info.Contains($token)) { Fail ("OpportunityInfo.inc missing graph-hover wiring '{0}'." -f $token) }
     }
 }
 
 if ($errors.Count -gt 0) {
-    foreach ($error in $errors) { Write-Host ("FAIL: {0}" -f $error) -ForegroundColor Red }
+    foreach ($validationError in $errors) { Write-Host ("FAIL: {0}" -f $validationError) -ForegroundColor Red }
     Write-Host ("Inline graph hover validation failed with {0} error(s)." -f $errors.Count) -ForegroundColor Red
     exit 1
 }
