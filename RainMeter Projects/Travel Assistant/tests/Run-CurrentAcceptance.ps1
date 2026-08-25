@@ -7,6 +7,7 @@ $tests = @(
     'Validate-RainmeterSkin.ps1',
     'Validate-CardPresenter.ps1',
     'Validate-CurrentTweaks.ps1',
+    'Validate-FreshnessGuard.ps1',
     'Validate-ItemViewer.ps1',
     'Validate-RuntimeDiagnostics.ps1',
     'Validate-Filters.ps1',
@@ -47,5 +48,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify stable near-term Safe/Best timing, no flight duration printed on cards, hover text/image shows pertinent arrival time plus in-stock duration and guaranteed overlap, raw cost beside item name, fixed cost white, variable cost green-yellow-red, profit/item green, conditional Take buffer, instant filters/sorts, and the one-at-a-time 528x125 observed-only 8-hour graph.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify stock evidence older than five minutes is visibly blocked and retried every 15 seconds; then verify stable near-term Safe/Best timing, tooltip-only pertinent flight/landing time, raw cost beside item name, fixed cost white, variable cost green-yellow-red, profit/item green, conditional Take buffer, instant filters/sorts, and the one-at-a-time 528x125 observed-only 8-hour graph.' -ForegroundColor Yellow
 exit 0
