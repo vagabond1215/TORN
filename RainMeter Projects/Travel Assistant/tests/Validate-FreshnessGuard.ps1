@@ -4,16 +4,18 @@ Set-StrictMode -Version 2.0
 $ProjectRoot=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $guardPath=Join-Path $ProjectRoot '@Resources\Scripts\FreshnessGuard.lua'
 $infoPath=Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
+$opportunityPath=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 $errors=New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($guardPath,$infoPath)) {
+foreach ($path in @($guardPath,$infoPath,$opportunityPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing freshness-guard asset: $path" }
 }
 
 if ($errors.Count -eq 0) {
     $guard=Get-Content -LiteralPath $guardPath -Raw
     $info=Get-Content -LiteralPath $infoPath -Raw
+    $opportunity=Get-Content -LiteralPath $opportunityPath -Raw
 
     foreach ($token in @(
         'UIFreshestMarketSourceTimestamp',
@@ -48,11 +50,30 @@ if ($errors.Count -eq 0) {
         Fail 'FreshnessGuard.lua must persist the last non-empty opportunity projection before an outage can clear it.'
     }
     if (-not $guard.Contains("restoreCachedProjection(data)")) {
-        Fail 'Degraded mode must restore the persisted opportunity projection when OpportunityState has emitted zero stale rows.'
+        Fail 'Degraded mode must restore the persisted opportunity projection when a stale projection becomes empty.'
     }
     if (-not $guard.Contains("if hardStale then")) { Fail 'FreshnessGuard.lua must separate degraded and hard-stale UI states.' }
-    if (-not $guard.Contains("SKIN:Bang('!HideMeter','MeterOpportunityMessage')")) { Fail 'Degraded mode must remove the full-panel stale message so cached cards remain visible.' }
+    if (-not $guard.Contains("SKIN:Bang('!HideMeter','MeterOpportunityMessage')")) { Fail 'Degraded mode must remove the full-panel stale message so forecast cards remain visible.' }
     if ($guard -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FreshnessGuard.lua must remain local-only.' }
+
+    foreach ($token in @(
+        'function Get-OpportunityStockEvidenceMode',
+        "return 'live'",
+        "return 'forecast'",
+        "return 'unusable'",
+        '$forecastStockMaxAge = 21600L',
+        "`$useForecastOnly = (`$stockEvidenceMode -eq 'forecast')",
+        "`$stock = if (`$useForecastOnly) { 0L } else { [long](Get-OptimalProperty `$market 'lastStock') }",
+        'Get-OpportunityActiveRestockAt -DestinationState $destinationState',
+        "-AnchorPhase 'restock'",
+        "'OpportunityForecastStockCount'",
+        "'stock forecast only'"
+    )) {
+        if (-not $opportunity.Contains($token)) { Fail "OpportunityState.ps1 missing forecast-only stock contract '$token'." }
+    }
+    if ($opportunity -match '\$useForecastOnly[^\r\n]*lastStock[^\r\n]*-gt\s*0') {
+        Fail 'Forecast-only mode must never promote the stale lastStock quantity back to live stock.'
+    }
 
     foreach ($token in @(
         '[MeasureFreshnessGuard]',
@@ -75,5 +96,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Persistent degraded stock freshness guard validation passed.' -ForegroundColor Green
-Write-Host 'Five-minute provider freshness remains strict; the last non-empty opportunity projection survives provider outages as FORECAST ONLY for up to six hours and is restored after skin refreshes.'
+Write-Host 'Five-minute provider freshness remains strict; 5m-6h evidence is forecast-only with stale stock quantity suppressed, and the last non-empty projection survives outages/skin refreshes.'
 exit 0
