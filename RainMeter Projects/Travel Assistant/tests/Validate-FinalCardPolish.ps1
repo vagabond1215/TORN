@@ -22,7 +22,10 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Gross','StringAlign','Right')",
         "setOption(prefix..'Gross','FontColor','86,190,116,255')",
         "setOption(prefix..'Name','InlinePattern',moneyPattern(cost))",
-        "setOption(prefix..'Name','InlineSetting',costColor)"
+        "setOption(prefix..'Name','InlineSetting',costColor)",
+        'parenthesizedMoneyPattern',
+        "setOption(prefix..'Name','InlinePattern2',parenthesizedMoneyPattern(mv))",
+        "setOption(prefix..'Name','InlineSetting2','Color | #Muted#')"
     )) {
         if (-not $scriptText.Contains($token)) { Fail "FinalCardPolish.lua missing '$token'." }
     }
@@ -43,5 +46,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Final card polish validation passed.' -ForegroundColor Green
-Write-Host 'Open Safe windows read SAFE FOR; item/cost/MV share the left header and profit/item remains green at far right.'
+Write-Host 'Open Safe windows read SAFE FOR; fixed foreign costs remain white, variable costs retain their scale, Torn MV is muted gray, and profit/item remains green at far right.'
 exit 0
