@@ -41,12 +41,24 @@ local function formatMoney(value)
     return (negative and '-$' or '$')..out
 end
 
+local function moneyNumber(text)
+    local value=trim(text)
+    local negative=value:find('%-')~=nil
+    value=value:gsub('[^%d]','')
+    local n=tonumber(value) or 0
+    return negative and -n or n
+end
+
 local function parseQuantity(text)
     return tonumber(trim(text):match('(%d+)')) or 0
 end
 
 local function normalizeName(value)
     return trim(value):lower():gsub('%s+',' ')
+end
+
+local function stripDebugQuantity(value)
+    return trim(tostring(value or ''):gsub('%s+%d+%s+qty$',''))
 end
 
 local function rowCountry(index)
@@ -68,11 +80,51 @@ local function buildLookup(state)
                 quantity=parseQuantity(state[prefix..'QuantityText']),
                 price=trim(state[prefix..'PriceText']),
                 marketValue=trim(state[prefix..'MarketValueText']),
-                gross=number(state[prefix..'GrossValue'])
+                gross=number(state[prefix..'GrossValue']),
+                priceVaries=trim(state[prefix..'PriceVaries'])=='1',
+                minObservedPrice=number(state[prefix..'MinObservedPrice']),
+                maxObservedPrice=number(state[prefix..'MaxObservedPrice'])
             }
         end
     end
     return lookup
+end
+
+local function clamp(value,minimum,maximum)
+    if value<minimum then return minimum end
+    if value>maximum then return maximum end
+    return value
+end
+
+local function mixChannel(a,b,t)
+    return math.floor(a+((b-a)*t)+0.5)
+end
+
+local function mixColor(a,b,t)
+    return string.format('%d,%d,%d,255',mixChannel(a[1],b[1],t),mixChannel(a[2],b[2],t),mixChannel(a[3],b[3],t))
+end
+
+local function costColor(row)
+    if row==nil or not row.priceVaries then return '255,255,255,255' end
+    local cost=moneyNumber(row.price)
+    local mv=moneyNumber(row.marketValue)
+    if cost<=0 or mv<=0 then return '255,255,255,255' end
+
+    local good={86,190,116}
+    local warn={232,178,72}
+    local bad={224,90,90}
+    local redThreshold=mv/1.05
+    if cost>=redThreshold then return '224,90,90,255' end
+
+    local minimum=number(row.minObservedPrice)
+    if minimum<=0 then minimum=math.min(cost,redThreshold*0.5) end
+    if minimum>=redThreshold then return '224,90,90,255' end
+
+    -- Item-specific scale: the lowest retained purchase cost is green; the point
+    -- where MV is only 5% above cost is red. Yellow is the midpoint between them.
+    local t=clamp((cost-minimum)/(redThreshold-minimum),0,1)
+    if t<=0.5 then return mixColor(good,warn,t*2) end
+    return mixColor(warn,bad,(t-0.5)*2)
 end
 
 local function configureInfo(index,tooltip)
@@ -83,68 +135,67 @@ local function configureInfo(index,tooltip)
     local text=trim(tooltip)
     local show=text~=''
 
-    setOption(info,'Text',show and 'ⓘ' or '')
+    setOption(info,'ImageAlpha',show and 255 or 0)
     setOption(info,'ToolTipTitle','Window calculation')
     setOption(info,'ToolTipText',text)
-    setOption(info,'ToolTipHidden',0)
+    setOption(info,'ToolTipHidden',show and 0 or 1)
     setOption(info,'ToolTipWidth',420)
     setOption(info,'DynamicVariables',1)
-    setOption(info,'SolidColor','0,0,0,1')
 
-    -- Keep the departure text itself hoverable, while the dedicated info glyph is
-    -- the stable target when Rainmeter does not expose a tooltip over rewritten text.
+    -- Keep the departure text itself hoverable. The image meter is the stable
+    -- fallback target and avoids Unicode/font encoding issues entirely.
     setOption(leave,'ToolTipTitle','Window calculation')
     setOption(leave,'ToolTipText',text)
-    setOption(leave,'ToolTipHidden',0)
+    setOption(leave,'ToolTipHidden',show and 0 or 1)
     setOption(leave,'ToolTipWidth',420)
     setOption(leave,'DynamicVariables',1)
     setOption(leave,'SolidColor','0,0,0,1')
 
-    if meterOption(chance,'Text')=='ⓘ' then setOption(chance,'Text','') end
+    if meterOption(leave,'Text'):match('^SAFE') then
+        setOption(chance,'Text','')
+        setOption(chance,'FontFace','Segoe UI')
+    end
 end
 
 local function applyHeader(index,lookup)
     local prefix='MeterOpportunity'..index
-    local currentName=trim(meterOption(prefix..'Name','Text'))
+    local currentName=stripDebugQuantity(meterOption(prefix..'Name','Text'))
     if currentName=='' then return end
-    -- CardPresenter has already removed the country suffix at this point.
     local country=rowCountry(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(currentName)]
     if row==nil then return end
 
     local quantity=row.quantity
     local unitProfit=(quantity>0) and (row.gross/quantity) or row.gross
-    local title=currentName
-    if quantity>0 then title=title..'  '..tostring(quantity)..' qty' end
-    setOption(prefix..'Name','Text',title)
+    setOption(prefix..'Name','Text',currentName)
     setOption(prefix..'Name','X',78)
-    setOption(prefix..'Name','W',148)
+    setOption(prefix..'Name','W',153)
     setOption(prefix..'Name','ClipString',1)
 
     local cost=row.price~='' and row.price or '?'
     local mv=row.marketValue~='' and row.marketValue or '?'
-    local header='Cost '..cost..'   MV:'..mv..' | '..formatMoney(unitProfit)
+    local header=cost..'   MV:'..mv..' | '..formatMoney(unitProfit)
     setOption(prefix..'Gross','Text',header)
-    setOption(prefix..'Gross','X',528)
-    setOption(prefix..'Gross','W',298)
-    setOption(prefix..'Gross','StringAlign','Right')
+    setOption(prefix..'Gross','X',235)
+    setOption(prefix..'Gross','W',293)
+    setOption(prefix..'Gross','StringAlign','Left')
     setOption(prefix..'Gross','ClipString',1)
     setOption(prefix..'Gross','FontColor','#Text#')
-    -- Cost, MV, and the separator stay neutral; only profit per item is green.
-    setOption(prefix..'Gross','InlinePattern','-?\\$[0-9,]+$')
-    setOption(prefix..'Gross','InlineSetting','Color | 86,190,116,255')
-    setOption(prefix..'Gross','InlinePattern2','')
-    setOption(prefix..'Gross','ToolTipText','Cost per item | Torn market value per item | profit per item')
+    setOption(prefix..'Gross','InlinePattern','^-?\\$[0-9,]+')
+    setOption(prefix..'Gross','InlineSetting','Color | '..costColor(row))
+    setOption(prefix..'Gross','InlinePattern2','-?\\$[0-9,]+$')
+    setOption(prefix..'Gross','InlineSetting2','Color | 86,190,116,255')
+    setOption(prefix..'Gross','ToolTipText','Foreign cost per item | Torn market value per item | profit per item')
 end
 
 local function applySecondLine(index)
     local prefix='MeterOpportunity'..index
     setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',65)
     setOption(prefix..'Leave','X',145); setOption(prefix..'Leave','W',154)
-    setOption(prefix..'Info','X',301); setOption(prefix..'Info','W',18)
+    setOption(prefix..'Info','X',303); setOption(prefix..'Info','W',12); setOption(prefix..'Info','H',12)
     local leaveY=tonumber(meterOption(prefix..'Leave','Y')) or 0
-    if leaveY>0 then setOption(prefix..'Info','Y',math.floor(leaveY)) end
-    setOption(prefix..'Chance','X',323); setOption(prefix..'Chance','W',42); setOption(prefix..'Chance','ClipString',1)
+    if leaveY>0 then setOption(prefix..'Info','Y',math.floor(leaveY+1)) end
+    setOption(prefix..'Chance','X',319); setOption(prefix..'Chance','W',44); setOption(prefix..'Chance','ClipString',1)
     setOption(prefix..'Price','X',367); setOption(prefix..'Price','W',143)
 end
 
@@ -166,8 +217,6 @@ local function applyExpandedGraphGeometry()
     local currentH=tonumber(meterOption(card,'H')) or 0
     if currentH>=180 then return end
 
-    -- StateReader's accepted layout reserves 108px. The graph is now 125px tall,
-    -- so add exactly 25px once whenever StateReader has just laid out the old size.
     setOption(card,'H',183)
     setOption(card,'Shape','Rectangle 0,0,536,183,5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#')
 
