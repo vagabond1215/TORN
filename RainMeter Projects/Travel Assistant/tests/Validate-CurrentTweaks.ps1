@@ -8,16 +8,19 @@ $anchorPath = Join-Path $ProjectRoot '@Resources\Scripts\CycleAnchorReconciler.p
 $graphPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 $tweaksPath = Join-Path $ProjectRoot '@Resources\Scripts\CardTweaks.lua'
 $infoPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
+$assetPath = Join-Path $ProjectRoot '@Resources\Scripts\EnsureUiAssets.ps1'
+$refinerPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowPlanRefiner.ps1'
+$filterStatePath = Join-Path $ProjectRoot '@Resources\Scripts\FilterState.ps1'
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$tweaksPath,$infoPath,$iniPath)) {
+foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$tweaksPath,$infoPath,$assetPath,$refinerPath,$filterStatePath,$iniPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing current-tweak asset: $path" }
 }
 
 if ($errors.Count -eq 0) {
-    foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath)) {
+    foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$assetPath,$refinerPath,$filterStatePath)) {
         $tokens=$null; $parseErrors=$null
         [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
         foreach ($parseError in @($parseErrors)) { Fail "$([System.IO.Path]::GetFileName($path)) parse error: $($parseError.Message)" }
@@ -29,6 +32,9 @@ if ($errors.Count -eq 0) {
     $graph = Get-Content -LiteralPath $graphPath -Raw
     $tweaks = Get-Content -LiteralPath $tweaksPath -Raw
     $info = Get-Content -LiteralPath $infoPath -Raw
+    $asset = Get-Content -LiteralPath $assetPath -Raw
+    $refiner = Get-Content -LiteralPath $refinerPath -Raw
+    $filterState = Get-Content -LiteralPath $filterStatePath -Raw
     $ini = Get-Content -LiteralPath $iniPath -Raw
 
     foreach ($token in @(
@@ -54,6 +60,19 @@ if ($errors.Count -eq 0) {
     }
     if ($anchor -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'Cycle anchor reconciliation must remain local-only.' }
 
+    foreach ($token in @(
+        'Get-StableWindowMedian','Get-StableWindowUsableCycles','Get-StableRecurringScenarioModel',
+        '$medianPeriod','(($ordinal-1) * $medianPeriod) + $period','($ordinal * $medianPeriod) + $delay',
+        'Collector outages can turn one apparent out-of-stock span','Select-StableWindowPlanGroup',
+        "'PriceVaries'","'MinObservedPrice'","'MaxObservedPrice'"
+    )) {
+        if (-not $refiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing '$token'." }
+    }
+    if ($refiner -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'WindowPlanRefiner.ps1 must remain local-only.' }
+    foreach ($token in @('WindowPlanRefiner.ps1','EnsureUiAssets.ps1','& $WindowPlanRefiner','& $EnsureUiAssets')) {
+        if (-not $filterState.Contains($token)) { Fail "FilterState.ps1 missing post-window refinement token '$token'." }
+    }
+
     $travelAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $TravelContext',[System.StringComparison]::Ordinal)
     $capacityAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $CurrentCapacityRefresh',[System.StringComparison]::Ordinal)
     $anchorAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $CycleAnchorReconciler',[System.StringComparison]::Ordinal)
@@ -68,20 +87,27 @@ if ($errors.Count -eq 0) {
         if (-not $graph.Contains($token)) { Fail "RenderInlineGraph.ps1 missing expanded graph token '$token'." }
     }
 
-    # Keep this validator source ASCII-only for Windows PowerShell 5.1. The actual
-    # info glyph lives in Lua/INI assets; validate its behavior through surrounding
-    # ASCII tokens rather than embedding the Unicode glyph in this .ps1 file.
     foreach ($token in @(
-        "title=title..'  '..tostring(quantity)..' qty'",
-        "local header='Cost '..cost..'   MV:'..mv..' | '..formatMoney(unitProfit)",
-        "setOption(prefix..'Gross','FontColor','#Text#')",
-        "setOption(prefix..'Gross','InlinePattern'",
-        "setOption(prefix..'Gross','InlineSetting','Color | 86,190,116,255')",
-        "setOption(prefix..'Info','X',301)",
-        "setOption(info,'Text',show and",
-        "setOption(info,'ToolTipTitle','Window calculation')",
+        'info-icon.png','System.Drawing.Bitmap 64,64','FillEllipse','FillRectangle','ImageFormat]::Png'
+    )) {
+        if (-not $asset.Contains($token)) { Fail "EnsureUiAssets.ps1 missing '$token'." }
+    }
+
+    # Keep this validator source ASCII-only for Windows PowerShell 5.1.
+    foreach ($token in @(
+        'stripDebugQuantity',
+        "local header=cost..'   MV:'..mv..' | '..formatMoney(unitProfit)",
+        "setOption(prefix..'Gross','X',235)",
+        "setOption(prefix..'Gross','StringAlign','Left')",
+        'local function costColor(row)',
+        'redThreshold=mv/1.05',
+        'minObservedPrice',
+        "return '255,255,255,255'",
+        "setOption(prefix..'Gross','InlineSetting2','Color | 86,190,116,255')",
+        "setOption(info,'ImageAlpha',show and 255 or 0)",
         "setOption(info,'ToolTipText',text)",
         "setOption(leave,'ToolTipText',text)",
+        "meterOption(leave,'Text'):match('^SAFE')",
         "setOption(graph,'W',528)",
         "setOption(graph,'H',125)",
         "setOption(card,'H',183)",
@@ -89,13 +115,18 @@ if ($errors.Count -eq 0) {
     )) {
         if (-not $tweaks.Contains($token)) { Fail "CardTweaks.lua missing '$token'." }
     }
+    if ($tweaks.Contains("title=title..'  '..tostring(quantity)..' qty'")) { Fail 'CardTweaks.lua must not print quantity in the title.' }
+    if ($tweaks.Contains("local header='Cost '")) { Fail 'CardTweaks.lua must not print the Cost label.' }
     if ($tweaks.Contains('/ea x')) { Fail 'CardTweaks.lua must not restore the retired /ea x qty = header.' }
     if ($tweaks -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'CardTweaks.lua must remain local presentation only.' }
 
     foreach ($index in 1..8) {
-        foreach ($token in @("[MeterOpportunity${index}Info]","Group=OpportunityRow${index}",'ToolTipTitle=Window calculation','ToolTipWidth=420')) {
-            if (-not $info.Contains($token)) { Fail "OpportunityInfo.inc missing row $index token '$token'." }
+        $section = [regex]::Match($info,'(?ms)^\[MeterOpportunity'+$index+'Info\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        if ([string]::IsNullOrWhiteSpace($section)) { Fail "OpportunityInfo.inc missing row $index info meter."; continue }
+        foreach ($token in @('Meter=Image','W=12','H=12','PreserveAspectRatio=1','ImageName=#@#Generated\info-icon.png','ToolTipTitle=Window calculation','ToolTipWidth=420')) {
+            if (-not $section.Contains($token)) { Fail "OpportunityInfo row $index missing image-anchor token '$token'." }
         }
+        if ($section.Contains('Meter=String')) { Fail "OpportunityInfo row $index must not use a Unicode String meter." }
     }
 
     foreach ($token in @('[MeasureCardTweaks]','CardTweaks.lua','@IncludeInfo=#@#Includes\OpportunityInfo.inc')) {
@@ -112,6 +143,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Current capacity, observation-anchor, card-header, info-anchor, and expanded-graph validation passed.' -ForegroundColor Green
-Write-Host 'Expected live result: active perks refresh inventory capacity; Safe/Best phase follows retained real stock transitions; header shows qty + Cost + MV + profit/item with only profit green; graph is 528x125; departure text and dedicated info glyph expose the calculation.'
+Write-Host 'Stable-window refiner, current capacity, card economics colors, image info anchor, and expanded graph validation passed.' -ForegroundColor Green
+Write-Host 'Expected live result: no title qty, raw cost beside name, fixed cost white, variable cost green-yellow-red by item-specific cost/MV position, profit green, image tooltip anchor, and no cumulative recurring-window phase drift.'
 exit 0
