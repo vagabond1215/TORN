@@ -129,16 +129,17 @@ ToolTipText=
 ToolTipWidth=420
 DynamicVariables=1
 
-; Final render-time safety fence. This measure updates after StateReader/CardPresenter/
-; CardTweaks because the include is parsed at the end of the skin. It prevents stale
-; provider evidence from remaining visible as actionable cards even if an upstream
-; projection stage fails and leaves an older OpportunityCount in state.kv.
+; Final render-time freshness fence. Provider selection still requires a snapshot
+; newer than StaleAfter, but the UI keeps the last computed opportunity set in a
+; clearly labeled forecast-only mode until HardStaleAfter. This avoids long blank
+; periods during provider outages without presenting cached stock as live evidence.
 [MeasureFreshnessGuard]
 Measure=Script
 ScriptFile=#@#Scripts\FreshnessGuard.lua
 StateFile=#@#Generated\state.kv
 HeartbeatFile=#@#Generated\last-update.txt
 StaleAfter=300
+HardStaleAfter=21600
 RetryInterval=15
 UpdateDivider=1
 
