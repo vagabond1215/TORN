@@ -1,6 +1,5 @@
 local statePath=nil
 local heartbeatPath=nil
-local cachePath=nil
 local staleAfter=300
 local hardStaleAfter=21600
 local retryInterval=15
@@ -25,23 +24,6 @@ local function readKv(path)
     end
     file:close()
     return out
-end
-
-local function writeKvAtomic(path,data)
-    if path==nil or path=='' then return false end
-    local keys={}
-    for key,_ in pairs(data or {}) do table.insert(keys,key) end
-    table.sort(keys)
-    local tmp=path..'.tmp'
-    local file=io.open(tmp,'w')
-    if not file then return false end
-    for _,key in ipairs(keys) do
-        local value=tostring(data[key] or ''):gsub('[\r\n]',' ')
-        file:write(key..'='..value..'\n')
-    end
-    file:close()
-    os.remove(path)
-    return os.rename(tmp,path)~=nil
 end
 
 local function readEpoch(path)
@@ -99,53 +81,7 @@ local function opportunityCount(data)
     return math.max(0,math.floor(number(data and data.OpportunityCount)))
 end
 
-local function projectionSnapshot(data)
-    if opportunityCount(data)<=0 then return nil end
-    local out={ OpportunityCount=tostring(opportunityCount(data)) }
-    for key,value in pairs(data or {}) do
-        if key:match('^Opportunity%d+') then out[key]=value end
-    end
-    return out
-end
-
-local function saveOpportunityCache(data)
-    local snapshot=projectionSnapshot(data)
-    if snapshot==nil then return false end
-    return writeKvAtomic(cachePath,snapshot)
-end
-
-local function cachedProjection()
-    local cached=readKv(cachePath)
-    if opportunityCount(cached)<=0 then return nil end
-    return cached
-end
-
-local function hasCachedOpportunities(data)
-    if opportunityCount(data)>0 then return true end
-    return cachedProjection()~=nil
-end
-
-local function restoreCachedProjection(data)
-    if opportunityCount(data)>0 then return false end
-    local cached=cachedProjection()
-    if cached==nil then return false end
-
-    for key,value in pairs(cached) do
-        if key=='OpportunityCount' or key:match('^Opportunity%d+') then data[key]=value end
-    end
-    data.OpportunityMessage=''
-    if not writeKvAtomic(statePath,data) then return false end
-
-    -- StateReader ran earlier in this update and may already have hidden the rows.
-    -- Re-read the merged local projection immediately; later presentation passes
-    -- can then refine travel-state labels/tooltips normally.
-    SKIN:Bang('!UpdateMeasure','MeasureState')
-    SKIN:Bang('!UpdateMeter','*')
-    SKIN:Bang('!Redraw')
-    return true
-end
-
-local function hideOpportunityRows()
+local function hideOpportunityRows(message)
     for i=1,8 do
         SKIN:Bang('!HideMeterGroup','OpportunityRow'..i)
         SKIN:Bang('!HideMeter','MeterOpportunity'..i..'InlineGraph')
@@ -153,16 +89,20 @@ local function hideOpportunityRows()
         SKIN:Bang('!SetOption','MeterOpportunity'..i..'Graph','Text','v')
     end
     setVariable('PanelHeight',164)
-    setVariable('OpportunityMessageText','Foreign stock cache is too old - waiting for a usable Prometheus/YATA snapshot')
+    setVariable('OpportunityMessageText',message or 'Foreign stock is unavailable')
     SKIN:Bang('!ShowMeter','MeterOpportunityMessage')
 end
 
-local function enterDegradedMode()
+local function enterDegradedMode(data)
     setVariable('StockFreshnessMode','degraded')
-    -- Rows come from the last evidence-backed opportunity projection. Forecast
-    -- timing may continue advancing from retained cycles, but cached stock is not
-    -- reclassified as a current provider observation.
-    SKIN:Bang('!HideMeter','MeterOpportunityMessage')
+    if opportunityCount(data)>0 then
+        -- OpportunityState has already converted stale stock evidence into recurring
+        -- forecast rows. Keep those cards visible and make the stale source explicit
+        -- in the header instead of treating the old stock count as live.
+        SKIN:Bang('!HideMeter','MeterOpportunityMessage')
+    else
+        hideOpportunityRows('No retained-cycle forecast is available from the stale stock evidence - retrying Prometheus/YATA')
+    end
 end
 
 local function requestRetry(now)
@@ -175,8 +115,6 @@ end
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
     heartbeatPath=SKIN:MakePathAbsolute(SELF:GetOption('HeartbeatFile','#@#Generated\\last-update.txt'))
-    cachePath=statePath:gsub('state%.kv$','opportunity-cache.kv')
-    if cachePath==statePath then cachePath=statePath..'.opportunity-cache.kv' end
     staleAfter=math.max(60,math.floor(tonumber(SELF:GetOption('StaleAfter','300')) or 300))
     hardStaleAfter=math.max(staleAfter+60,math.floor(tonumber(SELF:GetOption('HardStaleAfter','21600')) or 21600))
     retryInterval=math.max(5,math.floor(tonumber(SELF:GetOption('RetryInterval','15')) or 15))
@@ -185,12 +123,6 @@ end
 function Update()
     local now=os.time()
     local data=readKv(statePath)
-
-    -- OpportunityState intentionally drops stock older than five minutes. Save the
-    -- last non-empty projection separately so an outage cannot erase the only local
-    -- forecast we have. A later fresh projection simply replaces this cache.
-    if opportunityCount(data)>0 then saveOpportunityCache(data) end
-
     local freshestAt,oldestAt=sourceTimestamps(data)
     local displayAt=(oldestAt>0) and oldestAt or freshestAt
     local sourceAge=(displayAt>0) and math.max(0,now-displayAt) or math.huge
@@ -207,15 +139,14 @@ function Update()
     local provider=providerLabel(data.LiveProvider)
     local ageText=formatAge(sourceAge)
     local retryRemaining=math.max(0,retryInterval-(now-lastRetryAt))
-    local hardStale=(freshestAt<=0) or (freshestAge>hardStaleAfter) or (not hasCachedOpportunities(data))
+    local hardStale=(freshestAt<=0) or (freshestAge>hardStaleAfter)
 
     if hardStale then
         setVariable('StockFreshnessMode','hard-stale')
-        hideOpportunityRows()
+        hideOpportunityRows('Foreign stock evidence is over six hours old - waiting for a usable Prometheus/YATA snapshot')
         setVariable('UpdatedText',uiText..'STOCK UNAVAILABLE - '..provider..' '..ageText..' | retry '..tostring(retryRemaining)..'s')
     else
-        restoreCachedProjection(data)
-        enterDegradedMode()
+        enterDegradedMode(data)
         setVariable('UpdatedText',uiText..'FORECAST ONLY - '..provider..' '..ageText..' | retry '..tostring(retryRemaining)..'s')
     end
 
