@@ -141,3 +141,11 @@ HeartbeatFile=#@#Generated\last-update.txt
 StaleAfter=300
 RetryInterval=15
 UpdateDivider=1
+
+; Final tooltip pass. Runs after the card presenter/tweaks and keeps confidence out
+; of the card while adding live relative timing to the selected guaranteed window.
+[MeasureWindowTooltipTweaks]
+Measure=Script
+ScriptFile=#@#Scripts\WindowTooltipTweaks.lua
+StateFile=#@#Generated\state.kv
+UpdateDivider=1
