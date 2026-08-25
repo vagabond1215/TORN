@@ -24,6 +24,7 @@ $tests = @(
     'Run-OptimalRouteTests.ps1',
     'Run-OpportunityStateTests.ps1',
     'Run-WindowPlanTests.ps1',
+    'Run-WindowRefinerTests.ps1',
     'Validate-ResaleQueue.ps1',
     'Run-ResalePriorityTests.ps1',
     'Run-FinalizeStateTests.ps1'
@@ -46,5 +47,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify live active-perk capacity (including faction peace/war changes), observation-aligned Safe/Best timing, departure tooltip plus dedicated info glyph, qty in the title, Cost + MV + profit/item header, conditional Take cash buffer, provider freshness/fallback, instant filters/sorts, and the one-at-a-time 528x125 observed-only 8-hour graph.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify stable near-term Safe/Best timing without cumulative phase drift, departure tooltip plus 12px image info anchor, no title quantity, raw cost beside item name, fixed cost white, variable cost green-yellow-red by retained minimum versus 5%-profit threshold, profit/item green, conditional Take buffer, instant filters/sorts, and the one-at-a-time 528x125 observed-only 8-hour graph.' -ForegroundColor Yellow
 exit 0
