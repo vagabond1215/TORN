@@ -94,16 +94,9 @@ function Test-PVRecentVariation {
         return [pscustomobject]@{ varies=$true; reason='current-vs-recent'; minimum=$minimum; maximum=$maximum }
     }
 
-    if ($prices.Count -ge 2) {
-        $last=[long]$prices[-1]
-        $previous=[long]$prices[-2]
-        if ((Test-PVMaterialDifference -A $last -B $previous) -and ($current -le 0 -or -not (Test-PVMaterialDifference -A $current -B $last))) {
-            return [pscustomobject]@{ varies=$true; reason='recent-transition'; minimum=$minimum; maximum=$maximum }
-        }
-    }
-
-    # Historical one-off anomalies should not permanently color a fixed-price item.
-    # Require two recurring materially separated price levels in the recent window.
+    # A single anomalous sample followed by a return to the stable price is not
+    # evidence of a variable shop price. Require recurring materially separated
+    # levels before retained history can color an otherwise stable current price.
     $counts=@{}
     foreach ($price in $prices) {
         $key=[string]$price
