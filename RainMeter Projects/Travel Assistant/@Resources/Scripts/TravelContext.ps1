@@ -74,6 +74,24 @@ function Set-TravelDynamicProperty {
     else { $property.Value = $Value }
 }
 
+function Expire-CompletedReturnContext {
+    param([object]$Context, [long]$NowEpoch)
+    if ($null -eq $Context -or $NowEpoch -le 0) { return }
+    if ([string](Get-TravelDynamicProperty $Context 'state') -ne 'returning') { return }
+
+    $arrivalAt = [long](Get-TravelDynamicProperty $Context 'arrivalAt')
+    $timeLeft = [long](Get-TravelDynamicProperty $Context 'timeLeft')
+    $lastSuccessAt = [long](Get-TravelDynamicProperty $Context 'lastSuccessAt')
+    if ($arrivalAt -gt $NowEpoch) { return }
+    if ($timeLeft -gt 0 -and $lastSuccessAt -gt 0 -and ($lastSuccessAt + $timeLeft) -gt $NowEpoch) { return }
+
+    Set-TravelDynamicProperty $Context 'state' 'home'
+    Set-TravelDynamicProperty $Context 'destinationCountryId' ''
+    Set-TravelDynamicProperty $Context 'filterActive' $false
+    Set-TravelDynamicProperty $Context 'arrivalAt' 0L
+    Set-TravelDynamicProperty $Context 'timeLeft' 0L
+}
+
 function Get-TravelDestinationText {
     param([object]$Destination)
     if ($null -eq $Destination) { return '' }
@@ -157,7 +175,8 @@ function Convert-TornTravelContext {
     $destLower = $destinationText.Trim().ToLowerInvariant()
     $state = 'home'; $filterActive = $false
     if ($destLower -in @('torn','torn city','home')) {
-        $state = 'returning'
+        if ($timeLeft -gt 0 -or $arrivalAt -gt $NowEpoch -or $statusLower -like '*travel*') { $state = 'returning' }
+        else { $state = 'home' }
     } elseif (-not [string]::IsNullOrWhiteSpace($destinationCountryId)) {
         $filterActive = $true
         if ($timeLeft -gt 0 -or $arrivalAt -gt $NowEpoch -or $statusLower -like '*travel*') { $state = 'traveling' }
@@ -279,6 +298,7 @@ Set-TravelDynamicProperty $contextState 'lastAttemptAt' $Now
 $apiKey=Get-TravelApiKey
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
     Set-TravelDynamicProperty $contextState 'lastErrorAt' $Now; Set-TravelDynamicProperty $contextState 'lastError' 'No local Torn API key is available for travel-context sync.'
+    Expire-CompletedReturnContext -Context $contextState -NowEpoch $Now
     Write-TravelJsonAtomic -Path $EngineStateFile -Value $engineState; Project-TravelContextToState -Context $contextState; return
 }
 try {
@@ -293,5 +313,6 @@ try {
     Set-TravelDynamicProperty $contextState 'lastErrorAt' $Now; Set-TravelDynamicProperty $contextState 'lastError' $message
     try { Write-TravelContextError -Message $message } catch { }
 }
+Expire-CompletedReturnContext -Context $contextState -NowEpoch $Now
 Write-TravelJsonAtomic -Path $EngineStateFile -Value $engineState
 Project-TravelContextToState -Context $contextState
