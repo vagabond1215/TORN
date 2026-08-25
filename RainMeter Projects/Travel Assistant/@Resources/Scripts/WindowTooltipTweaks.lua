@@ -1,4 +1,4 @@
-local statePath = nil
+local statePath=nil
 
 local function trim(value)
     local text=tostring(value or ''):gsub('^\239\187\191','')
@@ -73,10 +73,29 @@ end
 local function tooltipLine(text,label)
     local raw=tostring(text or '')
     local line=raw:match(label..':%s*(.-)#CRLF#')
-    if line==nil then line=raw:match(label..'%s+(.-)#CRLF#') end
     if line==nil then line=raw:match(label..':%s*(.*)$') end
-    if line==nil then line=raw:match(label..'%s+(.*)$') end
     return trim(line or '')
+end
+
+local function clockFromLine(line)
+    return trim(line):match('(%d%d:%d%d)') or ''
+end
+
+local function medianAvailableSeconds(rawPlan)
+    local machine=tostring(rawPlan or ''):match('^WP2:([^#]*)#')
+    if machine==nil then return 0 end
+    local pairs=machine:match('^%d+,[RS],(.-)~')
+    if pairs==nil then return 0 end
+    local values={}
+    for part in pairs:gmatch('[^/]+') do
+        local _,available=part:match('^(%d+):(%d+)$')
+        if available~=nil and number(available)>0 then table.insert(values,number(available)) end
+    end
+    if #values==0 then return 0 end
+    table.sort(values)
+    local middle=math.floor((#values+1)/2)
+    if (#values%2)==1 then return values[middle] end
+    return math.floor((values[middle]+values[middle+1])/2+0.5)
 end
 
 local function parseSafeWindows(rawPlan)
@@ -91,9 +110,7 @@ local function parseSafeWindows(rawPlan)
         if ordinal~=nil then
             local startAt=number(safeStart)
             local endAt=number(safeEnd)
-            if startAt>0 and endAt>startAt then
-                table.insert(windows,{startAt=startAt,endAt=endAt})
-            end
+            if startAt>0 and endAt>startAt then table.insert(windows,{startAt=startAt,endAt=endAt}) end
         end
     end
     return windows
@@ -105,82 +122,87 @@ local function findMatchingSafeWindow(rawPlan,startClock,endClock,now)
     for _,window in ipairs(parseSafeWindows(rawPlan)) do
         if os.date('%H:%M',window.startAt)==startClock and os.date('%H:%M',window.endAt)==endClock then
             local score=0
-            if now>=window.startAt and now<window.endAt then
-                score=-1
-            elseif window.startAt>now then
-                score=window.startAt-now
-            else
-                score=1000000000+(now-window.endAt)
-            end
-            if best==nil or score<bestScore then
-                best=window
-                bestScore=score
-            end
+            if now>=window.startAt and now<window.endAt then score=-1
+            elseif window.startAt>now then score=window.startAt-now
+            else score=1000000000+(now-window.endAt) end
+            if best==nil or score<bestScore then best=window; bestScore=score end
         end
     end
     return best
 end
 
-local function bestChanceText(chanceText,existingTooltip,rawPlan)
-    local chance=trim(chanceText):match('(%d+%%)')
-    if chance~=nil then return chance..' chance to hit' end
-    local selected=tostring(existingTooltip or ''):match('Best Hit Window:%s*.-%[(%d+%%)%]')
-    if selected~=nil then return selected..' chance to hit' end
-    local fallback=tostring(rawPlan or ''):match('Best Hit Window:%s*.-%[(%d+%%)%]')
-    if fallback~=nil then return fallback..' chance to hit' end
-    return 'Chance to hit unavailable'
-end
-
-local function guaranteedLine(existingTooltip,rawPlan,chanceText,now)
-    local current=tooltipLine(existingTooltip,'Guaranteed Window')
-    if current=='' or current:lower()=='none' then
-        return bestChanceText(chanceText,existingTooltip,rawPlan)
-    end
-
-    local startClock,endClock=current:match('^(%d%d:%d%d)%s+to%s+(%d%d:%d%d)')
-    if startClock==nil or endClock==nil then
-        return 'Guaranteed Window: '..current
-    end
-
-    local window=findMatchingSafeWindow(rawPlan,startClock,endClock,now)
-    if window==nil then
-        return 'Guaranteed Window: '..startClock..' to '..endClock
-    end
+local function guaranteedText(rawPlan,now)
+    local current=tooltipLine(rawPlan,'Safe Window')
+    if current=='' or current:lower()=='none' then return '' end
+    local startClock,endClock=current:match('^(%d%d:%d%d)%s+%-%s+(%d%d:%d%d)')
+    if startClock==nil or endClock==nil then return 'Guaranteed: '..current end
 
     local relative=''
-    if now<window.startAt then
-        relative='starts in '..formatDuration(window.startAt-now)
-    elseif now<window.endAt then
-        relative='closes in '..formatDuration(window.endAt-now)
-    else
-        relative='closed '..formatDuration(now-window.endAt)..' ago'
+    local window=findMatchingSafeWindow(rawPlan,startClock,endClock,now)
+    if window~=nil then
+        if now<window.startAt then relative='starts in '..formatDuration(window.startAt-now)
+        elseif now<window.endAt then relative='closes in '..formatDuration(window.endAt-now)
+        else relative='closed '..formatDuration(now-window.endAt)..' ago' end
     end
-    return 'Guaranteed Window: '..startClock..' to '..endClock..' ('..relative..')'
+    local suffix=relative~='' and ' ('..relative..')' or ''
+    return 'Guaranteed: '..startClock..' to '..endClock..suffix
 end
 
-local function rebuildTooltip(existingTooltip,rawPlan,chanceText,now)
-    local arrival=tooltipLine(existingTooltip,'Estimated Arrival in')
-    local stocked=tooltipLine(existingTooltip,'Estimated In Stock Duration')
-    local early=tooltipLine(existingTooltip,'Early Restock')
-    local late=tooltipLine(existingTooltip,'Late Restock')
-    if arrival=='' and stocked=='' and early=='' and late=='' then return existingTooltip end
+local function bestHitText(rawPlan)
+    local current=tooltipLine(rawPlan,'Best Hit Window')
+    if current=='' or current:lower()=='none' then return '' end
+    local clock=clockFromLine(current)
+    local chance=current:match('%[(%d+%%)%]') or ''
+    if clock=='' then return 'Best hit: '..current end
+    if chance~='' then return 'Best hit: '..clock..' ['..chance..']' end
+    return 'Best hit: '..clock
+end
 
-    local nl='#CRLF#'
-    return 'Estimated Arrival in '..arrival..nl..
-        'Estimated In Stock Duration '..stocked..nl..
-        'Early Restock: '..early..nl..
-        'Late Restock: '..late..nl..
-        guaranteedLine(existingTooltip,rawPlan,chanceText,now)
+local function liveTravelRemainingSeconds(state,now)
+    local arrivalAt=number(state.TravelArrivalAt)
+    if arrivalAt>now then return arrivalAt-now end
+    local projectedLeft=number(state.TravelTimeLeft)
+    local projectedAt=number(state.TravelContextLastSuccessAt)
+    if projectedLeft>0 and projectedAt>0 then return math.max(0,projectedLeft-math.max(0,now-projectedAt)) end
+    return 0
+end
+
+local function conciseTooltip(rawPlan,state,now)
+    local lines={}
+    local travelState=trim(state.TravelState):lower()
+    if travelState=='returning' then
+        local remaining=liveTravelRemainingSeconds(state,now)
+        if remaining>0 then table.insert(lines,'Home in: '..formatDuration(remaining)) end
+    end
+
+    local early=clockFromLine(tooltipLine(rawPlan,'Early Restock'))
+    local late=clockFromLine(tooltipLine(rawPlan,'Late Restock'))
+    if early~='' and late~='' then
+        if early==late then table.insert(lines,'Restock: '..early)
+        else table.insert(lines,'Restock: '..early..' - '..late) end
+    elseif early~='' then table.insert(lines,'Restock: '..early)
+    elseif late~='' then table.insert(lines,'Restock: '..late) end
+
+    local stocked=medianAvailableSeconds(rawPlan)
+    if stocked>0 then table.insert(lines,'Typical stock duration: '..formatDuration(stocked)) end
+
+    local guaranteed=guaranteedText(rawPlan,now)
+    if guaranteed~='' then table.insert(lines,guaranteed)
+    else
+        local best=bestHitText(rawPlan)
+        if best~='' then table.insert(lines,best) end
+    end
+
+    return table.concat(lines,'#CRLF#')
 end
 
 local function updateRow(index,lookup,now,state)
     local prefix='MeterOpportunity'..index
     local travelState=trim(state.TravelState):lower()
 
-    -- TravelStateWindowTweaks runs immediately before this measure and owns the
-    -- concise landing/foreign-market tooltip. Do not reinterpret that tooltip as a
-    -- home Safe/Best tooltip or append generic window diagnostics back onto it.
-    if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then
+    -- Outbound/foreign presentation is owned by TravelStateWindowTweaks. Home and
+    -- active return-flight tooltips are rebuilt from raw state, never prior meter text.
+    if travelState~='' and travelState~='home' and travelState~='returning' then
         setOption(prefix..'Chance','Text','')
         return
     end
@@ -188,22 +210,17 @@ local function updateRow(index,lookup,now,state)
     local name=trim(meterOption(prefix..'Name','Text'))
     local country=rowCountry(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(name)]
-    local leave=prefix..'Leave'
-    local info=prefix..'Info'
-    local chance=prefix..'Chance'
-    local existing=meterOption(leave,'ToolTipText')
-    if existing=='' then existing=meterOption(info,'ToolTipText') end
-    local chanceText=meterOption(chance,'Text')
-
-    if row~=nil and existing~='' then
-        local tooltip=rebuildTooltip(existing,row.windowPlan,chanceText,now)
-        setOption(leave,'ToolTipText',tooltip)
-        setOption(info,'ToolTipText',tooltip)
-        setOption(leave,'ToolTipTitle','Window estimate')
-        setOption(info,'ToolTipTitle','Window estimate')
+    if row~=nil and row.windowPlan~='' then
+        local tooltip=conciseTooltip(row.windowPlan,state,now)
+        local hidden=tooltip=='' and 1 or 0
+        setOption(prefix..'Leave','ToolTipTitle','Window estimate')
+        setOption(prefix..'Leave','ToolTipText',tooltip)
+        setOption(prefix..'Leave','ToolTipHidden',hidden)
+        setOption(prefix..'Info','ToolTipTitle','Window estimate')
+        setOption(prefix..'Info','ToolTipText',tooltip)
+        setOption(prefix..'Info','ToolTipHidden',hidden)
     end
-
-    setOption(chance,'Text','')
+    setOption(prefix..'Chance','Text','')
 end
 
 function Initialize()
