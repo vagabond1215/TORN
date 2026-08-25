@@ -39,10 +39,53 @@ local function normalizeName(value)
     return trim(value):lower():gsub('%s+',' ')
 end
 
-local function rowCountry(index)
+local function rowCountryAndTravel(index)
     local text=meterOption('MeterOpportunity'..index..'Flag','ToolTipText')
-    local country=text:match('^(.-)%s*|%s*travel')
-    return trim(country or '')
+    local country,travel=text:match('^(.-)%s*|%s*travel%s+(.+)$')
+    return trim(country or ''),trim(travel or '')
+end
+
+local function split(text,separator)
+    local result={}
+    if text==nil or text=='' then return result end
+    local pattern='([^'..separator..']+)'
+    for part in tostring(text):gmatch(pattern) do table.insert(result,part) end
+    return result
+end
+
+local function parseWindowPlan(rawTooltip)
+    local raw=tostring(rawTooltip or '')
+    local machine=raw:match('^WP2:([^#]*)#')
+    if machine==nil then return nil end
+    local header,groupsText=machine:match('^(.-)~(.*)$')
+    if header==nil then return nil end
+    local anchorText,phase,pairsText=header:match('^(%d+),([RS]),(.*)$')
+    if anchorText==nil then return nil end
+
+    local plan={anchorAt=number(anchorText),anchorPhase=phase,cycles={},groups={}}
+    for _,pair in ipairs(split(pairsText,'/')) do
+        local delay,available=pair:match('^(%d+):(%d+)$')
+        if delay~=nil then table.insert(plan.cycles,{delay=number(delay),available=number(available)}) end
+    end
+    for _,entry in ipairs(split(groupsText,'/')) do
+        local f=split(entry,',')
+        if f[1]=='G' and #f>=11 then
+            table.insert(plan.groups,{
+                ordinal=number(f[2]),
+                earlyRestock=number(f[3]),
+                earlySellout=number(f[4]),
+                lateRestock=number(f[5]),
+                lateSellout=number(f[6]),
+                safeStart=number(f[7]),
+                safeEnd=number(f[8]),
+                bestStart=number(f[9]),
+                bestEnd=number(f[10]),
+                bestProbability=number(f[11])
+            })
+        end
+    end
+    table.sort(plan.groups,function(a,b) return a.ordinal<b.ordinal end)
+    return plan
 end
 
 local function buildLookup(state)
@@ -54,7 +97,7 @@ local function buildLookup(state)
         local country=trim(state[prefix..'Country'])
         if name~='' and country~='' then
             lookup[normalizeName(country)..'|'..normalizeName(name)]={
-                windowPlan=trim(state[prefix..'Tooltip'])
+                plan=parseWindowPlan(state[prefix..'Tooltip'])
             }
         end
     end
@@ -70,118 +113,104 @@ local function formatDuration(seconds)
     return string.format('%dm',minutes)
 end
 
-local function tooltipLine(text,label)
-    local raw=tostring(text or '')
-    local line=raw:match(label..':%s*(.-)#CRLF#')
-    if line==nil then line=raw:match(label..'%s+(.-)#CRLF#') end
-    if line==nil then line=raw:match(label..':%s*(.*)$') end
-    if line==nil then line=raw:match(label..'%s+(.*)$') end
-    return trim(line or '')
+local function parseDurationText(text)
+    local value=trim(text):lower()
+    if value=='<1m' then return 0 end
+    local hours=tonumber(value:match('(%d+)%s*h')) or 0
+    local minutes=tonumber(value:match('(%d+)%s*m')) or 0
+    return (hours*3600)+(minutes*60)
 end
 
-local function parseSafeWindows(rawPlan)
-    local windows={}
-    local machine=tostring(rawPlan or ''):match('^WP2:([^#]*)#')
-    if machine==nil then return windows end
-    local groups=machine:match('^[^~]*~(.*)$')
-    if groups==nil then return windows end
-    for entry in groups:gmatch('[^/]+') do
-        local ordinal,earlyRestock,earlySellout,lateRestock,lateSellout,safeStart,safeEnd,bestStart,bestEnd,bestProbability=
-            entry:match('^G,(%d+),(%d+),(%d+),(%d+),(%d+),(%d+),(%d+),(%d+),(%d+),([%d%.]+)$')
-        if ordinal~=nil then
-            local startAt=number(safeStart)
-            local endAt=number(safeEnd)
-            if startAt>0 and endAt>startAt then
-                table.insert(windows,{startAt=startAt,endAt=endAt})
-            end
+local function medianAvailableSeconds(plan)
+    if plan==nil then return 0 end
+    local values={}
+    for _,cycle in ipairs(plan.cycles or {}) do
+        local available=number(cycle.available)
+        if available>0 then table.insert(values,available) end
+    end
+    if #values==0 then return 0 end
+    table.sort(values)
+    local middle=math.floor((#values+1)/2)
+    if (#values%2)==1 then return values[middle] end
+    return math.floor((values[middle]+values[middle+1])/2+0.5)
+end
+
+local function groupMode(group)
+    if group==nil then return nil end
+    if group.safeStart>0 and group.safeEnd-group.safeStart>=60 then return 'safe' end
+    if group.bestStart>0 and group.bestEnd>group.bestStart and group.bestProbability>0.5 then return 'best' end
+    return nil
+end
+
+local function groupDepartureTimes(group,mode,flightSeconds)
+    if mode=='safe' then
+        return group.safeStart-flightSeconds,group.safeEnd-flightSeconds,math.floor(((group.safeStart+group.safeEnd)/2)-flightSeconds)
+    end
+    return group.bestStart-flightSeconds,group.bestEnd-flightSeconds,math.floor(((group.bestStart+group.bestEnd)/2)-flightSeconds)
+end
+
+local function findPreferredGroup(plan,flightSeconds,now)
+    if plan==nil then return nil,nil end
+    for _,group in ipairs(plan.groups or {}) do
+        local mode=groupMode(group)
+        if mode~=nil then
+            local openAt,closeAt,targetAt=groupDepartureTimes(group,mode,flightSeconds)
+            if mode=='safe' and closeAt>now then return group,mode end
+            if mode=='best' and closeAt>now and (targetAt>now or openAt<=now) then return group,mode end
         end
     end
-    return windows
+    return nil,nil
 end
 
-local function findMatchingSafeWindow(rawPlan,startClock,endClock,now)
-    local best=nil
-    local bestScore=nil
-    for _,window in ipairs(parseSafeWindows(rawPlan)) do
-        if os.date('%H:%M',window.startAt)==startClock and os.date('%H:%M',window.endAt)==endClock then
-            local score=0
-            if now>=window.startAt and now<window.endAt then
-                score=-1
-            elseif window.startAt>now then
-                score=window.startAt-now
-            else
-                score=1000000000+(now-window.endAt)
-            end
-            if best==nil or score<bestScore then
-                best=window
-                bestScore=score
-            end
-        end
+local function findFutureEvidenceGroup(plan,arrivalAt)
+    if plan==nil then return nil end
+    for _,group in ipairs(plan.groups or {}) do
+        if number(group.lateSellout)>arrivalAt then return group end
     end
-    return best
+    return nil
 end
 
-local function bestChanceText(chanceText,existingTooltip,rawPlan)
-    local chance=trim(chanceText):match('(%d+%%)')
-    if chance~=nil then return chance..' chance to hit' end
-    local selected=tostring(existingTooltip or ''):match('Best Hit Window:%s*.-%[(%d+%%)%]')
-    if selected~=nil then return selected..' chance to hit' end
-    local fallback=tostring(rawPlan or ''):match('Best Hit Window:%s*.-%[(%d+%%)%]')
-    if fallback~=nil then return fallback..' chance to hit' end
-    return 'Chance to hit unavailable'
-end
-
-local function guaranteedLine(existingTooltip,rawPlan,chanceText,now)
-    local current=tooltipLine(existingTooltip,'Guaranteed Window')
-    if current=='' or current:lower()=='none' then
-        return bestChanceText(chanceText,existingTooltip,rawPlan)
-    end
-
-    local startClock,endClock=current:match('^(%d%d:%d%d)%s+to%s+(%d%d:%d%d)')
-    if startClock==nil or endClock==nil then
-        return 'Guaranteed Window: '..current
-    end
-
-    local window=findMatchingSafeWindow(rawPlan,startClock,endClock,now)
-    if window==nil then
-        return 'Guaranteed Window: '..startClock..' to '..endClock
-    end
-
+local function formatMoment(at,now)
+    if at<=0 then return '?' end
     local relative=''
-    if now<window.startAt then
-        relative='starts in '..formatDuration(window.startAt-now)
-    elseif now<window.endAt then
-        relative='closes in '..formatDuration(window.endAt-now)
-    else
-        relative='closed '..formatDuration(now-window.endAt)..' ago'
-    end
-    return 'Guaranteed Window: '..startClock..' to '..endClock..' ('..relative..')'
+    if at>=now then relative=formatDuration(at-now)..' away'
+    else relative=formatDuration(now-at)..' ago' end
+    return os.date('%H:%M',at)..' ('..relative..')'
 end
 
-local function rebuildHomeTooltip(existingTooltip,rawPlan,chanceText,now)
-    local arrival=tooltipLine(existingTooltip,'Estimated Arrival in')
-    local stocked=tooltipLine(existingTooltip,'Estimated In Stock Duration')
-    local early=tooltipLine(existingTooltip,'Early Restock')
-    local late=tooltipLine(existingTooltip,'Late Restock')
-    if arrival=='' and stocked=='' and early=='' and late=='' then return existingTooltip end
+local function finalWindowLine(group,mode,now)
+    if group==nil then return 'Best Hit Window: unavailable' end
+    if mode=='safe' then
+        local startClock=os.date('%H:%M',group.safeStart)
+        local endClock=os.date('%H:%M',group.safeEnd)
+        local relative=''
+        if now<group.safeStart then relative='starts in '..formatDuration(group.safeStart-now)
+        elseif now<group.safeEnd then relative='closes in '..formatDuration(group.safeEnd-now)
+        else relative='closed '..formatDuration(now-group.safeEnd)..' ago' end
+        return 'Guaranteed Window: '..startClock..' to '..endClock..' ('..relative..')'
+    end
 
+    local target=math.floor((group.bestStart+group.bestEnd)/2)
+    local chance=string.format('%.0f%%',number(group.bestProbability)*100)
+    return 'Best Hit Window: '..formatMoment(target,now)..' ['..chance..']'
+end
+
+local function buildHomeTooltip(plan,travelText,now)
+    if plan==nil then return '' end
+    local flightSeconds=parseDurationText(travelText)
+    local group,mode=findPreferredGroup(plan,flightSeconds,now)
+    if group==nil then group=findFutureEvidenceGroup(plan,now+flightSeconds) end
+    if group==nil then return '' end
+
+    local arrival=travelText~='' and travelText or '?'
+    local stocked=medianAvailableSeconds(plan)
+    local stockedText=stocked>0 and formatDuration(stocked) or '?'
     local nl='#CRLF#'
     return 'Estimated Arrival in '..arrival..nl..
-        'Estimated In Stock Duration '..stocked..nl..
-        'Early Restock: '..early..nl..
-        'Late Restock: '..late..nl..
-        guaranteedLine(existingTooltip,rawPlan,chanceText,now)
-end
-
-local function liveTravelRemainingSeconds(state,now)
-    local arrivalAt=number(state.TravelArrivalAt)
-    if arrivalAt>now then return arrivalAt-now end
-    local projectedLeft=number(state.TravelTimeLeft)
-    local projectedAt=number(state.TravelContextLastSuccessAt)
-    if projectedLeft>0 and projectedAt>0 then
-        return math.max(0,projectedLeft-math.max(0,now-projectedAt))
-    end
-    return 0
+        'Estimated In Stock Duration '..stockedText..nl..
+        'Early Restock: '..formatMoment(group.earlyRestock,now)..nl..
+        'Late Restock: '..formatMoment(group.lateRestock,now)..nl..
+        finalWindowLine(group,mode,now)
 end
 
 local function applyTooltip(prefix,tooltip)
@@ -198,39 +227,20 @@ local function updateRow(index,lookup,now,state)
     local prefix='MeterOpportunity'..index
     local travelState=trim(state.TravelState):lower()
 
-    -- TravelStateWindowTweaks owns outbound and foreign-market tooltips. Keep the
-    -- established Safe/Best finalizer strictly in home mode.
-    if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then
-        setOption(prefix..'Chance','Text','')
-        return
-    end
-
-    -- Returning is intentionally separate from home. Do not feed the prior tooltip
-    -- back through the home formatter; show only the live home-availability delay.
-    if travelState=='returning' then
-        local remaining=liveTravelRemainingSeconds(state,now)
-        local tooltip='Home in: '..formatDuration(remaining)
-        applyTooltip(prefix,tooltip)
+    -- Non-home travel states have a separate owner in TravelStateWindowTweaks.
+    -- Never read or rewrite those tooltips here.
+    if travelState=='traveling' or travelState=='returning' or travelState=='abroad' or travelState=='foreign' then
         setOption(prefix..'Chance','Text','')
         return
     end
 
     local name=trim(meterOption(prefix..'Name','Text'))
-    local country=rowCountry(index)
+    local country,travelText=rowCountryAndTravel(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(name)]
-    local leave=prefix..'Leave'
-    local info=prefix..'Info'
-    local chance=prefix..'Chance'
-    local existing=meterOption(leave,'ToolTipText')
-    if existing=='' then existing=meterOption(info,'ToolTipText') end
-    local chanceText=meterOption(chance,'Text')
-
-    if row~=nil and existing~='' then
-        local tooltip=rebuildHomeTooltip(existing,row.windowPlan,chanceText,now)
-        applyTooltip(prefix,tooltip)
+    if row~=nil and row.plan~=nil then
+        applyTooltip(prefix,buildHomeTooltip(row.plan,travelText,now))
     end
-
-    setOption(chance,'Text','')
+    setOption(prefix..'Chance','Text','')
 end
 
 function Initialize()
