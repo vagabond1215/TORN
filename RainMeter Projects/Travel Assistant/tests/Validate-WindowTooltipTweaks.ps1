@@ -16,20 +16,35 @@ if ($errors.Count -eq 0) {
     $include = Get-Content -LiteralPath $includePath -Raw
 
     foreach ($token in @(
+        'medianAvailableSeconds',
         'parseSafeWindows',
         'findMatchingSafeWindow',
-        "os.date('%H:%M',window.startAt)",
-        "relative='starts in '..formatDuration(window.startAt-now)",
-        "relative='closes in '..formatDuration(window.endAt-now)",
-        "fallback..' chance to hit'",
-        "chance..' chance to hit'",
-        "tooltipLine(existingTooltip,'Guaranteed Window')",
-        "Best Hit Window:%s*.-%[(%d+%%)%]",
-        "setOption(chance,'Text','')",
-        "setOption(leave,'ToolTipText',tooltip)",
-        "setOption(info,'ToolTipText',tooltip)"
+        "tooltipLine(rawPlan,'Early Restock')",
+        "tooltipLine(rawPlan,'Late Restock')",
+        "tooltipLine(rawPlan,'Safe Window')",
+        "tooltipLine(rawPlan,'Best Hit Window')",
+        "'Home in: '..formatDuration(remaining)",
+        "'Restock: '..early..' - '..late",
+        "'Typical stock duration: '..formatDuration(stocked)",
+        "'Guaranteed: '..startClock..' to '..endClock..suffix",
+        "'Best hit: '..clock..' ['..chance..']'",
+        "return table.concat(lines,'#CRLF#')",
+        "travelState~='home' and travelState~='returning'",
+        "setOption(prefix..'Leave','ToolTipText',tooltip)",
+        "setOption(prefix..'Info','ToolTipText',tooltip)",
+        "setOption(prefix..'Chance','Text','')"
     )) {
         if (-not $script.Contains($token)) { Fail "WindowTooltipTweaks.lua missing '$token'." }
+    }
+
+    foreach ($forbidden in @(
+        "meterOption(prefix..'Leave','ToolTipText')",
+        "meterOption(prefix..'Info','ToolTipText')",
+        'existingTooltip',
+        'Estimated Arrival in',
+        'Estimated In Stock Duration'
+    )) {
+        if ($script.Contains($forbidden)) { Fail "WindowTooltipTweaks.lua must not recursively rebuild from prior tooltip text; found '$forbidden'." }
     }
 
     if ($script -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') {
@@ -46,18 +61,19 @@ if ($errors.Count -eq 0) {
     }
 
     $freshAt = $include.IndexOf('[MeasureFreshnessGuard]',[System.StringComparison]::Ordinal)
+    $travelAt = $include.IndexOf('[MeasureTravelStateWindowTweaks]',[System.StringComparison]::Ordinal)
     $tooltipAt = $include.IndexOf('[MeasureWindowTooltipTweaks]',[System.StringComparison]::Ordinal)
-    if ($freshAt -lt 0 -or $tooltipAt -le $freshAt) {
-        Fail 'Window tooltip refinement must run after the final freshness guard/presentation stack.'
+    if ($freshAt -lt 0 -or $travelAt -lt 0 -or $tooltipAt -le $travelAt -or $tooltipAt -le $freshAt) {
+        Fail 'Window tooltip refinement must run after freshness and travel-state presentation passes.'
     }
 }
 
 if ($errors.Count -gt 0) {
-    foreach ($error in $errors) { Write-Host "FAIL: $error" -ForegroundColor Red }
+    foreach ($validationError in $errors) { Write-Host "FAIL: $validationError" -ForegroundColor Red }
     Write-Host "Window tooltip validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
 
-Write-Host 'Relative guaranteed-window and tooltip-only Best Hit confidence validation passed.' -ForegroundColor Green
-Write-Host 'Safe tooltips switch from starts-in to closes-in timing; non-overlap rows show chance-to-hit in the tooltip and no confidence percentage on the card.'
+Write-Host 'Concise idempotent window tooltip validation passed.' -ForegroundColor Green
+Write-Host 'Home/return tooltips are rebuilt from raw window-plan state and contain only home timing when relevant, restock range, typical stock duration, and one Guaranteed-or-Best line.'
 exit 0
