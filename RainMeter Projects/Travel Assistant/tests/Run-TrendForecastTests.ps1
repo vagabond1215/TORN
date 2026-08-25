@@ -27,6 +27,20 @@ Assert-True ([double]$availability.rSquared -gt 0.90) 'clean growth has strong r
 $priceCorr=Get-TFCorrelation -Samples $growing -XProperty 'foreignPrice' -YProperty 'availabilitySeconds'
 Assert-True ($priceCorr -gt 0.90) 'rising price and stocked duration expose positive correlation'
 
+# Windows PowerShell 5.1 may surface dictionary-backed samples differently from
+# PSCustomObject samples. The forecast helpers must resolve values through the shared
+# property accessor rather than assuming PSPropertyInfo.Value is always present.
+$dictionaryGrowing=@(
+    [ordered]@{ soldOutAt=1L; restockDelaySeconds=3600L; availabilitySeconds=480L; foreignPrice=10000L; priceToMvRatioBps=3000 },
+    [ordered]@{ soldOutAt=2L; restockDelaySeconds=3610L; availabilitySeconds=600L; foreignPrice=10500L; priceToMvRatioBps=3100 },
+    [ordered]@{ soldOutAt=3L; restockDelaySeconds=3590L; availabilitySeconds=720L; foreignPrice=11000L; priceToMvRatioBps=3200 },
+    [ordered]@{ soldOutAt=4L; restockDelaySeconds=3605L; availabilitySeconds=900L; foreignPrice=11600L; priceToMvRatioBps=3300 }
+)
+$dictionaryAvailability=Get-TFLinearTrend -Samples $dictionaryGrowing -Property 'availabilitySeconds' -MinimumAbsoluteSlope 30 -MinimumRelativeSlope 0.02
+Assert-True ($dictionaryAvailability.direction -eq 'growing') 'dictionary-backed samples use the same PS5.1-safe trend property accessor'
+$dictionaryCorrelation=Get-TFCorrelation -Samples $dictionaryGrowing -XProperty 'foreignPrice' -YProperty 'availabilitySeconds'
+Assert-True ($dictionaryCorrelation -gt 0.90) 'dictionary-backed correlation uses the shared property accessor'
+
 $flat=@(
     New-Sample 1 3600 600 14000 2500
     New-Sample 2 3610 605 14000 2500
@@ -51,5 +65,5 @@ Assert-True ([string]$market.trendForecast.mode -eq 'shadow') 'trend forecast re
 Assert-True ([string]$market.trendForecast.availability.direction -eq 'growing') 'market projection retains duration direction'
 Assert-True ([double]$market.trendForecast.availabilityVsPriceCorrelation -gt 0.90) 'market projection retains price/duration correlation'
 
-Write-Host 'Shadow next-cycle trend forecast tests passed.' -ForegroundColor Green
+Write-Host 'Shadow next-cycle trend forecast and PowerShell 5.1 property-access tests passed.' -ForegroundColor Green
 exit 0
