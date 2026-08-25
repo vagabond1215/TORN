@@ -121,9 +121,14 @@ local function findMatchingSafeWindow(rawPlan,startClock,endClock,now)
     return best
 end
 
-local function bestChanceText(chanceText,rawPlan)
+local function bestChanceText(chanceText,existingTooltip,rawPlan)
     local chance=trim(chanceText):match('(%d+%%)')
     if chance~=nil then return chance..' chance to hit' end
+    -- Prefer the tooltip emitted by the currently selected travel-state cycle.
+    -- The raw state plan may still describe a later actionable cycle while the
+    -- player is outbound and intentionally viewing the nearer physical cycle.
+    local selected=tostring(existingTooltip or ''):match('Best Hit Window:%s*.-%[(%d+%%)%]')
+    if selected~=nil then return selected..' chance to hit' end
     local fallback=tostring(rawPlan or ''):match('Best Hit Window:%s*.-%[(%d+%%)%]')
     if fallback~=nil then return fallback..' chance to hit' end
     return 'Chance to hit unavailable'
@@ -132,7 +137,7 @@ end
 local function guaranteedLine(existingTooltip,rawPlan,chanceText,now)
     local current=tooltipLine(existingTooltip,'Guaranteed Window')
     if current=='' or current:lower()=='none' then
-        return bestChanceText(chanceText,rawPlan)
+        return bestChanceText(chanceText,existingTooltip,rawPlan)
     end
 
     local startClock,endClock=current:match('^(%d%d:%d%d)%s+to%s+(%d%d:%d%d)')
