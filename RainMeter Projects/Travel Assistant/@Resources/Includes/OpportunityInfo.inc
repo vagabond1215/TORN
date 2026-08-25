@@ -149,3 +149,10 @@ Measure=Script
 ScriptFile=#@#Scripts\WindowTooltipTweaks.lua
 StateFile=#@#Generated\state.kv
 UpdateDivider=1
+
+; Final visible-card polish. Keeps the forecast untouched while simplifying Safe
+; labels and placing item cost/MV beside the item name with profit at far right.
+[MeasureFinalCardPolish]
+Measure=Script
+ScriptFile=#@#Scripts\FinalCardPolish.lua
+UpdateDivider=1
