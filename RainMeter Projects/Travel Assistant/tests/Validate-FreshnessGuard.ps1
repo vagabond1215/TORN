@@ -21,6 +21,13 @@ if ($errors.Count -eq 0) {
         'staleAfter=300',
         'hardStaleAfter=21600',
         'retryInterval=15',
+        "opportunity-cache.kv",
+        'projectionSnapshot',
+        'saveOpportunityCache',
+        'cachedProjection',
+        'restoreCachedProjection',
+        "key:match('^Opportunity%d+')",
+        "SKIN:Bang('!UpdateMeasure','MeasureState')",
         'hasCachedOpportunities',
         'enterDegradedMode',
         "StockFreshnessMode','degraded'",
@@ -34,8 +41,14 @@ if ($errors.Count -eq 0) {
         if (-not $guard.Contains($token)) { Fail "FreshnessGuard.lua missing '$token'." }
     }
 
-    if (-not $guard.Contains("local hardStale=(sourceAt<=0) or (sourceAge>hardStaleAfter) or (not hasCachedOpportunities(data))")) {
+    if (-not $guard.Contains("local hardStale=(freshestAt<=0) or (freshestAge>hardStaleAfter) or (not hasCachedOpportunities(data))")) {
         Fail 'FreshnessGuard.lua must reserve row hiding for missing/very old evidence or missing cached opportunities.'
+    }
+    if (-not $guard.Contains("if opportunityCount(data)>0 then saveOpportunityCache(data) end")) {
+        Fail 'FreshnessGuard.lua must persist the last non-empty opportunity projection before an outage can clear it.'
+    }
+    if (-not $guard.Contains("restoreCachedProjection(data)")) {
+        Fail 'Degraded mode must restore the persisted opportunity projection when OpportunityState has emitted zero stale rows.'
     }
     if (-not $guard.Contains("if hardStale then")) { Fail 'FreshnessGuard.lua must separate degraded and hard-stale UI states.' }
     if (-not $guard.Contains("SKIN:Bang('!HideMeter','MeterOpportunityMessage')")) { Fail 'Degraded mode must remove the full-panel stale message so cached cards remain visible.' }
@@ -61,6 +74,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Degraded stock freshness guard validation passed.' -ForegroundColor Green
-Write-Host 'Five-minute provider freshness remains strict, but cached opportunity cards stay visible as FORECAST ONLY for up to six hours; only missing/very old evidence enters the hard blank safety state.'
+Write-Host 'Persistent degraded stock freshness guard validation passed.' -ForegroundColor Green
+Write-Host 'Five-minute provider freshness remains strict; the last non-empty opportunity projection survives provider outages as FORECAST ONLY for up to six hours and is restored after skin refreshes.'
 exit 0
