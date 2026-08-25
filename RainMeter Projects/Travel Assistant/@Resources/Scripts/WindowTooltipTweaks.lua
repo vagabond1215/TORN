@@ -71,8 +71,11 @@ local function formatDuration(seconds)
 end
 
 local function tooltipLine(text,label)
-    local line=tostring(text or ''):match(label..':?%s*(.-)#CRLF#')
-    if line==nil then line=tostring(text or ''):match(label..':?%s*(.*)$') end
+    local raw=tostring(text or '')
+    local line=raw:match(label..':%s*(.-)#CRLF#')
+    if line==nil then line=raw:match(label..'%s+(.-)#CRLF#') end
+    if line==nil then line=raw:match(label..':%s*(.*)$') end
+    if line==nil then line=raw:match(label..'%s+(.*)$') end
     return trim(line or '')
 end
 
