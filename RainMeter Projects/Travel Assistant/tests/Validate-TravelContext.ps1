@@ -16,7 +16,7 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
     [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail "TravelContext.ps1 parse error: $($parseError.Message)" }
 
-    foreach ($fn in @('Resolve-TravelCountryId','Convert-TornUserBar','Convert-TornTravelContext','Invoke-TornTravelCurl','Set-ProjectedBar','Project-TravelContextToState')) {
+    foreach ($fn in @('Resolve-TravelCountryId','Convert-TornUserBar','Convert-TornTravelContext','Expire-CompletedReturnContext','Invoke-TornTravelCurl','Set-ProjectedBar','Project-TravelContextToState')) {
         if ($text -notmatch ('(?m)^function\s+' + [regex]::Escape($fn) + '\s*\{')) { Fail "Missing $fn." }
     }
     foreach ($token in @(
@@ -25,6 +25,9 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
         'Authorization: ApiKey {0}',
         'destinationCountryId',
         'filterActive',
+        "`$arrivalAt -gt `$NowEpoch",
+        "(`$lastSuccessAt + `$timeLeft) -gt `$NowEpoch",
+        "Set-TravelDynamicProperty `$Context 'state' 'home'",
         "Set-ProjectedBar -State `$state -Prefix 'Energy'",
         "Set-ProjectedBar -State `$state -Prefix 'Nerve'",
         'TravelDestinationCountryId',
@@ -62,5 +65,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Travel context configuration validation passed.' -ForegroundColor Green
-Write-Host 'One bounded user request supplies destination plus Energy/Nerve bars; transient failures preserve the last successful context and diagnostics before opportunity ranking.'
+Write-Host 'Completed return flights expire to home even after a failed refresh; one bounded user request still supplies destination plus Energy/Nerve bars before opportunity ranking.'
 exit 0
