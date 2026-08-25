@@ -16,35 +16,27 @@ if ($errors.Count -eq 0) {
     $include = Get-Content -LiteralPath $includePath -Raw
 
     foreach ($token in @(
-        'medianAvailableSeconds',
         'parseSafeWindows',
         'findMatchingSafeWindow',
-        "tooltipLine(rawPlan,'Early Restock')",
-        "tooltipLine(rawPlan,'Late Restock')",
-        "tooltipLine(rawPlan,'Safe Window')",
-        "tooltipLine(rawPlan,'Best Hit Window')",
-        "'Home in: '..formatDuration(remaining)",
-        "'Restock: '..early..' - '..late",
-        "'Typical stock duration: '..formatDuration(stocked)",
-        "'Guaranteed: '..startClock..' to '..endClock..suffix",
-        "'Best hit: '..clock..' ['..chance..']'",
-        "return table.concat(lines,'#CRLF#')",
-        "travelState~='home' and travelState~='returning'",
+        "os.date('%H:%M',window.startAt)",
+        "relative='starts in '..formatDuration(window.startAt-now)",
+        "relative='closes in '..formatDuration(window.endAt-now)",
+        "selected=tostring(existingTooltip or ''):match('Best Hit Window:",
+        "fallback..' chance to hit'",
+        "chance..' chance to hit'",
+        "tooltipLine(existingTooltip,'Guaranteed Window')",
+        "'Estimated Arrival in '..arrival",
+        "'Estimated In Stock Duration '..stocked",
+        "'Early Restock: '..early",
+        "'Late Restock: '..late",
+        "if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then",
+        "if travelState=='returning' then",
+        "local tooltip='Home in: '..formatDuration(remaining)",
+        "setOption(prefix..'Chance','Text','')",
         "setOption(prefix..'Leave','ToolTipText',tooltip)",
-        "setOption(prefix..'Info','ToolTipText',tooltip)",
-        "setOption(prefix..'Chance','Text','')"
+        "setOption(prefix..'Info','ToolTipText',tooltip)"
     )) {
         if (-not $script.Contains($token)) { Fail "WindowTooltipTweaks.lua missing '$token'." }
-    }
-
-    foreach ($forbidden in @(
-        "meterOption(prefix..'Leave','ToolTipText')",
-        "meterOption(prefix..'Info','ToolTipText')",
-        'existingTooltip',
-        'Estimated Arrival in',
-        'Estimated In Stock Duration'
-    )) {
-        if ($script.Contains($forbidden)) { Fail "WindowTooltipTweaks.lua must not recursively rebuild from prior tooltip text; found '$forbidden'." }
     }
 
     if ($script -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') {
@@ -74,6 +66,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Concise idempotent window tooltip validation passed.' -ForegroundColor Green
-Write-Host 'Home/return tooltips are rebuilt from raw window-plan state and contain only home timing when relevant, restock range, typical stock duration, and one Guaranteed-or-Best line.'
+Write-Host 'Home window tooltip and isolated return-tooltip validation passed.' -ForegroundColor Green
+Write-Host 'Home keeps arrival, stock duration, early/late restock and Guaranteed-or-Best confidence; returning shows only the live home delay; outbound/foreign remain travel-state owned.'
 exit 0
