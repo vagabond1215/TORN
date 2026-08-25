@@ -124,9 +124,6 @@ end
 local function bestChanceText(chanceText,existingTooltip,rawPlan)
     local chance=trim(chanceText):match('(%d+%%)')
     if chance~=nil then return chance..' chance to hit' end
-    -- Prefer the tooltip emitted by the currently selected travel-state cycle.
-    -- The raw state plan may still describe a later actionable cycle while the
-    -- player is outbound and intentionally viewing the nearer physical cycle.
     local selected=tostring(existingTooltip or ''):match('Best Hit Window:%s*.-%[(%d+%%)%]')
     if selected~=nil then return selected..' chance to hit' end
     local fallback=tostring(rawPlan or ''):match('Best Hit Window:%s*.-%[(%d+%%)%]')
@@ -176,8 +173,18 @@ local function rebuildTooltip(existingTooltip,rawPlan,chanceText,now)
         guaranteedLine(existingTooltip,rawPlan,chanceText,now)
 end
 
-local function updateRow(index,lookup,now)
+local function updateRow(index,lookup,now,state)
     local prefix='MeterOpportunity'..index
+    local travelState=trim(state.TravelState):lower()
+
+    -- TravelStateWindowTweaks runs immediately before this measure and owns the
+    -- concise landing/foreign-market tooltip. Do not reinterpret that tooltip as a
+    -- home Safe/Best tooltip or append generic window diagnostics back onto it.
+    if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then
+        setOption(prefix..'Chance','Text','')
+        return
+    end
+
     local name=trim(meterOption(prefix..'Name','Text'))
     local country=rowCountry(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(name)]
@@ -196,8 +203,6 @@ local function updateRow(index,lookup,now)
         setOption(info,'ToolTipTitle','Window estimate')
     end
 
-    -- Confidence is tooltip-only. CardPresenter still computes it every second so
-    -- Best Hit selection remains live, but the final card surface stays cleaner.
     setOption(chance,'Text','')
 end
 
@@ -209,6 +214,6 @@ function Update()
     local state=readKv(statePath)
     local lookup=buildLookup(state)
     local now=os.time()
-    for i=1,8 do updateRow(i,lookup,now) end
+    for i=1,8 do updateRow(i,lookup,now,state) end
     return 0
 end
