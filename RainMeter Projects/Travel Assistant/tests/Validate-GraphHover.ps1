@@ -52,7 +52,9 @@ if ($errors.Count -eq 0) {
     }
 
     $include=Get-Content -LiteralPath $includePath -Raw
-    $meterCount=([regex]::Matches($include,'(?m)^\[MeterGraphHover\d{2}\]$')).Count
+    # Git may check this file out as LF or CRLF. Allow the optional carriage return
+    # so Windows PowerShell sees the same 48 section headers as the repository copy.
+    $meterCount=([regex]::Matches($include,'(?m)^\[MeterGraphHover\d{2}\]\r?$')).Count
     if ($meterCount -ne 48) { Fail ("GraphHover.inc should define 48 hover bands; found {0}." -f $meterCount) }
     foreach ($token in @('[GraphHoverStyle]','Group=InlineGraphHover','MeterStyle=GraphHoverStyle','Fill Color 0,0,0,1','ToolTipTitle=Stock history')) {
         if (-not $include.Contains($token)) { Fail ("GraphHover.inc missing contract '{0}'." -f $token) }
