@@ -6,32 +6,54 @@ $luaPath = Join-Path $ProjectRoot '@Resources\Scripts\TravelStateWindowTweaks.lu
 $infoPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
 $cardPath = Join-Path $ProjectRoot '@Resources\Scripts\CardPresenter.lua'
 $tooltipPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowTooltipTweaks.lua'
+$travelPath = Join-Path $ProjectRoot '@Resources\Scripts\TravelContext.ps1'
+$anchorPath = Join-Path $ProjectRoot '@Resources\Scripts\CycleAnchorReconciler.ps1'
 
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $errors.Add($Message) }
 
-foreach ($path in @($luaPath,$infoPath,$cardPath,$tooltipPath)) {
+foreach ($path in @($luaPath,$infoPath,$cardPath,$tooltipPath,$travelPath,$anchorPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail ("Missing required file: {0}" -f $path) }
 }
 
 if ($errors.Count -eq 0) {
     $lua = Get-Content -LiteralPath $luaPath -Raw
     foreach ($token in @(
-        "travelState=='traveling'",
-        "travelState=='abroad' or travelState=='foreign'",
+        "travelState=='returning'",
+        "'ARRIVE IN TORN: '",
+        "plan.anchorPhase=='S'",
+        'averageRestockDelay(plan)',
+        'local restockAt=plan.anchorAt+delay',
+        'local outOfStockFor=math.max(0,now-plan.anchorAt)',
+        "'OoS: '",
+        "'. Restock: '",
+        "' overdue'",
+        "travelState~='traveling' and travelState~='abroad' and travelState~='foreign'",
         "countryId~=destinationId",
-        'findUpcomingGroup(plan,now)',
-        "'UPCOMING - RESTOCK IN '",
-        "'UPCOMING - SELLOUT IN '",
-        "'RESTOCK IN '",
-        "'IN STOCK FOR '",
-        'medianAvailability(plan)',
-        'sellout>now'
+        'averageAvailability(plan)',
+        "'UPCOMING - SELLOUT IN '"
     )) {
         if (-not $lua.Contains($token)) { Fail ("TravelStateWindowTweaks.lua missing contract token '{0}'." -f $token) }
     }
-    if ($lua.Contains('TravelArrivalAt') -or $lua.Contains('TravelTimeLeft')) {
-        Fail 'Outbound informational cycle selection must not filter by landing feasibility.'
+
+    $travel = Get-Content -LiteralPath $travelPath -Raw
+    foreach ($token in @(
+        "if (`$destLower -in @('torn','torn city','home'))",
+        "`$state = 'returning'",
+        "`$state['TravelArrivalAt']",
+        "`$state['TravelTimeLeft']"
+    )) {
+        if (-not $travel.Contains($token)) { Fail ("TravelContext.ps1 missing returning-flight contract '{0}'." -f $token) }
+    }
+
+    $anchor = Get-Content -LiteralPath $anchorPath -Raw
+    foreach ($token in @(
+        '[long]$previousStock -gt 0 -and $stock -le 0',
+        '$lastSellOutAt = $timestamp',
+        "Set-AnchorProperty -Object `$destination -Name 'lastSellOutAt'",
+        "anchorSource' -Value 'observations'"
+    )) {
+        if (-not $anchor.Contains($token)) { Fail ("CycleAnchorReconciler.ps1 missing real sellout-anchor contract '{0}'." -f $token) }
     }
 
     $info = Get-Content -LiteralPath $infoPath -Raw
@@ -63,5 +85,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Travel-state window presentation validation passed.' -ForegroundColor Green
-Write-Host 'Outbound shows the nearest physical cycle even when landing misses it; abroad uses stock/restock countdowns; returning continues to skip windows before Torn availability.' -ForegroundColor Green
+Write-Host 'Returning is detected explicitly; OOS timing is latest real sellout plus average retained restock delay; outbound/abroad remain destination-specific.' -ForegroundColor Green
 exit 0
