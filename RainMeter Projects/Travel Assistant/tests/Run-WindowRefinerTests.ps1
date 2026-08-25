@@ -39,6 +39,28 @@ $filtered=@(Get-StableWindowUsableCycles -Cycles $outlierCycles)
 Assert-Equal $filtered.Count 5 'Stable forecast should discard a many-hour pseudo-cycle when five normal recent cycles agree.'
 Assert-True (-not (@($filtered | Where-Object { [long]$_.restockDelaySeconds -gt 10000L }).Count -gt 0)) 'Outage-length restock delay must not remain in live forecast evidence.'
 
+# Current live geometry should prefer a sufficiently populated recent regime over an
+# older cycle whose total period looks normal but whose OOS/stock split is very different.
+# This models the Japan Xanax failure mode: the old full-period filter could preserve a
+# short-delay/long-availability cycle and pull Early Restock far earlier than the recent data.
+$regimeAnchor=3000000L
+$regimeLatest=2000000L
+$regimeCycles=@(
+    [pscustomobject]@{restockDelaySeconds=6576L;availabilitySeconds=1650L;soldOutAt=$regimeLatest},
+    [pscustomobject]@{restockDelaySeconds=6792L;availabilitySeconds=1600L;soldOutAt=($regimeLatest-7200L)},
+    [pscustomobject]@{restockDelaySeconds=6882L;availabilitySeconds=1700L;soldOutAt=($regimeLatest-14400L)},
+    [pscustomobject]@{restockDelaySeconds=7362L;availabilitySeconds=1550L;soldOutAt=($regimeLatest-21600L)},
+    # Older than 12h, but deliberately similar total period so period-only filtering would keep it.
+    [pscustomobject]@{restockDelaySeconds=1800L;availabilitySeconds=6600L;soldOutAt=($regimeLatest-54000L)}
+)
+$regimeFiltered=@(Get-StableWindowUsableCycles -Cycles $regimeCycles)
+Assert-Equal $regimeFiltered.Count 4 'Four completed cycles in the latest 12-hour regime should define live window geometry.'
+Assert-True (-not (@($regimeFiltered | Where-Object { [long]$_.restockDelaySeconds -eq 1800L }).Count -gt 0)) 'Older same-period short-delay cycle must not widen current-regime restock bounds.'
+$regimeModel=Get-StableRecurringScenarioModel -Cycles $regimeCycles -AnchorAt $regimeAnchor -AnchorPhase sellout -NowEpoch $regimeAnchor -FutureHorizonSeconds 50000
+$regimeGroup0=@($regimeModel.groups | Where-Object { [int]$_.ordinal -eq 0 } | Select-Object -First 1)[0]
+Assert-Equal ([long]$regimeGroup0.earlyRestockAt) ($regimeAnchor+6576L) 'Recent-regime earliest restock should use recent minimum OOS delay.'
+Assert-Equal ([long]$regimeGroup0.lateRestockAt) ($regimeAnchor+7362L) 'Recent-regime latest restock should use recent maximum OOS delay.'
+
 # Selection is chronological. A near-term >50% Best Hit should not be skipped just
 # because some later cycle eventually has a Safe Window.
 $selectionModel=[pscustomobject]@{ groups=@(
@@ -54,5 +76,5 @@ if ($failures.Count -gt 0) {
     Write-Host "Stable recurring-window tests failed with $($failures.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Stable recurring-window phase, outage outlier filtering, and chronological Safe/Best selection tests passed.' -ForegroundColor Green
+Write-Host 'Stable recurring-window phase, recent-regime bounds, outage outlier filtering, and chronological Safe/Best selection tests passed.' -ForegroundColor Green
 exit 0
