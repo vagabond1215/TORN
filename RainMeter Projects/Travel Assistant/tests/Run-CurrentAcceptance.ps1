@@ -47,5 +47,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify stable near-term Safe/Best timing without cumulative phase drift, departure tooltip plus 12px image info anchor, no title quantity, raw cost beside item name, fixed cost white, variable cost green-yellow-red by retained minimum versus 5%-profit threshold, profit/item green, conditional Take buffer, instant filters/sorts, and the one-at-a-time 528x125 observed-only 8-hour graph.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify stable near-term Safe/Best timing, no flight duration printed on cards, hover text/image shows pertinent arrival time plus in-stock duration and guaranteed overlap, raw cost beside item name, fixed cost white, variable cost green-yellow-red, profit/item green, conditional Take buffer, instant filters/sorts, and the one-at-a-time 528x125 observed-only 8-hour graph.' -ForegroundColor Yellow
 exit 0
