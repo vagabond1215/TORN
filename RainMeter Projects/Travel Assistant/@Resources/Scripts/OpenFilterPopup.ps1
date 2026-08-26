@@ -122,7 +122,9 @@ if ($Filter -eq 'Item') {
 } elseif ($Filter -eq 'Country') {
     if ($null -eq $countries -or -not $countries.PSObject.Properties['countries']) { throw 'countries.json is missing or invalid.' }
     $titleText='Countries in selected trip bands'; $allLabel='All countries in selected bands'
-    $bands=New-StringSet @($prefs.selectedTripBands)
+    # selectedTripBands is the always-on candidate scope. The popup must follow the
+    # user's immediate visible-band selection instead.
+    $bands=New-StringSet @($prefs.displayTripBands)
     $selected=New-StringSet @($prefs.selectedCountryIds)
     foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $true -and $bands.ContainsKey([string]$_.tripBand) } | Sort-Object tripBand,name)) {
         $band=[string]$country.tripBand
