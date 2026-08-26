@@ -6,6 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
+. (Join-Path $PSScriptRoot 'AtomicFile.ps1')
+
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
@@ -38,15 +40,12 @@ function Read-ProjectionKv {
 
 function Write-ProjectionKvAtomic {
     param([hashtable]$Values,[string]$Path)
-    New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
-    $tmp = $Path + '.tmp'
     $lines = New-Object System.Collections.Generic.List[string]
     foreach ($key in @($Values.Keys | Sort-Object)) {
         $value = ([string]$Values[$key]).Replace("`r",' ').Replace("`n",' ')
         $lines.Add($key + '=' + $value)
     }
-    [System.IO.File]::WriteAllLines($tmp,$lines.ToArray(),[System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $tmp -Destination $Path -Force
+    Write-TravelAssistantAtomicLines -Path $Path -Lines $lines.ToArray()
 }
 
 function Get-ProjectionProperty {
