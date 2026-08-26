@@ -6,10 +6,12 @@ $guardPath=Join-Path $ProjectRoot '@Resources\Scripts\FreshnessGuard.lua'
 $infoPath=Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
 $opportunityPath=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 $settingsPath=Join-Path $ProjectRoot 'config\settings.example.json'
+$iniPath=Join-Path $ProjectRoot 'TravelAssistant.ini'
+$stateReaderPath=Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 $errors=New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($guardPath,$infoPath,$opportunityPath,$settingsPath)) {
+foreach ($path in @($guardPath,$infoPath,$opportunityPath,$settingsPath,$iniPath,$stateReaderPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing freshness-guard asset: $path" }
 }
 
@@ -18,6 +20,8 @@ if ($errors.Count -eq 0) {
     $info=Get-Content -LiteralPath $infoPath -Raw
     $opportunity=Get-Content -LiteralPath $opportunityPath -Raw
     $settings=Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+    $ini=Get-Content -LiteralPath $iniPath -Raw
+    $stateReader=Get-Content -LiteralPath $stateReaderPath -Raw
 
     foreach ($token in @(
         'UIFreshestMarketSourceTimestamp',
@@ -34,7 +38,8 @@ if ($errors.Count -eq 0) {
         "!HideMeterGroup','OpportunityRow",
         'Display-only fence',
         'local data=readKv(statePath)',
-        'local heartbeat=readEpoch(heartbeatPath)'
+        'local heartbeat=readEpoch(heartbeatPath)',
+        "setVariable('PanelHeight',132)"
     )) {
         if (-not $guard.Contains($token)) { Fail "FreshnessGuard.lua missing '$token'." }
     }
@@ -86,6 +91,27 @@ if ($errors.Count -eq 0) {
         if (-not $info.Contains($token)) { Fail "OpportunityInfo.inc missing freshness-guard token '$token'." }
     }
     if ($info.Contains('RetryInterval=')) { Fail 'OpportunityInfo.inc must not configure a second freshness-guard updater cadence.' }
+
+    $presentationChain='[!UpdateMeasure MeasureState][!UpdateMeasure MeasureHeaderLayout][!UpdateMeasure MeasureCardPresenter][!UpdateMeasure MeasureCardTweaks][!UpdateMeasure MeasureFreshnessGuard][!UpdateMeasure MeasureTravelStateWindowTweaks][!UpdateMeasure MeasureWindowTooltipTweaks][!UpdateMeasure MeasureFinalCardPolish][!UpdateMeter *][!Redraw]'
+    $finishActionCount=([regex]::Matches($ini,[regex]::Escape('FinishAction='+$presentationChain))).Count
+    if($finishActionCount -ne 3){Fail "Expected all three explicit RunCommand FinishActions to complete the full presentation chain before redraw; found $finishActionCount."}
+
+    foreach($token in @(
+        'local function refreshPresentation()',
+        "'MeasureHeaderLayout'",
+        "'MeasureCardPresenter'",
+        "'MeasureCardTweaks'",
+        "'MeasureFreshnessGuard'",
+        "'MeasureTravelStateWindowTweaks'",
+        "'MeasureWindowTooltipTweaks'",
+        "'MeasureFinalCardPolish'",
+        'refreshPresentation()'
+    )){
+        if(-not$stateReader.Contains($token)){Fail "StateReader.lua missing redraw-stability token '$token'."}
+    }
+    $rawRedrawPattern=[regex]::Escape("SKIN:Bang('!UpdateMeter', '*')")+'\s*'+[regex]::Escape("SKIN:Bang('!Redraw')")
+    $directRedraws=([regex]::Matches($stateReader,$rawRedrawPattern)).Count
+    if($directRedraws -ne 1){Fail "StateReader.lua must centralize explicit redraws inside refreshPresentation; found $directRedraws raw update/redraw pair(s)."}
 }
 
 if ($errors.Count -gt 0) {
