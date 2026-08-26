@@ -54,7 +54,7 @@ if(Test-Path -LiteralPath $preferencesPath) {
 
 if(Test-Path -LiteralPath $legacyPopupPath) {
     $text=Get-Content -LiteralPath $legacyPopupPath -Raw
-    foreach($token in @('Read-FilterJson -Path $Path','[int]::TryParse','New-IntSet','New-StringSet','Read-OptionalPopupJson',"$titleText='Ignore List'")) {
+    foreach($token in @('Read-FilterJson -Path $Path','[int]::TryParse','New-IntSet','New-StringSet','Read-OptionalPopupJson',"`$titleText='Ignore List'")) {
         if(-not $text.Contains($token)) { Fail "OpenFilterPopup.ps1 missing Ignore/legacy robustness token '$token'." }
     }
 }
