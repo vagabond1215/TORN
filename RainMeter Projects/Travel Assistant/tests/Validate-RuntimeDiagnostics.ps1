@@ -7,8 +7,8 @@ $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
 $required = @(
-    'RuntimeLog.ps1','PopupHost.ps1','LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','LaunchItemViewer.ps1',
-    'OpenOptimizerSettings.ps1','OpenFilterPopup.ps1','FilterPreferences.ps1','OpportunityState.ps1','RunUpdate.ps1'
+    'RuntimeLog.ps1','PopupHost.ps1','LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','LaunchItemViewer.ps1','LaunchSettings.ps1','LaunchUpdate.ps1',
+    'OpenOptimizerSettings.ps1','OpenFilterPopup.ps1','OpenSettings.ps1','FilterPreferences.ps1','OpportunityState.ps1','RunUpdate.ps1'
 )
 foreach ($name in $required) {
     $path = Join-Path $Scripts $name
@@ -49,28 +49,54 @@ foreach ($launcher in @('LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','L
     $path = Join-Path $Scripts $launcher
     if (-not (Test-Path -LiteralPath $path)) { continue }
     $text = Get-Content -LiteralPath $path -Raw
-    foreach ($token in @('PopupHost.ps1','-WindowStyle Hidden','-STA','exit 0')) {
-        if (-not $text.Contains($token)) { Fail "$launcher missing hidden-host contract '$token'." }
+    foreach ($token in @('PopupHost.ps1','RuntimeLog.ps1','-WindowStyle Hidden','-STA','System.Diagnostics.ProcessStartInfo','[System.Diagnostics.Process]::Start($psi)','UseShellExecute = $false','CreateNoWindow = $true','return','Format-TravelAssistantErrorRecord')) {
+        if (-not $text.Contains($token)) { Fail "$launcher missing reusable hidden-host contract '$token'." }
     }
-    if (-not ($text.Contains('Start-Process') -or $text.Contains('System.Diagnostics.ProcessStartInfo'))) { Fail "$launcher must detach its popup host." }
+    if ($text.Contains('Start-Process')) { Fail "$launcher must use the detached .NET process API rather than Start-Process." }
+    if ($text.Contains('exit 0')) { Fail "$launcher must return after spawning so nested Settings calls cannot terminate their parent host." }
     if ($text.Contains('-WindowStyle Normal')) { Fail "$launcher must not expose a PowerShell console window." }
+}
+
+$profileLauncherPath = Join-Path $Scripts 'LaunchSettings.ps1'
+if (Test-Path -LiteralPath $profileLauncherPath) {
+    $text = Get-Content -LiteralPath $profileLauncherPath -Raw
+    foreach ($token in @('OpenSettings.ps1','RuntimeLog.ps1','-WindowStyle Hidden','-STA','System.Diagnostics.ProcessStartInfo','[System.Diagnostics.Process]::Start($psi)','UseShellExecute = $false','CreateNoWindow = $true','return','Format-TravelAssistantErrorRecord')) {
+        if (-not $text.Contains($token)) { Fail "LaunchSettings.ps1 missing reusable Profile/API launcher contract '$token'." }
+    }
+    if ($text.Contains('Start-Process')) { Fail 'LaunchSettings.ps1 must use the detached .NET process API rather than Start-Process.' }
+    if ($text.Contains('exit 0')) { Fail 'LaunchSettings.ps1 must return so Optimizer Settings stays open when Profile/API is launched.' }
 }
 
 $settingsUiPath = Join-Path $Scripts 'OpenOptimizerSettings.ps1'
 if (Test-Path -LiteralPath $settingsUiPath) {
     $text = Get-Content -LiteralPath $settingsUiPath -Raw
     if ($text.Contains('-WindowStyle Normal')) { Fail 'OpenOptimizerSettings.ps1 must not spawn visible PowerShell consoles.' }
-    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','-WindowStyle Hidden')) {
+    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','LaunchUpdate.ps1','& $UpdateLauncher -Action Update')) {
         if (-not $text.Contains($token)) { Fail "OpenOptimizerSettings.ps1 missing '$token'." }
+    }
+    if ($text.Contains("Join-Path `$PSScriptRoot 'RunUpdate.ps1'") -or $text.Contains("Start-Process -FilePath 'powershell.exe'")) {
+        Fail 'OpenOptimizerSettings.ps1 must refresh through LaunchUpdate.ps1 rather than start RunUpdate directly under Windows PowerShell.'
+    }
+}
+
+$profileUiPath = Join-Path $Scripts 'OpenSettings.ps1'
+if (Test-Path -LiteralPath $profileUiPath) {
+    $text = Get-Content -LiteralPath $profileUiPath -Raw
+    foreach ($token in @('LaunchUpdate.ps1','Start-BackgroundUpdate','& $UpdateLauncherPath -Action Update')) {
+        if (-not $text.Contains($token)) { Fail "OpenSettings.ps1 missing updater-launcher contract '$token'." }
+    }
+    if ($text.Contains("Join-Path `$PSScriptRoot 'RunUpdate.ps1'") -or $text.Contains("Start-Process -FilePath 'powershell.exe' -ArgumentList `$arguments")) {
+        Fail 'OpenSettings.ps1 must refresh through LaunchUpdate.ps1 rather than start RunUpdate directly under Windows PowerShell.'
     }
 }
 
 $filterUiPath = Join-Path $Scripts 'OpenFilterPopup.ps1'
 if (Test-Path -LiteralPath $filterUiPath) {
     $text = Get-Content -LiteralPath $filterUiPath -Raw
-    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','Read-OptionalPopupJson','Start-FilterProjectionRefresh')) {
+    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','Read-OptionalPopupJson','Start-FilterProjectionRefresh','$prefs.displayTripBands')) {
         if (-not $text.Contains($token)) { Fail "OpenFilterPopup.ps1 missing '$token'." }
     }
+    if ($text.Contains('$bands=New-StringSet @($prefs.selectedTripBands)')) { Fail 'Country popup must use displayTripBands, not the always-on candidate trip-band scope.' }
     $legacyPartial = "foreach(`$scriptName in @('OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1'))"
     if ($text.Contains($legacyPartial)) { Fail 'Filter popups must not run an ad-hoc partial projection chain.' }
 }
@@ -107,6 +133,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Runtime diagnostics validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Hidden popup host, scope-safe entrypoints, and bounded runtime logging validation passed.' -ForegroundColor Green
+Write-Host 'Reusable detached popup hosts, PS7 settings refresh routing, scope-safe entrypoints, and bounded runtime logging validation passed.' -ForegroundColor Green
 Write-Host 'Runtime log: data\runtime\logs\travel-assistant.log (7-day / 256 KiB bounded, local and Git-ignored).'
 exit 0
