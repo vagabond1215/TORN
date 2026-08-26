@@ -58,7 +58,8 @@ if(Test-Path -LiteralPath $files.Preferences){
 
 if(Test-Path -LiteralPath $files.Popup){
  $text=Get-Content -LiteralPath $files.Popup -Raw
- foreach($token in @("'Item'","'Country'","'Category'","'Ignore'",'observedMarkets','Start-FilterProjectionRefresh','RuntimeLog.ps1','Read-OptionalPopupJson','$engine=Read-OptionalPopupJson $EngineStateFile')){if(-not$text.Contains($token)){Fail "Filter popup missing '$token'."}}
+ foreach($token in @("'Item'","'Country'","'Category'","'Ignore'",'observedMarkets','Start-FilterProjectionRefresh','RuntimeLog.ps1','Read-OptionalPopupJson','$engine=Read-OptionalPopupJson $EngineStateFile','$bands=New-StringSet @($prefs.displayTripBands)')){if(-not$text.Contains($token)){Fail "Filter popup missing '$token'."}}
+ if($text.Contains('$bands=New-StringSet @($prefs.selectedTripBands)')){Fail 'Country popup must scope rows from displayTripBands, not the always-on candidate trip bands.'}
  $legacyPartial="foreach(`$scriptName in @('OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1'))"
  if($text.Contains($legacyPartial)){Fail 'Filter popup must not mutate private build state through an ad-hoc partial projection chain.'}
  if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Filter popup must remain local-only.'}
@@ -66,7 +67,14 @@ if(Test-Path -LiteralPath $files.Popup){
 
 if(Test-Path -LiteralPath $files.Launcher){
  $text=Get-Content -LiteralPath $files.Launcher -Raw
- foreach($token in @('PopupHost.ps1','-Popup Filter','-WindowStyle Hidden','-STA')){if(-not$text.Contains($token)){Fail "Filter launcher missing '$token'."}}
+ foreach($token in @('PopupHost.ps1','-Popup Filter','-WindowStyle Hidden','-STA','System.Diagnostics.ProcessStartInfo','return')){if(-not$text.Contains($token)){Fail "Filter launcher missing '$token'."}}
+ if($text.Contains('exit 0')){Fail 'Filter launcher must return after spawning so nested settings popups remain alive.'}
+}
+
+if(Test-Path -LiteralPath $files.Settings){
+ $text=Get-Content -LiteralPath $files.Settings -Raw
+ foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1','& $UpdateLauncher -Action Update')){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ if($text.Contains("Join-Path `$PSScriptRoot 'RunUpdate.ps1'")){Fail 'Optimizer Settings must not bypass LaunchUpdate.ps1.'}
 }
 
 if(Test-Path -LiteralPath $files.State){
@@ -112,5 +120,5 @@ if(Test-Path -LiteralPath $files.Countries){
 }
 
 if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Opportunity filter/sort/settings validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Opportunity filters, persistent startup country defaults, finalized republish, popup fallback, instant trip-band/sort controls, and explicit card detail validation passed.' -ForegroundColor Green
+Write-Host 'Opportunity filters, visible-band country popup scope, persistent startup country defaults, finalized republish, popup fallback, instant trip-band/sort controls, and explicit card detail validation passed.' -ForegroundColor Green
 exit 0
