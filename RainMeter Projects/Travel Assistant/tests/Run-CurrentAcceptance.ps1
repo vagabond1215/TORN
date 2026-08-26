@@ -6,6 +6,7 @@ $tests = @(
     'Validate-TravelAssistant.ps1',
     'Validate-RainmeterSkin.ps1',
     'Validate-UpdaterRuntime.ps1',
+    'Validate-UpdaterMutex.ps1',
     'Validate-StatePublicationArchitecture.ps1',
     'Validate-CardPresenter.ps1',
     'Validate-CurrentTweaks.ps1',
