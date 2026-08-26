@@ -91,7 +91,7 @@ function Get-FilterVisibleCategories {
 
 function New-DefaultUiPreferences {
     return [pscustomobject]@{
-        schemaVersion = 6
+        schemaVersion = 7
         travelMode = 'airstrip'
         pinnedMarket = ''
         itemFilterAll = $true
@@ -146,6 +146,11 @@ function Normalize-UiPreferences {
     $defaults = New-DefaultUiPreferences
     if ($null -eq $Preferences) { $Preferences = [pscustomobject]@{} }
 
+    $sourceSchemaVersion = 0
+    if ($Preferences.PSObject.Properties['schemaVersion']) {
+        [void][int]::TryParse([string]$Preferences.schemaVersion,[ref]$sourceSchemaVersion)
+    }
+
     # Migrate the old selectedTripBands UI state into displayTripBands once.
     $legacyDisplayBands = @('short','medium','long')
     if (-not $Preferences.PSObject.Properties['displayTripBands'] -and $Preferences.PSObject.Properties['selectedTripBands']) {
@@ -155,7 +160,7 @@ function Normalize-UiPreferences {
     foreach ($property in @($defaults.PSObject.Properties)) {
         if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
-    Set-FilterProperty $Preferences 'schemaVersion' 6
+    Set-FilterProperty $Preferences 'schemaVersion' 7
 
     if ($legacyDisplayBands.Count -ge 0 -and -not $Preferences.PSObject.Properties['displayTripBandsMigrated']) {
         Set-FilterProperty $Preferences 'displayTripBands' ([string[]]$legacyDisplayBands)
@@ -184,6 +189,12 @@ function Normalize-UiPreferences {
     foreach ($id in @($Preferences.selectedCountryIds)) {
         $value = [string]$id
         if ($availableCountries -contains $value) { $countries += $value }
+    }
+    # Schema <=6 could persist an accidental empty country set, leaving the entire
+    # opportunity surface blank with no visible country-filter indicator. Repair that
+    # legacy state once; schema 7 still permits an intentional empty set afterward.
+    if ($sourceSchemaVersion -lt 7 -and $countries.Count -eq 0 -and $availableCountries.Count -gt 0) {
+        $countries = [string[]]@($availableCountries)
     }
     Set-FilterProperty $Preferences 'selectedCountryIds' ([string[]]@($countries | Sort-Object -Unique))
 
@@ -222,6 +233,15 @@ function Save-UiPreferences {
     $normalized = Normalize-UiPreferences -Preferences $Preferences
     Write-FilterJsonAtomic -Path $PreferenceFile -Value $normalized
     return $normalized
+}
+
+function Start-FilterProjectionRefresh {
+    $runner = Join-Path $PSScriptRoot 'RunUpdate.ps1'
+    if (-not (Test-Path -LiteralPath $runner)) { throw 'RunUpdate.ps1 is required to republish filter changes.' }
+    $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+    if ($null -eq $pwsh) { throw 'pwsh.exe is required to republish filter changes.' }
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $runner
+    Start-Process -FilePath $pwsh.Source -ArgumentList $arguments -WindowStyle Hidden | Out-Null
 }
 
 function Toggle-TripBandPreference {
@@ -289,25 +309,14 @@ if ($Action -eq 'ToggleTripBand') {
 }
 
 # Sort and trip-band clicks are presentation-only. Their visible result is applied
-# in Lua immediately, so persistence must not launch any projection work.
-if ($changed -and $Action -notin @('SetSortMode','ToggleTripBand')) {
-    $filterState = Join-Path $PSScriptRoot 'FilterState.ps1'
-    if (Test-Path -LiteralPath $filterState) {
-        try { & $filterState }
-        catch {
-            if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
-                Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('FilterState.ps1: ' + $_.Exception.ToString())
-            }
-        }
-    }
-
-    $opportunities = Join-Path $PSScriptRoot 'OpportunityState.ps1'
-    if (Test-Path -LiteralPath $opportunities) {
-        try { & $opportunities }
-        catch {
-            if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
-                Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('OpportunityState.ps1: ' + $_.Exception.ToString())
-            }
+# in Lua immediately, so persistence must not launch any projection work. Reset is a
+# model-affecting change and must flow through the PS7 main updater so the finalized
+# ui-state.kv generation is republished rather than mutating only private build state.
+if ($changed -and $Action -eq 'ResetFilters') {
+    try { Start-FilterProjectionRefresh }
+    catch {
+        if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+            Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('Republish reset filters: ' + $_.Exception.ToString())
         }
     }
 }
