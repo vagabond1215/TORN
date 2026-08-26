@@ -13,9 +13,18 @@ if (Test-Path -LiteralPath $runtimeLog) { . $runtimeLog }
 try {
     if (-not (Test-Path -LiteralPath $hostScript)) { throw 'PopupHost.ps1 is missing.' }
 
-    # Rainmeter owns only this short launcher. The detached STA host owns the dialog.
+    # Rainmeter owns only this short launcher. Use the .NET process API so the
+    # launcher cannot remain attached to the WinForms host; PopupHost owns the STA
+    # dialog and logs any model/UI failure itself.
     $arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -STA -File "{0}" -Popup Filter -Filter "{1}"' -f $hostScript,$Filter
-    Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'powershell.exe'
+    $psi.Arguments = $arguments
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $process = [System.Diagnostics.Process]::Start($psi)
+    if ($null -eq $process) { throw 'Failed to start filter popup host.' }
+    $process.Dispose()
     exit 0
 } catch {
     if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
