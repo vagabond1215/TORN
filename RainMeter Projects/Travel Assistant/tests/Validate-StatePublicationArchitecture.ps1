@@ -10,11 +10,8 @@ $publishedStatePath = Join-Path $ProjectRoot '@Resources\Scripts\PublishedState.
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($iniPath,$infoPath,$runUpdatePath,$atomicPath)) {
+foreach ($path in @($iniPath,$infoPath,$runUpdatePath,$atomicPath,$publishedStatePath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing publication architecture file: $path" }
-}
-if (Test-Path -LiteralPath $publishedStatePath) {
-    Fail 'PublishedState.lua must remain retired after the target-host manifest/fallback regression.'
 }
 
 if ($errors.Count -eq 0) {
@@ -22,6 +19,7 @@ if ($errors.Count -eq 0) {
     $info = Get-Content -LiteralPath $infoPath -Raw
     $runUpdate = Get-Content -LiteralPath $runUpdatePath -Raw
     $atomic = Get-Content -LiteralPath $atomicPath -Raw
+    $compat = Get-Content -LiteralPath $publishedStatePath -Raw
 
     $uiStateToken = 'StateFile=#@#Generated\ui-state.kv'
     $mainReaderCount = ([regex]::Matches($ini,[regex]::Escape($uiStateToken))).Count
@@ -74,9 +72,22 @@ if ($errors.Count -eq 0) {
         Fail 'AtomicFile.ps1 must retain the optional private-state override contract.'
     }
 
+    # The compatibility module exists only so a partially updated Rainmeter process
+    # cannot crash if an older loaded Lua chunk still calls PublishedState.lua.
+    # Production readers must not depend on it and it must not reintroduce the
+    # retired immutable-generation / manifest-selection behavior.
+    foreach ($token in @('function module.configure','function module.read','function module.epoch','return readKv(statePath)','raw:match(''^(%d+)'')')) {
+        if (-not $compat.Contains($token)) { Fail "PublishedState.lua compatibility shim missing '$token'." }
+    }
+    foreach ($forbidden in @('ui%-state%-%d+%-%x+%.kv','UIGeneration','cachedData','cachedKey','generatedDir')) {
+        if ($compat.Contains($forbidden)) { Fail "PublishedState.lua compatibility shim must not restore manifest-generation behavior '$forbidden'." }
+    }
+
     foreach ($luaName in @('StateReader.lua','CardPresenter.lua','CardTweaks.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua','WindowTooltipTweaks.lua')) {
         $luaText = Get-Content -LiteralPath (Join-Path $ProjectRoot ('@Resources\Scripts\' + $luaName)) -Raw
-        if ($luaText.Contains('PublishedState.lua')) { Fail "$luaName must read finalized ui-state.kv directly; PublishedState.lua is retired." }
+        if ($luaText.Contains('PublishedState.lua') -or $luaText.Contains('publishedState')) {
+            Fail "$luaName must read finalized ui-state.kv directly; the compatibility shim is not a production dependency."
+        }
     }
 }
 
@@ -87,5 +98,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Direct single-final-publication architecture validation passed.' -ForegroundColor Green
-Write-Host 'Intermediate stages mutate private state.kv; one complete ui-state.kv is atomically published after FilterState, then the numeric heartbeat advances.' -ForegroundColor Green
+Write-Host 'Intermediate stages mutate private state.kv; one complete ui-state.kv is atomically published after FilterState, then the numeric heartbeat advances. PublishedState.lua is compatibility-only.' -ForegroundColor Green
 exit 0
