@@ -189,6 +189,19 @@ The standalone Viewer retains its richer dropdown and diagnostics. Inline graphs
 
 Settings, Item/Country/Category filters, Ignore List, Profile/API and standalone Viewer use hidden STA popup hosts. No PowerShell console should remain visible.
 
+Popup launchers are spawn-only and reusable: after starting the detached child they `return` rather than `exit`, so nested `Ignore List...` / `Profile / API...` launches cannot terminate the parent Settings host. Item, Settings, Profile/API and Viewer launchers use the same hidden .NET `ProcessStartInfo` contract with launcher-level runtime logging.
+
+All settings/filter changes that require a projection refresh route through `LaunchUpdate.ps1`; they must not start `RunUpdate.ps1` directly under Windows PowerShell 5.1. The long-running worker remains PowerShell 7 and serialized by the named updater mutex.
+
+The Country popup is scoped by `displayTripBands`, while `selectedTripBands` remains the always-on candidate projection scope.
+
+### 2026-08-26 popup finalization checkpoint
+
+- Target-host evidence supplied during the previous Codex pass confirms the **Item filter popup appeared**.
+- The remaining popup launchers and nested Settings flows were hardened after that test and still require target-host interaction acceptance.
+- Static acceptance now rejects nested-launcher `exit 0`, direct Settings -> WinPS `RunUpdate.ps1` bypasses, and Country-popup use of `selectedTripBands`.
+- Do not mark popup acceptance complete until Settings, Category, Country, Ignore List, Profile/API and Viewer are exercised on the target Rainmeter host.
+
 Runtime failures:
 
 ```text
@@ -207,7 +220,7 @@ cd "C:\Codex\TORN\RainMeter Projects\Travel Assistant"
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Run-CurrentAcceptance.ps1
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
+pwsh.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\@Resources\Scripts\RunUpdate.ps1 -Action Update
 ```
 
@@ -233,6 +246,12 @@ Then refresh Rainmeter and verify:
 18. Opening another row collapses the first; sorting/trip filtering collapses an open graph.
 19. `VIEWER >` still opens the separate full Viewer popup.
 20. The list remains populated through normal polling and popups leave no visible PowerShell console.
+21. Item, Category and Country filter popups all open; Country lists only countries from currently visible trip bands.
+22. `SETTINGS >` opens Opportunity Settings without a visible console.
+23. `Ignore List...` opens from Opportunity Settings without closing the parent Settings window.
+24. `Profile / API...` opens from Opportunity Settings without closing the parent Settings window.
+25. Saving either Settings surface starts the normal PS7 update path; no long-running Windows PowerShell `RunUpdate.ps1` process is left behind.
+26. Saving a filter closes only that filter popup, republishes through the normal updater path, and leaves the Rainmeter skin responsive.
 
 If anything errors:
 
