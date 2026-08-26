@@ -86,7 +86,10 @@ end
 local function safeText(v, fallback)
     local value = trim(v)
     if value == '' then return fallback or '' end
-    return value:gsub('[\r\n]', ' ')
+    -- string.gsub returns (text, substitutionCount). Parentheses deliberately
+    -- collapse that multi-return so a final safeText(...) argument cannot leak an
+    -- extra numeric Config argument into SKIN:Bang('!SetOption', ...).
+    return (value:gsub('[\r\n]', ' '))
 end
 
 local function moneyNumber(v)
