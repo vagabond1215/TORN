@@ -113,9 +113,9 @@ if ($errors.Count -eq 0) {
         "'Late Restock: '",
         "'Guaranteed Window: '",
         "setOption(prefix..'Window','Text','')",
-        "setOption(prefix..'Window','W',0)",
+        "setOption(prefix..'Window','W',1)",
         "setOption(prefix..'Leave','X',78)",
-        "setOption(info,'ImageAlpha',show and 255 or 0)",
+        "if show then SKIN:Bang('!ShowMeter',info) else SKIN:Bang('!HideMeter',info) end",
         "setOption(info,'ToolTipTitle','Window estimate')",
         "setOption(info,'ToolTipText',text)",
         "setOption(leave,'ToolTipText',text)",
@@ -126,6 +126,14 @@ if ($errors.Count -eq 0) {
         "panel+25"
     )) {
         if (-not $tweaks.Contains($token)) { Fail "CardTweaks.lua missing '$token'." }
+    }
+    foreach ($forbidden in @(
+        "setOption(info,'ToolTipHidden'",
+        "setOption(leave,'ToolTipHidden'",
+        "setOption(info,'ImageAlpha',show and 255 or 0)",
+        "setOption(prefix..'Window','W',0)"
+    )) {
+        if ($tweaks.Contains($forbidden)) { Fail "CardTweaks.lua restores target-host unsafe visibility bang '$forbidden'." }
     }
     if ($tweaks.Contains("title=title..'  '..tostring(quantity)..' qty'")) { Fail 'CardTweaks.lua must not print quantity in the title.' }
     if ($tweaks.Contains("local header='Cost '")) { Fail 'CardTweaks.lua must not print the Cost label.' }
@@ -156,6 +164,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Stable-window refiner, tooltip-only travel timing, card economics colors, image info anchor, and expanded graph validation passed.' -ForegroundColor Green
+Write-Host 'Stable-window refiner, tooltip-only travel timing, card economics colors, bang-safe image info anchor, and expanded graph validation passed.' -ForegroundColor Green
 Write-Host 'Expected live result: no flight duration on the card; hover shows pertinent arrival time, median in-stock duration, early/late restock, and guaranteed overlap; economics colors and stable window timing remain intact.'
 exit 0
