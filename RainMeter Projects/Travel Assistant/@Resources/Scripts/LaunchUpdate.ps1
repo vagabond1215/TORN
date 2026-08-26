@@ -19,6 +19,7 @@ try {
     # preference normalization, state publication, provider work, or any other file I/O
     # that can be delayed by OneDrive/AV/filter drivers. All real update work belongs to
     # the detached RunUpdate worker, whose named mutex prevents overlapping workers.
+    # Return rather than exit so popup helpers can reuse this launcher safely.
     $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action {1}' -f $runner,$Action
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $pwsh.Source
@@ -28,7 +29,7 @@ try {
     $process = [System.Diagnostics.Process]::Start($psi)
     if ($null -eq $process) { throw 'Failed to start detached RunUpdate worker.' }
     $process.Dispose()
-    exit 0
+    return
 } catch {
     if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
         Write-TravelAssistantLog -Level ERROR -Component 'update-launcher' -Message (Format-TravelAssistantErrorRecord $_)
