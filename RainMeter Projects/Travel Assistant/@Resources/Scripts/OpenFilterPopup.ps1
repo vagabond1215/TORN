@@ -130,12 +130,10 @@ $save.Add_Click({
         } else { Set-FilterProperty $prefs 'ignoredItemIds' ([int[]]@($selected|ForEach-Object{[int]$_}|Sort-Object -Unique)) }
         [void](Save-UiPreferences $prefs)
 
-        foreach($scriptName in @('OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1')) {
-            $scriptPath=Join-Path $PSScriptRoot $scriptName
-            if(-not(Test-Path -LiteralPath $scriptPath)){continue}
-            try { & $scriptPath }
-            catch { Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message (($scriptName+': ')+(Format-TravelAssistantErrorRecord $_)) }
-        }
+        # Since Rainmeter now reads only finalized ui-state.kv, popup changes must
+        # republish through the same PS7 main update chain. Directly mutating build
+        # state here would leave the visible generation stale until a later poll.
+        Start-FilterProjectionRefresh
         Clear-TravelAssistantLatestError -Component $logComponent
         $form.Close()
     } catch {
