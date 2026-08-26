@@ -36,7 +36,7 @@ if ($errors.Count -eq 0) {
         "'SAFE - LEAVE '","'SAFE - LEAVE BEFORE '","'BEST - LEAVE NOW'", "'BEST - LEAVE '",
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
-        'configureWindowTooltipMeter','ToolTipHidden','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo',
+        'configureWindowTooltipMeter','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','Empty ToolTipText disables the tooltip naturally',
         "'InlinePattern'", "'InlinePattern2'", '/ea x[0-9]+ =', 'Color | 255,255,255,255',
         'quantityFromTooltip','buyPriceFromVisibleText','bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
@@ -44,6 +44,7 @@ if ($errors.Count -eq 0) {
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
+    if ($presenter.Contains("setOption(name,'ToolTipHidden'")) { Fail 'CardPresenter.lua must not dynamically mutate ToolTipHidden; empty tooltip text owns visibility on the target host.' }
     if ($presenter -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand|LaunchItemViewer') { Fail 'CardPresenter.lua must remain presentation-only and local.' }
 
     foreach ($token in @(
@@ -79,5 +80,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Compact trade-card safe/best window validation passed.' -ForegroundColor Green
-Write-Host 'Departure text has a persistent tooltip hitbox; Safe rows expose an info anchor, profit equation punctuation is white, and fixed-price items use exact Take cash.'
+Write-Host 'Departure text uses non-empty tooltip text as its hitbox; Safe rows expose an info anchor, profit equation punctuation is white, and fixed-price items use exact Take cash.'
 exit 0
