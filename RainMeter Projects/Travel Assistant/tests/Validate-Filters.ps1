@@ -12,6 +12,8 @@ $files=@{
  Launcher=Join-Path $ProjectRoot '@Resources\Scripts\LaunchFilterPopup.ps1'
  PopupHost=Join-Path $ProjectRoot '@Resources\Scripts\PopupHost.ps1'
  HeaderLayout=Join-Path $ProjectRoot '@Resources\Scripts\HeaderLayout.lua'
+ FilterIcon=Join-Path $ProjectRoot '@Resources\Images\UI\filter.png'
+ SettingsIcon=Join-Path $ProjectRoot '@Resources\Images\UI\settings.png'
  State=Join-Path $ProjectRoot '@Resources\Scripts\FilterState.ps1'
  Opportunities=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
  Settings=Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
@@ -135,8 +137,12 @@ if(Test-Path -LiteralPath $files.Ini){
  $ini=Get-Content -LiteralPath $files.Ini -Raw
  foreach($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeasureHeaderLayout','MeterFilterIcon','MeterSettingsIcon','MeterSortName','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')){if($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){Fail "TravelAssistant.ini missing [$section]."}}
  foreach($retired in @('MeterItemFilter','MeterTripLabel','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine','MeterSettings','MeterSortOptimal','MeterSortTime','MeterSortLabel')){if($ini -match ('(?m)^\['+[regex]::Escape($retired)+'\]\s*$')){Fail "Retired main-UI meter [$retired] returned."}}
- foreach($token in @('FilterRequest=Filters',"OpenFilter('Filters')",'ScriptFile=#@#Scripts\HeaderLayout.lua','PanelHeight=132','Y=58','Shape10=Line 6,14,3,17')){if(-not$ini.Contains($token)){Fail "TravelAssistant.ini compact-header token missing '$token'."}}
- if($ini.Contains('Text=SETTINGS  >')){Fail 'Main header must use the settings gear icon, not SETTINGS > text.'}
+ foreach($token in @('FilterRequest=Filters',"OpenFilter('Filters')",'ScriptFile=#@#Scripts\HeaderLayout.lua','PanelHeight=132','Y=58','ImageName=#@#Images\UI\filter.png','ImageName=#@#Images\UI\settings.png')){if(-not$ini.Contains($token)){Fail "TravelAssistant.ini compact-header token missing '$token'."}}
+ foreach($section in @('MeterFilterIcon','MeterSettingsIcon')) {
+  $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+  if($body -notmatch '(?im)^Meter=Image\s*$' -or $body -notmatch '(?im)^W=24\s*$' -or $body -notmatch '(?im)^H=24\s*$'){Fail "$section must remain a compact 24x24 image meter."}
+ }
+ if($ini.Contains('Text=SETTINGS  >')){Fail 'Main header must use the settings gear image, not SETTINGS > text.'}
 }
 
 if(Test-Path -LiteralPath $files.Countries){
@@ -148,6 +154,6 @@ if(Test-Path -LiteralPath $files.Countries){
 }
 
 if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Unified opportunity filter/header validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Unified trip/country/category/item filter panel and compact icon header validation passed.' -ForegroundColor Green
+Write-Host 'Unified trip/country/category/item filter panel and compact image-icon header validation passed.' -ForegroundColor Green
 Write-Host 'Legacy main filter meters are retired, Ignore List remains separate, and HeaderLayout can only shift the existing card stack upward.' -ForegroundColor Green
 exit 0
