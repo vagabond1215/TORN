@@ -42,7 +42,10 @@ if ($errors.Count -eq 0) {
         if (-not $helper.Contains($token)) { Fail "AtomicFile.ps1 missing '$token'." }
     }
     if ($helper.Contains('$Path + ''.tmp''')) { Fail 'AtomicFile.ps1 must not use a shared fixed destination.tmp file.' }
-    if ($helper.Contains('[System.IO.File]::Replace($TempPath, $Path, $null')) { Fail 'AtomicFile.ps1 must not pass a null backup path to File.Replace on Windows PowerShell 5.1.' }
+    if ($helper.Contains('[System.IO.File]::Replace($TempPath, $Path, $null')) { Fail 'AtomicFile.ps1 must not pass a null backup path to File.Replace.' }
+    if ($helper.Contains('[System.IO.File]::Replace($TempPath, $Path, $backupPath, $true)')) { Fail 'AtomicFile.ps1 must not use the runtime-sensitive four-argument File.Replace overload.' }
+    if (-not $helper.Contains('[System.IO.File]::Replace($TempPath, $Path, $backupPath)')) { Fail 'AtomicFile.ps1 must use the portable three-argument File.Replace overload.' }
+    if (-not $helper.Contains('Atomic backup path generation returned an empty path.')) { Fail 'AtomicFile.ps1 must explicitly guard against an empty generated backup path.' }
 
     foreach ($pair in @(
         [pscustomobject]@{name='ProjectCollectedState.ps1'; text=$projection},
@@ -57,8 +60,8 @@ if ($errors.Count -eq 0) {
     if (-not $runUpdate.Contains('Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text $epoch')) { Fail 'RunUpdate.ps1 heartbeat must use the shared atomic writer.' }
     if ($runUpdate.Contains("`$tmp = `$HeartbeatFile + '.tmp'")) { Fail 'RunUpdate.ps1 must not retain the fixed heartbeat .tmp publication path.' }
 
-    # Exercise the helper locally. This catches PowerShell 5.1/.NET compatibility
-    # issues and confirms repeated replacement leaves one complete destination.
+    # Exercise the helper locally. This catches Windows PowerShell 5.1 and PowerShell 7
+    # runtime differences and confirms repeated replacement leaves one complete destination.
     try {
         . $helperPath
         $work = Join-Path ([System.IO.Path]::GetTempPath()) ('TravelAssistantAtomicTest_' + [Guid]::NewGuid().ToString('N'))
@@ -87,5 +90,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Atomic state-write validation passed.' -ForegroundColor Green
-Write-Host 'Critical state and heartbeat publishers use unique temporary files, legal unique backup paths, per-destination cross-process mutexes, File.Replace/File.Move, and bounded retry instead of fixed .tmp + Move-Item publication.'
+Write-Host 'Critical state and heartbeat publishers use unique temporary files, legal unique backup paths, per-destination cross-process mutexes, the portable three-argument File.Replace overload, and bounded retry instead of fixed .tmp + Move-Item publication.'
 exit 0
