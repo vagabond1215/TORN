@@ -15,7 +15,7 @@ $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $LocalSettingsPath = Join-Path $ConfigDir 'settings.local.json'
 $PreferencePath = Join-Path $RuntimeDir 'preferences.json'
 $SettingsErrorFile = Join-Path $RuntimeDir 'settings-error.txt'
-$RunUpdatePath = Join-Path $PSScriptRoot 'RunUpdate.ps1'
+$UpdateLauncherPath = Join-Path $PSScriptRoot 'LaunchUpdate.ps1'
 $FilterLauncherPath = Join-Path $PSScriptRoot 'LaunchFilterPopup.ps1'
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
@@ -66,9 +66,8 @@ function Set-ObjectProperty {
 }
 
 function Start-BackgroundUpdate {
-    if (-not (Test-Path -LiteralPath $RunUpdatePath)) { return }
-    $arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $RunUpdatePath.Replace('"', '\"')
-    Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+    if (-not (Test-Path -LiteralPath $UpdateLauncherPath)) { throw 'LaunchUpdate.ps1 is required to refresh saved profile settings.' }
+    & $UpdateLauncherPath -Action Update
 }
 
 $base = Read-JsonFile (Join-Path $ConfigDir 'settings.example.json')
