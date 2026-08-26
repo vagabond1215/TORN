@@ -5,15 +5,16 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $helperPath = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
 $projectionPath = Join-Path $ProjectRoot '@Resources\Scripts\ProjectCollectedState.ps1'
 $finalizerPath = Join-Path $ProjectRoot '@Resources\Scripts\FinalizeState.ps1'
+$runUpdatePath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath)) {
+foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath,$runUpdatePath)) {
     if (-not (Test-Path -LiteralPath $assetPath)) { Fail "Missing atomic-state asset: $assetPath" }
 }
 
 if ($errors.Count -eq 0) {
-    foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath)) {
+    foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath,$runUpdatePath)) {
         $tokens=$null; $parseErrors=$null
         [void][System.Management.Automation.Language.Parser]::ParseFile($assetPath,[ref]$tokens,[ref]$parseErrors)
         foreach ($parseError in @($parseErrors)) { Fail "$([System.IO.Path]::GetFileName($assetPath)) parse error: $($parseError.Message)" }
@@ -22,10 +23,12 @@ if ($errors.Count -eq 0) {
     $helper = Get-Content -LiteralPath $helperPath -Raw
     $projection = Get-Content -LiteralPath $projectionPath -Raw
     $finalizer = Get-Content -LiteralPath $finalizerPath -Raw
+    $runUpdate = Get-Content -LiteralPath $runUpdatePath -Raw
 
     foreach ($token in @(
         'Get-TravelAssistantAtomicMutexName',
         'New-TravelAssistantAtomicTempPath',
+        'New-TravelAssistantAtomicBackupPath',
         'Publish-TravelAssistantAtomicTempFile',
         'Write-TravelAssistantAtomicText',
         'Write-TravelAssistantAtomicLines',
@@ -39,6 +42,7 @@ if ($errors.Count -eq 0) {
         if (-not $helper.Contains($token)) { Fail "AtomicFile.ps1 missing '$token'." }
     }
     if ($helper.Contains('$Path + ''.tmp''')) { Fail 'AtomicFile.ps1 must not use a shared fixed destination.tmp file.' }
+    if ($helper.Contains('[System.IO.File]::Replace($TempPath, $Path, $null')) { Fail 'AtomicFile.ps1 must not pass a null backup path to File.Replace on Windows PowerShell 5.1.' }
 
     foreach ($pair in @(
         [pscustomobject]@{name='ProjectCollectedState.ps1'; text=$projection},
@@ -48,6 +52,10 @@ if ($errors.Count -eq 0) {
         if (-not $pair.text.Contains('Write-TravelAssistantAtomicLines')) { Fail "$($pair.name) must publish state through the shared atomic writer." }
         if ($pair.text.Contains("Move-Item -LiteralPath `$tmp -Destination `$Path -Force")) { Fail "$($pair.name) must not retain the fixed-temp Move-Item publication path." }
     }
+
+    if (-not $runUpdate.Contains("`$AtomicFileScript = Join-Path `$PSScriptRoot 'AtomicFile.ps1'")) { Fail 'RunUpdate.ps1 must resolve AtomicFile.ps1 for heartbeat publication.' }
+    if (-not $runUpdate.Contains('Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text $epoch')) { Fail 'RunUpdate.ps1 heartbeat must use the shared atomic writer.' }
+    if ($runUpdate.Contains("`$tmp = `$HeartbeatFile + '.tmp'")) { Fail 'RunUpdate.ps1 must not retain the fixed heartbeat .tmp publication path.' }
 
     # Exercise the helper locally. This catches PowerShell 5.1/.NET compatibility
     # issues and confirms repeated replacement leaves one complete destination.
@@ -62,8 +70,10 @@ if ($errors.Count -eq 0) {
             }
             $actual = Get-Content -LiteralPath $target -Raw
             if (-not $actual.Contains('Generation=25') -or -not $actual.Contains('Complete=1')) { Fail 'Atomic helper did not publish the final complete generation.' }
-            $orphans = @(Get-ChildItem -LiteralPath $work -Filter '*.tmp' -Force -ErrorAction SilentlyContinue)
-            if ($orphans.Count -gt 0) { Fail 'Atomic helper left orphan temporary files after successful writes.' }
+            $tempOrphans = @(Get-ChildItem -LiteralPath $work -Filter '*.tmp' -Force -ErrorAction SilentlyContinue)
+            $backupOrphans = @(Get-ChildItem -LiteralPath $work -Filter '*.bak' -Force -ErrorAction SilentlyContinue)
+            if ($tempOrphans.Count -gt 0) { Fail 'Atomic helper left orphan temporary files after successful writes.' }
+            if ($backupOrphans.Count -gt 0) { Fail 'Atomic helper left orphan backup files after successful writes.' }
         } finally {
             Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         }
@@ -77,5 +87,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Atomic state-write validation passed.' -ForegroundColor Green
-Write-Host 'Critical state publishers use unique temporary files, per-destination cross-process mutexes, File.Replace/File.Move, and bounded retry instead of fixed .tmp + Move-Item publication.'
+Write-Host 'Critical state and heartbeat publishers use unique temporary files, legal unique backup paths, per-destination cross-process mutexes, File.Replace/File.Move, and bounded retry instead of fixed .tmp + Move-Item publication.'
 exit 0
