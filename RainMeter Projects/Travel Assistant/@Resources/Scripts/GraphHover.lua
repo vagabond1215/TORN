@@ -116,8 +116,7 @@ function Update()
         setOption(name,'Y',plotY)
         setOption(name,'Shape','Rectangle 0,0,'..width..','..plotH..' | Fill Color 0,0,0,1 | StrokeWidth 0')
         setOption(name,'ToolTipText',tip)
-        setOption(name,'ToolTipHidden',tip=='' and 1 or 0)
-        SKIN:Bang('!ShowMeter',name)
+        if tip=='' then SKIN:Bang('!HideMeter',name) else SKIN:Bang('!ShowMeter',name) end
     end
     return 0
 end
