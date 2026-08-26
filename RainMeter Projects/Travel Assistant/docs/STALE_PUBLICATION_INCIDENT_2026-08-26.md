@@ -1,10 +1,10 @@
 # Stale Publication Incident — 2026-08-26
 
-This note records live Windows evidence gathered while the Travel Assistant UI remained stale.
+This note records live Windows evidence gathered while the Travel Assistant UI remained stale and the publication architecture adopted from that evidence.
 
 ## Confirmed clock split
 
-A local `tools/Probe-LiveStockProviders.ps1` run reported approximately:
+An early `tools/Probe-LiveStockProviders.ps1` run reported approximately:
 
 ```text
 engine collection          1m
@@ -24,11 +24,11 @@ At the same time the structured providers were healthy for all collected countri
 
 This incident is not a Prometheus/YATA acquisition outage. Fresh provider data is reaching `engine-state.json`; generated UI publication is failing afterward.
 
-Earlier runtime errors showed Windows sharing/replacement failures on `state.kv`. The current atomic writer retries wrapped sharing violations, but a subsequent live probe still showed the generated state and heartbeat more than an hour behind the collection clocks.
+Earlier runtime errors showed Windows sharing/replacement failures on `state.kv`. The atomic writer retries wrapped sharing violations, but repeated live probes still showed generated state and heartbeat lagging behind collection.
 
 ## Confirmed lock owner
 
-Repeated Windows Restart Manager sampling caught the process holding `@Resources/Generated/state.kv` open:
+Repeated Windows Restart Manager sampling caught a process holding `@Resources/Generated/state.kv` open:
 
 ```text
 ProcessName     : powershell
@@ -39,57 +39,92 @@ ApplicationType : RmConsole
 
 The lock was transient rather than persistent: it appeared in one sample and disappeared in subsequent 250 ms samples. `last-update.txt` did not show the same lock owner.
 
-This is important because it rules out a persistent Rainmeter Lua file-handle leak as the immediate owner in the captured incident. The process reading `state.kv` was the Rainmeter-launched Windows PowerShell updater itself.
-
-## Root-cause correction
-
-`File.Replace` requires delete/rename sharing on the destination. A PowerShell read handle that allows ordinary read/write sharing but omits `FileShare.Delete` can therefore block a later atomic replacement even when the read is legitimate and short-lived.
-
-The shared atomic helper now exposes explicit state readers that open with:
+The shared atomic helper was subsequently hardened so updater-owned state reads use:
 
 ```text
 FileShare.ReadWrite | FileShare.Delete
 ```
 
-The two stages that were directly observed failing in the supplied runtime archive now use that reader before publishing state:
+`ProjectCollectedState.ps1` and `FinalizeState.ps1` adopted those shared readers, and runtime validation covered both delete-sharing readers and a temporary external lock that denies delete sharing.
+
+## PowerShell runtime A/B
+
+With Rainmeter unloaded, running the entire update manually under PowerShell 7.6.5 produced a healthy one-shot result:
 
 ```text
-ProjectCollectedState.ps1
-FinalizeState.ps1
+engine collection          38s
+engine freshest source     40s
+state.kv freshest source   40s
+UI heartbeat               10s
 ```
 
-They continue to publish with unique temporary files, a per-destination mutex, and atomic `File.Replace`/`File.Move` semantics.
+This justified a controlled migration of only Rainmeter's main `[MeasureUpdate]` process to `pwsh.exe`. Popup, filter, Viewer, inline-graph and preference helper measures remained on Windows PowerShell 5.1.
 
-`tests/Validate-AtomicStateWrites.ps1` now includes two separate runtime contention cases:
+That runtime migration improved the isolated test but did **not** solve normal Rainmeter publication. With Rainmeter active, a later production sample showed:
 
-1. an in-process `state.kv` reader deliberately left open with `ReadWrite|Delete`; atomic replacement must succeed while that reader is still open;
-2. an external-style reader that deliberately denies delete sharing for ~800 ms; replacement must retry and succeed after the lock is released.
+```text
+engine collection          30s
+engine freshest source     30s
+state.kv freshest source   3m
+UI heartbeat               2m
+```
 
-This distinguishes safe updater reads from genuine external sharing violations.
+and the runtime error again contained:
 
-## Reader audit
+```text
+System.Management.Automation.MethodInvocationException
+Exception calling "Replace" with "3" argument(s):
+"The process cannot access the file because it is being used by another process."
+```
 
-The primary Rainmeter Lua readers inspected (`StateReader.lua` and `CardPresenter.lua`) explicitly close their `io.open(...)` handles after reading. The captured Restart Manager evidence also identified the updater rather than `Rainmeter.exe` as the process owning `state.kv` at the sampled failure point.
+Therefore the incident crossed the decision boundary established for this investigation: do not keep increasing `File.Replace` retry duration and do not treat PowerShell 5.1 as the sole remaining cause.
 
-The repository still contains older state-mutating stages that use fixed `.tmp` + `Move-Item` publication patterns. Those should be migrated incrementally after the confirmed critical path is stable, but they are not being treated as the original provider-freshness failure.
+## Structural publication redesign
 
-## Immediate validation
+The generated-state roles are now separated:
 
-After pulling the shared-reader fix:
+```text
+@Resources/Generated/state.kv      = private/build state
+@Resources/Generated/ui-state.kv   = Rainmeter-consumed finalized state
+@Resources/Generated/last-update.txt = successful final UI publication heartbeat
+```
+
+Intermediate PowerShell stages continue to mutate `state.kv` sequentially during the update chain. Rainmeter no longer reads that hot pathname.
+
+After `FilterState.ps1` completes, `RunUpdate.ps1` validates that the build state contains the expected opportunity and UI freshness projection, then performs exactly one atomic publication from the completed build contents into `ui-state.kv`. Only after that final UI publication succeeds is `last-update.txt` advanced.
+
+This changes the failure mode intentionally:
+
+- a failed intermediate or final publication cannot expose a partially-mutated generation to Rainmeter;
+- the previous complete `ui-state.kv` remains visible;
+- the heartbeat cannot claim freshness unless final UI publication succeeded;
+- the frequently-mutated build pathname is no longer also the continuously-read UI pathname.
+
+The existing bounded atomic writer is retained for the one final publication. Its retry window was **not** lengthened as part of this redesign.
+
+`AtomicFile.ps1` also retains an optional `TORN_TRAVEL_STATE_KV` build-path override for controlled tests or later private-generation routing, while the default build artifact remains `state.kv`.
+
+## Validation
+
+After pulling the redesign:
 
 ```powershell
-.\tests\Validate-AtomicStateWrites.ps1
-.\@Resources\Scripts\RunUpdate.ps1 -Action Update
-.\tools\Probe-LiveStockProviders.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-CurrentAcceptance.ps1
+
+pwsh.exe -NoProfile -File .\tools\Probe-LiveStockProviders.ps1
 ```
 
-The desired clock result is:
+The probe now distinguishes both build and UI clocks:
 
 ```text
-engine collection          <1m
-engine freshest source     <1m
-state.kv freshest source   <1m
-UI heartbeat               <1m
+engine collection
+engine freshest source
+build state freshest source
+UI state freshest source
+UI heartbeat
 ```
 
-If `state.kv` still fails to advance, inspect the newest compact error files and capture the lock owner again. At that point the next step is to identify the exact later state-mutating stage or move the update chain to a single working-generation publication model rather than extending replacement retry duration further.
+For normal Rainmeter operation, the expected steady-state relationship is that build and UI state continue advancing across repeated polling cycles, with UI state/heartbeat usually no more than roughly one completed update behind the newest collection while a new cycle is in flight.
+
+If `state.kv` advances but `ui-state.kv` repeatedly fails to publish with sharing violations, the next architectural step is immutable generation publication plus a small pointer/manifest. Do not respond by extending replacement retry duration further.
