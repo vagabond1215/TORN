@@ -32,7 +32,7 @@ if(Test-Path -LiteralPath $files.Preferences){
   'showProfitableOnly','ignoredItemIds','use95PercentMarketValue','energyWastePolicy','nerveWastePolicy',
   "sortMode = 'upcoming'",'Normalize-SortMode',"@('name','upcoming','gross','profit_per_hour')",'SetSortMode',
   'Set-FilterStateKvValuesAtomic','UISelectedTripBands','UITripShortOn','UITripMediumOn','UITripLongOn',
-  '$sourceSchemaVersion -lt 7','Start-FilterProjectionRefresh','pwsh.exe',"$Action -eq 'ResetFilters'"
+  '$sourceSchemaVersion -lt 7','Start-FilterProjectionRefresh','pwsh.exe','$Action -eq ''ResetFilters'''
  )){if(-not$text.Contains($token)){Fail "FilterPreferences.ps1 missing '$token'."}}
  if($text -notmatch '(?s)if \(\$Action -eq ''ToggleTripBand''\).*?Save-UiPreferences.*?Set-FilterStateKvValuesAtomic') { Fail 'Trip-band persistence must remain a tiny preference/state write.' }
 
@@ -49,7 +49,8 @@ if(Test-Path -LiteralPath $files.Preferences){
 if(Test-Path -LiteralPath $files.Popup){
  $text=Get-Content -LiteralPath $files.Popup -Raw
  foreach($token in @("'Item'","'Country'","'Category'","'Ignore'",'observedMarkets','Start-FilterProjectionRefresh','RuntimeLog.ps1')){if(-not$text.Contains($token)){Fail "Filter popup missing '$token'."}}
- if($text -match "foreach\(\$scriptName in @\('OptimalRoute\.ps1','OpportunityState\.ps1','FilterState\.ps1'\)\)"){Fail 'Filter popup must not mutate private build state through an ad-hoc partial projection chain.'}
+ $legacyPartial="foreach(`$scriptName in @('OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1'))"
+ if($text.Contains($legacyPartial)){Fail 'Filter popup must not mutate private build state through an ad-hoc partial projection chain.'}
  if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Filter popup must remain local-only.'}
 }
 
