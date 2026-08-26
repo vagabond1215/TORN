@@ -7,12 +7,14 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
+. (Join-Path $PSScriptRoot 'AtomicFile.ps1')
+
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
-$StateKvFile = Join-Path $GeneratedDir 'state.kv'
+$StateKvFile = Get-TravelAssistantStateFilePath -ProjectRoot $ProjectRoot
 $ErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
 
 function Read-TravelJson {
