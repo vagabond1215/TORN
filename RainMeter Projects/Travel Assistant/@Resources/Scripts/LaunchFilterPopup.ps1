@@ -15,7 +15,8 @@ try {
 
     # Rainmeter owns only this short launcher. Use the .NET process API so the
     # launcher cannot remain attached to the WinForms host; PopupHost owns the STA
-    # dialog and logs any model/UI failure itself.
+    # dialog and logs any model/UI failure itself. Use return rather than exit so
+    # Settings can invoke this launcher without terminating its own popup host.
     $arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -STA -File "{0}" -Popup Filter -Filter "{1}"' -f $hostScript,$Filter
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = 'powershell.exe'
@@ -25,7 +26,7 @@ try {
     $process = [System.Diagnostics.Process]::Start($psi)
     if ($null -eq $process) { throw 'Failed to start filter popup host.' }
     $process.Dispose()
-    exit 0
+    return
 } catch {
     if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
         Write-TravelAssistantLog -Level ERROR -Component ('popup-launcher-filter-' + $Filter.ToLowerInvariant()) -Message (Format-TravelAssistantErrorRecord $_)
