@@ -28,6 +28,10 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
         "`$arrivalAt -gt `$NowEpoch",
         "(`$lastSuccessAt + `$timeLeft) -gt `$NowEpoch",
         "Set-TravelDynamicProperty `$Context 'state' 'home'",
+        "Set-TravelDynamicProperty `$Context 'destination' 'Torn'",
+        "`$statusLower -eq 'okay' -and -not `$travelActive",
+        "`$destinationText = 'Torn'",
+        "`$destinationCountryId = ''",
         "Set-ProjectedBar -State `$state -Prefix 'Energy'",
         "Set-ProjectedBar -State `$state -Prefix 'Nerve'",
         'TravelDestinationCountryId',
@@ -65,5 +69,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Travel context configuration validation passed.' -ForegroundColor Green
-Write-Host 'Completed return flights expire to home even after a failed refresh; one bounded user request still supplies destination plus Energy/Nerve bars before opportunity ranking.'
+Write-Host 'Completed returns and explicit Okay-at-home responses release stale foreign destinations; one bounded user request still supplies destination plus Energy/Nerve bars before opportunity ranking.'
 exit 0
