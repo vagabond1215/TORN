@@ -235,18 +235,18 @@ local function configureInfo(index,tooltip)
     local text=trim(tooltip)
     local show=text~=''
 
-    setOption(info,'ImageAlpha',show and 255 or 0)
+    -- Visibility is a meter bang, not a dynamic 0/1 option. On the target host,
+    -- numeric zero values in these high-frequency !SetOption calls were parsed as
+    -- an optional config named "0" and flooded Rainmeter's log after RESET.
+    if show then SKIN:Bang('!ShowMeter',info) else SKIN:Bang('!HideMeter',info) end
     setOption(info,'ToolTipTitle','Window estimate')
     setOption(info,'ToolTipText',text)
-    setOption(info,'ToolTipHidden',show and 0 or 1)
     setOption(info,'ToolTipWidth',420)
     setOption(info,'DynamicVariables',1)
 
-    -- Keep the departure text itself hoverable. The image meter is the stable
-    -- fallback target and avoids Unicode/font encoding issues entirely.
+    -- Empty ToolTipText naturally disables the departure tooltip.
     setOption(leave,'ToolTipTitle','Window estimate')
     setOption(leave,'ToolTipText',text)
-    setOption(leave,'ToolTipHidden',show and 0 or 1)
     setOption(leave,'ToolTipWidth',420)
     setOption(leave,'DynamicVariables',1)
     setOption(leave,'SolidColor','0,0,0,1')
@@ -293,7 +293,7 @@ local function applySecondLine(index)
     local prefix='MeterOpportunity'..index
     -- Flight duration is intentionally tooltip-only. Reuse that space for the
     -- actionable departure guidance instead of duplicating travel time on-card.
-    setOption(prefix..'Window','Text',''); setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',0)
+    setOption(prefix..'Window','Text',''); setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',1)
     setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',220)
     setOption(prefix..'Info','X',303); setOption(prefix..'Info','W',12); setOption(prefix..'Info','H',12)
     local leaveY=tonumber(meterOption(prefix..'Leave','Y')) or 0
