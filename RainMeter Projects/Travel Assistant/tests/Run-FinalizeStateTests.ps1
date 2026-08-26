@@ -4,7 +4,6 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $SourceFinalizer = Join-Path $ProjectRoot '@Resources\Scripts\FinalizeState.ps1'
 $SourceTravelProfile = Join-Path $ProjectRoot '@Resources\Scripts\TravelProfile.ps1'
-$SourceAtomicFile = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('TravelAssistant-Finalize-' + [Guid]::NewGuid().ToString('N'))
 $scriptDir = Join-Path $tempRoot '@Resources\Scripts'
 $configDir = Join-Path $tempRoot 'config'
@@ -118,7 +117,6 @@ New-Item -ItemType Directory -Force -Path $scriptDir,$configDir,$runtimeDir,$see
 try {
     Copy-Item -LiteralPath $SourceFinalizer -Destination $finalizer
     Copy-Item -LiteralPath $SourceTravelProfile -Destination $travelProfileScript
-    Copy-Item -LiteralPath $SourceAtomicFile -Destination (Join-Path $scriptDir 'AtomicFile.ps1')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\settings.example.json') -Destination (Join-Path $configDir 'settings.example.json')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\items.json') -Destination (Join-Path $configDir 'items.json')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\countries.json') -Destination (Join-Path $configDir 'countries.json')

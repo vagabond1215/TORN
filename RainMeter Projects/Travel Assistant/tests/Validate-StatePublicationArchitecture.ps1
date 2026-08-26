@@ -6,11 +6,10 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $infoPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
 $runUpdatePath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $atomicPath = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
-$publishedStatePath = Join-Path $ProjectRoot '@Resources\Scripts\PublishedState.lua'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($iniPath,$infoPath,$runUpdatePath,$atomicPath,$publishedStatePath)) {
+foreach ($path in @($iniPath,$infoPath,$runUpdatePath,$atomicPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing publication architecture file: $path" }
 }
 
@@ -19,7 +18,6 @@ if ($errors.Count -eq 0) {
     $info = Get-Content -LiteralPath $infoPath -Raw
     $runUpdate = Get-Content -LiteralPath $runUpdatePath -Raw
     $atomic = Get-Content -LiteralPath $atomicPath -Raw
-    $publishedState = Get-Content -LiteralPath $publishedStatePath -Raw
 
     $uiStateToken = 'StateFile=#@#Generated\ui-state.kv'
     $mainReaderCount = ([regex]::Matches($ini,[regex]::Escape($uiStateToken))).Count
@@ -40,11 +38,7 @@ if ($errors.Count -eq 0) {
         "`$StateKvFile = Join-Path `$GeneratedDir 'state.kv'",
         "`$UiStateKvFile = Join-Path `$GeneratedDir 'ui-state.kv'",
         'function Publish-UpdateUiState',
-        "'ui-state-{0}-{1}.kv'",
-        "'UIGeneration='",
-        '[System.IO.File]::WriteAllText($path,$publishedText',
-        "Write-TravelAssistantAtomicText -Path `$HeartbeatFile -Text (`$epoch + '|' + [string]`$Publication.Name)",
-        'Remove-OldUiStateGenerations',
+        'Write-TravelAssistantAtomicText -Path $UiStateKvFile -Text $text',
         'Build state.kv is incomplete after FilterState; refusing UI publication.',
         'Publish-UpdateUiState',
         'Write-UpdateHeartbeat'
@@ -61,7 +55,7 @@ if ($errors.Count -eq 0) {
         Fail 'RunUpdate must complete FilterState, publish exactly one finalized UI state, then write the heartbeat.'
     }
 
-    $publishInvocationCount = ([regex]::Matches($runUpdate,'(?m)^\s*\$publication\s*=\s*Publish-UpdateUiState\s*$')).Count
+    $publishInvocationCount = ([regex]::Matches($runUpdate,'(?m)^\s*Publish-UpdateUiState\s*$')).Count
     if ($publishInvocationCount -ne 1) {
         Fail "RunUpdate must invoke final UI publication exactly once; found $publishInvocationCount invocations."
     }
@@ -72,13 +66,6 @@ if ($errors.Count -eq 0) {
     if (-not $atomic.Contains('$env:TORN_TRAVEL_STATE_KV')) {
         Fail 'AtomicFile.ps1 must retain the optional private-state override contract.'
     }
-    foreach ($token in @('readManifest','ui%-state%-%d+%-%x+%.kv','candidate.UIGeneration','cachedData','fallbackPath')) {
-        if (-not $publishedState.Contains($token)) { Fail "PublishedState.lua missing immutable-generation reader token '$token'." }
-    }
-    foreach ($luaName in @('StateReader.lua','CardPresenter.lua','CardTweaks.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua','WindowTooltipTweaks.lua')) {
-        $luaText = Get-Content -LiteralPath (Join-Path $ProjectRoot ('@Resources\Scripts\' + $luaName)) -Raw
-        if (-not $luaText.Contains('PublishedState.lua')) { Fail "$luaName must read finalized immutable generations through PublishedState.lua." }
-    }
 }
 
 if ($errors.Count -gt 0) {
@@ -87,6 +74,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Immutable single-final-publication architecture validation passed.' -ForegroundColor Green
-Write-Host 'Intermediate stages mutate state.kv; Rainmeter readers cache the complete generation named by the heartbeat manifest; legacy ui-state.kv remains fallback-only.' -ForegroundColor Green
+Write-Host 'Single-final-publication architecture validation passed.' -ForegroundColor Green
+Write-Host 'Intermediate stages mutate state.kv; all live Rainmeter state readers use ui-state.kv; heartbeat follows the one final UI publication.' -ForegroundColor Green
 exit 0
