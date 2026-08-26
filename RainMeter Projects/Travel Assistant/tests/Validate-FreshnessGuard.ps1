@@ -73,7 +73,7 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         '[MeasureFreshnessGuard]',
         'FreshnessGuard.lua',
-        'StateFile=#@#Generated\state.kv',
+        'StateFile=#@#Generated\ui-state.kv',
         'HeartbeatFile=#@#Generated\last-update.txt',
         'StaleAfter=300',
         'HardStaleAfter=21600',
@@ -91,5 +91,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Forecast-only stock freshness validation passed.' -ForegroundColor Green
-Write-Host 'Five-minute provider freshness stays strict; 5m-6h evidence drives recurring forecasts with stale stock quantity suppressed, while the UI remains read-only and hard-stops after six hours.'
+Write-Host 'Five-minute provider freshness stays strict; 5m-6h evidence drives recurring forecasts with stale stock quantity suppressed, while the finalized UI state remains read-only and hard-stops after six hours.'
 exit 0
