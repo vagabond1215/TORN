@@ -37,7 +37,11 @@ OptimalRoute compatibility model
         ↓
 OpportunityState
         ↓
-FilterState
+WindowPlan / price refinement / FilterState
+        ↓
+private build state.kv
+        ↓ exactly one final publication
+finalized ui-state.kv
         ↓
 visible heartbeat
         ↓
@@ -73,9 +77,24 @@ For every active market it updates current `engine-state.json` market metadata, 
 
 `UpdateTracker.ps1` is retained only for explicit legacy compatibility actions such as `CycleTravelMode`; it is not called during a normal `Action=Update` heartbeat.
 
-`ProjectCollectedState.ps1` projects legacy `state.kv` stock/travel fields locally from the ShadowCollector engine state, avoiding a second provider request and a second history writer.
+`ProjectCollectedState.ps1` projects legacy build-state stock/travel fields locally from the ShadowCollector engine state, avoiding a second provider request and a second history writer.
 
 Filters, Ignore List, sort order, graph expansion, and Viewer selection never narrow shared provider collection.
+
+## State publication ownership
+
+Generated state has two explicit roles:
+
+```text
+@Resources/Generated/state.kv     build/intermediate state
+@Resources/Generated/ui-state.kv  finalized Rainmeter state
+```
+
+Intermediate PowerShell stages mutate only the build artifact during the normal update chain. Rainmeter's continuously-running Lua measures read only `ui-state.kv`.
+
+After `FilterState.ps1` completes, `RunUpdate.ps1` validates the build projection and performs one final atomic publication into `ui-state.kv`. The heartbeat is advanced only after that publication succeeds. If final publication fails, Rainmeter continues showing the previous complete UI generation rather than an intermediate state.
+
+The shared atomic writer keeps bounded retry/backoff for that final publication. Retry duration is not used as a substitute for publication isolation. If the single final publication is still recurrently blocked by active readers, the next escalation is immutable generation plus a pointer/manifest.
 
 ## Retention and historical truth
 
@@ -139,9 +158,9 @@ Each compact row is:
 
 ## Provider and heartbeat freshness
 
-`FilterState.ps1` records both the oldest and freshest active market source timestamps. The legacy header timestamp key is fed from the **freshest** active sample so one lagging country does not label the entire provider feed stale. The actual oldest timestamp is retained separately for diagnostics.
+`FilterState.ps1` records both the oldest and freshest active market source timestamps in the build state. The legacy header timestamp key is fed from the **freshest** active sample so one lagging country does not label the entire provider feed stale. The actual oldest timestamp is retained separately for diagnostics.
 
-The visible heartbeat is written after current collection/context/opportunity projection and before broad MV queue work. A slow MV refresh therefore does not make otherwise-current foreign-stock state appear unrefreshed.
+The visible heartbeat is written after finalized `ui-state.kv` publication and before broad MV queue work. A slow MV refresh therefore does not make otherwise-current foreign-stock state appear unrefreshed, and a failed UI publication cannot falsely advance the heartbeat.
 
 ## Local catalog and MV
 
@@ -179,6 +198,6 @@ Energy/Nerve waste policies remain local decision constraints and never mutate o
 
 ## Projection / interaction
 
-`StateReader.lua` performs immediate local sorting so button response does not wait for PowerShell persistence. It retains the last complete opportunity projection through transient intermediate writes, while genuine zero-result projections still replace the list.
+`StateReader.lua` performs immediate local sorting so button response does not wait for PowerShell persistence. It reads only the last finalized `ui-state.kv`, so intermediate PowerShell mutations are never visible to the main Rainmeter surface. Genuine zero-result projections still replace the list when that completed generation is published.
 
 One-second Rainmeter work remains local-only. Normal foreign-stock collection is approximately once per minute; inline rendering is local/on-demand; API credentials remain ignored/local.
