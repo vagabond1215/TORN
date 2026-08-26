@@ -136,7 +136,7 @@ DynamicVariables=1
 [MeasureFreshnessGuard]
 Measure=Script
 ScriptFile=#@#Scripts\FreshnessGuard.lua
-StateFile=#@#Generated\state.kv
+StateFile=#@#Generated\ui-state.kv
 HeartbeatFile=#@#Generated\last-update.txt
 StaleAfter=300
 HardStaleAfter=21600
@@ -149,7 +149,7 @@ UpdateDivider=1
 [MeasureTravelStateWindowTweaks]
 Measure=Script
 ScriptFile=#@#Scripts\TravelStateWindowTweaks.lua
-StateFile=#@#Generated\state.kv
+StateFile=#@#Generated\ui-state.kv
 UpdateDivider=1
 
 ; Final tooltip pass. Runs after the card presenter/tweaks and travel-state status
@@ -157,7 +157,7 @@ UpdateDivider=1
 [MeasureWindowTooltipTweaks]
 Measure=Script
 ScriptFile=#@#Scripts\WindowTooltipTweaks.lua
-StateFile=#@#Generated\state.kv
+StateFile=#@#Generated\ui-state.kv
 UpdateDivider=1
 
 ; Final visible-card polish. Keeps the forecast untouched while simplifying Safe
