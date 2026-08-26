@@ -18,9 +18,21 @@ $logComponent='popup-filter-'+$Filter.ToLowerInvariant()
 
 function Read-PopupJson([string]$Path) {
     try { return (Read-FilterJson -Path $Path) }
-    catch {
-        throw ("Failed to read popup JSON '{0}': {1}" -f $Path,$_.Exception.Message)
+    catch { throw ("Failed to read popup JSON '{0}': {1}" -f $Path,$_.Exception.Message) }
+}
+function Read-OptionalPopupJson([string]$Path) {
+    $lastError=$null
+    foreach($attempt in 1..3) {
+        try { return (Read-FilterJson -Path $Path) }
+        catch {
+            $lastError=$_
+            if($attempt -lt 3) { Start-Sleep -Milliseconds 75 }
+        }
     }
+    if($null -ne $lastError) {
+        try { Write-TravelAssistantLog -Level WARN -Component $logComponent -Message ("Optional engine-state read failed; using committed catalog fallback: {0}" -f $lastError.Exception.Message) } catch { }
+    }
+    return $null
 }
 function New-PopupRow([string]$Id,[string]$Label,[bool]$Checked) { return [pscustomobject]@{Id=$Id;Label=$Label;Checked=$Checked} }
 function New-StringSet([object[]]$Values) {
@@ -43,7 +55,9 @@ function New-IntSet([object[]]$Values) {
 $prefs=Read-UiPreferences
 $items=Read-PopupJson (Join-Path $ConfigDir 'items.json')
 $countries=Read-PopupJson (Join-Path $ConfigDir 'countries.json')
-$engine=Read-PopupJson $EngineStateFile
+# The filter UI must remain usable while the long-running updater rewrites engine state.
+# Engine metadata enriches the popup, but committed catalog data is a valid fallback.
+$engine=Read-OptionalPopupJson $EngineStateFile
 
 function Get-ActiveCatalogRows {
     $activeIds=@{}
@@ -75,10 +89,13 @@ function Get-ActiveCatalogRows {
 
     if ($resultRows.Count -eq 0 -and $null -ne $items -and $items.PSObject.Properties['items']) {
         foreach ($item in @($items.items)) {
+            if($item.PSObject.Properties['visible'] -and $item.visible -eq $false) { continue }
             $id=0
             if(-not [int]::TryParse([string]$item.itemId,[ref]$id) -or $id -le 0) { continue }
             if($activeIds.Count -gt 0 -and -not $activeIds.ContainsKey([string]$id)) { continue }
-            $resultRows += [pscustomobject]@{itemId=$id;name=[string]$item.name;category=[string]$item.category}
+            $name=if(-not [string]::IsNullOrWhiteSpace([string]$item.name)){[string]$item.name}else{'Item '+$id}
+            $category=if(-not [string]::IsNullOrWhiteSpace([string]$item.category)){[string]$item.category}else{'Unknown'}
+            $resultRows += [pscustomobject]@{itemId=$id;name=$name;category=$category}
         }
     }
     return @($resultRows | Sort-Object name,itemId)
@@ -186,10 +203,6 @@ $save.Add_Click({
             Set-FilterProperty $prefs 'ignoredItemIds' ([int[]]@($selected|ForEach-Object{[int]$_}|Sort-Object -Unique))
         }
         [void](Save-UiPreferences $prefs)
-
-        # Rainmeter consumes finalized ui-state.kv only, so popup changes republish
-        # through the same serialized PS7 update worker rather than mutating visible
-        # state directly.
         Start-FilterProjectionRefresh
         Clear-TravelAssistantLatestError -Component $logComponent
         $form.Close()
