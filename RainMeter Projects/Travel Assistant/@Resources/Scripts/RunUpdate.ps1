@@ -47,7 +47,10 @@ $TrendForecastErrorFile = Join-Path $RuntimeDir 'trend-forecast-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
+# state.kv is the private/build artifact mutated by intermediate pipeline stages.
+# Rainmeter reads ui-state.kv, which is replaced exactly once after FilterState.
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
+$UiStateKvFile = Join-Path $GeneratedDir 'ui-state.kv'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
 $acquired = $false
 
@@ -125,6 +128,16 @@ function Invoke-RestMethod {
     if ($Method -eq 'Get' -and $Uri -like 'https://api.torn.com/v2/market/*/itemmarket*') { return Invoke-TornJsonWithCurl -Uri $Uri -Headers $Headers -TimeoutSec $TimeoutSec }
     if ($Method -eq 'Get' -and $Uri -eq 'https://yata.yt/api/v1/travel/export/') { return Invoke-YataJsonNative -Uri $Uri -Headers $Headers -TimeoutSec $TimeoutSec }
     return Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
+}
+
+function Publish-UpdateUiState {
+    if (-not (Test-Path -LiteralPath $StateKvFile)) { throw 'Build state.kv is missing; refusing UI publication.' }
+    $text = Read-TravelAssistantSharedText -Path $StateKvFile
+    if ([string]::IsNullOrWhiteSpace($text)) { throw 'Build state.kv is empty; refusing UI publication.' }
+    if ($text -notmatch '(?m)^OpportunityCount=' -or $text -notmatch '(?m)^UIFreshestMarketSourceTimestamp=') {
+        throw 'Build state.kv is incomplete after FilterState; refusing UI publication.'
+    }
+    Write-TravelAssistantAtomicText -Path $UiStateKvFile -Text $text
 }
 
 function Write-UpdateHeartbeat {
@@ -271,7 +284,7 @@ try {
         }
     } catch { $hasOpportunityProjection = $false }
     if (-not $hasOpportunityProjection) {
-        Write-CompactFailure -Path $OpportunityStateErrorFile -Message 'OpportunityState completed without writing OpportunityCount to state.kv.'
+        Write-CompactFailure -Path $OpportunityStateErrorFile -Message 'OpportunityState completed without writing OpportunityCount to build state.kv.'
     }
 
     if (Test-Path -LiteralPath $FilterState) {
@@ -279,9 +292,14 @@ try {
         catch { Write-CompactFailure -Path $FilterStateErrorFile -Message $_.Exception.ToString() }
     }
 
-    # Heartbeat marks completion of the current stock/context/opportunity projection.
-    # Local analytics and resale pricing run afterward and cannot make the visible
-    # opportunity list falsely stale.
+    # state.kv is a private build artifact. Only this final publication touches the
+    # Rainmeter-consumed UI state. A failed final publish leaves the previous complete
+    # UI generation visible rather than exposing a partial/intermediate projection.
+    Publish-UpdateUiState
+
+    # Heartbeat represents successful final UI publication, not merely collection or
+    # an intermediate stage. Analytics and resale work below cannot make UI look fresh
+    # unless ui-state.kv was successfully published first.
     Write-UpdateHeartbeat
 
     if ($Action -eq 'Update') {
