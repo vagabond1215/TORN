@@ -205,6 +205,15 @@ data/runtime/logs/travel-assistant.log
 
 Rainmeter log should also remain free of repeating Lua / `!SetOption` errors.
 
+### 2026-08-26 redraw-stability checkpoint
+
+Target acceptance caught two follow-up issues after the unified-filter pull:
+
+- `Validate-ItemViewer.ps1` still expected the retired `Start-Process` launcher even though the production Viewer launcher intentionally uses the reusable hidden `.NET ProcessStartInfo` contract. The validator now checks the current contract and explicitly rejects `Start-Process` / `exit 0`.
+- the short RunCommand launcher's `FinishAction` redrew after `StateReader -> HeaderLayout -> CardPresenter -> CardTweaks` but before `FreshnessGuard -> TravelStateWindowTweaks -> WindowTooltipTweaks -> FinalCardPolish`. On a stale provider snapshot this exposed a sub-second intermediate render: header text could flash `UPDATE STALE` before `FORECAST ONLY`, and card meters could flash the intermediate styling.
+
+All explicit redraw paths now complete the entire presentation chain before `!Redraw`. `StateReader` also centralizes immediate sort/trip/graph redraws through that same chain. Hard-stale no-row mode uses the compact 132 px base panel height rather than the retired 164 px header footprint.
+
 ## Target-Windows acceptance for the new redesign
 
 First pull and verify the requested commit:
