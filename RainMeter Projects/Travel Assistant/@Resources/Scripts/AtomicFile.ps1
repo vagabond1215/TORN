@@ -7,6 +7,10 @@ Set-StrictMode -Version 2.0
 # a PowerShell update publishes the next complete generation. PowerShell wraps
 # exceptions from static .NET calls such as File.Replace in MethodInvocationException,
 # so retry classification must walk InnerException rather than catch IOException only.
+#
+# State readers that run inside the updater must also grant FileShare.Delete. Windows
+# File.Replace needs delete/rename sharing on the destination; a short read that omits
+# that share flag can otherwise make the updater block its own atomic publication.
 
 function Get-TravelAssistantAtomicMutexName {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -44,6 +48,43 @@ function New-TravelAssistantAtomicTempPath {
 function New-TravelAssistantAtomicBackupPath {
     param([Parameter(Mandatory = $true)][string]$Path)
     return (New-TravelAssistantAtomicSiblingPath -Path $Path -Suffix '.bak')
+}
+
+function Open-TravelAssistantSharedReadStream {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $shareValue = ([int][System.IO.FileShare]::ReadWrite -bor [int][System.IO.FileShare]::Delete)
+    $share = [System.IO.FileShare]$shareValue
+    return [System.IO.File]::Open(
+        $Path,
+        [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read,
+        $share
+    )
+}
+
+function Read-TravelAssistantSharedText {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    $stream = $null
+    $reader = $null
+    try {
+        $stream = Open-TravelAssistantSharedReadStream -Path $Path
+        $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+        return $reader.ReadToEnd()
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
+        elseif ($null -ne $stream) { $stream.Dispose() }
+    }
+}
+
+function Read-TravelAssistantSharedLines {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $text = Read-TravelAssistantSharedText -Path $Path
+    if ([string]::IsNullOrEmpty($text)) { return [string[]]@() }
+    return [string[]]([System.Text.RegularExpressions.Regex]::Split($text, "`r`n|`n|`r"))
 }
 
 function Test-TravelAssistantAtomicRetryableException {
