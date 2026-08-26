@@ -28,18 +28,28 @@ foreach($path in @($files.Preferences,$files.Popup,$files.Launcher,$files.State,
 if(Test-Path -LiteralPath $files.Preferences){
  $text=Get-Content -LiteralPath $files.Preferences -Raw
  foreach($token in @(
-  'schemaVersion = 6','selectedItemIds','selectedTripBands','displayTripBands','selectedCountryIds','selectedCategories',
+  'schemaVersion = 7','selectedItemIds','selectedTripBands','displayTripBands','selectedCountryIds','selectedCategories',
   'showProfitableOnly','ignoredItemIds','use95PercentMarketValue','energyWastePolicy','nerveWastePolicy',
   "sortMode = 'upcoming'",'Normalize-SortMode',"@('name','upcoming','gross','profit_per_hour')",'SetSortMode',
   'Set-FilterStateKvValuesAtomic','UISelectedTripBands','UITripShortOn','UITripMediumOn','UITripLongOn',
-  '$Action -notin @(''SetSortMode'',''ToggleTripBand'')'
+  '$sourceSchemaVersion -lt 7','Start-FilterProjectionRefresh','pwsh.exe',"$Action -eq 'ResetFilters'"
  )){if(-not$text.Contains($token)){Fail "FilterPreferences.ps1 missing '$token'."}}
  if($text -notmatch '(?s)if \(\$Action -eq ''ToggleTripBand''\).*?Save-UiPreferences.*?Set-FilterStateKvValuesAtomic') { Fail 'Trip-band persistence must remain a tiny preference/state write.' }
+
+ . $files.Preferences -SkipMain
+ $legacy=[pscustomobject]@{schemaVersion=6;selectedCountryIds=[string[]]@()}
+ $legacyNormalized=Normalize-UiPreferences -Preferences $legacy
+ $available=@(Get-FilterAvailableCountryIds)
+ if(@($legacyNormalized.selectedCountryIds).Count -ne $available.Count){Fail "Legacy empty country selection should migrate to all $($available.Count) collected countries."}
+ $current=[pscustomobject]@{schemaVersion=7;selectedCountryIds=[string[]]@()}
+ $currentNormalized=Normalize-UiPreferences -Preferences $current
+ if(@($currentNormalized.selectedCountryIds).Count -ne 0){Fail 'Schema 7 must preserve an explicitly empty country selection after the one-time legacy repair.'}
 }
 
 if(Test-Path -LiteralPath $files.Popup){
  $text=Get-Content -LiteralPath $files.Popup -Raw
- foreach($token in @("'Item'","'Country'","'Category'","'Ignore'",'observedMarkets','OpportunityState.ps1','RuntimeLog.ps1')){if(-not$text.Contains($token)){Fail "Filter popup missing '$token'."}}
+ foreach($token in @("'Item'","'Country'","'Category'","'Ignore'",'observedMarkets','Start-FilterProjectionRefresh','RuntimeLog.ps1')){if(-not$text.Contains($token)){Fail "Filter popup missing '$token'."}}
+ if($text -match "foreach\(\$scriptName in @\('OptimalRoute\.ps1','OpportunityState\.ps1','FilterState\.ps1'\)\)"){Fail 'Filter popup must not mutate private build state through an ad-hoc partial projection chain.'}
  if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Filter popup must remain local-only.'}
 }
 
@@ -91,5 +101,5 @@ if(Test-Path -LiteralPath $files.Countries){
 }
 
 if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Opportunity filter/sort/settings validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Opportunity filters, full local candidate pool, instant trip-band/sort controls, and explicit card detail validation passed.' -ForegroundColor Green
+Write-Host 'Opportunity filters, legacy country-selection repair, finalized republish, instant trip-band/sort controls, and explicit card detail validation passed.' -ForegroundColor Green
 exit 0
