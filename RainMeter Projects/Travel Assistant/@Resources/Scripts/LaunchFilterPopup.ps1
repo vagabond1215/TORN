@@ -1,6 +1,6 @@
 param(
-    [ValidateSet('Item','Country','Category','Ignore')]
-    [string]$Filter = 'Item'
+    [ValidateSet('Filters','Item','Country','Category','Ignore')]
+    [string]$Filter = 'Filters'
 )
 
 $ErrorActionPreference = 'Stop'
