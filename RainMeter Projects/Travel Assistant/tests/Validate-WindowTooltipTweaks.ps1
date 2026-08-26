@@ -56,7 +56,7 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         '[MeasureWindowTooltipTweaks]',
         'ScriptFile=#@#Scripts\WindowTooltipTweaks.lua',
-        'StateFile=#@#Generated\state.kv',
+        'StateFile=#@#Generated\ui-state.kv',
         'UpdateDivider=1'
     )) {
         if (-not $include.Contains($token)) { Fail "OpportunityInfo.inc missing '$token'." }
