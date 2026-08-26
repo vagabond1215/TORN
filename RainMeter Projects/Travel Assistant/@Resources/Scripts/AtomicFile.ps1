@@ -81,11 +81,14 @@ function Publish-TravelAssistantAtomicTempFile {
             $backupPath = $null
             try {
                 if (Test-Path -LiteralPath $Path) {
-                    # Windows PowerShell 5.1/.NET Framework can reject a null backup
-                    # argument to the four-argument File.Replace overload as an
-                    # illegal path. Always supply a real unique sibling backup path.
+                    # Use the three-argument overload for compatibility across
+                    # Windows PowerShell 5.1/.NET Framework and PowerShell 7/.NET.
+                    # Some runtimes resolve the four-argument overload inconsistently.
                     $backupPath = New-TravelAssistantAtomicBackupPath -Path $Path
-                    [System.IO.File]::Replace($TempPath, $Path, $backupPath, $true)
+                    if ([string]::IsNullOrWhiteSpace([string]$backupPath)) {
+                        throw 'Atomic backup path generation returned an empty path.'
+                    }
+                    [System.IO.File]::Replace($TempPath, $Path, $backupPath)
                     if (Test-Path -LiteralPath $backupPath) {
                         Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
                     }
@@ -94,19 +97,19 @@ function Publish-TravelAssistantAtomicTempFile {
                 }
                 return
             } catch [System.IO.IOException] {
-                if (-not (Test-Path -LiteralPath $Path) -and -not [string]::IsNullOrWhiteSpace($backupPath) -and (Test-Path -LiteralPath $backupPath)) {
+                if (-not (Test-Path -LiteralPath $Path) -and -not [string]::IsNullOrWhiteSpace([string]$backupPath) -and (Test-Path -LiteralPath $backupPath)) {
                     try { [System.IO.File]::Move($backupPath, $Path) } catch { }
                 }
-                if (-not [string]::IsNullOrWhiteSpace($backupPath) -and (Test-Path -LiteralPath $backupPath)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$backupPath) -and (Test-Path -LiteralPath $backupPath)) {
                     Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
                 }
                 if ($attempt -ge $RetryCount) { throw }
                 Start-Sleep -Milliseconds ($RetryDelayMilliseconds * [Math]::Min($attempt, 5))
             } catch [System.UnauthorizedAccessException] {
-                if (-not (Test-Path -LiteralPath $Path) -and -not [string]::IsNullOrWhiteSpace($backupPath) -and (Test-Path -LiteralPath $backupPath)) {
+                if (-not (Test-Path -LiteralPath $Path) -and -not [string]::IsNullOrWhiteSpace([string]$backupPath) -and (Test-Path -LiteralPath $backupPath)) {
                     try { [System.IO.File]::Move($backupPath, $Path) } catch { }
                 }
-                if (-not [string]::IsNullOrWhiteSpace($backupPath) -and (Test-Path -LiteralPath $backupPath)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$backupPath) -and (Test-Path -LiteralPath $backupPath)) {
                     Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
                 }
                 if ($attempt -ge $RetryCount) { throw }
