@@ -20,7 +20,9 @@ foreach($path in @($viewerPath,$launcherPath,$inlineRendererPath,$hostPath,$hist
 
 if(Test-Path -LiteralPath $launcherPath){
  $launcher=Get-Content -LiteralPath $launcherPath -Raw
- foreach($token in @('PopupHost.ps1','Start-Process','-WindowStyle Hidden','-STA','-Popup ItemViewer','-MarketKey','$MarketKey')){if(-not$launcher.Contains($token)){Fail "Viewer launcher missing '$token'."}}
+ foreach($token in @('PopupHost.ps1','System.Diagnostics.ProcessStartInfo','System.Diagnostics.Process]::Start','UseShellExecute = $false','CreateNoWindow = $true','-WindowStyle Hidden','-STA','-Popup ItemViewer','-MarketKey','$MarketKey','RuntimeLog.ps1','return')){if(-not$launcher.Contains($token)){Fail "Viewer launcher missing '$token'."}}
+ if($launcher.Contains('Start-Process')){Fail 'Viewer launcher must use the reusable .NET ProcessStartInfo detachment contract, not Start-Process.'}
+ if($launcher.Contains('exit 0')){Fail 'Viewer launcher must return after spawning so nested/reusable callers remain alive.'}
  if($launcher.Contains('-WindowStyle Normal')){Fail 'Viewer launcher must not expose a PowerShell console.'}
 }
 
