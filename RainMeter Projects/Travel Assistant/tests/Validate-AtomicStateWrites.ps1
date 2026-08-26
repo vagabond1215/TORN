@@ -29,6 +29,11 @@ if ($errors.Count -eq 0) {
         'Get-TravelAssistantAtomicMutexName',
         'New-TravelAssistantAtomicTempPath',
         'New-TravelAssistantAtomicBackupPath',
+        'Open-TravelAssistantSharedReadStream',
+        'Read-TravelAssistantSharedText',
+        'Read-TravelAssistantSharedLines',
+        '[System.IO.FileShare]::ReadWrite',
+        '[System.IO.FileShare]::Delete',
         'Test-TravelAssistantAtomicRetryableException',
         'Publish-TravelAssistantAtomicTempFile',
         'Write-TravelAssistantAtomicText',
@@ -55,6 +60,7 @@ if ($errors.Count -eq 0) {
         [pscustomobject]@{name='FinalizeState.ps1'; text=$finalizer}
     )) {
         if (-not $pair.text.Contains(". (Join-Path `$PSScriptRoot 'AtomicFile.ps1')")) { Fail "$($pair.name) must load AtomicFile.ps1." }
+        if (-not $pair.text.Contains('Read-TravelAssistantSharedLines -Path $Path')) { Fail "$($pair.name) must read state.kv through the delete-sharing reader." }
         if (-not $pair.text.Contains('Write-TravelAssistantAtomicLines')) { Fail "$($pair.name) must publish state through the shared atomic writer." }
         if ($pair.text.Contains("Move-Item -LiteralPath `$tmp -Destination `$Path -Force")) { Fail "$($pair.name) must not retain the fixed-temp Move-Item publication path." }
     }
@@ -77,10 +83,25 @@ if ($errors.Count -eq 0) {
             $actual = Get-Content -LiteralPath $target -Raw
             if (-not $actual.Contains('Generation=25') -or -not $actual.Contains('Complete=1')) { Fail 'Atomic helper did not publish the final complete generation.' }
 
+            # Reproduce the updater's own read->write pattern. The shared reader remains
+            # intentionally open while File.Replace publishes the next generation. This
+            # must succeed because the read handle grants FileShare.Delete.
+            $sharedReader = $null
+            try {
+                $sharedReader = Open-TravelAssistantSharedReadStream -Path $target
+                Write-TravelAssistantAtomicLines -Path $target -Lines @('Generation=self-shared','Complete=1') -RetryCount 2 -RetryDelayMilliseconds 10
+            } finally {
+                if ($null -ne $sharedReader) { $sharedReader.Dispose() }
+            }
+            $afterSharedRead = Get-Content -LiteralPath $target -Raw
+            if (-not $afterSharedRead.Contains('Generation=self-shared') -or -not $afterSharedRead.Contains('Complete=1')) {
+                Fail 'Atomic helper could not replace state while its own delete-sharing reader remained open.'
+            }
+
             # On Windows, deliberately hold the destination without FileShare.Delete.
             # File.Replace then throws a MethodInvocationException wrapping IOException.
             # The helper must recognize that wrapped sharing violation, retry, and
-            # publish successfully after the short lock is released.
+            # publish successfully after the short external-style lock is released.
             if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and (Get-Command Start-Job -ErrorAction SilentlyContinue)) {
                 $ready = Join-Path $work 'lock.ready'
                 $lockJob = Start-Job -ArgumentList $target,$ready -ScriptBlock {
@@ -137,5 +158,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Atomic state-write validation passed.' -ForegroundColor Green
-Write-Host 'Critical state and heartbeat publishers use unique temporary files, legal unique backup paths, per-destination cross-process mutexes, portable File.Replace/File.Move publication, and wrapped sharing-violation retries.'
+Write-Host 'Critical state readers grant delete sharing, critical state/heartbeat publishers use unique temporary files and per-destination mutexes, and wrapped external sharing violations are retried.'
 exit 0
