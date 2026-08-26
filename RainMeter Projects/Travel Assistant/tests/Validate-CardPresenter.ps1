@@ -20,7 +20,7 @@ if ($errors.Count -eq 0) {
     $windowPlan = Get-Content -LiteralPath $windowPlanPath -Raw
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
 
-    foreach ($token in @('[MeasureCardPresenter]','CardPresenter.lua','StateFile=#@#Generated\state.kv')) {
+    foreach ($token in @('[MeasureCardPresenter]','CardPresenter.lua','StateFile=#@#Generated\ui-state.kv')) {
         if (-not $ini.Contains($token)) { Fail "TravelAssistant.ini missing compact-card token '$token'." }
     }
     $stateAt = $ini.IndexOf('[MeasureState]',[System.StringComparison]::Ordinal)
@@ -63,7 +63,7 @@ if ($errors.Count -eq 0) {
     $opportunityAt=$wrapper.IndexOf('Invoke-FailSoftScript -Path $OpportunityState',[System.StringComparison]::Ordinal)
     $windowAt=$wrapper.IndexOf('Invoke-FailSoftScript -Path $WindowPlan',[System.StringComparison]::Ordinal)
     $filterAt=$wrapper.IndexOf('if (Test-Path -LiteralPath $FilterState)',[System.StringComparison]::Ordinal)
-    if ($opportunityAt -lt 0 -or $windowAt -le $opportunityAt -or $filterAt -le $windowAt) { Fail 'RunUpdate must project WindowPlan after OpportunityState and before FilterState/heartbeat.' }
+    if ($opportunityAt -lt 0 -or $windowAt -le $opportunityAt -or $filterAt -le $windowAt) { Fail 'RunUpdate must project WindowPlan after OpportunityState and before FilterState/final UI publication/heartbeat.' }
 
     foreach ($token in @(
         "if (`$null -ne `$travelContext -and [bool](Get-OptimalProperty `$travelContext 'filterActive')) { `$fixedCountry = [string](Get-OptimalProperty `$travelContext 'destinationCountryId') }",
