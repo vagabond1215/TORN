@@ -193,13 +193,12 @@ local function buildHomeTooltip(plan,travelText,now)
 end
 
 local function applyTooltip(prefix,tooltip)
-    local hidden=trim(tooltip)=='' and 1 or 0
+    -- Empty tooltip text is sufficient to disable the tooltip; avoid dynamic
+    -- ToolTipHidden=0/1 writes on the one-second render path.
     setOption(prefix..'Leave','ToolTipTitle','Window estimate')
     setOption(prefix..'Leave','ToolTipText',tooltip)
-    setOption(prefix..'Leave','ToolTipHidden',hidden)
     setOption(prefix..'Info','ToolTipTitle','Window estimate')
     setOption(prefix..'Info','ToolTipText',tooltip)
-    setOption(prefix..'Info','ToolTipHidden',hidden)
 end
 
 local function updateRow(index,lookup,now,state)
