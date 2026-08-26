@@ -24,26 +24,72 @@ At the same time the structured providers were healthy for all collected countri
 
 This incident is not a Prometheus/YATA acquisition outage. Fresh provider data is reaching `engine-state.json`; generated UI publication is failing afterward.
 
-Earlier runtime errors showed Windows sharing/replacement failures on `state.kv`. The current atomic writer now retries wrapped sharing violations, but a subsequent live probe still showed the generated state and heartbeat more than an hour behind the collection clocks.
+Earlier runtime errors showed Windows sharing/replacement failures on `state.kv`. The current atomic writer retries wrapped sharing violations, but a subsequent live probe still showed the generated state and heartbeat more than an hour behind the collection clocks.
 
-The next diagnostic step is to identify the process holding `@Resources/Generated/state.kv` open rather than increasing retry duration further.
+## Confirmed lock owner
 
-Use:
+Repeated Windows Restart Manager sampling caught the process holding `@Resources/Generated/state.kv` open:
 
-```powershell
-.\tools\Find-FileLock.ps1
+```text
+ProcessName     : powershell
+ParentName      : Rainmeter.exe
+CommandLine     : powershell.exe -NoProfile -ExecutionPolicy Bypass -File "...\Travel Assistant\@Resources\Scripts\RunUpdate.ps1" -Action Update
+ApplicationType : RmConsole
 ```
 
-or include the heartbeat file:
+The lock was transient rather than persistent: it appeared in one sample and disappeared in subsequent 250 ms samples. `last-update.txt` did not show the same lock owner.
 
-```powershell
-.\tools\Find-FileLock.ps1 -IncludeHeartbeat
+This is important because it rules out a persistent Rainmeter Lua file-handle leak as the immediate owner in the captured incident. The process reading `state.kv` was the Rainmeter-launched Windows PowerShell updater itself.
+
+## Root-cause correction
+
+`File.Replace` requires delete/rename sharing on the destination. A PowerShell read handle that allows ordinary read/write sharing but omits `FileShare.Delete` can therefore block a later atomic replacement even when the read is legitimate and short-lived.
+
+The shared atomic helper now exposes explicit state readers that open with:
+
+```text
+FileShare.ReadWrite | FileShare.Delete
 ```
 
-The tool uses the Windows Restart Manager API and is read-only; it does not terminate any process or modify the files.
+The two stages that were directly observed failing in the supplied runtime archive now use that reader before publishing state:
+
+```text
+ProjectCollectedState.ps1
+FinalizeState.ps1
+```
+
+They continue to publish with unique temporary files, a per-destination mutex, and atomic `File.Replace`/`File.Move` semantics.
+
+`tests/Validate-AtomicStateWrites.ps1` now includes two separate runtime contention cases:
+
+1. an in-process `state.kv` reader deliberately left open with `ReadWrite|Delete`; atomic replacement must succeed while that reader is still open;
+2. an external-style reader that deliberately denies delete sharing for ~800 ms; replacement must retry and succeed after the lock is released.
+
+This distinguishes safe updater reads from genuine external sharing violations.
 
 ## Reader audit
 
-The primary Rainmeter Lua readers inspected so far (`StateReader.lua` and `CardPresenter.lua`) explicitly close their `io.open(...)` handles after reading. This reduces the likelihood of a simple leaked Lua handle and raises the possibility of a sharing-mode incompatibility or another process such as Rainmeter, synchronization/indexing software, antivirus, or a separate PowerShell worker.
+The primary Rainmeter Lua readers inspected (`StateReader.lua` and `CardPresenter.lua`) explicitly close their `io.open(...)` handles after reading. The captured Restart Manager evidence also identified the updater rather than `Rainmeter.exe` as the process owning `state.kv` at the sampled failure point.
 
-If the lock owner is Rainmeter and the lock is recurrent rather than leaked, the preferred architectural fix is to stop replacing the same pathname that Rainmeter reads continuously. A generation/immutable-publication scheme should then be used instead of progressively longer retries.
+The repository still contains older state-mutating stages that use fixed `.tmp` + `Move-Item` publication patterns. Those should be migrated incrementally after the confirmed critical path is stable, but they are not being treated as the original provider-freshness failure.
+
+## Immediate validation
+
+After pulling the shared-reader fix:
+
+```powershell
+.\tests\Validate-AtomicStateWrites.ps1
+.\@Resources\Scripts\RunUpdate.ps1 -Action Update
+.\tools\Probe-LiveStockProviders.ps1
+```
+
+The desired clock result is:
+
+```text
+engine collection          <1m
+engine freshest source     <1m
+state.kv freshest source   <1m
+UI heartbeat               <1m
+```
+
+If `state.kv` still fails to advance, inspect the newest compact error files and capture the lock owner again. At that point the next step is to identify the exact later state-mutating stage or move the update chain to a single working-generation publication model rather than extending replacement retry duration further.
