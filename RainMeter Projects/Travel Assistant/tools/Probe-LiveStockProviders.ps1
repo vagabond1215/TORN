@@ -12,7 +12,8 @@ $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $CountriesFile = Join-Path $ConfigDir 'countries.json'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
-$StateKvFile = Join-Path $GeneratedDir 'state.kv'
+$BuildStateKvFile = Join-Path $GeneratedDir 'state.kv'
+$UiStateKvFile = Join-Path $GeneratedDir 'ui-state.kv'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 
 if ($MaximumProviderAgeSeconds -lt 60) { $MaximumProviderAgeSeconds = 60 }
@@ -46,6 +47,15 @@ function Read-ProbeStateKv {
         $state[$line.Substring(0,$eq).Trim([char]0xFEFF).Trim()]=$line.Substring($eq+1).Trim()
     }
     return $state
+}
+
+function Get-ProbeProjectedFreshest {
+    param([hashtable]$State)
+    $value=0L
+    if ($null -ne $State -and $State.ContainsKey('UIFreshestMarketSourceTimestamp')) {
+        [void][long]::TryParse([string]$State['UIFreshestMarketSourceTimestamp'],[ref]$value)
+    }
+    return $value
 }
 
 function Get-ProbeAge {
@@ -113,7 +123,8 @@ $now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 Write-Host ''
 Write-Host '=== Local pipeline clocks ===' -ForegroundColor Cyan
 $engine=Read-ProbeJson $EngineStateFile
-$state=Read-ProbeStateKv $StateKvFile
+$buildState=Read-ProbeStateKv $BuildStateKvFile
+$uiState=Read-ProbeStateKv $UiStateKvFile
 $collectionAt=0L
 $engineFreshest=0L
 if ($null -ne $engine -and $engine.PSObject.Properties['shadowCollection']) {
@@ -127,15 +138,16 @@ if ($null -ne $engine -and $engine.PSObject.Properties['observedMarkets']) {
         if ($ts -gt $engineFreshest) { $engineFreshest=$ts }
     }
 }
-$projectedFreshest=0L
-if ($state.ContainsKey('UIFreshestMarketSourceTimestamp')) { [void][long]::TryParse([string]$state['UIFreshestMarketSourceTimestamp'],[ref]$projectedFreshest) }
+$buildFreshest=Get-ProbeProjectedFreshest -State $buildState
+$uiFreshest=Get-ProbeProjectedFreshest -State $uiState
 $heartbeat=0L
 if (Test-Path -LiteralPath $HeartbeatFile) { [void][long]::TryParse((Get-Content -LiteralPath $HeartbeatFile -Raw).Trim(),[ref]$heartbeat) }
 
 $clockRows=@(
     [pscustomobject]@{Clock='engine collection';Timestamp=$collectionAt;Age=(Format-ProbeAge (Get-ProbeAge $collectionAt $now))}
     [pscustomobject]@{Clock='engine freshest source';Timestamp=$engineFreshest;Age=(Format-ProbeAge (Get-ProbeAge $engineFreshest $now))}
-    [pscustomobject]@{Clock='state.kv freshest source';Timestamp=$projectedFreshest;Age=(Format-ProbeAge (Get-ProbeAge $projectedFreshest $now))}
+    [pscustomobject]@{Clock='build state freshest source';Timestamp=$buildFreshest;Age=(Format-ProbeAge (Get-ProbeAge $buildFreshest $now))}
+    [pscustomobject]@{Clock='UI state freshest source';Timestamp=$uiFreshest;Age=(Format-ProbeAge (Get-ProbeAge $uiFreshest $now))}
     [pscustomobject]@{Clock='UI heartbeat';Timestamp=$heartbeat;Age=(Format-ProbeAge (Get-ProbeAge $heartbeat $now))}
 )
 $clockRows | Format-Table -AutoSize
@@ -181,5 +193,5 @@ if ($bothUnavailable) {
 }
 
 Write-Host ''
-Write-Host 'Provider probe completed. Compare engine/source ages with state.kv/heartbeat ages to distinguish acquisition failures from local publication failures.' -ForegroundColor Green
+Write-Host 'Provider probe completed. Compare engine/build/UI/heartbeat ages to distinguish acquisition, build-stage, and final-publication failures.' -ForegroundColor Green
 exit 0
