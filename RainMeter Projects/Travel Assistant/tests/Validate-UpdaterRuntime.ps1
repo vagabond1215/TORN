@@ -3,6 +3,7 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
+$launcherPath = Join-Path $ProjectRoot '@Resources\Scripts\LaunchUpdate.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
@@ -28,9 +29,12 @@ if (-not (Test-Path -LiteralPath $iniPath)) {
         if ($updateBody -match '(?im)^Program=powershell\.exe\s*$') {
             Fail 'MeasureUpdate must not launch Windows PowerShell 5.1.'
         }
-        $expectedParameter = 'Parameter=-NoProfile -ExecutionPolicy Bypass -File "#@#Scripts\RunUpdate.ps1" -Action Update'
+        $expectedParameter = 'Parameter=-NoProfile -ExecutionPolicy Bypass -File "#@#Scripts\LaunchUpdate.ps1" -Action Update'
         if (-not $updateBody.Contains($expectedParameter)) {
-            Fail 'MeasureUpdate must retain the RunUpdate.ps1 -Action Update command contract.'
+            Fail 'MeasureUpdate must launch the detached PS7 update launcher.'
+        }
+        if ($updateBody -match '(?im)^Parameter=.*RunUpdate\.ps1') {
+            Fail 'Rainmeter must not own the long-running RunUpdate.ps1 worker directly.'
         }
     }
 
@@ -60,6 +64,19 @@ if (-not (Test-Path -LiteralPath $iniPath)) {
     }
 }
 
+if (-not (Test-Path -LiteralPath $launcherPath)) {
+    Fail 'Missing LaunchUpdate.ps1.'
+} else {
+    $tokens = $null
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($launcherPath,[ref]$tokens,[ref]$parseErrors)
+    foreach ($parseError in @($parseErrors)) { Fail ('LaunchUpdate.ps1 parse error: ' + $parseError.Message) }
+    $launcher = Get-Content -LiteralPath $launcherPath -Raw
+    foreach ($token in @('RunUpdate.ps1','Get-Command pwsh.exe','Start-Process -FilePath $pwsh.Source','-Action {1}')) {
+        if (-not $launcher.Contains($token)) { Fail "LaunchUpdate.ps1 missing '$token'." }
+    }
+}
+
 if ($errors.Count -gt 0) {
     foreach ($message in $errors) {
         Write-Host "FAIL: $message" -ForegroundColor Red
@@ -69,5 +86,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Rainmeter updater runtime contract passed.' -ForegroundColor Green
-Write-Host 'MeasureUpdate uses pwsh.exe; popup/filter/inline/preference helper measures remain on powershell.exe.' -ForegroundColor Green
+Write-Host 'MeasureUpdate uses a short PS7 launcher; the detached PS7 RunUpdate worker is protected by its named mutex.' -ForegroundColor Green
 exit 0

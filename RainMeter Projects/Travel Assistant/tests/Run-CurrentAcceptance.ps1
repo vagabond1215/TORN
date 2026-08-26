@@ -19,6 +19,7 @@ $tests = @(
     'Validate-ItemViewer.ps1',
     'Validate-RuntimeDiagnostics.ps1',
     'Validate-Filters.ps1',
+    'Validate-FilterReset.ps1',
     'Run-PresentationProjectionTests.ps1',
     'Run-PowerShell51CompatibilityTests.ps1',
     'Run-ProviderFreshnessTests.ps1',

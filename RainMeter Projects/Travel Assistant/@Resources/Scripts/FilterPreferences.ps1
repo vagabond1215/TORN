@@ -16,12 +16,15 @@ $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $PreferenceFile = Join-Path $RuntimeDir 'preferences.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeLogScript = Join-Path $PSScriptRoot 'RuntimeLog.ps1'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 if (Test-Path -LiteralPath $RuntimeLogScript) { . $RuntimeLogScript }
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for safe filter preference persistence.' }
+. $AtomicFileScript
 
 function Read-FilterJson {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    $raw = Read-TravelAssistantSharedText -Path $Path
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
     return ($raw | ConvertFrom-Json)
 }
@@ -29,10 +32,8 @@ function Read-FilterJson {
 function Write-FilterJsonAtomic {
     param([string]$Path, [object]$Value, [int]$Depth = 20)
     New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
-    $tmp = $Path + '.tmp'
     $json = $Value | ConvertTo-Json -Depth $Depth
-    [System.IO.File]::WriteAllText($tmp, $json, [System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $tmp -Destination $Path -Force
+    Write-TravelAssistantAtomicText -Path $Path -Text $json
 }
 
 function Set-FilterProperty {
@@ -46,7 +47,8 @@ function Set-FilterStateKvValuesAtomic {
     param([hashtable]$Updates)
     $values = @{}
     if (Test-Path -LiteralPath $StateKvFile) {
-        foreach ($line in Get-Content -LiteralPath $StateKvFile) {
+        $stateText = Read-TravelAssistantSharedText -Path $StateKvFile
+        foreach ($line in @($stateText -split "`r?`n")) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             $index = $line.IndexOf('=')
             if ($index -lt 1) { continue }
@@ -56,14 +58,13 @@ function Set-FilterStateKvValuesAtomic {
     }
     foreach ($key in @($Updates.Keys)) { $values[[string]$key] = [string]$Updates[$key] }
     New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
-    $tmp = $StateKvFile + '.preference.tmp'
     $lines = @()
     foreach ($key in @($values.Keys | Sort-Object)) {
         $safe = ([string]$values[$key]).Replace("`r",' ').Replace("`n",' ')
         $lines += ($key + '=' + $safe)
     }
-    [System.IO.File]::WriteAllLines($tmp,[string[]]$lines,[System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $tmp -Destination $StateKvFile -Force
+    $text = ([string[]]$lines) -join [Environment]::NewLine
+    Write-TravelAssistantAtomicText -Path $StateKvFile -Text $text
 }
 
 function Set-FilterStateKvValueAtomic {
@@ -262,11 +263,25 @@ function Toggle-TripBandPreference {
 function Reset-UiFilterPreferences {
     param([object]$Preferences)
     $normalized = Normalize-UiPreferences -Preferences $Preferences
-    $defaults = New-DefaultUiPreferences
-    foreach ($name in @('itemFilterAll','selectedItemIds','displayTripBands','selectedCountryIds','categoryFilterAll','selectedCategories','showProfitableOnly')) {
-        Set-FilterProperty $normalized $name $defaults.PSObject.Properties[$name].Value
-    }
+    $availableCountries = [string[]]@(Get-FilterAvailableCountryIds)
+    $visibleItems = [int[]]@(Get-FilterVisibleItemIds)
+    $visibleCategories = [string[]]@(Get-FilterVisibleCategories)
+
+    # RESET must never turn a transient config/catalog read failure into a persisted
+    # zero-country/zero-item filter. Fail without writing so the previous preferences
+    # remain intact instead of blanking the opportunity surface.
+    if ($availableCountries.Count -eq 0) { throw 'Cannot reset filters because no collected countries are available.' }
+    if ($visibleItems.Count -eq 0) { throw 'Cannot reset filters because no visible items are available.' }
+
+    Set-FilterProperty $normalized 'schemaVersion' 7
+    Set-FilterProperty $normalized 'itemFilterAll' $true
+    Set-FilterProperty $normalized 'selectedItemIds' ([int[]]@($visibleItems))
     Set-FilterProperty $normalized 'selectedTripBands' ([string[]]@('short','medium','long'))
+    Set-FilterProperty $normalized 'displayTripBands' ([string[]]@('short','medium','long'))
+    Set-FilterProperty $normalized 'selectedCountryIds' ([string[]]@($availableCountries))
+    Set-FilterProperty $normalized 'categoryFilterAll' $true
+    Set-FilterProperty $normalized 'selectedCategories' ([string[]]@($visibleCategories))
+    Set-FilterProperty $normalized 'showProfitableOnly' $false
     return $normalized
 }
 
