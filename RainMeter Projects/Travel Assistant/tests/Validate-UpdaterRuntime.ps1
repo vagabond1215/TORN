@@ -38,6 +38,15 @@ if (-not (Test-Path -LiteralPath $iniPath)) {
         }
     }
 
+    $stateBody = Get-SectionBody 'MeasureState'
+    if ([string]::IsNullOrWhiteSpace($stateBody)) {
+        Fail 'Missing [MeasureState] body.'
+    } else {
+        if ($stateBody -notmatch '(?im)^PollInterval=60\s*$') { Fail 'MeasureState normal poll interval must remain 60 seconds.' }
+        if ($stateBody -notmatch '(?im)^FailureRetryInterval=60\s*$') { Fail 'Update failures must use the normal 60-second poll cadence during target-host crash isolation.' }
+        if ($stateBody -match '(?im)^FailureRetryInterval=15\s*$') { Fail 'The accelerated 15-second failure retry must not return.' }
+    }
+
     $pwshCount = ([regex]::Matches($ini, '(?im)^Program=pwsh\.exe\s*$')).Count
     if ($pwshCount -ne 1) {
         Fail "Exactly one Rainmeter RunCommand measure should use pwsh.exe during this controlled migration; found $pwshCount."
@@ -92,5 +101,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Rainmeter updater runtime contract passed.' -ForegroundColor Green
-Write-Host 'MeasureUpdate uses a reusable spawn-only PS7 launcher; the detached PS7 RunUpdate worker is protected by its named mutex.' -ForegroundColor Green
+Write-Host 'MeasureUpdate uses a reusable spawn-only PS7 launcher; failures wait for the normal 60-second poll instead of an accelerated retry.' -ForegroundColor Green
 exit 0
