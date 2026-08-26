@@ -274,8 +274,9 @@ local function applyCompactLayout(index)
 end
 
 local function configureWindowTooltipMeter(name,tooltip)
+    -- Empty ToolTipText disables the tooltip naturally. Do not mutate ToolTipHidden
+    -- at runtime; target Rainmeter interpreted a dynamic numeric 0 as a config name.
     setOption(name,'DynamicVariables',1)
-    setOption(name,'ToolTipHidden',0)
     setOption(name,'ToolTipTitle','Window calculation')
     setOption(name,'ToolTipWidth',420)
     setOption(name,'ToolTipText',tooltip or '')
