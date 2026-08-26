@@ -57,23 +57,22 @@ Updated ...
 ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
 NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 
-[FLAG]
-[time]  <item>                         <$trip gross>   v
-        <window>  <leave>  <hit likelihood>  <foreign> (<MV>)
-
-[FLAG]
-[time]  <item>                         <$trip gross>   v
-        ...
+[FLAG]  <item>             <$net/ea> x<qty> = <$total net>   v
+        <flight/remaining> <safe/best leave guidance> <certainty/info> Take: <$required cash>
 ```
 
 Card rules:
 
 - No visible row/place numbers (`#1`, `#2`, etc.).
-- Left rail is a recognizable destination flag with a white strip across its bottom.
-- The existing total elapsed/travel-time text is shown on that white strip in dark text.
-- Do not duplicate country name/code or elapsed time in the card body.
-- Gross display is the dollar amount only. Do not append `gross`, `x18`, or other quantity text to the visible row.
-- Quantity still exists in projected data/tooltips so the gross calculation remains inspectable.
+- Left side is a recognizable FlagKit destination flag with no separate tile/background strip.
+- Country name is visible only in the flag tooltip; that tooltip also includes configured one-way travel time.
+- Card title is item name only.
+- Top-line economics show net profit per item × planned quantity = total net profit.
+- Monetary values retain the row economics color while `$` symbols and `/ea xN =` connective text render white.
+- Lower-left timing is muted gray: configured one-way flight duration at home, or a live landing countdown during recognized outbound travel.
+- Lower-middle is the actionable Safe/Best leave state; do not repeat flight duration there.
+- Safe rows suppress confidence and expose the `ⓘ` fallback tooltip anchor; Best rows show live confidence.
+- Lower-right `Take:` is exact purchase cash for invariant retained foreign prices and adds the 5% buffer only after retained evidence demonstrates real price variance.
 - The far-right row control is a compact chevron/chart affordance (`v` collapsed, `^` expanded), not the word `GRAPH`.
 - Clicking the row control expands that market's 8-hour graph **inside the list/card**.
 - At most one inline card graph is expanded at a time; opening another collapses the previous graph.
@@ -126,8 +125,8 @@ There are two graph surfaces:
 - Opened with the row chevron.
 - Rendered inside the Rainmeter card/list.
 - One expanded market at a time.
-- Uses `RenderInlineGraph.ps1` and generated local Shape-path data.
-- Reuses the existing hidden Viewer launcher transport with an `inline_` stable-key prefix; it must not open the popup in this branch.
+- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering and generated local Shape-path data.
+- It must never route through the standalone Viewer popup launcher. `LaunchItemViewer.ps1` retains only legacy `inline_` compatibility; the live Rainmeter inline path does not use it.
 - Refreshing an open graph is local-only and may occur at approximately one-minute cadence.
 
 ### Standalone Viewer
@@ -160,7 +159,8 @@ travelMode
 pinnedMarket                 # legacy/migration compatibility; no active card UI
 itemFilterAll
 selectedItemIds
-selectedTripBands
+selectedTripBands            # always all candidate bands in schema 7
+displayTripBands             # user-selected visible trip bands
 selectedCountryIds
 categoryFilterAll
 selectedCategories
@@ -182,7 +182,7 @@ profit  -> gross
 time    -> upcoming
 ```
 
-Item and Category popups use the active local catalog, not only old proof-card seeds.
+Item and Category popups use the active local catalog, not only old proof-card seeds. The Country popup follows `displayTripBands`; `selectedTripBands` remains the broad candidate scope.
 
 Trip bands are presentation/filter taxonomy only:
 
@@ -358,15 +358,24 @@ richer manual Torn metadata
 Current production order:
 
 ```text
-UpdateTracker
+MaintainObservationHistory -Phase PreUpdate
 ShadowCollector
+ProjectCollectedState
+MaintainObservationHistory -Phase PostUpdate
 LocalCatalog
+EnsureEngineStateSchema
 FinalizeState
 TravelContext
+CurrentCapacityRefresh
+CycleAnchorReconciler
 OptimalRoute            # background compatibility / MV priority
 OpportunityState        # primary opportunity projection
+WindowPlan
+PriceVariationRefiner
 FilterState
-heartbeat
+immutable UI generation + last-update manifest
+CycleAnalytics
+TrendForecast
 ResalePriority
 ResaleQueue              # <= 1 market request
 ```
@@ -376,7 +385,8 @@ ResaleQueue              # <= 1 market request
 ## Projection / interaction stability
 
 - The one-second Lua loop is local-only.
-- Preserve the last complete opportunity/UI projection while minute-update writers publish intermediate state.
+- `state.kv` is a private build artifact. Rainmeter consumes complete immutable `ui-state-<epoch>-<id>.kv` generations selected by `last-update.txt`.
+- Never replace a hot Rainmeter-read state pathname as the normal publication mechanism; a failed generation must leave the previous complete generation visible.
 - Never flash an already-populated surface to `Learning opportunities...` because a child stage is still running.
 - A transient learning-only zero pass is not authoritative over a previously valid nonzero projection.
 - Sorts are immediate local Lua reorderings.
@@ -389,6 +399,8 @@ ResaleQueue              # <= 1 market request
 - Runtime/popup failures should include component and source context.
 - Stale compact error markers may clear after successful component runs.
 - Popups launch through hidden STA PowerShell; no visible console should persist.
+- Popup launchers are spawn-only and reusable: after spawning they `return` rather than `exit`, so nested popup calls do not terminate the parent Settings host.
+- Settings/filter saves that need a projection refresh route through `LaunchUpdate.ps1`; do not start `RunUpdate.ps1` directly under Windows PowerShell 5.1.
 - Runtime logs/history/preferences/generated graph specs remain ignored/local.
 
 ## Secrets / local files
@@ -420,6 +432,6 @@ Browser/Chrome notifications remain a future optional companion. They must consu
 
 ## Current validation boundary
 
-The 0.6 compact opportunity implementation is **pending target-Windows/Rainmeter acceptance**. Do not call it accepted until focused parser/deterministic tests, one production update, visible current-stock rows, flag rails, exclusive inline expansion, separate Viewer, sort/filter controls and screenshots pass on the target host.
+The 0.6 compact opportunity implementation is **pending target-Windows/Rainmeter acceptance**. The Item filter popup has target-host evidence from the 2026-08-26 Codex pass; the other popup/nested Settings paths still require target-host interaction acceptance. Do not call 0.6 accepted until focused parser/deterministic tests, one production update, visible current-stock rows, flag rails, exclusive inline expansion, separate Viewer, sort/filter controls and screenshots pass on the target host.
 
 See `docs/NEXT_CODEX_RUN.md` for the current exact acceptance commands.
