@@ -122,19 +122,7 @@ if ($errors.Count -eq 0) {
         if($outside.Contains("SKIN:Bang('!Redraw')")){Fail 'StateReader.lua has an explicit redraw outside refreshPresentation.'}
         $redrawCount=([regex]::Matches($helperBlock,[regex]::Escape("SKIN:Bang('!Redraw')"))).Count
         if($redrawCount -ne 1){Fail "refreshPresentation must contain exactly one !Redraw; found $redrawCount."}
-        if($helperBlock -match '(?m)^\s*refreshPresentation\(\)\s*
-}
-
-if ($errors.Count -gt 0) {
-    foreach ($validationError in $errors) { Write-Host "FAIL: $validationError" -ForegroundColor Red }
-    Write-Host "Freshness-guard validation failed with $($errors.Count) error(s)." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host 'Forecast-only stock freshness validation passed.' -ForegroundColor Green
-Write-Host 'Five-minute provider freshness stays strict; 5m-6h evidence drives recurring forecasts with stale stock quantity suppressed, while the render-time freshness guard reads finalized ui-state.kv directly and never launches the updater.'
-exit 0
-){Fail 'refreshPresentation must not recursively call itself.'}
+        if($helperBlock.Contains('    refreshPresentation()')){Fail 'refreshPresentation must not recursively call itself.'}
     }
 }
 
