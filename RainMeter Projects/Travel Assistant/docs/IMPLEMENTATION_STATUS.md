@@ -154,6 +154,9 @@ Static/focused tests have been updated to guard:
 - 32 px geometry-only header compaction;
 - existing card presenter and Rainmeter card contracts;
 - popup launch detachment and updater routing;
+- Viewer launcher validation against the reusable `.NET ProcessStartInfo` contract rather than retired `Start-Process`;
+- full presentation-pipeline completion before any explicit Rainmeter redraw, preventing transient `UPDATE STALE` / intermediate-card flashes;
+- compact 132 px hard-stale/no-row geometry;
 - the Lua multi-return SetOption regression.
 
 This execution environment does not provide Windows PowerShell/Rainmeter, so the redesigned WinForms surface and Rainmeter render have **not** been executed here. Target acceptance must run the focused checks and visual/interactivity checklist in `docs/NEXT_CODEX_RUN.md`.
