@@ -10,11 +10,15 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
+$AtomicFileScript = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
 $CountriesFile = Join-Path $ConfigDir 'countries.json'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $BuildStateKvFile = Join-Path $GeneratedDir 'state.kv'
 $UiStateKvFile = Join-Path $GeneratedDir 'ui-state.kv'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
+
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for delete-sharing-safe publication probing.' }
+. $AtomicFileScript
 
 if ($MaximumProviderAgeSeconds -lt 60) { $MaximumProviderAgeSeconds = 60 }
 if ($RequestTimeoutSeconds -lt 2) { $RequestTimeoutSeconds = 2 }
@@ -40,7 +44,7 @@ function Read-ProbeStateKv {
     param([string]$Path)
     $state=@{}
     if (-not (Test-Path -LiteralPath $Path)) { return $state }
-    foreach ($line in Get-Content -LiteralPath $Path) {
+    foreach ($line in @(Read-TravelAssistantSharedLines -Path $Path)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $eq=$line.IndexOf('=')
         if ($eq -lt 1) { continue }
@@ -141,7 +145,10 @@ if ($null -ne $engine -and $engine.PSObject.Properties['observedMarkets']) {
 $buildFreshest=Get-ProbeProjectedFreshest -State $buildState
 $uiFreshest=Get-ProbeProjectedFreshest -State $uiState
 $heartbeat=0L
-if (Test-Path -LiteralPath $HeartbeatFile) { [void][long]::TryParse((Get-Content -LiteralPath $HeartbeatFile -Raw).Trim(),[ref]$heartbeat) }
+if (Test-Path -LiteralPath $HeartbeatFile) {
+    $heartbeatText = Read-TravelAssistantSharedText -Path $HeartbeatFile
+    [void][long]::TryParse($heartbeatText.Trim(),[ref]$heartbeat)
+}
 
 $clockRows=@(
     [pscustomobject]@{Clock='engine collection';Timestamp=$collectionAt;Age=(Format-ProbeAge (Get-ProbeAge $collectionAt $now))}
