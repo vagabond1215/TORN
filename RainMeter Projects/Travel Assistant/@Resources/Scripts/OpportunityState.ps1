@@ -592,9 +592,9 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             if ($recurringCycles.Count -lt $minimumSamples) { $learning++; continue }
             $window = $null
 
-            -- A stale positive stock count is never carried forward as current stock.
-            -- Its historical active restock timestamp is still a real observed phase
-            -- anchor, so use that anchor for the recurring forecast when available.
+            # A stale positive stock count is never carried forward as current stock.
+            # Its historical active restock timestamp is still a real observed phase
+            # anchor, so use that anchor for the recurring forecast when available.
             if ($useForecastOnly) {
                 $activeRestockAt = Get-OpportunityActiveRestockAt -DestinationState $destinationState
                 if ($activeRestockAt -gt 0) {
