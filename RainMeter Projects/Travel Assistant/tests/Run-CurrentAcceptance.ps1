@@ -6,6 +6,7 @@ $tests = @(
     'Validate-TravelAssistant.ps1',
     'Validate-RainmeterSkin.ps1',
     'Validate-UpdaterRuntime.ps1',
+    'Validate-StatePublicationArchitecture.ps1',
     'Validate-CardPresenter.ps1',
     'Validate-CurrentTweaks.ps1',
     'Validate-GraphHover.ps1',
@@ -57,5 +58,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify state publication stays error-free, outbound destination rows use the concise landing-centric tooltip, inline graph hover reports retained time/stock values, abroad rows avoid departure language, returning respects home availability, fixed-price items remain white, and shadow trend forecasting remains non-authoritative.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify the private build state and finalized UI state advance, final UI publication stays error-free, outbound destination rows use the concise landing-centric tooltip, inline graph hover reports retained time/stock values, abroad rows avoid departure language, returning respects home availability, fixed-price items remain white, and shadow trend forecasting remains non-authoritative.' -ForegroundColor Yellow
 exit 0
