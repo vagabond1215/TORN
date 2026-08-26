@@ -181,6 +181,24 @@ local function setMeterVisible(meter, visible)
     else SKIN:Bang('!HideMeter', meter) end
 end
 
+local function refreshPresentation()
+    -- Explicit redraws must finish the same presentation chain as the normal
+    -- one-second Rainmeter pass. Otherwise the intermediate StateReader/CardTweaks
+    -- surface can flash before freshness and final polish run.
+    for _, measure in ipairs({
+        'MeasureHeaderLayout',
+        'MeasureCardPresenter',
+        'MeasureCardTweaks',
+        'MeasureFreshnessGuard',
+        'MeasureTravelStateWindowTweaks',
+        'MeasureWindowTooltipTweaks',
+        'MeasureFinalCardPolish'
+    }) do
+        SKIN:Bang('!UpdateMeasure', measure)
+    end
+    refreshPresentation()
+end
+
 local function providerLabel(provider)
     if provider == 'prometheus' then return 'Prometheus' end
     if provider == 'yata' then return 'YATA' end
@@ -677,8 +695,7 @@ function ToggleTripBand(band)
     setVariable('PreferenceValue', band)
     SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
-    SKIN:Bang('!UpdateMeter', '*')
-    SKIN:Bang('!Redraw')
+    refreshPresentation()
 end
 
 function ResetFilters()
@@ -712,8 +729,7 @@ function SetSortMode(mode)
     setVariable('PreferenceValue', mode)
     SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
-    SKIN:Bang('!UpdateMeter', '*')
-    SKIN:Bang('!Redraw')
+    refreshPresentation()
 end
 
 function ToggleInlineGraph(index)
@@ -732,8 +748,7 @@ function ToggleInlineGraph(index)
         requestInlineGraph(key)
     end
     updateOpportunities(lastDisplayedData)
-    SKIN:Bang('!UpdateMeter', '*')
-    SKIN:Bang('!Redraw')
+    refreshPresentation()
 end
 
 function OpenViewer(marketKey)
