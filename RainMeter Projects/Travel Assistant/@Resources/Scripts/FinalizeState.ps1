@@ -34,7 +34,7 @@ function Read-StateKv {
     param([string]$Path)
     $values = @{}
     if (-not (Test-Path -LiteralPath $Path)) { return $values }
-    foreach ($line in Get-Content -LiteralPath $Path) {
+    foreach ($line in @(Read-TravelAssistantSharedLines -Path $Path)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $index = $line.IndexOf('=')
         if ($index -lt 1) { continue }
