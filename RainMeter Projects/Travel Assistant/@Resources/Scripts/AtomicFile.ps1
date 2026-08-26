@@ -3,16 +3,10 @@ Set-StrictMode -Version 2.0
 
 # Shared atomic-file writer for Travel Assistant state/config artifacts.
 #
-# Why this exists:
-# - Rainmeter reads generated state continuously while PowerShell publishes updates.
-# - the skin may live inside a OneDrive-synchronized directory;
-# - UI preference actions can run in a separate PowerShell process from RunUpdate;
-# - fixed <destination>.tmp names plus Move-Item -Force are vulnerable to stale temp
-#   files, concurrent writers, and transient file-system/sync locks on Windows.
-#
-# Use a unique sibling temp file, a cross-process per-destination mutex, and a short
-# retry loop around File.Replace/File.Move. Readers continue seeing either the old
-# complete file or the new complete file; no partial destination is published.
+# Rainmeter and other Windows processes can briefly hold generated files open while
+# a PowerShell update publishes the next complete generation. PowerShell wraps
+# exceptions from static .NET calls such as File.Replace in MethodInvocationException,
+# so retry classification must walk InnerException rather than catch IOException only.
 
 function Get-TravelAssistantAtomicMutexName {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -52,11 +46,40 @@ function New-TravelAssistantAtomicBackupPath {
     return (New-TravelAssistantAtomicSiblingPath -Path $Path -Suffix '.bak')
 }
 
+function Test-TravelAssistantAtomicRetryableException {
+    param([System.Exception]$Exception)
+
+    $current = $Exception
+    while ($null -ne $current) {
+        if ($current -is [System.IO.IOException] -or $current -is [System.UnauthorizedAccessException]) {
+            return $true
+        }
+        $current = $current.InnerException
+    }
+    return $false
+}
+
+function Remove-TravelAssistantAtomicBackup {
+    param([string]$BackupPath)
+    if (-not [string]::IsNullOrWhiteSpace([string]$BackupPath) -and (Test-Path -LiteralPath $BackupPath)) {
+        Remove-Item -LiteralPath $BackupPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Repair-TravelAssistantAtomicDestination {
+    param([string]$BackupPath,[string]$Path)
+    if ((-not (Test-Path -LiteralPath $Path)) -and
+        -not [string]::IsNullOrWhiteSpace([string]$BackupPath) -and
+        (Test-Path -LiteralPath $BackupPath)) {
+        try { [System.IO.File]::Move($BackupPath, $Path) } catch { }
+    }
+}
+
 function Publish-TravelAssistantAtomicTempFile {
     param(
         [Parameter(Mandatory = $true)][string]$TempPath,
         [Parameter(Mandatory = $true)][string]$Path,
-        [int]$RetryCount = 20,
+        [int]$RetryCount = 40,
         [int]$RetryDelayMilliseconds = 50,
         [int]$MutexTimeoutMilliseconds = 5000
     )
@@ -71,8 +94,6 @@ function Publish-TravelAssistantAtomicTempFile {
         try {
             $acquired = $mutex.WaitOne($MutexTimeoutMilliseconds)
         } catch [System.Threading.AbandonedMutexException] {
-            # The previous writer died while owning the mutex. Ownership is granted
-            # to this process, so continue and repair the publication normally.
             $acquired = $true
         }
         if (-not $acquired) { throw ('Timed out waiting to publish atomic file: ' + $Path) }
@@ -81,38 +102,29 @@ function Publish-TravelAssistantAtomicTempFile {
             $backupPath = $null
             try {
                 if (Test-Path -LiteralPath $Path) {
-                    # Use the three-argument overload for compatibility across
-                    # Windows PowerShell 5.1/.NET Framework and PowerShell 7/.NET.
-                    # Some runtimes resolve the four-argument overload inconsistently.
+                    # Three-argument overload works across Windows PowerShell 5.1
+                    # and PowerShell 7. A real sibling backup avoids null-path issues.
                     $backupPath = New-TravelAssistantAtomicBackupPath -Path $Path
                     if ([string]::IsNullOrWhiteSpace([string]$backupPath)) {
                         throw 'Atomic backup path generation returned an empty path.'
                     }
                     [System.IO.File]::Replace($TempPath, $Path, $backupPath)
-                    if (Test-Path -LiteralPath $backupPath) {
-                        Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
-                    }
+                    Remove-TravelAssistantAtomicBackup -BackupPath $backupPath
                 } else {
                     [System.IO.File]::Move($TempPath, $Path)
                 }
                 return
-            } catch [System.IO.IOException] {
-                if (-not (Test-Path -LiteralPath $Path) -and -not [string]::IsNullOrWhiteSpace([string]$backupPath) -and (Test-Path -LiteralPath $backupPath)) {
-                    try { [System.IO.File]::Move($backupPath, $Path) } catch { }
-                }
-                if (-not [string]::IsNullOrWhiteSpace([string]$backupPath) -and (Test-Path -LiteralPath $backupPath)) {
-                    Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
-                }
-                if ($attempt -ge $RetryCount) { throw }
-                Start-Sleep -Milliseconds ($RetryDelayMilliseconds * [Math]::Min($attempt, 5))
-            } catch [System.UnauthorizedAccessException] {
-                if (-not (Test-Path -LiteralPath $Path) -and -not [string]::IsNullOrWhiteSpace([string]$backupPath) -and (Test-Path -LiteralPath $backupPath)) {
-                    try { [System.IO.File]::Move($backupPath, $Path) } catch { }
-                }
-                if (-not [string]::IsNullOrWhiteSpace([string]$backupPath) -and (Test-Path -LiteralPath $backupPath)) {
-                    Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
-                }
-                if ($attempt -ge $RetryCount) { throw }
+            } catch {
+                $exception = $_.Exception
+                $retryable = Test-TravelAssistantAtomicRetryableException -Exception $exception
+                Repair-TravelAssistantAtomicDestination -BackupPath $backupPath -Path $Path
+                Remove-TravelAssistantAtomicBackup -BackupPath $backupPath
+
+                if (-not $retryable -or $attempt -ge $RetryCount) { throw }
+
+                # Bounded backoff: 50,100,150,200, then 250 ms per retry by default.
+                # Forty attempts gives transient readers/sync/AV locks about nine
+                # seconds to clear without making a permanently locked file hang forever.
                 Start-Sleep -Milliseconds ($RetryDelayMilliseconds * [Math]::Min($attempt, 5))
             }
         }
@@ -126,7 +138,7 @@ function Write-TravelAssistantAtomicText {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [AllowEmptyString()][string]$Text = '',
-        [int]$RetryCount = 20,
+        [int]$RetryCount = 40,
         [int]$RetryDelayMilliseconds = 50
     )
 
@@ -143,7 +155,7 @@ function Write-TravelAssistantAtomicLines {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [AllowEmptyCollection()][string[]]$Lines = @(),
-        [int]$RetryCount = 20,
+        [int]$RetryCount = 40,
         [int]$RetryDelayMilliseconds = 50
     )
 
@@ -161,7 +173,7 @@ function Write-TravelAssistantAtomicJson {
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][object]$Value,
         [int]$Depth = 24,
-        [int]$RetryCount = 20,
+        [int]$RetryCount = 40,
         [int]$RetryDelayMilliseconds = 50
     )
 
