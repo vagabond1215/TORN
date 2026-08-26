@@ -7,8 +7,11 @@ function Fail([string]$Message){$script:errors.Add($Message)}
 
 $files=@{
  Preferences=Join-Path $ProjectRoot '@Resources\Scripts\FilterPreferences.ps1'
- Popup=Join-Path $ProjectRoot '@Resources\Scripts\OpenFilterPopup.ps1'
+ LegacyPopup=Join-Path $ProjectRoot '@Resources\Scripts\OpenFilterPopup.ps1'
+ UnifiedPopup=Join-Path $ProjectRoot '@Resources\Scripts\OpenUnifiedFilterPopup.ps1'
  Launcher=Join-Path $ProjectRoot '@Resources\Scripts\LaunchFilterPopup.ps1'
+ PopupHost=Join-Path $ProjectRoot '@Resources\Scripts\PopupHost.ps1'
+ HeaderLayout=Join-Path $ProjectRoot '@Resources\Scripts\HeaderLayout.lua'
  State=Join-Path $ProjectRoot '@Resources\Scripts\FilterState.ps1'
  Opportunities=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
  Settings=Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
@@ -18,7 +21,7 @@ $files=@{
 }
 foreach($entry in $files.GetEnumerator()){if(-not(Test-Path -LiteralPath $entry.Value)){Fail "Missing $($entry.Key): $($entry.Value)"}}
 
-foreach($path in @($files.Preferences,$files.Popup,$files.Launcher,$files.State,$files.Opportunities,$files.Settings)){
+foreach($path in @($files.Preferences,$files.LegacyPopup,$files.UnifiedPopup,$files.Launcher,$files.PopupHost,$files.State,$files.Opportunities,$files.Settings)){
  if(-not(Test-Path -LiteralPath $path)){continue}
  $tokens=$null;$parseErrors=$null
  [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
@@ -34,7 +37,7 @@ if(Test-Path -LiteralPath $files.Preferences){
   'Set-FilterStateKvValuesAtomic','UISelectedTripBands','UITripShortOn','UITripMediumOn','UITripLongOn',
   '$countries.Count -eq 0','Write-FilterJsonAtomic -Path $PreferenceFile -Value $normalized','Start-FilterProjectionRefresh','LaunchUpdate.ps1','$Action -eq ''ResetFilters'''
  )){if(-not$text.Contains($token)){Fail "FilterPreferences.ps1 missing '$token'."}}
- if($text -notmatch '(?s)if \(\$Action -eq ''ToggleTripBand''\).*?Save-UiPreferences.*?Set-FilterStateKvValuesAtomic') { Fail 'Trip-band persistence must remain a tiny preference/state write.' }
+ if($text -notmatch '(?s)if \(\$Action -eq ''ToggleTripBand''\).*?Save-UiPreferences.*?Set-FilterStateKvValuesAtomic') { Fail 'Legacy trip-band persistence must remain a tiny preference/state write for compatibility.' }
 
  . $files.Preferences -SkipMain
  $available=@(Get-FilterAvailableCountryIds)
@@ -56,25 +59,46 @@ if(Test-Path -LiteralPath $files.Preferences){
  if(@($explicitEmptyBandsNormalized.displayTripBands).Count -ne 0){Fail 'An explicit empty displayTripBands array must remain a valid user selection.'}
 }
 
-if(Test-Path -LiteralPath $files.Popup){
- $text=Get-Content -LiteralPath $files.Popup -Raw
- foreach($token in @("'Item'","'Country'","'Category'","'Ignore'",'observedMarkets','Start-FilterProjectionRefresh','RuntimeLog.ps1','Read-OptionalPopupJson','$engine=Read-OptionalPopupJson $EngineStateFile','$bands=New-StringSet @($prefs.displayTripBands)')){if(-not$text.Contains($token)){Fail "Filter popup missing '$token'."}}
- if($text.Contains('$bands=New-StringSet @($prefs.selectedTripBands)')){Fail 'Country popup must scope rows from displayTripBands, not the always-on candidate trip bands.'}
- $legacyPartial="foreach(`$scriptName in @('OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1'))"
- if($text.Contains($legacyPartial)){Fail 'Filter popup must not mutate private build state through an ad-hoc partial projection chain.'}
- if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Filter popup must remain local-only.'}
+if(Test-Path -LiteralPath $files.UnifiedPopup){
+ $text=Get-Content -LiteralPath $files.UnifiedPopup -Raw
+ foreach($token in @(
+  'TRIP & FILTERS','COUNTRIES','CATEGORIES','ITEMS',"@('short','medium','long')",'SHORT','MEDIUM','LONG',
+  'Get-CountryFlagImage','@Resources\Images\Flags','CheckedListBox','TextChanged','Set-BandSelection','Set-AllCountries','Set-AllCategories',
+  "Set-FilterProperty `$current 'displayTripBands'","Set-FilterProperty `$current 'selectedCountryIds'","Set-FilterProperty `$current 'selectedCategories'","Set-FilterProperty `$current 'selectedItemIds'",
+  'Start-FilterProjectionRefresh','RuntimeLog.ps1','Read-OptionalPopupJson','$engine=Read-OptionalPopupJson $EngineStateFile','$script:resetProfitable=$true'
+ )){if(-not$text.Contains($token)){Fail "Unified filter popup missing '$token'."}}
+ if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Unified filter popup must remain local-only.'}
+ if($text.Contains('RunUpdate.ps1')){Fail 'Unified filter popup must republish through Start-FilterProjectionRefresh, not invoke RunUpdate.ps1 directly.'}
+}
+
+if(Test-Path -LiteralPath $files.LegacyPopup){
+ $text=Get-Content -LiteralPath $files.LegacyPopup -Raw
+ foreach($token in @("'Ignore'",'Read-OptionalPopupJson','Start-FilterProjectionRefresh')){if(-not$text.Contains($token)){Fail "Legacy/Ignore popup missing '$token'."}}
+ if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Legacy/Ignore popup must remain local-only.'}
 }
 
 if(Test-Path -LiteralPath $files.Launcher){
  $text=Get-Content -LiteralPath $files.Launcher -Raw
- foreach($token in @('PopupHost.ps1','-Popup Filter','-WindowStyle Hidden','-STA','System.Diagnostics.ProcessStartInfo','return')){if(-not$text.Contains($token)){Fail "Filter launcher missing '$token'."}}
+ foreach($token in @("'Filters'",'PopupHost.ps1','-Popup Filter','-WindowStyle Hidden','-STA','System.Diagnostics.ProcessStartInfo','return')){if(-not$text.Contains($token)){Fail "Filter launcher missing '$token'."}}
  if($text.Contains('exit 0')){Fail 'Filter launcher must return after spawning so nested settings popups remain alive.'}
+}
+
+if(Test-Path -LiteralPath $files.PopupHost){
+ $text=Get-Content -LiteralPath $files.PopupHost -Raw
+ foreach($token in @("'Filters'",'OpenUnifiedFilterPopup.ps1',"if (`$Filter -eq 'Ignore')",'OpenFilterPopup.ps1')){if(-not$text.Contains($token)){Fail "PopupHost unified routing missing '$token'."}}
 }
 
 if(Test-Path -LiteralPath $files.Settings){
  $text=Get-Content -LiteralPath $files.Settings -Raw
- foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1','& $UpdateLauncher -Action Update')){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1','& $UpdateLauncher -Action Update',"& `$FilterLauncher -Filter 'Ignore'")){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
  if($text.Contains("Join-Path `$PSScriptRoot 'RunUpdate.ps1'")){Fail 'Optimizer Settings must not bypass LaunchUpdate.ps1.'}
+}
+
+if(Test-Path -LiteralPath $files.HeaderLayout){
+ $text=Get-Content -LiteralPath $files.HeaderLayout -Raw
+ foreach($token in @('compactOffset = 32',"meterY('MeterOpportunity1Card')",'firstY<120','PanelHeight',"'Y'")){if(-not$text.Contains($token)){Fail "HeaderLayout.lua missing '$token'."}}
+ foreach($forbidden in @("'X'","'W'","'H'","'Text'","'FontColor'","'Shape'","ImageName")){if($text.Contains("!SetOption',name,$forbidden")){Fail "HeaderLayout.lua must not mutate protected card option $forbidden."}}
+ if($text -match '(?i)https?://|RunCommand|CommandMeasure|MeasureUpdate'){Fail 'HeaderLayout.lua must remain geometry-only and local.'}
 }
 
 if(Test-Path -LiteralPath $files.State){
@@ -109,16 +133,21 @@ if(Test-Path -LiteralPath $files.StateReader){
 
 if(Test-Path -LiteralPath $files.Ini){
  $ini=Get-Content -LiteralPath $files.Ini -Raw
- foreach($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeterItemFilter','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterSortName','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')){if($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){Fail "TravelAssistant.ini missing [$section]."}}
- foreach($retired in @('MeterSortOptimal','MeterSortTime','MeterSortLabel')){if($ini -match ('(?m)^\['+$retired+'\]\s*$')){Fail "Retired sort meter [$retired] returned."}}
+ foreach($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeasureHeaderLayout','MeterFilterIcon','MeterSettingsIcon','MeterSortName','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')){if($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){Fail "TravelAssistant.ini missing [$section]."}}
+ foreach($retired in @('MeterItemFilter','MeterTripLabel','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine','MeterSettings','MeterSortOptimal','MeterSortTime','MeterSortLabel')){if($ini -match ('(?m)^\['+[regex]::Escape($retired)+'\]\s*$')){Fail "Retired main-UI meter [$retired] returned."}}
+ foreach($token in @('FilterRequest=Filters',"OpenFilter('Filters')",'ScriptFile=#@#Scripts\HeaderLayout.lua','PanelHeight=132','Y=58','Shape10=Line 6,14,3,17')){if(-not$ini.Contains($token)){Fail "TravelAssistant.ini compact-header token missing '$token'."}}
+ if($ini.Contains('Text=SETTINGS  >')){Fail 'Main header must use the settings gear icon, not SETTINGS > text.'}
 }
 
 if(Test-Path -LiteralPath $files.Countries){
- $countries=Get-Content -LiteralPath $files.Countries -Raw|ConvertFrom-Json
- $collect=@($countries.countries|Where-Object{$_.collect -eq $true})
+ $countriesJson=Get-Content -LiteralPath $files.Countries -Raw|ConvertFrom-Json
+ $collect=@($countriesJson.countries|Where-Object{$_.collect -eq $true})
  if($collect.Count -ne 11){Fail "Expected 11 collect=true destinations; found $($collect.Count)."}
+ $short=@($collect|Where-Object{$_.tripBand -eq 'short'});$medium=@($collect|Where-Object{$_.tripBand -eq 'medium'});$long=@($collect|Where-Object{$_.tripBand -eq 'long'})
+ if($short.Count -ne 3 -or $medium.Count -ne 4 -or $long.Count -ne 4){Fail "Trip subdivisions must remain 3 short / 4 medium / 4 long; found $($short.Count)/$($medium.Count)/$($long.Count)."}
 }
 
-if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Opportunity filter/sort/settings validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Opportunity filters, visible-band country popup scope, persistent startup country defaults, finalized republish, popup fallback, instant trip-band/sort controls, and explicit card detail validation passed.' -ForegroundColor Green
+if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Unified opportunity filter/header validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
+Write-Host 'Unified trip/country/category/item filter panel and compact icon header validation passed.' -ForegroundColor Green
+Write-Host 'Legacy main filter meters are retired, Ignore List remains separate, and HeaderLayout can only shift the existing card stack upward.' -ForegroundColor Green
 exit 0
