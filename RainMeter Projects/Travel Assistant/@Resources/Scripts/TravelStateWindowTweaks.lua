@@ -153,13 +153,13 @@ local function applyTooltip(prefix,tooltip,title)
     local text=trim(tooltip)
     local heading=trim(title)
     if heading=='' then heading='Window estimate' end
+    -- Empty ToolTipText disables the tooltip without high-frequency numeric
+    -- ToolTipHidden bangs, which the target Rainmeter host misparsed after RESET.
     setOption(prefix..'Leave','ToolTipTitle',heading)
     setOption(prefix..'Leave','ToolTipText',text)
-    setOption(prefix..'Leave','ToolTipHidden',text=='' and 1 or 0)
     setOption(prefix..'Leave','DynamicVariables',1)
     setOption(prefix..'Info','ToolTipTitle',heading)
     setOption(prefix..'Info','ToolTipText',text)
-    setOption(prefix..'Info','ToolTipHidden',text=='' and 1 or 0)
 end
 
 local function liveTravelRemainingSeconds(state,now)
