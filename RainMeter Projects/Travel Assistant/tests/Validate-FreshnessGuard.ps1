@@ -109,9 +109,33 @@ if ($errors.Count -eq 0) {
     )){
         if(-not$stateReader.Contains($token)){Fail "StateReader.lua missing redraw-stability token '$token'."}
     }
-    $rawRedrawPattern=[regex]::Escape("SKIN:Bang('!UpdateMeter', '*')")+'\s*'+[regex]::Escape("SKIN:Bang('!Redraw')")
-    $directRedraws=([regex]::Matches($stateReader,$rawRedrawPattern)).Count
-    if($directRedraws -ne 1){Fail "StateReader.lua must centralize explicit redraws inside refreshPresentation; found $directRedraws raw update/redraw pair(s)."}
+    $helperStart=$stateReader.IndexOf('local function refreshPresentation()',[System.StringComparison]::Ordinal)
+    $helperEnd=if($helperStart -ge 0){$stateReader.IndexOf('local function providerLabel',$helperStart,[System.StringComparison]::Ordinal)}else{-1}
+    if($helperStart -lt 0 -or $helperEnd -le $helperStart){
+        Fail 'Unable to isolate StateReader refreshPresentation helper.'
+    } else {
+        $helperBlock=$stateReader.Substring($helperStart,$helperEnd-$helperStart)
+        foreach($token in @("SKIN:Bang('!UpdateMeter', '*')","SKIN:Bang('!Redraw')")){
+            if(-not$helperBlock.Contains($token)){Fail "refreshPresentation helper missing '$token'."}
+        }
+        $outside=$stateReader.Remove($helperStart,$helperEnd-$helperStart)
+        if($outside.Contains("SKIN:Bang('!Redraw')")){Fail 'StateReader.lua has an explicit redraw outside refreshPresentation.'}
+        $redrawCount=([regex]::Matches($helperBlock,[regex]::Escape("SKIN:Bang('!Redraw')"))).Count
+        if($redrawCount -ne 1){Fail "refreshPresentation must contain exactly one !Redraw; found $redrawCount."}
+        if($helperBlock -match '(?m)^\s*refreshPresentation\(\)\s*
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($validationError in $errors) { Write-Host "FAIL: $validationError" -ForegroundColor Red }
+    Write-Host "Freshness-guard validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host 'Forecast-only stock freshness validation passed.' -ForegroundColor Green
+Write-Host 'Five-minute provider freshness stays strict; 5m-6h evidence drives recurring forecasts with stale stock quantity suppressed, while the render-time freshness guard reads finalized ui-state.kv directly and never launches the updater.'
+exit 0
+){Fail 'refreshPresentation must not recursively call itself.'}
+    }
 }
 
 if ($errors.Count -gt 0) {
