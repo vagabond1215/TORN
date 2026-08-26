@@ -29,6 +29,7 @@ if ($errors.Count -eq 0) {
         'Get-TravelAssistantAtomicMutexName',
         'New-TravelAssistantAtomicTempPath',
         'New-TravelAssistantAtomicBackupPath',
+        'Test-TravelAssistantAtomicRetryableException',
         'Publish-TravelAssistantAtomicTempFile',
         'Write-TravelAssistantAtomicText',
         'Write-TravelAssistantAtomicLines',
@@ -36,7 +37,8 @@ if ($errors.Count -eq 0) {
         'System.Threading.Mutex',
         '[System.IO.File]::Replace',
         '[System.IO.File]::Move',
-        'RetryCount = 20',
+        'RetryCount = 40',
+        'InnerException',
         'AbandonedMutexException'
     )) {
         if (-not $helper.Contains($token)) { Fail "AtomicFile.ps1 missing '$token'." }
@@ -46,6 +48,7 @@ if ($errors.Count -eq 0) {
     if ($helper.Contains('[System.IO.File]::Replace($TempPath, $Path, $backupPath, $true)')) { Fail 'AtomicFile.ps1 must not use the runtime-sensitive four-argument File.Replace overload.' }
     if (-not $helper.Contains('[System.IO.File]::Replace($TempPath, $Path, $backupPath)')) { Fail 'AtomicFile.ps1 must use the portable three-argument File.Replace overload.' }
     if (-not $helper.Contains('Atomic backup path generation returned an empty path.')) { Fail 'AtomicFile.ps1 must explicitly guard against an empty generated backup path.' }
+    if (-not $helper.Contains('$current = $current.InnerException')) { Fail 'AtomicFile.ps1 must walk wrapped InnerException values when classifying retryable Windows file locks.' }
 
     foreach ($pair in @(
         [pscustomobject]@{name='ProjectCollectedState.ps1'; text=$projection},
@@ -73,6 +76,50 @@ if ($errors.Count -eq 0) {
             }
             $actual = Get-Content -LiteralPath $target -Raw
             if (-not $actual.Contains('Generation=25') -or -not $actual.Contains('Complete=1')) { Fail 'Atomic helper did not publish the final complete generation.' }
+
+            # On Windows, deliberately hold the destination without FileShare.Delete.
+            # File.Replace then throws a MethodInvocationException wrapping IOException.
+            # The helper must recognize that wrapped sharing violation, retry, and
+            # publish successfully after the short lock is released.
+            if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and (Get-Command Start-Job -ErrorAction SilentlyContinue)) {
+                $ready = Join-Path $work 'lock.ready'
+                $lockJob = Start-Job -ArgumentList $target,$ready -ScriptBlock {
+                    param($lockedTarget,$readyPath)
+                    $stream = [System.IO.File]::Open(
+                        $lockedTarget,
+                        [System.IO.FileMode]::Open,
+                        [System.IO.FileAccess]::Read,
+                        [System.IO.FileShare]::Read
+                    )
+                    try {
+                        [System.IO.File]::WriteAllText($readyPath,'ready')
+                        Start-Sleep -Milliseconds 800
+                    } finally {
+                        $stream.Dispose()
+                    }
+                }
+                try {
+                    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+                    while (-not (Test-Path -LiteralPath $ready) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
+                    if (-not (Test-Path -LiteralPath $ready)) {
+                        Fail 'Atomic lock-contention test could not establish the child-process file lock.'
+                    } else {
+                        Write-TravelAssistantAtomicLines -Path $target -Lines @('Generation=after-lock','Complete=1') -RetryCount 40 -RetryDelayMilliseconds 50
+                        $afterLock = Get-Content -LiteralPath $target -Raw
+                        if (-not $afterLock.Contains('Generation=after-lock') -or -not $afterLock.Contains('Complete=1')) {
+                            Fail 'Atomic helper did not recover from a transient wrapped sharing violation.'
+                        }
+                    }
+                } finally {
+                    if ($null -ne $lockJob) {
+                        Wait-Job -Job $lockJob -Timeout 5 -ErrorAction SilentlyContinue | Out-Null
+                        Stop-Job -Job $lockJob -ErrorAction SilentlyContinue
+                        Remove-Job -Job $lockJob -Force -ErrorAction SilentlyContinue
+                    }
+                    Remove-Item -LiteralPath $ready -Force -ErrorAction SilentlyContinue
+                }
+            }
+
             $tempOrphans = @(Get-ChildItem -LiteralPath $work -Filter '*.tmp' -Force -ErrorAction SilentlyContinue)
             $backupOrphans = @(Get-ChildItem -LiteralPath $work -Filter '*.bak' -Force -ErrorAction SilentlyContinue)
             if ($tempOrphans.Count -gt 0) { Fail 'Atomic helper left orphan temporary files after successful writes.' }
@@ -90,5 +137,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Atomic state-write validation passed.' -ForegroundColor Green
-Write-Host 'Critical state and heartbeat publishers use unique temporary files, legal unique backup paths, per-destination cross-process mutexes, the portable three-argument File.Replace overload, and bounded retry instead of fixed .tmp + Move-Item publication.'
+Write-Host 'Critical state and heartbeat publishers use unique temporary files, legal unique backup paths, per-destination cross-process mutexes, portable File.Replace/File.Move publication, and wrapped sharing-violation retries.'
 exit 0
