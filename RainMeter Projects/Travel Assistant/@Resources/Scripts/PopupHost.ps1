@@ -2,8 +2,8 @@ param(
     [Parameter(Mandatory=$true)]
     [ValidateSet('Filter','OptimizerSettings','ItemViewer')]
     [string]$Popup,
-    [ValidateSet('Item','Country','Category','Ignore')]
-    [string]$Filter = 'Item',
+    [ValidateSet('Filters','Item','Country','Category','Ignore')]
+    [string]$Filter = 'Filters',
     [ValidateRange(0,8)]
     [int]$Row = 0,
     [string]$MarketKey = ''
@@ -20,9 +20,17 @@ Clear-TravelAssistantLatestError -Component $component
 try {
     switch ($Popup) {
         'Filter' {
-            $target = Join-Path $PSScriptRoot 'OpenFilterPopup.ps1'
-            if (-not (Test-Path -LiteralPath $target)) { throw 'OpenFilterPopup.ps1 is missing.' }
-            & $target -Filter $Filter
+            if ($Filter -eq 'Ignore') {
+                $target = Join-Path $PSScriptRoot 'OpenFilterPopup.ps1'
+                if (-not (Test-Path -LiteralPath $target)) { throw 'OpenFilterPopup.ps1 is missing.' }
+                & $target -Filter 'Ignore'
+            } else {
+                # Item/Country/Category are retained as backward-compatible launcher
+                # values, but all three now open the same staged unified panel.
+                $target = Join-Path $PSScriptRoot 'OpenUnifiedFilterPopup.ps1'
+                if (-not (Test-Path -LiteralPath $target)) { throw 'OpenUnifiedFilterPopup.ps1 is missing.' }
+                & $target
+            }
         }
         'OptimizerSettings' {
             $target = Join-Path $PSScriptRoot 'OpenOptimizerSettings.ps1'
