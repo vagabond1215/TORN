@@ -32,7 +32,9 @@ if ($errors.Count -eq 0) {
         "No retained-cycle forecast is available from the stale stock evidence",
         "Foreign stock evidence is over six hours old",
         "!HideMeterGroup','OpportunityRow",
-        'Display-only fence'
+        'Display-only fence',
+        'local data=readKv(statePath)',
+        'local heartbeat=readEpoch(heartbeatPath)'
     )) {
         if (-not $guard.Contains($token)) { Fail "FreshnessGuard.lua missing '$token'." }
     }
@@ -45,9 +47,9 @@ if ($errors.Count -eq 0) {
     }
     foreach ($forbidden in @(
         'writeKvAtomic','opportunity-cache.kv','restoreCachedProjection',"!UpdateMeasure','MeasureState",
-        "!CommandMeasure','MeasureUpdate','Run'",'requestRetry','retryInterval','lastRetryAt'
+        "!CommandMeasure','MeasureUpdate','Run'",'requestRetry','retryInterval','lastRetryAt','PublishedState.lua'
     )) {
-        if ($guard.Contains($forbidden)) { Fail "FreshnessGuard.lua must remain display-only; found '$forbidden'." }
+        if ($guard.Contains($forbidden)) { Fail "FreshnessGuard.lua must remain direct-read and display-only; found '$forbidden'." }
     }
     if ($guard -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FreshnessGuard.lua must remain local-only.' }
 
@@ -93,5 +95,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Forecast-only stock freshness validation passed.' -ForegroundColor Green
-Write-Host 'Five-minute provider freshness stays strict; 5m-6h evidence drives recurring forecasts with stale stock quantity suppressed, while the render-time freshness guard remains display-only and the main state reader owns updater cadence.'
+Write-Host 'Five-minute provider freshness stays strict; 5m-6h evidence drives recurring forecasts with stale stock quantity suppressed, while the render-time freshness guard reads finalized ui-state.kv directly and never launches the updater.'
 exit 0
