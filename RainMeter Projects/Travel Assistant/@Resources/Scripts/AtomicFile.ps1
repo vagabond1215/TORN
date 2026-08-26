@@ -29,14 +29,27 @@ function Get-TravelAssistantAtomicMutexName {
     }
 }
 
-function New-TravelAssistantAtomicTempPath {
-    param([Parameter(Mandatory = $true)][string]$Path)
+function New-TravelAssistantAtomicSiblingPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Suffix
+    )
 
     $directory = Split-Path $Path -Parent
     if ([string]::IsNullOrWhiteSpace($directory)) { $directory = (Get-Location).Path }
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
     $name = [System.IO.Path]::GetFileName($Path)
-    return (Join-Path $directory ('.' + $name + '.' + [string]$PID + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'))
+    return (Join-Path $directory ('.' + $name + '.' + [string]$PID + '.' + [Guid]::NewGuid().ToString('N') + $Suffix))
+}
+
+function New-TravelAssistantAtomicTempPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return (New-TravelAssistantAtomicSiblingPath -Path $Path -Suffix '.tmp')
+}
+
+function New-TravelAssistantAtomicBackupPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return (New-TravelAssistantAtomicSiblingPath -Path $Path -Suffix '.bak')
 }
 
 function Publish-TravelAssistantAtomicTempFile {
@@ -65,17 +78,37 @@ function Publish-TravelAssistantAtomicTempFile {
         if (-not $acquired) { throw ('Timed out waiting to publish atomic file: ' + $Path) }
 
         for ($attempt = 1; $attempt -le $RetryCount; $attempt++) {
+            $backupPath = $null
             try {
                 if (Test-Path -LiteralPath $Path) {
-                    [System.IO.File]::Replace($TempPath, $Path, $null, $true)
+                    # Windows PowerShell 5.1/.NET Framework can reject a null backup
+                    # argument to the four-argument File.Replace overload as an
+                    # illegal path. Always supply a real unique sibling backup path.
+                    $backupPath = New-TravelAssistantAtomicBackupPath -Path $Path
+                    [System.IO.File]::Replace($TempPath, $Path, $backupPath, $true)
+                    if (Test-Path -LiteralPath $backupPath) {
+                        Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+                    }
                 } else {
                     [System.IO.File]::Move($TempPath, $Path)
                 }
                 return
             } catch [System.IO.IOException] {
+                if (-not (Test-Path -LiteralPath $Path) -and -not [string]::IsNullOrWhiteSpace($backupPath) -and (Test-Path -LiteralPath $backupPath)) {
+                    try { [System.IO.File]::Move($backupPath, $Path) } catch { }
+                }
+                if (-not [string]::IsNullOrWhiteSpace($backupPath) -and (Test-Path -LiteralPath $backupPath)) {
+                    Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+                }
                 if ($attempt -ge $RetryCount) { throw }
                 Start-Sleep -Milliseconds ($RetryDelayMilliseconds * [Math]::Min($attempt, 5))
             } catch [System.UnauthorizedAccessException] {
+                if (-not (Test-Path -LiteralPath $Path) -and -not [string]::IsNullOrWhiteSpace($backupPath) -and (Test-Path -LiteralPath $backupPath)) {
+                    try { [System.IO.File]::Move($backupPath, $Path) } catch { }
+                }
+                if (-not [string]::IsNullOrWhiteSpace($backupPath) -and (Test-Path -LiteralPath $backupPath)) {
+                    Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+                }
                 if ($attempt -ge $RetryCount) { throw }
                 Start-Sleep -Milliseconds ($RetryDelayMilliseconds * [Math]::Min($attempt, 5))
             }
