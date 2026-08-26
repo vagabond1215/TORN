@@ -145,11 +145,6 @@ function Normalize-UiPreferences {
     $defaults = New-DefaultUiPreferences
     if ($null -eq $Preferences) { $Preferences = [pscustomobject]@{} }
 
-    $sourceSchemaVersion = 0
-    if ($Preferences.PSObject.Properties['schemaVersion']) {
-        [void][int]::TryParse([string]$Preferences.schemaVersion,[ref]$sourceSchemaVersion)
-    }
-
     $legacyDisplayBands = @('short','medium','long')
     if (-not $Preferences.PSObject.Properties['displayTripBands'] -and $Preferences.PSObject.Properties['selectedTripBands']) {
         $legacyDisplayBands = @(Normalize-TripBands @($Preferences.selectedTripBands))
@@ -186,9 +181,9 @@ function Normalize-UiPreferences {
         $value = [string]$id
         if ($availableCountries -contains $value) { $countries += $value }
     }
-    # A zero-country selection is not a useful persistent startup state. Preserve any
-    # real nonempty user selection, but default an absent/empty/invalid set to all
-    # collected countries so startup/refresh cannot silently blank the opportunity list.
+    # Empty/missing/invalid country state is never a useful startup selection. Keep
+    # any real saved selection, otherwise use all collected countries in memory.
+    # Reads remain side-effect free; explicit user saves/reset persist preferences.
     if ($countries.Count -eq 0 -and $availableCountries.Count -gt 0) {
         $countries = [string[]]@($availableCountries)
     }
@@ -220,23 +215,10 @@ function Normalize-UiPreferences {
 }
 
 function Read-UiPreferences {
+    # Read paths must be side-effect free. In particular, startup and popup opening
+    # must never block on an atomic preference write merely to repair defaults.
     $prefs = Read-FilterJson $PreferenceFile
-    $sourceSchemaVersion = 0
-    $sourceCountryCount = 0
-    $needsPersist = ($null -eq $prefs)
-    if ($null -ne $prefs) {
-        if ($prefs.PSObject.Properties['schemaVersion']) {
-            [void][int]::TryParse([string]$prefs.schemaVersion,[ref]$sourceSchemaVersion)
-        }
-        if ($prefs.PSObject.Properties['selectedCountryIds']) { $sourceCountryCount = @($prefs.selectedCountryIds).Count }
-        if ($sourceSchemaVersion -lt 7 -or $sourceCountryCount -eq 0) { $needsPersist = $true }
-    }
-
-    $normalized = Normalize-UiPreferences -Preferences $prefs
-    if ($needsPersist -and @($normalized.selectedCountryIds).Count -gt 0) {
-        Write-FilterJsonAtomic -Path $PreferenceFile -Value $normalized
-    }
-    return $normalized
+    return (Normalize-UiPreferences -Preferences $prefs)
 }
 
 function Save-UiPreferences {
@@ -249,8 +231,10 @@ function Save-UiPreferences {
 function Start-FilterProjectionRefresh {
     $launcher = Join-Path $PSScriptRoot 'LaunchUpdate.ps1'
     if (-not (Test-Path -LiteralPath $launcher)) { throw 'LaunchUpdate.ps1 is required to republish filter changes.' }
-    & $launcher -Action Update
-    if (-not $?) { throw 'LaunchUpdate.ps1 failed to start the filter republish worker.' }
+    $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+    if ($null -eq $pwsh) { throw 'pwsh.exe is required to republish filter changes.' }
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $launcher
+    Start-Process -FilePath $pwsh.Source -ArgumentList $arguments -WindowStyle Hidden | Out-Null
 }
 
 function Toggle-TripBandPreference {
