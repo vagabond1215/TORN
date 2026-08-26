@@ -1,6 +1,5 @@
 local statePath=nil
 local heartbeatPath=nil
-local publishedState=nil
 local staleAfter=300
 local hardStaleAfter=21600
 
@@ -11,6 +10,26 @@ end
 
 local function number(value)
     return tonumber(trim(value)) or 0
+end
+
+local function readKv(path)
+    local out={}
+    local file=io.open(path,'r')
+    if not file then return out end
+    for line in file:lines() do
+        local key,value=line:match('^([^=]+)=(.*)$')
+        if key then out[trim(key)]=trim(value) end
+    end
+    file:close()
+    return out
+end
+
+local function readEpoch(path)
+    local file=io.open(path,'r')
+    if not file then return 0 end
+    local raw=file:read('*a') or ''
+    file:close()
+    return number(raw)
 end
 
 local function setVariable(name,value)
@@ -87,14 +106,13 @@ end
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
     heartbeatPath=SKIN:MakePathAbsolute(SELF:GetOption('HeartbeatFile','#@#Generated\\last-update.txt'))
-    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath,heartbeatPath)
     staleAfter=math.max(60,math.floor(tonumber(SELF:GetOption('StaleAfter','300')) or 300))
     hardStaleAfter=math.max(staleAfter+60,math.floor(tonumber(SELF:GetOption('HardStaleAfter','21600')) or 21600))
 end
 
 function Update()
     local now=os.time()
-    local data=publishedState.read()
+    local data=readKv(statePath)
     local freshestAt,oldestAt=sourceTimestamps(data)
     local displayAt=(oldestAt>0) and oldestAt or freshestAt
     local sourceAge=(displayAt>0) and math.max(0,now-displayAt) or math.huge
@@ -105,7 +123,7 @@ function Update()
         return 0
     end
 
-    local heartbeat=publishedState.epoch()
+    local heartbeat=readEpoch(heartbeatPath)
     local uiText=''
     if heartbeat>0 then uiText='UI '..os.date('%H:%M:%S',heartbeat)..' | ' end
     local provider=providerLabel(data.LiveProvider)
