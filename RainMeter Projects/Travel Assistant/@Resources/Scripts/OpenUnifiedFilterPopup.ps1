@@ -108,6 +108,8 @@ $catalog=@(Get-ActiveCatalogRows)
 if($catalog.Count -eq 0) { throw 'No active item catalog rows are available for the unified filter panel.' }
 $countries=@($countriesConfig.countries | Where-Object { $_.collect -eq $true })
 $categories=@($catalog | ForEach-Object { [string]$_.category } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+$bandOrder=@('short','medium','long')
+$bandLabels=@{short='SHORT';medium='MEDIUM';long='LONG'}
 
 $selectedCountrySet=New-StringSet @($prefs.selectedCountryIds)
 $displayBandSet=New-StringSet @($prefs.displayTripBands)
@@ -169,12 +171,13 @@ function Set-ChipStyle($Chip) {
     }
 }
 
-function New-Chip([string]$Text,[int]$Width,[bool]$Checked,[System.Drawing.Image]$Image=$null) {
+function New-Chip([string]$Text,[int]$Width,[bool]$Checked,[string]$Tag,[System.Drawing.Image]$Image=$null) {
     $chip=New-Object System.Windows.Forms.CheckBox
     $chip.Appearance=[System.Windows.Forms.Appearance]::Button
     $chip.AutoSize=$false
     $chip.Size=New-Object System.Drawing.Size($Width,30)
     $chip.Text=$Text
+    $chip.Tag=$Tag
     $chip.Checked=$Checked
     $chip.FlatStyle=[System.Windows.Forms.FlatStyle]::Flat
     $chip.FlatAppearance.BorderSize=1
@@ -182,6 +185,7 @@ function New-Chip([string]$Text,[int]$Width,[bool]$Checked,[System.Drawing.Image
     $chip.Font=New-Object System.Drawing.Font('Segoe UI Semibold',8)
     $chip.Margin=New-Object System.Windows.Forms.Padding(0,0,6,6)
     $chip.Padding=New-Object System.Windows.Forms.Padding(4,0,4,0)
+    $chip.AutoEllipsis=$true
     if($null -ne $Image) {
         $chip.Image=$Image
         $chip.ImageAlign=[System.Drawing.ContentAlignment]::MiddleLeft
@@ -202,9 +206,10 @@ function New-SectionHeader([string]$Text,[int]$Y,[System.Windows.Forms.Control]$
     return $label
 }
 
-function New-ActionLink([string]$Text,[int]$X,[int]$Y,[System.Windows.Forms.Control]$Parent) {
+function New-ActionLink([string]$Text,[int]$X,[int]$Y,[System.Windows.Forms.Control]$Parent,[string]$Tag='') {
     $link=New-Object System.Windows.Forms.LinkLabel
     $link.Text=$Text
+    $link.Tag=$Tag
     $link.Location=New-Object System.Drawing.Point($X,$Y)
     $link.Size=New-Object System.Drawing.Size(42,20)
     $link.TextAlign=[System.Drawing.ContentAlignment]::MiddleRight
@@ -243,6 +248,27 @@ function Set-CategorySelection([string]$Category,[bool]$Value) {
 }
 function Set-AllCategories([bool]$Value) {
     foreach($category in $categories) { Set-CategorySelection -Category $category -Value $Value }
+}
+
+function Country-ChipChanged {
+    $chip=[System.Windows.Forms.CheckBox]$this
+    $id=[string]$chip.Tag
+    if([string]::IsNullOrWhiteSpace($id)) { return }
+    $script:countrySelection[$id]=[bool]$chip.Checked
+    Set-ChipStyle $chip
+}
+function Category-ChipChanged {
+    $chip=[System.Windows.Forms.CheckBox]$this
+    $category=[string]$chip.Tag
+    if([string]::IsNullOrWhiteSpace($category)) { return }
+    $script:categorySelection[$category]=[bool]$chip.Checked
+    Set-ChipStyle $chip
+}
+function Band-LinkClicked {
+    $link=[System.Windows.Forms.LinkLabel]$this
+    $parts=([string]$link.Tag).Split('|')
+    if($parts.Count -ne 2) { return }
+    Set-BandSelection -Band $parts[0] -Value ($parts[1] -eq '1')
 }
 
 $form=New-Object System.Windows.Forms.Form
@@ -291,12 +317,10 @@ $countryAll.Add_Click({ Set-AllCountries $true })
 $countryNone.Add_Click({ Set-AllCountries $false })
 $y+=24
 
-$bandOrder=@('short','medium','long')
-$bandLabels=@{short='SHORT';medium='MEDIUM';long='LONG'}
 foreach($band in $bandOrder) {
     $panel=New-Object System.Windows.Forms.Panel
     $panel.Location=New-Object System.Drawing.Point(0,$y)
-    $panel.Size=New-Object System.Drawing.Size(394,88)
+    $panel.Size=New-Object System.Drawing.Size(394,94)
     $panel.BackColor=$ColorPanel
     $content.Controls.Add($panel)
 
@@ -308,14 +332,14 @@ foreach($band in $bandOrder) {
     $label.ForeColor=$ColorMuted
     $panel.Controls.Add($label)
 
-    $all=New-ActionLink 'All' 306 0 $panel
-    $none=New-ActionLink 'None' 348 0 $panel
-    $all.Add_Click(({ Set-BandSelection -Band $band -Value $true }).GetNewClosure())
-    $none.Add_Click(({ Set-BandSelection -Band $band -Value $false }).GetNewClosure())
+    $all=New-ActionLink 'All' 306 0 $panel ($band+'|1')
+    $none=New-ActionLink 'None' 348 0 $panel ($band+'|0')
+    $all.Add_Click({ Band-LinkClicked })
+    $none.Add_Click({ Band-LinkClicked })
 
     $flow=New-Object System.Windows.Forms.FlowLayoutPanel
     $flow.Location=New-Object System.Drawing.Point(4,23)
-    $flow.Size=New-Object System.Drawing.Size(386,62)
+    $flow.Size=New-Object System.Drawing.Size(386,68)
     $flow.WrapContents=$true
     $flow.FlowDirection=[System.Windows.Forms.FlowDirection]::LeftToRight
     $flow.BackColor=$ColorPanel
@@ -323,15 +347,12 @@ foreach($band in $bandOrder) {
 
     foreach($country in @($countries | Where-Object { [string]$_.tripBand -eq $band } | Sort-Object name)) {
         $id=[string]$country.id
-        $name=[string]$country.name
-        $textWidth=[System.Windows.Forms.TextRenderer]::MeasureText($name,(New-Object System.Drawing.Font('Segoe UI Semibold',8))).Width
-        $chipWidth=[Math]::Min(180,[Math]::Max(96,$textWidth+44))
-        $chip=New-Chip -Text $name -Width $chipWidth -Checked ([bool]$script:countrySelection[$id]) -Image (Get-CountryFlagImage $id)
+        $chip=New-Chip -Text ([string]$country.name) -Width 122 -Checked ([bool]$script:countrySelection[$id]) -Tag $id -Image (Get-CountryFlagImage $id)
         $script:countryChips[$id]=$chip
-        $chip.Add_CheckedChanged(({ $script:countrySelection[$id]=[bool]$chip.Checked; Set-ChipStyle $chip }).GetNewClosure())
+        $chip.Add_CheckedChanged({ Country-ChipChanged })
         $flow.Controls.Add($chip)
     }
-    $y+=88
+    $y+=94
 }
 
 $separator1=New-Object System.Windows.Forms.Label
@@ -350,20 +371,18 @@ $y+=24
 
 $categoryFlow=New-Object System.Windows.Forms.FlowLayoutPanel
 $categoryFlow.Location=New-Object System.Drawing.Point(4,$y)
-$categoryFlow.Size=New-Object System.Drawing.Size(390,126)
+$categoryFlow.Size=New-Object System.Drawing.Size(390,154)
 $categoryFlow.WrapContents=$true
 $categoryFlow.FlowDirection=[System.Windows.Forms.FlowDirection]::LeftToRight
 $categoryFlow.BackColor=$ColorPanel
 $content.Controls.Add($categoryFlow)
 foreach($category in $categories) {
-    $textWidth=[System.Windows.Forms.TextRenderer]::MeasureText($category,(New-Object System.Drawing.Font('Segoe UI Semibold',8))).Width
-    $chipWidth=[Math]::Min(150,[Math]::Max(86,$textWidth+24))
-    $chip=New-Chip -Text $category -Width $chipWidth -Checked ([bool]$script:categorySelection[$category])
+    $chip=New-Chip -Text $category -Width 118 -Checked ([bool]$script:categorySelection[$category]) -Tag $category
     $script:categoryChips[$category]=$chip
-    $chip.Add_CheckedChanged(({ $script:categorySelection[$category]=[bool]$chip.Checked; Set-ChipStyle $chip }).GetNewClosure())
+    $chip.Add_CheckedChanged({ Category-ChipChanged })
     $categoryFlow.Controls.Add($chip)
 }
-$y+=132
+$y+=160
 
 $separator2=New-Object System.Windows.Forms.Label
 $separator2.Location=New-Object System.Drawing.Point(0,$y+2)
