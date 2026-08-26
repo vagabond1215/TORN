@@ -210,7 +210,13 @@ function Invoke-HistoryMaintenance {
 }
 
 try {
-    $acquired = $mutex.WaitOne(0)
+    try {
+        $acquired = $mutex.WaitOne(0)
+    } catch [System.Threading.AbandonedMutexException] {
+        # WaitOne transfers ownership to this thread before throwing for an abandoned mutex.
+        # Treat it as acquired so a crashed predecessor cannot poison subsequent updates.
+        $acquired = $true
+    }
     if (-not $acquired) { exit 0 }
 
     # Preserve one predecessor per market before any legacy maintenance can prune
