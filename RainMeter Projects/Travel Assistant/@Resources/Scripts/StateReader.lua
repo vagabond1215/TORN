@@ -196,7 +196,8 @@ local function refreshPresentation()
     }) do
         SKIN:Bang('!UpdateMeasure', measure)
     end
-    refreshPresentation()
+    SKIN:Bang('!UpdateMeter', '*')
+    SKIN:Bang('!Redraw')
 end
 
 local function providerLabel(provider)
