@@ -72,8 +72,11 @@ if (-not (Test-Path -LiteralPath $launcherPath)) {
     [void][System.Management.Automation.Language.Parser]::ParseFile($launcherPath,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail ('LaunchUpdate.ps1 parse error: ' + $parseError.Message) }
     $launcher = Get-Content -LiteralPath $launcherPath -Raw
-    foreach ($token in @('RunUpdate.ps1','Get-Command pwsh.exe','Start-Process -FilePath $pwsh.Source','-Action {1}')) {
+    foreach ($token in @('RunUpdate.ps1','Get-Command pwsh.exe','System.Diagnostics.ProcessStartInfo','[System.Diagnostics.Process]::Start($psi)','UseShellExecute = $false','CreateNoWindow = $true','-Action {1}')) {
         if (-not $launcher.Contains($token)) { Fail "LaunchUpdate.ps1 missing '$token'." }
+    }
+    foreach ($forbidden in @('FilterPreferences.ps1','Read-UiPreferences','Save-UiPreferences','Write-TravelAssistantAtomicText','Invoke-RestMethod')) {
+        if ($launcher.Contains($forbidden)) { Fail "LaunchUpdate.ps1 must remain spawn-only and must not contain '$forbidden'." }
     }
 }
 
@@ -86,5 +89,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Rainmeter updater runtime contract passed.' -ForegroundColor Green
-Write-Host 'MeasureUpdate uses a short PS7 launcher; the detached PS7 RunUpdate worker is protected by its named mutex.' -ForegroundColor Green
+Write-Host 'MeasureUpdate uses a spawn-only PS7 launcher; the detached PS7 RunUpdate worker is protected by its named mutex.' -ForegroundColor Green
 exit 0
