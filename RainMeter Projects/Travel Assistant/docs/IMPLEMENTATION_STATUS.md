@@ -1,8 +1,8 @@
 # Travel Assistant Implementation Status
 
-**Checkpoint:** 2026-08-22
+**Checkpoint:** 2026-08-26
 
-**Active run:** 0.6.0 compact opportunity surface. See `docs/NEXT_CODEX_RUN.md`.
+**Active run:** 0.6.0 compact opportunity surface. See `docs/NEXT_CODEX_RUN.md` for the authoritative acceptance checklist.
 
 ## Accepted data foundation
 
@@ -18,14 +18,15 @@ Previously target-Windows validated foundation:
 5 verified legacy provider rows excluded from new learning/economics work
 ```
 
-Also accepted:
+Also previously accepted:
 
-- provider-name enrichment;
-- offline category/catalog authority;
+- provider-name enrichment and offline category/catalog authority;
 - bounded one-request Torn Item Market pricing;
 - `/user/perks` general capacity behavior;
 - Flower/Toy category-capacity isolation;
 - Airstrip general/Xanax 18 and Standard 13 on the target profile.
+
+These are historical target-host baselines, not timeless live counts.
 
 ## 0.6 compact opportunity UI — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
@@ -36,171 +37,140 @@ ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
 NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 ```
 
-Visible rows are now designed as:
+Current compact card target:
 
 ```text
-[FLAG]  item                                    $gross   v
-[time]  current/window   leave   chance/LEARNING   foreign (MV)
+[FLAG]  item             $net/ea xN = $total net   v
+        flight/remaining  Safe/Best guidance  info/confidence  Take: $cash
 ```
 
-Changes implemented:
+Implemented behavior includes:
 
-- retired visible row rank numbers;
-- retired country code/name from the row body;
-- retired duplicate center elapsed-time text;
-- moved elapsed/time text to a white strip under a vector destination flag;
-- removed visible `gross` and `xN` suffixes from the gross dollar field;
-- retained quantity internally and in tooltips for economic inspection;
-- replaced `GRAPH` word with a compact `v`/`^` expansion control.
+- no visible rank numbers;
+- country appears only in the flag tooltip;
+- FlagKit flag assets rather than vector flag approximations;
+- item-only card title;
+- visible per-item × quantity = total economics equation;
+- home one-way flight time / recognized-outbound live landing countdown;
+- Safe/Best live guidance with detailed arrival-window tooltip;
+- Safe confidence suppression with `ⓘ` fallback anchor;
+- conditional 5% `Take:` buffer only after retained foreign-price variance is demonstrated;
+- `v`/`^` inline graph control;
+- immediate local NAME / UPCOMING / GROSS PROFIT / PROFIT/HR sorting;
+- immediate local SHORT / MED / LONG display filtering.
 
-Flags are Rainmeter Shape approximations for all 11 destinations and require no binary image assets.
+Fresh observed in-stock markets may remain visible with `LEARNING` likelihood while recurring evidence is incomplete. Sold-out future opportunities still require completed-cycle evidence.
+
+## Trip-band model — IMPLEMENTED
+
+Schema 7 separates candidate scope from visible scope:
+
+```text
+selectedTripBands = short,medium,long   # always retained for candidate projection
+displayTripBands  = user-selected visible bands
+```
+
+Trip-band clicks filter/reorder the already-projected candidate pool immediately in Lua and persist via a tiny local write.
+
+The Country popup now follows `displayTripBands`. Country selections outside currently visible bands are preserved so re-enabling a band restores its prior country-level exceptions.
 
 ## Inline card graph — IMPLEMENTED, PENDING WINDOWS ACCEPTANCE
 
-`RenderInlineGraph.ps1` renders retained 8-hour stock history to a small generated Rainmeter Shape-path spec.
+`StateReader.lua` owns inline expansion state and invokes dedicated `MeasureInlineGraph` / `RenderInlineGraph.ps1` local rendering.
 
-`StateReader.lua`:
+- only one graph expanded at a time;
+- stable `country:itemId` identity through sorting;
+- lower rows and panel height reflow locally;
+- open graph may refresh locally around once/minute;
+- 8-hour retained history only;
+- no provider/Torn request;
+- no forecast-to-history mutation;
+- zero-stock-only history remains flat at zero.
 
-- expands the selected card in-place;
-- shifts lower rows down and grows panel height;
-- allows only one expanded graph at a time;
-- collapses the current graph when another card opens;
-- tracks the expanded market by stable `country:itemId` through sorting;
-- refreshes the open graph locally around once per minute.
+The live inline path does **not** use the standalone Viewer launcher. `LaunchItemViewer.ps1` retains legacy `inline_` compatibility only.
 
-The existing Viewer launcher distinguishes:
+`VIEWER >` remains a separate detached WinForms market browser.
+
+## Immutable UI publication — IMPLEMENTED, PENDING STEADY-STATE TARGET ACCEPTANCE
+
+The 2026-08-26 stale-publication incident established that fresh provider/engine data was reaching the machine while Rainmeter-facing publication could stall on Windows file-sharing contention.
+
+Current state roles are:
 
 ```text
-inline_<country:itemId> -> RenderInlineGraph.ps1, no popup
-ordinary/empty key      -> standalone Item Viewer popup
+@Resources/Generated/state.kv                    = private mutable build state
+@Resources/Generated/ui-state-<epoch>-<id>.kv    = immutable complete UI generation
+@Resources/Generated/last-update.txt              = epoch|generation manifest
+@Resources/Generated/ui-state.kv                  = legacy startup fallback
 ```
 
-Inline graph viewing makes no network request and does not write observation/cycle history.
+`RunUpdate.ps1` publishes one complete immutable generation only after `FilterState`, then atomically advances the small manifest. `PublishedState.lua` caches the selected complete generation so a failed or in-flight update cannot expose partial build state.
 
-## Standalone Viewer — RETAINED
+`LaunchUpdate.ps1` is spawn-only and starts the long-running worker under `pwsh.exe`; the named updater mutex serializes workers and tolerates an abandoned predecessor.
 
-`VIEWER >` is still a separate WinForms market browser with:
+## Popup / Settings finalization — CODE COMPLETE, TARGET INTERACTION ACCEPTANCE PENDING
 
-- broad market dropdown;
-- full 8-hour graph;
-- hourly markers;
-- restock/sellout diagnostics;
-- truthful zero-stock axis;
-- retained baseline repair.
+The target-host Item filter popup was observed opening during the 2026-08-26 Codex pass before that run exhausted its token budget.
 
-The standalone Viewer is not replaced by card expansion.
+Follow-up repository finalization hardened the remaining paths:
 
-## Current in-stock learning semantics — IMPLEMENTED
+- Item/Country/Category/Ignore, Opportunity Settings, Profile/API and Viewer launchers use hidden detached process contracts;
+- launchers `return` after spawning rather than `exit`, making nested popup calls safe;
+- `Ignore List...` and `Profile / API...` can be launched from Opportunity Settings without the launcher intentionally terminating the parent host;
+- Opportunity Settings and Profile/API saves route through `LaunchUpdate.ps1` rather than launching `RunUpdate.ps1` directly under Windows PowerShell 5.1;
+- launcher/runtime failures are written to the bounded runtime log;
+- static acceptance rejects regression to nested-launcher `exit 0`, direct WinPS updater bypasses, or Country-popup use of the candidate-only trip-band field.
 
-Fresh observed stock is now allowed to remain visible before arrival-survival evidence is trained.
+Still requiring target-host interaction acceptance: Opportunity Settings, Category, Country, Ignore List, Profile/API and standalone Viewer open/save behavior.
 
-For current in-stock markets:
-
-- known likelihood -> percentage;
-- unknown likelihood -> `LEARNING`;
-- unknown likelihood no longer causes the row to be dropped.
-
-Gross and profit/hour still derive from current stock/capacity, foreign price and cached MV. This does not relax future sold-out forecasting: sold-out future windows still need completed-cycle evidence.
-
-## Transparent ordering — IMPLEMENTED
-
-- `NAME`: alphabetical item/destination.
-- `UPCOMING`: earliest current/modeled window.
-- `GROSS PROFIT`: trip gross descending.
-- `PROFIT/HR`: trip gross / total elapsed hours descending.
-
-Hit likelihood remains separate and is not probability-weighted into any visible sort.
-
-Sorts reorder already-projected rows immediately in Lua; the PowerShell preference action persists the mode without gating visual response.
-
-## Economics
+## Current runtime order
 
 ```text
-gross = (selected MV basis - foreign price) × purchasable quantity
-profit/hr = gross / total elapsed hours
-```
-
-Gross excludes travel cost. Quantity is no longer printed beside the row gross but remains projected for tooltips/debugging.
-
-Default basis remains:
-
-```text
-100% Torn MV
-0% Item Market fee deduction
-0 minimum profit gate
-0 minimum margin gate
-negative-value candidates allowed
-```
-
-Optional 95% MV and profitable-only settings remain.
-
-## Projection / interaction stability
-
-The Lua reader retains the last complete opportunity/UI projection while intermediate minute-update writes are occurring. A transient learning-only zero pass does not erase previously valid visible rows.
-
-Text controls have explicit hitboxes. Sort and inline expansion are local UI operations rather than network-update operations.
-
-## Graph/history retention
-
-- visible graph horizon: 8h;
-- high-resolution observation retention: 48h;
-- completed cycle retention: 90d;
-- change-only pruning preserves a predecessor/baseline;
-- bootstrap-only historical migration can be repaired as a carried unchanged baseline without inventing a transition.
-
-## Popups / runtime diagnostics
-
-Detached Settings/filter/standalone Viewer paths use hidden STA PowerShell. Failures are written to:
-
-```text
-data/runtime/logs/travel-assistant.log
-```
-
-Windows PowerShell 5.1 generic collection compatibility fixes remain in place.
-
-## Background optimizer — RETAINED
-
-`OptimalRoute.ps1` remains a background compatibility/diagnostics/MV-priority model only. It does not define the user-facing UI.
-
-## Runtime order
-
-```text
-UpdateTracker
+MaintainObservationHistory -Phase PreUpdate
 ShadowCollector
+ProjectCollectedState
+MaintainObservationHistory -Phase PostUpdate
 LocalCatalog
+EnsureEngineStateSchema
 FinalizeState
 TravelContext
+CurrentCapacityRefresh
+CycleAnchorReconciler
 OptimalRoute
 OpportunityState
+WindowPlan
+PriceVariationRefiner
 FilterState
-heartbeat
+immutable UI generation + last-update manifest
+CycleAnalytics
+TrendForecast
 ResalePriority
 ResaleQueue
 ```
 
+`OptimalRoute.ps1` remains background compatibility/diagnostics/MV-priority logic; it does not define the user-facing opportunity surface.
+
 ## Validation status
 
-Current validators cover:
+Focused acceptance covers, among other contracts:
 
-- four transparent sort modes;
-- local immediate sorting fields;
-- fresh current in-stock `LEARNING` likelihood projection;
-- no visible place-number projection;
-- separate inline vs standalone graph routing;
-- inline renderer parse/local-only contract;
-- flag rail / white time strip / chevron expansion contract;
-- exclusive expanded graph state;
-- stable projection through polling;
-- retained-history repair and zero-stock graph truthfulness;
-- Windows PowerShell 5.1 compatibility;
-- Energy/Nerve integration;
-- popup/logging contract.
+- updater PS7/spawn-only runtime and named mutex;
+- immutable UI publication architecture;
+- four transparent sort modes and immediate local sorting;
+- schema-7 trip-band persistence and display filtering;
+- fresh in-stock `LEARNING` likelihood behavior;
+- card presentation and Safe/Best tooltip semantics;
+- dedicated inline graph transport and exclusive expansion;
+- retained-history truthfulness;
+- Energy/Nerve constraints;
+- Windows PowerShell 5.1 helper compatibility;
+- reusable hidden popup launchers and bounded runtime diagnostics.
 
-This visual candidate still requires target-Windows/Rainmeter acceptance. Do not mark 0.6 accepted until the focused suite, one production update, compact collapsed cards, one expanded inline graph, sorting, popups and standalone Viewer are visibly validated.
+This environment did not provide PowerShell/Rainmeter, so the post-finalization focused suite was **not** executed here. Do not mark 0.6 accepted until `tests/Run-CurrentAcceptance.ps1`, one synchronous `pwsh.exe` production update, and the full visual/popup checklist in `docs/NEXT_CODEX_RUN.md` pass on the target Windows host.
 
 ## After 0.6 acceptance
 
-1. refine vector flag and inline graph proportions from the real render;
-2. continue probability calibration as cycles accumulate;
-3. add optional Chrome/browser notifications consuming accepted opportunity timing state;
+1. tune final card/flag/graph proportions from the real Rainmeter render;
+2. continue probability calibration as retained cycles accumulate;
+3. add optional browser notifications consuming accepted local timing state;
 4. evaluate bounded multi-trip sequence scheduling separately.
