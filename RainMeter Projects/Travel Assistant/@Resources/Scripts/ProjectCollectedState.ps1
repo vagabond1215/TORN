@@ -28,7 +28,7 @@ function Read-ProjectionKv {
     param([string]$Path)
     $values = @{}
     if (-not (Test-Path -LiteralPath $Path)) { return $values }
-    foreach ($line in Get-Content -LiteralPath $Path) {
+    foreach ($line in @(Read-TravelAssistantSharedLines -Path $Path)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $i = $line.IndexOf('=')
         if ($i -lt 1) { continue }
