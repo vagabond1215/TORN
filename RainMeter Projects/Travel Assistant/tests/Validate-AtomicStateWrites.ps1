@@ -8,15 +8,15 @@ $finalizerPath = Join-Path $ProjectRoot '@Resources\Scripts\FinalizeState.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($helperPath,$projectionPath,$finalizerPath)) {
-    if (-not (Test-Path -LiteralPath $path)) { Fail "Missing atomic-state asset: $path" }
+foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath)) {
+    if (-not (Test-Path -LiteralPath $assetPath)) { Fail "Missing atomic-state asset: $assetPath" }
 }
 
 if ($errors.Count -eq 0) {
-    foreach ($path in @($helperPath,$projectionPath,$finalizerPath)) {
+    foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath)) {
         $tokens=$null; $parseErrors=$null
-        [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
-        foreach ($parseError in @($parseErrors)) { Fail "$([System.IO.Path]::GetFileName($path)) parse error: $($parseError.Message)" }
+        [void][System.Management.Automation.Language.Parser]::ParseFile($assetPath,[ref]$tokens,[ref]$parseErrors)
+        foreach ($parseError in @($parseErrors)) { Fail "$([System.IO.Path]::GetFileName($assetPath)) parse error: $($parseError.Message)" }
     }
 
     $helper = Get-Content -LiteralPath $helperPath -Raw
@@ -38,7 +38,7 @@ if ($errors.Count -eq 0) {
     )) {
         if (-not $helper.Contains($token)) { Fail "AtomicFile.ps1 missing '$token'." }
     }
-    if ($helper.Contains("$Path + '.tmp'")) { Fail 'AtomicFile.ps1 must not use a shared fixed destination.tmp file.' }
+    if ($helper.Contains('$Path + ''.tmp''')) { Fail 'AtomicFile.ps1 must not use a shared fixed destination.tmp file.' }
 
     foreach ($pair in @(
         [pscustomobject]@{name='ProjectCollectedState.ps1'; text=$projection},
