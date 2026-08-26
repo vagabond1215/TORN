@@ -3,8 +3,6 @@ local heartbeatPath=nil
 local publishedState=nil
 local staleAfter=300
 local hardStaleAfter=21600
-local retryInterval=15
-local lastRetryAt=0
 
 local function trim(value)
     local text=tostring(value or ''):gsub('^\239\187\191','')
@@ -13,26 +11,6 @@ end
 
 local function number(value)
     return tonumber(trim(value)) or 0
-end
-
-local function readKv(path)
-    local out={}
-    local file=io.open(path,'r')
-    if not file then return out end
-    for line in file:lines() do
-        local key,value=line:match('^([^=]+)=(.*)$')
-        if key then out[trim(key)]=trim(value) end
-    end
-    file:close()
-    return out
-end
-
-local function readEpoch(path)
-    local file=io.open(path,'r')
-    if not file then return 0 end
-    local raw=file:read('*a') or ''
-    file:close()
-    return number(raw)
 end
 
 local function setVariable(name,value)
@@ -102,14 +80,7 @@ local function enterDegradedMode(data)
         -- in the header instead of treating the old stock count as live.
         SKIN:Bang('!HideMeter','MeterOpportunityMessage')
     else
-        hideOpportunityRows('No retained-cycle forecast is available from the stale stock evidence - retrying Prometheus/YATA')
-    end
-end
-
-local function requestRetry(now)
-    if lastRetryAt<=0 or (now-lastRetryAt)>=retryInterval then
-        lastRetryAt=now
-        SKIN:Bang('!CommandMeasure','MeasureUpdate','Run')
+        hideOpportunityRows('No retained-cycle forecast is available from the stale stock evidence - waiting for the normal updater poll')
     end
 end
 
@@ -119,7 +90,6 @@ function Initialize()
     publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath,heartbeatPath)
     staleAfter=math.max(60,math.floor(tonumber(SELF:GetOption('StaleAfter','300')) or 300))
     hardStaleAfter=math.max(staleAfter+60,math.floor(tonumber(SELF:GetOption('HardStaleAfter','21600')) or 21600))
-    retryInterval=math.max(5,math.floor(tonumber(SELF:GetOption('RetryInterval','15')) or 15))
 end
 
 function Update()
@@ -140,18 +110,18 @@ function Update()
     if heartbeat>0 then uiText='UI '..os.date('%H:%M:%S',heartbeat)..' | ' end
     local provider=providerLabel(data.LiveProvider)
     local ageText=formatAge(sourceAge)
-    local retryRemaining=math.max(0,retryInterval-(now-lastRetryAt))
     local hardStale=(freshestAt<=0) or (freshestAge>hardStaleAfter)
 
     if hardStale then
         setVariable('StockFreshnessMode','hard-stale')
         hideOpportunityRows('Foreign stock evidence is over six hours old - waiting for a usable Prometheus/YATA snapshot')
-        setVariable('UpdatedText',uiText..'STOCK UNAVAILABLE - '..provider..' '..ageText..' | retry '..tostring(retryRemaining)..'s')
+        setVariable('UpdatedText',uiText..'STOCK UNAVAILABLE - '..provider..' '..ageText)
     else
         enterDegradedMode(data)
-        setVariable('UpdatedText',uiText..'FORECAST ONLY - '..provider..' '..ageText..' | retry '..tostring(retryRemaining)..'s')
+        setVariable('UpdatedText',uiText..'FORECAST ONLY - '..provider..' '..ageText)
     end
 
-    requestRetry(now)
+    -- Display-only fence. StateReader owns updater cadence; this measure must never
+    -- launch MeasureUpdate from the one-second render loop.
     return 0
 end
