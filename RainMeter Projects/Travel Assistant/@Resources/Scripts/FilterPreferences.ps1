@@ -97,8 +97,6 @@ function New-DefaultUiPreferences {
         pinnedMarket = ''
         itemFilterAll = $true
         selectedItemIds = [int[]]@(Get-FilterVisibleItemIds)
-        # Candidate projection always retains all bands. displayTripBands is the
-        # local presentation filter used by the instant Rainmeter controls.
         selectedTripBands = [string[]]@('short','medium','long')
         displayTripBands = [string[]]@('short','medium','long')
         selectedCountryIds = [string[]]@(Get-FilterAvailableCountryIds)
@@ -152,7 +150,6 @@ function Normalize-UiPreferences {
         [void][int]::TryParse([string]$Preferences.schemaVersion,[ref]$sourceSchemaVersion)
     }
 
-    # Migrate the old selectedTripBands UI state into displayTripBands once.
     $legacyDisplayBands = @('short','medium','long')
     if (-not $Preferences.PSObject.Properties['displayTripBands'] -and $Preferences.PSObject.Properties['selectedTripBands']) {
         $legacyDisplayBands = @(Normalize-TripBands @($Preferences.selectedTripBands))
@@ -180,8 +177,6 @@ function Normalize-UiPreferences {
     }
     Set-FilterProperty $Preferences 'selectedItemIds' ([int[]]@($itemIds | Sort-Object -Unique))
 
-    # Do not let presentation toggles prune the candidate projection. All three
-    # bands remain available locally so OFF -> ON is immediate even after polls.
     Set-FilterProperty $Preferences 'selectedTripBands' ([string[]]@('short','medium','long'))
     Set-FilterProperty $Preferences 'displayTripBands' (Normalize-TripBands @($Preferences.displayTripBands))
 
@@ -191,10 +186,10 @@ function Normalize-UiPreferences {
         $value = [string]$id
         if ($availableCountries -contains $value) { $countries += $value }
     }
-    # Schema <=6 could persist an accidental empty country set, leaving the entire
-    # opportunity surface blank with no visible country-filter indicator. Repair that
-    # legacy state once; schema 7 still permits an intentional empty set afterward.
-    if ($sourceSchemaVersion -lt 7 -and $countries.Count -eq 0 -and $availableCountries.Count -gt 0) {
+    # A zero-country selection is not a useful persistent startup state. Preserve any
+    # real nonempty user selection, but default an absent/empty/invalid set to all
+    # collected countries so startup/refresh cannot silently blank the opportunity list.
+    if ($countries.Count -eq 0 -and $availableCountries.Count -gt 0) {
         $countries = [string[]]@($availableCountries)
     }
     Set-FilterProperty $Preferences 'selectedCountryIds' ([string[]]@($countries | Sort-Object -Unique))
@@ -226,7 +221,22 @@ function Normalize-UiPreferences {
 
 function Read-UiPreferences {
     $prefs = Read-FilterJson $PreferenceFile
-    return (Normalize-UiPreferences -Preferences $prefs)
+    $sourceSchemaVersion = 0
+    $sourceCountryCount = 0
+    $needsPersist = ($null -eq $prefs)
+    if ($null -ne $prefs) {
+        if ($prefs.PSObject.Properties['schemaVersion']) {
+            [void][int]::TryParse([string]$prefs.schemaVersion,[ref]$sourceSchemaVersion)
+        }
+        if ($prefs.PSObject.Properties['selectedCountryIds']) { $sourceCountryCount = @($prefs.selectedCountryIds).Count }
+        if ($sourceSchemaVersion -lt 7 -or $sourceCountryCount -eq 0) { $needsPersist = $true }
+    }
+
+    $normalized = Normalize-UiPreferences -Preferences $prefs
+    if ($needsPersist -and @($normalized.selectedCountryIds).Count -gt 0) {
+        Write-FilterJsonAtomic -Path $PreferenceFile -Value $normalized
+    }
+    return $normalized
 }
 
 function Save-UiPreferences {
@@ -237,12 +247,10 @@ function Save-UiPreferences {
 }
 
 function Start-FilterProjectionRefresh {
-    $runner = Join-Path $PSScriptRoot 'RunUpdate.ps1'
-    if (-not (Test-Path -LiteralPath $runner)) { throw 'RunUpdate.ps1 is required to republish filter changes.' }
-    $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
-    if ($null -eq $pwsh) { throw 'pwsh.exe is required to republish filter changes.' }
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $runner
-    Start-Process -FilePath $pwsh.Source -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+    $launcher = Join-Path $PSScriptRoot 'LaunchUpdate.ps1'
+    if (-not (Test-Path -LiteralPath $launcher)) { throw 'LaunchUpdate.ps1 is required to republish filter changes.' }
+    & $launcher -Action Update
+    if (-not $?) { throw 'LaunchUpdate.ps1 failed to start the filter republish worker.' }
 }
 
 function Toggle-TripBandPreference {
@@ -267,9 +275,6 @@ function Reset-UiFilterPreferences {
     $visibleItems = [int[]]@(Get-FilterVisibleItemIds)
     $visibleCategories = [string[]]@(Get-FilterVisibleCategories)
 
-    # RESET must never turn a transient config/catalog read failure into a persisted
-    # zero-country/zero-item filter. Fail without writing so the previous preferences
-    # remain intact instead of blanking the opportunity surface.
     if ($availableCountries.Count -eq 0) { throw 'Cannot reset filters because no collected countries are available.' }
     if ($visibleItems.Count -eq 0) { throw 'Cannot reset filters because no visible items are available.' }
 
@@ -323,10 +328,6 @@ if ($Action -eq 'ToggleTripBand') {
     $changed = $true
 }
 
-# Sort and trip-band clicks are presentation-only. Their visible result is applied
-# in Lua immediately, so persistence must not launch any projection work. Reset is a
-# model-affecting change and must flow through the PS7 main updater so the finalized
-# ui-state.kv generation is republished rather than mutating only private build state.
 if ($changed -and $Action -eq 'ResetFilters') {
     try { Start-FilterProjectionRefresh }
     catch {
