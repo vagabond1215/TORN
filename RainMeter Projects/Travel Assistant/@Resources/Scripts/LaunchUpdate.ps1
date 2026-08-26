@@ -27,10 +27,7 @@ try {
     # RunCommand plugin cannot terminate a healthy update merely because the full
     # collection/projection cycle takes longer than its launcher timeout. RunUpdate's
     # named mutex remains the authority that prevents overlapping update workers.
-    # PowerShell does not use backslash as its quote escape; keep ordinary double
-    # quotes inside this single-quoted format string so paths with spaces stay intact.
     $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action {1}' -f $runner,$Action
-    $arguments = $arguments.Replace('\"','"')
     Start-Process -FilePath $pwsh.Source -ArgumentList $arguments -WindowStyle Hidden | Out-Null
     exit 0
 } catch {
