@@ -26,6 +26,7 @@ $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
 $RuntimeLogScript = Join-Path $PSScriptRoot 'RuntimeLog.ps1'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $HistoryErrorFile = Join-Path $RuntimeDir 'history-maintenance-error.txt'
@@ -51,6 +52,8 @@ $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpd
 $acquired = $false
 
 if (Test-Path -LiteralPath $RuntimeLogScript) { . $RuntimeLogScript }
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for safe Travel Assistant state publication.' }
+. $AtomicFileScript
 
 function Get-UpdateFailureComponent {
     param([string]$Path)
@@ -126,10 +129,8 @@ function Invoke-RestMethod {
 
 function Write-UpdateHeartbeat {
     New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
-    $tmp = $HeartbeatFile + '.tmp'
     $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    [System.IO.File]::WriteAllText($tmp, $epoch, [System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $tmp -Destination $HeartbeatFile -Force
+    Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text $epoch
 }
 
 function Write-CompactFailure {
