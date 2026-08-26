@@ -132,11 +132,13 @@ if ($state.ContainsKey('UIFreshestMarketSourceTimestamp')) { [void][long]::TryPa
 $heartbeat=0L
 if (Test-Path -LiteralPath $HeartbeatFile) { [void][long]::TryParse((Get-Content -LiteralPath $HeartbeatFile -Raw).Trim(),[ref]$heartbeat) }
 
-[pscustomobject]@{Clock='engine collection';Timestamp=$collectionAt;Age=(Format-ProbeAge (Get-ProbeAge $collectionAt $now))},
-[pscustomobject]@{Clock='engine freshest source';Timestamp=$engineFreshest;Age=(Format-ProbeAge (Get-ProbeAge $engineFreshest $now))},
-[pscustomobject]@{Clock='state.kv freshest source';Timestamp=$projectedFreshest;Age=(Format-ProbeAge (Get-ProbeAge $projectedFreshest $now))},
-[pscustomobject]@{Clock='UI heartbeat';Timestamp=$heartbeat;Age=(Format-ProbeAge (Get-ProbeAge $heartbeat $now))} |
-    Format-Table -AutoSize
+$clockRows=@(
+    [pscustomobject]@{Clock='engine collection';Timestamp=$collectionAt;Age=(Format-ProbeAge (Get-ProbeAge $collectionAt $now))}
+    [pscustomobject]@{Clock='engine freshest source';Timestamp=$engineFreshest;Age=(Format-ProbeAge (Get-ProbeAge $engineFreshest $now))}
+    [pscustomobject]@{Clock='state.kv freshest source';Timestamp=$projectedFreshest;Age=(Format-ProbeAge (Get-ProbeAge $projectedFreshest $now))}
+    [pscustomobject]@{Clock='UI heartbeat';Timestamp=$heartbeat;Age=(Format-ProbeAge (Get-ProbeAge $heartbeat $now))}
+)
+$clockRows | Format-Table -AutoSize
 
 Write-Host ''
 Write-Host '=== Structured live stock providers ===' -ForegroundColor Cyan
@@ -164,8 +166,10 @@ Write-Host ''
 Write-Host '=== Additional provider/interface probes ===' -ForegroundColor Cyan
 $droqs=Invoke-ProbeJson -Name 'droqsdb' -Uri 'https://droqsdb.com/api/public/v1/export'
 $weav3r=Invoke-ProbeJson -Name 'weav3r-market' -Uri 'https://weav3r.dev/api/marketplace'
-Write-Host ('DroqsDB export:   {0} ({1} ms) {2}' -f $(if ($droqs.ok) {'JSON OK'} else {'FAILED'}),$droqs.elapsedMs,$droqs.error)
-Write-Host ('Weav3r marketplace: {0} ({1} ms) {2}' -f $(if ($weav3r.ok) {'JSON OK'} else {'FAILED'}),$weav3r.elapsedMs,$weav3r.error)
+$droqsStatus=if ($droqs.ok) { 'JSON OK' } else { 'FAILED' }
+$weav3rStatus=if ($weav3r.ok) { 'JSON OK' } else { 'FAILED' }
+Write-Host ('DroqsDB export:     {0} ({1} ms) {2}' -f $droqsStatus,$droqs.elapsedMs,$droqs.error)
+Write-Host ('Weav3r marketplace: {0} ({1} ms) {2}' -f $weav3rStatus,$weav3r.elapsedMs,$weav3r.error)
 Write-Host 'Note: Weav3r /api/marketplace is verified for Torn-side market/catalog pricing, not overseas stock quantities.' -ForegroundColor Yellow
 Write-Host 'No structured Weav3r travel-stock quantity endpoint is assumed by this probe.' -ForegroundColor Yellow
 
