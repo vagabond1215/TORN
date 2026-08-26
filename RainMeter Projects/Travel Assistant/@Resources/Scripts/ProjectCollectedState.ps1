@@ -14,7 +14,7 @@ $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $PreferenceFile = Join-Path $RuntimeDir 'preferences.json'
-$StateKvFile = Join-Path $GeneratedDir 'state.kv'
+$StateKvFile = Get-TravelAssistantStateFilePath -ProjectRoot $ProjectRoot
 
 function Read-ProjectionJson {
     param([string]$Path)
