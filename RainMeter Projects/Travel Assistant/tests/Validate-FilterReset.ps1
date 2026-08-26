@@ -3,11 +3,12 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $preferencesPath = Join-Path $ProjectRoot '@Resources\Scripts\FilterPreferences.ps1'
-$popupPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenFilterPopup.ps1'
+$legacyPopupPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenFilterPopup.ps1'
+$unifiedPopupPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenUnifiedFilterPopup.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach($path in @($preferencesPath,$popupPath)) {
+foreach($path in @($preferencesPath,$legacyPopupPath,$unifiedPopupPath)) {
     if(-not(Test-Path -LiteralPath $path)) { Fail ('Missing filter file: ' + $path) }
     else {
         $tokens=$null; $parseErrors=$null
@@ -51,10 +52,24 @@ if(Test-Path -LiteralPath $preferencesPath) {
     elseif($readBody -match 'Write-FilterJsonAtomic|Write-TravelAssistantAtomic') { Fail 'Read-UiPreferences must not write preferences during startup/popup reads.' }
 }
 
-if(Test-Path -LiteralPath $popupPath) {
-    $text=Get-Content -LiteralPath $popupPath -Raw
-    foreach($token in @('Read-FilterJson -Path $Path','[int]::TryParse','New-IntSet','New-StringSet','No active item catalog rows are available for the Item filter.','Read-OptionalPopupJson')) {
-        if(-not $text.Contains($token)) { Fail "OpenFilterPopup.ps1 missing robustness token '$token'." }
+if(Test-Path -LiteralPath $legacyPopupPath) {
+    $text=Get-Content -LiteralPath $legacyPopupPath -Raw
+    foreach($token in @('Read-FilterJson -Path $Path','[int]::TryParse','New-IntSet','New-StringSet','Read-OptionalPopupJson',"$titleText='Ignore List'")) {
+        if(-not $text.Contains($token)) { Fail "OpenFilterPopup.ps1 missing Ignore/legacy robustness token '$token'." }
+    }
+}
+
+if(Test-Path -LiteralPath $unifiedPopupPath) {
+    $text=Get-Content -LiteralPath $unifiedPopupPath -Raw
+    foreach($token in @(
+        'Read-OptionalPopupJson','No active item catalog rows are available for the unified filter panel.',
+        'Set-AllCountries $true','Set-AllCategories $true','$script:resetProfitable=$true',
+        "Set-FilterProperty `$current 'selectedTripBands' ([string[]]@('short','medium','long'))",
+        "Set-FilterProperty `$current 'displayTripBands' ([string[]]@(`$selectedBands))",
+        "Set-FilterProperty `$current 'selectedCountryIds'","Set-FilterProperty `$current 'categoryFilterAll'","Set-FilterProperty `$current 'itemFilterAll'",
+        "Set-FilterProperty `$current 'showProfitableOnly' `$false",'Start-FilterProjectionRefresh'
+    )) {
+        if(-not $text.Contains($token)) { Fail "OpenUnifiedFilterPopup.ps1 missing reset/save contract '$token'." }
     }
 }
 
@@ -65,5 +80,5 @@ if($errors.Count -gt 0) {
 }
 
 Write-Host 'Filter reset/popup validation passed.' -ForegroundColor Green
-Write-Host 'RESET restores all 11 countries/items/bands; startup defaults empty country state to all without write-on-read; popup catalog reads tolerate malformed/busy engine metadata.' -ForegroundColor Green
+Write-Host 'RESET restores all countries/items/bands and clears profitable-only; unified Save stages one coherent country-band/category/item preference write before one normal republish.' -ForegroundColor Green
 exit 0
