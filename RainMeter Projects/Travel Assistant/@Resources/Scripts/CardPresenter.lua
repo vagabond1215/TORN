@@ -1,5 +1,4 @@
 local statePath = nil
-local publishedState = nil
 local lastTravelStateSignature = ''
 
 local countryIdsByName = {
@@ -318,14 +317,11 @@ local function updateRow(index,state,now)
 end
 
 function Initialize()
-    statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
-    local heartbeatPath=SKIN:MakePathAbsolute(SELF:GetOption('HeartbeatFile','#@#Generated\\last-update.txt'))
-    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath,heartbeatPath)
-    for i=1,8 do applyCompactLayout(i) end
+    statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv')); for i=1,8 do applyCompactLayout(i) end
 end
 
 function Update()
-    local state=publishedState.read(); local now=os.time(); local travelSignature=trim(state.TravelState)..':'..trim(state.TravelDestinationCountryId)
+    local state=readKv(statePath); local now=os.time(); local travelSignature=trim(state.TravelState)..':'..trim(state.TravelDestinationCountryId)
     if lastTravelStateSignature~='' and travelSignature~=lastTravelStateSignature then SKIN:Bang('!UpdateMeasure','MeasureState') end; lastTravelStateSignature=travelSignature
     for i=1,8 do updateRow(i,state,now) end; return 0
 end

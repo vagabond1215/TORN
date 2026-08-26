@@ -137,33 +137,13 @@ function Publish-UpdateUiState {
     if ($text -notmatch '(?m)^OpportunityCount=' -or $text -notmatch '(?m)^UIFreshestMarketSourceTimestamp=') {
         throw 'Build state.kv is incomplete after FilterState; refusing UI publication.'
     }
-    $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $name = 'ui-state-{0}-{1}.kv' -f $epoch,[Guid]::NewGuid().ToString('N')
-    $path = Join-Path $GeneratedDir $name
-    $publishedText = 'UIGeneration=' + $epoch.ToString([System.Globalization.CultureInfo]::InvariantCulture) + [Environment]::NewLine + $text
-    # New generation paths are immutable and therefore never collide with Rainmeter's
-    # active read handle. The tiny heartbeat manifest switches readers only after the
-    # complete generation exists.
-    [System.IO.File]::WriteAllText($path,$publishedText,[System.Text.UTF8Encoding]::new($false))
-    return [pscustomobject]@{ Epoch=$epoch; Name=$name; Path=$path }
+    Write-TravelAssistantAtomicText -Path $UiStateKvFile -Text $text
 }
 
 function Write-UpdateHeartbeat {
-    param([Parameter(Mandatory = $true)][object]$Publication)
     New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
-    $epoch = ([long]$Publication.Epoch).ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text ($epoch + '|' + [string]$Publication.Name)
-}
-
-function Remove-OldUiStateGenerations {
-    param([string]$CurrentName,[int]$Keep = 3)
-    try {
-        $kept = 0
-        foreach ($file in @(Get-ChildItem -LiteralPath $GeneratedDir -File -Filter 'ui-state-*.kv' -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending)) {
-            if ($file.Name -eq $CurrentName -or $kept -lt $Keep) { $kept++; continue }
-            Remove-Item -LiteralPath $file.FullName -Force -ErrorAction SilentlyContinue
-        }
-    } catch { }
+    $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text $epoch
 }
 
 function Write-CompactFailure {
@@ -321,13 +301,12 @@ try {
     # state.kv is a private build artifact. Only this final publication touches the
     # Rainmeter-consumed UI state. A failed final publish leaves the previous complete
     # UI generation visible rather than exposing a partial/intermediate projection.
-    $publication = Publish-UpdateUiState
+    Publish-UpdateUiState
 
     # Heartbeat represents successful final UI publication, not merely collection or
     # an intermediate stage. Analytics and resale work below cannot make UI look fresh
     # unless ui-state.kv was successfully published first.
-    Write-UpdateHeartbeat -Publication $publication
-    Remove-OldUiStateGenerations -CurrentName ([string]$publication.Name)
+    Write-UpdateHeartbeat
 
     if ($Action -eq 'Update') {
         Invoke-FailSoftScript -Path $CycleAnalytics -ErrorPath $CycleAnalyticsErrorFile
