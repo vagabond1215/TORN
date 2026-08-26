@@ -250,22 +250,25 @@ function Set-AllCategories([bool]$Value) {
     foreach($category in $categories) { Set-CategorySelection -Category $category -Value $Value }
 }
 
-function Country-ChipChanged {
-    $chip=[System.Windows.Forms.CheckBox]$this
+function Country-ChipChanged([object]$Sender) {
+    if($null -eq $Sender) { return }
+    $chip=[System.Windows.Forms.CheckBox]$Sender
     $id=[string]$chip.Tag
     if([string]::IsNullOrWhiteSpace($id)) { return }
     $script:countrySelection[$id]=[bool]$chip.Checked
     Set-ChipStyle $chip
 }
-function Category-ChipChanged {
-    $chip=[System.Windows.Forms.CheckBox]$this
+function Category-ChipChanged([object]$Sender) {
+    if($null -eq $Sender) { return }
+    $chip=[System.Windows.Forms.CheckBox]$Sender
     $category=[string]$chip.Tag
     if([string]::IsNullOrWhiteSpace($category)) { return }
     $script:categorySelection[$category]=[bool]$chip.Checked
     Set-ChipStyle $chip
 }
-function Band-LinkClicked {
-    $link=[System.Windows.Forms.LinkLabel]$this
+function Band-LinkClicked([object]$Sender) {
+    if($null -eq $Sender) { return }
+    $link=[System.Windows.Forms.LinkLabel]$Sender
     $parts=([string]$link.Tag).Split('|')
     if($parts.Count -ne 2) { return }
     Set-BandSelection -Band $parts[0] -Value ($parts[1] -eq '1')
@@ -334,8 +337,8 @@ foreach($band in $bandOrder) {
 
     $all=New-ActionLink 'All' 306 0 $panel ($band+'|1')
     $none=New-ActionLink 'None' 348 0 $panel ($band+'|0')
-    $all.Add_Click({ Band-LinkClicked })
-    $none.Add_Click({ Band-LinkClicked })
+    $all.Add_Click({ param($sender,$eventArgs); Band-LinkClicked -Sender $sender })
+    $none.Add_Click({ param($sender,$eventArgs); Band-LinkClicked -Sender $sender })
 
     $flow=New-Object System.Windows.Forms.FlowLayoutPanel
     $flow.Location=New-Object System.Drawing.Point(4,23)
@@ -349,7 +352,7 @@ foreach($band in $bandOrder) {
         $id=[string]$country.id
         $chip=New-Chip -Text ([string]$country.name) -Width 122 -Checked ([bool]$script:countrySelection[$id]) -Tag $id -Image (Get-CountryFlagImage $id)
         $script:countryChips[$id]=$chip
-        $chip.Add_CheckedChanged({ Country-ChipChanged })
+        $chip.Add_CheckedChanged({ param($sender,$eventArgs); Country-ChipChanged -Sender $sender })
         $flow.Controls.Add($chip)
     }
     $y+=94
@@ -379,7 +382,7 @@ $content.Controls.Add($categoryFlow)
 foreach($category in $categories) {
     $chip=New-Chip -Text $category -Width 118 -Checked ([bool]$script:categorySelection[$category]) -Tag $category
     $script:categoryChips[$category]=$chip
-    $chip.Add_CheckedChanged({ Category-ChipChanged })
+    $chip.Add_CheckedChanged({ param($sender,$eventArgs); Category-ChipChanged -Sender $sender })
     $categoryFlow.Controls.Add($chip)
 }
 $y+=160
