@@ -11,6 +11,19 @@ Set-StrictMode -Version 2.0
 # State readers that run inside the updater must also grant FileShare.Delete. Windows
 # File.Replace needs delete/rename sharing on the destination; a short read that omits
 # that share flag can otherwise make the updater block its own atomic publication.
+#
+# The main updater can isolate all intermediate state mutations by setting
+# TORN_TRAVEL_STATE_KV to a private build file. Standalone scripts keep using the
+# generated Rainmeter state when no override is present.
+
+function Get-TravelAssistantStateFilePath {
+    param([Parameter(Mandatory = $true)][string]$ProjectRoot)
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$env:TORN_TRAVEL_STATE_KV)) {
+        return [System.IO.Path]::GetFullPath([string]$env:TORN_TRAVEL_STATE_KV)
+    }
+    return (Join-Path $ProjectRoot '@Resources\Generated\state.kv')
+}
 
 function Get-TravelAssistantAtomicMutexName {
     param([Parameter(Mandatory = $true)][string]$Path)
