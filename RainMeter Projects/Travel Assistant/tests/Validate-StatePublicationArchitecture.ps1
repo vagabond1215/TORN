@@ -6,11 +6,15 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $infoPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
 $runUpdatePath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $atomicPath = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
+$publishedStatePath = Join-Path $ProjectRoot '@Resources\Scripts\PublishedState.lua'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
 foreach ($path in @($iniPath,$infoPath,$runUpdatePath,$atomicPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing publication architecture file: $path" }
+}
+if (Test-Path -LiteralPath $publishedStatePath) {
+    Fail 'PublishedState.lua must remain retired after the target-host manifest/fallback regression.'
 }
 
 if ($errors.Count -eq 0) {
@@ -45,6 +49,9 @@ if ($errors.Count -eq 0) {
     )) {
         if (-not $runUpdate.Contains($token)) { Fail "RunUpdate.ps1 missing publication contract '$token'." }
     }
+    foreach ($forbidden in @('ui-state-{0}-{1}.kv','UIGeneration=','Remove-OldUiStateGenerations',"`$epoch + '|'")) {
+        if ($runUpdate.Contains($forbidden)) { Fail "RunUpdate.ps1 must not restore the retired manifest-generation contract '$forbidden'." }
+    }
 
     $filterAt = $runUpdate.IndexOf('if (Test-Path -LiteralPath $FilterState)',[System.StringComparison]::Ordinal)
     $publishCallAt = $runUpdate.LastIndexOf('Publish-UpdateUiState',[System.StringComparison]::Ordinal)
@@ -66,6 +73,11 @@ if ($errors.Count -eq 0) {
     if (-not $atomic.Contains('$env:TORN_TRAVEL_STATE_KV')) {
         Fail 'AtomicFile.ps1 must retain the optional private-state override contract.'
     }
+
+    foreach ($luaName in @('StateReader.lua','CardPresenter.lua','CardTweaks.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua','WindowTooltipTweaks.lua')) {
+        $luaText = Get-Content -LiteralPath (Join-Path $ProjectRoot ('@Resources\Scripts\' + $luaName)) -Raw
+        if ($luaText.Contains('PublishedState.lua')) { Fail "$luaName must read finalized ui-state.kv directly; PublishedState.lua is retired." }
+    }
 }
 
 if ($errors.Count -gt 0) {
@@ -74,6 +86,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Single-final-publication architecture validation passed.' -ForegroundColor Green
-Write-Host 'Intermediate stages mutate state.kv; all live Rainmeter state readers use ui-state.kv; heartbeat follows the one final UI publication.' -ForegroundColor Green
+Write-Host 'Direct single-final-publication architecture validation passed.' -ForegroundColor Green
+Write-Host 'Intermediate stages mutate private state.kv; one complete ui-state.kv is atomically published after FilterState, then the numeric heartbeat advances.' -ForegroundColor Green
 exit 0
