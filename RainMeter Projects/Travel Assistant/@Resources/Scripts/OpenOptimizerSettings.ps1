@@ -7,7 +7,7 @@ Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot 'RuntimeLog.ps1')
 
 $ProjectRoot=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$RunUpdatePath=Join-Path $PSScriptRoot 'RunUpdate.ps1'
+$UpdateLauncher=Join-Path $PSScriptRoot 'LaunchUpdate.ps1'
 $FilterLauncher=Join-Path $PSScriptRoot 'LaunchFilterPopup.ps1'
 $ProfileLauncher=Join-Path $PSScriptRoot 'LaunchSettings.ps1'
 $prefs=Read-UiPreferences
@@ -117,14 +117,12 @@ $save.Add_Click({
         Set-FilterProperty $current 'nerveWastePolicy' (Get-ComboPolicy $nervePolicy)
         Set-FilterProperty $current 'maxNerveLoss' ([int]$nerveMax.Value)
         [void](Save-UiPreferences $current)
-        if (Test-Path -LiteralPath $RunUpdatePath) {
-            $arguments='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $RunUpdatePath
-            Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden | Out-Null
-        }
+        if (-not (Test-Path -LiteralPath $UpdateLauncher)) { throw 'LaunchUpdate.ps1 is missing.' }
+        & $UpdateLauncher -Action Update
         Clear-TravelAssistantLatestError -Component $logComponent
         $form.Close()
     } catch {
-        Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message $_.Exception.ToString()
+        Write-TravelAssistantLog -Level ERROR -Component $logComponent -Message (Format-TravelAssistantErrorRecord $_)
     }
 })
 
