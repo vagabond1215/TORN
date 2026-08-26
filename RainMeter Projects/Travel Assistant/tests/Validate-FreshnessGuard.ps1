@@ -24,7 +24,6 @@ if ($errors.Count -eq 0) {
         'UIOldestMarketSourceTimestamp',
         'staleAfter=300',
         'hardStaleAfter=21600',
-        'retryInterval=15',
         'enterDegradedMode',
         "StockFreshnessMode','degraded'",
         "StockFreshnessMode','hard-stale'",
@@ -33,7 +32,7 @@ if ($errors.Count -eq 0) {
         "No retained-cycle forecast is available from the stale stock evidence",
         "Foreign stock evidence is over six hours old",
         "!HideMeterGroup','OpportunityRow",
-        "!CommandMeasure','MeasureUpdate','Run'"
+        'Display-only fence'
     )) {
         if (-not $guard.Contains($token)) { Fail "FreshnessGuard.lua missing '$token'." }
     }
@@ -44,8 +43,11 @@ if ($errors.Count -eq 0) {
     if (-not $guard.Contains("if opportunityCount(data)>0 then")) {
         Fail 'Degraded mode must keep model-produced forecast rows visible when they exist.'
     }
-    foreach ($forbidden in @('writeKvAtomic','opportunity-cache.kv','restoreCachedProjection',"!UpdateMeasure','MeasureState")) {
-        if ($guard.Contains($forbidden)) { Fail "FreshnessGuard.lua must remain read-only with respect to opportunity state; found '$forbidden'." }
+    foreach ($forbidden in @(
+        'writeKvAtomic','opportunity-cache.kv','restoreCachedProjection',"!UpdateMeasure','MeasureState",
+        "!CommandMeasure','MeasureUpdate','Run'",'requestRetry','retryInterval','lastRetryAt'
+    )) {
+        if ($guard.Contains($forbidden)) { Fail "FreshnessGuard.lua must remain display-only; found '$forbidden'." }
     }
     if ($guard -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FreshnessGuard.lua must remain local-only.' }
 
@@ -77,11 +79,11 @@ if ($errors.Count -eq 0) {
         'HeartbeatFile=#@#Generated\last-update.txt',
         'StaleAfter=300',
         'HardStaleAfter=21600',
-        'RetryInterval=15',
         'UpdateDivider=1'
     )) {
         if (-not $info.Contains($token)) { Fail "OpportunityInfo.inc missing freshness-guard token '$token'." }
     }
+    if ($info.Contains('RetryInterval=')) { Fail 'OpportunityInfo.inc must not configure a second freshness-guard updater cadence.' }
 }
 
 if ($errors.Count -gt 0) {
@@ -91,5 +93,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Forecast-only stock freshness validation passed.' -ForegroundColor Green
-Write-Host 'Five-minute provider freshness stays strict; 5m-6h evidence drives recurring forecasts with stale stock quantity suppressed, while the finalized UI state remains read-only and hard-stops after six hours.'
+Write-Host 'Five-minute provider freshness stays strict; 5m-6h evidence drives recurring forecasts with stale stock quantity suppressed, while the render-time freshness guard remains display-only and the main state reader owns updater cadence.'
 exit 0
