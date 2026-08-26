@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
 . (Join-Path $PSScriptRoot 'TravelProfile.ps1')
+. (Join-Path $PSScriptRoot 'AtomicFile.ps1')
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
@@ -45,14 +46,12 @@ function Read-StateKv {
 
 function Write-StateKvAtomic {
     param([hashtable]$Values, [string]$Path)
-    $tmp = $Path + '.tmp'
     $lines = New-Object System.Collections.Generic.List[string]
     foreach ($key in ($Values.Keys | Sort-Object)) {
         $value = ([string]$Values[$key]).Replace("`r", ' ').Replace("`n", ' ')
         $lines.Add("$key=$value")
     }
-    [System.IO.File]::WriteAllLines($tmp, $lines.ToArray(), [System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $tmp -Destination $Path -Force
+    Write-TravelAssistantAtomicLines -Path $Path -Lines $lines.ToArray()
 }
 
 function Get-Median {
