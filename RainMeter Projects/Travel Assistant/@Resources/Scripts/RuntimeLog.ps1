@@ -7,6 +7,40 @@ $TravelAssistantLogFile = Join-Path $TravelAssistantLogDir 'travel-assistant.log
 $TravelAssistantLogRetentionDays = 7
 $TravelAssistantLogMaxBytes = 262144
 
+function Read-TravelAssistantLogTailText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$MaxBytes = $TravelAssistantLogMaxBytes
+    )
+    if ($MaxBytes -lt 4096) { $MaxBytes = 4096 }
+
+    # Get-Content -Tail scans for line boundaries and can consume a full CPU core
+    # when a damaged log contains multi-megabyte lines. Read a fixed byte window so
+    # maintenance cost is bounded by the configured log cap, not the current file size.
+    $share = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete
+    $stream = New-Object System.IO.FileStream($Path,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,$share)
+    try {
+        $length = [long]$stream.Length
+        $count = [int][Math]::Min($length,[long]$MaxBytes)
+        if ($count -le 0) { return '' }
+        [void]$stream.Seek(-$count,[System.IO.SeekOrigin]::End)
+        $buffer = New-Object byte[] $count
+        $read = 0
+        while ($read -lt $count) {
+            $current = $stream.Read($buffer,$read,$count-$read)
+            if ($current -le 0) { break }
+            $read += $current
+        }
+        $text = [System.Text.Encoding]::UTF8.GetString($buffer,0,$read).TrimStart([char]0xFEFF)
+        if ($length -gt $count) {
+            $newline = $text.IndexOf("`n")
+            if ($newline -ge 0 -and $newline + 1 -lt $text.Length) { $text = $text.Substring($newline + 1) }
+            else { $text = '[older log content truncated] ' + $text }
+        }
+        return $text
+    } finally { $stream.Dispose() }
+}
+
 function Get-TravelAssistantSafeComponentName {
     param([string]$Component)
     $name = ([string]$Component).Trim()
@@ -53,8 +87,8 @@ function Invoke-TravelAssistantLogMaintenance {
             return
         }
         if ($item.Length -le $TravelAssistantLogMaxBytes) { return }
-        $lines = @(Get-Content -LiteralPath $TravelAssistantLogFile -Tail 600 -ErrorAction Stop)
-        [System.IO.File]::WriteAllLines($TravelAssistantLogFile,[string[]]$lines,[System.Text.UTF8Encoding]::new($false))
+        $tail = Read-TravelAssistantLogTailText -Path $TravelAssistantLogFile -MaxBytes $TravelAssistantLogMaxBytes
+        [System.IO.File]::WriteAllText($TravelAssistantLogFile,$tail,[System.Text.UTF8Encoding]::new($false))
     } catch { }
 }
 
@@ -92,5 +126,3 @@ function Write-TravelAssistantLog {
         }
     } catch { }
 }
-
-Invoke-TravelAssistantLogMaintenance

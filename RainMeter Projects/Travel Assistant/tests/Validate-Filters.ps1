@@ -48,6 +48,12 @@ if(Test-Path -LiteralPath $files.Preferences){
  $selected=[pscustomobject]@{schemaVersion=7;selectedCountryIds=[string[]]$subset}
  $selectedNormalized=Normalize-UiPreferences -Preferences $selected
  if(@($selectedNormalized.selectedCountryIds).Count -ne $subset.Count){Fail 'A nonempty saved country selection must remain persistent.'}
+ $nullBands=[pscustomobject]@{schemaVersion=6;selectedTripBands=[string[]]@('short','medium','long');displayTripBands=$null;displayTripBandsMigrated=$true}
+ $nullBandsNormalized=Normalize-UiPreferences -Preferences $nullBands
+ if(@($nullBandsNormalized.displayTripBands).Count -ne 3){Fail 'A null migrated displayTripBands value must recover all legacy trip bands.'}
+ $explicitEmptyBands=[pscustomobject]@{schemaVersion=7;displayTripBands=[string[]]@()}
+ $explicitEmptyBandsNormalized=Normalize-UiPreferences -Preferences $explicitEmptyBands
+ if(@($explicitEmptyBandsNormalized.displayTripBands).Count -ne 0){Fail 'An explicit empty displayTripBands array must remain a valid user selection.'}
 }
 
 if(Test-Path -LiteralPath $files.Popup){

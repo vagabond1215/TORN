@@ -41,6 +41,8 @@ if(Test-Path -LiteralPath $preferencesPath) {
     $subset = @($availableCountries | Select-Object -First 2)
     $subsetNormalized = Normalize-UiPreferences -Preferences ([pscustomobject]@{schemaVersion=7;selectedCountryIds=[string[]]$subset})
     if(@($subsetNormalized.selectedCountryIds).Count -ne $subset.Count) { Fail 'Nonempty saved country selection must remain persistent.' }
+    $nullBandsNormalized = Normalize-UiPreferences -Preferences ([pscustomobject]@{schemaVersion=6;selectedTripBands=[string[]]@('short','medium','long');displayTripBands=$null;displayTripBandsMigrated=$true})
+    if(@($nullBandsNormalized.displayTripBands).Count -ne 3) { Fail 'A null migrated displayTripBands value must recover the legacy trip-band selection.' }
 
     $text=Get-Content -LiteralPath $preferencesPath -Raw
     foreach($token in @('Write-TravelAssistantAtomicText','Read-TravelAssistantSharedText','Cannot reset filters because no collected countries are available.','Read paths must be side-effect free.')) {

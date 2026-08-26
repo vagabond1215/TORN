@@ -1,5 +1,6 @@
 local statePath=nil
 local heartbeatPath=nil
+local publishedState=nil
 local staleAfter=300
 local hardStaleAfter=21600
 local retryInterval=15
@@ -115,6 +116,7 @@ end
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
     heartbeatPath=SKIN:MakePathAbsolute(SELF:GetOption('HeartbeatFile','#@#Generated\\last-update.txt'))
+    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath,heartbeatPath)
     staleAfter=math.max(60,math.floor(tonumber(SELF:GetOption('StaleAfter','300')) or 300))
     hardStaleAfter=math.max(staleAfter+60,math.floor(tonumber(SELF:GetOption('HardStaleAfter','21600')) or 21600))
     retryInterval=math.max(5,math.floor(tonumber(SELF:GetOption('RetryInterval','15')) or 15))
@@ -122,7 +124,7 @@ end
 
 function Update()
     local now=os.time()
-    local data=readKv(statePath)
+    local data=publishedState.read()
     local freshestAt,oldestAt=sourceTimestamps(data)
     local displayAt=(oldestAt>0) and oldestAt or freshestAt
     local sourceAge=(displayAt>0) and math.max(0,now-displayAt) or math.huge
@@ -133,7 +135,7 @@ function Update()
         return 0
     end
 
-    local heartbeat=readEpoch(heartbeatPath)
+    local heartbeat=publishedState.epoch()
     local uiText=''
     if heartbeat>0 then uiText='UI '..os.date('%H:%M:%S',heartbeat)..' | ' end
     local provider=providerLabel(data.LiveProvider)

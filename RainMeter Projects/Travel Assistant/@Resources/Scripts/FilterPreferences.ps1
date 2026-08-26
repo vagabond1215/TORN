@@ -137,7 +137,9 @@ function Normalize-TripBands {
         $value = ([string]$band).ToLowerInvariant()
         if ($value -in @('short','medium','long')) { $bands += $value }
     }
-    return [string[]]@($bands | Sort-Object -Unique)
+    # Preserve an intentional empty selection as an empty string array on Windows
+    # PowerShell 5.1; returning it normally collapses the value to $null.
+    return ,([string[]]@($bands | Sort-Object -Unique))
 }
 
 function Normalize-UiPreferences {
@@ -145,20 +147,18 @@ function Normalize-UiPreferences {
     $defaults = New-DefaultUiPreferences
     if ($null -eq $Preferences) { $Preferences = [pscustomobject]@{} }
 
+    $sourceSchema = 0
+    if ($Preferences.PSObject.Properties['schemaVersion']) { [void][int]::TryParse([string]$Preferences.schemaVersion,[ref]$sourceSchema) }
+    $hasUsableDisplayBands = $Preferences.PSObject.Properties['displayTripBands'] -and $null -ne $Preferences.displayTripBands
     $legacyDisplayBands = @('short','medium','long')
-    if (-not $Preferences.PSObject.Properties['displayTripBands'] -and $Preferences.PSObject.Properties['selectedTripBands']) {
-        $legacyDisplayBands = @(Normalize-TripBands @($Preferences.selectedTripBands))
+    if (-not $hasUsableDisplayBands -and $sourceSchema -lt 7 -and $Preferences.PSObject.Properties['selectedTripBands']) {
+        $legacyDisplayBands = [string[]](Normalize-TripBands @($Preferences.selectedTripBands))
     }
 
     foreach ($property in @($defaults.PSObject.Properties)) {
         if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
     Set-FilterProperty $Preferences 'schemaVersion' 7
-
-    if ($legacyDisplayBands.Count -ge 0 -and -not $Preferences.PSObject.Properties['displayTripBandsMigrated']) {
-        Set-FilterProperty $Preferences 'displayTripBands' ([string[]]$legacyDisplayBands)
-        Set-FilterProperty $Preferences 'displayTripBandsMigrated' $true
-    }
 
     $mode = [string]$Preferences.travelMode
     if ($mode -notin @('standard','airstrip','wlt','business')) { Set-FilterProperty $Preferences 'travelMode' 'airstrip' }
@@ -173,7 +173,15 @@ function Normalize-UiPreferences {
     Set-FilterProperty $Preferences 'selectedItemIds' ([int[]]@($itemIds | Sort-Object -Unique))
 
     Set-FilterProperty $Preferences 'selectedTripBands' ([string[]]@('short','medium','long'))
-    Set-FilterProperty $Preferences 'displayTripBands' (Normalize-TripBands @($Preferences.displayTripBands))
+    if ($hasUsableDisplayBands) {
+        Set-FilterProperty $Preferences 'displayTripBands' (Normalize-TripBands @($Preferences.displayTripBands))
+    } else {
+        # A JSON null is an incomplete migration, not an intentional "all bands off"
+        # selection. Recover legacy bands (or current defaults) in memory without
+        # turning startup reads into preference writes.
+        Set-FilterProperty $Preferences 'displayTripBands' ([string[]]$legacyDisplayBands)
+    }
+    Set-FilterProperty $Preferences 'displayTripBandsMigrated' $true
 
     $availableCountries = [string[]]@(Get-FilterAvailableCountryIds)
     $countries = @()

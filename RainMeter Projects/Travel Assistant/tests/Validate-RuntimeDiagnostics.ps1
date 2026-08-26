@@ -26,11 +26,15 @@ if (Test-Path -LiteralPath $logPath) {
         'travel-assistant.log',
         'TravelAssistantLogRetentionDays = 7',
         'TravelAssistantLogMaxBytes = 262144',
+        'Read-TravelAssistantLogTailText',
+        '[System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete',
         'Protect-TravelAssistantLogText',
         'Write-TravelAssistantLog',
         'Clear-TravelAssistantLatestError',
         '<redacted>'
     )) { if (-not $text.Contains($token)) { Fail "RuntimeLog.ps1 missing '$token'." } }
+    if ($text.Contains('Get-Content -LiteralPath $TravelAssistantLogFile -Tail')) { Fail 'RuntimeLog.ps1 must not scan oversized logs by line from the end.' }
+    if ($text.TrimEnd().EndsWith('Invoke-TravelAssistantLogMaintenance')) { Fail 'Importing RuntimeLog.ps1 must not eagerly rotate logs on launcher startup.' }
 }
 
 $hostPath = Join-Path $Scripts 'PopupHost.ps1'
@@ -45,9 +49,10 @@ foreach ($launcher in @('LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','L
     $path = Join-Path $Scripts $launcher
     if (-not (Test-Path -LiteralPath $path)) { continue }
     $text = Get-Content -LiteralPath $path -Raw
-    foreach ($token in @('PopupHost.ps1','Start-Process','-WindowStyle Hidden','-STA','exit 0')) {
+    foreach ($token in @('PopupHost.ps1','-WindowStyle Hidden','-STA','exit 0')) {
         if (-not $text.Contains($token)) { Fail "$launcher missing hidden-host contract '$token'." }
     }
+    if (-not ($text.Contains('Start-Process') -or $text.Contains('System.Diagnostics.ProcessStartInfo'))) { Fail "$launcher must detach its popup host." }
     if ($text.Contains('-WindowStyle Normal')) { Fail "$launcher must not expose a PowerShell console window." }
 }
 
@@ -63,9 +68,11 @@ if (Test-Path -LiteralPath $settingsUiPath) {
 $filterUiPath = Join-Path $Scripts 'OpenFilterPopup.ps1'
 if (Test-Path -LiteralPath $filterUiPath) {
     $text = Get-Content -LiteralPath $filterUiPath -Raw
-    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1')) {
+    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','Read-OptionalPopupJson','Start-FilterProjectionRefresh')) {
         if (-not $text.Contains($token)) { Fail "OpenFilterPopup.ps1 missing '$token'." }
     }
+    $legacyPartial = "foreach(`$scriptName in @('OptimalRoute.ps1','OpportunityState.ps1','FilterState.ps1'))"
+    if ($text.Contains($legacyPartial)) { Fail 'Filter popups must not run an ad-hoc partial projection chain.' }
 }
 
 $filterPrefsPath = Join-Path $Scripts 'FilterPreferences.ps1'

@@ -1,4 +1,5 @@
 local statePath = nil
+local publishedState = nil
 
 local function trim(value)
     local text=tostring(value or ''):gsub('^\239\187\191','')
@@ -224,10 +225,12 @@ end
 
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
+    local heartbeatPath=SKIN:MakePathAbsolute(SELF:GetOption('HeartbeatFile','#@#Generated\\last-update.txt'))
+    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath,heartbeatPath)
 end
 
 function Update()
-    local state=readKv(statePath)
+    local state=publishedState.read()
     local lookup=buildLookup(state)
     local now=os.time()
     for i=1,8 do updateRow(i,lookup,now,state) end

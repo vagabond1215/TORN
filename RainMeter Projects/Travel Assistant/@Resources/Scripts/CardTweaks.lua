@@ -1,4 +1,5 @@
 local statePath = nil
+local publishedState = nil
 
 local countryIdsByName = {
     ['Mexico']='mexico', ['Cayman Islands']='cayman_islands', ['Canada']='canada', ['Hawaii']='hawaii',
@@ -344,6 +345,8 @@ end
 
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
+    local heartbeatPath=SKIN:MakePathAbsolute(SELF:GetOption('HeartbeatFile','#@#Generated\\last-update.txt'))
+    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath,heartbeatPath)
     for i=1,8 do
         applySecondLine(i)
         applyGraphSize(i)
@@ -351,7 +354,7 @@ function Initialize()
 end
 
 function Update()
-    local state=readKv(statePath)
+    local state=publishedState.read()
     local lookup=buildLookup(state)
     local now=os.time()
     for i=1,8 do

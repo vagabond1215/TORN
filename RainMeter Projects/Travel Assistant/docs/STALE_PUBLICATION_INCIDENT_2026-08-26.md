@@ -84,23 +84,24 @@ Therefore the incident crossed the decision boundary established for this invest
 The generated-state roles are now separated:
 
 ```text
-@Resources/Generated/state.kv      = private/build state
-@Resources/Generated/ui-state.kv   = Rainmeter-consumed finalized state
-@Resources/Generated/last-update.txt = successful final UI publication heartbeat
+@Resources/Generated/state.kv                    = private/build state
+@Resources/Generated/ui-state-<epoch>-<id>.kv    = immutable finalized state
+@Resources/Generated/last-update.txt              = heartbeat + active-generation manifest
+@Resources/Generated/ui-state.kv                  = legacy startup fallback
 ```
 
 Intermediate PowerShell stages continue to mutate `state.kv` sequentially during the update chain. Rainmeter no longer reads that hot pathname.
 
-After `FilterState.ps1` completes, `RunUpdate.ps1` validates that the build state contains the expected opportunity and UI freshness projection, then performs exactly one atomic publication from the completed build contents into `ui-state.kv`. Only after that final UI publication succeeds is `last-update.txt` advanced.
+After `FilterState.ps1` completes, `RunUpdate.ps1` validates that the build state contains the expected opportunity and UI freshness projection, writes one new immutable generation at a unique pathname, and then atomically switches `last-update.txt` to `epoch|generation`. Rainmeter readers cache the complete named generation until that small manifest changes.
 
 This changes the failure mode intentionally:
 
 - a failed intermediate or final publication cannot expose a partially-mutated generation to Rainmeter;
-- the previous complete `ui-state.kv` remains visible;
+- the previous complete immutable generation remains cached and visible;
 - the heartbeat cannot claim freshness unless final UI publication succeeded;
 - the frequently-mutated build pathname is no longer also the continuously-read UI pathname.
 
-The existing bounded atomic writer is retained for the one final publication. Its retry window was **not** lengthened as part of this redesign.
+The existing bounded atomic writer is retained only for the tiny manifest switch. The large state artifact is never replaced while Rainmeter is reading it, and the retry window was **not** lengthened.
 
 `AtomicFile.ps1` also retains an optional `TORN_TRAVEL_STATE_KV` build-path override for controlled tests or later private-generation routing, while the default build artifact remains `state.kv`.
 
@@ -127,4 +128,4 @@ UI heartbeat
 
 For normal Rainmeter operation, the expected steady-state relationship is that build and UI state continue advancing across repeated polling cycles, with UI state/heartbeat usually no more than roughly one completed update behind the newest collection while a new cycle is in flight.
 
-If `state.kv` advances but `ui-state.kv` repeatedly fails to publish with sharing violations, the next architectural step is immutable generation publication plus a small pointer/manifest. Do not respond by extending replacement retry duration further.
+The immutable-generation/manifest design is the escalation triggered by repeated live `ui-state.kv` sharing violations. Do not regress to replacing the hot Rainmeter pathname or extending replacement retry duration.

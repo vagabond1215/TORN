@@ -58,7 +58,7 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     foreach ($token in @('ResalePriority.ps1','ResaleQueue.ps1','Write-UpdateHeartbeat')) {
         if (-not $wrapper.Contains($token)) { Fail "RunUpdate.ps1 missing $token." }
     }
-    $heartbeatCalls=[regex]::Matches($wrapper,'(?m)^\s*Write-UpdateHeartbeat\s*$')
+    $heartbeatCalls=[regex]::Matches($wrapper,'(?m)^\s*Write-UpdateHeartbeat\s+-Publication\s+\$publication\s*$')
     $priorityCalls=[regex]::Matches($wrapper,'(?m)^\s*if \(Test-Path -LiteralPath \$ResalePriority\) \{ & \$ResalePriority \}\s*$')
     $queueCalls=[regex]::Matches($wrapper,'(?m)^\s*&\s+\$ResaleQueue\s*$')
     if ($heartbeatCalls.Count -ne 1) { Fail "Expected one heartbeat; found $($heartbeatCalls.Count)." }

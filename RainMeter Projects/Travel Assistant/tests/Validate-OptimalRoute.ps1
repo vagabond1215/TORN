@@ -63,7 +63,7 @@ if (Test-Path -LiteralPath $settingsPath) {
 
 if (Test-Path -LiteralPath $preferencesPath) {
     $text=Get-Content -LiteralPath $preferencesPath -Raw
-    foreach ($token in @('schemaVersion = 6','displayTripBands','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'","@('name','upcoming','gross','profit_per_hour')")) {
+    foreach ($token in @('schemaVersion = 7','displayTripBands','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'","@('name','upcoming','gross','profit_per_hour')")) {
         if (-not $text.Contains($token)) { Fail "Preference schema missing '$token'." }
     }
 }

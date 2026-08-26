@@ -40,10 +40,10 @@ OpportunityState
 WindowPlan / price refinement / FilterState
         ↓
 private build state.kv
-        ↓ exactly one final publication
-finalized ui-state.kv
-        ↓
-visible heartbeat
+        ↓ exactly one immutable generation write
+finalized ui-state-<epoch>-<id>.kv
+        ↓ one tiny manifest switch
+last-update.txt (epoch|generation)
         ↓
 ResalePriority / ResaleQueue
 ```
@@ -86,15 +86,17 @@ Filters, Ignore List, sort order, graph expansion, and Viewer selection never na
 Generated state has two explicit roles:
 
 ```text
-@Resources/Generated/state.kv     build/intermediate state
-@Resources/Generated/ui-state.kv  finalized Rainmeter state
+@Resources/Generated/state.kv                    build/intermediate state
+@Resources/Generated/ui-state-<epoch>-<id>.kv    immutable finalized state
+@Resources/Generated/last-update.txt              heartbeat + active-generation manifest
+@Resources/Generated/ui-state.kv                  legacy startup fallback
 ```
 
-Intermediate PowerShell stages mutate only the build artifact during the normal update chain. Rainmeter's continuously-running Lua measures read only `ui-state.kv`.
+Intermediate PowerShell stages mutate only the build artifact during the normal update chain. Rainmeter's Lua measures resolve the immutable generation named by `last-update.txt`; they cache that parsed generation until the manifest changes instead of reparsing a 300+ KiB state file every second.
 
-After `FilterState.ps1` completes, `RunUpdate.ps1` validates the build projection and performs one final atomic publication into `ui-state.kv`. The heartbeat is advanced only after that publication succeeds. If final publication fails, Rainmeter continues showing the previous complete UI generation rather than an intermediate state.
+After `FilterState.ps1` completes, `RunUpdate.ps1` validates the build projection and writes a new immutable generation at a unique pathname. It then atomically switches the small heartbeat manifest to that completed file. If either step fails, Rainmeter continues showing its cached previous complete generation rather than an intermediate state. Old non-active generations are pruned on a best-effort basis.
 
-The shared atomic writer keeps bounded retry/backoff for that final publication. Retry duration is not used as a substitute for publication isolation. If the single final publication is still recurrently blocked by active readers, the next escalation is immutable generation plus a pointer/manifest.
+The shared atomic writer remains responsible for the tiny manifest switch. Rainmeter never holds the new generation pathname open before it exists, so final state publication no longer depends on replacing a hot file that Lua or OneDrive may have open without delete sharing.
 
 ## Retention and historical truth
 
@@ -160,7 +162,7 @@ Each compact row is:
 
 `FilterState.ps1` records both the oldest and freshest active market source timestamps in the build state. The legacy header timestamp key is fed from the **freshest** active sample so one lagging country does not label the entire provider feed stale. The actual oldest timestamp is retained separately for diagnostics.
 
-The visible heartbeat is written after finalized `ui-state.kv` publication and before broad MV queue work. A slow MV refresh therefore does not make otherwise-current foreign-stock state appear unrefreshed, and a failed UI publication cannot falsely advance the heartbeat.
+The visible heartbeat/manifest is switched after the immutable generation is complete and before broad MV queue work. A slow MV refresh therefore does not make otherwise-current foreign-stock state appear unrefreshed, and a failed UI generation cannot falsely advance the heartbeat.
 
 ## Local catalog and MV
 
@@ -198,6 +200,6 @@ Energy/Nerve waste policies remain local decision constraints and never mutate o
 
 ## Projection / interaction
 
-`StateReader.lua` performs immediate local sorting so button response does not wait for PowerShell persistence. It reads only the last finalized `ui-state.kv`, so intermediate PowerShell mutations are never visible to the main Rainmeter surface. Genuine zero-result projections still replace the list when that completed generation is published.
+`StateReader.lua` performs immediate local sorting so button response does not wait for PowerShell persistence. Through `PublishedState.lua`, every Rainmeter presentation reader keeps the last finalized immutable generation cached until the heartbeat manifest changes. Intermediate PowerShell mutations are never visible to the main surface, while genuine zero-result projections still replace the list when a completed generation is published.
 
 One-second Rainmeter work remains local-only. Normal foreign-stock collection is approximately once per minute; inline rendering is local/on-demand; API credentials remain ignored/local.

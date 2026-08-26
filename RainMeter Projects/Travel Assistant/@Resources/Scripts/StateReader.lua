@@ -2,6 +2,7 @@ local statePath = nil
 local heartbeatPath = nil
 local generatedDir = nil
 local flagDir = nil
+local publishedState = nil
 local pollInterval = 60
 local failureRetryInterval = 15
 local failureRetryArmed = false
@@ -110,6 +111,7 @@ local function readKv(path)
 end
 
 local function readState()
+    if publishedState ~= nil then return publishedState.read() end
     return readKv(statePath)
 end
 
@@ -156,6 +158,7 @@ local function stabilizeProjection(data)
 end
 
 local function readEpochFile(path)
+    if publishedState ~= nil and path == heartbeatPath then return publishedState.epoch() end
     if path == nil then return 0 end
     local file = io.open(path, 'r')
     if not file then return 0 end
@@ -632,6 +635,8 @@ function Initialize()
     statePath = SKIN:MakePathAbsolute(configured)
     heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
     generatedDir = statePath:match('^(.*[\\/])') or ''
+    publishedState = dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua'))
+    publishedState.configure(statePath,heartbeatPath)
     flagDir = SKIN:ReplaceVariables('#@#Images\\Flags\\')
     pollInterval = math.floor(configuredPoll)
     failureRetryInterval = math.floor(configuredFailureRetry)
