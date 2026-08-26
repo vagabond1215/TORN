@@ -36,15 +36,24 @@ if(Test-Path -LiteralPath $preferencesPath) {
     if(@($reset.displayTripBands).Count -ne 3) { Fail 'RESET must restore all three display trip bands.' }
     if([int]$reset.schemaVersion -ne 7) { Fail 'RESET must persist schemaVersion=7.' }
 
+    $emptyNormalized = Normalize-UiPreferences -Preferences ([pscustomobject]@{schemaVersion=7;selectedCountryIds=[string[]]@()})
+    if(@($emptyNormalized.selectedCountryIds).Count -ne $availableCountries.Count) { Fail 'Empty startup country selection must normalize to all collected countries.' }
+    $subset = @($availableCountries | Select-Object -First 2)
+    $subsetNormalized = Normalize-UiPreferences -Preferences ([pscustomobject]@{schemaVersion=7;selectedCountryIds=[string[]]$subset})
+    if(@($subsetNormalized.selectedCountryIds).Count -ne $subset.Count) { Fail 'Nonempty saved country selection must remain persistent.' }
+
     $text=Get-Content -LiteralPath $preferencesPath -Raw
-    foreach($token in @('Write-TravelAssistantAtomicText','Read-TravelAssistantSharedText','Cannot reset filters because no collected countries are available.')) {
+    foreach($token in @('Write-TravelAssistantAtomicText','Read-TravelAssistantSharedText','Cannot reset filters because no collected countries are available.','Read paths must be side-effect free.')) {
         if(-not $text.Contains($token)) { Fail "FilterPreferences.ps1 missing '$token'." }
     }
+    $readBody=[regex]::Match($text,'(?ms)^function Read-UiPreferences\s*\{(.*?)(?=^function Save-UiPreferences)').Groups[1].Value
+    if([string]::IsNullOrWhiteSpace($readBody)) { Fail 'Unable to locate Read-UiPreferences body.' }
+    elseif($readBody -match 'Write-FilterJsonAtomic|Write-TravelAssistantAtomic') { Fail 'Read-UiPreferences must not write preferences during startup/popup reads.' }
 }
 
 if(Test-Path -LiteralPath $popupPath) {
     $text=Get-Content -LiteralPath $popupPath -Raw
-    foreach($token in @('Read-FilterJson -Path $Path','[int]::TryParse','New-IntSet','New-StringSet','No active item catalog rows are available for the Item filter.')) {
+    foreach($token in @('Read-FilterJson -Path $Path','[int]::TryParse','New-IntSet','New-StringSet','No active item catalog rows are available for the Item filter.','Read-OptionalPopupJson')) {
         if(-not $text.Contains($token)) { Fail "OpenFilterPopup.ps1 missing robustness token '$token'." }
     }
 }
@@ -56,5 +65,5 @@ if($errors.Count -gt 0) {
 }
 
 Write-Host 'Filter reset/popup validation passed.' -ForegroundColor Green
-Write-Host 'RESET restores all 11 countries/items/bands and popup catalog reads tolerate malformed metadata IDs without blanking the dialog.' -ForegroundColor Green
+Write-Host 'RESET restores all 11 countries/items/bands; startup defaults empty country state to all without write-on-read; popup catalog reads tolerate malformed/busy engine metadata.' -ForegroundColor Green
 exit 0
