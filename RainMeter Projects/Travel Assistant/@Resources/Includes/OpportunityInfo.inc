@@ -131,8 +131,9 @@ DynamicVariables=1
 
 ; Final render-time freshness fence. Provider selection still requires a snapshot
 ; newer than StaleAfter, but the UI keeps the last computed opportunity set in a
-; clearly labeled forecast-only mode until HardStaleAfter. This avoids long blank
-; periods during provider outages without presenting cached stock as live evidence.
+; clearly labeled forecast-only mode until HardStaleAfter. This measure is display-
+; only; StateReader owns the updater cadence so the one-second render loop cannot
+; create a second 15-second RunCommand retry loop.
 [MeasureFreshnessGuard]
 Measure=Script
 ScriptFile=#@#Scripts\FreshnessGuard.lua
@@ -140,7 +141,6 @@ StateFile=#@#Generated\ui-state.kv
 HeartbeatFile=#@#Generated\last-update.txt
 StaleAfter=300
 HardStaleAfter=21600
-RetryInterval=15
 UpdateDivider=1
 
 ; Travel-state-specific status pass. While outbound or abroad, physical upcoming
