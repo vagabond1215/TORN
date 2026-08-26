@@ -70,6 +70,16 @@ $ctx = Convert-TornTravelContext -Payload $landed -CountriesConfig $countries -N
 Assert-Equal 'Completed return flight becomes home' ([string]$ctx.state) 'home'
 Assert-True 'Completed return flight keeps foreign filter released' (-not [bool]$ctx.filterActive)
 
+$staleDestinationAfterReturn = [pscustomobject]@{
+    travel = [pscustomobject]@{ destination='United Kingdom'; method='Airstrip'; arrival_at=$now-600; time_left=0 }
+    status = [pscustomobject]@{ state='Okay' }
+}
+$ctx = Convert-TornTravelContext -Payload $staleDestinationAfterReturn -CountriesConfig $countries -NowEpoch $now
+Assert-Equal 'Okay status overrides stale prior foreign destination' ([string]$ctx.state) 'home'
+Assert-True 'Stale prior destination cannot keep country filter active' (-not [bool]$ctx.filterActive)
+Assert-Equal 'Stale prior destination country is cleared at home' ([string]$ctx.destinationCountryId) ''
+Assert-Equal 'Stale prior destination label is normalized to Torn' ([string]$ctx.destination) 'Torn'
+
 $staleReturn = [pscustomobject]@{
     state='returning'
     destination='Torn'
@@ -83,6 +93,7 @@ Expire-CompletedReturnContext -Context $staleReturn -NowEpoch $now
 Assert-Equal 'Expired cached return state becomes home' ([string]$staleReturn.state) 'home'
 Assert-Equal 'Expired cached return time is cleared' ([long]$staleReturn.timeLeft) 0
 Assert-Equal 'Expired cached return arrival is cleared' ([long]$staleReturn.arrivalAt) 0
+Assert-Equal 'Expired cached return destination is normalized to Torn' ([string]$staleReturn.destination) 'Torn'
 
 $unknown = [pscustomobject]@{
     travel = [pscustomobject]@{ destination='Somewhere New'; arrival_at=$now+500; time_left=500 }
@@ -92,5 +103,5 @@ $ctx = Convert-TornTravelContext -Payload $unknown -CountriesConfig $countries -
 Assert-Equal 'Unknown traveling destination is explicit' ([string]$ctx.state) 'traveling_unknown'
 Assert-True 'Unknown destination does not force an unsafe country filter' (-not [bool]$ctx.filterActive)
 
-Write-Host 'Travel context, completed-return expiry, and bar normalization tests passed.' -ForegroundColor Green
+Write-Host 'Travel context, completed-return expiry, stale-destination release, and bar normalization tests passed.' -ForegroundColor Green
 exit 0
