@@ -3,27 +3,35 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
+$infoPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
 $runUpdatePath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $atomicPath = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($iniPath,$runUpdatePath,$atomicPath)) {
+foreach ($path in @($iniPath,$infoPath,$runUpdatePath,$atomicPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing publication architecture file: $path" }
 }
 
 if ($errors.Count -eq 0) {
     $ini = Get-Content -LiteralPath $iniPath -Raw
+    $info = Get-Content -LiteralPath $infoPath -Raw
     $runUpdate = Get-Content -LiteralPath $runUpdatePath -Raw
     $atomic = Get-Content -LiteralPath $atomicPath -Raw
 
     $uiStateToken = 'StateFile=#@#Generated\ui-state.kv'
-    $uiReaderCount = ([regex]::Matches($ini,[regex]::Escape($uiStateToken))).Count
-    if ($uiReaderCount -ne 3) {
-        Fail "MeasureState, MeasureCardPresenter, and MeasureCardTweaks must all read finalized ui-state.kv; found $uiReaderCount matching StateFile entries."
+    $mainReaderCount = ([regex]::Matches($ini,[regex]::Escape($uiStateToken))).Count
+    if ($mainReaderCount -ne 3) {
+        Fail "MeasureState, MeasureCardPresenter, and MeasureCardTweaks must all read finalized ui-state.kv; found $mainReaderCount matching main StateFile entries."
     }
-    if ($ini -match '(?m)^StateFile=#@#Generated\\state\.kv\s*$') {
-        Fail 'Rainmeter must not read the intermediate build state.kv directly.'
+    $infoReaderCount = ([regex]::Matches($info,[regex]::Escape($uiStateToken))).Count
+    if ($infoReaderCount -ne 3) {
+        Fail "FreshnessGuard, TravelStateWindowTweaks, and WindowTooltipTweaks must all read finalized ui-state.kv; found $infoReaderCount matching included StateFile entries."
+    }
+    foreach ($surface in @($ini,$info)) {
+        if ($surface -match '(?m)^StateFile=#@#Generated\\state\.kv\s*$') {
+            Fail 'A live Rainmeter measure still reads the intermediate build state.kv directly.'
+        }
     }
 
     foreach ($token in @(
@@ -67,5 +75,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Single-final-publication architecture validation passed.' -ForegroundColor Green
-Write-Host 'Intermediate stages mutate state.kv; Rainmeter reads ui-state.kv; heartbeat follows the one final UI publication.' -ForegroundColor Green
+Write-Host 'Intermediate stages mutate state.kv; all live Rainmeter state readers use ui-state.kv; heartbeat follows the one final UI publication.' -ForegroundColor Green
 exit 0
