@@ -88,6 +88,7 @@ function Expire-CompletedReturnContext {
     if ($timeLeft -gt 0 -and $lastSuccessAt -gt 0 -and ($lastSuccessAt + $timeLeft) -gt $NowEpoch) { return }
 
     Set-TravelDynamicProperty $Context 'state' 'home'
+    Set-TravelDynamicProperty $Context 'destination' 'Torn'
     Set-TravelDynamicProperty $Context 'destinationCountryId' ''
     Set-TravelDynamicProperty $Context 'filterActive' $false
     Set-TravelDynamicProperty $Context 'arrivalAt' 0L
@@ -175,13 +176,24 @@ function Convert-TornTravelContext {
     $statusState = Get-TravelStatusState -Payload $Payload
     $statusLower = $statusState.Trim().ToLowerInvariant()
     $destLower = $destinationText.Trim().ToLowerInvariant()
+    $travelActive = ($timeLeft -gt 0 -or $arrivalAt -gt $NowEpoch -or $statusLower -like '*travel*')
     $state = 'home'; $filterActive = $false
-    if ($destLower -in @('torn','torn city','home')) {
-        if ($timeLeft -gt 0 -or $arrivalAt -gt $NowEpoch -or $statusLower -like '*travel*') { $state = 'returning' }
+
+    # Torn can briefly retain the previous foreign destination in the travel object
+    # after a completed return. An explicit Okay status with no active flight is
+    # authoritative home evidence; do not let that stale destination keep the UI
+    # pinned to the previous country.
+    if ($statusLower -eq 'okay' -and -not $travelActive) {
+        $state = 'home'
+        $destinationText = 'Torn'
+        $destinationCountryId = ''
+        $filterActive = $false
+    } elseif ($destLower -in @('torn','torn city','home')) {
+        if ($travelActive) { $state = 'returning' }
         else { $state = 'home' }
     } elseif (-not [string]::IsNullOrWhiteSpace($destinationCountryId)) {
         $filterActive = $true
-        if ($timeLeft -gt 0 -or $arrivalAt -gt $NowEpoch -or $statusLower -like '*travel*') { $state = 'traveling' }
+        if ($travelActive) { $state = 'traveling' }
         elseif ($statusLower -like '*abroad*') { $state = 'abroad' }
         else { $state = 'foreign' }
     } elseif ($statusLower -like '*travel*') {
