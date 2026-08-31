@@ -42,6 +42,7 @@ try {
                 '277' = [pscustomobject]@{ lastAttemptAt=0; lastSuccessAt=0; lastErrorAt=0; attemptCount=0; successCount=0; lastError='' }
                 '4'   = [pscustomobject]@{ lastAttemptAt=19600; lastSuccessAt=0; lastErrorAt=19600; attemptCount=1; successCount=0; lastError='timeout' }
                 '5'   = [pscustomobject]@{ lastAttemptAt=19600; lastSuccessAt=0; lastErrorAt=19600; attemptCount=1; successCount=0; lastError='timeout' }
+                '206' = [pscustomobject]@{ lastAttemptAt=19600; lastSuccessAt=0; lastErrorAt=19600; attemptCount=1; successCount=0; lastError='Torn Item Market response did not contain a usable price.' }
             }
         }
     }
@@ -56,6 +57,7 @@ try {
     Assert-Equal 'Pinned failed item is re-enabled after five-minute priority backoff' ([long]$after.resaleQueue.attempts.'266'.lastAttemptAt) 0
     Assert-Equal 'Optimizer-needed hidden item receives the same bounded retry policy' ([long]$after.resaleQueue.attempts.'4'.lastAttemptAt) 0
     Assert-Equal 'General hidden failed item keeps normal queue backoff state' ([long]$after.resaleQueue.attempts.'5'.lastAttemptAt) 19600
+    Assert-Equal 'Empty-market response keeps normal backoff and cannot starve the queue' ([long]$after.resaleQueue.attempts.'206'.lastAttemptAt) 19600
     Assert-Equal 'Ignored item is marked with synthetic queue hold' ([string]$after.resaleQueue.attempts.'277'.lastError) 'ignored_by_user'
     Assert-True 'Ignored item hold is in the future' ([long]$after.resaleQueue.attempts.'277'.lastAttemptAt -gt 20000)
     Assert-Equal 'Priority diagnostics count one ignored item' ([int]$after.resaleQueue.ignoredItems) 1

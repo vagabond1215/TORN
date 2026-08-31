@@ -66,7 +66,7 @@ if ($errors.Count -eq 0) {
     }
 
     if (-not $runUpdate.Contains("`$AtomicFileScript = Join-Path `$PSScriptRoot 'AtomicFile.ps1'")) { Fail 'RunUpdate.ps1 must resolve AtomicFile.ps1 for heartbeat publication.' }
-    if (-not $runUpdate.Contains('Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text $epoch')) { Fail 'RunUpdate.ps1 heartbeat must use the shared atomic writer.' }
+    if (-not $runUpdate.Contains('Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text $script:PendingUiGeneration')) { Fail 'RunUpdate.ps1 manifest must use the shared atomic writer.' }
     if ($runUpdate.Contains("`$tmp = `$HeartbeatFile + '.tmp'")) { Fail 'RunUpdate.ps1 must not retain the fixed heartbeat .tmp publication path.' }
 
     # Exercise the helper locally. This catches Windows PowerShell 5.1 and PowerShell 7

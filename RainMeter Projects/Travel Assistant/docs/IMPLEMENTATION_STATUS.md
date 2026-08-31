@@ -108,13 +108,15 @@ Current production roles are:
 
 ```text
 @Resources/Generated/state.kv       private mutable build state
-@Resources/Generated/ui-state.kv    finalized atomic UI snapshot
-@Resources/Generated/last-update.txt numeric heartbeat
+@Resources/Generated/ui-state-<epoch>-<id>.kv immutable finalized UI snapshot
+@Resources/Generated/last-update.txt          generation manifest
 ```
 
-Production Lua readers read finalized `ui-state.kv` directly. `PublishedState.lua` remains only a compatibility shim for stale/transitional loaded Lua.
+Production Lua readers use `PublishedState.lua` to cache and resolve complete immutable generations. The former `ui-state.kv` remains a transition fallback for a numeric legacy heartbeat.
 
 `LaunchUpdate.ps1` starts the long-running normal worker under PowerShell 7 and returns; the named updater mutex serializes workers. Popup saves use the normal launcher path rather than a direct Windows PowerShell `RunUpdate.ps1` process.
+
+The resale priority pass does not accelerate legitimate empty-market responses (zero average and no listings); those retain the normal queue backoff so other stale items continue refreshing.
 
 ## Current runtime order
 

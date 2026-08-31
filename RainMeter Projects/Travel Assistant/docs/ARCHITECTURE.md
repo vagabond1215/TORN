@@ -87,14 +87,15 @@ Generated state has two explicit roles:
 
 ```text
 @Resources/Generated/state.kv     build/intermediate state
-@Resources/Generated/ui-state.kv  finalized Rainmeter state
+@Resources/Generated/ui-state-<epoch>-<id>.kv  immutable finalized Rainmeter state
+@Resources/Generated/last-update.txt           generation manifest
 ```
 
-Intermediate PowerShell stages mutate only the build artifact during the normal update chain. Rainmeter's continuously-running Lua measures read only `ui-state.kv`.
+Intermediate PowerShell stages mutate only the build artifact during the normal update chain. Rainmeter's Lua measures resolve a complete immutable generation through `PublishedState.lua`; `ui-state.kv` remains a transition fallback for older numeric heartbeats.
 
-After `FilterState.ps1` completes, `RunUpdate.ps1` validates the build projection and performs one final atomic publication into `ui-state.kv`. The heartbeat is advanced only after that publication succeeds. If final publication fails, Rainmeter continues showing the previous complete UI generation rather than an intermediate state.
+After `FilterState.ps1` completes, `RunUpdate.ps1` validates the build projection, writes a new immutable snapshot, then atomically advances the small manifest. A failed write or manifest switch leaves readers on the previous complete generation.
 
-The shared atomic writer keeps bounded retry/backoff for that final publication. Retry duration is not used as a substitute for publication isolation. If the single final publication is still recurrently blocked by active readers, the next escalation is immutable generation plus a pointer/manifest.
+This avoids replacing the large file that six one-second Rainmeter readers have open. The shared atomic writer retains bounded retry/backoff for the small manifest; old disposable generations are pruned only after a grace period.
 
 ## Retention and historical truth
 
@@ -167,6 +168,8 @@ The visible heartbeat is written after finalized `ui-state.kv` publication and b
 Catalog network maintenance stays outside the one-second Rainmeter loop. `LocalCatalog.ps1` resolves metadata from committed/local sources.
 
 `ResaleQueue.ps1` is the sole broad Torn Item Market request path. The opportunity layer consumes cached `itemmarket.item.average_price` as MV.
+
+A successful item-market response with neither listings nor a positive average remains unresolved. It retains the normal one-hour retry backoff even when optimizer-prioritized, so one legitimately empty market cannot monopolize the single-request queue.
 
 Default value basis:
 

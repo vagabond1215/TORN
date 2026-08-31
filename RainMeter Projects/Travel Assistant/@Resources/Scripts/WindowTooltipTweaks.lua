@@ -1,4 +1,5 @@
 local statePath = nil
+local publishedState = nil
 
 local function trim(value)
     local text=tostring(value or ''):gsub('^\239\187\191','')
@@ -10,6 +11,7 @@ local function number(value)
 end
 
 local function readKv(path)
+    if publishedState and path==statePath then return publishedState.read() end
     local out={}
     local file=io.open(path,'r')
     if not file then return out end
@@ -223,6 +225,7 @@ end
 
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
+    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath)
 end
 
 function Update()

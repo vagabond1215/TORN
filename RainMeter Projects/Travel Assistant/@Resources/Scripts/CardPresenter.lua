@@ -1,4 +1,5 @@
 local statePath = nil
+local publishedState = nil
 local lastTravelStateSignature = ''
 
 local countryIdsByName = {
@@ -13,6 +14,7 @@ local function trim(value)
 end
 
 local function readKv(path)
+    if publishedState and path==statePath then return publishedState.read() end
     local out={}; local file=io.open(path,'r'); if not file then return out end
     for line in file:lines() do local key,value=line:match('^([^=]+)=(.*)$'); if key then out[trim(key)]=trim(value) end end
     file:close(); return out
@@ -318,7 +320,9 @@ local function updateRow(index,state,now)
 end
 
 function Initialize()
-    statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv')); for i=1,8 do applyCompactLayout(i) end
+    statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
+    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath)
+    for i=1,8 do applyCompactLayout(i) end
 end
 
 function Update()

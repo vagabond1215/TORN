@@ -21,6 +21,8 @@ if ($errors.Count -eq 0) {
     $atomic = Get-Content -LiteralPath $atomicPath -Raw
     $compat = Get-Content -LiteralPath $publishedStatePath -Raw
 
+    # The configured path is the last direct-snapshot fallback for a numeric legacy
+    # heartbeat; production readers resolve immutable generations through the module.
     $uiStateToken = 'StateFile=#@#Generated\ui-state.kv'
     $mainReaderCount = ([regex]::Matches($ini,[regex]::Escape($uiStateToken))).Count
     if ($mainReaderCount -ne 3) {
@@ -38,18 +40,18 @@ if ($errors.Count -eq 0) {
 
     foreach ($token in @(
         "`$StateKvFile = Join-Path `$GeneratedDir 'state.kv'",
-        "`$UiStateKvFile = Join-Path `$GeneratedDir 'ui-state.kv'",
+        "'ui-state-{0}-{1}.kv'",
         'function Publish-UpdateUiState',
-        'Write-TravelAssistantAtomicText -Path $UiStateKvFile -Text $text',
+        'Write-TravelAssistantAtomicText -Path (Join-Path $GeneratedDir $name) -Text $text',
+        'UIGeneration=',
         'Build state.kv is incomplete after FilterState; refusing UI publication.',
         'Publish-UpdateUiState',
-        'Write-UpdateHeartbeat'
+        'Write-UpdateHeartbeat',
+        'Remove-OldUiStateGenerations'
     )) {
         if (-not $runUpdate.Contains($token)) { Fail "RunUpdate.ps1 missing publication contract '$token'." }
     }
-    foreach ($forbidden in @('ui-state-{0}-{1}.kv','UIGeneration=','Remove-OldUiStateGenerations',"`$epoch + '|'")) {
-        if ($runUpdate.Contains($forbidden)) { Fail "RunUpdate.ps1 must not restore the retired manifest-generation contract '$forbidden'." }
-    }
+    if ($runUpdate.Contains('Write-TravelAssistantAtomicText -Path $UiStateKvFile')) { Fail 'RunUpdate must not replace the Rainmeter-read snapshot directly.' }
 
     $filterAt = $runUpdate.IndexOf('if (Test-Path -LiteralPath $FilterState)',[System.StringComparison]::Ordinal)
     $publishCallAt = $runUpdate.LastIndexOf('Publish-UpdateUiState',[System.StringComparison]::Ordinal)
@@ -72,21 +74,14 @@ if ($errors.Count -eq 0) {
         Fail 'AtomicFile.ps1 must retain the optional private-state override contract.'
     }
 
-    # The compatibility module exists only so a partially updated Rainmeter process
-    # cannot crash if an older loaded Lua chunk still calls PublishedState.lua.
-    # Production readers must not depend on it and it must not reintroduce the
-    # retired immutable-generation / manifest-selection behavior.
-    foreach ($token in @('function module.configure','function module.read','function module.epoch','return readKv(statePath)','raw:match(''^(%d+)'')')) {
-        if (-not $compat.Contains($token)) { Fail "PublishedState.lua compatibility shim missing '$token'." }
-    }
-    foreach ($forbidden in @('ui%-state%-%d+%-%x+%.kv','UIGeneration','cachedData','cachedKey','generatedDir')) {
-        if ($compat.Contains($forbidden)) { Fail "PublishedState.lua compatibility shim must not restore manifest-generation behavior '$forbidden'." }
+    foreach ($token in @('function module.configure','function module.read','function module.epoch','cachedData','UIGeneration','ui%-state%-%d+%-%x+%.kv','return copyData()')) {
+        if (-not $compat.Contains($token)) { Fail "PublishedState.lua immutable-reader contract missing '$token'." }
     }
 
     foreach ($luaName in @('StateReader.lua','CardPresenter.lua','CardTweaks.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua','WindowTooltipTweaks.lua')) {
         $luaText = Get-Content -LiteralPath (Join-Path $ProjectRoot ('@Resources\Scripts\' + $luaName)) -Raw
-        if ($luaText.Contains('PublishedState.lua') -or $luaText.Contains('publishedState')) {
-            Fail "$luaName must read finalized ui-state.kv directly; the compatibility shim is not a production dependency."
+        if (-not $luaText.Contains('PublishedState.lua') -or -not $luaText.Contains('publishedState.configure')) {
+            Fail "$luaName must resolve immutable finalized state through PublishedState.lua."
         }
     }
 }
@@ -97,6 +92,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Direct single-final-publication architecture validation passed.' -ForegroundColor Green
-Write-Host 'Intermediate stages mutate private state.kv; one complete ui-state.kv is atomically published after FilterState, then the numeric heartbeat advances. PublishedState.lua is compatibility-only.' -ForegroundColor Green
+Write-Host 'Immutable single-final-publication architecture validation passed.' -ForegroundColor Green
+Write-Host 'Intermediate stages mutate private state.kv; a complete immutable generation is written after FilterState, then the small manifest advances.' -ForegroundColor Green
 exit 0

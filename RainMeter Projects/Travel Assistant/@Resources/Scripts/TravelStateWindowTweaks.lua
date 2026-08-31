@@ -1,4 +1,5 @@
 local statePath = nil
+local publishedState = nil
 
 local countryIdsByName = {
     ['Mexico']='mexico', ['Cayman Islands']='cayman_islands', ['Canada']='canada', ['Hawaii']='hawaii',
@@ -16,6 +17,7 @@ local function number(value)
 end
 
 local function readKv(path)
+    if publishedState and path==statePath then return publishedState.read() end
     local out={}
     local file=io.open(path,'r')
     if not file then return out end
@@ -337,6 +339,7 @@ end
 
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
+    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath)
 end
 
 function Update()

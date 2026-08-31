@@ -48,9 +48,9 @@ $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
 # state.kv is the private/build artifact mutated by intermediate pipeline stages.
-# Rainmeter reads ui-state.kv, which is replaced exactly once after FilterState.
+# Rainmeter reads immutable snapshots selected by the small heartbeat manifest.
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
-$UiStateKvFile = Join-Path $GeneratedDir 'ui-state.kv'
+$PendingUiGeneration = $null
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
 $acquired = $false
 
@@ -137,13 +137,34 @@ function Publish-UpdateUiState {
     if ($text -notmatch '(?m)^OpportunityCount=' -or $text -notmatch '(?m)^UIFreshestMarketSourceTimestamp=') {
         throw 'Build state.kv is incomplete after FilterState; refusing UI publication.'
     }
-    Write-TravelAssistantAtomicText -Path $UiStateKvFile -Text $text
+    $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    $name = 'ui-state-{0}-{1}.kv' -f $epoch, [Guid]::NewGuid().ToString('N')
+    $text = ($text.TrimEnd() + "`nUIGeneration=" + $name + "`n")
+    Write-TravelAssistantAtomicText -Path (Join-Path $GeneratedDir $name) -Text $text
+    $script:PendingUiGeneration = $epoch + '|' + $name
 }
 
 function Write-UpdateHeartbeat {
     New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
-    $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text $epoch
+    if ([string]::IsNullOrWhiteSpace($script:PendingUiGeneration)) { throw 'No complete UI generation is ready to publish.' }
+    Write-TravelAssistantAtomicText -Path $HeartbeatFile -Text $script:PendingUiGeneration
+}
+
+function Remove-OldUiStateGenerations {
+    # Only disposable generated snapshots, never observations/cycles or the legacy
+    # fallback. Keep recent generations so an in-flight reader can finish safely.
+    try {
+        $currentName = ($script:PendingUiGeneration -split '\|',2)[1]
+        $cutoff = [DateTime]::UtcNow.AddMinutes(-10)
+        $files = @(Get-ChildItem -LiteralPath $GeneratedDir -File | Where-Object {
+            $_.Name -match '^ui-state-\d+-[a-f0-9]{32}\.kv$'
+        } | Sort-Object LastWriteTimeUtc -Descending)
+        foreach ($file in @($files | Select-Object -Skip 8)) {
+            if ($file.Name -ne $currentName -and $file.LastWriteTimeUtc -lt $cutoff) {
+                Remove-Item -LiteralPath $file.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } catch { } # Cleanup must never prevent collection or price refresh.
 }
 
 function Write-CompactFailure {
@@ -305,8 +326,9 @@ try {
 
     # Heartbeat represents successful final UI publication, not merely collection or
     # an intermediate stage. Analytics and resale work below cannot make UI look fresh
-    # unless ui-state.kv was successfully published first.
+    # unless the complete immutable snapshot was successfully selected first.
     Write-UpdateHeartbeat
+    Remove-OldUiStateGenerations
 
     if ($Action -eq 'Update') {
         Invoke-FailSoftScript -Path $CycleAnalytics -ErrorPath $CycleAnalyticsErrorFile
@@ -332,7 +354,7 @@ try {
     exit 0
 } catch {
     if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
-        Write-TravelAssistantLog -Level ERROR -Component 'run-update' -Message $_.Exception.ToString()
+        Write-TravelAssistantLog -Level ERROR -Component 'run-update' -Message (Format-TravelAssistantErrorRecord $_)
     }
     throw
 } finally {

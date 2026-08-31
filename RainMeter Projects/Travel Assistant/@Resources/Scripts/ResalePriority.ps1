@@ -141,6 +141,10 @@ foreach ($itemId in @($priorityIds)) {
     $lastAttemptAt = if ($attempt.PSObject.Properties['lastAttemptAt']) { [long]$attempt.lastAttemptAt } else { 0L }
     $lastSuccessAt = if ($attempt.PSObject.Properties['lastSuccessAt']) { [long]$attempt.lastSuccessAt } else { 0L }
     $lastErrorAt = if ($attempt.PSObject.Properties['lastErrorAt']) { [long]$attempt.lastErrorAt } else { 0L }
+    # A successful API response with no listing and zero average is not a transient
+    # transport failure. Keep the normal one-hour backoff so an empty priority item
+    # cannot consume the queue's only request every five minutes and starve others.
+    if ($attempt.PSObject.Properties['lastError'] -and [string]$attempt.lastError -eq 'Torn Item Market response did not contain a usable price.') { continue }
     if ($lastAttemptAt -le 0 -or $lastErrorAt -le $lastSuccessAt) { continue }
     if (($Now - $lastAttemptAt) -lt $PriorityBackoffSeconds) { continue }
 

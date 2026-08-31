@@ -49,6 +49,7 @@ if (-not (Test-Path -LiteralPath $priorityPath)) {
         if (-not $text.Contains($token)) { Fail "ResalePriority.ps1 missing '$token'." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'ResalePriority.ps1 must remain local-only and never add a second request path.' }
+    if (-not $text.Contains('Torn Item Market response did not contain a usable price.')) { Fail 'Empty market responses must retain normal backoff rather than enter the five-minute priority retry loop.' }
 }
 
 if (-not (Test-Path -LiteralPath $wrapperPath)) {

@@ -2,6 +2,7 @@ local statePath=nil
 local heartbeatPath=nil
 local staleAfter=300
 local hardStaleAfter=21600
+local publishedState=nil
 
 local function trim(value)
     local text=tostring(value or ''):gsub('^\239\187\191','')
@@ -13,6 +14,7 @@ local function number(value)
 end
 
 local function readKv(path)
+    if publishedState and path==statePath then return publishedState.read() end
     local out={}
     local file=io.open(path,'r')
     if not file then return out end
@@ -25,6 +27,7 @@ local function readKv(path)
 end
 
 local function readEpoch(path)
+    if publishedState then return publishedState.epoch() end
     local file=io.open(path,'r')
     if not file then return 0 end
     local raw=file:read('*a') or ''
@@ -106,6 +109,7 @@ end
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
     heartbeatPath=SKIN:MakePathAbsolute(SELF:GetOption('HeartbeatFile','#@#Generated\\last-update.txt'))
+    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath,heartbeatPath)
     staleAfter=math.max(60,math.floor(tonumber(SELF:GetOption('StaleAfter','300')) or 300))
     hardStaleAfter=math.max(staleAfter+60,math.floor(tonumber(SELF:GetOption('HardStaleAfter','21600')) or 21600))
 end
