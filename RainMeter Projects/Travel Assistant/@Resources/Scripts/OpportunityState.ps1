@@ -546,7 +546,7 @@ $fixedCountry = ''
 if ($null -ne $travelContext -and [bool](Get-OptimalProperty $travelContext 'filterActive')) { $fixedCountry = [string](Get-OptimalProperty $travelContext 'destinationCountryId') }
 
 $eligibleEvidenceKeys=Get-OpportunityEligibleEvidenceKeys -Engine $engine -Countries $countries -Preferences $preferences -FixedCountry $fixedCountry -NowEpoch $Now -BasisPercent $basisPercent -ResaleFallbackMaxAgeSeconds $resaleFallbackMaxAge
-$evidence=Get-OptimalEvidence -WantedKeys $eligibleEvidenceKeys
+$evidence=Get-OptimalEvidence -WantedKeys $eligibleEvidenceKeys -SkipObservations
 $focusMarker=Read-OpportunityFocusMarker -Path $FocusMarketFile -NowEpoch $Now
 
 $returningWait = 0L
@@ -674,9 +674,11 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                 )
                 if ($sleeping) {
                     $availableQuantity=$capacity
-                    if ($evidence.restockStock.ContainsKey($marketKey)) {
-                        $samples=[long[]]@($evidence.restockStock[$marketKey] | ForEach-Object { [long]$_ })
-                        $sampleQuantity=Get-OptimalMedian $samples
+                    $quantitySamples=[long[]]@($recurringCycles | Where-Object {
+                        $_.PSObject.Properties['restockQuantity'] -and [long]$_.restockQuantity -gt 0
+                    } | ForEach-Object { [long]$_.restockQuantity })
+                    if ($quantitySamples.Count -gt 0) {
+                        $sampleQuantity=Get-OptimalMedian $quantitySamples
                         if ($sampleQuantity -gt 0) { $availableQuantity=[Math]::Min($capacity,[int]$sampleQuantity) }
                     }
                     $quantity=[Math]::Max(1,[Math]::Min($capacity,[int]$availableQuantity))
@@ -813,10 +815,10 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             $probability = [double]$window.probability
             if ($probability -le 0) { continue }
             $probabilityKnown = $true
-            if ($evidence.restockStock.ContainsKey($marketKey)) {
-                $samples = [long[]]@($evidence.restockStock[$marketKey] | ForEach-Object { [long]$_ })
-                $availableQuantity = Get-OptimalMedian $samples
-            }
+            $quantitySamples=[long[]]@($recurringCycles | Where-Object {
+                $_.PSObject.Properties['restockQuantity'] -and [long]$_.restockQuantity -gt 0
+            } | ForEach-Object { [long]$_.restockQuantity })
+            if ($quantitySamples.Count -gt 0) { $availableQuantity=Get-OptimalMedian $quantitySamples }
             if ($availableQuantity -le 0) { $learning++; continue }
             if ($windowStartAt -le $Now) { $windowText = 'WINDOW NOW' }
             else { $windowText = 'WINDOW '+(Format-OpportunityDuration ($windowStartAt-$Now)) }
