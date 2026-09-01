@@ -107,6 +107,17 @@ if (-not (Test-Path -LiteralPath $collectorPath)) {
     foreach ($token in @('observedMarkets','providerName','itemName','Get-LiveStockObservationsForCountry','Get-InactiveMarketIndex','foreign-market-overrides.json','legacyMarketsSeen','Get-CycleBoundaryPolicy','Invalidate-PhaseAnchorForGap')) {
         if (-not $collector.Contains($token)) { Fail "Shadow collector contract is missing '$token'." }
     }
+    foreach ($token in @(
+        'AtomicFile.ps1',
+        'Read-TravelAssistantSharedText -Path $Path',
+        'Write-TravelAssistantAtomicJson -Path $Path',
+        'Get-TravelAssistantAtomicMutexName -Path $Path',
+        '[System.IO.FileShare]::Delete',
+        'observations.pending.jsonl'
+    )) {
+        if (-not $collector.Contains($token)) { Fail "Shadow collector shared-IO contract is missing '$token'." }
+    }
+    if ($collector.Contains("$Path + '.tmp'")) { Fail 'Shadow collector must not use a fixed destination.tmp file for engine-state publication.' }
     if ($collector -notmatch '(?s)Update-ObservedMarketMetadata.+?\$marketsSeen\+\+.+?\$inactiveMarketIndex\.ContainsKey\(\$key\).+?continue') {
         Fail 'Shadow collector must retain legacy provider rows in observedMarkets while suppressing them before history/cycle writes.'
     }
