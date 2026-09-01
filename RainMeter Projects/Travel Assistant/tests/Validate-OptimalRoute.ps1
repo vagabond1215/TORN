@@ -7,12 +7,13 @@ $opportunityPath = Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.p
 $settingsPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
 $preferencesPath = Join-Path $ProjectRoot '@Resources\Scripts\FilterPreferences.ps1'
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
+$resalePriorityPath = Join-Path $ProjectRoot '@Resources\Scripts\ResalePriority.ps1'
 $countriesPath = Join-Path $ProjectRoot 'config\countries.json'
 $baseSettingsPath = Join-Path $ProjectRoot 'config\settings.example.json'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($optimizerPath,$opportunityPath,$settingsPath,$preferencesPath,$wrapperPath)) {
+foreach ($path in @($optimizerPath,$opportunityPath,$settingsPath,$preferencesPath,$wrapperPath,$resalePriorityPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing $(Split-Path $path -Leaf)."; continue }
     $tokens=$null; $parseErrors=$null
     [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
@@ -42,7 +43,8 @@ if (Test-Path -LiteralPath $opportunityPath) {
     foreach ($token in @(
         'grossProfit','profitPerHour','quantity','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge',
         'Get-OpportunityResaleUse','resaleFallbackMaxAgeSeconds','marketValueFresh',' STALE','OpportunityStaleMvCount','OpportunityCountry_',
-        'Write-OpportunityProjection',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'GrossValue','ProfitHourValue','WindowStartAt'
+        'Write-OpportunityProjection',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'GrossValue','ProfitHourValue','WindowStartAt',
+        'ResalePricingPriorityItemIds','pricingPriorityIds.Add($itemId)'
     )) {
         if (-not $text.Contains($token)) { Fail "Opportunity ranking contract missing '$token'." }
     }
@@ -50,6 +52,13 @@ if (Test-Path -LiteralPath $opportunityPath) {
         if ($text.Contains($retired)) { Fail "Opportunity presentation must not retain hidden weighting token '$retired'." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'OpportunityState.ps1 must remain local-only.' }
+}
+
+if (Test-Path -LiteralPath $resalePriorityPath) {
+    $text=Get-Content -LiteralPath $resalePriorityPath -Raw
+    foreach ($token in @('ResalePricingPriorityItemIds','Read-PriorityStateKv','$projection.ContainsKey(''ResalePricingPriorityItemIds'')')) {
+        if (-not $text.Contains($token)) { Fail "Resale priority projection contract missing '$token'." }
+    }
 }
 
 if (Test-Path -LiteralPath $settingsPath) {
@@ -98,13 +107,15 @@ if (Test-Path -LiteralPath $wrapperPath) {
     $wrapper=Get-Content -LiteralPath $wrapperPath -Raw
     $finalizer=$wrapper.IndexOf('& $Finalizer')
     $travel=$wrapper.IndexOf('Invoke-FailSoftScript -Path $TravelContext')
-    $optimal=$wrapper.IndexOf('Invoke-FailSoftScript -Path $OptimalRoute')
     $opportunity=$wrapper.IndexOf('Invoke-FailSoftScript -Path $OpportunityState')
     $filter=$wrapper.IndexOf('& $FilterState')
     $heartbeat=$wrapper.LastIndexOf('Write-UpdateHeartbeat')
     $resale=$wrapper.IndexOf('& $ResaleQueue')
-    if (@($finalizer,$travel,$optimal,$opportunity,$filter,$heartbeat,$resale) -contains -1 -or -not ($finalizer -lt $travel -and $travel -lt $optimal -and $optimal -lt $opportunity -and $opportunity -lt $filter -and $filter -lt $heartbeat -and $heartbeat -lt $resale)) {
-        Fail 'Runtime order must remain FinalizeState -> TravelContext -> OptimalRoute -> OpportunityState -> FilterState -> heartbeat -> ResaleQueue.'
+    if (@($finalizer,$travel,$opportunity,$filter,$heartbeat,$resale) -contains -1 -or -not ($finalizer -lt $travel -and $travel -lt $opportunity -and $opportunity -lt $filter -and $filter -lt $heartbeat -and $heartbeat -lt $resale)) {
+        Fail 'Runtime order must remain FinalizeState -> TravelContext -> OpportunityState -> FilterState -> heartbeat -> ResaleQueue.'
+    }
+    if ($wrapper.Contains('Invoke-FailSoftScript -Path $OptimalRoute') -or $wrapper.Contains('$OptimalRouteErrorFile')) {
+        Fail 'The retired standalone OptimalRoute stage must not run on the normal one-minute updater path.'
     }
     if ($wrapper.Contains('VisibleItems.ps1')) { Fail 'Normal runtime must not regenerate old embedded card graphs through VisibleItems.ps1.' }
 }
@@ -114,6 +125,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Optimizer/opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Background route model and transparent opportunity economics validation passed.' -ForegroundColor Green
+Write-Host 'Retired standalone route stage, shared opportunity economics, and resale-priority projection validation passed.' -ForegroundColor Green
 Write-Host 'Visible ordering is NAME, UPCOMING, GROSS PROFIT, or PROFIT/HR; stale MV is bounded/explicit and hit likelihood remains separate.'
 exit 0
