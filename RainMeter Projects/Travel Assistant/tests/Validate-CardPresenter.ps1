@@ -52,7 +52,8 @@ if ($errors.Count -eq 0) {
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
         'statusText(fallbackWindow,fallbackLeave)',
         'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
-        'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','group.lateSellout','Window opens:',
+        'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','highest-overlap interval',
+        "math.floor((number(group.bestStart)+number(group.bestEnd))/2)",'group.lateSellout','Window opens:',
         'formatSleepingRestockTooltip',"'Restocks in ~'",
         "'Collecting Data: See Weav3r'",
         'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'"
