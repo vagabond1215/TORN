@@ -6,11 +6,12 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $presenterPath = Join-Path $ProjectRoot '@Resources\Scripts\CardPresenter.lua'
 $opportunityPath = Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 $windowPlanPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowPlan.ps1'
+$windowRefinerPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowPlanRefiner.ps1'
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($iniPath,$presenterPath,$opportunityPath,$windowPlanPath,$wrapperPath)) {
+foreach ($path in @($iniPath,$presenterPath,$opportunityPath,$windowPlanPath,$windowRefinerPath,$wrapperPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing compact-card/window file: $path" }
 }
 if ($errors.Count -eq 0) {
@@ -18,6 +19,7 @@ if ($errors.Count -eq 0) {
     $presenter = Get-Content -LiteralPath $presenterPath -Raw
     $opportunity = Get-Content -LiteralPath $opportunityPath -Raw
     $windowPlan = Get-Content -LiteralPath $windowPlanPath -Raw
+    $windowRefiner = Get-Content -LiteralPath $windowRefinerPath -Raw
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
 
     foreach ($token in @('[MeasureCardPresenter]','CardPresenter.lua','StateFile=#@#Generated\ui-state.kv')) {
@@ -33,19 +35,37 @@ if ($errors.Count -eq 0) {
         'removeCountrySuffix','rowCountryAndTravel','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
         'parseWindowPlan','parsePriceVarianceEnvelope','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
         'WP2:','PV([01])','group.safeEnd-group.safeStart>=60','group.bestProbability>0.5','currentProbability>0.5',
-        "'SAFE - LEAVE '","'SAFE - LEAVE BEFORE '","'BEST - LEAVE NOW'", "'BEST - LEAVE '",
+        "'LEAVE BEFORE '","'SAFE - LEAVE IN '","'SAFE - LEAVE BEFORE '","'BEST - LEAVE NOW'","'BEST - LEAVE IN '",
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
         'configureWindowTooltipMeter','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','Empty ToolTipText disables the tooltip naturally',
         "'InlinePattern'", "'InlinePattern2'", '/ea x[0-9]+ =', 'Color | 255,255,255,255',
         'quantityFromTooltip','buyPriceFromVisibleText','bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
-        'statusText(fallbackWindow,fallbackLeave)'
+        'statusText(fallbackWindow,fallbackLeave)',
+        'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCyclePurchaseBufferSeconds','formatCurrentCycleTooltip'
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
     if ($presenter.Contains("setOption(name,'ToolTipHidden'")) { Fail 'CardPresenter.lua must not dynamically mutate ToolTipHidden; empty tooltip text owns visibility on the target host.' }
     if ($presenter -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand|LaunchItemViewer') { Fail 'CardPresenter.lua must remain presentation-only and local.' }
+    foreach ($ambiguous in @(
+        "return 'SAFE - LEAVE '..formatDuration",
+        "return 'BEST - LEAVE '..formatDuration"
+    )) {
+        if ($presenter.Contains($ambiguous)) { Fail "CardPresenter.lua retains ambiguous departure wording '$ambiguous'." }
+    }
+
+    foreach ($token in @(
+        'Get-CurrentCycleDeparturePlan',
+        'CurrentCycleReachable',
+        'CurrentCycleLeaveDeadlineAt',
+        'CurrentCyclePurchaseBufferSeconds',
+        '-ActiveSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt)',
+        '-PurchaseBufferSeconds $purchaseBuffer'
+    )) {
+        if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
+    }
 
     foreach ($token in @(
         'Get-RecurringScenarioModel','safeStartAt = $lateRestockAt','safeEndAt = $earlySelloutAt','MinimumSafeWindowSeconds = 60L',
@@ -79,6 +99,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Compact trade-card validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Compact trade-card safe/best window validation passed.' -ForegroundColor Green
-Write-Host 'Departure text uses non-empty tooltip text as its hitbox; Safe rows expose an info anchor, profit equation punctuation is white, and fixed-price items use exact Take cash.'
+Write-Host 'Compact trade-card current-cycle and recurring-window validation passed.' -ForegroundColor Green
+Write-Host 'Reachable live stock uses LEAVE BEFORE; future modeled departures use LEAVE IN; fixed-price items use exact Take cash.'
 exit 0
