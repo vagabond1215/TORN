@@ -33,7 +33,7 @@ if(Test-Path -LiteralPath $hostPath){
 
 if(Test-Path -LiteralPath $viewerPath){
  $viewer=Get-Content -LiteralPath $viewerPath -Raw
- foreach($token in @('[string]$MarketKey','RuntimeObservationFile','SeedObservationFile','MaintainObservationHistory.ps1','graphWindowHours','observedMarkets','resaleCache','sourceTimestamp','carry_forward',"ToString('HH:mm')",'Green: observed restock','Red: observed sellout','Dropdown is sorted by known profit/item.','AtomicFile.ps1','Read-TravelAssistantSharedText -Path $Path','Open-TravelAssistantSharedTextReader -Path $path','focus-market.kv','Write-ViewerFocusMarker')){if(-not$viewer.Contains($token)){Fail "Standalone Viewer missing '$token'."}}
+ foreach($token in @('[string]$MarketKey','RuntimeObservationFile','SeedObservationFile','MaintainObservationHistory.ps1','graphWindowHours','observedMarkets','resaleCache','sourceTimestamp','carry_forward',"ToString('HH:mm')",'Green: observed restock','Red: observed sellout','Dropdown is sorted by known profit/item.','AtomicFile.ps1','Read-TravelAssistantSharedText -Path $Path','Open-TravelAssistantSharedTextReader -Path $path','focus-market.kv','Write-ViewerFocusMarker','System.Windows.Forms.Timer','$focusTimer.Interval = 60000','$focusTimer.Start()')){if(-not$viewer.Contains($token)){Fail "Standalone Viewer missing '$token'."}}
  if($viewer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|api\.torn\.com|prombot\.co\.uk|yata\.yt'){Fail 'Standalone Viewer must remain local-only.'}
 }
 
