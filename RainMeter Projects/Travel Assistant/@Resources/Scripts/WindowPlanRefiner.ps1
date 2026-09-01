@@ -454,11 +454,9 @@ for ($i=1; $i -le $count; $i++) {
         $anchorAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')
     }
 
-    $model=Get-StableRecurringScenarioModel -Cycles $cycles -AnchorAt $anchorAt -AnchorPhase $phase -NowEpoch $Now
-
     # Never turn frozen provider state or an unobserved transition into forecast
-    # duration. A current/next-cycle window requires fresh market evidence plus
-    # observed, tightly bounded, or externally recovered phase boundaries.
+    # duration. Check direct current-cycle evidence before paying for any recurring
+    # next-cycle geometry.
     $collectingReason=''
     if ([string]$liveProjection.mode -eq 'stale-source') {
         $collectingReason='live stock source is stale'
@@ -476,8 +474,6 @@ for ($i=1; $i -le $count; $i++) {
         $lastSellOutQuality=if ($null -ne $destinationState) { [string](Get-WindowProperty $destinationState 'lastSellOutBoundaryQuality') } else { '' }
         if ($lastSellOutAt -le 0 -or -not (Test-WindowBoundaryQuality -Quality $lastSellOutQuality)) {
             $collectingReason='sellout boundary was missed during collection'
-        } elseif ([int]$model.sampleCount -le 0) {
-            $collectingReason='no verified completed cycles are available'
         }
     }
 
@@ -485,17 +481,6 @@ for ($i=1; $i -le $count; $i++) {
         $state[$prefix+'WindowDataQuality']='collecting'
         $state[$prefix+'WindowDataQualityReason']=$collectingReason
     }
-
-    $machine=Convert-WindowPlanMachineText -Model $model
-    $baseTooltip=Remove-WindowMachineEnvelope -Text ([string]$state[$prefix+'Tooltip'])
-    $priceInfo=Get-WindowPriceInfo -Engine $engine -Key $key
-    $priceEnvelope=if ([bool]$priceInfo.varies) { 'PV1#' } else { 'PV0#' }
-    $state[$prefix+'PriceVaries']=if ([bool]$priceInfo.varies) { '1' } else { '0' }
-    $state[$prefix+'MinObservedPrice']=[long]$priceInfo.minimum
-    $state[$prefix+'MaxObservedPrice']=[long]$priceInfo.maximum
-    $state[$prefix+'WindowMedianPeriodSeconds']=[long]$model.medianPeriodSeconds
-    if (-not [string]::IsNullOrWhiteSpace($machine)) { $state[$prefix+'Tooltip']='WP2:'+$machine+'#'+$priceEnvelope+$baseTooltip }
-    else { $state[$prefix+'Tooltip']=$priceEnvelope+$baseTooltip }
 
     $flightSeconds=Get-WindowTravelSeconds -State $state -CountryId $countryId
     $earliestDeparture=$Now
@@ -521,7 +506,6 @@ for ($i=1; $i -le $count; $i++) {
     }
 
     $currentCycle=Get-CurrentCycleDeparturePlan -CurrentStock $stock -ActiveSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt) -FlightSeconds $flightSeconds -EarliestDepartureAt $earliestDeparture -NowEpoch $Now -SafetyMarginFraction 0.05
-
     if ([bool]$currentCycle.reachable) {
         $state[$prefix+'CurrentCycleReachable']='1'
         $state[$prefix+'CurrentCycleLeaveDeadlineAt']=[long]$currentCycle.leaveDeadlineAt
@@ -533,9 +517,14 @@ for ($i=1; $i -le $count; $i++) {
             $state[$prefix+'ProbabilityValue']=(Convert-WindowProbabilityText ([double]$currentProbability))
             $state[$prefix+'ChanceText']=('{0:N0}%' -f (100.0*[double]$currentProbability))
         }
+        # Scenario 1 is fully resolved from the direct current cycle. Do not build
+        # the recurring next-cycle model merely to calculate a far-future close.
         continue
     }
 
+    # Only an unreachable current cycle or an OOS market needs next-restock
+    # probability geometry.
+    $model=Get-StableRecurringScenarioModel -Cycles $cycles -AnchorAt $anchorAt -AnchorPhase $phase -NowEpoch $Now
     if ([int]$model.sampleCount -le 0) {
         $state[$prefix+'WindowDataQuality']='collecting'
         $state[$prefix+'WindowDataQualityReason']='no verified completed cycles are available for the next restock'
@@ -545,6 +534,17 @@ for ($i=1; $i -le $count; $i++) {
         $state[$prefix+'ProbabilityValue']='-1'
         continue
     }
+
+    $machine=Convert-WindowPlanMachineText -Model $model
+    $baseTooltip=Remove-WindowMachineEnvelope -Text ([string]$state[$prefix+'Tooltip'])
+    $priceInfo=Get-WindowPriceInfo -Engine $engine -Key $key
+    $priceEnvelope=if ([bool]$priceInfo.varies) { 'PV1#' } else { 'PV0#' }
+    $state[$prefix+'PriceVaries']=if ([bool]$priceInfo.varies) { '1' } else { '0' }
+    $state[$prefix+'MinObservedPrice']=[long]$priceInfo.minimum
+    $state[$prefix+'MaxObservedPrice']=[long]$priceInfo.maximum
+    $state[$prefix+'WindowMedianPeriodSeconds']=[long]$model.medianPeriodSeconds
+    if (-not [string]::IsNullOrWhiteSpace($machine)) { $state[$prefix+'Tooltip']='WP2:'+$machine+'#'+$priceEnvelope+$baseTooltip }
+    else { $state[$prefix+'Tooltip']=$priceEnvelope+$baseTooltip }
 
     $selected=Select-StableWindowPlanGroup -Model $model -EarliestArrivalAt $earliestArrival
     if ($null -ne $selected) {
