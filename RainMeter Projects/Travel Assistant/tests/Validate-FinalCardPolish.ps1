@@ -29,6 +29,7 @@ if ($errors.Count -eq 0) {
         'polishWindowStatus',
         "text:match('^Window Open:')",
         "text:match('^Safe Hit Window')",
+        "text:match('^Collecting Data:')",
         "setOption(leave,'W',285)",
         "setOption(leave,'FontSize',7)",
         "SKIN:Bang('!HideMeter',prefix..'Chance')",
