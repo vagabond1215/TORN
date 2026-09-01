@@ -481,8 +481,8 @@ end
 local function applyCompactLayout(index)
     local prefix='MeterOpportunity'..index
     setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',500); setOption(prefix..'Gross','FontSize',7); setOption(prefix..'Gross','StringAlign','Left'); setOption(prefix..'Gross','ClipString',1)
-    setOption(prefix..'Name','X',78); setOption(prefix..'Name','W',200); setOption(prefix..'Name','FontSize',9); setOption(prefix..'Name','ClipString',1)
-    setOption(prefix..'Price','X',282); setOption(prefix..'Price','W',236); setOption(prefix..'Price','FontSize',8); setOption(prefix..'Price','ClipString',1)
+    setOption(prefix..'Name','X',78); setOption(prefix..'Name','W',170); setOption(prefix..'Name','FontSize',9); setOption(prefix..'Name','ClipString',1)
+    setOption(prefix..'Price','X',252); setOption(prefix..'Price','W',266); setOption(prefix..'Price','FontSize',7); setOption(prefix..'Price','ClipString',1)
     setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',1)
     setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',440); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
     setOption(prefix..'Chance','X',78); setOption(prefix..'Chance','W',1)
@@ -508,8 +508,6 @@ local function updateRow(index,state,now)
     if rawTitle=='' then return end
     local country,travel=rowCountryAndTravel(index)
     local itemName=removeCountrySuffix(rawTitle,country)
-    local renderedName=itemName:match('^(.-)%s+|%s+%$')
-    if renderedName~=nil then itemName=trim(renderedName) end
     local projectedPrefix=opportunityStatePrefix(state,country,itemName)
     if projectedPrefix=='' then return end
 
@@ -539,13 +537,12 @@ local function updateRow(index,state,now)
     local grossProfitHour=number(state[projectedPrefix..'GrossProfitHourValue'])
     local marketTax=number(state[projectedPrefix..'MarketTaxValue'])
 
-    local nameText=itemName
-    if unitCost>0 then nameText=nameText..' | '..formatMoney(unitCost) end
-    setOption(prefix..'Name','Text',nameText)
-    setOption(prefix..'Name','ToolTipText','Item | foreign unit cost')
+    setOption(prefix..'Name','Text',itemName)
+    setOption(prefix..'Name','ToolTipText','Item name')
 
     local takeText=take>0 and formatMoney(take) or '?'
-    setOption(prefix..'Price','Text','Take: '..takeText..'  Make: '..formatMoney(make))
+    local unitCostText=unitCost>0 and formatMoney(unitCost) or '?'
+    setOption(prefix..'Price','Text','| '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))
     if priceVaries then
         setOption(prefix..'Price','ToolTipText','Take includes a 5% cash reserve because the foreign price varies. Make uses actual purchase cost, not the reserve.')
     else
