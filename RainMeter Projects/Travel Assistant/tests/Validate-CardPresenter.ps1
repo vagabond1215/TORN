@@ -35,9 +35,11 @@ if ($errors.Count -eq 0) {
         'removeCountrySuffix','rowCountryAndTravel','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
         'parseWindowPlan','parsePriceVarianceEnvelope','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
         'WP2:','PV([01])','group.safeEnd-group.safeStart>=60','group.bestProbability>0.5','currentProbability>0.5',
-        "'Leave Before '..formatDuration","'Window Open: '","' Best: '","' Closes: '",
-        'formatBestCountdown',"string.format('%02ds',value)",'usefulWindowHorizon',
-        "'Safe Hit Window Open: '","'Safe Hit Window Open. Closes: '","'Safe window closed. Leave Now: '",
+        'formatCountdown',"string.format('%02d:%02d:%02d',hours,minutes,secs)",
+        'formatBestCountdown','return formatCountdown(seconds)',
+        "'Leave before: '..formatCountdown","'Window opens: '..formatCountdown",
+        "'Window Open. Optimal Departure: '..formatCountdown","'. Safe Departure: '..formatCountdown",
+        "'Guaranteed Hit for: '..formatCountdown","'. Closes: '..formatCountdown",
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
         'configureWindowTooltipMeter','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','Empty ToolTipText disables the tooltip naturally',
@@ -46,7 +48,7 @@ if ($errors.Count -eq 0) {
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
         'statusText(fallbackWindow,fallbackLeave)',
         'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
-        'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','NEXT RESTOCK WITHIN FLIGHT',
+        'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','group.lateSellout','Window opens:',
         'formatSleepingRestockTooltip',"'Restocks in ~'",
         "'Collecting Data: See Weav3r'",
         'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'"
@@ -57,7 +59,11 @@ if ($errors.Count -eq 0) {
         "' ['..chancePercent",
         "' ['..string.format('%.0f%%'",
         "'SAFE - EN ROUTE'",
-        "'BEST - EN ROUTE'"
+        "'BEST - EN ROUTE'",
+        "'NEXT RESTOCK WITHIN FLIGHT'",
+        "'Safe Hit Window Open'",
+        "'Safe window closed'",
+        "'Leave Now to hit.'"
     )) {
         if ($presenter.Contains($forbidden)) { Fail "CardPresenter.lua retains obsolete/cluttered status token '$forbidden'." }
     }
