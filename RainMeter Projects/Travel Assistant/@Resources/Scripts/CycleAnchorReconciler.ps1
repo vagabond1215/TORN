@@ -139,7 +139,10 @@ function Get-AnchorTransitions {
                     $lastRestockLowerBoundAt=$lower
                     $lastRestockUpperBoundAt=$timestamp
                 } else {
-                    $lastSellOutAt=$lower
+                    # Keep the representative sellout anchor at the first observed
+                    # OOS timestamp. The preceding positive-stock timestamp is the
+                    # uncertainty lower bound, not the central anchor.
+                    $lastSellOutAt=$timestamp
                     $lastSellOutQuality=$quality
                     $lastSellOutLowerBoundAt=$lower
                     $lastSellOutUpperBoundAt=$timestamp
