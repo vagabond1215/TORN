@@ -7,6 +7,9 @@ $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $ObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared schema IO.' }
+. $AtomicFileScript
 
 # OpportunityState preserves and extends state.kv, so guarantee that it has a
 # minimal local bootstrap record even before another projector has populated it.
@@ -14,17 +17,15 @@ New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
 $stateKvNeedsBootstrap = $true
 if (Test-Path -LiteralPath $StateKvFile) {
     try {
-        $stateKvNeedsBootstrap = [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $StateKvFile -Raw -ErrorAction Stop))
+        $stateKvNeedsBootstrap = [string]::IsNullOrWhiteSpace((Read-TravelAssistantSharedText -Path $StateKvFile))
     } catch { $stateKvNeedsBootstrap = $true }
 }
 if ($stateKvNeedsBootstrap) {
-    $tmpState = $StateKvFile + '.tmp'
-    [System.IO.File]::WriteAllText($tmpState, "OpportunityBootstrap=1`r`n", [System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $tmpState -Destination $StateKvFile -Force
+    Write-TravelAssistantAtomicText -Path $StateKvFile -Text "OpportunityBootstrap=1`r`n"
 }
 
 if (-not (Test-Path -LiteralPath $EngineStateFile)) { return }
-$raw = Get-Content -LiteralPath $EngineStateFile -Raw -ErrorAction Stop
+$raw = Read-TravelAssistantSharedText -Path $EngineStateFile
 if ([string]::IsNullOrWhiteSpace($raw)) { return }
 $state = $raw | ConvertFrom-Json
 $changed = $false
@@ -91,20 +92,26 @@ foreach ($property in @($state.observedMarkets.PSObject.Properties)) {
 if ($activeCycleRepairKeys.Count -gt 0 -and (Test-Path -LiteralPath $ObservationFile)) {
     $previousStock = @{}
     $latestRestock = @{}
-    foreach ($line in [System.IO.File]::ReadLines($ObservationFile)) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try { $row = $line | ConvertFrom-Json } catch { continue }
-        $country = [string](Get-StateProperty $row 'country')
-        $itemId = [int](Get-StateProperty $row 'itemId')
-        $timestamp = [long](Get-StateProperty $row 'timestamp')
-        $stock = [long](Get-StateProperty $row 'stock')
-        if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $timestamp -le 0) { continue }
-        $key = ($country + ':' + $itemId).ToLowerInvariant()
-        if (-not $activeCycleRepairKeys.Contains($key)) { continue }
-        if ($previousStock.ContainsKey($key) -and [long]$previousStock[$key] -eq 0 -and $stock -gt 0) {
-            $latestRestock[$key] = $row
+    $reader=$null
+    try {
+        $reader=Open-TravelAssistantSharedTextReader -Path $ObservationFile
+        while (($line=$reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try { $row = $line | ConvertFrom-Json } catch { continue }
+            $country = [string](Get-StateProperty $row 'country')
+            $itemId = [int](Get-StateProperty $row 'itemId')
+            $timestamp = [long](Get-StateProperty $row 'timestamp')
+            $stock = [long](Get-StateProperty $row 'stock')
+            if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $timestamp -le 0) { continue }
+            $key = ($country + ':' + $itemId).ToLowerInvariant()
+            if (-not $activeCycleRepairKeys.Contains($key)) { continue }
+            if ($previousStock.ContainsKey($key) -and [long]$previousStock[$key] -eq 0 -and $stock -gt 0) {
+                $latestRestock[$key] = $row
+            }
+            $previousStock[$key] = $stock
         }
-        $previousStock[$key] = $stock
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
     }
 
     foreach ($key in @($activeCycleRepairKeys)) {
@@ -132,6 +139,4 @@ if ($activeCycleRepairKeys.Count -gt 0 -and (Test-Path -LiteralPath $Observation
 
 if (-not $changed) { return }
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
-$tmp = $EngineStateFile + '.tmp'
-$state | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $tmp -Encoding UTF8
-Move-Item -LiteralPath $tmp -Destination $EngineStateFile -Force
+Write-TravelAssistantAtomicJson -Path $EngineStateFile -Value $state -Depth 24
