@@ -25,7 +25,14 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Name','InlineSetting',costColor)",
         'parenthesizedMoneyPattern',
         "setOption(prefix..'Name','InlinePattern2',parenthesizedMoneyPattern(mv))",
-        "setOption(prefix..'Name','InlineSetting2','Color | #Muted#')"
+        "setOption(prefix..'Name','InlineSetting2','Color | #Muted#')",
+        'polishWindowStatus',
+        "text:match('^Window Open:')",
+        "text:match('^Safe Hit Window')",
+        "setOption(leave,'W',285)",
+        "setOption(leave,'FontSize',7)",
+        "SKIN:Bang('!HideMeter',prefix..'Chance')",
+        "SKIN:Bang('!HideMeter',prefix..'Info')"
     )) {
         if (-not $scriptText.Contains($token)) { Fail "FinalCardPolish.lua missing '$token'." }
     }
@@ -47,5 +54,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Final card polish validation passed.' -ForegroundColor Green
-Write-Host 'Final polish leaves current/next-cycle status text untouched; fixed foreign costs remain white, Torn MV muted gray, and profit/item green at far right.'
+Write-Host 'Final polish preserves current/next-cycle status semantics and gives long next-cycle text the available left-side width without moving Take; header/profit styling remains unchanged.'
 exit 0
