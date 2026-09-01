@@ -95,6 +95,8 @@ if($errors.Count -eq 0){
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))",
         "setOption(prefix..'Price','InlinePattern','\\|')",
         "setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
+        "setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')",
+        "setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
         "'MV:'..formatMoney(mv)",
         "'  Each:'..formatMoney(each)",
         "'  Gross:'..formatMoney(grossSale)",
