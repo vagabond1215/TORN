@@ -185,6 +185,14 @@ local function formatMoment(at,now)
     return os.date('%H:%M',at)..' ('..relation..')'
 end
 
+local function formatCurrentCycleTooltip(selloutAt,deadlineAt,bufferSeconds,flightSeconds,now)
+    local nl='#CRLF#'
+    return 'Current Cycle Sellout: '..formatMoment(selloutAt,now)..nl..
+        'Travel Time: '..formatDuration(flightSeconds)..nl..
+        'Purchase Buffer: '..formatDuration(bufferSeconds)..nl..
+        'Leave Before: '..formatMoment(deadlineAt,now)..nl..
+        'Basis: live depletion of current observed stock'
+end
 local function formatWindowTooltip(group,now)
     if group==nil then return 'Window evidence unavailable' end
     local nl='#CRLF#'; local safe='none'
@@ -219,10 +227,30 @@ local function nextBetterBestBefore(plan,currentGroup,currentProbability,flightS
     return nil
 end
 
-local function liveWindowAction(plan,state,country,defaultTravel,now)
+local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     if plan==nil or #plan.groups==0 then return nil,nil,nil end
     local countryId=countryIdsByName[country] or ''; local travelState=trim(state.TravelState):lower(); local destinationId=trim(state.TravelDestinationCountryId):lower()
     local flightSeconds=countryTravelSeconds(state,country,defaultTravel); if flightSeconds<=0 then return nil,nil,nil end
+
+    -- Home-state current stock gets first refusal. WindowPlanRefiner publishes a
+    -- live depletion sellout estimate plus the latest safe departure deadline
+    -- (sellout - one-way travel - purchase buffer). If that deadline is still
+    -- ahead of us, do not jump to a later recurring Safe/Best window.
+    if travelState~='traveling' and travelState~='returning' and travelState~='abroad' and travelState~='foreign' then
+        local statePrefix='Opportunity'..tostring(index)
+        local currentStock=number(state[statePrefix..'CurrentStock'])
+        local reachable=number(state[statePrefix..'CurrentCycleReachable'])>0
+        local selloutAt=number(state[statePrefix..'ActiveSelloutEstimateAt'])
+        local deadlineAt=number(state[statePrefix..'CurrentCycleLeaveDeadlineAt'])
+        local bufferSeconds=number(state[statePrefix..'CurrentCyclePurchaseBufferSeconds'])
+        if currentStock>0 and reachable and selloutAt>now and deadlineAt>now then
+            local arrivalAt=now+flightSeconds
+            local p=probabilityAt(plan,arrivalAt)
+            local certainty=p>0 and string.format('%.0f%%',p*100) or ''
+            return 'LEAVE BEFORE '..formatDuration(deadlineAt-now),certainty,formatCurrentCycleTooltip(selloutAt,deadlineAt,bufferSeconds,flightSeconds,now)
+        end
+    end
+
     local effectiveFlightSeconds=flightSeconds
     if travelState=='traveling' and destinationId==countryId then local remaining=liveTravelRemainingSeconds(state,now); if remaining>0 then effectiveFlightSeconds=remaining end end
     local availableAt=now; if travelState=='returning' then availableAt=now+liveTravelRemainingSeconds(state,now) end
@@ -239,7 +267,7 @@ local function liveWindowAction(plan,state,country,defaultTravel,now)
 
     local openAt,closeAt,targetAt=groupDepartureTimes(group,mode,flightSeconds)
     if mode=='safe' then
-        if now<openAt then return 'SAFE - LEAVE '..formatDuration(openAt-now),'',tooltip end
+        if now<openAt then return 'SAFE - LEAVE IN '..formatDuration(openAt-now),'',tooltip end
         if now<closeAt then return 'SAFE - LEAVE BEFORE '..formatDuration(closeAt-now),'',tooltip end
         return 'WAIT DATA','',tooltip
     end
@@ -248,21 +276,21 @@ local function liveWindowAction(plan,state,country,defaultTravel,now)
     if currentProbability>0.5 then
         local _,_,sameTarget=groupDepartureTimes(group,'best',flightSeconds)
         if group.bestProbability>currentProbability and sameTarget>now and staysAboveThresholdUntil(plan,now+flightSeconds,sameTarget+flightSeconds,0.5) then
-            return 'BEST - LEAVE '..formatDuration(sameTarget-now),string.format('%.0f%%',group.bestProbability*100),tooltip
+            return 'BEST - LEAVE IN '..formatDuration(sameTarget-now),string.format('%.0f%%',group.bestProbability*100),tooltip
         end
         local better=nextBetterBestBefore(plan,group,currentProbability,flightSeconds,now)
-        if better~=nil then local _,_,betterTarget=groupDepartureTimes(better,'best',flightSeconds); return 'BEST - LEAVE '..formatDuration(betterTarget-now),string.format('%.0f%%',better.bestProbability*100),formatWindowTooltip(better,now) end
+        if better~=nil then local _,_,betterTarget=groupDepartureTimes(better,'best',flightSeconds); return 'BEST - LEAVE IN '..formatDuration(betterTarget-now),string.format('%.0f%%',better.bestProbability*100),formatWindowTooltip(better,now) end
         return 'BEST - LEAVE NOW',string.format('%.0f%%',currentProbability*100),tooltip
     end
 
-    if now<openAt then return 'BEST - LEAVE '..formatDuration(targetAt-now),string.format('%.0f%%',group.bestProbability*100),tooltip end
+    if now<openAt then return 'BEST - LEAVE IN '..formatDuration(targetAt-now),string.format('%.0f%%',group.bestProbability*100),tooltip end
     for _,nextGroup in ipairs(plan.groups) do
         if nextGroup.ordinal>group.ordinal and groupMode(nextGroup)~=nil then
             local nextMode=groupMode(nextGroup); local nOpen,nClose,nTarget=groupDepartureTimes(nextGroup,nextMode,flightSeconds)
             if nextMode=='safe' and nClose>now then
-                if now<nOpen then return 'SAFE - LEAVE '..formatDuration(nOpen-now),'',formatWindowTooltip(nextGroup,now) end
+                if now<nOpen then return 'SAFE - LEAVE IN '..formatDuration(nOpen-now),'',formatWindowTooltip(nextGroup,now) end
                 return 'SAFE - LEAVE BEFORE '..formatDuration(nClose-now),'',formatWindowTooltip(nextGroup,now)
-            elseif nextMode=='best' and nTarget>now then return 'BEST - LEAVE '..formatDuration(nTarget-now),string.format('%.0f%%',nextGroup.bestProbability*100),formatWindowTooltip(nextGroup,now) end
+            elseif nextMode=='best' and nTarget>now then return 'BEST - LEAVE IN '..formatDuration(nTarget-now),string.format('%.0f%%',nextGroup.bestProbability*100),formatWindowTooltip(nextGroup,now) end
         end
     end
     return 'WAIT DATA','',tooltip
@@ -292,7 +320,7 @@ local function updateRow(index,state,now)
     local buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')); local bufferRate=priceVaries and 0.05 or 0.0
     local take=(buyPrice>0 and quantity>0) and math.ceil(buyPrice*quantity*(1.0+bufferRate)) or 0
     local fallbackWindow=meterOption(prefix..'Window','Text'); local fallbackLeave=meterOption(prefix..'Leave','Text'); local fallbackCertainty=meterOption(prefix..'Chance','Text')
-    local liveAction,liveCertainty,windowTooltip=liveWindowAction(plan,state,country,travel,now)
+    local liveAction,liveCertainty,windowTooltip=liveWindowAction(index,plan,state,country,travel,now)
 
     setOption(prefix..'Name','Text',itemName); setOption(prefix..'Name','ToolTipText','')
     setOption(prefix..'Gross','Text',equation); setOption(prefix..'Gross','ToolTipText','Net profit per item x planned inventory quantity = total net profit')
