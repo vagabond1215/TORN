@@ -8,11 +8,12 @@ $presenterPath=Join-Path $ProjectRoot '@Resources\Scripts\CardPresenter.lua'
 $tweaksPath=Join-Path $ProjectRoot '@Resources\Scripts\CardTweaks.lua'
 $polishPath=Join-Path $ProjectRoot '@Resources\Scripts\FinalCardPolish.lua'
 $iniPath=Join-Path $ProjectRoot 'TravelAssistant.ini'
+$headerPath=Join-Path $ProjectRoot '@Resources\Scripts\HeaderLayout.lua'
 
 $errors=New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message){$script:errors.Add($Message)}
 
-foreach($path in @($rowsPath,$readerPath,$presenterPath,$tweaksPath,$polishPath,$iniPath)){
+foreach($path in @($rowsPath,$readerPath,$presenterPath,$tweaksPath,$polishPath,$iniPath,$headerPath)){
     if(-not(Test-Path -LiteralPath $path)){Fail "Missing compact-card asset: $path"}
 }
 
@@ -23,6 +24,7 @@ if($errors.Count -eq 0){
     $tweaks=Get-Content -LiteralPath $tweaksPath -Raw
     $polish=Get-Content -LiteralPath $polishPath -Raw
     $ini=Get-Content -LiteralPath $iniPath -Raw
+    $header=Get-Content -LiteralPath $headerPath -Raw
 
     foreach($i in 1..8){
         foreach($suffix in @('Card','Flag','Name','Gross','Price','Leave','DetailToggle','Graph','InlineGraph')){
@@ -91,6 +93,10 @@ if($errors.Count -eq 0){
         "setOption(prefix..'Leave','Text',actionText)"
     )){
         if(-not$presenter.Contains($token)){Fail "CardPresenter.lua missing compact-card presentation contract '$token'."}
+    }
+
+    if(-not$header.Contains("'Card','Flag','Name','Gross','Window','Leave','Chance','Price','DetailToggle','Graph','InlineGraph'")){
+        Fail 'HeaderLayout.lua must shift DetailToggle with every compact card row.'
     }
 
     foreach($retired in @(
