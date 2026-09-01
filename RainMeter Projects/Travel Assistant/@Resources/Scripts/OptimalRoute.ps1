@@ -97,18 +97,47 @@ function Add-EvidenceRow {
     $Map[$Key] = [object[]](@($Map[$Key]) + @($Value))
 }
 
+function Get-OptimalEvidenceLineKey {
+    param([string]$Line)
+
+    if ([string]::IsNullOrWhiteSpace($Line)) { return '' }
+    $countryMatch=[System.Text.RegularExpressions.Regex]::Match(
+        $Line,
+        '"country"\s*:\s*"([^"]+)"',
+        [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+    )
+    $itemMatch=[System.Text.RegularExpressions.Regex]::Match(
+        $Line,
+        '"itemId"\s*:\s*([1-9][0-9]*)',
+        [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+    )
+    if (-not $countryMatch.Success -or -not $itemMatch.Success) { return '' }
+    return ($countryMatch.Groups[1].Value.Trim().ToLowerInvariant()+':'+$itemMatch.Groups[1].Value)
+}
+
+function Test-OptimalEvidenceKeyWanted {
+    param([string]$Key,[hashtable]$WantedKeys)
+    if ($null -eq $WantedKeys) { return $true }
+    return $WantedKeys.ContainsKey(([string]$Key).Trim().ToLowerInvariant())
+}
+
 function Get-OptimalEvidence {
+    param([hashtable]$WantedKeys = $null)
+
     $cycles = @{}
+    if ($null -ne $WantedKeys -and $WantedKeys.Count -eq 0) {
+        return [pscustomobject]@{ cycles=@{}; observations=@{}; restockStock=@{} }
+    }
+
     foreach ($path in @($SeedCycleFile, $RuntimeCycleFile)) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
         foreach ($line in Get-Content -LiteralPath $path) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $lineKey=Get-OptimalEvidenceLineKey -Line $line
+            if ([string]::IsNullOrWhiteSpace($lineKey) -or -not (Test-OptimalEvidenceKeyWanted -Key $lineKey -WantedKeys $WantedKeys)) { continue }
             try {
                 $row = $line | ConvertFrom-Json
-                $country = [string](Get-OptimalProperty $row 'country')
-                $itemId = [int](Get-OptimalProperty $row 'itemId')
-                if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0) { continue }
-                Add-EvidenceRow -Map $cycles -Key ($country + ':' + $itemId) -Value $row
+                Add-EvidenceRow -Map $cycles -Key $lineKey -Value $row
             } catch { }
         }
     }
@@ -118,12 +147,11 @@ function Get-OptimalEvidence {
         if (-not (Test-Path -LiteralPath $path)) { continue }
         foreach ($line in Get-Content -LiteralPath $path) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $lineKey=Get-OptimalEvidenceLineKey -Line $line
+            if ([string]::IsNullOrWhiteSpace($lineKey) -or -not (Test-OptimalEvidenceKeyWanted -Key $lineKey -WantedKeys $WantedKeys)) { continue }
             try {
                 $row = $line | ConvertFrom-Json
-                $country = [string](Get-OptimalProperty $row 'country')
-                $itemId = [int](Get-OptimalProperty $row 'itemId')
-                if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0) { continue }
-                Add-EvidenceRow -Map $observations -Key ($country + ':' + $itemId) -Value $row
+                Add-EvidenceRow -Map $observations -Key $lineKey -Value $row
             } catch { }
         }
     }
@@ -140,8 +168,8 @@ function Get-OptimalEvidence {
         $restockStock[$key] = [long[]]$samples
     }
 
-    # Stored cycles remain untouched. Only the evidence handed to route and
-    # opportunity forecasts excludes cadence-incompatible capture gaps.
+    # Stored cycles remain untouched. Only the evidence handed to opportunity
+    # forecasts excludes cadence-incompatible or boundary-unverifiable capture gaps.
     foreach ($key in @($cycles.Keys)) {
         $cycles[$key] = [object[]]@(Select-CadenceAwareForecastCycles -Cycles @($cycles[$key]))
     }
