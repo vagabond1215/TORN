@@ -124,7 +124,7 @@ function Write-UpdatePerformanceSummary {
     $script:UpdatePerformanceWall.Stop()
     $totalCpu = [Math]::Max(0.0, (Get-UpdateCpuMilliseconds) - [double]$script:UpdatePerformanceCpuStart)
     $stageParts = New-Object System.Collections.Generic.List[string]
-    foreach ($row in @($script:UpdatePerformanceRows)) {
+    foreach ($row in $script:UpdatePerformanceRows) {
         [void]$stageParts.Add(('{0}:{1}cpu/{2}wall' -f
             [string]$row.Name,
             [long][Math]::Round([double]$row.CpuMs),
@@ -134,7 +134,7 @@ function Write-UpdatePerformanceSummary {
         [string]$script:UpdatePerformanceOutcome,
         [long][Math]::Round($totalCpu),
         [long][Math]::Round([double]$script:UpdatePerformanceWall.Elapsed.TotalMilliseconds),
-        ($stageParts -join ','))
+        ($stageParts.ToArray() -join ','))
     $record = ('{0} {1}' -f
         [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ',[System.Globalization.CultureInfo]::InvariantCulture),
         $message)
