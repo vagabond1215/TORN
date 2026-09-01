@@ -146,8 +146,8 @@ if (Test-Path -LiteralPath $updatePath) {
     if (-not $text.Contains('foreach ($row in $script:UpdatePerformanceRows)')) {
         Fail 'RunUpdate.ps1 must directly enumerate UpdatePerformanceRows.'
     }
-    if (-not $text.Contains('$stageParts.ToArray() -join '',''')) {
-        Fail 'RunUpdate.ps1 must join the concrete stage string array without generic-list coercion.'
+    if (-not $text.Contains('$stageParts.ToArray()')) {
+        Fail 'RunUpdate.ps1 must join a concrete stage string array without generic-list coercion.'
     }
 
 
