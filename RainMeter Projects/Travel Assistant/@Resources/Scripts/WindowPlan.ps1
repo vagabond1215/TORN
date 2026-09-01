@@ -78,7 +78,8 @@ function Get-RecurringScenarioModel {
         [ValidateSet('sellout','restock')][string]$AnchorPhase,
         [long]$NowEpoch,
         [long]$FutureHorizonSeconds = 86400L,
-        [long]$MinimumSafeWindowSeconds = 60L
+        [long]$MinimumSafeWindowSeconds = 60L,
+        [int]$MaximumOrdinal = 1
     )
     $usable = @(Get-WindowUsableCycles -Cycles $Cycles)
     if ($AnchorAt -le 0 -or $usable.Count -eq 0) {
@@ -95,16 +96,20 @@ function Get-RecurringScenarioModel {
         $available = [long]$cycle.availabilitySeconds
         $period = $delay + $available
         if ($period -le 0) { continue }
-        $startAge = if ($AnchorPhase -eq 'restock') { 0L } else { $delay }
-        $ordinal = 0
-        while ($startAge -lt $maxAge -and $ordinal -lt 2048) {
+        # Only the current and immediately next cycle are actionable in the
+        # current UI. Always materialize ordinal 0/1 even when a long cycle lies
+        # beyond the old fixed 24-hour horizon; do not spend CPU on +2/+3.
+        for ($ordinal=0; $ordinal -le [Math]::Max(0,$MaximumOrdinal); $ordinal++) {
+            $startAge = if ($AnchorPhase -eq 'restock') {
+                [long]($ordinal * $period)
+            } else {
+                [long](($ordinal * $period) + $delay)
+            }
             $endAge = $startAge + $available
             if (-not $groups.ContainsKey($ordinal)) { $groups[$ordinal] = New-Object System.Collections.Generic.List[object] }
             $groups[$ordinal].Add([pscustomobject]@{ startAge=[long]$startAge; endAge=[long]$endAge })
             Add-WindowDelta -Map $deltas -At $startAge -Delta 1
             Add-WindowDelta -Map $deltas -At $endAge -Delta -1
-            $startAge += $period
-            $ordinal++
         }
     }
 
@@ -291,8 +296,10 @@ if ($count -le 0) { return }
 
 $wanted=@{}
 for ($i=1; $i -le $count; $i++) {
-    $key=[string]$state['Opportunity'+$i+'Key']
-    if (-not [string]::IsNullOrWhiteSpace($key)) { $wanted[$key]=$true }
+    $prefix='Opportunity'+$i
+    $key=[string]$state[$prefix+'Key']
+    $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
+    if (-not [string]::IsNullOrWhiteSpace($key) -and $forecastMode -ne 'sleeping_oos') { $wanted[$key]=$true }
 }
 $cycleMap=Read-WindowCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile) -Wanted $wanted
 $travelState=([string]$state['TravelState']).Trim().ToLowerInvariant()
@@ -304,6 +311,12 @@ for ($i=1; $i -le $count; $i++) {
     $prefix='Opportunity'+$i
     $key=[string]$state[$prefix+'Key']
     if ([string]::IsNullOrWhiteSpace($key)) { continue }
+    $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
+    if ($forecastMode -eq 'sleeping_oos') {
+        # OpportunityState already owns the cheap absolute Restocks in ~... state.
+        # Do not deserialize cycle rows or build WP2 probability geometry.
+        continue
+    }
     $countryId=($key -split ':',2)[0]
     $cycles=@()
     if ($cycleMap.ContainsKey($key)) { $cycles=@($cycleMap[$key].ToArray()) }
