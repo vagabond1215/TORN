@@ -284,16 +284,16 @@ local function outboundStatus(row,state,now)
         if number(row.nextRestockAt)>0 then return 'UPCOMING - RESTOCK ESTIMATE OVERDUE' end
         return 'UPCOMING - RESTOCK LEARNING'
     end
-    if plan==nil then return 'EN ROUTE' end
+    if plan==nil then return 'MARKET DATA PENDING' end
     local remaining=liveTravelRemainingSeconds(state,now)
     local landingAt=now+remaining
     local group=landingRelevantGroup(plan,landingAt)
-    if group==nil then return 'EN ROUTE' end
+    if group==nil then return 'MARKET DATA PENDING' end
     local restockAt=expectedRestockAt(plan,group)
     local selloutAt=expectedSelloutAt(plan,group,restockAt)
     if restockAt>now then return 'UPCOMING - RESTOCK IN '..formatDuration(restockAt-now) end
     if selloutAt>now then return 'UPCOMING - SELLOUT IN '..formatDuration(selloutAt-now) end
-    return 'EN ROUTE'
+    return 'MARKET DATA PENDING'
 end
 
 local function currentCycleStatus(plan,now)
@@ -337,9 +337,8 @@ local function updateRow(index,state,lookup,now)
     local travelState=trim(state.TravelState):lower()
 
     if travelState=='returning' then
-        setOption(prefix..'Leave','Text',returningStatus(state,now))
-        setOption(prefix..'Chance','Text','')
-        applyTooltip(prefix,returningTooltip(state,now),'Return estimate')
+        -- Character travel status belongs in MeterTitle. Preserve CardPresenter's
+        -- item-specific post-return departure/window action on each row.
         return
     end
 
