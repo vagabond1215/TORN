@@ -32,6 +32,7 @@ if ($errors.Count -eq 0) {
         'New-TravelAssistantAtomicTempPath',
         'New-TravelAssistantAtomicBackupPath',
         'Open-TravelAssistantSharedReadStream',
+        'Open-TravelAssistantSharedTextReader',
         'Read-TravelAssistantSharedText',
         'Read-TravelAssistantSharedLines',
         '[System.IO.FileShare]::ReadWrite',
