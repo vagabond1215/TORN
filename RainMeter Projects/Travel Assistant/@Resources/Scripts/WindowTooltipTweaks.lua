@@ -104,6 +104,7 @@ local function buildLookup(state)
                 activeSelloutEstimateAt=number(state[prefix..'ActiveSelloutEstimateAt']),
                 currentCycleLeaveDeadlineAt=number(state[prefix..'CurrentCycleLeaveDeadlineAt']),
                 currentCycleSafetyMarginSeconds=number(state[prefix..'CurrentCycleSafetyMarginSeconds']),
+                liveCycleProjectionMode=trim(state[prefix..'LiveCycleProjectionMode']),
                 nextCycleOrdinal=math.floor(number(state[prefix..'NextCycleOrdinal']))
             }
         end
@@ -178,11 +179,12 @@ local function buildHomeTooltip(row,travelText,now)
     local nl='#CRLF#'
 
     if row.currentStock>0 and row.currentCycleReachable and row.activeSelloutEstimateAt>now and row.currentCycleLeaveDeadlineAt>=now then
+        local basis=(row.liveCycleProjectionMode=='historical-duration') and 'active restock + median completed-cycle stock duration' or 'live depletion of current observed stock'
         return 'Estimated Arrival in '..arrival..nl..
             'Current Cycle Sellout: '..formatMoment(row.activeSelloutEstimateAt,now)..nl..
             'Leave Before: '..formatMoment(row.currentCycleLeaveDeadlineAt,now)..nl..
             '5% Sellout Safety: '..formatDuration(row.currentCycleSafetyMarginSeconds)..nl..
-            'Basis: live depletion of current observed stock'
+            'Basis: '..basis
     end
 
     local group=nextCycleGroup(row)
