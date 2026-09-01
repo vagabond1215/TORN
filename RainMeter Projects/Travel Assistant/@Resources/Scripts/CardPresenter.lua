@@ -255,11 +255,12 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         local selloutAt=statePrefix~='' and number(state[statePrefix..'ActiveSelloutEstimateAt']) or 0
         local deadlineAt=statePrefix~='' and number(state[statePrefix..'CurrentCycleLeaveDeadlineAt']) or 0
         local bufferSeconds=statePrefix~='' and number(state[statePrefix..'CurrentCyclePurchaseBufferSeconds']) or 0
-        if currentStock>0 and reachable and selloutAt>now and deadlineAt>now then
+        if currentStock>0 and reachable and selloutAt>now and deadlineAt>=now then
             local arrivalAt=now+flightSeconds
             local p=probabilityAt(plan,arrivalAt)
             local certainty=p>0 and string.format('%.0f%%',p*100) or ''
-            return 'LEAVE BEFORE '..formatDuration(deadlineAt-now),certainty,formatCurrentCycleTooltip(selloutAt,deadlineAt,bufferSeconds,flightSeconds,now)
+            local action=(deadlineAt-now)<=60 and 'LEAVE NOW' or ('LEAVE BEFORE '..formatDuration(deadlineAt-now))
+            return action,certainty,formatCurrentCycleTooltip(selloutAt,deadlineAt,bufferSeconds,flightSeconds,now)
         end
     end
 
