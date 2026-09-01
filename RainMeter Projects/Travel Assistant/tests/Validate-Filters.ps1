@@ -104,6 +104,8 @@ if(Test-Path -LiteralPath $files.PopupHost){
 if(Test-Path -LiteralPath $files.Settings){
  $text=Get-Content -LiteralPath $files.Settings -Raw
  foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1','& $UpdateLauncher -Action Update',"& `$FilterLauncher -Filter 'Ignore'")){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ foreach($token in @('Use 95% MV profit calculation','use95PercentMarketValue')){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ foreach($retiredText in @('OPPORTUNITY SETTINGS','Main sort choices are UPCOMING')){if($text.Contains($retiredText)){Fail "OpenOptimizerSettings.ps1 retains unnecessary settings copy '$retiredText'."}}
  if($text.Contains("Join-Path `$PSScriptRoot 'RunUpdate.ps1'")){Fail 'Optimizer Settings must not bypass LaunchUpdate.ps1.'}
 }
 
