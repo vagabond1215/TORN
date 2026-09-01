@@ -45,7 +45,8 @@ if ($errors.Count -eq 0) {
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
         'statusText(fallbackWindow,fallbackLeave)',
         'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
-        'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','NEXT RESTOCK WITHIN FLIGHT'
+        'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','NEXT RESTOCK WITHIN FLIGHT',
+        'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'"
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
@@ -59,7 +60,8 @@ if ($errors.Count -eq 0) {
         'NextCycleOrdinal',
         '-ActiveSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt)',
         '-SafetyMarginFraction 0.05',
-        '$medianAvailable = Get-StableWindowMedian'
+        '$medianAvailable = Get-StableWindowMedian',
+        'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r'
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
     }
@@ -96,6 +98,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Compact trade-card validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Compact trade-card current/next-cycle validation passed.' -ForegroundColor Green
+Write-Host 'Compact trade-card current/next-cycle and collecting-data validation passed.' -ForegroundColor Green
 Write-Host 'In Torn, current stock uses a 5% sellout safety deadline; otherwise only the immediate next restock exposes Window Open/Best/Closes or Safe Hit state.'
 exit 0
