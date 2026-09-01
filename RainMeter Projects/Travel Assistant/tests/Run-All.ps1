@@ -2,37 +2,29 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
 $TestRoot = (Resolve-Path $PSScriptRoot).Path
-$tests = @(
-    'Validate-TravelAssistant.ps1',
-    'Validate-RainmeterSkin.ps1',
-    'Validate-ItemViewer.ps1',
-    'Validate-ShadowCollection.ps1',
-    'Validate-ItemMetadata.ps1',
-    'Validate-LocalCatalog.ps1',
-    'Validate-ResaleQueue.ps1',
-    'Validate-Filters.ps1',
-    'Validate-TravelContext.ps1',
-    'Validate-OptimalRoute.ps1',
-    'Validate-Distribution.ps1',
-    'Validate-HistoricalTools.ps1',
-    'Run-HistoricalPipelineTests.ps1',
-    'Run-SeedImporterTests.ps1',
-    'Run-ModelTests.ps1',
-    'Run-LiveProviderTests.ps1',
-    'Run-ShadowCollectionTests.ps1',
-    'Run-ItemMetadataTests.ps1',
-    'Run-LocalCatalogTests.ps1',
-    'Run-ResaleQueueTests.ps1',
-    'Run-ResalePriorityTests.ps1',
-    'Run-FilterPreferenceTests.ps1',
-    'Run-TravelContextTests.ps1',
-    'Run-OptimalRouteTests.ps1',
-    'Run-OpportunityStateTests.ps1',
-    'Run-TravelProfileTests.ps1',
-    'Run-TornProfileSyncTests.ps1',
-    'Run-CurrentCapacityTests.ps1',
-    'Run-FinalizeStateTests.ps1'
-)
+$excludedAggregates = @('Run-All.ps1','Run-CurrentAcceptance.ps1')
+$discovered = @(Get-ChildItem -LiteralPath $TestRoot -Filter '*.ps1' -File |
+    Where-Object { $_.Name -notin $excludedAggregates })
+
+# Keep the architecture/syntax gate first, then run every leaf validator and
+# deterministic test in a stable order. Discovery prevents newly added regression
+# tests from silently falling outside the default first-validation path.
+$tests = New-Object System.Collections.Generic.List[string]
+if (@($discovered.Name) -contains 'Validate-TravelAssistant.ps1') {
+    $tests.Add('Validate-TravelAssistant.ps1')
+}
+foreach ($file in @($discovered | Where-Object { $_.Name -like 'Validate-*.ps1' -and $_.Name -ne 'Validate-TravelAssistant.ps1' } | Sort-Object Name)) {
+    $tests.Add($file.Name)
+}
+foreach ($file in @($discovered | Where-Object { $_.Name -like 'Run-*.ps1' } | Sort-Object Name)) {
+    $tests.Add($file.Name)
+}
+
+$expectedLeafCount = $discovered.Count
+if ($tests.Count -ne $expectedLeafCount) {
+    Write-Host ("FAILED: discovered {0} leaf test scripts but scheduled {1}." -f $expectedLeafCount,$tests.Count) -ForegroundColor Red
+    exit 1
+}
 
 foreach ($name in $tests) {
     $path = Join-Path $TestRoot $name
@@ -46,6 +38,6 @@ foreach ($name in $tests) {
 }
 
 Write-Host ''
-Write-Host 'All Travel Assistant 0.6 deterministic/static validations passed.' -ForegroundColor Green
+Write-Host ("All Travel Assistant 0.6 deterministic/static validations passed ({0} leaf scripts)." -f $tests.Count) -ForegroundColor Green
 Write-Host 'This still does not replace live Rainmeter/provider/API validation on Windows.' -ForegroundColor Yellow
 exit 0
