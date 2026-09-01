@@ -126,13 +126,30 @@ if (Test-Path -LiteralPath $updatePath) {
     foreach ($token in @(
         'RuntimeLog.ps1','Write-TravelAssistantLog','Clear-TravelAssistantLatestError','filter-state-error.txt','run-update',
         'UpdatePerformanceRows','System.Diagnostics.Stopwatch','TotalProcessorTime','New-UpdateStageTimer','Complete-UpdateStageTimer',
-        'Write-UpdatePerformanceSummary',"-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
+        'Write-UpdatePerformanceSummary','Write-UpdatePerformanceRecord','update-performance.log',
+        'Get-TravelAssistantAtomicMutexName -Path $UpdatePerformanceFile','[System.IO.FileShare]::ReadWrite','[System.IO.FileShare]::Delete',
+        "-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
         "'publish-ui'","'publish-heartbeat'","'generation-cleanup'"
     )) {
         if (-not $text.Contains($token)) { Fail "RunUpdate.ps1 missing centralized diagnostic/performance token '$token'." }
     }
     if ($text.Contains("Invoke-HistoryMaintenance -Phase 'PostUpdate'")) {
         Fail 'RunUpdate.ps1 must not pay for the retired no-op PostUpdate history pass on every heartbeat.'
+    }
+}
+
+$analyzerPath = Join-Path $ProjectRoot 'tools\Analyze-UpdatePerformance.ps1'
+if (-not (Test-Path -LiteralPath $analyzerPath)) {
+    Fail 'Missing tools\Analyze-UpdatePerformance.ps1.'
+} else {
+    $analyzerText = Get-Content -LiteralPath $analyzerPath -Raw
+    foreach ($token in @(
+        'update-performance.log',
+        'AtomicFile.ps1',
+        'Open-TravelAssistantSharedTextReader -Path $sourcePath',
+        'No updater performance samples are present yet.'
+    )) {
+        if (-not $analyzerText.Contains($token)) { Fail "Analyze-UpdatePerformance.ps1 missing durable telemetry token '$token'." }
     }
 }
 
