@@ -668,7 +668,8 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $foreignPrice = [long](Get-OptimalProperty $market 'lastForeignPrice')
         if ($foreignPrice -le 0) { continue }
         $sellBasis = [long][Math]::Floor([long]$resaleUse.marketValue * ($basisPercent/100.0))
-        $profitPerItem = [long]($sellBasis-$foreignPrice)
+        $unitMarketTax = if ($marketFeePercent -eq 5) { [long][Math]::Floor([double]$sellBasis*0.05) } else { 0L }
+        $profitPerItem = [long]($sellBasis-$foreignPrice-$unitMarketTax)
         if ([bool]$preferences.showProfitableOnly -and $profitPerItem -le 0) { continue }
 
         $item = [pscustomobject]@{ itemId=$itemId; category=[string]$metadata.category }
@@ -739,11 +740,12 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                         if ($sampleQuantity -gt 0) { $availableQuantity=[Math]::Min($capacity,[int]$sampleQuantity) }
                     }
                     $quantity=[Math]::Max(1,[Math]::Min($capacity,[int]$availableQuantity))
-                    $grossProfit=[long]($quantity*$profitPerItem)
                     $remaining=[Math]::Max(1L,$restockEstimateAt-$Now)
                     $elapsedSeconds=[Math]::Max(1L,$remaining+$returnSeconds+$purchaseBuffer)
-                    $elapsedHours=[Math]::Max(1.0/60.0,$elapsedSeconds/3600.0)
-                    $profitPerHour=[double]$grossProfit/$elapsedHours
+                    $tripEconomics=Get-OpportunityEconomics -MarketValue ([long]$resaleUse.marketValue) -ForeignPrice $foreignPrice -Quantity $quantity -BasisPercent $basisPercent -MarketFeePercent $marketFeePercent -ElapsedSeconds $elapsedSeconds
+                    $grossProfit=[long]$tripEconomics.make
+                    $profitPerHour=[double]$tripEconomics.makePerHour
+                    $profitPerItem=[long]$tripEconomics.profitEach
                     $priceColor=if (-not $marketValueFresh) { '145,152,164,255' } elseif ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
                     $lifetimeShortest=[long]$restockSummary.lifetimeShortestDelaySeconds
                     $lifetimeLongest=[long]$restockSummary.lifetimeLongestDelaySeconds
@@ -776,6 +778,16 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                         quantity=[int]$quantity
                         grossProfit=$grossProfit
                         profitPerHour=[double]$profitPerHour
+                        saleBasis=[long]$tripEconomics.saleEach
+                        purchaseCost=[long]$tripEconomics.purchaseCost
+                        grossSale=[long]$tripEconomics.grossSale
+                        grossProfitBeforeTax=[long]$tripEconomics.grossProfit
+                        marketTax=[long]$tripEconomics.marketTax
+                        make=[long]$tripEconomics.make
+                        profitEach=[long]$tripEconomics.profitEach
+                        grossProfitPerHour=[double]$tripEconomics.grossProfitPerHour
+                        marketFeePercent=[int]$tripEconomics.marketFeePercent
+                        basisPercent=[int]$tripEconomics.basisPercent
                         elapsedSeconds=[long]$elapsedSeconds
                         windowStartAt=[long]$restockEstimateAt
                         windowEndAt=0L
@@ -904,9 +916,10 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             if (-not (Test-OptimalWastePolicy -Waste $nerve -Policy ([string]$preferences.nerveWastePolicy) -MaximumLoss ([int]$preferences.maxNerveLoss))) { $wasteBlocked++; continue }
         }
 
-        $grossProfit = [long]($quantity*$profitPerItem)
-        $elapsedHours = [Math]::Max(1.0/60.0,$elapsedSeconds/3600.0)
-        $profitPerHour = [double]$grossProfit/$elapsedHours
+        $tripEconomics=Get-OpportunityEconomics -MarketValue ([long]$resaleUse.marketValue) -ForeignPrice $foreignPrice -Quantity $quantity -BasisPercent $basisPercent -MarketFeePercent $marketFeePercent -ElapsedSeconds $elapsedSeconds
+        $grossProfit = [long]$tripEconomics.make
+        $profitPerHour = [double]$tripEconomics.makePerHour
+        $profitPerItem = [long]$tripEconomics.profitEach
         $priceColor = if (-not $marketValueFresh) { '145,152,164,255' } elseif ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
         $leaveText = if ($leaveDelaySeconds -le 60) { 'LEAVE NOW' } else { 'LEAVE '+(Format-OpportunityDuration $leaveDelaySeconds) }
         if ($travelState -in @('abroad','foreign') -and $outboundSeconds -eq 0) { $leaveText = 'AT DEST.' }
@@ -915,7 +928,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $chanceText = if ($probabilityKnown) { ('{0:N0}% modeled hit' -f (100.0*$probability)) } else { 'hit likelihood learning' }
         $mvStateText = if ($marketValueFresh) { 'MV fresh' } else { 'MV STALE '+(Format-OpportunityDuration ([long]$resaleUse.ageSeconds))+' old; refresh queued' }
         $stockStateText = if ($useForecastOnly) { 'stock forecast only' } else { 'stock live' }
-        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | unit spread {5} x {6} = {7} gross at {8}% MV | {9}/hr | {10} | foreign {11}, MV {12} ({13}); {14}' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney $grossProfit),$basisPercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resaleUse.marketValue)),$mvStateText,$stockStateText)
+        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | net each {5} x {6} = {7} make | gross sale {8} at {9}% MV | market tax {10} ({11}%) | {12}/hr net | {13} | foreign {14}, MV {15} ({16}); {17}' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney ([long]$tripEconomics.make)),(Format-OpportunityMoney ([long]$tripEconomics.grossSale)),$basisPercent,(Format-OpportunityMoney ([long]$tripEconomics.marketTax)),$marketFeePercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resaleUse.marketValue)),$mvStateText,$stockStateText)
 
         $rows.Add([pscustomobject]@{
             key=$marketKey
@@ -931,6 +944,16 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             quantity=[int]$quantity
             grossProfit=$grossProfit
             profitPerHour=[double]$profitPerHour
+            saleBasis=[long]$tripEconomics.saleEach
+            purchaseCost=[long]$tripEconomics.purchaseCost
+            grossSale=[long]$tripEconomics.grossSale
+            grossProfitBeforeTax=[long]$tripEconomics.grossProfit
+            marketTax=[long]$tripEconomics.marketTax
+            make=[long]$tripEconomics.make
+            profitEach=[long]$tripEconomics.profitEach
+            grossProfitPerHour=[double]$tripEconomics.grossProfitPerHour
+            marketFeePercent=[int]$tripEconomics.marketFeePercent
+            basisPercent=[int]$tripEconomics.basisPercent
             elapsedSeconds=[long]$elapsedSeconds
             windowStartAt=[long]$windowStartAt
             windowEndAt=[long]$windowEndAt
