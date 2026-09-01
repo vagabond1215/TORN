@@ -83,6 +83,7 @@ if ($errors.Count -eq 0) {
         'Get-RecurringScenarioModel','safeStartAt = $lateRestockAt','safeEndAt = $earlySelloutAt','MinimumSafeWindowSeconds = 60L',
         'bestProbability','Convert-WindowPlanMachineText','Select-WindowPlanGroup','WP2:',
         '$RuntimeCycleFile','$SeedCycleFile','MaximumSamples = 48','$cycleParts','$phaseCode','restockDelaySeconds','availabilitySeconds',
+        'MaximumOrdinal = 1',"'sleeping_oos'",'Do not deserialize cycle rows or build WP2 probability geometry',
         'Test-WindowPriceVaries','cycleAnalytics','foreignPrice','currentForeignPrice','lastForeignPrice','priceEvents','PV1#','PV0#'
     )) {
         if (-not $windowPlan.Contains($token)) { Fail "WindowPlan.ps1 missing '$token'." }
