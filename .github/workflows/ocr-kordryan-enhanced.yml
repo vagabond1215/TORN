@@ -1,0 +1,46 @@
+name: Enhanced OCR Kordryan ending
+
+on:
+  push:
+    branches:
+      - process/growth-submissions-2026-08-10-b
+    paths:
+      - '.github/workflows/ocr-kordryan-enhanced.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr imagemagick
+      - name: Enhanced OCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          f='Growth comp/Kordryan_ending.webp'
+          identify "$f" > kordryan_ocr_report.txt
+          magick "$f" -resize 300% -colorspace Gray -contrast-stretch 1%x1% /tmp/kord_full.png
+          echo '=== FULL ENHANCED PSM6 ===' >> kordryan_ocr_report.txt
+          tesseract /tmp/kord_full.png stdout --psm 6 2>/dev/null >> kordryan_ocr_report.txt || true
+          echo '=== FULL ENHANCED PSM11 ===' >> kordryan_ocr_report.txt
+          tesseract /tmp/kord_full.png stdout --psm 11 2>/dev/null >> kordryan_ocr_report.txt || true
+          read w h < <(identify -format '%w %h' "$f")
+          crop_h=$((h*60/100))
+          magick "$f" -crop "${w}x${crop_h}+0+0" +repage -resize 400% -colorspace Gray -contrast-stretch 1%x1% /tmp/kord_top.png
+          echo '=== TOP60 ENHANCED PSM6 ===' >> kordryan_ocr_report.txt
+          tesseract /tmp/kord_top.png stdout --psm 6 2>/dev/null >> kordryan_ocr_report.txt || true
+          echo '=== TOP60 TSV DIGIT TOKENS ===' >> kordryan_ocr_report.txt
+          tesseract /tmp/kord_top.png stdout --psm 11 tsv 2>/dev/null | awk -F '\t' 'NR==1 || ($11 ~ /[0-9]/ && $10+0 >= 20)' >> kordryan_ocr_report.txt || true
+      - name: Commit report
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add kordryan_ocr_report.txt
+          git commit -m 'Generate enhanced OCR for Kordryan ending'
+          git push

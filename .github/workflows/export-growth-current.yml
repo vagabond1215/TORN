@@ -1,0 +1,26 @@
+name: Export current growth submissions
+
+on:
+  push:
+    branches:
+      - process/growth-submissions-2026-08-10-b
+    paths:
+      - '.github/workflows/export-growth-current.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: growth-current
+          path: |
+            Growth comp/AUG2026 Growth Contest.xlsx
+            Growth comp/*_Ending*.webp
+            Growth comp/*_ending*.webp
+            Growth comp/*_Ending*.jpg
+            Growth comp/*_ending*.jpg
+            Growth comp/*_Ending*.png
+            Growth comp/*_ending*.png

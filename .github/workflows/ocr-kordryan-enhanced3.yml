@@ -1,0 +1,43 @@
+name: Enhanced OCR Kordryan ending v3
+
+on:
+  push:
+    branches:
+      - process/growth-submissions-2026-08-10-b
+    paths:
+      - '.github/workflows/ocr-kordryan-enhanced3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr imagemagick
+      - name: OCR and always preserve report
+        shell: bash
+        run: |
+          f='Growth comp/Kordryan_ending.webp'
+          : > kordryan_ocr_report3.txt
+          identify "$f" >> kordryan_ocr_report3.txt 2>&1 || true
+          convert "$f" -resize 300% -colorspace Gray -contrast-stretch 1%x1% /tmp/kord_full.png || true
+          echo '=== FULL ENHANCED PSM6 ===' >> kordryan_ocr_report3.txt
+          tesseract /tmp/kord_full.png stdout --psm 6 2>/dev/null >> kordryan_ocr_report3.txt || true
+          echo '=== FULL ENHANCED PSM11 ===' >> kordryan_ocr_report3.txt
+          tesseract /tmp/kord_full.png stdout --psm 11 2>/dev/null >> kordryan_ocr_report3.txt || true
+          convert "$f" -resize 400% -colorspace Gray -threshold 58% /tmp/kord_thresh.png || true
+          echo '=== THRESHOLD PSM6 ===' >> kordryan_ocr_report3.txt
+          tesseract /tmp/kord_thresh.png stdout --psm 6 2>/dev/null >> kordryan_ocr_report3.txt || true
+          echo '=== THRESHOLD PSM11 ===' >> kordryan_ocr_report3.txt
+          tesseract /tmp/kord_thresh.png stdout --psm 11 2>/dev/null >> kordryan_ocr_report3.txt || true
+      - name: Commit report
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add kordryan_ocr_report3.txt
+          git commit -m 'Generate enhanced OCR v3 for Kordryan ending'
+          git push
