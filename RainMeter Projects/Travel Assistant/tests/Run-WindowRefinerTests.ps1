@@ -148,6 +148,18 @@ Assert-True (-not [bool]$missedCurrent.reachable) 'Current cycle must fall back 
 $currentProbability=Get-StableCurrentCycleArrivalProbability -Cycles $projectionCycles -ActiveRestockAt 10000L -ArrivalAt 11250L
 Assert-Near ([double]$currentProbability) (2.0/3.0) 0.0001 'Current-cycle arrival confidence should use completed-cycle availability durations at the live restock anchor.'
 
+# Long but valid cycles must still construct the immediate next cycle even when the
+# period exceeds the default 24-hour display horizon.
+$longCycleAnchor=100000L
+$longCycleNow=$longCycleAnchor+7200L
+$longCycles=@(
+    [pscustomobject]@{schemaVersion=2;restockDelaySeconds=54000L;availabilitySeconds=43200L;soldOutAt=70001L;forecastEligible=$true;availabilityEligible=$true;restockDelayEligible=$true;trendEligible=$true;restockBoundaryQuality='observed';soldOutBoundaryQuality='observed';previousSellOutBoundaryQuality='observed'},
+    [pscustomobject]@{schemaVersion=2;restockDelaySeconds=55800L;availabilitySeconds=45000L;soldOutAt=70002L;forecastEligible=$true;availabilityEligible=$true;restockDelayEligible=$true;trendEligible=$true;restockBoundaryQuality='bounded';soldOutBoundaryQuality='observed';previousSellOutBoundaryQuality='bounded'},
+    [pscustomobject]@{schemaVersion=2;restockDelaySeconds=57600L;availabilitySeconds=46800L;soldOutAt=70003L;forecastEligible=$true;availabilityEligible=$true;restockDelayEligible=$true;trendEligible=$true;restockBoundaryQuality='observed';soldOutBoundaryQuality='bounded';previousSellOutBoundaryQuality='observed'}
+)
+$longModel=Get-StableRecurringScenarioModel -Cycles $longCycles -AnchorAt $longCycleAnchor -AnchorPhase restock -NowEpoch $longCycleNow -FutureHorizonSeconds 86400L
+Assert-True (@($longModel.groups | Where-Object { [int]$_.ordinal -eq 1 }).Count -eq 1) 'Immediate next cycle must exist even when its long period extends beyond the default 24-hour horizon.'
+
 # Selection is chronological. A near-term >50% Best Hit should not be skipped just
 # because some later cycle eventually has a Safe Window.
 $selectionModel=[pscustomobject]@{ groups=@(
