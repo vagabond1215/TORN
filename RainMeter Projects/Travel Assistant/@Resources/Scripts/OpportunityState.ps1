@@ -35,6 +35,41 @@ function Format-OpportunityMoney {
     return ('${0:N0}' -f $Value)
 }
 
+function Get-OpportunityEconomics {
+    param(
+        [long]$MarketValue,
+        [long]$ForeignPrice,
+        [int]$Quantity,
+        [int]$BasisPercent,
+        [int]$MarketFeePercent,
+        [long]$ElapsedSeconds
+    )
+    $quantity=[Math]::Max(0,$Quantity)
+    $basis=if ($BasisPercent -eq 95) { 95 } else { 100 }
+    $fee=if ($MarketFeePercent -eq 5) { 5 } else { 0 }
+    $saleEach=if ($MarketValue -gt 0) { [long][Math]::Floor([double]$MarketValue*($basis/100.0)) } else { 0L }
+    $purchaseCost=[long]([Math]::Max(0L,$ForeignPrice)*$quantity)
+    $grossSale=[long]($saleEach*$quantity)
+    $grossProfit=[long]($grossSale-$purchaseCost)
+    $marketTax=if ($grossSale -gt 0 -and $fee -gt 0) { [long][Math]::Floor([double]$grossSale*($fee/100.0)) } else { 0L }
+    $make=[long]($grossProfit-$marketTax)
+    $each=if ($quantity -gt 0) { [long][Math]::Round($make/[double]$quantity) } else { 0L }
+    $hours=[Math]::Max(1.0/60.0,[Math]::Max(1L,$ElapsedSeconds)/3600.0)
+    return [pscustomobject]@{
+        basisPercent=$basis
+        marketFeePercent=$fee
+        saleEach=$saleEach
+        purchaseCost=$purchaseCost
+        grossSale=$grossSale
+        grossProfit=$grossProfit
+        marketTax=$marketTax
+        make=$make
+        profitEach=$each
+        grossProfitPerHour=([double]$grossProfit/$hours)
+        makePerHour=([double]$make/$hours)
+    }
+}
+
 function Add-OpportunityDelta {
     param([hashtable]$Map,[long]$At,[int]$Delta)
     $key = [string]$At
@@ -437,6 +472,7 @@ function Write-OpportunityProjection {
             'Key','RankText','OptimalText','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
             'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip',
             'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds',
+            'MarketValueValue','SaleBasisValue','PurchaseCostValue','GrossSaleValue','GrossProfitValue','MarketTaxValue','MakeValue','ProfitEachValue','GrossProfitHourValue','MarketFeePercent','MvBasisPercent','TakeValue',
             'ForecastMode','RestockEstimateAt','RestockAverageDelaySeconds','RestockEarliestDelaySeconds','RestockLatestDelaySeconds',
             'RestockLifetimeShortestDelaySeconds','RestockLifetimeLongestDelaySeconds','RestockSampleCount'
         )) {
@@ -478,6 +514,18 @@ function Write-OpportunityProjection {
         $State['Opportunity'+$n+'Tooltip'] = [string]$row.tooltip
         $State['Opportunity'+$n+'GrossValue'] = [long]$row.grossProfit
         $State['Opportunity'+$n+'ProfitHourValue'] = ('{0:R}' -f [double]$row.profitPerHour)
+        $State['Opportunity'+$n+'MarketValueValue'] = if ($row.PSObject.Properties['marketValue']) { [long]$row.marketValue } else { 0L }
+        $State['Opportunity'+$n+'SaleBasisValue'] = if ($row.PSObject.Properties['saleBasis']) { [long]$row.saleBasis } else { 0L }
+        $State['Opportunity'+$n+'PurchaseCostValue'] = if ($row.PSObject.Properties['purchaseCost']) { [long]$row.purchaseCost } else { 0L }
+        $State['Opportunity'+$n+'GrossSaleValue'] = if ($row.PSObject.Properties['grossSale']) { [long]$row.grossSale } else { 0L }
+        $State['Opportunity'+$n+'GrossProfitValue'] = if ($row.PSObject.Properties['grossProfitBeforeTax']) { [long]$row.grossProfitBeforeTax } else { [long]$row.grossProfit }
+        $State['Opportunity'+$n+'MarketTaxValue'] = if ($row.PSObject.Properties['marketTax']) { [long]$row.marketTax } else { 0L }
+        $State['Opportunity'+$n+'MakeValue'] = if ($row.PSObject.Properties['make']) { [long]$row.make } else { [long]$row.grossProfit }
+        $State['Opportunity'+$n+'ProfitEachValue'] = if ($row.PSObject.Properties['profitEach']) { [long]$row.profitEach } else { 0L }
+        $State['Opportunity'+$n+'GrossProfitHourValue'] = if ($row.PSObject.Properties['grossProfitPerHour']) { ('{0:R}' -f [double]$row.grossProfitPerHour) } else { ('{0:R}' -f [double]$row.profitPerHour) }
+        $State['Opportunity'+$n+'MarketFeePercent'] = if ($row.PSObject.Properties['marketFeePercent']) { [int]$row.marketFeePercent } else { 0 }
+        $State['Opportunity'+$n+'MvBasisPercent'] = if ($row.PSObject.Properties['basisPercent']) { [int]$row.basisPercent } else { 100 }
+        $State['Opportunity'+$n+'TakeValue'] = if ($row.PSObject.Properties['purchaseCost']) { [long]$row.purchaseCost } else { 0L }
         $State['Opportunity'+$n+'WindowStartAt'] = [long]$row.windowStartAt
         $State['Opportunity'+$n+'ProbabilityValue'] = if ($probabilityKnown) { ('{0:R}' -f [double]$row.probability) } else { '-1' }
         $State['Opportunity'+$n+'ElapsedSeconds'] = [long]$row.elapsedSeconds
@@ -522,6 +570,7 @@ if ($null -ne $optimizerSettings) {
     if ($optimizerSettings.PSObject.Properties['purchaseBufferSeconds']) { $purchaseBuffer = [Math]::Max(0L,[long]$optimizerSettings.purchaseBufferSeconds) }
 }
 $basisPercent = if ([bool]$preferences.use95PercentMarketValue) { 95 } else { 100 }
+$marketFeePercent = if ([int]$preferences.itemMarketFeePercent -eq 5) { 5 } else { 0 }
 $travelMode = [string]$preferences.travelMode
 $staleAfter = [Math]::Max(60L,[long]$settings.staleAfterSeconds)
 $forecastStockMaxAge = 21600L
