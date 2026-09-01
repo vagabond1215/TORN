@@ -25,7 +25,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ShadowCollector.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-CountryProviderCode','Get-LiveStockObservationsForCountry','Write-SharedAppendBytes','Append-JsonLine','Flush-PendingJsonLines','Invalidate-PhaseAnchorForGap','Test-ForecastBoundaryQuality','Update-CycleState','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
+$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-CountryProviderCode','Get-LiveStockObservationsForCountry','Write-SharedAppendBytes','Append-JsonLine','Flush-PendingJsonLines','Invalidate-PhaseAnchorForGap','Test-ForecastBoundaryQuality','Get-CycleLifetimeStats','Update-ActiveCyclePriceExtrema','Update-DestinationLifetimeStats','Update-CycleState','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -183,6 +183,19 @@ $positiveObservation = [pscustomobject]@{
 }
 $null = Update-CycleState -DestState $destState -Observation $positiveObservation
 
+$priceOnlyObservation=[pscustomobject]@{
+    timestamp=240
+    country='united_kingdom'
+    itemId=266
+    stock=400
+    foreignPrice=180
+    source='prometheus'
+    sourceTimestamp=240
+}
+Update-ActiveCyclePriceExtrema -DestState $destState -Observation $priceOnlyObservation
+Assert-Equal 'Active cycle retains minimum observed foreign price' ([long]$destState.activeCycle.minimumForeignPrice) 180
+Assert-Equal 'Active cycle retains maximum observed foreign price' ([long]$destState.activeCycle.maximumForeignPrice) 200
+
 $soldOutObservation = [pscustomobject]@{
     timestamp = 260
     country = 'united_kingdom'
@@ -199,6 +212,19 @@ Assert-Equal 'Completed cycle uses conservative confirmed availability' ([long]$
 Assert-Equal 'Completed cycle retains maximum availability bound' ([long]$completed.availabilityMaximumSeconds) 160
 Assert-Equal 'Completed cycle restock delay is isolated' ([long]$completed.restockDelaySeconds) 100
 Assert-True 'Bounded completed cycle remains forecast eligible' ([bool]$completed.forecastEligible)
+Assert-Equal 'Completed cycle representative sellout is first observed OOS timestamp' ([long]$completed.soldOutAt) 260
+Assert-Equal 'Completed cycle keeps lower sellout uncertainty bound' ([long]$completed.soldOutLowerBoundAt) 230
+Assert-Equal 'Completed cycle retains minimum foreign price from active stock' ([long]$completed.minimumForeignPrice) 180
+Assert-Equal 'Completed cycle retains maximum foreign price from active stock' ([long]$completed.maximumForeignPrice) 200
+
+Update-DestinationLifetimeStats -DestState $destState -CompletedCycle $completed
+$lifetime=Get-CycleLifetimeStats -DestState $destState
+Assert-Equal 'Lifetime shortest restock period is retained incrementally' ([long]$lifetime.shortestRestockDelaySeconds) 100
+Assert-Equal 'Lifetime shortest restock period keeps its starting sellout timestamp' ([long]$lifetime.shortestRestockSoldOutAt) 100
+Assert-Equal 'Lifetime longest restock period is retained incrementally' ([long]$lifetime.longestRestockDelaySeconds) 100
+Assert-Equal 'Lifetime minimum foreign price is retained with completed-cycle sellout association' ([long]$lifetime.minimumForeignPrice) 180
+Assert-Equal 'Lifetime minimum price associates with representative sellout timestamp' ([long]$lifetime.minimumForeignPriceSoldOutAt) 260
+Assert-Equal 'Lifetime maximum foreign price is retained with completed-cycle sellout association' ([long]$lifetime.maximumForeignPrice) 200
 
 $gapPolicy = [pscustomobject]@{
     expectedPollSeconds=60
