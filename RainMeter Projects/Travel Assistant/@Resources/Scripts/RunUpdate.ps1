@@ -32,6 +32,7 @@ $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $UpdatePerformanceFile = Join-Path $RuntimeDir 'update-performance.log'
+$UpdatePerformanceErrorFile = Join-Path $RuntimeDir 'update-performance-error.txt'
 $HistoryErrorFile = Join-Path $RuntimeDir 'history-maintenance-error.txt'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $CollectedStateErrorFile = Join-Path $RuntimeDir 'collected-state-error.txt'
@@ -106,58 +107,51 @@ function Complete-UpdateStageTimer {
 function Write-UpdatePerformanceRecord {
     param([Parameter(Mandatory = $true)][string]$Line)
 
-    # RunUpdate already owns the single updater mutex, so performance telemetry has
-    # exactly one writer. Reuse the proven atomic publication primitive instead of a
-    # second bespoke append/FileStream path. Keep a bounded history for profiling.
-    $existing = ''
-    if (Test-Path -LiteralPath $UpdatePerformanceFile) {
-        try { $existing = Read-TravelAssistantSharedText -Path $UpdatePerformanceFile }
-        catch { $existing = '' }
-    }
-
-    $lines = New-Object System.Collections.Generic.List[string]
-    if (-not [string]::IsNullOrWhiteSpace($existing)) {
-        foreach ($existingLine in @([System.Text.RegularExpressions.Regex]::Split($existing.TrimEnd(),"\r\n|\n|\r"))) {
-            if (-not [string]::IsNullOrWhiteSpace($existingLine)) { [void]$lines.Add([string]$existingLine) }
-        }
-    }
-    [void]$lines.Add($Line)
-
-    # 1,000 one-minute samples is more than 16 hours of history and keeps telemetry
-    # small enough that atomic rewrite cost remains negligible.
-    $retained = @($lines | Select-Object -Last 1000)
-    $text = (($retained -join [Environment]::NewLine) + [Environment]::NewLine)
-    Write-TravelAssistantAtomicText -Path $UpdatePerformanceFile -Text $text
+    New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+    $payload = $Line + [Environment]::NewLine
+    [System.IO.File]::AppendAllText(
+        $UpdatePerformanceFile,
+        $payload,
+        [System.Text.UTF8Encoding]::new($false)
+    )
 }
 
 function Write-UpdatePerformanceSummary {
-    if (-not $script:UpdatePerformanceActive) { return }
-    try {
-        $script:UpdatePerformanceWall.Stop()
-        $totalCpu = [Math]::Max(0.0, (Get-UpdateCpuMilliseconds) - [double]$script:UpdatePerformanceCpuStart)
-        $stageParts = New-Object System.Collections.Generic.List[string]
-        foreach ($row in @($script:UpdatePerformanceRows)) {
-            [void]$stageParts.Add(('{0}:{1}cpu/{2}wall' -f
-                [string]$row.Name,
-                [long][Math]::Round([double]$row.CpuMs),
-                [long][Math]::Round([double]$row.WallMs)))
-        }
-        $message = ('outcome={0} total_cpu_ms={1} total_wall_ms={2} stages={3}' -f
-            [string]$script:UpdatePerformanceOutcome,
-            [long][Math]::Round($totalCpu),
-            [long][Math]::Round([double]$script:UpdatePerformanceWall.Elapsed.TotalMilliseconds),
-            ($stageParts -join ','))
-        $record = ('{0} {1}' -f
-            [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ',[System.Globalization.CultureInfo]::InvariantCulture),
-            $message)
-        Write-UpdatePerformanceRecord -Line $record
+    if (-not $script:UpdatePerformanceActive) {
+        throw 'Updater performance telemetry was not activated after mutex acquisition.'
+    }
 
-        # Keep the main runtime log copy as a convenience only. Profiling correctness
-        # no longer depends on this best-effort logger.
-        if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
-            Write-TravelAssistantLog -Level INFO -Component 'performance' -Message $message
-        }
-    } catch { }
+    $script:UpdatePerformanceWall.Stop()
+    $totalCpu = [Math]::Max(0.0, (Get-UpdateCpuMilliseconds) - [double]$script:UpdatePerformanceCpuStart)
+    $stageParts = New-Object System.Collections.Generic.List[string]
+    foreach ($row in @($script:UpdatePerformanceRows)) {
+        [void]$stageParts.Add(('{0}:{1}cpu/{2}wall' -f
+            [string]$row.Name,
+            [long][Math]::Round([double]$row.CpuMs),
+            [long][Math]::Round([double]$row.WallMs)))
+    }
+    $message = ('outcome={0} total_cpu_ms={1} total_wall_ms={2} stages={3}' -f
+        [string]$script:UpdatePerformanceOutcome,
+        [long][Math]::Round($totalCpu),
+        [long][Math]::Round([double]$script:UpdatePerformanceWall.Elapsed.TotalMilliseconds),
+        ($stageParts -join ','))
+    $record = ('{0} {1}' -f
+        [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ',[System.Globalization.CultureInfo]::InvariantCulture),
+        $message)
+
+    Write-UpdatePerformanceRecord -Line $record
+    if (-not (Test-Path -LiteralPath $UpdatePerformanceFile)) {
+        throw ('Performance telemetry record was not created: ' + $UpdatePerformanceFile)
+    }
+
+    if (Test-Path -LiteralPath $UpdatePerformanceErrorFile) {
+        Remove-Item -LiteralPath $UpdatePerformanceErrorFile -Force -ErrorAction SilentlyContinue
+    }
+
+    # Main runtime-log copy is convenience-only.
+    if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+        Write-TravelAssistantLog -Level INFO -Component 'performance' -Message $message
+    }
 }
 
 function Invoke-TornJsonWithCurl {
@@ -488,7 +482,24 @@ try {
     }
     throw
 } finally {
-    Write-UpdatePerformanceSummary
+    if ($acquired) {
+        try {
+            Write-UpdatePerformanceSummary
+        } catch {
+            try {
+                New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+                $performanceError = $_.Exception.ToString()
+                [System.IO.File]::WriteAllText(
+                    $UpdatePerformanceErrorFile,
+                    $performanceError,
+                    [System.Text.UTF8Encoding]::new($false)
+                )
+                if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+                    Write-TravelAssistantLog -Level WARN -Component 'performance' -Message $performanceError
+                }
+            } catch { }
+        }
+    }
     if ($null -ne $UpdatePerformanceProcess) { try { $UpdatePerformanceProcess.Dispose() } catch { } }
     if ($acquired) { try { $mutex.ReleaseMutex() } catch { } }
     $mutex.Dispose()
