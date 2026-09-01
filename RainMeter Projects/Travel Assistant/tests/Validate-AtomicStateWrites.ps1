@@ -69,7 +69,9 @@ if ($errors.Count -eq 0) {
     }
 
     foreach ($token in @(
-        ". (Join-Path `$PSScriptRoot 'AtomicFile.ps1')",
+        "`$AtomicFileScript = Join-Path `$PSScriptRoot 'AtomicFile.ps1'",
+        '. $AtomicFileScript',
+        'AtomicFile.ps1 is required for shared history maintenance IO.',
         'Open-TravelAssistantSharedTextReader -Path $ObservationFile',
         'Open-TravelAssistantSharedTextReader -Path $CycleFile',
         'New-TravelAssistantAtomicTempPath -Path $ObservationFile',
