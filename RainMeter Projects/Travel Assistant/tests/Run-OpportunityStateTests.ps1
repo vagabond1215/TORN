@@ -102,9 +102,14 @@ try {
     $wantedEvidence=@{'canada:1'=$true}
     $scopedEvidence=Get-OptimalEvidence -WantedKeys $wantedEvidence
     Assert-Equal $scopedEvidence.cycles.Count 1 'Evidence loader should deserialize only computation-eligible cycle keys.'
-    Assert-True $scopedEvidence.cycles.ContainsKey('canada:1') 'Scoped cycle evidence should retain the wanted market.'
+    Assert-True ($scopedEvidence.cycles.ContainsKey('canada:1')) 'Scoped cycle evidence should retain the wanted market.'
     Assert-Equal $scopedEvidence.observations.Count 1 'Evidence loader should deserialize only computation-eligible observation keys.'
-    Assert-True (-not $scopedEvidence.observations.ContainsKey('china:2')) 'Filtered market observations must not enter opportunity evidence.'
+    Assert-True (-not ($scopedEvidence.observations.ContainsKey('china:2'))) 'Filtered market observations must not enter opportunity evidence.'
+
+    $cycleOnlyEvidence=Get-OptimalEvidence -WantedKeys $wantedEvidence -SkipObservations
+    Assert-Equal $cycleOnlyEvidence.cycles.Count 1 'Cycle-only opportunity evidence should retain the wanted completed-cycle key.'
+    Assert-Equal $cycleOnlyEvidence.observations.Count 0 'Opportunity evidence with SkipObservations must not deserialize retained raw observations.'
+    Assert-Equal $cycleOnlyEvidence.restockStock.Count 0 'Opportunity evidence with SkipObservations must not build raw-history restock-stock samples.'
 } finally {
     $RuntimeCycleFile=$oldRuntimeCycleFile
     $SeedCycleFile=$oldSeedCycleFile
