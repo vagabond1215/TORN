@@ -16,7 +16,9 @@ if (-not (Test-Path -LiteralPath $runUpdate)) {
 
     $text = Get-Content -LiteralPath $runUpdate -Raw
     foreach ($token in @(
-        '$mutex.WaitOne(0)',
+        '[int]$MutexWaitSeconds = 0',
+        '$mutex.WaitOne($mutexWaitMilliseconds)',
+        'Timed out waiting {0}s for the Travel Assistant updater mutex.',
         'catch [System.Threading.AbandonedMutexException]',
         '$acquired = $true',
         '$mutex.ReleaseMutex()'
@@ -67,5 +69,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Updater abandoned-mutex recovery validation passed.' -ForegroundColor Green
-Write-Host 'A crashed predecessor cannot poison the named updater mutex; the next owner continues and releases it normally.' -ForegroundColor Green
+Write-Host 'A crashed predecessor cannot poison the named updater mutex; Rainmeter remains non-blocking while manual verification can wait deterministically for the active worker.' -ForegroundColor Green
 exit 0
