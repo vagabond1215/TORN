@@ -219,7 +219,28 @@ function Get-StableRecurringScenarioModel {
     }
 
     $currentAge = [Math]::Max(0L,$NowEpoch-$AnchorAt)
-    $maxAge = $currentAge + [Math]::Max(3600L,$FutureHorizonSeconds)
+
+    # The fixed horizon is only a minimum. Long stock/depletion cycles must still
+    # generate the immediately next cycle; otherwise valid evidence incorrectly
+    # collapses to WAIT DATA simply because the period exceeds 24 hours.
+    $maximumObservedPeriod = 0L
+    $maximumObservedAvailability = 0L
+    foreach ($cycle in $usable) {
+        $cycleDelay=[long]$cycle.restockDelaySeconds
+        $cycleAvailable=[long]$cycle.availabilitySeconds
+        $cyclePeriod=$cycleDelay+$cycleAvailable
+        if ($cyclePeriod -gt $maximumObservedPeriod) { $maximumObservedPeriod=$cyclePeriod }
+        if ($cycleAvailable -gt $maximumObservedAvailability) { $maximumObservedAvailability=$cycleAvailable }
+    }
+    $nextCycleRequiredAge = if ($AnchorPhase -eq 'restock') {
+        $maximumObservedPeriod + $maximumObservedAvailability + 1L
+    } else {
+        $maximumObservedPeriod + 1L
+    }
+    $maxAge = [Math]::Max(
+        $currentAge + [Math]::Max(3600L,$FutureHorizonSeconds),
+        $nextCycleRequiredAge
+    )
     $groups = @{}
     $deltas = @{}
 
