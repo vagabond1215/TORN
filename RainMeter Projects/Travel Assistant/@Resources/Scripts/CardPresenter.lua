@@ -548,8 +548,10 @@ local function updateRow(index,state,now)
     setOption(prefix..'Price','FontColor','#Text#')
     setOption(prefix..'Price','InlinePattern','\\|')
     setOption(prefix..'Price','InlineSetting','Color | #Muted#')
-    setOption(prefix..'Price','InlinePattern2','')
-    setOption(prefix..'Price','InlineSetting2','')
+    local priceColor=trim(state[projectedPrefix..'PriceColor'])
+    if priceColor=='' then priceColor='#Text#' end
+    setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')
+    setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)
     if priceVaries then
         setOption(prefix..'Price','ToolTipText','Take includes a 5% cash reserve because the foreign price varies. Make uses actual purchase cost, not the reserve.')
     else
