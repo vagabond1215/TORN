@@ -13,22 +13,21 @@ $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $RuntimePendingObservationFile = Join-Path $RuntimeDir 'observations.pending.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared anchor IO.' }
+. $AtomicFileScript
 
 function Read-AnchorJson {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    $raw = Read-TravelAssistantSharedText -Path $Path
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
     return ($raw | ConvertFrom-Json)
 }
 
 function Write-AnchorJsonAtomic {
     param([string]$Path,[object]$Value,[int]$Depth = 30)
-    New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
-    $tmp = $Path + '.tmp'
-    $json = $Value | ConvertTo-Json -Depth $Depth
-    [System.IO.File]::WriteAllText($tmp,$json,[System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $tmp -Destination $Path -Force
+    Write-TravelAssistantAtomicJson -Path $Path -Value $Value -Depth $Depth
 }
 
 function Get-AnchorProperty {
@@ -51,22 +50,28 @@ function Read-AnchorObservationMap {
     param([string]$Path,[hashtable]$Wanted)
     $map = @{}
     if (-not (Test-Path -LiteralPath $Path)) { return $map }
-    foreach ($line in [System.IO.File]::ReadLines($Path)) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try { $row = $line | ConvertFrom-Json } catch { continue }
-        $country = [string](Get-AnchorProperty $row 'country')
-        $itemId = [int](Get-AnchorProperty $row 'itemId')
-        $timestamp = [long](Get-AnchorProperty $row 'timestamp')
-        if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $timestamp -le 0) { continue }
-        $key = $country + ':' + [string]$itemId
-        if (-not $Wanted.ContainsKey($key)) { continue }
-        $source = [string](Get-AnchorProperty $row 'source')
-        if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
-        if (-not $map.ContainsKey($key)) { $map[$key] = New-Object System.Collections.Generic.List[object] }
-        $map[$key].Add([pscustomobject]@{
-            timestamp = $timestamp
-            stock = [long](Get-AnchorProperty $row 'stock')
-        })
+    $reader=$null
+    try {
+        $reader=Open-TravelAssistantSharedTextReader -Path $Path
+        while (($line=$reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try { $row = $line | ConvertFrom-Json } catch { continue }
+            $country = [string](Get-AnchorProperty $row 'country')
+            $itemId = [int](Get-AnchorProperty $row 'itemId')
+            $timestamp = [long](Get-AnchorProperty $row 'timestamp')
+            if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $timestamp -le 0) { continue }
+            $key = $country + ':' + [string]$itemId
+            if (-not $Wanted.ContainsKey($key)) { continue }
+            $source = [string](Get-AnchorProperty $row 'source')
+            if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
+            if (-not $map.ContainsKey($key)) { $map[$key] = New-Object System.Collections.Generic.List[object] }
+            $map[$key].Add([pscustomobject]@{
+                timestamp = $timestamp
+                stock = [long](Get-AnchorProperty $row 'stock')
+            })
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
     }
     return $map
 }
