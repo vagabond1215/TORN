@@ -14,6 +14,10 @@ function New-PriceSample([long]$At,[long]$Price) {
     [pscustomobject]@{ soldOutAt=$At; foreignPrice=$Price }
 }
 
+Assert-True ((Get-PVTakeValue -PurchaseCost 1000L -PriceVaries $false) -eq 1000L) 'fixed foreign prices require exactly the planned purchase cost'
+Assert-True ((Get-PVTakeValue -PurchaseCost 1000L -PriceVaries $true) -eq 1050L) 'variable foreign prices add a five-percent Take reserve'
+Assert-True ((Get-PVTakeValue -PurchaseCost 1001L -PriceVaries $true) -eq 1052L) 'variable-price Take reserve rounds upward to ensure enough cash'
+
 $fixed=[pscustomobject]@{
     currentForeignPrice=14000L
     recentSamples=@(
