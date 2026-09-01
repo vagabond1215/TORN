@@ -1,5 +1,4 @@
 local statePath = nil
-local publishedState = nil
 
 local function trim(value)
     local text=tostring(value or ''):gsub('^\239\187\191','')
@@ -11,7 +10,7 @@ local function number(value)
 end
 
 local function readKv(path)
-    if publishedState and path==statePath then return publishedState.read() end
+    local manifest=io.open((path:match('^(.*[\\/])') or '')..'last-update.txt','r'); if manifest then local raw=manifest:read('*a') or ''; manifest:close(); local name=raw:match('^%d+|(ui%-state%-%d+%-%x+%.kv)'); if name then path=(path:match('^(.*[\\/])') or '')..name end end
     local out={}
     local file=io.open(path,'r')
     if not file then return out end
@@ -225,7 +224,6 @@ end
 
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
-    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath)
 end
 
 function Update()

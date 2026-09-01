@@ -21,8 +21,8 @@ if ($errors.Count -eq 0) {
     $atomic = Get-Content -LiteralPath $atomicPath -Raw
     $compat = Get-Content -LiteralPath $publishedStatePath -Raw
 
-    # The configured path is the last direct-snapshot fallback for a numeric legacy
-    # heartbeat; production readers resolve immutable generations through the module.
+    # The configured path is the direct-snapshot fallback for a numeric legacy
+    # heartbeat; production readers resolve immutable generations through the manifest.
     $uiStateToken = 'StateFile=#@#Generated\ui-state.kv'
     $mainReaderCount = ([regex]::Matches($ini,[regex]::Escape($uiStateToken))).Count
     if ($mainReaderCount -ne 3) {
@@ -80,9 +80,19 @@ if ($errors.Count -eq 0) {
 
     foreach ($luaName in @('StateReader.lua','CardPresenter.lua','CardTweaks.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua','WindowTooltipTweaks.lua')) {
         $luaText = Get-Content -LiteralPath (Join-Path $ProjectRoot ('@Resources\Scripts\' + $luaName)) -Raw
-        if (-not $luaText.Contains('PublishedState.lua') -or -not $luaText.Contains('publishedState.configure')) {
-            Fail "$luaName must resolve immutable finalized state through PublishedState.lua."
+        foreach ($token in @('last-update.txt','ui%-state%-%d+%-%x+%.kv')) {
+            if (-not $luaText.Contains($token)) {
+                Fail "$luaName must resolve immutable finalized state from the generation manifest; missing '$token'."
+            }
         }
+        if ($luaText.Contains('dofile(')) {
+            Fail "$luaName must not depend on a secondary Lua module during Rainmeter initialization."
+        }
+    }
+
+    $stateReader = Get-Content -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua') -Raw
+    if (-not $stateReader.Contains('if path==statePath then')) {
+        Fail 'StateReader.lua must only apply generation-manifest resolution to the main state path, not graph-spec reads.'
     }
 }
 

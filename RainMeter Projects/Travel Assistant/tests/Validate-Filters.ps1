@@ -71,6 +71,9 @@ if(Test-Path -LiteralPath $files.UnifiedPopup){
  )){if(-not$text.Contains($token)){Fail "Unified filter popup missing '$token'."}}
  if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Unified filter popup must remain local-only.'}
  if($text.Contains('RunUpdate.ps1')){Fail 'Unified filter popup must republish through Start-FilterProjectionRefresh, not invoke RunUpdate.ps1 directly.'}
+ foreach($badConstructor in @('Point(0,$y+2)','Size(0,$y+8)')){if($text.Contains($badConstructor)){Fail "Unified filter popup contains an ungrouped arithmetic constructor that PowerShell treats as three arguments: '$badConstructor'."}}
+ foreach($constructor in @('[System.Drawing.Point]::new(0,($y+2))','[System.Drawing.Size]::new(0,($y+8))')){if(-not$text.Contains($constructor)){Fail "Unified filter popup missing the PowerShell-safe dynamic constructor '$constructor'."}}
+ foreach($token in @('New-CountryFlagChip',"New-Chip -Text '' -Width 44",'$script:countryToolTip.SetToolTip($chip,$Name)','$categoryColumnCount=4','-Width 93')){if(-not$text.Contains($token)){Fail "Unified filter popup missing requested compact layout contract '$token'."}}
 }
 
 if(Test-Path -LiteralPath $files.LegacyPopup){

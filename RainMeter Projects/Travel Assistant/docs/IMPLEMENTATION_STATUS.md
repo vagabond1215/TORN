@@ -112,7 +112,7 @@ Current production roles are:
 @Resources/Generated/last-update.txt          generation manifest
 ```
 
-Production Lua readers use `PublishedState.lua` to cache and resolve complete immutable generations. The former `ui-state.kv` remains a transition fallback for a numeric legacy heartbeat.
+Production Lua readers resolve complete immutable generations directly from `last-update.txt`. The former `ui-state.kv` remains a transition fallback for a numeric legacy heartbeat; `PublishedState.lua` is retained only as a compatibility helper and is not loaded by production measures.
 
 `LaunchUpdate.ps1` starts the long-running normal worker under PowerShell 7 and returns; the named updater mutex serializes workers. Popup saves use the normal launcher path rather than a direct Windows PowerShell `RunUpdate.ps1` process.
 

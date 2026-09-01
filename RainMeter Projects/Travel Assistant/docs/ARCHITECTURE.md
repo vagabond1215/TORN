@@ -91,7 +91,7 @@ Generated state has two explicit roles:
 @Resources/Generated/last-update.txt           generation manifest
 ```
 
-Intermediate PowerShell stages mutate only the build artifact during the normal update chain. Rainmeter's Lua measures resolve a complete immutable generation through `PublishedState.lua`; `ui-state.kv` remains a transition fallback for older numeric heartbeats.
+Intermediate PowerShell stages mutate only the build artifact during the normal update chain. Each production Lua measure resolves the complete immutable generation named by `last-update.txt` directly; `ui-state.kv` remains a transition fallback for older numeric heartbeats. Keeping resolution inside each measure avoids a secondary `dofile` dependency during Rainmeter initialization.
 
 After `FilterState.ps1` completes, `RunUpdate.ps1` validates the build projection, writes a new immutable snapshot, then atomically advances the small manifest. A failed write or manifest switch leaves readers on the previous complete generation.
 

@@ -56,7 +56,7 @@ if ($errors.Count -eq 0) {
     )) {
         if ($guard.Contains($forbidden)) { Fail "FreshnessGuard.lua must remain display-only; found '$forbidden'." }
     }
-    foreach ($token in @('PublishedState.lua','publishedState.configure','publishedState.read()','publishedState.epoch()')) {
+    foreach ($token in @('last-update.txt','ui%-state%-%d+%-%x+%.kv',"match('^(%d+)')")) {
         if (-not $guard.Contains($token)) { Fail "FreshnessGuard.lua must read the selected complete generation; missing '$token'." }
     }
     if ($guard -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FreshnessGuard.lua must remain local-only.' }

@@ -1,5 +1,4 @@
 local statePath = nil
-local publishedState = nil
 local lastTravelStateSignature = ''
 
 local countryIdsByName = {
@@ -14,7 +13,7 @@ local function trim(value)
 end
 
 local function readKv(path)
-    if publishedState and path==statePath then return publishedState.read() end
+    local manifest=io.open((path:match('^(.*[\\/])') or '')..'last-update.txt','r'); if manifest then local raw=manifest:read('*a') or ''; manifest:close(); local name=raw:match('^%d+|(ui%-state%-%d+%-%x+%.kv)'); if name then path=(path:match('^(.*[\\/])') or '')..name end end
     local out={}; local file=io.open(path,'r'); if not file then return out end
     for line in file:lines() do local key,value=line:match('^([^=]+)=(.*)$'); if key then out[trim(key)]=trim(value) end end
     file:close(); return out
@@ -321,7 +320,6 @@ end
 
 function Initialize()
     statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
-    publishedState=dofile(SKIN:MakePathAbsolute('#@#Scripts\\PublishedState.lua')); publishedState.configure(statePath)
     for i=1,8 do applyCompactLayout(i) end
 end
 
