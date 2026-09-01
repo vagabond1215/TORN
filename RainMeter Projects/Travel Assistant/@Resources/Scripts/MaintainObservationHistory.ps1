@@ -15,24 +15,23 @@ $CycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $SettingsFile = Join-Path $ConfigDir 'settings.example.json'
 $SyntheticCleanupMarker = Join-Path $RuntimeDir 'synthetic-history-cleanup-v1.done'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared history maintenance IO.' }
+. $AtomicFileScript
 
 if ($Now -le 0) { $Now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 
 function Read-HistoryJson {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    $raw = Read-TravelAssistantSharedText -Path $Path
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
     return ($raw | ConvertFrom-Json)
 }
 
 function Write-HistoryJsonAtomic {
     param([string]$Path,[object]$Value,[int]$Depth=24)
-    New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
-    $tmp = $Path + '.tmp'
-    $json = $Value | ConvertTo-Json -Depth $Depth
-    [System.IO.File]::WriteAllText($tmp,$json,[System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $tmp -Destination $Path -Force
+    Write-TravelAssistantAtomicJson -Path $Path -Value $Value -Depth $Depth
 }
 
 function Get-HistoryProperty {
@@ -70,16 +69,17 @@ function Remove-SyntheticObservationArtifacts {
         return 0
     }
 
-    # This is also the one-time migration from the legacy updater's every-source-
-    # timestamp rows to the current transition-only database. For each market keep
-    # the first retained state and every subsequent stock change; foreign-price-only
-    # or timestamp-only repeats are discarded.
+    # One-time migration from timestamp-noise history to transition-only evidence.
+    # Read with delete sharing, write to a unique sibling, then atomically publish.
     $lastStockByKey = @{}
-    $tmp = $ObservationFile + '.cleanup.tmp'
-    $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
+    $tmp = New-TravelAssistantAtomicTempPath -Path $ObservationFile
+    $reader = $null
+    $writer = $null
     $removed = 0
     try {
-        foreach ($line in Get-Content -LiteralPath $ObservationFile) {
+        $reader = Open-TravelAssistantSharedTextReader -Path $ObservationFile
+        $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
+        while (($line = $reader.ReadLine()) -ne $null) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             try {
                 $row = $line | ConvertFrom-Json
@@ -94,12 +94,18 @@ function Remove-SyntheticObservationArtifacts {
                 $writer.WriteLine($line)
                 $lastStockByKey[$key] = $stock
             } catch {
-                # Invalid JSON is not useful evidence; omit it during the same migration cleanup.
                 $removed++
             }
         }
-    } finally { $writer.Dispose() }
-    Move-Item -LiteralPath $tmp -Destination $ObservationFile -Force
+    } finally {
+        if ($null -ne $writer) { $writer.Dispose() }
+        if ($null -ne $reader) { $reader.Dispose() }
+    }
+    try {
+        Publish-TravelAssistantAtomicTempFile -TempPath $tmp -Path $ObservationFile
+    } finally {
+        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    }
     [System.IO.File]::WriteAllText($SyntheticCleanupMarker,('removed_or_compacted=' + $removed),[System.Text.UTF8Encoding]::new($false))
     return $removed
 }
@@ -108,28 +114,33 @@ function Write-BaselineAwareObservationPrune {
     param([long]$Cutoff)
     if (-not (Test-Path -LiteralPath $ObservationFile)) { return }
 
-    # A retention baseline is safe only when it comes from a real observation
-    # immediately before the cutoff. It carries an actually observed state across
-    # the boundary; it never backfills from current engine state.
     $latestBefore = @{}
-    foreach ($line in Get-Content -LiteralPath $ObservationFile) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try {
-            $row = $line | ConvertFrom-Json
-            if (Test-IsSyntheticHistorySource $row) { continue }
-            $key = Get-HistoryMarketKey $row
-            if ([string]::IsNullOrWhiteSpace($key)) { continue }
-            $timestamp = [long](Get-HistoryProperty $row 'timestamp')
-            if ($timestamp -ge $Cutoff) { continue }
-            if (-not $latestBefore.ContainsKey($key) -or [long](Get-HistoryProperty $latestBefore[$key] 'timestamp') -lt $timestamp) {
-                $latestBefore[$key] = $row
-            }
-        } catch { }
+    $reader = $null
+    try {
+        $reader = Open-TravelAssistantSharedTextReader -Path $ObservationFile
+        while (($line = $reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $row = $line | ConvertFrom-Json
+                if (Test-IsSyntheticHistorySource $row) { continue }
+                $key = Get-HistoryMarketKey $row
+                if ([string]::IsNullOrWhiteSpace($key)) { continue }
+                $timestamp = [long](Get-HistoryProperty $row 'timestamp')
+                if ($timestamp -ge $Cutoff) { continue }
+                if (-not $latestBefore.ContainsKey($key) -or [long](Get-HistoryProperty $latestBefore[$key] 'timestamp') -lt $timestamp) {
+                    $latestBefore[$key] = $row
+                }
+            } catch { }
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
     }
 
-    $tmp = $ObservationFile + '.history.tmp'
-    $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
+    $tmp = New-TravelAssistantAtomicTempPath -Path $ObservationFile
+    $writer = $null
+    $reader = $null
     try {
+        $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
         foreach ($key in @($latestBefore.Keys | Sort-Object)) {
             $row = $latestBefore[$key]
             $baseline = [ordered]@{
@@ -147,7 +158,8 @@ function Write-BaselineAwareObservationPrune {
             $writer.WriteLine((ConvertTo-HistoryLine ([pscustomobject]$baseline)))
         }
 
-        foreach ($line in Get-Content -LiteralPath $ObservationFile) {
+        $reader = Open-TravelAssistantSharedTextReader -Path $ObservationFile
+        while (($line = $reader.ReadLine()) -ne $null) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             try {
                 $row = $line | ConvertFrom-Json
@@ -155,25 +167,43 @@ function Write-BaselineAwareObservationPrune {
                 if ([long](Get-HistoryProperty $row 'timestamp') -ge $Cutoff) { $writer.WriteLine($line) }
             } catch { }
         }
-    } finally { $writer.Dispose() }
-    Move-Item -LiteralPath $tmp -Destination $ObservationFile -Force
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
+        if ($null -ne $writer) { $writer.Dispose() }
+    }
+    try {
+        Publish-TravelAssistantAtomicTempFile -TempPath $tmp -Path $ObservationFile
+    } finally {
+        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 function Write-CyclePrune {
     param([long]$Cutoff)
     if (-not (Test-Path -LiteralPath $CycleFile)) { return }
-    $tmp = $CycleFile + '.history.tmp'
-    $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
+
+    $tmp = New-TravelAssistantAtomicTempPath -Path $CycleFile
+    $reader = $null
+    $writer = $null
     try {
-        foreach ($line in Get-Content -LiteralPath $CycleFile) {
+        $reader = Open-TravelAssistantSharedTextReader -Path $CycleFile
+        $writer = New-Object System.IO.StreamWriter($tmp,$false,[System.Text.UTF8Encoding]::new($false))
+        while (($line = $reader.ReadLine()) -ne $null) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             try {
                 $row = $line | ConvertFrom-Json
                 if ([long](Get-HistoryProperty $row 'soldOutAt') -ge $Cutoff) { $writer.WriteLine($line) }
             } catch { }
         }
-    } finally { $writer.Dispose() }
-    Move-Item -LiteralPath $tmp -Destination $CycleFile -Force
+    } finally {
+        if ($null -ne $writer) { $writer.Dispose() }
+        if ($null -ne $reader) { $reader.Dispose() }
+    }
+    try {
+        Publish-TravelAssistantAtomicTempFile -TempPath $tmp -Path $CycleFile
+    } finally {
+        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 $settings = Read-HistoryJson $SettingsFile
