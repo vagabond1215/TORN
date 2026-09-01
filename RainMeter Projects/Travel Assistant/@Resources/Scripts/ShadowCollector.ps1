@@ -564,7 +564,7 @@ function Update-CycleState {
                     previousSoldOutAt = $previousSoldOutAt
                     previousSoldOutLowerBoundAt = $previousSoldOutLower
                     previousSoldOutUpperBoundAt = $previousSoldOutUpper
-                    restockDelaySeconds = $delayMaximum
+                    restockDelaySeconds = $(if ($restockDelayEligible) { [Math]::Max(0L,$restockAt-$previousSoldOutAt) } else { 0L })
                     restockDelayMinimumSeconds = $delayMinimum
                     restockDelayMaximumSeconds = $delayMaximum
                     restockDelayEligible = $restockDelayEligible
