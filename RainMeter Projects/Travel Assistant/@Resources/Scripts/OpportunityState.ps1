@@ -688,6 +688,15 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                     $elapsedHours=[Math]::Max(1.0/60.0,$elapsedSeconds/3600.0)
                     $profitPerHour=[double]$grossProfit/$elapsedHours
                     $priceColor=if (-not $marketValueFresh) { '145,152,164,255' } elseif ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
+                    $lifetimeShortest=[long]$restockSummary.lifetimeShortestDelaySeconds
+                    $lifetimeLongest=[long]$restockSummary.lifetimeLongestDelaySeconds
+                    $lifetimeStats=if ($null -ne $destinationState) { Get-OptimalProperty $destinationState 'lifetimeStats' } else { $null }
+                    if ($null -ne $lifetimeStats) {
+                        $storedShortest=[long](Get-OptimalProperty $lifetimeStats 'shortestRestockDelaySeconds')
+                        $storedLongest=[long](Get-OptimalProperty $lifetimeStats 'longestRestockDelaySeconds')
+                        if ($storedShortest -gt 0) { $lifetimeShortest=$storedShortest }
+                        if ($storedLongest -gt 0) { $lifetimeLongest=$storedLongest }
+                    }
                     $restockText='Restocks in ~'+(Format-OpportunityDuration $remaining)
                     $tooltip=('{0} - {1} | {2} | average OOS->restock {3} over {4} verified cycle(s); recent earliest {5}, recent latest {6}; detailed forecast sleeps until 10m before the historical early-restock boundary or while focused' -f
                         [string]$metadata.name,[string]$country.name,$restockText,
@@ -726,8 +735,8 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                         restockAverageDelaySeconds=[long]$restockSummary.averageDelaySeconds
                         restockEarliestDelaySeconds=[long]$restockSummary.earliestDelaySeconds
                         restockLatestDelaySeconds=[long]$restockSummary.latestDelaySeconds
-                        restockLifetimeShortestDelaySeconds=[long]$restockSummary.lifetimeShortestDelaySeconds
-                        restockLifetimeLongestDelaySeconds=[long]$restockSummary.lifetimeLongestDelaySeconds
+                        restockLifetimeShortestDelaySeconds=[long]$lifetimeShortest
+                        restockLifetimeLongestDelaySeconds=[long]$lifetimeLongest
                         restockSampleCount=[int]$restockSummary.sampleCount
                     })
                     $countryStats[$countryId].rows=[int]$countryStats[$countryId].rows+1
