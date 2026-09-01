@@ -15,7 +15,7 @@ $logComponent='popup-optimizersettings'
 
 $form=New-Object System.Windows.Forms.Form
 $form.Text='Travel Assistant Settings'
-$form.Size=New-Object System.Drawing.Size(520,370)
+$form.Size=New-Object System.Drawing.Size(520,398)
 $form.StartPosition='CenterScreen'
 $form.FormBorderStyle='FixedDialog'
 $form.MaximizeBox=$false
@@ -51,22 +51,30 @@ $profitable.Text='Show profitable items only'; $profitable.Location=New-Object S
 $mv95=New-Object System.Windows.Forms.CheckBox
 $mv95.Text='Use 95% MV profit calculation'; $mv95.Location=New-Object System.Drawing.Point(250,18); $mv95.Size=New-Object System.Drawing.Size(220,24); $mv95.Checked=[bool]$prefs.use95PercentMarketValue; $form.Controls.Add($mv95)
 
-Add-Label 'Energy Waste' 18 64 130 | Out-Null
-$energyPolicy=Add-Combo 150 60 150; Set-ComboPolicy $energyPolicy ([string]$prefs.energyWastePolicy)
-Add-Label 'Max Energy Loss' 318 64 110 | Out-Null
-$energyMax=New-Object System.Windows.Forms.NumericUpDown
-$energyMax.Location=New-Object System.Drawing.Point(425,60); $energyMax.Size=New-Object System.Drawing.Size(62,26); $energyMax.Minimum=0; $energyMax.Maximum=1000; $energyMax.Value=[decimal][int]$prefs.maxEnergyLoss; $form.Controls.Add($energyMax)
+Add-Label 'Market tax' 250 50 82 | Out-Null
+$marketTax=New-Object System.Windows.Forms.ComboBox
+$marketTax.DropDownStyle='DropDownList'; $marketTax.Location=New-Object System.Drawing.Point(338,46); $marketTax.Size=New-Object System.Drawing.Size(132,26)
+$marketTax.BackColor=[System.Drawing.Color]::FromArgb(20,23,27); $marketTax.ForeColor=[System.Drawing.Color]::FromArgb(232,235,240)
+[void]$marketTax.Items.Add('0%'); [void]$marketTax.Items.Add('5%')
+$marketTax.SelectedIndex=if ([int]$prefs.itemMarketFeePercent -eq 5) { 1 } else { 0 }
+$form.Controls.Add($marketTax)
 
-$energyNote=Add-Label 'If current energy is already above its natural maximum, energy waste restrictions are bypassed for opportunity ranking.' 18 93 468 38
+Add-Label 'Energy Waste' 18 90 130 | Out-Null
+$energyPolicy=Add-Combo 150 86 150; Set-ComboPolicy $energyPolicy ([string]$prefs.energyWastePolicy)
+Add-Label 'Max Energy Loss' 318 90 110 | Out-Null
+$energyMax=New-Object System.Windows.Forms.NumericUpDown
+$energyMax.Location=New-Object System.Drawing.Point(425,86); $energyMax.Size=New-Object System.Drawing.Size(62,26); $energyMax.Minimum=0; $energyMax.Maximum=1000; $energyMax.Value=[decimal][int]$prefs.maxEnergyLoss; $form.Controls.Add($energyMax)
+
+$energyNote=Add-Label 'If current energy is already above its natural maximum, energy waste restrictions are bypassed for opportunity ranking.' 18 119 468 38
 $energyNote.ForeColor=[System.Drawing.Color]::FromArgb(145,152,164)
 
-Add-Label 'Nerve Waste' 18 146 130 | Out-Null
-$nervePolicy=Add-Combo 150 142 150; Set-ComboPolicy $nervePolicy ([string]$prefs.nerveWastePolicy)
-Add-Label 'Max Nerve Loss' 318 146 110 | Out-Null
+Add-Label 'Nerve Waste' 18 172 130 | Out-Null
+$nervePolicy=Add-Combo 150 168 150; Set-ComboPolicy $nervePolicy ([string]$prefs.nerveWastePolicy)
+Add-Label 'Max Nerve Loss' 318 172 110 | Out-Null
 $nerveMax=New-Object System.Windows.Forms.NumericUpDown
-$nerveMax.Location=New-Object System.Drawing.Point(425,142); $nerveMax.Size=New-Object System.Drawing.Size(62,26); $nerveMax.Minimum=0; $nerveMax.Maximum=32767; $nerveMax.Value=[decimal][int]$prefs.maxNerveLoss; $form.Controls.Add($nerveMax)
+$nerveMax.Location=New-Object System.Drawing.Point(425,168); $nerveMax.Size=New-Object System.Drawing.Size(62,26); $nerveMax.Minimum=0; $nerveMax.Maximum=32767; $nerveMax.Value=[decimal][int]$prefs.maxNerveLoss; $form.Controls.Add($nerveMax)
 
-$nerveNote=Add-Label 'Nerve restrictions remain active even when nerve is stacked above its natural maximum.' 18 175 468 28
+$nerveNote=Add-Label 'Nerve restrictions remain active even when nerve is stacked above its natural maximum.' 18 201 468 28
 $nerveNote.ForeColor=[System.Drawing.Color]::FromArgb(145,152,164)
 
 function Refresh-Limits {
@@ -78,7 +86,7 @@ $nervePolicy.Add_SelectedIndexChanged({ Refresh-Limits })
 Refresh-Limits
 
 $ignore=New-Object System.Windows.Forms.Button
-$ignore.Text='Ignore List...'; $ignore.Location=New-Object System.Drawing.Point(18,226); $ignore.Size=New-Object System.Drawing.Size(120,32); $form.Controls.Add($ignore)
+$ignore.Text='Ignore List...'; $ignore.Location=New-Object System.Drawing.Point(18,252); $ignore.Size=New-Object System.Drawing.Size(120,32); $form.Controls.Add($ignore)
 $ignore.Add_Click({
     try {
         if (-not (Test-Path -LiteralPath $FilterLauncher)) { throw 'LaunchFilterPopup.ps1 is missing.' }
@@ -87,7 +95,7 @@ $ignore.Add_Click({
 })
 
 $profile=New-Object System.Windows.Forms.Button
-$profile.Text='Profile / API...'; $profile.Location=New-Object System.Drawing.Point(154,226); $profile.Size=New-Object System.Drawing.Size(120,32); $form.Controls.Add($profile)
+$profile.Text='Profile / API...'; $profile.Location=New-Object System.Drawing.Point(154,252); $profile.Size=New-Object System.Drawing.Size(120,32); $form.Controls.Add($profile)
 $profile.Add_Click({
     try {
         if (-not (Test-Path -LiteralPath $ProfileLauncher)) { throw 'LaunchSettings.ps1 is missing.' }
@@ -96,9 +104,9 @@ $profile.Add_Click({
 })
 
 $save=New-Object System.Windows.Forms.Button
-$save.Text='Save'; $save.Location=New-Object System.Drawing.Point(326,286); $save.Size=New-Object System.Drawing.Size(78,30); $save.BackColor=[System.Drawing.Color]::FromArgb(82,174,255); $save.ForeColor=[System.Drawing.Color]::Black; $form.Controls.Add($save)
+$save.Text='Save'; $save.Location=New-Object System.Drawing.Point(326,312); $save.Size=New-Object System.Drawing.Size(78,30); $save.BackColor=[System.Drawing.Color]::FromArgb(82,174,255); $save.ForeColor=[System.Drawing.Color]::Black; $form.Controls.Add($save)
 $cancel=New-Object System.Windows.Forms.Button
-$cancel.Text='Cancel'; $cancel.Location=New-Object System.Drawing.Point(412,286); $cancel.Size=New-Object System.Drawing.Size(78,30); $form.Controls.Add($cancel)
+$cancel.Text='Cancel'; $cancel.Location=New-Object System.Drawing.Point(412,312); $cancel.Size=New-Object System.Drawing.Size(78,30); $form.Controls.Add($cancel)
 $cancel.Add_Click({ $form.Close() })
 
 $save.Add_Click({
@@ -106,6 +114,7 @@ $save.Add_Click({
         $current=Read-UiPreferences
         Set-FilterProperty $current 'showProfitableOnly' ([bool]$profitable.Checked)
         Set-FilterProperty $current 'use95PercentMarketValue' ([bool]$mv95.Checked)
+        Set-FilterProperty $current 'itemMarketFeePercent' (if ($marketTax.SelectedIndex -eq 1) { 5 } else { 0 })
         Set-FilterProperty $current 'energyWastePolicy' (Get-ComboPolicy $energyPolicy)
         Set-FilterProperty $current 'maxEnergyLoss' ([int]$energyMax.Value)
         Set-FilterProperty $current 'nerveWastePolicy' (Get-ComboPolicy $nervePolicy)
