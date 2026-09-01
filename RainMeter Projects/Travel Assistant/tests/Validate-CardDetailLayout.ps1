@@ -133,7 +133,8 @@ if($errors.Count -eq 0){
     if($rows -match '(?im)^FontFace=Segoe UI' -or $ini -match '(?im)^FontFace=Segoe UI'){
         Fail 'Main Rainmeter typography must not fall back to Segoe UI.'
     }
-    foreach($fontLine in @([regex]::Matches($rows,'(?im)^FontFace=(.+)$') + [regex]::Matches($ini,'(?im)^FontFace=(.+)$'))){
+    $fontLines=@([regex]::Matches($rows,'(?im)^FontFace=(.+)$')) + @([regex]::Matches($ini,'(?im)^FontFace=(.+)$'))
+    foreach($fontLine in $fontLines){
         if($fontLine.Groups[1].Value.Trim() -ne 'Nirmala UI Semilight'){Fail "Unexpected main-skin font face '$($fontLine.Groups[1].Value.Trim())'."}
     }
 
