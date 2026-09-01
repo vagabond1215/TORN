@@ -9,6 +9,24 @@ function Assert-True([bool]$Condition,[string]$Message) { if (-not $Condition) {
 function Assert-Equal($Actual,$Expected,[string]$Message) { if ($Actual -ne $Expected) { $script:failures.Add("$Message Expected=$Expected Actual=$Actual") } }
 function Assert-Near([double]$Actual,[double]$Expected,[double]$Tolerance,[string]$Message) { if ([Math]::Abs($Actual-$Expected) -gt $Tolerance) { $script:failures.Add("$Message Expected=$Expected Actual=$Actual") } }
 
+$grossEconomics=Get-OpportunityEconomics -MarketValue 150L -ForeignPrice 100L -Quantity 10 -BasisPercent 100 -MarketFeePercent 0 -ElapsedSeconds 3600L
+Assert-Equal ([long]$grossEconomics.saleEach) 150L '100% MV basis keeps the full per-item market value.'
+Assert-Equal ([long]$grossEconomics.purchaseCost) 1000L 'Purchase cost is foreign unit cost times quantity.'
+Assert-Equal ([long]$grossEconomics.grossSale) 1500L 'Gross Sale is sale basis times quantity.'
+Assert-Equal ([long]$grossEconomics.grossProfit) 500L 'Gross profit is Gross Sale minus actual purchase cost before tax.'
+Assert-Equal ([long]$grossEconomics.marketTax) 0L 'Zero-percent market tax leaves Gross Sale untaxed.'
+Assert-Equal ([long]$grossEconomics.make) 500L 'Make is gross profit after market tax.'
+Assert-Near ([double]$grossEconomics.grossProfitPerHour) 500.0 0.001 'Gross profit per hour uses pre-tax gross profit.'
+Assert-Near ([double]$grossEconomics.makePerHour) 500.0 0.001 'Net profit per hour tracks Make.'
+
+$taxedEconomics=Get-OpportunityEconomics -MarketValue 150L -ForeignPrice 100L -Quantity 10 -BasisPercent 95 -MarketFeePercent 5 -ElapsedSeconds 3600L
+Assert-Equal ([long]$taxedEconomics.saleEach) 142L '95% MV basis floors the selected sale basis per item.'
+Assert-Equal ([long]$taxedEconomics.grossSale) 1420L 'Gross Sale uses the selected 95% MV basis.'
+Assert-Equal ([long]$taxedEconomics.grossProfit) 420L 'Gross profit remains sale proceeds minus actual purchase cost before tax.'
+Assert-Equal ([long]$taxedEconomics.marketTax) 71L 'Five-percent market tax applies to total Gross Sale.'
+Assert-Equal ([long]$taxedEconomics.make) 349L 'Make subtracts market tax but never a Take cash buffer.'
+Assert-Equal ([long]$taxedEconomics.profitEach) 35L 'Displayed net profit per item derives from Make divided by quantity.'
+
 $cycles = @(
     [pscustomobject]@{ restockDelaySeconds=600L; availabilitySeconds=300L },
     [pscustomobject]@{ restockDelaySeconds=660L; availabilitySeconds=300L },
@@ -170,6 +188,25 @@ Assert-Near ([double]$state['Opportunity2ProfitHourValue']) 2400.0 0.001 'Raw pr
 Assert-Equal ([long]$state['Opportunity2WindowStartAt']) 100200L 'Raw window timestamp must be available for immediate Lua sorting.'
 Assert-Near ([double]$state['Opportunity2ProbabilityValue']) .8 0.0001 'Raw probability must remain available as an independent sort tiebreaker.'
 Assert-Equal ([long]$state['Opportunity2ElapsedSeconds']) 1800L 'Raw elapsed seconds must be available for local sorting and the flag travel-time tooltip.'
+
+$economicsState=@{}
+$economicsRows=@([pscustomobject]@{
+    key='canada:99'; name='Economics'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=.75; probabilityKnown=$true;
+    elapsedSeconds=3600L; grossProfit=349L; quantity=10; profitPerHour=349.0; windowStartAt=100000L; foreignPrice=100L; marketValue=150L;
+    marketValueFresh=$true; priceColor='86,190,116,255'; windowText='WINDOW'; leaveText='LEAVE'; tooltip='economics';
+    saleBasis=142L; purchaseCost=1000L; grossSale=1420L; grossProfitBeforeTax=420L; marketTax=71L; make=349L; profitEach=35L;
+    grossProfitPerHour=420.0; marketFeePercent=5; basisPercent=95
+})
+Write-OpportunityProjection -State $economicsState -Rows $economicsRows -SortMode 'gross' -Message ''
+Assert-Equal ([long]$economicsState['Opportunity1PurchaseCostValue']) 1000L 'Projected purchase cost is explicit and machine-readable.'
+Assert-Equal ([long]$economicsState['Opportunity1GrossSaleValue']) 1420L 'Projected Gross Sale is explicit and distinct from profit.'
+Assert-Equal ([long]$economicsState['Opportunity1GrossProfitValue']) 420L 'Projected pre-tax gross profit remains available for detail display.'
+Assert-Equal ([long]$economicsState['Opportunity1MarketTaxValue']) 71L 'Projected market tax is explicit.'
+Assert-Equal ([long]$economicsState['Opportunity1MakeValue']) 349L 'Projected Make is after-tax net profit.'
+Assert-Equal ([long]$economicsState['Opportunity1ProfitEachValue']) 35L 'Projected Each value is net profit per item.'
+Assert-Equal ([int]$economicsState['Opportunity1MarketFeePercent']) 5 'Projected market fee percentage is explicit.'
+Assert-Equal ([int]$economicsState['Opportunity1MvBasisPercent']) 95 'Projected MV basis percentage follows the setting.'
+Assert-Equal ([long]$economicsState['Opportunity1TakeValue']) 1000L 'Take starts at actual purchase cost before price-variation refinement.'
 Assert-Equal (Get-OpportunityCountryCode 'united_kingdom') 'UK' 'United Kingdom display code remains available internally.'
 
 # The state projection is a candidate pool, not merely the eight visible cards.
