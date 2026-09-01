@@ -45,6 +45,7 @@ if ($errors.Count -eq 0) {
         'configureWindowTooltipMeter','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','Empty ToolTipText disables the tooltip naturally',
         "'InlinePattern'", "'InlinePattern2'", '/ea x[0-9]+ =', 'Color | 255,255,255,255',
         'quantityFromProjectedState','buyPriceFromProjectedState','projectedPrefix=opportunityStatePrefix(state,country,itemName)',
+        "state[projectedPrefix..'TakeValue']",
         "state[prefix..'QuantityText']","state[prefix..'PriceText']",
         'if quantity<=0 then quantity=quantityFromTooltip(humanTooltip) end',
         "if buyPrice<=0 then buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')) end",
