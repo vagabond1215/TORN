@@ -445,21 +445,21 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     if currentProbability>0.5 then
         local _,_,sameTarget=groupDepartureTimes(group,'best',flightSeconds)
         if group.bestProbability>currentProbability and sameTarget>now and staysAboveThresholdUntil(plan,now+flightSeconds,sameTarget+flightSeconds,0.5) then
-            return 'BEST - LEAVE IN '..formatDuration(sameTarget-now),string.format('%.0f%%',group.bestProbability*100),tooltip
+            return 'BEST - LEAVE IN '..formatBestCountdown(sameTarget-now),string.format('%.0f%%',group.bestProbability*100),tooltip
         end
         local better=nextBetterBestBefore(plan,group,currentProbability,flightSeconds,now)
-        if better~=nil then local _,_,betterTarget=groupDepartureTimes(better,'best',flightSeconds); return 'BEST - LEAVE IN '..formatDuration(betterTarget-now),string.format('%.0f%%',better.bestProbability*100),formatWindowTooltip(better,now) end
+        if better~=nil then local _,_,betterTarget=groupDepartureTimes(better,'best',flightSeconds); return 'BEST - LEAVE IN '..formatBestCountdown(betterTarget-now),string.format('%.0f%%',better.bestProbability*100),formatWindowTooltip(better,now) end
         return 'BEST - LEAVE NOW',string.format('%.0f%%',currentProbability*100),tooltip
     end
 
-    if now<openAt then return 'BEST - LEAVE IN '..formatDuration(targetAt-now),string.format('%.0f%%',group.bestProbability*100),tooltip end
+    if now<openAt then return 'BEST - LEAVE IN '..formatBestCountdown(targetAt-now),string.format('%.0f%%',group.bestProbability*100),tooltip end
     for _,nextGroup in ipairs(plan.groups) do
         if nextGroup.ordinal>group.ordinal and groupMode(nextGroup)~=nil then
             local nextMode=groupMode(nextGroup); local nOpen,nClose,nTarget=groupDepartureTimes(nextGroup,nextMode,flightSeconds)
             if nextMode=='safe' and nClose>now then
                 if now<nOpen then return 'SAFE - LEAVE IN '..formatDuration(nOpen-now),'',formatWindowTooltip(nextGroup,now) end
                 return 'SAFE - LEAVE BEFORE '..formatDuration(nClose-now),'',formatWindowTooltip(nextGroup,now)
-            elseif nextMode=='best' and nTarget>now then return 'BEST - LEAVE IN '..formatDuration(nTarget-now),string.format('%.0f%%',nextGroup.bestProbability*100),formatWindowTooltip(nextGroup,now) end
+            elseif nextMode=='best' and nTarget>now then return 'BEST - LEAVE IN '..formatBestCountdown(nTarget-now),string.format('%.0f%%',nextGroup.bestProbability*100),formatWindowTooltip(nextGroup,now) end
         end
     end
     return 'WAIT DATA','',tooltip
