@@ -120,11 +120,12 @@ Assert-Equal ([long]$projection.nextRestockEstimateAt) 18534L 'Restock projectio
 
 # A live current cycle that survives travel plus purchase buffer must be used before
 # any later recurring Safe/Best window.
-$currentDeparture=Get-CurrentCycleDeparturePlan -CurrentStock 600L -ActiveSelloutEstimateAt 20000L -FlightSeconds 7200L -PurchaseBufferSeconds 60L -EarliestDepartureAt 10000L -NowEpoch 10000L
+$currentDeparture=Get-CurrentCycleDeparturePlan -CurrentStock 600L -ActiveSelloutEstimateAt 20000L -FlightSeconds 7200L -EarliestDepartureAt 10000L -NowEpoch 10000L -SafetyMarginFraction 0.05
 Assert-True ([bool]$currentDeparture.reachable) 'Current stock should remain actionable when projected sellout is later than travel plus buffer.'
-Assert-Equal ([long]$currentDeparture.leaveDeadlineAt) 12740L 'Leave-before deadline must equal projected sellout minus flight minus purchase buffer.'
+Assert-Equal ([long]$currentDeparture.leaveDeadlineAt) 12300L 'Leave-before deadline must equal projected sellout minus flight minus a 5% haircut of remaining sellout time.'
+Assert-Equal ([long]$currentDeparture.safetyMarginSeconds) 500L 'Ten-thousand seconds remaining should reserve a 500-second 5% sellout safety margin.'
 
-$missedCurrent=Get-CurrentCycleDeparturePlan -CurrentStock 600L -ActiveSelloutEstimateAt 16000L -FlightSeconds 7200L -PurchaseBufferSeconds 60L -EarliestDepartureAt 10000L -NowEpoch 10000L
+$missedCurrent=Get-CurrentCycleDeparturePlan -CurrentStock 600L -ActiveSelloutEstimateAt 16000L -FlightSeconds 7200L -EarliestDepartureAt 10000L -NowEpoch 10000L -SafetyMarginFraction 0.05
 Assert-True (-not [bool]$missedCurrent.reachable) 'Current cycle must fall back to a later recurring window once travel plus buffer cannot beat projected sellout.'
 
 $currentProbability=Get-StableCurrentCycleArrivalProbability -Cycles $projectionCycles -ActiveRestockAt 10000L -ArrivalAt 11250L
