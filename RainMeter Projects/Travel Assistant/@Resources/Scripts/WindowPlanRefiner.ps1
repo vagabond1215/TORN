@@ -393,8 +393,10 @@ if ($count -le 0) { return }
 
 $wanted=@{}
 for ($i=1; $i -le $count; $i++) {
-    $key=[string]$state['Opportunity'+$i+'Key']
-    if (-not [string]::IsNullOrWhiteSpace($key)) { $wanted[$key]=$true }
+    $prefix='Opportunity'+$i
+    $key=[string]$state[$prefix+'Key']
+    $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
+    if (-not [string]::IsNullOrWhiteSpace($key) -and $forecastMode -ne 'sleeping_oos') { $wanted[$key]=$true }
 }
 $cycleMap=Read-WindowCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile) -Wanted $wanted
 $travelState=([string]$state['TravelState']).Trim().ToLowerInvariant()
@@ -406,6 +408,19 @@ for ($i=1; $i -le $count; $i++) {
     $prefix='Opportunity'+$i
     $key=[string]$state[$prefix+'Key']
     if ([string]::IsNullOrWhiteSpace($key)) { continue }
+    $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
+    if ($forecastMode -eq 'sleeping_oos') {
+        # OpportunityState already published the cheap absolute restock estimate.
+        # Do not read cycle evidence or build recurring probability geometry until
+        # the wake boundary/focus marker promotes this market back to detailed mode.
+        $state[$prefix+'CurrentStock']='0'
+        $state[$prefix+'WindowDataQuality']='ready'
+        $state[$prefix+'WindowDataQualityReason']=''
+        $state[$prefix+'CurrentCycleReachable']='0'
+        $state[$prefix+'CurrentCycleLeaveDeadlineAt']='0'
+        $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
+        continue
+    }
     $countryId=($key -split ':',2)[0]
     $cycles=@()
     if ($cycleMap.ContainsKey($key)) { $cycles=@($cycleMap[$key].ToArray()) }
