@@ -33,7 +33,8 @@ local function polishWindowStatus(index)
         text:match('^Window Open:')~=nil or
         text:match('^Safe Hit Window')~=nil or
         text:match('^Safe window closed')~=nil or
-        text:match('^NEXT RESTOCK')~=nil
+        text:match('^NEXT RESTOCK')~=nil or
+        text:match('^Collecting Data:')~=nil
     )
     if longStatus then
         setOption(leave,'X',78)
