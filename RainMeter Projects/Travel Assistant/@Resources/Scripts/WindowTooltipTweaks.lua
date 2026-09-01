@@ -103,7 +103,8 @@ local function buildLookup(state)
                 currentCycleReachable=number(state[prefix..'CurrentCycleReachable'])>0,
                 activeSelloutEstimateAt=number(state[prefix..'ActiveSelloutEstimateAt']),
                 currentCycleLeaveDeadlineAt=number(state[prefix..'CurrentCycleLeaveDeadlineAt']),
-                currentCyclePurchaseBufferSeconds=number(state[prefix..'CurrentCyclePurchaseBufferSeconds'])
+                currentCycleSafetyMarginSeconds=number(state[prefix..'CurrentCycleSafetyMarginSeconds']),
+                nextCycleOrdinal=math.floor(number(state[prefix..'NextCycleOrdinal']))
             }
         end
     end
@@ -133,25 +134,14 @@ local function medianAvailableSeconds(plan)
     return math.floor((values[middle]+values[middle+1])/2+0.5)
 end
 
-local function findPreferredGroup(plan,now)
-    if plan==nil then return nil,nil end
-    for _,group in ipairs(plan.groups or {}) do
-        local safeValid=group.safeStart>0 and group.safeEnd-group.safeStart>=60
-        if safeValid and group.safeEnd>now then return group,'safe' end
-
-        local bestValid=group.bestStart>0 and group.bestEnd>group.bestStart and group.bestProbability>0.5
-        if bestValid and group.bestEnd>now then return group,'best' end
-    end
-    return nil,nil
-end
-
-local function findFutureEvidenceGroup(plan,now)
-    if plan==nil then return nil end
-    for _,group in ipairs(plan.groups or {}) do
-        if number(group.lateSellout)>now then return group end
+local function nextCycleGroup(row)
+    if row==nil or row.plan==nil then return nil end
+    local ordinal=row.nextCycleOrdinal
+    for _,group in ipairs(row.plan.groups or {}) do
+        if number(group.ordinal)==ordinal then return group end
     end
     return nil
-end
+}
 
 local function formatMoment(at,now)
     if at<=0 then return '?' end
@@ -187,28 +177,25 @@ local function buildHomeTooltip(row,travelText,now)
     local arrival=travelText~='' and travelText or '?'
     local nl='#CRLF#'
 
-    -- If the current observed cycle can still be reached before its live depletion
-    -- sellout estimate, describe that cycle directly instead of advertising a later
-    -- recurring restock window.
-    if row.currentStock>0 and row.currentCycleReachable and row.activeSelloutEstimateAt>now and row.currentCycleLeaveDeadlineAt>now then
+    if row.currentStock>0 and row.currentCycleReachable and row.activeSelloutEstimateAt>now and row.currentCycleLeaveDeadlineAt>=now then
         return 'Estimated Arrival in '..arrival..nl..
             'Current Cycle Sellout: '..formatMoment(row.activeSelloutEstimateAt,now)..nl..
             'Leave Before: '..formatMoment(row.currentCycleLeaveDeadlineAt,now)..nl..
-            'Purchase Buffer: '..formatDuration(row.currentCyclePurchaseBufferSeconds)..nl..
+            '5% Sellout Safety: '..formatDuration(row.currentCycleSafetyMarginSeconds)..nl..
             'Basis: live depletion of current observed stock'
     end
 
-    local group,mode=findPreferredGroup(plan,now)
-    if group==nil then group=findFutureEvidenceGroup(plan,now) end
-    if group==nil then return '' end
-
-    local stocked=medianAvailableSeconds(plan)
-    local stockedText=stocked>0 and formatDuration(stocked) or '?'
-    return 'Estimated Arrival in '..arrival..nl..
-        'Estimated In Stock Duration '..stockedText..nl..
+    local group=nextCycleGroup(row)
+    if group==nil then return 'Next-cycle evidence unavailable' end
+    local safe='none'
+    if group.safeStart>0 and group.safeEnd>group.safeStart then
+        safe=formatMoment(group.safeStart,now)..' -> '..formatMoment(group.safeEnd,now)
+    end
+    return 'Next Restock Only'..nl..
         'Early Restock: '..formatMoment(group.earlyRestock,now)..nl..
         'Late Restock: '..formatMoment(group.lateRestock,now)..nl..
-        finalWindowLine(group,mode,now)
+        'Safe Window: '..safe..nl..
+        'No farther cycle is selected while in Torn'
 end
 
 local function applyTooltip(prefix,tooltip)
