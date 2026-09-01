@@ -28,20 +28,27 @@ end
 local function polishWindowStatus(index)
     local prefix='MeterOpportunity'..index
     local leave=prefix..'Leave'
+    local chance=prefix..'Chance'
     local text=meterOption(leave,'Text')
+    local chanceText=meterOption(chance,'Text')
     local longStatus=(
-        text:match('^Window Open:')~=nil or
-        text:match('^Safe Hit Window')~=nil or
-        text:match('^Safe window closed')~=nil or
-        text:match('^NEXT RESTOCK')~=nil or
+        text:match('^Leave before:')~=nil or
+        text:match('^Window opens:')~=nil or
+        text:match('^Window Open')~=nil or
+        text:match('^Guaranteed Hit for:')~=nil or
         text:match('^Collecting Data:')~=nil
     )
     if longStatus then
         setOption(leave,'X',78)
-        setOption(leave,'W',285)
         setOption(leave,'FontSize',7)
         setOption(leave,'ClipString',1)
-        SKIN:Bang('!HideMeter',prefix..'Chance')
+        if chanceText~='' then
+            setOption(leave,'W',236)
+            SKIN:Bang('!ShowMeter',chance)
+        else
+            setOption(leave,'W',285)
+            SKIN:Bang('!HideMeter',chance)
+        end
         SKIN:Bang('!HideMeter',prefix..'Info')
     end
 end
