@@ -154,4 +154,4 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
 }
 
 Write-ProjectionKvAtomic -Values $state -Path $StateKvFile
-exit 0
+return
