@@ -122,7 +122,10 @@ function Test-OptimalEvidenceKeyWanted {
 }
 
 function Get-OptimalEvidence {
-    param([hashtable]$WantedKeys = $null)
+    param(
+        [hashtable]$WantedKeys = $null,
+        [switch]$SkipObservations
+    )
 
     $cycles = @{}
     if ($null -ne $WantedKeys -and $WantedKeys.Count -eq 0) {
@@ -143,29 +146,32 @@ function Get-OptimalEvidence {
     }
 
     $observations = @{}
-    foreach ($path in @($SeedObservationFile, $RuntimeObservationFile)) {
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        foreach ($line in Get-Content -LiteralPath $path) {
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-            $lineKey=Get-OptimalEvidenceLineKey -Line $line
-            if ([string]::IsNullOrWhiteSpace($lineKey) -or -not (Test-OptimalEvidenceKeyWanted -Key $lineKey -WantedKeys $WantedKeys)) { continue }
-            try {
-                $row = $line | ConvertFrom-Json
-                Add-EvidenceRow -Map $observations -Key $lineKey -Value $row
-            } catch { }
-        }
-    }
-
     $restockStock = @{}
-    foreach ($key in @($observations.Keys)) {
-        $samples = [long[]]@()
-        $previousStock = $null
-        foreach ($row in @($observations[$key] | Sort-Object timestamp)) {
-            $stock = [long](Get-OptimalProperty $row 'stock')
-            if ($null -ne $previousStock -and [long]$previousStock -eq 0 -and $stock -gt 0) { $samples = [long[]]($samples + $stock) }
-            $previousStock = $stock
+    if (-not $SkipObservations) {
+        foreach ($path in @($SeedObservationFile, $RuntimeObservationFile)) {
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            foreach ($line in Get-Content -LiteralPath $path) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                $lineKey=Get-OptimalEvidenceLineKey -Line $line
+                if ([string]::IsNullOrWhiteSpace($lineKey) -or -not (Test-OptimalEvidenceKeyWanted -Key $lineKey -WantedKeys $WantedKeys)) { continue }
+                try {
+                    $row = $line | ConvertFrom-Json
+                    Add-EvidenceRow -Map $observations -Key $lineKey -Value $row
+                } catch { }
+            }
         }
-        $restockStock[$key] = [long[]]$samples
+    
+        foreach ($key in @($observations.Keys)) {
+            $samples = [long[]]@()
+            $previousStock = $null
+            foreach ($row in @($observations[$key] | Sort-Object timestamp)) {
+                $stock = [long](Get-OptimalProperty $row 'stock')
+                if ($null -ne $previousStock -and [long]$previousStock -eq 0 -and $stock -gt 0) { $samples = [long[]]($samples + $stock) }
+                $previousStock = $stock
+            }
+            $restockStock[$key] = [long[]]$samples
+        }
+    
     }
 
     # Stored cycles remain untouched. Only the evidence handed to opportunity
@@ -335,6 +341,12 @@ function Get-OptimalArrivalForecast {
     if ($Evidence.restockStock.ContainsKey($MarketKey)) {
         $samples = [long[]]@($Evidence.restockStock[$MarketKey] | ForEach-Object { [long]$_ })
         $quantity = Get-OptimalMedian $samples
+    }
+    if ($quantity -le 0) {
+        $cycleQuantitySamples=[long[]]@($usable | Where-Object {
+            $_.PSObject.Properties['restockQuantity'] -and [long]$_.restockQuantity -gt 0
+        } | ForEach-Object { [long]$_.restockQuantity })
+        if ($cycleQuantitySamples.Count -gt 0) { $quantity=Get-OptimalMedian $cycleQuantitySamples }
     }
 
     return [pscustomobject]@{
