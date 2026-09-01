@@ -227,6 +227,18 @@ local function nextBetterBestBefore(plan,currentGroup,currentProbability,flightS
     return nil
 end
 
+local function opportunityStatePrefix(state,country,itemName)
+    local count=math.max(0,math.min(256,math.floor(number(state.OpportunityCount))))
+    local wantedCountry=trim(country):lower()
+    local wantedName=trim(itemName):lower()
+    for i=1,count do
+        local prefix='Opportunity'..tostring(i)
+        if trim(state[prefix..'Country']):lower()==wantedCountry and trim(state[prefix..'Name']):lower()==wantedName then
+            return prefix
+        end
+    end
+    return ''
+end
 local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     local countryId=countryIdsByName[country] or ''; local travelState=trim(state.TravelState):lower(); local destinationId=trim(state.TravelDestinationCountryId):lower()
     local flightSeconds=countryTravelSeconds(state,country,defaultTravel); if flightSeconds<=0 then return nil,nil,nil end
@@ -236,12 +248,13 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     -- (sellout - one-way travel - purchase buffer). If that deadline is still
     -- ahead of us, do not jump to a later recurring Safe/Best window.
     if travelState~='traveling' and travelState~='returning' and travelState~='abroad' and travelState~='foreign' then
-        local statePrefix='Opportunity'..tostring(index)
-        local currentStock=number(state[statePrefix..'CurrentStock'])
-        local reachable=number(state[statePrefix..'CurrentCycleReachable'])>0
-        local selloutAt=number(state[statePrefix..'ActiveSelloutEstimateAt'])
-        local deadlineAt=number(state[statePrefix..'CurrentCycleLeaveDeadlineAt'])
-        local bufferSeconds=number(state[statePrefix..'CurrentCyclePurchaseBufferSeconds'])
+        local displayedName=removeCountrySuffix(meterOption('MeterOpportunity'..tostring(index)..'Name','Text'),country)
+        local statePrefix=opportunityStatePrefix(state,country,displayedName)
+        local currentStock=statePrefix~='' and number(state[statePrefix..'CurrentStock']) or 0
+        local reachable=statePrefix~='' and number(state[statePrefix..'CurrentCycleReachable'])>0
+        local selloutAt=statePrefix~='' and number(state[statePrefix..'ActiveSelloutEstimateAt']) or 0
+        local deadlineAt=statePrefix~='' and number(state[statePrefix..'CurrentCycleLeaveDeadlineAt']) or 0
+        local bufferSeconds=statePrefix~='' and number(state[statePrefix..'CurrentCyclePurchaseBufferSeconds']) or 0
         if currentStock>0 and reachable and selloutAt>now and deadlineAt>now then
             local arrivalAt=now+flightSeconds
             local p=probabilityAt(plan,arrivalAt)
