@@ -137,7 +137,10 @@ if (Test-Path -LiteralPath $updatePath) {
     if ($text.Contains("Invoke-HistoryMaintenance -Phase 'PostUpdate'")) {
         Fail 'RunUpdate.ps1 must not pay for the retired no-op PostUpdate history pass on every heartbeat.'
     }
-    if ($text -match '(?m)^\s*\$UpdatePerformanceOutcome\s*=\s*''success''\s*\r?\n\s*exit 0\s*
+    $successExitPattern = '(?m)^\s*\$UpdatePerformanceOutcome\s*=\s*''success''\s*\r?\n\s*exit 0\s*$'
+    if ($text -match $successExitPattern) {
+        Fail 'RunUpdate.ps1 must fall through after success so finally always writes performance telemetry and releases the updater mutex.'
+    }
 }
 
 $analyzerPath = Join-Path $ProjectRoot 'tools\Analyze-UpdatePerformance.ps1'
