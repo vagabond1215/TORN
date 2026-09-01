@@ -746,8 +746,8 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                     $remaining=[Math]::Max(1L,$restockEstimateAt-$Now)
                     $elapsedSeconds=[Math]::Max(1L,$remaining+$returnSeconds+$purchaseBuffer)
                     $tripEconomics=Get-OpportunityEconomics -MarketValue ([long]$resaleUse.marketValue) -ForeignPrice $foreignPrice -Quantity $quantity -BasisPercent $basisPercent -MarketFeePercent $marketFeePercent -ElapsedSeconds $elapsedSeconds
-                    $grossProfit=[long]$tripEconomics.make
-                    $profitPerHour=[double]$tripEconomics.makePerHour
+                    $grossProfit=[long]$tripEconomics.grossProfit
+                    $profitPerHour=[double]$tripEconomics.grossProfitPerHour
                     $profitPerItem=[long]$tripEconomics.profitEach
                     $priceColor=if (-not $marketValueFresh) { '145,152,164,255' } elseif ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
                     $lifetimeShortest=[long]$restockSummary.lifetimeShortestDelaySeconds
@@ -920,8 +920,8 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         }
 
         $tripEconomics=Get-OpportunityEconomics -MarketValue ([long]$resaleUse.marketValue) -ForeignPrice $foreignPrice -Quantity $quantity -BasisPercent $basisPercent -MarketFeePercent $marketFeePercent -ElapsedSeconds $elapsedSeconds
-        $grossProfit = [long]$tripEconomics.make
-        $profitPerHour = [double]$tripEconomics.makePerHour
+        $grossProfit = [long]$tripEconomics.grossProfit
+        $profitPerHour = [double]$tripEconomics.grossProfitPerHour
         $profitPerItem = [long]$tripEconomics.profitEach
         $priceColor = if (-not $marketValueFresh) { '145,152,164,255' } elseif ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
         $leaveText = if ($leaveDelaySeconds -le 60) { 'LEAVE NOW' } else { 'LEAVE '+(Format-OpportunityDuration $leaveDelaySeconds) }
