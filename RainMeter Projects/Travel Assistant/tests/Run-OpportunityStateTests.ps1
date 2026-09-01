@@ -75,6 +75,44 @@ Assert-Equal ([long]$summary.averageDelaySeconds) 39600L 'Lightweight OOS estima
 Assert-Equal ([long]$summary.earliestDelaySeconds) 36000L 'Historical early restock should use the shortest recent verified delay.'
 Assert-Equal ([long]$summary.latestDelaySeconds) 43200L 'Historical late restock should use the longest recent verified delay.'
 
+$oldRuntimeCycleFile=$RuntimeCycleFile
+$oldSeedCycleFile=$SeedCycleFile
+$oldRuntimeObservationFile=$RuntimeObservationFile
+$oldSeedObservationFile=$SeedObservationFile
+$tempCycle=Join-Path ([System.IO.Path]::GetTempPath()) ('travel-evidence-cycles-'+[guid]::NewGuid().ToString('N')+'.jsonl')
+$tempObs=Join-Path ([System.IO.Path]::GetTempPath()) ('travel-evidence-observations-'+[guid]::NewGuid().ToString('N')+'.jsonl')
+$tempEmpty=Join-Path ([System.IO.Path]::GetTempPath()) ('travel-evidence-empty-'+[guid]::NewGuid().ToString('N')+'.jsonl')
+try {
+    @(
+        '{"schemaVersion":2,"country":"canada","itemId":1,"restockDelaySeconds":600,"availabilitySeconds":300,"soldOutAt":1000,"forecastEligible":true,"availabilityEligible":true,"restockDelayEligible":true,"trendEligible":true,"restockBoundaryQuality":"observed","soldOutBoundaryQuality":"observed","previousSellOutBoundaryQuality":"observed"}',
+        '{"schemaVersion":2,"country":"china","itemId":2,"restockDelaySeconds":700,"availabilitySeconds":300,"soldOutAt":1001,"forecastEligible":true,"availabilityEligible":true,"restockDelayEligible":true,"trendEligible":true,"restockBoundaryQuality":"observed","soldOutBoundaryQuality":"observed","previousSellOutBoundaryQuality":"observed"}'
+    ) | Set-Content -LiteralPath $tempCycle -Encoding UTF8
+    @(
+        '{"schemaVersion":1,"country":"canada","itemId":1,"timestamp":900,"stock":0}',
+        '{"schemaVersion":1,"country":"canada","itemId":1,"timestamp":1000,"stock":50}',
+        '{"schemaVersion":1,"country":"china","itemId":2,"timestamp":900,"stock":0}',
+        '{"schemaVersion":1,"country":"china","itemId":2,"timestamp":1000,"stock":50}'
+    ) | Set-Content -LiteralPath $tempObs -Encoding UTF8
+    [System.IO.File]::WriteAllText($tempEmpty,'',[System.Text.UTF8Encoding]::new($false))
+    $RuntimeCycleFile=$tempCycle
+    $SeedCycleFile=$tempEmpty
+    $RuntimeObservationFile=$tempObs
+    $SeedObservationFile=$tempEmpty
+
+    $wantedEvidence=@{'canada:1'=$true}
+    $scopedEvidence=Get-OptimalEvidence -WantedKeys $wantedEvidence
+    Assert-Equal $scopedEvidence.cycles.Count 1 'Evidence loader should deserialize only computation-eligible cycle keys.'
+    Assert-True $scopedEvidence.cycles.ContainsKey('canada:1') 'Scoped cycle evidence should retain the wanted market.'
+    Assert-Equal $scopedEvidence.observations.Count 1 'Evidence loader should deserialize only computation-eligible observation keys.'
+    Assert-True (-not $scopedEvidence.observations.ContainsKey('china:2')) 'Filtered market observations must not enter opportunity evidence.'
+} finally {
+    $RuntimeCycleFile=$oldRuntimeCycleFile
+    $SeedCycleFile=$oldSeedCycleFile
+    $RuntimeObservationFile=$oldRuntimeObservationFile
+    $SeedObservationFile=$oldSeedObservationFile
+    Remove-Item -LiteralPath $tempCycle,$tempObs,$tempEmpty -Force -ErrorAction SilentlyContinue
+}
+
 $focusPath=Join-Path ([System.IO.Path]::GetTempPath()) ('travel-focus-'+[guid]::NewGuid().ToString('N')+'.kv')
 try {
     @('MarketKey=china:123','UpdatedAt=100000') | Set-Content -LiteralPath $focusPath -Encoding UTF8
