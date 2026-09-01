@@ -31,6 +31,11 @@ if ($errors.Count -eq 0) {
         'currentCycleLeaveDeadlineAt=number(state[prefix..''CurrentCycleLeaveDeadlineAt''])',
         'currentCycleSafetyMarginSeconds=number(state[prefix..''CurrentCycleSafetyMarginSeconds''])',
         'nextCycleOrdinal=math.floor(number(state[prefix..''NextCycleOrdinal'']))',
+        'windowDataQuality=trim(state[prefix..''WindowDataQuality'']):lower()',
+        'windowDataQualityReason=trim(state[prefix..''WindowDataQualityReason''])',
+        "'Collecting Data'",
+        "'Stale/frozen intervals are excluded from forecast timing.'",
+        "'See Weav3r for the current travel-stock snapshot.'",
         "'Current Cycle Sellout: '..formatMoment(row.activeSelloutEstimateAt,now)",
         "'Leave Before: '..formatMoment(row.currentCycleLeaveDeadlineAt,now)",
         "'5% Sellout Safety: '..formatDuration(row.currentCycleSafetyMarginSeconds)",
@@ -83,6 +88,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Current/next-cycle home window-tooltip validation passed.' -ForegroundColor Green
+Write-Host 'Current/next-cycle and collecting-data home tooltip validation passed.' -ForegroundColor Green
 Write-Host 'Reachable current stock shows sellout plus 5% safety deadline; otherwise the tooltip is pinned to the immediate next restock and never a farther cycle.'
 exit 0
