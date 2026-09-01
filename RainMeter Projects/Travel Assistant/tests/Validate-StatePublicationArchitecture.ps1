@@ -62,7 +62,16 @@ if ($errors.Count -eq 0) {
         Fail 'RunUpdate must complete FilterState, publish exactly one finalized UI state, then write the heartbeat.'
     }
 
-    $publishInvocationCount = ([regex]::Matches($runUpdate,'(?m)^\s*Publish-UpdateUiState\s*$')).Count
+    $tokens=$null; $parseErrors=$null
+    $runUpdateAst=[System.Management.Automation.Language.Parser]::ParseFile($runUpdatePath,[ref]$tokens,[ref]$parseErrors)
+    foreach($parseError in @($parseErrors)) {
+        Fail ("PowerShell parse error in RunUpdate.ps1 while validating publication architecture: " + $parseError.Message)
+    }
+    $publishInvocationCount=@($runUpdateAst.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq 'Publish-UpdateUiState'
+    },$true)).Count
     if ($publishInvocationCount -ne 1) {
         Fail "RunUpdate must invoke final UI publication exactly once; found $publishInvocationCount invocations."
     }
