@@ -443,7 +443,14 @@ function Invalidate-PhaseAnchorForGap {
     if ($currentAt -le 0) { $currentAt = [long]$Observation.timestamp }
     if ($previousAt -le 0 -or $currentAt -le $previousAt) { return $false }
     $gap = $currentAt - $previousAt
-    $hardGap = [Math]::Min([long]$BoundaryPolicy.selloutHardGapSeconds,[long]$BoundaryPolicy.restockHardGapSeconds)
+    # A gap wholly inside the same observed phase is not itself a missing boundary.
+    # Only invalidate continuity when the outage is long enough to plausibly hide
+    # both a sellout and a restock. Shorter interior outages remain bridgeable if
+    # the phase boundaries are observed before/after the outage.
+    $hardGap = [Math]::Max(
+        [long](2 * [Math]::Max(1,[long]$BoundaryPolicy.expectedPollSeconds)),
+        [long]$BoundaryPolicy.selloutHardGapSeconds + [long]$BoundaryPolicy.restockHardGapSeconds
+    )
     if ($gap -lt $hardGap) { return $false }
 
     Set-DynamicProperty -Object $DestState -Name 'continuityInvalidatedAt' -Value $currentAt
@@ -456,6 +463,11 @@ function Invalidate-PhaseAnchorForGap {
         Set-DynamicProperty -Object $DestState -Name 'lastSellOutBoundaryQuality' -Value 'unknown_gap'
     }
     return $true
+}
+
+function Test-ForecastBoundaryQuality {
+    param([string]$Quality)
+    return (([string]$Quality).Trim().ToLowerInvariant() -in @('observed','bounded','recovered'))
 }
 
 function Update-CycleState {
@@ -476,7 +488,7 @@ function Update-CycleState {
     if ($previousStock -ge 0) {
         if ($previousStock -eq 0 -and $currentStock -gt 0) {
             $quality = Get-CycleBoundaryQuality -GapSeconds $gapSeconds -Policy $BoundaryPolicy -Phase restock
-            $restockKnown = ($quality -ne 'unknown_gap')
+            $restockKnown = Test-ForecastBoundaryQuality -Quality $quality
             $previousSoldOutAt = [long]$DestState.lastSellOutAt
             $previousSoldOutLower = if ($DestState.PSObject.Properties['lastSellOutLowerBoundAt'] -and [long]$DestState.lastSellOutLowerBoundAt -gt 0) { [long]$DestState.lastSellOutLowerBoundAt } else { $previousSoldOutAt }
             $previousSoldOutUpper = if ($DestState.PSObject.Properties['lastSellOutUpperBoundAt'] -and [long]$DestState.lastSellOutUpperBoundAt -gt 0) { [long]$DestState.lastSellOutUpperBoundAt } else { $previousSoldOutAt }
@@ -506,7 +518,7 @@ function Update-CycleState {
             }
         } elseif ($previousStock -gt 0 -and $currentStock -eq 0) {
             $quality = Get-CycleBoundaryQuality -GapSeconds $gapSeconds -Policy $BoundaryPolicy -Phase sellout
-            $selloutKnown = ($quality -ne 'unknown_gap')
+            $selloutKnown = Test-ForecastBoundaryQuality -Quality $quality
             $selloutLower = if ($selloutKnown) { $previousObservedAt } else { 0L }
             $selloutUpper = if ($selloutKnown) { $ts } else { 0L }
             $DestState.lastSellOutAt = $selloutLower
@@ -528,9 +540,9 @@ function Update-CycleState {
                 $availabilityMaximum = if ($selloutKnown -and $restockLower -gt 0) { [Math]::Max(0L,$selloutUpper-$restockLower) } else { 0L }
                 $delayMinimum = if ($restockLower -gt 0 -and $previousSoldOutUpper -gt 0) { [Math]::Max(0L,$restockLower-$previousSoldOutUpper) } else { 0L }
                 $delayMaximum = if ($restockUpper -gt 0 -and $previousSoldOutLower -gt 0) { [Math]::Max(0L,$restockUpper-$previousSoldOutLower) } else { 0L }
-                $availabilityEligible = ($selloutKnown -and $restockAt -gt 0 -and $availabilityMinimum -gt 0)
-                $restockDelayEligible = ($restockAt -gt 0 -and $previousSoldOutAt -gt 0 -and $previousSelloutQuality -ne 'unknown_gap' -and $delayMaximum -gt 0)
-                $trendEligible = ($availabilityEligible -and $restockDelayEligible -and $quality -ne 'uncertain' -and $restockQuality -ne 'uncertain' -and $previousSelloutQuality -ne 'uncertain')
+                $availabilityEligible = ($selloutKnown -and $restockAt -gt 0 -and (Test-ForecastBoundaryQuality -Quality $restockQuality) -and $availabilityMinimum -gt 0)
+                $restockDelayEligible = ($restockAt -gt 0 -and $previousSoldOutAt -gt 0 -and (Test-ForecastBoundaryQuality -Quality $previousSelloutQuality) -and $delayMaximum -gt 0)
+                $trendEligible = ($availabilityEligible -and $restockDelayEligible)
                 $completed = [pscustomobject]@{
                     schemaVersion = 2
                     country = [string]$Observation.country
@@ -716,6 +728,18 @@ try {
                 $destState.lastForeignPrice = [long]$observation.foreignPrice
                 $destState.lastSourceTimestamp = $(if ([long]$observation.sourceTimestamp -gt 0) { [long]$observation.sourceTimestamp } else { [long]$observation.timestamp })
                 continue
+            }
+
+            $effectiveTimestamp = if ([long]$observation.sourceTimestamp -gt 0) { [long]$observation.sourceTimestamp } else { [long]$observation.timestamp }
+            $previousFreshTimestamp = [long]$destState.lastSourceTimestamp
+            $transitionGapSeconds = if ($previousFreshTimestamp -gt 0 -and $effectiveTimestamp -gt $previousFreshTimestamp) { [long]($effectiveTimestamp-$previousFreshTimestamp) } else { 0L }
+            Set-DynamicProperty -Object $observation -Name 'previousFreshSourceTimestamp' -Value $previousFreshTimestamp
+            Set-DynamicProperty -Object $observation -Name 'transitionGapSeconds' -Value $transitionGapSeconds
+            $transitionPhase = ''
+            if ([int]$destState.lastStock -le 0 -and [int]$observation.stock -gt 0) { $transitionPhase='restock' }
+            elseif ([int]$destState.lastStock -gt 0 -and [int]$observation.stock -le 0) { $transitionPhase='sellout' }
+            if (-not [string]::IsNullOrWhiteSpace($transitionPhase)) {
+                Set-DynamicProperty -Object $observation -Name 'transitionBoundaryQuality' -Value (Get-CycleBoundaryQuality -GapSeconds $transitionGapSeconds -Policy $boundaryPolicy -Phase $transitionPhase)
             }
 
             Append-JsonLine -Path $ObservationFile -Value $observation -FallbackPath $PendingObservationFile
