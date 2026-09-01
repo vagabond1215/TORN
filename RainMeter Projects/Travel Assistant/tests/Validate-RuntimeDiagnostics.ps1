@@ -8,7 +8,7 @@ function Fail([string]$Message) { $script:errors.Add($Message) }
 
 $required = @(
     'RuntimeLog.ps1','PopupHost.ps1','LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','LaunchItemViewer.ps1','LaunchSettings.ps1','LaunchUpdate.ps1',
-    'OpenOptimizerSettings.ps1','OpenFilterPopup.ps1','OpenSettings.ps1','FilterPreferences.ps1','OpportunityState.ps1','RunUpdate.ps1'
+    'OpenOptimizerSettings.ps1','OpenFilterPopup.ps1','OpenSettings.ps1','FilterPreferences.ps1','OpportunityState.ps1','RunUpdate.ps1','EnsureEngineStateSchema.ps1'
 )
 foreach ($name in $required) {
     $path = Join-Path $Scripts $name
@@ -123,8 +123,34 @@ if (Test-Path -LiteralPath $opportunityPath) {
 $updatePath = Join-Path $Scripts 'RunUpdate.ps1'
 if (Test-Path -LiteralPath $updatePath) {
     $text = Get-Content -LiteralPath $updatePath -Raw
-    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','Clear-TravelAssistantLatestError','filter-state-error.txt','run-update')) {
-        if (-not $text.Contains($token)) { Fail "RunUpdate.ps1 missing centralized diagnostic token '$token'." }
+    foreach ($token in @(
+        'RuntimeLog.ps1','Write-TravelAssistantLog','Clear-TravelAssistantLatestError','filter-state-error.txt','run-update',
+        'UpdatePerformanceRows','System.Diagnostics.Stopwatch','TotalProcessorTime','New-UpdateStageTimer','Complete-UpdateStageTimer',
+        'Write-UpdatePerformanceSummary',"-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
+        "'publish-ui'","'publish-heartbeat'","'generation-cleanup'"
+    )) {
+        if (-not $text.Contains($token)) { Fail "RunUpdate.ps1 missing centralized diagnostic/performance token '$token'." }
+    }
+    if ($text.Contains("Invoke-HistoryMaintenance -Phase 'PostUpdate'")) {
+        Fail 'RunUpdate.ps1 must not pay for the retired no-op PostUpdate history pass on every heartbeat.'
+    }
+}
+
+$schemaPath = Join-Path $Scripts 'EnsureEngineStateSchema.ps1'
+if (Test-Path -LiteralPath $schemaPath) {
+    $schemaText = Get-Content -LiteralPath $schemaPath -Raw
+    foreach ($token in @(
+        'activeCycleRepairKeys',
+        '$activeCycleRepairKeys.Count -gt 0',
+        '[System.IO.File]::ReadLines($ObservationFile)',
+        '$activeCycleRepairKeys.Contains($key)',
+        'exceptional',
+        'steady-state updater never scans'
+    )) {
+        if (-not $schemaText.Contains($token)) { Fail "EnsureEngineStateSchema.ps1 missing CPU-efficiency token '$token'." }
+    }
+    if ($schemaText.Contains('foreach ($line in Get-Content -LiteralPath $ObservationFile)')) {
+        Fail 'EnsureEngineStateSchema.ps1 must stream the repair scan and only enter it when repair candidates exist.'
     }
 }
 
@@ -133,6 +159,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Runtime diagnostics validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Reusable detached popup hosts, PS7 settings refresh routing, scope-safe entrypoints, and bounded runtime logging validation passed.' -ForegroundColor Green
+Write-Host 'Reusable detached popup hosts, PS7 settings refresh routing, bounded runtime logging, and updater CPU profiling/steady-state scan guards validation passed.' -ForegroundColor Green
 Write-Host 'Runtime log: data\runtime\logs\travel-assistant.log (7-day / 256 KiB bounded, local and Git-ignored).'
 exit 0
