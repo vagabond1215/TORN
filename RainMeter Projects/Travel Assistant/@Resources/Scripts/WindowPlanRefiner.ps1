@@ -30,6 +30,13 @@ function Get-StableWindowMedian {
     return [long][Math]::Round(([double]$sorted[$mid-1] + [double]$sorted[$mid]) / 2.0)
 }
 
+function Test-WindowBoundaryQuality {
+    param([string]$Quality)
+    $value=([string]$Quality).Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($value)) { return $false }
+    return ($value -in @('observed','bounded','recovered'))
+}
+
 function Get-CurrentCycleDeparturePlan {
     param(
         [long]$CurrentStock,
@@ -398,6 +405,8 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'NextRestockEstimateAt']=[long]$liveProjection.nextRestockEstimateAt
     $state[$prefix+'MedianRestockDelaySeconds']=[long]$liveProjection.medianRestockDelaySeconds
     $state[$prefix+'LiveCycleProjectionMode']=[string]$liveProjection.mode
+    $state[$prefix+'WindowDataQuality']='ready'
+    $state[$prefix+'WindowDataQualityReason']=''
     $anchorAt=0L; $phase='sellout'
     if ($stock -gt 0) {
         $phase='restock'
@@ -408,6 +417,39 @@ for ($i=1; $i -le $count; $i++) {
     }
 
     $model=Get-StableRecurringScenarioModel -Cycles $cycles -AnchorAt $anchorAt -AnchorPhase $phase -NowEpoch $Now
+
+    # Never turn frozen provider state or an unobserved transition into forecast
+    # duration. A current/next-cycle window requires fresh market evidence plus
+    # observed, tightly bounded, or externally recovered phase boundaries.
+    $collectingReason=''
+    if ([string]$liveProjection.mode -eq 'stale-source') {
+        $collectingReason='live stock source is stale'
+    } elseif ($stock -gt 0) {
+        $activeCycle=Get-WindowProperty $destinationState 'activeCycle'
+        $restockAt=if ($null -ne $activeCycle) { [long](Get-WindowProperty $activeCycle 'restockAt') } else { 0L }
+        $restockQuality=if ($null -ne $activeCycle) { [string](Get-WindowProperty $activeCycle 'restockBoundaryQuality') } else { '' }
+        if ($restockAt -le 0 -or -not (Test-WindowBoundaryQuality -Quality $restockQuality)) {
+            $collectingReason='current restock boundary was not observed or recovered'
+        } elseif ([long]$liveProjection.activeSelloutEstimateAt -le 0) {
+            $collectingReason='current sellout cannot yet be estimated from verified evidence'
+        } elseif ([int]$model.sampleCount -le 0) {
+            $collectingReason='no verified completed cycles are available'
+        }
+    } else {
+        $lastSellOutAt=if ($null -ne $destinationState) { [long](Get-WindowProperty $destinationState 'lastSellOutAt') } else { 0L }
+        $lastSellOutQuality=if ($null -ne $destinationState) { [string](Get-WindowProperty $destinationState 'lastSellOutBoundaryQuality') } else { '' }
+        if ($lastSellOutAt -le 0 -or -not (Test-WindowBoundaryQuality -Quality $lastSellOutQuality)) {
+            $collectingReason='sellout boundary was missed during collection'
+        } elseif ([int]$model.sampleCount -le 0) {
+            $collectingReason='no verified completed cycles are available'
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($collectingReason)) {
+        $state[$prefix+'WindowDataQuality']='collecting'
+        $state[$prefix+'WindowDataQualityReason']=$collectingReason
+    }
+
     $machine=Convert-WindowPlanMachineText -Model $model
     $baseTooltip=Remove-WindowMachineEnvelope -Text ([string]$state[$prefix+'Tooltip'])
     $priceInfo=Get-WindowPriceInfo -Engine $engine -Key $key
@@ -433,6 +475,14 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'CurrentCycleLeaveDeadlineAt']='0'
     $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
     $state[$prefix+'NextCycleOrdinal']=if ($stock -gt 0) { '1' } else { '0' }
+
+    if ([string]$state[$prefix+'WindowDataQuality'] -eq 'collecting') {
+        $state[$prefix+'WindowStartAt']='0'
+        $state[$prefix+'WindowText']='Collecting Data: See Weav3r'
+        $state[$prefix+'ChanceText']=''
+        $state[$prefix+'ProbabilityValue']='-1'
+        continue
+    }
 
     $currentCycle=Get-CurrentCycleDeparturePlan -CurrentStock $stock -ActiveSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt) -FlightSeconds $flightSeconds -EarliestDepartureAt $earliestDeparture -NowEpoch $Now -SafetyMarginFraction 0.05
 
