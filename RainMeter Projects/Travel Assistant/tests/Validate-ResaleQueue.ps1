@@ -59,13 +59,41 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     foreach ($token in @('ResalePriority.ps1','ResaleQueue.ps1','Write-UpdateHeartbeat')) {
         if (-not $wrapper.Contains($token)) { Fail "RunUpdate.ps1 missing $token." }
     }
-    $heartbeatCalls=[regex]::Matches($wrapper,'(?m)^\s*Write-UpdateHeartbeat\s*$')
-    $priorityCalls=[regex]::Matches($wrapper,'(?m)^\s*if \(Test-Path -LiteralPath \$ResalePriority\) \{ & \$ResalePriority \}\s*$')
-    $queueCalls=[regex]::Matches($wrapper,'(?m)^\s*&\s+\$ResaleQueue\s*$')
+    $tokens=$null; $parseErrors=$null
+    $wrapperAst=[System.Management.Automation.Language.Parser]::ParseFile($wrapperPath,[ref]$tokens,[ref]$parseErrors)
+    foreach($parseError in @($parseErrors)) {
+        Fail ("PowerShell parse error in RunUpdate.ps1 while validating resale routing: " + $parseError.Message)
+    }
+
+    $commands=@($wrapperAst.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.CommandAst]
+    },$true))
+
+    $heartbeatCalls=@($commands | Where-Object {
+        $_.GetCommandName() -eq 'Write-UpdateHeartbeat'
+    })
+    $priorityCalls=@($commands | Where-Object {
+        $_.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Ampersand -and
+        $_.CommandElements.Count -gt 0 -and
+        $_.CommandElements[0].Extent.Text -eq '$ResalePriority'
+    })
+    $queueCalls=@($commands | Where-Object {
+        $_.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Ampersand -and
+        $_.CommandElements.Count -gt 0 -and
+        $_.CommandElements[0].Extent.Text -eq '$ResaleQueue'
+    })
+
     if ($heartbeatCalls.Count -ne 1) { Fail "Expected one heartbeat; found $($heartbeatCalls.Count)." }
     if ($priorityCalls.Count -ne 1) { Fail "Expected one local ResalePriority call; found $($priorityCalls.Count)." }
     if ($queueCalls.Count -ne 1) { Fail "Expected one ResaleQueue call; found $($queueCalls.Count)." }
-    if ($heartbeatCalls.Count -eq 1 -and $priorityCalls.Count -eq 1 -and $queueCalls.Count -eq 1 -and -not ($heartbeatCalls[0].Index -lt $priorityCalls[0].Index -and $priorityCalls[0].Index -lt $queueCalls[0].Index)) {
+    if (-not $wrapper.Contains('if (Test-Path -LiteralPath $ResalePriority)')) {
+        Fail 'ResalePriority must remain guarded by its local script existence check.'
+    }
+    if ($heartbeatCalls.Count -eq 1 -and $priorityCalls.Count -eq 1 -and $queueCalls.Count -eq 1 -and -not (
+        $heartbeatCalls[0].Extent.StartOffset -lt $priorityCalls[0].Extent.StartOffset -and
+        $priorityCalls[0].Extent.StartOffset -lt $queueCalls[0].Extent.StartOffset
+    )) {
         Fail 'Runtime must remain heartbeat -> local ResalePriority -> single ResaleQueue request path.'
     }
 }
