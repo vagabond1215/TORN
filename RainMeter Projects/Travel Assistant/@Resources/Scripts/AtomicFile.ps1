@@ -76,6 +76,18 @@ function Open-TravelAssistantSharedReadStream {
     )
 }
 
+function Open-TravelAssistantSharedTextReader {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = Open-TravelAssistantSharedReadStream -Path $Path
+    try {
+        return [System.IO.StreamReader]::new($stream,[System.Text.Encoding]::UTF8,$true)
+    } catch {
+        $stream.Dispose()
+        throw
+    }
+}
+
 function Read-TravelAssistantSharedText {
     param([Parameter(Mandatory = $true)][string]$Path)
 
