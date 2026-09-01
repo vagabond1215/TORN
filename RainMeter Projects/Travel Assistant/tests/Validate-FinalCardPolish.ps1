@@ -15,7 +15,7 @@ if ($errors.Count -eq 0) {
     $includeText = Get-Content -LiteralPath $includePath -Raw
 
     foreach ($token in @(
-        'LEAVE IN = wait before departing; LEAVE BEFORE = latest departure deadline.',
+        'Preserve the explicit current/next-cycle status text produced by CardPresenter.',
         "header:match('^(.-)%s+MV:(.-)%s+|%s+(.+)$')",
         "name..' - '..cost..' ('..mv..')'",
         "setOption(prefix..'Gross','Text',profit)",
@@ -47,5 +47,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Final card polish validation passed.' -ForegroundColor Green
-Write-Host 'Departure wording preserves LEAVE IN versus LEAVE BEFORE; fixed foreign costs remain white, Torn MV muted gray, and profit/item green at far right.'
+Write-Host 'Final polish leaves current/next-cycle status text untouched; fixed foreign costs remain white, Torn MV muted gray, and profit/item green at far right.'
 exit 0
