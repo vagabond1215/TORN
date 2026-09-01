@@ -91,7 +91,8 @@ if ($errors.Count -eq 0) {
     $card = Get-Content -LiteralPath $cardPath -Raw
     foreach ($token in @(
         "if travelState=='returning' then availableAt=now+liveTravelRemainingSeconds(state,now) end",
-        'findPreferredGroup(plan,effectiveFlightSeconds,availableAt,now)'
+        'findPreferredGroup(plan,effectiveFlightSeconds,availableAt,now)',
+        "'SAFE AT ARRIVAL'","'BEST AT ARRIVAL'","'MARKET DATA PENDING'"
     )) {
         if (-not $card.Contains($token)) { Fail ("CardPresenter.lua missing return/home availability contract '{0}'." -f $token) }
     }
