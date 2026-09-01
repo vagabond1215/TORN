@@ -16,10 +16,15 @@ $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
+$FocusMarketFile = Join-Path $RuntimeDir 'focus-market.kv'
 $SettingsFile = Join-Path $ConfigDir 'settings.example.json'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared graph history reads.' }
 . $AtomicFileScript
+
+$focusUpdatedAt=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+$focusText=('MarketKey={0}{1}UpdatedAt={2}{1}' -f $MarketKey,[Environment]::NewLine,$focusUpdatedAt)
+Write-TravelAssistantAtomicText -Path $FocusMarketFile -Text $focusText
 
 function Read-InlineJson {
     param([string]$Path)
