@@ -144,6 +144,7 @@ for ($i=1; $i -le $count; $i++) {
     $prefix='Opportunity'+$i
     $key=[string]$state[$prefix+'Key']
     if ([string]::IsNullOrWhiteSpace($key)) { continue }
+    if (([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant() -eq 'sleeping_oos') { continue }
     $p=$markets.PSObject.Properties[$key.ToLowerInvariant()]
     if ($null -eq $p) { continue }
     $classification=Test-PVRecentVariation -Market $p.Value
