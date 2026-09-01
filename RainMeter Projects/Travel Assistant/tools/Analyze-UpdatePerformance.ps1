@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$PerformanceFile = Join-Path $ProjectRoot 'data\runtime\update-performance.log'
 $LogFile = Join-Path $ProjectRoot 'data\runtime\logs\travel-assistant.log'
 
 function Get-PerformancePercentile {
@@ -18,41 +19,61 @@ function Get-PerformancePercentile {
     return [double]$sorted[$index]
 }
 
-if (-not (Test-Path -LiteralPath $LogFile)) {
-    Write-Host "No runtime log found at $LogFile" -ForegroundColor Yellow
+$sources = New-Object System.Collections.Generic.List[object]
+if (Test-Path -LiteralPath $PerformanceFile) {
+    [void]$sources.Add([pscustomobject]@{
+        Path = $PerformanceFile
+        Pattern = '^\S+\s+outcome=(\S+)\s+total_cpu_ms=(\d+)\s+total_wall_ms=(\d+)\s+stages=(.*)$'
+    })
+}
+if (Test-Path -LiteralPath $LogFile) {
+    [void]$sources.Add([pscustomobject]@{
+        Path = $LogFile
+        Pattern = '\[performance\]\s+outcome=(\S+)\s+total_cpu_ms=(\d+)\s+total_wall_ms=(\d+)\s+stages=(.*)$'
+    })
+}
+if ($sources.Count -eq 0) {
+    Write-Host 'No updater performance or runtime log files are present yet.' -ForegroundColor Yellow
     exit 2
 }
 
 $updates = New-Object System.Collections.Generic.List[object]
-foreach ($line in [System.IO.File]::ReadLines($LogFile)) {
-    $match = [regex]::Match(
-        $line,
-        '\[performance\]\s+outcome=(\S+)\s+total_cpu_ms=(\d+)\s+total_wall_ms=(\d+)\s+stages=(.*)$'
-    )
-    if (-not $match.Success) { continue }
+$seen = New-Object 'System.Collections.Generic.HashSet[string]'
+foreach ($source in @($sources)) {
+    foreach ($line in [System.IO.File]::ReadLines([string]$source.Path)) {
+        $match = [regex]::Match($line,[string]$source.Pattern)
+        if (-not $match.Success) { continue }
 
-    $stageRows = New-Object System.Collections.Generic.List[object]
-    $stageText = [string]$match.Groups[4].Value
-    foreach ($part in @($stageText -split ',')) {
-        $stageMatch = [regex]::Match($part.Trim(),'^([^:]+):(\d+)cpu/(\d+)wall$')
-        if (-not $stageMatch.Success) { continue }
-        [void]$stageRows.Add([pscustomobject]@{
-            Stage = [string]$stageMatch.Groups[1].Value
-            CpuMs = [double]$stageMatch.Groups[2].Value
-            WallMs = [double]$stageMatch.Groups[3].Value
+        $stageRows = New-Object System.Collections.Generic.List[object]
+        $stageText = [string]$match.Groups[4].Value
+        foreach ($part in @($stageText -split ',')) {
+            $stageMatch = [regex]::Match($part.Trim(),'^([^:]+):(\d+)cpu/(\d+)wall$')
+            if (-not $stageMatch.Success) { continue }
+            [void]$stageRows.Add([pscustomobject]@{
+                Stage = [string]$stageMatch.Groups[1].Value
+                CpuMs = [double]$stageMatch.Groups[2].Value
+                WallMs = [double]$stageMatch.Groups[3].Value
+            })
+        }
+
+        $fingerprint = ('{0}|{1}|{2}|{3}' -f
+            [string]$match.Groups[1].Value,
+            [string]$match.Groups[2].Value,
+            [string]$match.Groups[3].Value,
+            $stageText)
+        if (-not $seen.Add($fingerprint)) { continue }
+
+        [void]$updates.Add([pscustomobject]@{
+            Outcome = [string]$match.Groups[1].Value
+            TotalCpuMs = [double]$match.Groups[2].Value
+            TotalWallMs = [double]$match.Groups[3].Value
+            Stages = $stageRows.ToArray()
         })
     }
-
-    [void]$updates.Add([pscustomobject]@{
-        Outcome = [string]$match.Groups[1].Value
-        TotalCpuMs = [double]$match.Groups[2].Value
-        TotalWallMs = [double]$match.Groups[3].Value
-        Stages = $stageRows.ToArray()
-    })
 }
 
 if ($updates.Count -eq 0) {
-    Write-Host 'No [performance] updater samples are present yet. Let the skin complete at least one normal update.' -ForegroundColor Yellow
+    Write-Host 'No updater performance samples are present yet. Complete one deterministic or normal update after pulling the telemetry fix.' -ForegroundColor Yellow
     exit 2
 }
 
