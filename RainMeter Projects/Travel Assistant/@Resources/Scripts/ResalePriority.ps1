@@ -9,8 +9,10 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $PreferenceFile = Join-Path $RuntimeDir 'preferences.json'
+$StateKvFile = Join-Path $GeneratedDir 'state.kv'
 
 function Read-PriorityJson {
     param([string]$Path)
@@ -18,6 +20,20 @@ function Read-PriorityJson {
     $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
     return ($raw | ConvertFrom-Json)
+}
+
+function Read-PriorityStateKv {
+    param([string]$Path)
+    $values = @{}
+    if (-not (Test-Path -LiteralPath $Path)) { return $values }
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $index = $line.IndexOf('=')
+        if ($index -lt 1) { continue }
+        $key = $line.Substring(0,$index).Trim([char]0xFEFF).Trim()
+        $values[$key] = $line.Substring($index+1).Trim()
+    }
+    return $values
 }
 
 function Write-PriorityJsonAtomic {
@@ -70,6 +86,7 @@ if ($null -eq $engine -or $null -eq $items -or -not $engine.PSObject.Properties[
 if (-not $engine.resaleQueue.PSObject.Properties['attempts']) { return }
 
 $preferences = Read-PriorityJson $PreferenceFile
+$projection = Read-PriorityStateKv $StateKvFile
 $ignoredIds = New-Object 'System.Collections.Generic.HashSet[int]'
 if ($null -ne $preferences -and $preferences.PSObject.Properties['ignoredItemIds']) {
     foreach ($id in @($preferences.ignoredItemIds)) {
@@ -104,11 +121,19 @@ foreach ($property in @($engine.resaleQueue.attempts.PSObject.Properties)) {
 
 $priorityIds = New-Object 'System.Collections.Generic.HashSet[int]'
 
-# The optimizer records item IDs whose MV is currently the blocker for route
-# evaluation. They receive the same bounded five-minute failure retry policy as
-# the old visible proof items, but this script never makes a request itself.
-if ($engine.PSObject.Properties['optimizer'] -and $null -ne $engine.optimizer -and $engine.optimizer.PSObject.Properties['pricingPriorityItemIds']) {
-    foreach ($id in @($engine.optimizer.pricingPriorityItemIds)) {
+# OpportunityState now owns the visible economics calculation and publishes the
+# IDs whose MV is missing/stale directly in state.kv. This replaces the retired
+# standalone route optimizer as the primary pricing-priority signal.
+if ($projection.ContainsKey('ResalePricingPriorityItemIds')) {
+    foreach ($idText in ([string]$projection['ResalePricingPriorityItemIds']).Split(',')) {
+        $itemId = 0
+        if ([int]::TryParse($idText.Trim(), [ref]$itemId) -and $itemId -gt 0 -and -not $ignoredIds.Contains($itemId)) {
+            [void]$priorityIds.Add($itemId)
+        }
+    }
+} elseif ($engine.PSObject.Properties['optimizer'] -and $null -ne $engine.optimizer -and $engine.optimizer.PSObject.Properties['pricingPriorityItemIds']) {
+    # One-release compatibility fallback for an older persisted engine-state.
+    foreach ($id in $engine.optimizer.pricingPriorityItemIds) {
         $itemId = 0
         if ([int]::TryParse([string]$id, [ref]$itemId) -and $itemId -gt 0 -and -not $ignoredIds.Contains($itemId)) {
             [void]$priorityIds.Add($itemId)
