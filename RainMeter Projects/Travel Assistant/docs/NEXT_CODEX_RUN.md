@@ -214,6 +214,25 @@ Target acceptance caught two follow-up issues after the unified-filter pull:
 
 All explicit redraw paths now complete the entire presentation chain before `!Redraw`. `StateReader` also centralizes immediate sort/trip/graph redraws through that same chain. Hard-stale no-row mode uses the compact 132 px base panel height rather than the retired 164 px header footprint.
 
+### CPU profiling / first steady-state optimizations
+
+The updater now records one compact `[performance]` line after each acquired worker. Each stage reports both pwsh CPU milliseconds and wall milliseconds, so API/network wait is not mistaken for processor work.
+
+Two behavior-preserving reductions are already active:
+
+- the retired `MaintainObservationHistory -Phase PostUpdate` call is no longer launched every minute because PreUpdate already owns migration cleanup and hourly pruning and PostUpdate now returns without extra work;
+- `EnsureEngineStateSchema.ps1` first identifies in-stock markets with a genuinely missing `activeCycle`; only that exceptional repair state scans `observations.jsonl`. Normal heartbeats no longer parse the full history file for a repair that is not needed.
+
+After 20-60 minutes of normal operation:
+
+```powershell
+cd "C:\Codex\TORN\RainMeter Projects\Travel Assistant"
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Analyze-UpdatePerformance.ps1 -Last 60
+```
+
+Rank the next optimization target by `AvgCpuMs` and `P95CpuMs`, not wall time alone.
+
 ## Target-Windows acceptance for the new redesign
 
 First pull and verify the requested commit:
