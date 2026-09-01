@@ -15,6 +15,9 @@ $GeneratedDir=Join-Path $ProjectRoot '@Resources\Generated'
 $RuntimeObservationFile=Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile=Join-Path $SeedDir 'observations.jsonl'
 $BandCount=48
+$AtomicFileScript=Join-Path $PSScriptRoot 'AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared graph-hover history reads.' }
+. $AtomicFileScript
 
 function Get-HoverProperty {
     param([object]$Object,[string]$Name)
@@ -32,11 +35,17 @@ function Read-HoverKv {
     param([string]$Path)
     $values=@{}
     if (-not (Test-Path -LiteralPath $Path)) { return $values }
-    foreach ($line in [System.IO.File]::ReadLines($Path)) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        $eq=$line.IndexOf('=')
-        if ($eq -le 0) { continue }
-        $values[$line.Substring(0,$eq)]=$line.Substring($eq+1)
+    $reader=$null
+    try {
+        $reader=Open-TravelAssistantSharedTextReader -Path $Path
+        while (($line=$reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $eq=$line.IndexOf('=')
+            if ($eq -le 0) { continue }
+            $values[$line.Substring(0,$eq)]=$line.Substring($eq+1)
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
     }
     return $values
 }
@@ -59,18 +68,24 @@ function Read-HoverHistory {
     if (-not (Test-Path -LiteralPath $Path)) { return $rows }
     $countryNeedle='"country":"'+$Country+'"'
     $itemPattern='"itemId"\s*:\s*'+[regex]::Escape([string]$ItemId)+'(?=\s*[,}])'
-    foreach ($line in [System.IO.File]::ReadLines($Path)) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        if ($line.IndexOf($countryNeedle,[System.StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
-        if ($line -notmatch $itemPattern) { continue }
-        try {
-            $row=$line | ConvertFrom-Json
-            $timestamp=[long](Get-HoverProperty $row 'timestamp')
-            if ($timestamp -le 0) { continue }
-            $source=[string](Get-HoverProperty $row 'source')
-            if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
-            $rows += [pscustomobject]@{ timestamp=$timestamp; stock=[long](Get-HoverProperty $row 'stock') }
-        } catch { }
+    $reader=$null
+    try {
+        $reader=Open-TravelAssistantSharedTextReader -Path $Path
+        while (($line=$reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            if ($line.IndexOf($countryNeedle,[System.StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+            if ($line -notmatch $itemPattern) { continue }
+            try {
+                $row=$line | ConvertFrom-Json
+                $timestamp=[long](Get-HoverProperty $row 'timestamp')
+                if ($timestamp -le 0) { continue }
+                $source=[string](Get-HoverProperty $row 'source')
+                if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
+                $rows += [pscustomobject]@{ timestamp=$timestamp; stock=[long](Get-HoverProperty $row 'stock') }
+            } catch { }
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
     }
     return $rows
 }
