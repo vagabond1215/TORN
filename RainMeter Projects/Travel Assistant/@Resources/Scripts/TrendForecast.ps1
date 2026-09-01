@@ -9,6 +9,7 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $EngineStateFile = Join-Path $ProjectRoot 'data\runtime\engine-state.json'
+. (Join-Path $PSScriptRoot 'CycleForecastFilter.ps1')
 
 function Get-TFProperty {
     param([object]$Object,[string]$Name)
@@ -192,7 +193,7 @@ function Update-TFAccuracy {
 function Get-TFRecentSamples {
     param([object]$Market,[int]$Maximum=8)
     $samples=@(Get-TFProperty $Market 'recentSamples')
-    $usable=@($samples | Where-Object { $null -ne $_ -and [long](Get-TFProperty $_ 'soldOutAt') -gt 0 } | Sort-Object soldOutAt)
+    $usable=@(Select-CadenceAwareForecastCycles -Cycles $samples -MaximumSamples 0 | Where-Object { $null -ne $_ -and [long](Get-TFProperty $_ 'soldOutAt') -gt 0 } | Sort-Object soldOutAt)
     if ($usable.Count -gt $Maximum) { return @($usable | Select-Object -Last $Maximum) }
     return $usable
 }

@@ -143,7 +143,11 @@ local function buildLookup(state)
         if name~='' and country~='' then
             lookup[normalizeName(country)..'|'..normalizeName(name)]={
                 plan=parseWindowPlan(state[prefix..'Tooltip']),
-                plannedQuantity=parsePlannedQuantity(state[prefix..'QuantityText'])
+                plannedQuantity=parsePlannedQuantity(state[prefix..'QuantityText']),
+                currentStock=number(state[prefix..'CurrentStock']),
+                stockEvidenceAt=number(state[prefix..'StockEvidenceAt']),
+                activeSelloutAt=number(state[prefix..'ActiveSelloutEstimateAt']),
+                nextRestockAt=number(state[prefix..'NextRestockEstimateAt'])
             }
         end
     end
@@ -222,7 +226,24 @@ local function outboundTooltip(row,state,now)
     local plan=row and row.plan or nil
     local group=landingRelevantGroup(plan,landingAt)
     local nl='#CRLF#'
-    local lines={'Landing in '..formatDuration(remaining)}
+    local lines={}
+    local hasDirectEvidence=row~=nil and number(row.stockEvidenceAt)>0
+    if hasDirectEvidence and number(row.currentStock)>0 then
+        if number(row.activeSelloutAt)>now then
+            table.insert(lines,'Sellout in: '..formatDuration(number(row.activeSelloutAt)-now))
+        else
+            table.insert(lines,'Sellout estimate: learning from live stock')
+        end
+    elseif hasDirectEvidence then
+        if number(row.nextRestockAt)>now then
+            table.insert(lines,'Restock in: '..formatDuration(number(row.nextRestockAt)-now))
+        elseif number(row.nextRestockAt)>0 then
+            table.insert(lines,'Restock estimate: '..formatRelativeTarget(number(row.nextRestockAt),now))
+        else
+            table.insert(lines,'Restock estimate: learning')
+        end
+    end
+    table.insert(lines,'Landing in '..formatDuration(remaining))
 
     if group==nil then
         table.insert(lines,'Estimated Stock at arrival: ?')
@@ -232,20 +253,37 @@ local function outboundTooltip(row,state,now)
     local restockAt=expectedRestockAt(plan,group)
     local selloutAt=expectedSelloutAt(plan,group,restockAt)
     local estimatedStock='0'
-    if restockAt>0 and selloutAt>restockAt and landingAt>=restockAt and landingAt<selloutAt then
+    local directArrivalResolved=false
+    if hasDirectEvidence and number(row.currentStock)>0 and number(row.activeSelloutAt)>landingAt then
+        if number(row.plannedQuantity)>0 then estimatedStock='>='..tostring(math.floor(number(row.plannedQuantity))) else estimatedStock='available' end
+        directArrivalResolved=true
+    elseif hasDirectEvidence and number(row.nextRestockAt)>landingAt then
+        directArrivalResolved=true
+    end
+    if not directArrivalResolved and restockAt>0 and selloutAt>restockAt and landingAt>=restockAt and landingAt<selloutAt then
         if number(row.plannedQuantity)>0 then estimatedStock='>='..tostring(math.floor(number(row.plannedQuantity))) else estimatedStock='available' end
     end
     table.insert(lines,'Estimated Stock at arrival: '..estimatedStock)
 
-    if restockAt>now then
+    if not hasDirectEvidence and restockAt>now then
         table.insert(lines,'Restock in: '..formatDuration(restockAt-now))
-    elseif selloutAt>now then
+    elseif not hasDirectEvidence and selloutAt>now then
         table.insert(lines,'Sold out in: '..formatDuration(selloutAt-now))
     end
     return table.concat(lines,nl)
 end
 
-local function outboundStatus(plan,state,now)
+local function outboundStatus(row,state,now)
+    local plan=row and row.plan or nil
+    if row~=nil and number(row.stockEvidenceAt)>0 then
+        if number(row.currentStock)>0 then
+            if number(row.activeSelloutAt)>now then return 'UPCOMING - SELLOUT IN '..formatDuration(number(row.activeSelloutAt)-now) end
+            return 'UPCOMING - IN STOCK'
+        end
+        if number(row.nextRestockAt)>now then return 'UPCOMING - RESTOCK IN '..formatDuration(number(row.nextRestockAt)-now) end
+        if number(row.nextRestockAt)>0 then return 'UPCOMING - RESTOCK ESTIMATE OVERDUE' end
+        return 'UPCOMING - RESTOCK LEARNING'
+    end
     if plan==nil then return 'EN ROUTE' end
     local remaining=liveTravelRemainingSeconds(state,now)
     local landingAt=now+remaining
@@ -324,7 +362,7 @@ local function updateRow(index,state,lookup,now)
     end
 
     if travelState=='traveling' then
-        setOption(prefix..'Leave','Text',outboundStatus(row.plan,state,now))
+        setOption(prefix..'Leave','Text',outboundStatus(row,state,now))
         applyTooltip(prefix,outboundTooltip(row,state,now),'Arrival estimate')
         return
     end

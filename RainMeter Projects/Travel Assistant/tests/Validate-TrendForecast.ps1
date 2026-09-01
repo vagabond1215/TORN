@@ -24,7 +24,7 @@ if ($errors.Count -eq 0) {
         foreach ($parseError in @($parseErrors)) { Fail "$([IO.Path]::GetFileName($path)) parse error: $($parseError.Message)" }
     }
 
-    foreach ($token in @('mode=''shadow''','Get-TFLinearTrend','Get-TFCorrelation','availabilityVsPriceCorrelation','availabilityVsRatioCorrelation','Update-TFAccuracy','pending=$pendingNext')) {
+    foreach ($token in @('mode=''shadow''','Get-TFLinearTrend','Get-TFCorrelation','availabilityVsPriceCorrelation','availabilityVsRatioCorrelation','Update-TFAccuracy','pending=$pendingNext','CycleForecastFilter.ps1','Select-CadenceAwareForecastCycles')) {
         if (-not $trend.Contains($token)) { Fail "TrendForecast.ps1 missing '$token'." }
     }
     if ($trend -match '(?i)Invoke-RestMethod|Invoke-WebRequest|https?://|curl\.exe') { Fail 'TrendForecast.ps1 must remain local-only.' }

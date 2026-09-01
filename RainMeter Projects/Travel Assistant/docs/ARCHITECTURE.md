@@ -33,6 +33,8 @@ FinalizeState
         ↓
 TravelContext
         ↓
+CycleForecastFilter (cadence-aware forecast eligibility; history retained)
+        ↓
 OptimalRoute compatibility model
         ↓
 OpportunityState
@@ -47,6 +49,8 @@ visible heartbeat
         ↓
 ResalePriority / ResaleQueue
 ```
+
+Completed cycle rows remain retained for audit and long-horizon analysis. Route, window, and shadow-trend forecasts apply a market-specific cadence filter: markets normally completing at least eight cycles per day reject apparent cycles over 24 hours, other multi-cycle/day markets reject periods over 48 hours, and once-daily or slower markets retain a wider cadence-relative window. Fresh positive stock uses its observed restock quantity and live depletion rate for the active sellout estimate; restock timing begins only after observed stock reaches zero and uses the cleaned median out-of-stock delay.
 
 Inline graph rendering and the standalone Viewer are local side paths. They make no provider/Torn request.
 

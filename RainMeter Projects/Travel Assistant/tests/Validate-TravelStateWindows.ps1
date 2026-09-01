@@ -30,6 +30,11 @@ if ($errors.Count -eq 0) {
         'number(group.lateSellout)>landingAt',
         "'Landing in '",
         "'Estimated Stock at arrival: '",
+        'currentStock=number(state[prefix..''CurrentStock''])',
+        'activeSelloutAt=number(state[prefix..''ActiveSelloutEstimateAt''])',
+        "'Sellout in: '",
+        "'UPCOMING - SELLOUT IN '",
+        "'UPCOMING - RESTOCK IN '",
         "'Restock in: '",
         "'Sold out in: '",
         "'Arrival estimate'",
@@ -44,6 +49,9 @@ if ($errors.Count -eq 0) {
     foreach ($retired in @('Safe formula:','Best formula:')) {
         if ($lua.Contains($retired)) { Fail ("Travel-state tooltip must not contain generic home-window detail '{0}'." -f $retired) }
     }
+    $selloutLineAt=$lua.IndexOf("table.insert(lines,'Sellout in: '",[System.StringComparison]::Ordinal)
+    $landingLineAt=$lua.IndexOf("table.insert(lines,'Landing in '",[System.StringComparison]::Ordinal)
+    if ($selloutLineAt -lt 0 -or $landingLineAt -lt 0 -or $selloutLineAt -gt $landingLineAt) { Fail 'Outbound live-stock tooltip must present sellout timing before landing/restock context.' }
 
     $travel = Get-Content -LiteralPath $travelPath -Raw
     foreach ($token in @(

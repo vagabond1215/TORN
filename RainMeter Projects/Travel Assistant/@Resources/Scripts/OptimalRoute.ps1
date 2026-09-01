@@ -8,6 +8,7 @@ Set-StrictMode -Version 2.0
 
 . (Join-Path $PSScriptRoot 'TravelProfile.ps1')
 . (Join-Path $PSScriptRoot 'FilterPreferences.ps1') -SkipMain
+. (Join-Path $PSScriptRoot 'CycleForecastFilter.ps1')
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $ProjectRoot 'config'
@@ -137,6 +138,12 @@ function Get-OptimalEvidence {
             $previousStock = $stock
         }
         $restockStock[$key] = [long[]]$samples
+    }
+
+    # Stored cycles remain untouched. Only the evidence handed to route and
+    # opportunity forecasts excludes cadence-incompatible capture gaps.
+    foreach ($key in @($cycles.Keys)) {
+        $cycles[$key] = [object[]]@(Select-CadenceAwareForecastCycles -Cycles @($cycles[$key]))
     }
 
     return [pscustomobject]@{

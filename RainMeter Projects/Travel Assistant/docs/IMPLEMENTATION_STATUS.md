@@ -131,6 +131,7 @@ FinalizeState
 TravelContext
 CurrentCapacityRefresh
 CycleAnchorReconciler
+CycleForecastFilter
 OptimalRoute
 OpportunityState
 WindowPlan
@@ -153,6 +154,8 @@ Static/focused tests have been updated to guard:
 - bundled filter/settings image assets;
 - removal of old main filter meters;
 - 3 short / 4 medium / 4 long destination grouping;
+- cadence-aware capture-gap exclusion without deleting retained cycles;
+- live in-stock sellout priority followed by observed-OOS restock timing;
 - 32 px geometry-only header compaction;
 - existing card presenter and Rainmeter card contracts;
 - popup launch detachment and updater routing;

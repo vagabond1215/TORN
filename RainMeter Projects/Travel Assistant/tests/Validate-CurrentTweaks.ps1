@@ -10,17 +10,18 @@ $tweaksPath = Join-Path $ProjectRoot '@Resources\Scripts\CardTweaks.lua'
 $infoPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
 $assetPath = Join-Path $ProjectRoot '@Resources\Scripts\EnsureUiAssets.ps1'
 $refinerPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowPlanRefiner.ps1'
+$cycleFilterPath = Join-Path $ProjectRoot '@Resources\Scripts\CycleForecastFilter.ps1'
 $filterStatePath = Join-Path $ProjectRoot '@Resources\Scripts\FilterState.ps1'
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$tweaksPath,$infoPath,$assetPath,$refinerPath,$filterStatePath,$iniPath)) {
+foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$tweaksPath,$infoPath,$assetPath,$refinerPath,$cycleFilterPath,$filterStatePath,$iniPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing current-tweak asset: $path" }
 }
 
 if ($errors.Count -eq 0) {
-    foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$assetPath,$refinerPath,$filterStatePath)) {
+    foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$assetPath,$refinerPath,$cycleFilterPath,$filterStatePath)) {
         $tokens=$null; $parseErrors=$null
         [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
         foreach ($parseError in @($parseErrors)) { Fail "$([System.IO.Path]::GetFileName($path)) parse error: $($parseError.Message)" }
@@ -34,6 +35,7 @@ if ($errors.Count -eq 0) {
     $info = Get-Content -LiteralPath $infoPath -Raw
     $asset = Get-Content -LiteralPath $assetPath -Raw
     $refiner = Get-Content -LiteralPath $refinerPath -Raw
+    $cycleFilter = Get-Content -LiteralPath $cycleFilterPath -Raw
     $filterState = Get-Content -LiteralPath $filterStatePath -Raw
     $ini = Get-Content -LiteralPath $iniPath -Raw
 
@@ -69,6 +71,10 @@ if ($errors.Count -eq 0) {
         if (-not $refiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing '$token'." }
     }
     if ($refiner -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'WindowPlanRefiner.ps1 must remain local-only.' }
+    foreach ($token in @('Select-CadenceAwareForecastCycles','$medianPeriod -le 10800L','$maximumPeriod = 86400L','$maximumPeriod = 172800L','604800L')) {
+        if (-not $cycleFilter.Contains($token)) { Fail "CycleForecastFilter.ps1 missing cadence-aware contract '$token'." }
+    }
+    if ($cycleFilter -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'Cadence-aware cycle filtering must remain local-only.' }
     foreach ($token in @('WindowPlanRefiner.ps1','EnsureUiAssets.ps1','& $WindowPlanRefiner','& $EnsureUiAssets')) {
         if (-not $filterState.Contains($token)) { Fail "FilterState.ps1 missing post-window refinement token '$token'." }
     }

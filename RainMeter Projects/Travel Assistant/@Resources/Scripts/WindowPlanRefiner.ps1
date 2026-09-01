@@ -37,12 +37,7 @@ function Get-StableWindowUsableCycles {
         [long]$RecentRegimeSeconds = 43200L,
         [int]$MinimumRecentRegimeSamples = 4
     )
-    $usable = @($Cycles | Where-Object {
-        $null -ne $_ -and
-        $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0 -and
-        $_.PSObject.Properties['availabilitySeconds'] -and [long]$_.availabilitySeconds -gt 0
-    } | Sort-Object @{Expression={ if ($_.PSObject.Properties['soldOutAt']) { [long]$_.soldOutAt } else { 0L } };Descending=$true})
-    if ($MaximumSamples -gt 0 -and $usable.Count -gt $MaximumSamples) { $usable = @($usable | Select-Object -First $MaximumSamples) }
+    $usable = @(Select-CadenceAwareForecastCycles -Cycles $Cycles -MaximumSamples $MaximumSamples)
 
     # Live Safe/Best geometry should describe the current market regime. Older
     # cycles remain retained for long-horizon analytics and shadow forecasting,
@@ -85,6 +80,57 @@ function Get-StableWindowUsableCycles {
     $minimumKeep = [Math]::Max(3,[int][Math]::Ceiling($usable.Count * 0.5))
     if ($filtered.Count -ge $minimumKeep) { return $filtered }
     return $usable
+}
+
+function Get-LiveCycleProjection {
+    param(
+        [long]$CurrentStock,
+        [long]$SourceTimestamp,
+        [object]$DestinationState,
+        [object[]]$Cycles,
+        [long]$NowEpoch,
+        [long]$LiveMaximumAgeSeconds = 300L
+    )
+    $usable = @(Get-StableWindowUsableCycles -Cycles $Cycles)
+    $medianDelay = Get-StableWindowMedian -Values ([long[]]@($usable | ForEach-Object { [long]$_.restockDelaySeconds }))
+    $sourceAt = if ($SourceTimestamp -gt 0) { [Math]::Min($SourceTimestamp,$NowEpoch) } else { $NowEpoch }
+    $sourceFresh = ($SourceTimestamp -gt 0 -and ($NowEpoch-$SourceTimestamp) -le $LiveMaximumAgeSeconds)
+    $stock = if ($sourceFresh) { [Math]::Max(0L,$CurrentStock) } else { 0L }
+    $activeRestockAt=0L; $selloutAt=0L; $nextRestockAt=0L; $mode='none'
+
+    $activeCycle=Get-WindowProperty $DestinationState 'activeCycle'
+    if ($null -ne $activeCycle) { $activeRestockAt=[long](Get-WindowProperty $activeCycle 'restockAt') }
+    if ($stock -gt 0 -and $activeRestockAt -gt 0) {
+        $restockQuantity=[long](Get-WindowProperty $activeCycle 'restockQuantity')
+        $elapsed=[Math]::Max(0L,$sourceAt-$activeRestockAt)
+        $sold=[Math]::Max(0L,$restockQuantity-$stock)
+        if ($restockQuantity -gt $stock -and $elapsed -ge 120L -and $sold -ge 10L) {
+            $unitsPerSecond=$sold/[double]$elapsed
+            if ($unitsPerSecond -gt 0) {
+                $remaining=[long][Math]::Ceiling($stock/$unitsPerSecond)
+                $selloutAt=$sourceAt+[Math]::Max(60L,$remaining)
+                $mode='live-depletion'
+                if ($medianDelay -gt 0) { $nextRestockAt=$selloutAt+$medianDelay }
+            }
+        }
+        if ($mode -eq 'none') { $mode='live-stock-learning' }
+    } elseif ($sourceFresh -and $stock -eq 0) {
+        $lastSellOutAt=[long](Get-WindowProperty $DestinationState 'lastSellOutAt')
+        if ($lastSellOutAt -gt 0 -and $medianDelay -gt 0) {
+            $nextRestockAt=$lastSellOutAt+$medianDelay
+            $mode='observed-oos'
+        } else { $mode='oos-learning' }
+    } elseif (-not $sourceFresh) { $mode='stale-source' }
+
+    return [pscustomobject]@{
+        currentStock=[long]$stock
+        sourceTimestamp=[long]$SourceTimestamp
+        activeRestockAt=[long]$activeRestockAt
+        activeSelloutEstimateAt=[long]$selloutAt
+        nextRestockEstimateAt=[long]$nextRestockAt
+        medianRestockDelaySeconds=[long]$medianDelay
+        mode=[string]$mode
+    }
 }
 
 function Get-StableRecurringScenarioModel {
@@ -280,8 +326,20 @@ for ($i=1; $i -le $count; $i++) {
     $market=Get-WindowProperty $engine.observedMarkets $key
     $destinationState=$null
     if ($engine.PSObject.Properties['destinations']) { $destinationState=Get-WindowProperty $engine.destinations $key }
-    $stock=0L
-    if ($null -ne $market) { $stock=[long](Get-WindowProperty $market 'lastStock') }
+    $stock=0L; $sourceTimestamp=0L
+    if ($null -ne $market) {
+        $stock=[long](Get-WindowProperty $market 'lastStock')
+        $sourceTimestamp=[long](Get-WindowProperty $market 'sourceTimestamp')
+    }
+    $liveProjection=Get-LiveCycleProjection -CurrentStock $stock -SourceTimestamp $sourceTimestamp -DestinationState $destinationState -Cycles $cycles -NowEpoch $Now
+    $stock=[long]$liveProjection.currentStock
+    $state[$prefix+'CurrentStock']=$stock
+    $state[$prefix+'StockEvidenceAt']=[long]$liveProjection.sourceTimestamp
+    $state[$prefix+'ActiveRestockAt']=[long]$liveProjection.activeRestockAt
+    $state[$prefix+'ActiveSelloutEstimateAt']=[long]$liveProjection.activeSelloutEstimateAt
+    $state[$prefix+'NextRestockEstimateAt']=[long]$liveProjection.nextRestockEstimateAt
+    $state[$prefix+'MedianRestockDelaySeconds']=[long]$liveProjection.medianRestockDelaySeconds
+    $state[$prefix+'LiveCycleProjectionMode']=[string]$liveProjection.mode
     $anchorAt=0L; $phase='sellout'
     if ($stock -gt 0) {
         $phase='restock'

@@ -51,6 +51,19 @@ $flat=@(
 $flatTrend=Get-TFLinearTrend -Samples $flat -Property 'availabilitySeconds' -MinimumAbsoluteSlope 30 -MinimumRelativeSlope 0.02
 Assert-True ($flatTrend.direction -eq 'neutral') 'small duration noise remains neutral'
 
+$captureGapSamples=@(
+    New-Sample 10 7000 1400 14000 2500
+    New-Sample 11 7200 1200 14000 2500
+    New-Sample 12 7400 1000 14000 2500
+    New-Sample 13 6900 1500 14000 2500
+    New-Sample 14 7100 1300 14000 2500
+    New-Sample 15 6959 424027 14000 2500
+)
+$captureGapMarket=[pscustomobject]@{recentSamples=$captureGapSamples}
+$trendEligible=@(Get-TFRecentSamples -Market $captureGapMarket -Maximum 8)
+Assert-True ($trendEligible.Count -eq 5) 'shadow trend forecast excludes a cadence-incompatible capture gap'
+Assert-True (@($captureGapMarket.recentSamples).Count -eq 6) 'shadow filtering leaves retained analytics samples intact'
+
 $accuracy=New-TFAccuracy
 $pending=[pscustomobject]@{ basedOnCycleAt=10L; availabilitySeconds=900L; restockDelaySeconds=3600L }
 $actual=[pscustomobject]@{ soldOutAt=20L; availabilitySeconds=840L; restockDelaySeconds=3660L }

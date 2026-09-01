@@ -14,6 +14,7 @@ $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeCycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
 $SeedCycleFile = Join-Path $SeedDir 'cycles.jsonl'
+. (Join-Path $PSScriptRoot 'CycleForecastFilter.ps1')
 
 function Read-WindowJson {
     param([string]$Path)
@@ -60,13 +61,7 @@ function Get-WindowProperty {
 
 function Get-WindowUsableCycles {
     param([object[]]$Cycles,[int]$MaximumSamples = 48)
-    $usable = @($Cycles | Where-Object {
-        $null -ne $_ -and
-        $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0 -and
-        $_.PSObject.Properties['availabilitySeconds'] -and [long]$_.availabilitySeconds -gt 0
-    } | Sort-Object @{Expression={ if ($_.PSObject.Properties['soldOutAt']) { [long]$_.soldOutAt } else { 0L } };Descending=$true})
-    if ($MaximumSamples -gt 0 -and $usable.Count -gt $MaximumSamples) { return @($usable | Select-Object -First $MaximumSamples) }
-    return $usable
+    return @(Select-CadenceAwareForecastCycles -Cycles $Cycles -MaximumSamples $MaximumSamples)
 }
 
 function Add-WindowDelta {

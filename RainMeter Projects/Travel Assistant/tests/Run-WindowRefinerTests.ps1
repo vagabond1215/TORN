@@ -61,6 +61,42 @@ $regimeGroup0=@($regimeModel.groups | Where-Object { [int]$_.ordinal -eq 0 } | S
 Assert-Equal ([long]$regimeGroup0.earlyRestockAt) ($regimeAnchor+6576L) 'Recent-regime earliest restock should use recent minimum OOS delay.'
 Assert-Equal ([long]$regimeGroup0.lateRestockAt) ($regimeAnchor+7362L) 'Recent-regime latest restock should use recent maximum OOS delay.'
 
+# Forecast eligibility follows each market's cadence without deleting retained history.
+$fastCadenceCycles=@(
+    [pscustomobject]@{restockDelaySeconds=7000L;availabilitySeconds=1400L;soldOutAt=101L},
+    [pscustomobject]@{restockDelaySeconds=7200L;availabilitySeconds=1200L;soldOutAt=102L},
+    [pscustomobject]@{restockDelaySeconds=7400L;availabilitySeconds=1000L;soldOutAt=103L},
+    [pscustomobject]@{restockDelaySeconds=6900L;availabilitySeconds=1500L;soldOutAt=104L},
+    [pscustomobject]@{restockDelaySeconds=7100L;availabilitySeconds=1300L;soldOutAt=105L},
+    [pscustomobject]@{restockDelaySeconds=6959L;availabilitySeconds=424027L;soldOutAt=106L},
+    [pscustomobject]@{restockDelaySeconds=229L;availabilitySeconds=36L;soldOutAt=107L}
+)
+$fastFiltered=@(Select-CadenceAwareForecastCycles -Cycles $fastCadenceCycles)
+Assert-Equal $fastFiltered.Count 5 'Fast-market forecasts should reject multi-day capture gaps and implausibly short pseudo-cycles.'
+Assert-True (@($fastCadenceCycles).Count -eq 7) 'Cadence filtering must not mutate retained history.'
+
+$slowCadenceCycles=@(
+    [pscustomobject]@{restockDelaySeconds=90000L;availabilitySeconds=18000L;soldOutAt=201L},
+    [pscustomobject]@{restockDelaySeconds=100000L;availabilitySeconds=15000L;soldOutAt=202L},
+    [pscustomobject]@{restockDelaySeconds=110000L;availabilitySeconds=12000L;soldOutAt=203L},
+    [pscustomobject]@{restockDelaySeconds=120000L;availabilitySeconds=20000L;soldOutAt=204L},
+    [pscustomobject]@{restockDelaySeconds=300000L;availabilitySeconds=40000L;soldOutAt=205L}
+)
+$slowFiltered=@(Select-CadenceAwareForecastCycles -Cycles $slowCadenceCycles)
+Assert-Equal $slowFiltered.Count 5 'Once-daily or slower markets should retain a wider cadence-relative forecast history.'
+
+$projectionCycles=@(
+    [pscustomobject]@{restockDelaySeconds=6900L;availabilitySeconds=1200L;soldOutAt=301L},
+    [pscustomobject]@{restockDelaySeconds=7200L;availabilitySeconds=1300L;soldOutAt=302L},
+    [pscustomobject]@{restockDelaySeconds=7500L;availabilitySeconds=1400L;soldOutAt=303L}
+)
+$projectionState=[pscustomobject]@{lastSellOutAt=5000L;activeCycle=[pscustomobject]@{restockAt=6000L;restockQuantity=2400L}}
+$projection=Get-LiveCycleProjection -CurrentStock 600L -SourceTimestamp 10000L -DestinationState $projectionState -Cycles $projectionCycles -NowEpoch 10000L
+Assert-Equal ([string]$projection.mode) 'live-depletion' 'Fresh positive stock should use a live depletion projection before recurring windows.'
+Assert-Equal ([long]$projection.activeSelloutEstimateAt) 11334L 'Live sellout should project remaining stock from observed cycle depletion.'
+Assert-Equal ([long]$projection.medianRestockDelaySeconds) 7200L 'Next restock should use the cleaned median OOS delay.'
+Assert-Equal ([long]$projection.nextRestockEstimateAt) 18534L 'Restock projection must begin after the projected sellout.'
+
 # Selection is chronological. A near-term >50% Best Hit should not be skipped just
 # because some later cycle eventually has a Safe Window.
 $selectionModel=[pscustomobject]@{ groups=@(
@@ -76,5 +112,5 @@ if ($failures.Count -gt 0) {
     Write-Host "Stable recurring-window tests failed with $($failures.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Stable recurring-window phase, recent-regime bounds, outage outlier filtering, and chronological Safe/Best selection tests passed.' -ForegroundColor Green
+Write-Host 'Stable recurring-window phase, cadence-aware outage filtering, live depletion timing, and chronological Safe/Best selection tests passed.' -ForegroundColor Green
 exit 0
