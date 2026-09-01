@@ -451,6 +451,7 @@ $forecastOnly = 0
 $missingMv = 0
 $staleMv = 0
 $wasteBlocked = 0
+$pricingPriorityIds = New-Object 'System.Collections.Generic.HashSet[int]'
 $countryStats = @{}
 
 foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $true })) {
@@ -496,12 +497,14 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $resale = Get-OptimalResaleSnapshot -Engine $engine -ItemId $itemId -NowEpoch $Now
         $resaleUse = Get-OpportunityResaleUse -Resale $resale -NowEpoch $Now -MaximumAgeSeconds $resaleFallbackMaxAge
         if (-not [bool]$resaleUse.usable) {
+            [void]$pricingPriorityIds.Add($itemId)
             $missingMv++
             $countryStats[$countryId].missingMv = [int]$countryStats[$countryId].missingMv + 1
             continue
         }
         $marketValueFresh = [bool]$resaleUse.fresh
         if (-not $marketValueFresh) {
+            [void]$pricingPriorityIds.Add($itemId)
             $staleMv++
             $countryStats[$countryId].staleMv = [int]$countryStats[$countryId].staleMv + 1
         }
@@ -700,6 +703,10 @@ $state['OpportunityStaleStockCount'] = $stale
 $state['OpportunityForecastStockCount'] = $forecastOnly
 $state['OpportunityMissingMvCount'] = $missingMv
 $state['OpportunityStaleMvCount'] = $staleMv
+# The retired standalone route optimizer used to persist this list under
+# engine.optimizer. OpportunityState already evaluates the same resale freshness
+# blockers, so publish the compact priority signal with the visible projection.
+$state['ResalePricingPriorityItemIds'] = (($pricingPriorityIds | Sort-Object) -join ',')
 foreach ($countryId in @($countryStats.Keys | Sort-Object)) {
     $stats = $countryStats[$countryId]
     $prefix = 'OpportunityCountry_'+$countryId
