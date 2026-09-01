@@ -543,6 +543,10 @@ local function updateRow(index,state,now)
     local takeText=take>0 and formatMoney(take) or '?'
     local unitCostText=unitCost>0 and formatMoney(unitCost) or '?'
     setOption(prefix..'Price','Text','| '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))
+    local priceColor=trim(state[projectedPrefix..'PriceColor'])
+    if priceColor=='' then priceColor='#Text#' end
+    setOption(prefix..'Price','InlinePattern','^\\|\\s+-?\\$[0-9,]+')
+    setOption(prefix..'Price','InlineSetting','Color | '..priceColor)
     if priceVaries then
         setOption(prefix..'Price','ToolTipText','Take includes a 5% cash reserve because the foreign price varies. Make uses actual purchase cost, not the reserve.')
     else
