@@ -124,14 +124,12 @@ The resale priority pass does not accelerate legitimate empty-market responses (
 MaintainObservationHistory -Phase PreUpdate
 ShadowCollector
 ProjectCollectedState
-MaintainObservationHistory -Phase PostUpdate
 LocalCatalog
 EnsureEngineStateSchema
 FinalizeState
 TravelContext
 CurrentCapacityRefresh
 CycleAnchorReconciler
-CycleForecastFilter
 OptimalRoute
 OpportunityState
 WindowPlan
@@ -162,6 +160,9 @@ Static/focused tests have been updated to guard:
 - Viewer launcher validation against the reusable `.NET ProcessStartInfo` contract rather than retired `Start-Process`;
 - full presentation-pipeline completion before any explicit Rainmeter redraw, preventing transient `UPDATE STALE` / intermediate-card flashes;
 - compact 132 px hard-stale/no-row geometry;
+- one compact updater performance sample per completed worker with per-stage pwsh CPU and wall milliseconds;
+- elimination of the retired no-op PostUpdate history invocation;
+- steady-state EngineState schema repair avoids scanning observations.jsonl unless an in-stock market actually lacks activeCycle;
 - the Lua multi-return SetOption regression.
 
 This execution environment does not provide Windows PowerShell/Rainmeter, so the redesigned WinForms surface and Rainmeter render have **not** been executed here. Target acceptance must run the focused checks and visual/interactivity checklist in `docs/NEXT_CODEX_RUN.md`.
@@ -174,4 +175,5 @@ This execution environment does not provide Windows PowerShell/Rainmeter, so the
 4. unified filter screenshot shows country bands, categories and searchable items;
 5. Save/Cancel/Reset round-trip correctly;
 6. Settings/Ignore/Profile/Viewer remain functional;
-7. Rainmeter log stays clean for at least two normal poll intervals.
+7. Rainmeter log stays clean for at least two normal poll intervals;
+8. after 20-60 minutes, run `tools\Analyze-UpdatePerformance.ps1` and use AvgCpuMs / P95CpuMs to select the next CPU optimization target.
