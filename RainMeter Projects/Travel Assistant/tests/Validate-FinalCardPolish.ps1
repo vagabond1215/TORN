@@ -15,31 +15,20 @@ if ($errors.Count -eq 0) {
     $includeText = Get-Content -LiteralPath $includePath -Raw
 
     foreach ($token in @(
-        'Preserve the explicit current/next-cycle status text produced by CardPresenter.',
-        "header:match('^(.-)%s+MV:(.-)%s+|%s+(.+)$')",
-        "name..' - '..cost..' ('..mv..')'",
-        "setOption(prefix..'Gross','Text',profit)",
-        "setOption(prefix..'Gross','StringAlign','Right')",
-        "setOption(prefix..'Gross','FontColor','86,190,116,255')",
-        "setOption(prefix..'Name','InlinePattern',moneyPattern(cost))",
-        "setOption(prefix..'Name','InlineSetting',costColor)",
-        'parenthesizedMoneyPattern',
-        "setOption(prefix..'Name','InlinePattern2',parenthesizedMoneyPattern(mv))",
-        "setOption(prefix..'Name','InlineSetting2','Color | #Muted#')",
-        'polishWindowStatus',
-        "text:match('^Leave before:')",
-        "text:match('^Window opens:')",
-        "text:match('^Window Open')",
-        "text:match('^Guaranteed Hit for:')",
-        "text:match('^Collecting Data:')",
-        "setOption(leave,'W',236)",
-        "setOption(leave,'W',285)",
-        "setOption(leave,'FontSize',7)",
-        "SKIN:Bang('!ShowMeter',chance)",
-        "SKIN:Bang('!HideMeter',chance)",
-        "SKIN:Bang('!HideMeter',prefix..'Info')"
+        'CardPresenter emits the final card contract',
+        'StateReader owns all geometry',
+        'non-destructive compatibility point',
+        'function Update()',
+        'return 0'
     )) {
-        if (-not $scriptText.Contains($token)) { Fail "FinalCardPolish.lua missing '$token'." }
+        if (-not $scriptText.Contains($token)) { Fail "FinalCardPolish.lua missing non-destructive contract '$token'." }
+    }
+
+    foreach ($retired in @(
+        'polishHeader','polishWindowStatus','!SetOption','!ShowMeter','!HideMeter',
+        "prefix..'Gross'","prefix..'Chance'","prefix..'Name'"
+    )) {
+        if ($scriptText.Contains($retired)) { Fail "FinalCardPolish.lua must not mutate compact-card presentation; found '$retired'." }
     }
 
     foreach ($token in @('[MeasureFinalCardPolish]','FinalCardPolish.lua')) {
@@ -47,12 +36,8 @@ if ($errors.Count -eq 0) {
     }
     $tooltipAt = $includeText.IndexOf('[MeasureWindowTooltipTweaks]',[System.StringComparison]::Ordinal)
     $polishAt = $includeText.IndexOf('[MeasureFinalCardPolish]',[System.StringComparison]::Ordinal)
-    if ($tooltipAt -lt 0 -or $polishAt -le $tooltipAt) { Fail 'Final card polish must run after the window tooltip pass.' }
+    if ($tooltipAt -lt 0 -or $polishAt -le $tooltipAt) { Fail 'Final compatibility pass must remain after the window tooltip pass.' }
 
-    if ($scriptText.Contains('SAFE FOR ')) { Fail 'FinalCardPolish.lua must not collapse an explicit countdown into ambiguous SAFE FOR wording.' }
-    foreach ($obsolete in @("^Safe Hit Window","^Safe window closed","^NEXT RESTOCK")) {
-        if ($scriptText.Contains("text:match('$obsolete')")) { Fail "FinalCardPolish.lua retains obsolete window status prefix '$obsolete'." }
-    }
     if ($scriptText -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FinalCardPolish.lua must remain presentation-only and local.' }
 }
 
@@ -61,6 +46,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Final card polish validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Final card polish validation passed.' -ForegroundColor Green
-Write-Host 'Final polish preserves current/next-cycle status semantics and gives long next-cycle text the available left-side width without moving Take; header/profit styling remains unchanged.'
+Write-Host 'Final card compatibility validation passed.' -ForegroundColor Green
+Write-Host 'FinalCardPolish remains in the refresh chain but cannot override CardPresenter text or StateReader geometry.'
 exit 0
