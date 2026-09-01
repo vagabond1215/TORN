@@ -128,7 +128,8 @@ if(Test-Path -LiteralPath $files.State){
 if(Test-Path -LiteralPath $files.Opportunities){
  $text=Get-Content -LiteralPath $files.Opportunities -Raw
  foreach($token in @(
-  'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Get-OpportunityNextRecurringWindow','grossProfit','profitPerHour','elapsedSeconds','probabilityKnown',
+  'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Get-OpportunityNextRecurringWindow','Get-OpportunityEconomics','grossProfit','profitPerHour','elapsedSeconds','probabilityKnown',
+  'itemMarketFeePercent','MarketFeePercent','GrossSaleValue','MarketTaxValue','MakeValue','PurchaseCostValue','TakeValue',
   "'LEARNING'",'$availableQuantity = $stock',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",
   '$maxProjectedRows = 256',"'TripBand'",'tripBand=$tripBand','OpportunityCount'
  )){if(-not$text.Contains($token)){Fail "OpportunityState.ps1 missing '$token'."}}
