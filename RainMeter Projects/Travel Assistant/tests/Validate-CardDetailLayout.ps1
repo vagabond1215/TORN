@@ -42,13 +42,16 @@ if($errors.Count -eq 0){
         if($graph -notmatch ('ToggleInlineGraph\('+[string]$i+'\)')){Fail "Row $i graph toggle must call ToggleInlineGraph($i)."}
 
         $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($nameBody -notmatch '(?im)^W=170\s*$' -or $nameBody -notmatch '(?im)^FontSize=9\s*$'){
-            Fail "Row $i Name meter must preserve the canonical item-name surface."
+        if($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=11\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
+            Fail "Row $i Name meter must remain a hidden canonical lookup surface at the new 11pt typography."
         }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=252\s*$' -or $priceBody -notmatch '(?im)^W=266\s*$' -or $priceBody -notmatch '(?im)^FontSize=7\s*$'){
-            Fail "Row $i price/Take/Make meter must own the remaining first-line width."
+        if($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=440\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
+            Fail "Row $i visible first-line meter must span Name | Cost | Take | Make at 11pt."
+        }
+        if($nameBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$' -or $priceBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){
+            Fail "Row $i first-line typography must use Nirmala UI Semilight."
         }
 
         $strip=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -65,6 +68,7 @@ if($errors.Count -eq 0){
     foreach($token in @(
         'local detailExtra = 18',
         'local graphExtra = 133',
+        'local footerExtra = 28',
         "local expandedDetailKey = ''",
         'local expandedDetailRow = 0',
         'local function collapseCardDetails()',
@@ -74,8 +78,9 @@ if($errors.Count -eq 0){
         "if expandedRow > 0 and i > expandedRow then extraBefore = extraBefore + graphExtra end",
         'local bodyOffset = detailExpanded and detailExtra or 0',
         'local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)',
-        "panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8",
+        "panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra",
         "if i == expandedDetailRow then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end",
+        "SKIN:Bang('!HideMeter', p .. 'Name')",
         "SKIN:Bang('!HideMeter', p .. 'Window')",
         "SKIN:Bang('!HideMeter', p .. 'Chance')"
     )){
@@ -83,14 +88,28 @@ if($errors.Count -eq 0){
     }
 
     foreach($token in @(
+        "local face='Nirmala UI Semilight'",
         "setOption(prefix..'Name','Text',itemName)",
+        "setOption(prefix..'Name','FontColor','0,0,0,0')",
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
-        "setOption(prefix..'Price','Text','| '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))",
+        "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))",
+        "setOption(prefix..'Price','InlinePattern','\\|')",
+        "setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
         "'MV:'..formatMoney(mv)",
         "'  Each:'..formatMoney(each)",
         "'  Gross:'..formatMoney(grossSale)",
         "'  Per Hour:'..formatMoney(grossProfitHour)",
         "'  Tax:'..formatMoney(marketTax)",
+        "setOption(prefix..'Gross','InlinePattern','MV:')",
+        "setOption(prefix..'Gross','InlineSetting','Color | 218,178,69,255')",
+        "setOption(prefix..'Gross','InlinePattern2','Each:')",
+        "setOption(prefix..'Gross','InlineSetting2','Color | 255,255,255,255')",
+        "setOption(prefix..'Gross','InlinePattern3','Gross:')",
+        "setOption(prefix..'Gross','InlineSetting3','Color | 255,255,255,255')",
+        "setOption(prefix..'Gross','InlinePattern4','Per Hour:')",
+        "setOption(prefix..'Gross','InlineSetting4','Color | 255,255,255,255')",
+        "setOption(prefix..'Gross','InlinePattern5','Tax:')",
+        "setOption(prefix..'Gross','InlineSetting5','Color | 232,104,70,255')",
         "setOption(prefix..'Window','Text','')",
         "setOption(prefix..'Chance','Text','')",
         "if certainty~='' then actionText=actionText..' '..certainty end",
@@ -101,6 +120,21 @@ if($errors.Count -eq 0){
 
     if(-not$header.Contains("'Card','Flag','Name','Gross','Window','Leave','Chance','Price','DetailToggle','Graph','InlineGraph'")){
         Fail 'HeaderLayout.lua must shift DetailToggle with every compact card row.'
+    }
+    if(-not$header.Contains('math.max(160,math.floor(panel-compactOffset))')){
+        Fail 'HeaderLayout.lua must preserve the footer-aware 160px minimum panel height.'
+    }
+
+    $updated=[regex]::Match($ini,'(?ms)^\[MeterUpdated\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    foreach($token in @('X=12','Y=(#PanelHeight#-20)','W=528','FontFace=Nirmala UI Semilight')){
+        if(-not$updated.Contains($token)){Fail "MeterUpdated footer missing '$token'."}
+    }
+    if($ini -notmatch '(?m)^PanelHeight=160\s*$'){Fail 'Initial PanelHeight must reserve the footer.'}
+    if($rows -match '(?im)^FontFace=Segoe UI' -or $ini -match '(?im)^FontFace=Segoe UI'){
+        Fail 'Main Rainmeter typography must not fall back to Segoe UI.'
+    }
+    foreach($fontLine in @([regex]::Matches($rows,'(?im)^FontFace=(.+)$') + [regex]::Matches($ini,'(?im)^FontFace=(.+)$'))){
+        if($fontLine.Groups[1].Value.Trim() -ne 'Nirmala UI Semilight'){Fail "Unexpected main-skin font face '$($fontLine.Groups[1].Value.Trim())'."}
     }
 
     foreach($retired in @('applyExpandedGraphGeometry','applyHeader','applySecondLine','polishHeader','polishWindowStatus')){
