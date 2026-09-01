@@ -503,10 +503,13 @@ local function updateRow(index,state,now)
     if quantity<=0 then quantity=quantityFromTooltip(humanTooltip) end
     local unitProfit=quantity>0 and totalProfit/quantity or 0
     local equation=formatMoney(unitProfit)..'/ea'; if quantity>0 then equation=equation..' x'..tostring(quantity)..' = '..formatMoney(totalProfit) else equation=formatMoney(totalProfit) end
-    local buyPrice=buyPriceFromProjectedState(state,projectedPrefix)
-    if buyPrice<=0 then buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')) end
-    local bufferRate=priceVaries and 0.05 or 0.0
-    local take=(buyPrice>0 and quantity>0) and math.ceil(buyPrice*quantity*(1.0+bufferRate)) or 0
+    local take=number(state[projectedPrefix..'TakeValue'])
+    if take<=0 then
+        local buyPrice=buyPriceFromProjectedState(state,projectedPrefix)
+        if buyPrice<=0 then buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')) end
+        local bufferRate=priceVaries and 0.05 or 0.0
+        take=(buyPrice>0 and quantity>0) and math.ceil(buyPrice*quantity*(1.0+bufferRate)) or 0
+    end
     local fallbackWindow=meterOption(prefix..'Window','Text'); local fallbackLeave=meterOption(prefix..'Leave','Text'); local fallbackCertainty=meterOption(prefix..'Chance','Text')
     local liveAction,liveCertainty,windowTooltip=liveWindowAction(index,plan,state,country,travel,now)
 
