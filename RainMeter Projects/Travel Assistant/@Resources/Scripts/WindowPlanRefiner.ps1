@@ -141,6 +141,7 @@ function Get-LiveCycleProjection {
     )
     $usable = @(Get-StableWindowUsableCycles -Cycles $Cycles)
     $medianDelay = Get-StableWindowMedian -Values ([long[]]@($usable | ForEach-Object { [long]$_.restockDelaySeconds }))
+    $medianAvailable = Get-StableWindowMedian -Values ([long[]]@($usable | ForEach-Object { [long]$_.availabilitySeconds }))
     $sourceAt = if ($SourceTimestamp -gt 0) { [Math]::Min($SourceTimestamp,$NowEpoch) } else { $NowEpoch }
     $sourceFresh = ($SourceTimestamp -gt 0 -and ($NowEpoch-$SourceTimestamp) -le $LiveMaximumAgeSeconds)
     $stock = if ($sourceFresh) { [Math]::Max(0L,$CurrentStock) } else { 0L }
@@ -161,6 +162,14 @@ function Get-LiveCycleProjection {
                 if ($medianDelay -gt 0) { $nextRestockAt=$selloutAt+$medianDelay }
             }
         }
+        if ($mode -eq 'none' -and $medianAvailable -gt 0) {
+            $historicalSelloutAt=$activeRestockAt+$medianAvailable
+            if ($historicalSelloutAt -gt $sourceAt) {
+                $selloutAt=$historicalSelloutAt
+                $mode='historical-duration'
+                if ($medianDelay -gt 0) { $nextRestockAt=$selloutAt+$medianDelay }
+            }
+        }
         if ($mode -eq 'none') { $mode='live-stock-learning' }
     } elseif ($sourceFresh -and $stock -eq 0) {
         $lastSellOutAt=[long](Get-WindowProperty $DestinationState 'lastSellOutAt')
@@ -177,6 +186,7 @@ function Get-LiveCycleProjection {
         activeSelloutEstimateAt=[long]$selloutAt
         nextRestockEstimateAt=[long]$nextRestockAt
         medianRestockDelaySeconds=[long]$medianDelay
+        medianAvailabilitySeconds=[long]$medianAvailable
         mode=[string]$mode
     }
 }
