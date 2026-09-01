@@ -44,7 +44,11 @@ if ($errors.Count -eq 0) {
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
         'configureWindowTooltipMeter','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','Empty ToolTipText disables the tooltip naturally',
         "'InlinePattern'", "'InlinePattern2'", '/ea x[0-9]+ =', 'Color | 255,255,255,255',
-        'quantityFromTooltip','buyPriceFromVisibleText','bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
+        'quantityFromProjectedState','buyPriceFromProjectedState','projectedPrefix=opportunityStatePrefix(state,country,itemName)',
+        "state[prefix..'QuantityText']","state[prefix..'PriceText']",
+        'if quantity<=0 then quantity=quantityFromTooltip(humanTooltip) end',
+        "if buyPrice<=0 then buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')) end",
+        'bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
         'statusText(fallbackWindow,fallbackLeave)',
         'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
@@ -63,7 +67,8 @@ if ($errors.Count -eq 0) {
         "'NEXT RESTOCK WITHIN FLIGHT'",
         "'Safe Hit Window Open'",
         "'Safe window closed'",
-        "'Leave Now to hit.'"
+        "'Leave Now to hit.'",
+        "local quantity=quantityFromTooltip(humanTooltip)"
     )) {
         if ($presenter.Contains($forbidden)) { Fail "CardPresenter.lua retains obsolete/cluttered status token '$forbidden'." }
     }
