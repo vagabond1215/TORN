@@ -252,7 +252,8 @@ local function updateRow(index,lookup,now,state)
     if row~=nil then
         applyTooltip(prefix,buildHomeTooltip(row,travelText,now))
     end
-    setOption(prefix..'Chance','Text','')
+    -- CardPresenter owns the home-state probability text. This pass refines only
+    -- the tooltip and must not erase Window opens / Optimal Departure odds.
 end
 
 function Initialize()
