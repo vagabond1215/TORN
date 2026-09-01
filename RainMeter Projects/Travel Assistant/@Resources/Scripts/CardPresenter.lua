@@ -42,14 +42,16 @@ local function formatDuration(seconds)
     return '<1m'
 end
 
-local function formatBestCountdown(seconds)
+local function formatCountdown(seconds)
     local value=math.max(0,math.floor(number(seconds)))
-    if value<60 then return string.format('%02ds',value) end
-    return formatDuration(value)
+    local hours=math.floor(value/3600)
+    local minutes=math.floor((value%3600)/60)
+    local secs=value%60
+    return string.format('%02d:%02d:%02d',hours,minutes,secs)
 end
 
-local function usefulWindowHorizon(flightSeconds)
-    return math.min(8*3600,math.max(3*3600,math.floor(number(flightSeconds)*1.10+0.5)))
+local function formatBestCountdown(seconds)
+    return formatCountdown(seconds)
 end
 
 local function parseDurationText(text)
@@ -330,47 +332,42 @@ local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,n
     local group=groupByOrdinal(plan,nextOrdinal)
     if group==nil then return 'NEXT CYCLE UNAVAILABLE','',nil end
 
-    local estimatedRestock=math.floor((number(group.earlyRestock)+number(group.lateRestock))/2)
     local bestArrival,bestChance=bestNextRestockArrival(plan,group,nextOrdinal)
     local tooltip=formatNextCycleTooltip(group,bestArrival,bestChance,flightSeconds,now)
+    local openDeparture=number(group.earlyRestock)-flightSeconds
+    local closeDeparture=number(group.lateSellout)-flightSeconds
+    local bestDeparture=bestArrival-flightSeconds
+    local openChance=clampProbability(probabilityAt(plan,number(group.earlyRestock)))
+    local liveChance=clampProbability(probabilityAt(plan,now+flightSeconds))
 
-    -- Scenario 2 Logic 1 only: the immediately next estimated restock must still
-    -- be farther away than one full flight. Never search cycle +2/+3 here.
-    if estimatedRestock<=0 or (estimatedRestock-now)<=flightSeconds then
-        return 'NEXT RESTOCK WITHIN FLIGHT','',tooltip
+    -- The home card always stays on the current or immediate next cycle. "Within
+    -- flight" is geometry, not a terminal status: keep walking this same cycle's
+    -- actionable phases even when its restock occurs before the player can land.
+    if openDeparture<=0 or closeDeparture<=openDeparture then
+        return 'Collecting Data: See Weav3r','',formatCollectingTooltip('the immediate next-cycle departure envelope is incomplete')
     end
+    if now<openDeparture then
+        return 'Window opens: '..formatCountdown(openDeparture-now),chancePercent(openChance),tooltip
+    end
+    if now>=closeDeparture then return 'Window closed.','',tooltip end
 
     local safeValid=group.safeStart>0 and group.safeEnd>group.safeStart
     if safeValid then
         local safeOpen=group.safeStart-flightSeconds
         local safeClose=group.safeEnd-flightSeconds
-        local usefulHorizon=usefulWindowHorizon(flightSeconds)
-        if now<safeOpen then return 'Safe Hit Window Open: '..formatDuration(safeOpen-now),'',tooltip end
-        if now<safeClose then
-            if (safeClose-now)>usefulHorizon then return 'Safe Hit Window Open','',tooltip end
-            return 'Safe Hit Window Open. Closes: '..formatDuration(safeClose-now),'',tooltip
+        if now<safeOpen then
+            return 'Window Open: '..chancePercent(liveChance)..'. Safe Departure: '..formatCountdown(safeOpen-now),'',tooltip
         end
-        local liveChance=clampProbability(probabilityAt(plan,now+flightSeconds))
-        if liveChance>0.5 then return 'Safe window closed. Leave Now: '..chancePercent(liveChance),'',tooltip end
-        return 'Safe window closed.','',tooltip
+        if now<safeClose then
+            return 'Guaranteed Hit for: '..formatCountdown(safeClose-now),'',tooltip
+        end
+        return 'Window Open: '..chancePercent(liveChance)..'. Closes: '..formatCountdown(closeDeparture-now),'',tooltip
     end
 
-    local openDeparture=group.earlyRestock-flightSeconds
-    local closeDeparture=group.lateRestock-flightSeconds
-    local bestDeparture=bestArrival-flightSeconds
-    local openChance=clampProbability(probabilityAt(plan,group.earlyRestock))
-    local liveChance=clampProbability(probabilityAt(plan,now+flightSeconds))
-
-    if now<openDeparture then
-        return 'Window Open: '..formatDuration(openDeparture-now)..' '..chancePercent(openChance)..' Best: '..formatBestCountdown(math.max(0,bestDeparture-now))..' '..chancePercent(bestChance)..' Closes: '..formatDuration(math.max(0,closeDeparture-now)),'',tooltip
+    if bestDeparture>now and bestDeparture<closeDeparture then
+        return 'Window Open. Optimal Departure: '..formatCountdown(bestDeparture-now),chancePercent(bestChance),tooltip
     end
-    if now<bestDeparture then
-        return 'Window Open: '..chancePercent(liveChance)..' Best: '..formatBestCountdown(bestDeparture-now)..' '..chancePercent(bestChance)..' Closes: '..formatDuration(math.max(0,closeDeparture-now)),'',tooltip
-    end
-    if now<closeDeparture then
-        return 'Window Open: '..chancePercent(liveChance)..' Closes: '..formatDuration(closeDeparture-now),'',tooltip
-    end
-    return 'Window closed.','',tooltip
+    return 'Window Open: '..chancePercent(liveChance)..'. Closes: '..formatCountdown(closeDeparture-now),'',tooltip
 end
 local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     local countryId=countryIdsByName[country] or ''; local travelState=trim(state.TravelState):lower(); local destinationId=trim(state.TravelDestinationCountryId):lower()
@@ -408,7 +405,7 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         end
 
         if currentStock>0 and reachable and selloutAt>now and deadlineAt>=now then
-            local action=(deadlineAt-now)<=60 and 'Leave Now to hit.' or ('Leave Before '..formatDuration(deadlineAt-now)..' to hit.')
+            local action='Leave before: '..formatCountdown(deadlineAt-now)
             local basis=(projectionMode=='historical-duration') and 'active restock + median completed-cycle stock duration' or 'live depletion of current observed stock'
             return action,'',formatCurrentCycleTooltip(selloutAt,deadlineAt,safetySeconds,flightSeconds,basis,now)
         end
@@ -436,8 +433,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
 
     local openAt,closeAt,targetAt=groupDepartureTimes(group,mode,flightSeconds)
     if mode=='safe' then
-        if now<openAt then return 'SAFE - LEAVE IN '..formatDuration(openAt-now),'',tooltip end
-        if now<closeAt then return 'SAFE - LEAVE BEFORE '..formatDuration(closeAt-now),'',tooltip end
+        if now<openAt then return 'SAFE - LEAVE IN '..formatCountdown(openAt-now),'',tooltip end
+        if now<closeAt then return 'SAFE - LEAVE BEFORE '..formatCountdown(closeAt-now),'',tooltip end
         return 'WAIT DATA','',tooltip
     end
 
@@ -457,8 +454,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         if nextGroup.ordinal>group.ordinal and groupMode(nextGroup)~=nil then
             local nextMode=groupMode(nextGroup); local nOpen,nClose,nTarget=groupDepartureTimes(nextGroup,nextMode,flightSeconds)
             if nextMode=='safe' and nClose>now then
-                if now<nOpen then return 'SAFE - LEAVE IN '..formatDuration(nOpen-now),'',formatWindowTooltip(nextGroup,now) end
-                return 'SAFE - LEAVE BEFORE '..formatDuration(nClose-now),'',formatWindowTooltip(nextGroup,now)
+                if now<nOpen then return 'SAFE - LEAVE IN '..formatCountdown(nOpen-now),'',formatWindowTooltip(nextGroup,now) end
+                return 'SAFE - LEAVE BEFORE '..formatCountdown(nClose-now),'',formatWindowTooltip(nextGroup,now)
             elseif nextMode=='best' and nTarget>now then return 'BEST - LEAVE IN '..formatBestCountdown(nTarget-now),string.format('%.0f%%',nextGroup.bestProbability*100),formatWindowTooltip(nextGroup,now) end
         end
     end
