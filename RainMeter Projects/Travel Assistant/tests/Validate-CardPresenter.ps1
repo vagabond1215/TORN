@@ -51,6 +51,7 @@ if ($errors.Count -eq 0) {
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))",
         "setOption(prefix..'Price','InlinePattern','\\|')","setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
+        "state[projectedPrefix..'PriceColor']","setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')","setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
         "'MV:'..formatMoney(mv)","'  Each:'..formatMoney(each)","'  Gross:'..formatMoney(grossSale)",
         "'  Per Hour:'..formatMoney(grossProfitHour)","'  Tax:'..formatMoney(marketTax)",
         "setOption(prefix..'Gross','InlinePattern','MV:')","setOption(prefix..'Gross','InlineSetting','Color | 218,178,69,255')",
