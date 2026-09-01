@@ -64,6 +64,29 @@ if ($null -ne $lateWindow) {
 }
 Assert-Near (Get-OpportunityRecurringProbabilityAtAge -Cycles $steadyCycles -AgeSeconds 10000L -AnchorPhase 'sellout') 1.0 0.0001 'Recurring probability must recognize stock in a later cycle.'
 
+$verifiedRestockCycles=@(
+    [pscustomobject]@{schemaVersion=2;restockDelaySeconds=36000L;availabilitySeconds=1800L;soldOutAt=9003L;forecastEligible=$true;availabilityEligible=$true;restockDelayEligible=$true;restockBoundaryQuality='observed';soldOutBoundaryQuality='observed';previousSellOutBoundaryQuality='observed'},
+    [pscustomobject]@{schemaVersion=2;restockDelaySeconds=39600L;availabilitySeconds=1800L;soldOutAt=9002L;forecastEligible=$true;availabilityEligible=$true;restockDelayEligible=$true;restockBoundaryQuality='bounded';soldOutBoundaryQuality='observed';previousSellOutBoundaryQuality='bounded'},
+    [pscustomobject]@{schemaVersion=2;restockDelaySeconds=43200L;availabilitySeconds=1800L;soldOutAt=9001L;forecastEligible=$true;availabilityEligible=$true;restockDelayEligible=$true;restockBoundaryQuality='recovered';soldOutBoundaryQuality='observed';previousSellOutBoundaryQuality='observed'}
+)
+$summary=Get-OpportunityRestockSummary -Cycles $verifiedRestockCycles -RecentSamples 12
+Assert-Equal ([int]$summary.sampleCount) 3 'Lightweight OOS summary should count verified cycles only.'
+Assert-Equal ([long]$summary.averageDelaySeconds) 39600L 'Lightweight OOS estimate should use the arithmetic mean OOS-to-restock duration.'
+Assert-Equal ([long]$summary.earliestDelaySeconds) 36000L 'Historical early restock should use the shortest recent verified delay.'
+Assert-Equal ([long]$summary.latestDelaySeconds) 43200L 'Historical late restock should use the longest recent verified delay.'
+
+$focusPath=Join-Path ([System.IO.Path]::GetTempPath()) ('travel-focus-'+[guid]::NewGuid().ToString('N')+'.kv')
+try {
+    @('MarketKey=china:123','UpdatedAt=100000') | Set-Content -LiteralPath $focusPath -Encoding UTF8
+    $focus=Read-OpportunityFocusMarker -Path $focusPath -NowEpoch 100100L -MaximumAgeSeconds 180L
+    Assert-True ([bool]$focus.fresh) 'Recent focus marker should wake detailed forecasting.'
+    Assert-Equal ([string]$focus.marketKey) 'china:123' 'Focus marker should preserve stable market identity.'
+    $expiredFocus=Read-OpportunityFocusMarker -Path $focusPath -NowEpoch 100500L -MaximumAgeSeconds 180L
+    Assert-True (-not [bool]$expiredFocus.fresh) 'Old focus markers should expire automatically.'
+} finally {
+    Remove-Item -LiteralPath $focusPath -Force -ErrorAction SilentlyContinue
+}
+
 # Fresh stock timing should not disappear merely because the resale queue is
 # recovering from an outage. A positive MV is usable for seven days by default,
 # but stale status remains explicit and ancient/no-value snapshots are rejected.
@@ -132,6 +155,23 @@ Write-OpportunityProjection -State $learningState -Rows $learningRows -SortMode 
 Assert-Equal $learningState['OpportunityCount'] 1 'Fresh in-stock markets can remain visible while likelihood is learning.'
 Assert-Equal $learningState['Opportunity1ChanceText'] 'LEARNING' 'Unknown arrival likelihood must be explicit rather than fabricated or hidden.'
 Assert-Near ([double]$learningState['Opportunity1ProbabilityValue']) -1.0 0.0001 'Unknown probability uses a sentinel that sorts below known probabilities.'
+
+$sleepState=@{}
+$sleepRows=@(
+    [pscustomobject]@{
+        key='china:123'; name='Sleeping OOS'; countryName='China'; countryCode='CN'; tripBand='long';
+        probability=-1.0; probabilityKnown=$false; elapsedSeconds=40000L; grossProfit=50000L; quantity=10; profitPerHour=4500.0;
+        windowStartAt=140000L; foreignPrice=100L; marketValue=500L; marketValueFresh=$true; priceColor='86,190,116,255';
+        windowText='RESTOCK ESTIMATE'; leaveText='Restocks in ~11h'; tooltip='sleeping';
+        forecastMode='sleeping_oos'; restockEstimateAt=140000L; restockAverageDelaySeconds=39600L;
+        restockEarliestDelaySeconds=36000L; restockLatestDelaySeconds=43200L;
+        restockLifetimeShortestDelaySeconds=35000L; restockLifetimeLongestDelaySeconds=45000L; restockSampleCount=3
+    }
+)
+Write-OpportunityProjection -State $sleepState -Rows $sleepRows -SortMode 'upcoming' -Message ''
+Assert-Equal $sleepState['Opportunity1ForecastMode'] 'sleeping_oos' 'Sleeping OOS mode must survive projection into state.kv.'
+Assert-Equal ([long]$sleepState['Opportunity1RestockEstimateAt']) 140000L 'Absolute cheap restock estimate must be projected for live countdown rendering.'
+Assert-Equal ([int]$sleepState['Opportunity1RestockSampleCount']) 3 'Verified restock sample count must be projected for tooltip context.'
 
 $profitHourA = 1000.0/1.0
 $profitHourB = 1200.0/0.5
