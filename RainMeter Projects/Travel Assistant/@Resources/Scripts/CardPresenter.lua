@@ -228,7 +228,6 @@ local function nextBetterBestBefore(plan,currentGroup,currentProbability,flightS
 end
 
 local function liveWindowAction(index,plan,state,country,defaultTravel,now)
-    if plan==nil or #plan.groups==0 then return nil,nil,nil end
     local countryId=countryIdsByName[country] or ''; local travelState=trim(state.TravelState):lower(); local destinationId=trim(state.TravelDestinationCountryId):lower()
     local flightSeconds=countryTravelSeconds(state,country,defaultTravel); if flightSeconds<=0 then return nil,nil,nil end
 
@@ -250,6 +249,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
             return 'LEAVE BEFORE '..formatDuration(deadlineAt-now),certainty,formatCurrentCycleTooltip(selloutAt,deadlineAt,bufferSeconds,flightSeconds,now)
         end
     end
+
+    if plan==nil or #plan.groups==0 then return nil,nil,nil end
 
     local effectiveFlightSeconds=flightSeconds
     if travelState=='traveling' and destinationId==countryId then local remaining=liveTravelRemainingSeconds(state,now); if remaining>0 then effectiveFlightSeconds=remaining end end
