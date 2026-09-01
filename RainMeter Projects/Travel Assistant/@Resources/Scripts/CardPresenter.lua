@@ -430,9 +430,9 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         local arrivalAt=number(state.TravelArrivalAt); if arrivalAt<=now then arrivalAt=now+effectiveFlightSeconds end; local p=probabilityAt(plan,arrivalAt)
         if mode=='safe' and arrivalAt>=group.safeStart and arrivalAt<group.safeEnd then return 'SAFE - EN ROUTE','',tooltip end
         if mode=='best' then return 'BEST - EN ROUTE',string.format('%.0f%%',p*100),tooltip end
-        return 'EN ROUTE','',tooltip
+        return 'MARKET DATA PENDING','',tooltip
     end
-    if travelState=='abroad' and destinationId==countryId then return 'AT DEST.','',tooltip end
+    if travelState=='abroad' and destinationId==countryId then return 'MARKET DATA PENDING','',tooltip end
 
     local openAt,closeAt,targetAt=groupDepartureTimes(group,mode,flightSeconds)
     if mode=='safe' then
