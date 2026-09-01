@@ -26,6 +26,7 @@ local collapsedCardHeight = 50
 local rowStride = 54
 local detailExtra = 18
 local graphExtra = 133
+local footerExtra = 28
 local maxCandidateRows = 256
 
 local opportunitySuffixes = {
@@ -592,6 +593,7 @@ local function layoutRows(data, count)
     for i = 1, 8 do
         local p = 'MeterOpportunity' .. i
         if i == expandedDetailRow then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end
+        SKIN:Bang('!HideMeter', p .. 'Name')
         SKIN:Bang('!HideMeter', p .. 'Window')
         SKIN:Bang('!HideMeter', p .. 'Chance')
     end
@@ -638,9 +640,9 @@ local function layoutRows(data, count)
         if not graphExpanded then SKIN:Bang('!HideMeter', p .. 'InlineGraph') end
     end
 
-    local panelHeight = 164
+    local panelHeight = 192
     if count > 0 then
-        panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8
+        panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra
     end
     setVariable('PanelHeight', panelHeight)
 end
