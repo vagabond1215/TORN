@@ -76,10 +76,10 @@ function Get-PVRecentPrices {
 }
 
 function Test-PVRecentVariation {
-    param([object]$Market)
+    param([object]$Market,[long]$CurrentOverride=0L)
     if ($null -eq $Market) { return [pscustomobject]@{ varies=$false; reason='no-market'; minimum=0L; maximum=0L } }
     $prices=[long[]]@(Get-PVRecentPrices -Market $Market)
-    $current=[long](Get-PVProperty $Market 'currentForeignPrice')
+    $current=if ($CurrentOverride -gt 0) { [long]$CurrentOverride } else { [long](Get-PVProperty $Market 'currentForeignPrice') }
     $positive=@($prices | Where-Object { $_ -gt 0 })
     $minimum=if ($positive.Count -gt 0) { [long](@($positive | Measure-Object -Minimum).Minimum) } else { 0L }
     $maximum=if ($positive.Count -gt 0) { [long](@($positive | Measure-Object -Maximum).Maximum) } else { 0L }
@@ -144,10 +144,19 @@ for ($i=1; $i -le $count; $i++) {
     $prefix='Opportunity'+$i
     $key=[string]$state[$prefix+'Key']
     if ([string]::IsNullOrWhiteSpace($key)) { continue }
-    if (([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant() -eq 'sleeping_oos') { continue }
-    $p=$markets.PSObject.Properties[$key.ToLowerInvariant()]
+    $normalizedKey=$key.ToLowerInvariant()
+    $p=$markets.PSObject.Properties[$normalizedKey]
     if ($null -eq $p) { continue }
-    $classification=Test-PVRecentVariation -Market $p.Value
+
+    # Completed-cycle price history remains retained even when timing work sleeps.
+    # Use the authoritative current observed foreign price as an override so price
+    # variation / Take buffering does not depend on the scoped transient analytics
+    # snapshot being awake for this market.
+    $observedMarkets=Get-PVProperty $engine 'observedMarkets'
+    $observed=Get-PVProperty $observedMarkets $normalizedKey
+    $currentOverride=0L
+    if ($null -ne $observed) { $currentOverride=[long](Get-PVProperty $observed 'lastForeignPrice') }
+    $classification=Test-PVRecentVariation -Market $p.Value -CurrentOverride $currentOverride
     $state[$prefix+'PriceVaries']=if ([bool]$classification.varies) { '1' } else { '0' }
     $state[$prefix+'PriceVariationReason']=[string]$classification.reason
     $state[$prefix+'MinObservedPrice']=[long]$classification.minimum
