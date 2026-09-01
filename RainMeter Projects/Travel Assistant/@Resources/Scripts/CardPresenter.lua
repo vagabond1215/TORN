@@ -480,8 +480,14 @@ end
 
 local function applyCompactLayout(index)
     local prefix='MeterOpportunity'..index
-    setOption(prefix..'Name','X',78); setOption(prefix..'Name','W',176); setOption(prefix..'Gross','X',504); setOption(prefix..'Gross','W',244); setOption(prefix..'Gross','ClipString',1)
-    setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',70); setOption(prefix..'Leave','X',150); setOption(prefix..'Leave','W',164); setOption(prefix..'Chance','X',316); setOption(prefix..'Chance','W',48); setOption(prefix..'Chance','ClipString',1); setOption(prefix..'Price','X',366); setOption(prefix..'Price','W',144)
+    setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',500); setOption(prefix..'Gross','FontSize',7); setOption(prefix..'Gross','StringAlign','Left'); setOption(prefix..'Gross','ClipString',1)
+    setOption(prefix..'Name','X',78); setOption(prefix..'Name','W',200); setOption(prefix..'Name','FontSize',9); setOption(prefix..'Name','ClipString',1)
+    setOption(prefix..'Price','X',282); setOption(prefix..'Price','W',236); setOption(prefix..'Price','FontSize',8); setOption(prefix..'Price','ClipString',1)
+    setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',1)
+    setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',440); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
+    setOption(prefix..'Chance','X',78); setOption(prefix..'Chance','W',1)
+    setOption(prefix..'DetailToggle','X',522); setOption(prefix..'DetailToggle','W',18)
+    setOption(prefix..'Graph','X',522); setOption(prefix..'Graph','W',18)
 end
 
 local function configureWindowTooltipMeter(name,tooltip)
@@ -495,55 +501,102 @@ local function configureWindowTooltipMeter(name,tooltip)
 end
 
 local function updateRow(index,state,now)
-    local prefix='MeterOpportunity'..index; applyCompactLayout(index); local rawTitle=meterOption(prefix..'Name','Text'); if rawTitle=='' then return end
-    local country,travel=rowCountryAndTravel(index); local itemName=removeCountrySuffix(rawTitle,country); local totalProfit=parseMoney(meterOption(prefix..'Gross','Text'))
-    local rawTooltip=meterOption(prefix..'Gross','ToolTipText'); local plan,humanTooltip,priceVaries=parseWindowPlan(rawTooltip)
+    local prefix='MeterOpportunity'..index
+    applyCompactLayout(index)
+
+    local rawTitle=meterOption(prefix..'Name','Text')
+    if rawTitle=='' then return end
+    local country,travel=rowCountryAndTravel(index)
+    local itemName=removeCountrySuffix(rawTitle,country)
+    local renderedName=itemName:match('^(.-)%s+|%s+%$')
+    if renderedName~=nil then itemName=trim(renderedName) end
     local projectedPrefix=opportunityStatePrefix(state,country,itemName)
+    if projectedPrefix=='' then return end
+
+    local fallbackWindow=meterOption(prefix..'Window','Text')
+    local fallbackLeave=meterOption(prefix..'Leave','Text')
+
+    local rawTooltip=trim(state[projectedPrefix..'Tooltip'])
+    local plan,humanTooltip,priceVaries=parseWindowPlan(rawTooltip)
     local quantity=quantityFromProjectedState(state,projectedPrefix)
     if quantity<=0 then quantity=quantityFromTooltip(humanTooltip) end
-    local unitProfit=quantity>0 and totalProfit/quantity or 0
-    local equation=formatMoney(unitProfit)..'/ea'; if quantity>0 then equation=equation..' x'..tostring(quantity)..' = '..formatMoney(totalProfit) else equation=formatMoney(totalProfit) end
+
+    local unitCost=buyPriceFromProjectedState(state,projectedPrefix)
     local take=number(state[projectedPrefix..'TakeValue'])
     if take<=0 then
-        local buyPrice=buyPriceFromProjectedState(state,projectedPrefix)
-        if buyPrice<=0 then buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')) end
+        local fallbackPrice=unitCost
+        if fallbackPrice<=0 then fallbackPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')) end
         local bufferRate=priceVaries and 0.05 or 0.0
-        take=(buyPrice>0 and quantity>0) and math.ceil(buyPrice*quantity*(1.0+bufferRate)) or 0
+        take=(fallbackPrice>0 and quantity>0) and math.ceil(fallbackPrice*quantity*(1.0+bufferRate)) or 0
     end
-    local fallbackWindow=meterOption(prefix..'Window','Text'); local fallbackLeave=meterOption(prefix..'Leave','Text'); local fallbackCertainty=meterOption(prefix..'Chance','Text')
+
+    local makeRaw=trim(state[projectedPrefix..'MakeValue'])
+    local make=makeRaw~='' and number(makeRaw) or number(state[projectedPrefix..'GrossValue'])
+    local mv=number(state[projectedPrefix..'MarketValueValue'])
+    if mv<=0 then mv=parseMoney(state[projectedPrefix..'MarketValueText']) end
+    local each=number(state[projectedPrefix..'ProfitEachValue'])
+    local grossSale=number(state[projectedPrefix..'GrossSaleValue'])
+    local grossProfitHour=number(state[projectedPrefix..'GrossProfitHourValue'])
+    local marketTax=number(state[projectedPrefix..'MarketTaxValue'])
+
+    local nameText=itemName
+    if unitCost>0 then nameText=nameText..' | '..formatMoney(unitCost) end
+    setOption(prefix..'Name','Text',nameText)
+    setOption(prefix..'Name','ToolTipText','Item | foreign unit cost')
+
+    local takeText=take>0 and formatMoney(take) or '?'
+    setOption(prefix..'Price','Text','Take: '..takeText..'  Make: '..formatMoney(make))
+    if priceVaries then
+        setOption(prefix..'Price','ToolTipText','Take includes a 5% cash reserve because the foreign price varies. Make uses actual purchase cost, not the reserve.')
+    else
+        setOption(prefix..'Price','ToolTipText','Take is exact purchase cash for a fixed foreign price. Make is after market tax.')
+    end
+
+    local detail='MV:'..formatMoney(mv)..
+        '  Each:'..formatMoney(each)..
+        '  Gross:'..formatMoney(grossSale)..
+        '  Per Hour:'..formatMoney(grossProfitHour)..
+        '  Tax:'..formatMoney(marketTax)
+    setOption(prefix..'Gross','Text',detail)
+    setOption(prefix..'Gross','FontColor','#Muted#')
+    setOption(prefix..'Gross','ToolTipText','Market value | net profit per item | Gross Sale | pre-tax gross profit per hour | market tax')
+    setOption(prefix..'Gross','InlinePattern','')
+    setOption(prefix..'Gross','InlineSetting','')
+    setOption(prefix..'Gross','InlinePattern2','')
+    setOption(prefix..'Gross','InlineSetting2','')
+
+    setOption(prefix..'Window','Text','')
+    setOption(prefix..'Chance','Text','')
+
+    local fallbackCertainty=trim(state[projectedPrefix..'ChanceText'])
     local liveAction,liveCertainty,windowTooltip=liveWindowAction(index,plan,state,country,travel,now)
 
-    setOption(prefix..'Name','Text',itemName); setOption(prefix..'Name','ToolTipText','')
-    setOption(prefix..'Gross','Text',equation); setOption(prefix..'Gross','ToolTipText','Net profit per item x planned inventory quantity = total net profit')
-    setOption(prefix..'Gross','InlinePattern','\\$'); setOption(prefix..'Gross','InlineSetting','Color | 255,255,255,255')
-    setOption(prefix..'Gross','InlinePattern2','/ea x[0-9]+ ='); setOption(prefix..'Gross','InlineSetting2','Color | 255,255,255,255')
-    setOption(prefix..'Window','Text',rowFlightText(state,country,travel,now)); setOption(prefix..'Window','FontColor','#Muted#')
+    local actionText=''
     if liveAction~=nil then
-        local certainty=liveCertainty or ''
-        local safeInfo=(liveAction:match('^SAFE')~=nil and certainty=='' and trim(windowTooltip)~='')
-        if safeInfo then certainty='ⓘ' end
-        setOption(prefix..'Leave','Text',liveAction); setOption(prefix..'Chance','Text',certainty)
-        setOption(prefix..'Chance','FontFace',safeInfo and 'Segoe UI Symbol' or 'Segoe UI')
+        actionText=liveAction
+        local certainty=trim(liveCertainty or '')
+        if certainty~='' then actionText=actionText..' '..certainty end
         configureWindowTooltipMeter(prefix..'Leave',windowTooltip or '')
-        configureWindowTooltipMeter(prefix..'Chance',windowTooltip or '')
     else
-        setOption(prefix..'Leave','Text',statusText(fallbackWindow,fallbackLeave)); setOption(prefix..'Chance','Text',fallbackCertainty); setOption(prefix..'Chance','FontFace','Segoe UI')
-        configureWindowTooltipMeter(prefix..'Leave',''); configureWindowTooltipMeter(prefix..'Chance','')
+        actionText=statusText(fallbackWindow,fallbackLeave)
+        if fallbackCertainty~='' then actionText=actionText..' '..fallbackCertainty end
+        configureWindowTooltipMeter(prefix..'Leave','')
     end
-    if take>0 then
-        setOption(prefix..'Price','Text','Take: '..formatMoney(take))
-        if priceVaries then setOption(prefix..'Price','ToolTipText','Purchase cash required plus a 5% buffer because retained foreign price has varied')
-        else setOption(prefix..'Price','ToolTipText','Exact purchase cash; retained foreign price has not varied') end
-    else setOption(prefix..'Price','Text','Take: ?'); setOption(prefix..'Price','ToolTipText','Purchase cash requirement unavailable') end
+    setOption(prefix..'Leave','Text',actionText)
+    configureWindowTooltipMeter(prefix..'Chance','')
 end
 
 function Initialize()
-    statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\state.kv'))
+    statePath=SKIN:MakePathAbsolute(SELF:GetOption('StateFile','#@#Generated\\ui-state.kv'))
     for i=1,8 do applyCompactLayout(i) end
 end
 
 function Update()
-    local state=readKv(statePath); local now=os.time(); local travelSignature=trim(state.TravelState)..':'..trim(state.TravelDestinationCountryId)
-    if lastTravelStateSignature~='' and travelSignature~=lastTravelStateSignature then SKIN:Bang('!UpdateMeasure','MeasureState') end; lastTravelStateSignature=travelSignature
-    for i=1,8 do updateRow(i,state,now) end; return 0
+    local state=readKv(statePath)
+    local now=os.time()
+    local travelSignature=trim(state.TravelState)..':'..trim(state.TravelDestinationCountryId)
+    if lastTravelStateSignature~='' and travelSignature~=lastTravelStateSignature then SKIN:Bang('!UpdateMeasure','MeasureState') end
+    lastTravelStateSignature=travelSignature
+    for i=1,8 do updateRow(i,state,now) end
+    return 0
 end
