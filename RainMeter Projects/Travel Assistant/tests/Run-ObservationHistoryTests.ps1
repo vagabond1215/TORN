@@ -4,6 +4,8 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $sourceScript = Join-Path $ProjectRoot '@Resources\Scripts\MaintainObservationHistory.ps1'
 if (-not (Test-Path -LiteralPath $sourceScript)) { throw 'MaintainObservationHistory.ps1 is missing.' }
+$sourceAtomic = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $sourceAtomic)) { throw 'AtomicFile.ps1 is missing.' }
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('TravelAssistantHistoryTest-' + [Guid]::NewGuid().ToString('N'))
 $scriptDir = Join-Path $tempRoot '@Resources\Scripts'
@@ -11,6 +13,7 @@ $configDir = Join-Path $tempRoot 'config'
 $runtimeDir = Join-Path $tempRoot 'data\runtime'
 New-Item -ItemType Directory -Force -Path $scriptDir,$configDir,$runtimeDir | Out-Null
 Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $scriptDir 'MaintainObservationHistory.ps1')
+Copy-Item -LiteralPath $sourceAtomic -Destination (Join-Path $scriptDir 'AtomicFile.ps1')
 
 $now = 20000000L
 $retentionHours = 48
