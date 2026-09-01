@@ -22,6 +22,7 @@ $safeCycles=@(
 )
 $safeModel=Get-RecurringScenarioModel -Cycles $safeCycles -AnchorAt $anchor -AnchorPhase sellout -NowEpoch $now -FutureHorizonSeconds 20000
 Assert-Equal ([int]$safeModel.sampleCount) 3 'Safe model should retain all three completed cycles.'
+Assert-Equal (@($safeModel.groups | Where-Object { [int]$_.ordinal -gt 1 }).Count) 0 'Base window model must not project beyond the immediate next cycle.'
 $g=@($safeModel.groups | Select-Object -First 1)[0]
 Assert-Equal ([long]$g.earlyRestockAt) ($anchor+6600L) 'Early Restock must use the minimum projected restock.'
 Assert-Equal ([long]$g.earlySelloutAt) ($anchor+8400L) 'Early sellout must use the earliest projected sellout.'
