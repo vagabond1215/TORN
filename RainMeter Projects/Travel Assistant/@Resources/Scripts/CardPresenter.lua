@@ -305,7 +305,9 @@ local function formatCollectingTooltip(reason)
         'See Weav3r for the current travel-stock snapshot.'
 end
 local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,now)
-    if plan==nil or #plan.groups==0 then return 'WAIT DATA','',nil end
+    if plan==nil or #plan.groups==0 then
+        return 'Collecting Data: See Weav3r','',formatCollectingTooltip('verified current/next-cycle evidence could not produce a usable next-restock window')
+    end
     local group=groupByOrdinal(plan,nextOrdinal)
     if group==nil then return 'NEXT CYCLE UNAVAILABLE','',nil end
 
