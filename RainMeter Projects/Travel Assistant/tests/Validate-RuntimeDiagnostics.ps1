@@ -127,7 +127,8 @@ if (Test-Path -LiteralPath $updatePath) {
         'RuntimeLog.ps1','Write-TravelAssistantLog','Clear-TravelAssistantLatestError','filter-state-error.txt','run-update',
         'UpdatePerformanceRows','System.Diagnostics.Stopwatch','TotalProcessorTime','New-UpdateStageTimer','Complete-UpdateStageTimer',
         'Write-UpdatePerformanceSummary','Write-UpdatePerformanceRecord','update-performance.log',
-        'Get-TravelAssistantAtomicMutexName -Path $UpdatePerformanceFile','[System.IO.FileShare]::ReadWrite','[System.IO.FileShare]::Delete',
+        'Read-TravelAssistantSharedText -Path $UpdatePerformanceFile','Write-TravelAssistantAtomicText -Path $UpdatePerformanceFile -Text $text',
+        'Select-Object -Last 1000',
         "-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
         "'publish-ui'","'publish-heartbeat'","'generation-cleanup'"
     )) {
