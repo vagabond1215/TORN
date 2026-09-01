@@ -98,6 +98,10 @@ function Get-AnchorTransitions {
     $lastSellOutAt = 0L
     $lastRestockQuality = ''
     $lastSellOutQuality = ''
+    $lastRestockLowerBoundAt = 0L
+    $lastRestockUpperBoundAt = 0L
+    $lastSellOutLowerBoundAt = 0L
+    $lastSellOutUpperBoundAt = 0L
     $lastUnknownBoundaryAt = 0L
     $previousStock = $null
     $previousTimestamp = 0L
@@ -128,11 +132,30 @@ function Get-AnchorTransitions {
             }
 
             if (Test-AnchorBoundaryQuality -Quality $quality) {
-                if ($phase -eq 'restock') { $lastRestockAt=$timestamp; $lastRestockQuality=$quality }
-                else { $lastSellOutAt=$timestamp; $lastSellOutQuality=$quality }
+                $lower=if ($quality -eq 'recovered' -or $gap -le 0) { $timestamp } else { [Math]::Max(0L,$timestamp-$gap) }
+                if ($phase -eq 'restock') {
+                    $lastRestockAt=$timestamp
+                    $lastRestockQuality=$quality
+                    $lastRestockLowerBoundAt=$lower
+                    $lastRestockUpperBoundAt=$timestamp
+                } else {
+                    $lastSellOutAt=$lower
+                    $lastSellOutQuality=$quality
+                    $lastSellOutLowerBoundAt=$lower
+                    $lastSellOutUpperBoundAt=$timestamp
+                }
             } else {
-                if ($phase -eq 'restock') { $lastRestockAt=0L; $lastRestockQuality=$quality }
-                else { $lastSellOutAt=0L; $lastSellOutQuality=$quality }
+                if ($phase -eq 'restock') {
+                    $lastRestockAt=0L
+                    $lastRestockQuality=$quality
+                    $lastRestockLowerBoundAt=0L
+                    $lastRestockUpperBoundAt=0L
+                } else {
+                    $lastSellOutAt=0L
+                    $lastSellOutQuality=$quality
+                    $lastSellOutLowerBoundAt=0L
+                    $lastSellOutUpperBoundAt=0L
+                }
                 $lastUnknownBoundaryAt=$timestamp
             }
         }
@@ -144,6 +167,10 @@ function Get-AnchorTransitions {
         lastSellOutAt = $lastSellOutAt
         lastRestockQuality = $lastRestockQuality
         lastSellOutQuality = $lastSellOutQuality
+        lastRestockLowerBoundAt = $lastRestockLowerBoundAt
+        lastRestockUpperBoundAt = $lastRestockUpperBoundAt
+        lastSellOutLowerBoundAt = $lastSellOutLowerBoundAt
+        lastSellOutUpperBoundAt = $lastSellOutUpperBoundAt
         lastUnknownBoundaryAt = $lastUnknownBoundaryAt
         latestTimestamp = $previousTimestamp
     }
@@ -220,6 +247,8 @@ foreach ($key in @($wanted.Keys)) {
             $changed = $true
         }
         Set-AnchorProperty -Object $activeCycle -Name 'restockBoundaryQuality' -Value ([string]$transition.lastRestockQuality)
+        Set-AnchorProperty -Object $activeCycle -Name 'restockLowerBoundAt' -Value ([long]$transition.lastRestockLowerBoundAt)
+        Set-AnchorProperty -Object $activeCycle -Name 'restockUpperBoundAt' -Value ([long]$transition.lastRestockUpperBoundAt)
         Set-AnchorProperty -Object $activeCycle -Name 'anchorSource' -Value 'observations'
         Set-AnchorProperty -Object $activeCycle -Name 'anchorObservedAt' -Value ([long]$transition.latestTimestamp)
     } elseif ($stock -gt 0 -and $continuityInvalidatedAt -gt 0) {
@@ -235,6 +264,8 @@ foreach ($key in @($wanted.Keys)) {
             $changed = $true
         }
         Set-AnchorProperty -Object $destination -Name 'lastSellOutBoundaryQuality' -Value ([string]$transition.lastSellOutQuality)
+        Set-AnchorProperty -Object $destination -Name 'lastSellOutLowerBoundAt' -Value ([long]$transition.lastSellOutLowerBoundAt)
+        Set-AnchorProperty -Object $destination -Name 'lastSellOutUpperBoundAt' -Value ([long]$transition.lastSellOutUpperBoundAt)
         Set-AnchorProperty -Object $destination -Name 'anchorSource' -Value 'observations'
         Set-AnchorProperty -Object $destination -Name 'anchorObservedAt' -Value ([long]$transition.latestTimestamp)
     } elseif ($stock -le 0 -and $continuityInvalidatedAt -gt 0) {
