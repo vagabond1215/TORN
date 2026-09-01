@@ -208,7 +208,7 @@ local function formatWindowTooltip(group,now)
     local nl='#CRLF#'; local safe='none'
     if group.safeStart>0 and group.safeEnd-group.safeStart>=60 then safe=os.date('%H:%M',group.safeStart)..' - '..os.date('%H:%M',group.safeEnd)..' ('..formatDuration(group.safeEnd-group.safeStart)..')' end
     local best='none'
-    if group.bestStart>0 and group.bestEnd>group.bestStart then local target=math.floor((group.bestStart+group.bestEnd)/2); best=formatMoment(target,now)..' ['..string.format('%.0f%%',group.bestProbability*100)..']' end
+    if group.bestStart>0 and group.bestEnd>group.bestStart then local target=math.floor((group.bestStart+group.bestEnd)/2); best=formatMoment(target,now)..' '..string.format('%.0f%%',group.bestProbability*100) end
     return 'Safe formula: max(restock starts) -> min(sellout ends)'..nl..'Best formula: completed-cycle overlap / usable cycle count'..nl..'Early Restock: '..formatMoment(group.earlyRestock,now)..' - '..formatMoment(group.earlySellout,now)..nl..'Late Restock: '..formatMoment(group.lateRestock,now)..' - '..formatMoment(group.lateSellout,now)..nl..'Safe Window: '..safe..nl..'Best Hit Window: '..best
 end
 
@@ -428,8 +428,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
 
     if travelState=='traveling' and destinationId==countryId then
         local arrivalAt=number(state.TravelArrivalAt); if arrivalAt<=now then arrivalAt=now+effectiveFlightSeconds end; local p=probabilityAt(plan,arrivalAt)
-        if mode=='safe' and arrivalAt>=group.safeStart and arrivalAt<group.safeEnd then return 'SAFE - EN ROUTE','',tooltip end
-        if mode=='best' then return 'BEST - EN ROUTE',string.format('%.0f%%',p*100),tooltip end
+        if mode=='safe' and arrivalAt>=group.safeStart and arrivalAt<group.safeEnd then return 'SAFE AT ARRIVAL','',tooltip end
+        if mode=='best' then return 'BEST AT ARRIVAL',string.format('%.0f%%',p*100),tooltip end
         return 'MARKET DATA PENDING','',tooltip
     end
     if travelState=='abroad' and destinationId==countryId then return 'MARKET DATA PENDING','',tooltip end
