@@ -121,10 +121,10 @@ function Get-AnchorTransitions {
 
         $phase = if ([long]$previousStock -le 0 -and $stock -gt 0) { 'restock' } elseif ([long]$previousStock -gt 0 -and $stock -le 0) { 'sellout' } else { '' }
         if (-not [string]::IsNullOrWhiteSpace($phase)) {
-            $quality = ([string]$row.transitionBoundaryQuality).Trim().ToLowerInvariant()
-            $gap = [long]$row.transitionGapSeconds
+            $quality = ([string](Get-AnchorProperty $row 'transitionBoundaryQuality')).Trim().ToLowerInvariant()
+            $gap = [long](Get-AnchorProperty $row 'transitionGapSeconds')
             if ($gap -le 0) {
-                $freshBefore=[long]$row.previousFreshSourceTimestamp
+                $freshBefore=[long](Get-AnchorProperty $row 'previousFreshSourceTimestamp')
                 $gap = if ($freshBefore -gt 0 -and $timestamp -gt $freshBefore) { $timestamp-$freshBefore } else { [Math]::Max(0L,$timestamp-$previousTimestamp) }
             }
             if ([string]::IsNullOrWhiteSpace($quality)) {
