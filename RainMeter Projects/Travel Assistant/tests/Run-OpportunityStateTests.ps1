@@ -192,7 +192,7 @@ Assert-Equal ([long]$state['Opportunity2ElapsedSeconds']) 1800L 'Raw elapsed sec
 $economicsState=@{}
 $economicsRows=@([pscustomobject]@{
     key='canada:99'; name='Economics'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=.75; probabilityKnown=$true;
-    elapsedSeconds=3600L; grossProfit=349L; quantity=10; profitPerHour=349.0; windowStartAt=100000L; foreignPrice=100L; marketValue=150L;
+    elapsedSeconds=3600L; grossProfit=420L; quantity=10; profitPerHour=420.0; windowStartAt=100000L; foreignPrice=100L; marketValue=150L;
     marketValueFresh=$true; priceColor='86,190,116,255'; windowText='WINDOW'; leaveText='LEAVE'; tooltip='economics';
     saleBasis=142L; purchaseCost=1000L; grossSale=1420L; grossProfitBeforeTax=420L; marketTax=71L; make=349L; profitEach=35L;
     grossProfitPerHour=420.0; marketFeePercent=5; basisPercent=95
