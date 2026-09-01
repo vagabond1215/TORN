@@ -98,7 +98,12 @@ local function buildLookup(state)
         local country=trim(state[prefix..'Country'])
         if name~='' and country~='' then
             lookup[normalizeName(country)..'|'..normalizeName(name)]={
-                plan=parseWindowPlan(state[prefix..'Tooltip'])
+                plan=parseWindowPlan(state[prefix..'Tooltip']),
+                currentStock=number(state[prefix..'CurrentStock']),
+                currentCycleReachable=number(state[prefix..'CurrentCycleReachable'])>0,
+                activeSelloutEstimateAt=number(state[prefix..'ActiveSelloutEstimateAt']),
+                currentCycleLeaveDeadlineAt=number(state[prefix..'CurrentCycleLeaveDeadlineAt']),
+                currentCyclePurchaseBufferSeconds=number(state[prefix..'CurrentCyclePurchaseBufferSeconds'])
             }
         end
     end
@@ -176,16 +181,29 @@ local function finalWindowLine(group,mode,now)
     return 'Best Hit Window: '..formatMoment(target,now)..' ['..chance..']'
 end
 
-local function buildHomeTooltip(plan,travelText,now)
-    if plan==nil then return '' end
+local function buildHomeTooltip(row,travelText,now)
+    if row==nil or row.plan==nil then return '' end
+    local plan=row.plan
+    local arrival=travelText~='' and travelText or '?'
+    local nl='#CRLF#'
+
+    -- If the current observed cycle can still be reached before its live depletion
+    -- sellout estimate, describe that cycle directly instead of advertising a later
+    -- recurring restock window.
+    if row.currentStock>0 and row.currentCycleReachable and row.activeSelloutEstimateAt>now and row.currentCycleLeaveDeadlineAt>now then
+        return 'Estimated Arrival in '..arrival..nl..
+            'Current Cycle Sellout: '..formatMoment(row.activeSelloutEstimateAt,now)..nl..
+            'Leave Before: '..formatMoment(row.currentCycleLeaveDeadlineAt,now)..nl..
+            'Purchase Buffer: '..formatDuration(row.currentCyclePurchaseBufferSeconds)..nl..
+            'Basis: live depletion of current observed stock'
+    end
+
     local group,mode=findPreferredGroup(plan,now)
     if group==nil then group=findFutureEvidenceGroup(plan,now) end
     if group==nil then return '' end
 
-    local arrival=travelText~='' and travelText or '?'
     local stocked=medianAvailableSeconds(plan)
     local stockedText=stocked>0 and formatDuration(stocked) or '?'
-    local nl='#CRLF#'
     return 'Estimated Arrival in '..arrival..nl..
         'Estimated In Stock Duration '..stockedText..nl..
         'Early Restock: '..formatMoment(group.earlyRestock,now)..nl..
@@ -217,7 +235,7 @@ local function updateRow(index,lookup,now,state)
     local country,travelText=rowCountryAndTravel(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(name)]
     if row~=nil and row.plan~=nil then
-        applyTooltip(prefix,buildHomeTooltip(row.plan,travelText,now))
+        applyTooltip(prefix,buildHomeTooltip(row,travelText,now))
     end
     setOption(prefix..'Chance','Text','')
 end
