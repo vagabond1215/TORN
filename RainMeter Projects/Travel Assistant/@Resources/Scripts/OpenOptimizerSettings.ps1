@@ -114,7 +114,8 @@ $save.Add_Click({
         $current=Read-UiPreferences
         Set-FilterProperty $current 'showProfitableOnly' ([bool]$profitable.Checked)
         Set-FilterProperty $current 'use95PercentMarketValue' ([bool]$mv95.Checked)
-        Set-FilterProperty $current 'itemMarketFeePercent' (if ($marketTax.SelectedIndex -eq 1) { 5 } else { 0 })
+        $marketTaxPercent=if ($marketTax.SelectedIndex -eq 1) { 5 } else { 0 }
+        Set-FilterProperty $current 'itemMarketFeePercent' $marketTaxPercent
         Set-FilterProperty $current 'energyWastePolicy' (Get-ComboPolicy $energyPolicy)
         Set-FilterProperty $current 'maxEnergyLoss' ([int]$energyMax.Value)
         Set-FilterProperty $current 'nerveWastePolicy' (Get-ComboPolicy $nervePolicy)
