@@ -6,15 +6,16 @@ $helperPath = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
 $projectionPath = Join-Path $ProjectRoot '@Resources\Scripts\ProjectCollectedState.ps1'
 $finalizerPath = Join-Path $ProjectRoot '@Resources\Scripts\FinalizeState.ps1'
 $runUpdatePath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
+$historyPath = Join-Path $ProjectRoot '@Resources\Scripts\MaintainObservationHistory.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath,$runUpdatePath)) {
+foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath,$runUpdatePath,$historyPath)) {
     if (-not (Test-Path -LiteralPath $assetPath)) { Fail "Missing atomic-state asset: $assetPath" }
 }
 
 if ($errors.Count -eq 0) {
-    foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath,$runUpdatePath)) {
+    foreach ($assetPath in @($helperPath,$projectionPath,$finalizerPath,$runUpdatePath,$historyPath)) {
         $tokens=$null; $parseErrors=$null
         [void][System.Management.Automation.Language.Parser]::ParseFile($assetPath,[ref]$tokens,[ref]$parseErrors)
         foreach ($parseError in @($parseErrors)) { Fail "$([System.IO.Path]::GetFileName($assetPath)) parse error: $($parseError.Message)" }
@@ -24,6 +25,7 @@ if ($errors.Count -eq 0) {
     $projection = Get-Content -LiteralPath $projectionPath -Raw
     $finalizer = Get-Content -LiteralPath $finalizerPath -Raw
     $runUpdate = Get-Content -LiteralPath $runUpdatePath -Raw
+    $history = Get-Content -LiteralPath $historyPath -Raw
 
     foreach ($token in @(
         'Get-TravelAssistantAtomicMutexName',
@@ -63,6 +65,26 @@ if ($errors.Count -eq 0) {
         if (-not $pair.text.Contains('Read-TravelAssistantSharedLines -Path $Path')) { Fail "$($pair.name) must read state.kv through the delete-sharing reader." }
         if (-not $pair.text.Contains('Write-TravelAssistantAtomicLines')) { Fail "$($pair.name) must publish state through the shared atomic writer." }
         if ($pair.text.Contains("Move-Item -LiteralPath `$tmp -Destination `$Path -Force")) { Fail "$($pair.name) must not retain the fixed-temp Move-Item publication path." }
+    }
+
+    foreach ($token in @(
+        ". (Join-Path `$PSScriptRoot 'AtomicFile.ps1')",
+        'Open-TravelAssistantSharedTextReader -Path $ObservationFile',
+        'Open-TravelAssistantSharedTextReader -Path $CycleFile',
+        'New-TravelAssistantAtomicTempPath -Path $ObservationFile',
+        'Publish-TravelAssistantAtomicTempFile -TempPath $tmp -Path $ObservationFile',
+        'Write-TravelAssistantAtomicJson -Path $Path'
+    )) {
+        if (-not $history.Contains($token)) { Fail "MaintainObservationHistory.ps1 missing shared/atomic IO token '$token'." }
+    }
+    foreach ($retired in @(
+        "$ObservationFile + '.cleanup.tmp'",
+        "$ObservationFile + '.history.tmp'",
+        "$CycleFile + '.history.tmp'",
+        'Move-Item -LiteralPath $tmp -Destination $ObservationFile -Force',
+        'Move-Item -LiteralPath $tmp -Destination $CycleFile -Force'
+    )) {
+        if ($history.Contains($retired)) { Fail "MaintainObservationHistory.ps1 retains lock-prone fixed-temp history IO '$retired'." }
     }
 
     if (-not $runUpdate.Contains("`$AtomicFileScript = Join-Path `$PSScriptRoot 'AtomicFile.ps1'")) { Fail 'RunUpdate.ps1 must resolve AtomicFile.ps1 for heartbeat publication.' }
