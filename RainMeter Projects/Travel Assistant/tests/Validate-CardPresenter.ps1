@@ -36,6 +36,7 @@ if ($errors.Count -eq 0) {
         'parseWindowPlan','parsePriceVarianceEnvelope','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
         'WP2:','PV([01])','group.safeEnd-group.safeStart>=60','group.bestProbability>0.5','currentProbability>0.5',
         "'Leave Before '..formatDuration","'Window Open: '","' Best: '","' Closes: '",
+        'formatBestCountdown',"string.format('%02ds',value)",'usefulWindowHorizon',
         "'Safe Hit Window Open: '","'Safe Hit Window Open. Closes: '","'Safe window closed. Leave Now: '",
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
@@ -52,6 +53,14 @@ if ($errors.Count -eq 0) {
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
+    foreach ($forbidden in @(
+        "' ['..chancePercent",
+        "' ['..string.format('%.0f%%'",
+        "'SAFE - EN ROUTE'",
+        "'BEST - EN ROUTE'"
+    )) {
+        if ($presenter.Contains($forbidden)) { Fail "CardPresenter.lua retains obsolete/cluttered status token '$forbidden'." }
+    }
     if ($presenter.Contains("setOption(name,'ToolTipHidden'")) { Fail 'CardPresenter.lua must not dynamically mutate ToolTipHidden; empty tooltip text owns visibility on the target host.' }
     if ($presenter -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand|LaunchItemViewer') { Fail 'CardPresenter.lua must remain presentation-only and local.' }
     foreach ($token in @(
@@ -64,7 +73,8 @@ if ($errors.Count -eq 0) {
         '-SafetyMarginFraction 0.05',
         '$medianAvailable = Get-StableWindowMedian',
         'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
-        "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry'
+        "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
+        'MaximumOrdinal = 1','immediately next cycle'
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
     }
