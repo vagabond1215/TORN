@@ -25,7 +25,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ShadowCollector.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-CountryProviderCode','Get-LiveStockObservationsForCountry','Write-SharedAppendBytes','Append-JsonLine','Flush-PendingJsonLines','Invalidate-PhaseAnchorForGap','Update-CycleState','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
+$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-CountryProviderCode','Get-LiveStockObservationsForCountry','Write-SharedAppendBytes','Append-JsonLine','Flush-PendingJsonLines','Invalidate-PhaseAnchorForGap','Test-ForecastBoundaryQuality','Update-CycleState','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -153,6 +153,10 @@ $destState = [pscustomobject]@{
     lastForeignPrice = 200
     lastSourceTimestamp = 100
     lastSellOutAt = 100
+    lastSellOutLowerBoundAt = 90
+    lastSellOutUpperBoundAt = 100
+    lastSellOutBoundaryQuality = 'bounded'
+    continuityInvalidatedAt = 0
     activeCycle = $null
 }
 $restockObservation = [pscustomobject]@{
@@ -214,10 +218,44 @@ $longGapState = [pscustomobject]@{
     continuityInvalidatedAt=0
     activeCycle=$null
 }
-$longGapObservation = [pscustomobject]@{timestamp=800;sourceTimestamp=800;stock=0;foreignPrice=200}
-Assert-True 'Long unchanged gap invalidates the current phase anchor' (Invalidate-PhaseAnchorForGap -DestState $longGapState -Observation $longGapObservation -BoundaryPolicy $gapPolicy)
-Assert-Equal 'Long OOS gap clears unknown sellout anchor' ([long]$longGapState.lastSellOutAt) 0
-Assert-Equal 'Long OOS gap records invalidation point' ([long]$longGapState.continuityInvalidatedAt) 800
+$interiorGapObservation = [pscustomobject]@{timestamp=800;sourceTimestamp=800;stock=0;foreignPrice=200}
+Assert-Equal 'Same-phase outage shorter than a full possible cycle does not erase a known boundary' (Invalidate-PhaseAnchorForGap -DestState $longGapState -Observation $interiorGapObservation -BoundaryPolicy $gapPolicy) $false
+Assert-Equal 'Bridgeable same-phase outage keeps the known sellout anchor' ([long]$longGapState.lastSellOutAt) 100
+
+$fullCycleGapObservation = [pscustomobject]@{timestamp=1400;sourceTimestamp=1400;stock=0;foreignPrice=200}
+Assert-True 'Same-phase outage long enough to hide a full cycle invalidates continuity' (Invalidate-PhaseAnchorForGap -DestState $longGapState -Observation $fullCycleGapObservation -BoundaryPolicy $gapPolicy)
+Assert-Equal 'Full-cycle OOS gap clears the sellout anchor' ([long]$longGapState.lastSellOutAt) 0
+Assert-Equal 'Full-cycle gap records invalidation point' ([long]$longGapState.continuityInvalidatedAt) 1400
+
+$unknownBoundaryState = [pscustomobject]@{
+    lastStock=400
+    lastForeignPrice=200
+    lastSourceTimestamp=100
+    lastSellOutAt=0
+    lastSellOutLowerBoundAt=0
+    lastSellOutUpperBoundAt=0
+    lastSellOutBoundaryQuality='unknown'
+    continuityInvalidatedAt=0
+    activeCycle=[pscustomobject]@{
+        previousSoldOutAt=50L
+        previousSoldOutLowerBoundAt=40L
+        previousSoldOutUpperBoundAt=50L
+        previousSellOutBoundaryQuality='bounded'
+        restockAt=60L
+        restockLowerBoundAt=50L
+        restockUpperBoundAt=60L
+        restockBoundaryQuality='bounded'
+        restockGapSeconds=10L
+        restockQuantity=500
+        foreignPrice=200
+        source='prometheus'
+    }
+}
+$unknownSellout=[pscustomobject]@{timestamp=900;sourceTimestamp=900;country='united_kingdom';itemId=266;stock=0;foreignPrice=200;source='prometheus'}
+$unknownCompleted=Update-CycleState -DestState $unknownBoundaryState -Observation $unknownSellout -BoundaryPolicy $gapPolicy
+Assert-Equal 'Sellout across an unobservable outage is not assigned a fake timestamp' ([long]$unknownBoundaryState.lastSellOutAt) 0
+Assert-Equal 'Unobservable sellout boundary is explicitly unknown' ([string]$unknownBoundaryState.lastSellOutBoundaryQuality) 'unknown_gap'
+Assert-Equal 'Partial cycle with missing sellout boundary is excluded from forecast' ([bool]$unknownCompleted.forecastEligible) $false
 
 Write-Host 'Shadow collection tests passed.' -ForegroundColor Green
 exit 0
