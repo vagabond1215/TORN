@@ -163,6 +163,8 @@ Static/focused tests have been updated to guard:
 - one compact updater performance sample per completed worker with per-stage pwsh CPU and wall milliseconds;
 - elimination of the retired no-op PostUpdate history invocation;
 - steady-state EngineState schema repair avoids scanning observations.jsonl unless an in-stock market actually lacks activeCycle;
+- observation/cycle history readers used by inline graph, graph hover, Item Viewer, cycle-anchor repair, and engine-schema repair use delete-sharing streams so they cannot block the collector's append/atomic-replace path;
+- ShadowCollector engine-state publication uses the shared unique-temp atomic writer and per-journal append mutexes, eliminating fixed .tmp collisions under Rainmeter/OneDrive contention;
 - the Lua multi-return SetOption regression.
 
 This execution environment does not provide Windows PowerShell/Rainmeter, so the redesigned WinForms surface and Rainmeter render have **not** been executed here. Target acceptance must run the focused checks and visual/interactivity checklist in `docs/NEXT_CODEX_RUN.md`.
