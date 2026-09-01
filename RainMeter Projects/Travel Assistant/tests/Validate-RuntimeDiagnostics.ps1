@@ -140,6 +140,16 @@ if (Test-Path -LiteralPath $updatePath) {
     if ($text.Contains("Invoke-HistoryMaintenance -Phase 'PostUpdate'")) {
         Fail 'RunUpdate.ps1 must not pay for the retired no-op PostUpdate history pass on every heartbeat.'
     }
+    if ($text.Contains('foreach ($row in @($script:UpdatePerformanceRows))')) {
+        Fail 'RunUpdate.ps1 must iterate the generic performance row list directly; PowerShell array coercion can throw PSToObjectArrayBinder ArgumentException.'
+    }
+    if (-not $text.Contains('foreach ($row in $script:UpdatePerformanceRows)')) {
+        Fail 'RunUpdate.ps1 must directly enumerate UpdatePerformanceRows.'
+    }
+    if (-not $text.Contains('$stageParts.ToArray() -join '',''')) {
+        Fail 'RunUpdate.ps1 must join the concrete stage string array without generic-list coercion.'
+    }
+
 
     $successExitWindows = "`$UpdatePerformanceOutcome = 'success'`r`n    exit 0"
     $successExitUnix = "`$UpdatePerformanceOutcome = 'success'`n    exit 0"
