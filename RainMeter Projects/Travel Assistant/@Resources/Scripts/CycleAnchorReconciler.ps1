@@ -184,4 +184,4 @@ foreach ($key in @($wanted.Keys)) {
 }
 
 if ($changed) { Write-AnchorJsonAtomic -Path $EngineStateFile -Value $engine }
-exit 0
+return
