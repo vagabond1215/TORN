@@ -340,6 +340,7 @@ function Get-OpportunityEligibleEvidenceKeys {
         [string]$FixedCountry,
         [long]$NowEpoch,
         [int]$BasisPercent,
+        [int]$MarketFeePercent,
         [long]$ResaleFallbackMaxAgeSeconds
     )
     $wanted=@{}
@@ -369,7 +370,8 @@ function Get-OpportunityEligibleEvidenceKeys {
             if (-not [bool]$resaleUse.usable) { continue }
             $foreignPrice=[long](Get-OptimalProperty $market 'lastForeignPrice')
             $sellBasis=[long][Math]::Floor([long]$resaleUse.marketValue * ($BasisPercent/100.0))
-            if ($foreignPrice -le 0 -or ($sellBasis-$foreignPrice) -le 0) { continue }
+            $unitTax=if ($MarketFeePercent -eq 5) { [long][Math]::Floor([double]$sellBasis*0.05) } else { 0L }
+            if ($foreignPrice -le 0 -or ($sellBasis-$foreignPrice-$unitTax) -le 0) { continue }
         }
 
         $wanted[($countryId+':'+[string]$itemId).ToLowerInvariant()]=$true
@@ -595,7 +597,7 @@ if ($travelState -in @('traveling_unknown','abroad_unknown')) {
 $fixedCountry = ''
 if ($null -ne $travelContext -and [bool](Get-OptimalProperty $travelContext 'filterActive')) { $fixedCountry = [string](Get-OptimalProperty $travelContext 'destinationCountryId') }
 
-$eligibleEvidenceKeys=Get-OpportunityEligibleEvidenceKeys -Engine $engine -Countries $countries -Preferences $preferences -FixedCountry $fixedCountry -NowEpoch $Now -BasisPercent $basisPercent -ResaleFallbackMaxAgeSeconds $resaleFallbackMaxAge
+$eligibleEvidenceKeys=Get-OpportunityEligibleEvidenceKeys -Engine $engine -Countries $countries -Preferences $preferences -FixedCountry $fixedCountry -NowEpoch $Now -BasisPercent $basisPercent -MarketFeePercent $marketFeePercent -ResaleFallbackMaxAgeSeconds $resaleFallbackMaxAge
 $evidence=Get-OptimalEvidence -WantedKeys $eligibleEvidenceKeys -SkipObservations
 $focusMarker=Read-OpportunityFocusMarker -Path $FocusMarketFile -NowEpoch $Now
 
