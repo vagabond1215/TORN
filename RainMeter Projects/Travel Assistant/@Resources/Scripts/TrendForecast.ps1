@@ -193,7 +193,7 @@ function Update-TFAccuracy {
 function Get-TFRecentSamples {
     param([object]$Market,[int]$Maximum=8)
     $samples=@(Get-TFProperty $Market 'recentSamples')
-    $usable=@(Select-CadenceAwareForecastCycles -Cycles $samples -MaximumSamples 0 | Where-Object { $null -ne $_ -and [long](Get-TFProperty $_ 'soldOutAt') -gt 0 } | Sort-Object soldOutAt)
+    $usable=@(Select-CadenceAwareForecastCycles -Cycles $samples -MaximumSamples 0 -Purpose Trend | Where-Object { $null -ne $_ -and [long](Get-TFProperty $_ 'soldOutAt') -gt 0 } | Sort-Object soldOutAt)
     if ($usable.Count -gt $Maximum) { return @($usable | Select-Object -Last $Maximum) }
     return $usable
 }
@@ -255,8 +255,17 @@ if ($null -eq $engine) { return }
 $root=Get-TFProperty $engine 'cycleAnalytics'
 $markets=Get-TFProperty $root 'markets'
 if ($null -eq $markets) { return }
+$sourceLength=[long](Get-TFProperty $root 'sourceLength')
+$sourceTicks=[long](Get-TFProperty $root 'sourceLastWriteUtcTicks')
+$previousLength=[long](Get-TFProperty $root 'trendForecastSourceLength')
+$previousTicks=[long](Get-TFProperty $root 'trendForecastSourceLastWriteUtcTicks')
+$trendSchema=[int](Get-TFProperty $root 'trendForecastSchemaVersion')
+if ($trendSchema -eq 2 -and $sourceLength -eq $previousLength -and $sourceTicks -eq $previousTicks) { return }
 $changed=$false
 foreach ($property in @($markets.PSObject.Properties)) {
     if (Update-TFMarket -Market $property.Value -NowEpoch $Now) { $changed=$true }
 }
-if ($changed) { Write-TFJsonAtomic -Path $EngineStateFile -Value $engine }
+Set-TFProperty -Object $root -Name 'trendForecastSchemaVersion' -Value 2
+Set-TFProperty -Object $root -Name 'trendForecastSourceLength' -Value $sourceLength
+Set-TFProperty -Object $root -Name 'trendForecastSourceLastWriteUtcTicks' -Value $sourceTicks
+if ($changed -or $trendSchema -ne 2 -or $sourceLength -ne $previousLength -or $sourceTicks -ne $previousTicks) { Write-TFJsonAtomic -Path $EngineStateFile -Value $engine }

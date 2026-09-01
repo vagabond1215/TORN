@@ -64,11 +64,13 @@ if(Test-Path -LiteralPath $files.Preferences){
 if(Test-Path -LiteralPath $files.UnifiedPopup){
  $text=Get-Content -LiteralPath $files.UnifiedPopup -Raw
  foreach($token in @(
-  'TRIP & FILTERS','COUNTRIES','CATEGORIES','ITEMS',"@('short','medium','long')",'SHORT','MEDIUM','LONG',
+  'CATEGORIES','ITEMS',"@('short','medium','long')","short='S';medium='M';long='L'",
   'Get-CountryFlagImage','@Resources\Images\Flags','CheckedListBox','TextChanged','Set-BandSelection','Set-AllCountries','Set-AllCategories',
+  'Get-ScopedCatalogRows','Test-ItemInCurrentScope','countryIds',"New-ActionLink 'ON'","New-ActionLink 'OFF'",
   "Set-FilterProperty `$current 'displayTripBands'","Set-FilterProperty `$current 'selectedCountryIds'","Set-FilterProperty `$current 'selectedCategories'","Set-FilterProperty `$current 'selectedItemIds'",
   'Start-FilterProjectionRefresh','RuntimeLog.ps1','Read-OptionalPopupJson','$engine=Read-OptionalPopupJson $EngineStateFile','$script:resetProfitable=$true'
  )){if(-not$text.Contains($token)){Fail "Unified filter popup missing '$token'."}}
+ if($text.Contains("`$title.Text='TRIP & FILTERS'") -or $text.Contains("New-SectionHeader 'COUNTRIES'")){Fail 'Unified filter popup must not render the retired title or Countries header.'}
  if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Unified filter popup must remain local-only.'}
  if($text.Contains('RunUpdate.ps1')){Fail 'Unified filter popup must republish through Start-FilterProjectionRefresh, not invoke RunUpdate.ps1 directly.'}
  foreach($badConstructor in @('Point(0,$y+2)','Size(0,$y+8)')){if($text.Contains($badConstructor)){Fail "Unified filter popup contains an ungrouped arithmetic constructor that PowerShell treats as three arguments: '$badConstructor'."}}

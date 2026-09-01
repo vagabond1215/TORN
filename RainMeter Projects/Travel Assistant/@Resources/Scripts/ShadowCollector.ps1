@@ -14,10 +14,17 @@ $ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $ObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $CycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
+$PendingObservationFile = Join-Path $RuntimeDir 'observations.pending.jsonl'
+$PendingCycleFile = Join-Path $RuntimeDir 'cycles.pending.jsonl'
+$SeedCycleFile = Join-Path $ProjectRoot 'data\seed\cycles.jsonl'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $ErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
+$CycleForecastFilter = Join-Path $PSScriptRoot 'CycleForecastFilter.ps1'
+
+. $CycleForecastFilter
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+$script:blockedAppendPaths=@{}
 
 function Read-JsonFile {
     param([string]$Path)
@@ -118,9 +125,23 @@ function Get-DestinationState {
             lastForeignPrice = 0
             lastSourceTimestamp = 0
             lastSellOutAt = 0
+            lastSellOutLowerBoundAt = 0
+            lastSellOutUpperBoundAt = 0
+            lastSellOutBoundaryQuality = 'unknown'
+            continuityInvalidatedAt = 0
+            boundaryPolicy = $null
             activeCycle = $null
         }
         Set-DynamicProperty $EngineState.destinations $Key $dest
+    }
+    foreach ($property in @{
+        lastSellOutLowerBoundAt=0L
+        lastSellOutUpperBoundAt=0L
+        lastSellOutBoundaryQuality='unknown'
+        continuityInvalidatedAt=0L
+        boundaryPolicy=$null
+    }.GetEnumerator()) {
+        if (-not $dest.PSObject.Properties[$property.Key]) { $dest | Add-Member NoteProperty $property.Key $property.Value }
     }
     return $dest
 }
@@ -331,46 +352,200 @@ function Get-LiveStockObservationsForCountry {
     return $rows.ToArray()
 }
 
+function Write-SharedAppendBytes {
+    param([string]$Path,[byte[]]$Bytes,[int]$MaximumAttempts=12)
+    $shareValue = ([int][System.IO.FileShare]::ReadWrite -bor [int][System.IO.FileShare]::Delete)
+    $share = [System.IO.FileShare]$shareValue
+    for ($attempt=1; $attempt -le $MaximumAttempts; $attempt++) {
+        $stream = $null
+        try {
+            $stream = New-Object System.IO.FileStream($Path,[System.IO.FileMode]::Append,[System.IO.FileAccess]::Write,$share)
+            $stream.Write($Bytes,0,$Bytes.Length)
+            $stream.Flush($true)
+            return
+        } catch {
+            if ($attempt -ge $MaximumAttempts -or ($_.Exception -isnot [System.IO.IOException] -and $_.Exception -isnot [System.UnauthorizedAccessException])) { throw }
+            Start-Sleep -Milliseconds (50 * [Math]::Min($attempt,5))
+        } finally {
+            if ($null -ne $stream) { $stream.Dispose() }
+        }
+    }
+}
+
 function Append-JsonLine {
-    param([string]$Path, [object]$Value)
-    $line = $Value | ConvertTo-Json -Compress -Depth 10
-    Add-Content -LiteralPath $Path -Value $line -Encoding UTF8
+    param([string]$Path,[object]$Value,[string]$FallbackPath='')
+    $line = ($Value | ConvertTo-Json -Compress -Depth 10) + [Environment]::NewLine
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($line)
+    if ($script:blockedAppendPaths.ContainsKey($Path) -and -not [string]::IsNullOrWhiteSpace($FallbackPath)) {
+        Write-SharedAppendBytes -Path $FallbackPath -Bytes $bytes
+        return
+    }
+    try {
+        Write-SharedAppendBytes -Path $Path -Bytes $bytes
+    } catch {
+        if ([string]::IsNullOrWhiteSpace($FallbackPath)) { throw }
+        # Do not let a OneDrive/Rainmeter reader abort collection for every other
+        # market. The pending journal is local evidence and is merged losslessly
+        # into the canonical JSONL file on a later heartbeat.
+        $script:blockedAppendPaths[$Path]=$true
+        Write-SharedAppendBytes -Path $FallbackPath -Bytes $bytes
+    }
+}
+
+function Flush-PendingJsonLines {
+    param([string]$Path,[string]$PendingPath)
+    if (-not (Test-Path -LiteralPath $PendingPath)) { return $true }
+    $pendingBytes = $null
+    try {
+        $pendingBytes = [System.IO.File]::ReadAllBytes($PendingPath)
+        if ($pendingBytes.Length -gt 0) { Write-SharedAppendBytes -Path $Path -Bytes $pendingBytes }
+        Remove-Item -LiteralPath $PendingPath -Force -ErrorAction Stop
+        return $true
+    } catch {
+        $script:blockedAppendPaths[$Path]=$true
+        return $false
+    }
+}
+
+function Read-CycleHistoryMap {
+    param([string[]]$Paths)
+    $map = @{}
+    foreach ($path in $Paths) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        foreach ($line in [System.IO.File]::ReadLines($path)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try { $row = $line | ConvertFrom-Json } catch { continue }
+            if ($null -eq $row -or -not $row.PSObject.Properties['country'] -or -not $row.PSObject.Properties['itemId']) { continue }
+            $key = (([string]$row.country) + ':' + [string][int]$row.itemId).ToLowerInvariant()
+            if (-not $map.ContainsKey($key)) { $map[$key] = New-Object System.Collections.Generic.List[object] }
+            $map[$key].Add($row)
+        }
+    }
+    return $map
+}
+
+function Invalidate-PhaseAnchorForGap {
+    param([object]$DestState,[object]$Observation,[object]$BoundaryPolicy)
+    $previousAt = [long]$DestState.lastSourceTimestamp
+    $currentAt = [long]$Observation.sourceTimestamp
+    if ($currentAt -le 0) { $currentAt = [long]$Observation.timestamp }
+    if ($previousAt -le 0 -or $currentAt -le $previousAt) { return $false }
+    $gap = $currentAt - $previousAt
+    $hardGap = [Math]::Min([long]$BoundaryPolicy.selloutHardGapSeconds,[long]$BoundaryPolicy.restockHardGapSeconds)
+    if ($gap -lt $hardGap) { return $false }
+
+    Set-DynamicProperty -Object $DestState -Name 'continuityInvalidatedAt' -Value $currentAt
+    if ([int]$Observation.stock -gt 0) {
+        $DestState.activeCycle = $null
+    } else {
+        $DestState.lastSellOutAt = 0L
+        Set-DynamicProperty -Object $DestState -Name 'lastSellOutLowerBoundAt' -Value 0L
+        Set-DynamicProperty -Object $DestState -Name 'lastSellOutUpperBoundAt' -Value 0L
+        Set-DynamicProperty -Object $DestState -Name 'lastSellOutBoundaryQuality' -Value 'unknown_gap'
+    }
+    return $true
 }
 
 function Update-CycleState {
-    param([object]$DestState, [object]$Observation)
+    param([object]$DestState, [object]$Observation, [object]$BoundaryPolicy)
     $previousStock = [int]$DestState.lastStock
     $currentStock = [int]$Observation.stock
     $ts = [long]$Observation.timestamp
+    $previousObservedAt = [long]$DestState.lastSourceTimestamp
+    if ($previousObservedAt -le 0 -or $previousObservedAt -gt $ts) { $previousObservedAt = $ts }
+    if ($null -eq $BoundaryPolicy) { $BoundaryPolicy = Get-CycleBoundaryPolicy -Cycles @() -ExpectedPollIntervalSeconds 60 }
+    $gapSeconds = [Math]::Max(0L,$ts-$previousObservedAt)
     $completed = $null
+
+    if (($previousStock -gt 0 -and $currentStock -gt 0) -or ($previousStock -eq 0 -and $currentStock -eq 0)) {
+        [void](Invalidate-PhaseAnchorForGap -DestState $DestState -Observation $Observation -BoundaryPolicy $BoundaryPolicy)
+    }
 
     if ($previousStock -ge 0) {
         if ($previousStock -eq 0 -and $currentStock -gt 0) {
+            $quality = Get-CycleBoundaryQuality -GapSeconds $gapSeconds -Policy $BoundaryPolicy -Phase restock
+            $restockKnown = ($quality -ne 'unknown_gap')
+            $previousSoldOutAt = [long]$DestState.lastSellOutAt
+            $previousSoldOutLower = if ($DestState.PSObject.Properties['lastSellOutLowerBoundAt'] -and [long]$DestState.lastSellOutLowerBoundAt -gt 0) { [long]$DestState.lastSellOutLowerBoundAt } else { $previousSoldOutAt }
+            $previousSoldOutUpper = if ($DestState.PSObject.Properties['lastSellOutUpperBoundAt'] -and [long]$DestState.lastSellOutUpperBoundAt -gt 0) { [long]$DestState.lastSellOutUpperBoundAt } else { $previousSoldOutAt }
+            $previousSelloutQuality = if ($DestState.PSObject.Properties['lastSellOutBoundaryQuality']) { [string]$DestState.lastSellOutBoundaryQuality } else { 'legacy_exact' }
             $DestState.activeCycle = [pscustomobject]@{
-                previousSoldOutAt = [long]$DestState.lastSellOutAt
-                restockAt = $ts
+                previousSoldOutAt = $previousSoldOutAt
+                previousSoldOutLowerBoundAt = $previousSoldOutLower
+                previousSoldOutUpperBoundAt = $previousSoldOutUpper
+                previousSellOutBoundaryQuality = $previousSelloutQuality
+                restockAt = $(if ($restockKnown) { $ts } else { 0L })
+                restockLowerBoundAt = $(if ($restockKnown) { $previousObservedAt } else { 0L })
+                restockUpperBoundAt = $(if ($restockKnown) { $ts } else { 0L })
+                restockBoundaryQuality = $quality
+                restockGapSeconds = $gapSeconds
                 restockQuantity = $currentStock
                 foreignPrice = [long]$Observation.foreignPrice
                 source = [string]$Observation.source
             }
+            if ($restockKnown) {
+                Set-DynamicProperty -Object $DestState -Name 'continuityInvalidatedAt' -Value 0L
+            } else {
+                Set-DynamicProperty -Object $DestState -Name 'continuityInvalidatedAt' -Value $ts
+                $DestState.lastSellOutAt = 0L
+                Set-DynamicProperty -Object $DestState -Name 'lastSellOutLowerBoundAt' -Value 0L
+                Set-DynamicProperty -Object $DestState -Name 'lastSellOutUpperBoundAt' -Value 0L
+                Set-DynamicProperty -Object $DestState -Name 'lastSellOutBoundaryQuality' -Value 'unknown_gap'
+            }
         } elseif ($previousStock -gt 0 -and $currentStock -eq 0) {
-            $DestState.lastSellOutAt = $ts
+            $quality = Get-CycleBoundaryQuality -GapSeconds $gapSeconds -Policy $BoundaryPolicy -Phase sellout
+            $selloutKnown = ($quality -ne 'unknown_gap')
+            $selloutLower = if ($selloutKnown) { $previousObservedAt } else { 0L }
+            $selloutUpper = if ($selloutKnown) { $ts } else { 0L }
+            $DestState.lastSellOutAt = $selloutLower
+            Set-DynamicProperty -Object $DestState -Name 'lastSellOutLowerBoundAt' -Value $selloutLower
+            Set-DynamicProperty -Object $DestState -Name 'lastSellOutUpperBoundAt' -Value $selloutUpper
+            Set-DynamicProperty -Object $DestState -Name 'lastSellOutBoundaryQuality' -Value $quality
+            if ($selloutKnown) { Set-DynamicProperty -Object $DestState -Name 'continuityInvalidatedAt' -Value 0L }
+            else { Set-DynamicProperty -Object $DestState -Name 'continuityInvalidatedAt' -Value $ts }
             if ($null -ne $DestState.activeCycle) {
                 $restockAt = [long]$DestState.activeCycle.restockAt
                 $previousSoldOutAt = [long]$DestState.activeCycle.previousSoldOutAt
-                $delay = 0L
-                if ($previousSoldOutAt -gt 0 -and $restockAt -gt $previousSoldOutAt) { $delay = $restockAt - $previousSoldOutAt }
+                $restockLower = if ($DestState.activeCycle.PSObject.Properties['restockLowerBoundAt']) { [long]$DestState.activeCycle.restockLowerBoundAt } else { $restockAt }
+                $restockUpper = if ($DestState.activeCycle.PSObject.Properties['restockUpperBoundAt']) { [long]$DestState.activeCycle.restockUpperBoundAt } else { $restockAt }
+                $previousSoldOutLower = if ($DestState.activeCycle.PSObject.Properties['previousSoldOutLowerBoundAt']) { [long]$DestState.activeCycle.previousSoldOutLowerBoundAt } else { $previousSoldOutAt }
+                $previousSoldOutUpper = if ($DestState.activeCycle.PSObject.Properties['previousSoldOutUpperBoundAt']) { [long]$DestState.activeCycle.previousSoldOutUpperBoundAt } else { $previousSoldOutAt }
+                $restockQuality = if ($DestState.activeCycle.PSObject.Properties['restockBoundaryQuality']) { [string]$DestState.activeCycle.restockBoundaryQuality } else { 'legacy_exact' }
+                $previousSelloutQuality = if ($DestState.activeCycle.PSObject.Properties['previousSellOutBoundaryQuality']) { [string]$DestState.activeCycle.previousSellOutBoundaryQuality } else { 'legacy_exact' }
+                $availabilityMinimum = if ($selloutKnown -and $restockUpper -gt 0) { [Math]::Max(0L,$selloutLower-$restockUpper) } else { 0L }
+                $availabilityMaximum = if ($selloutKnown -and $restockLower -gt 0) { [Math]::Max(0L,$selloutUpper-$restockLower) } else { 0L }
+                $delayMinimum = if ($restockLower -gt 0 -and $previousSoldOutUpper -gt 0) { [Math]::Max(0L,$restockLower-$previousSoldOutUpper) } else { 0L }
+                $delayMaximum = if ($restockUpper -gt 0 -and $previousSoldOutLower -gt 0) { [Math]::Max(0L,$restockUpper-$previousSoldOutLower) } else { 0L }
+                $availabilityEligible = ($selloutKnown -and $restockAt -gt 0 -and $availabilityMinimum -gt 0)
+                $restockDelayEligible = ($restockAt -gt 0 -and $previousSoldOutAt -gt 0 -and $previousSelloutQuality -ne 'unknown_gap' -and $delayMaximum -gt 0)
+                $trendEligible = ($availabilityEligible -and $restockDelayEligible -and $quality -ne 'uncertain' -and $restockQuality -ne 'uncertain' -and $previousSelloutQuality -ne 'uncertain')
                 $completed = [pscustomobject]@{
-                    schemaVersion = 1
+                    schemaVersion = 2
                     country = [string]$Observation.country
                     itemId = [int]$Observation.itemId
                     foreignPrice = [long]$DestState.activeCycle.foreignPrice
                     restockAt = $restockAt
+                    restockLowerBoundAt = $restockLower
+                    restockUpperBoundAt = $restockUpper
+                    restockBoundaryQuality = $restockQuality
                     restockQuantity = [int]$DestState.activeCycle.restockQuantity
-                    soldOutAt = $ts
-                    availabilitySeconds = [long]($ts - $restockAt)
+                    soldOutAt = $selloutLower
+                    soldOutLowerBoundAt = $selloutLower
+                    soldOutUpperBoundAt = $selloutUpper
+                    soldOutBoundaryQuality = $quality
+                    availabilitySeconds = $availabilityMinimum
+                    availabilityMinimumSeconds = $availabilityMinimum
+                    availabilityMaximumSeconds = $availabilityMaximum
+                    availabilityEligible = $availabilityEligible
                     previousSoldOutAt = $previousSoldOutAt
-                    restockDelaySeconds = $delay
+                    previousSoldOutLowerBoundAt = $previousSoldOutLower
+                    previousSoldOutUpperBoundAt = $previousSoldOutUpper
+                    restockDelaySeconds = $delayMaximum
+                    restockDelayMinimumSeconds = $delayMinimum
+                    restockDelayMaximumSeconds = $delayMaximum
+                    restockDelayEligible = $restockDelayEligible
+                    trendEligible = $trendEligible
+                    forecastEligible = ($availabilityEligible -and $restockDelayEligible)
                     source = [string]$DestState.activeCycle.source
                 }
                 $DestState.activeCycle = $null
@@ -380,7 +555,8 @@ function Update-CycleState {
 
     $DestState.lastStock = $currentStock
     $DestState.lastForeignPrice = [long]$Observation.foreignPrice
-    $DestState.lastSourceTimestamp = [long]$Observation.sourceTimestamp
+    $sourceTimestamp = [long]$Observation.sourceTimestamp
+    $DestState.lastSourceTimestamp = $(if ($sourceTimestamp -gt 0) { $sourceTimestamp } else { $ts })
     return $completed
 }
 
@@ -461,6 +637,11 @@ $engineState = Get-EngineState
 $lastPollAt = [long]$engineState.shadowCollection.lastPollAt
 if (-not $Force -and $lastPollAt -gt 0 -and ($now - $lastPollAt) -lt $MinimumPollIntervalSeconds) { return }
 
+$pendingObservationsFlushed = Flush-PendingJsonLines -Path $ObservationFile -PendingPath $PendingObservationFile
+$pendingCyclesFlushed = Flush-PendingJsonLines -Path $CycleFile -PendingPath $PendingCycleFile
+Set-DynamicProperty -Object $engineState.shadowCollection -Name 'pendingObservationJournal' -Value (-not $pendingObservationsFlushed -or (Test-Path -LiteralPath $PendingObservationFile))
+Set-DynamicProperty -Object $engineState.shadowCollection -Name 'pendingCycleJournal' -Value (-not $pendingCyclesFlushed -or (Test-Path -LiteralPath $PendingCycleFile))
+
 $countriesConfig = Read-JsonFile (Join-Path $ConfigDir 'countries.json')
 $marketOverrideConfig = Read-JsonFile (Join-Path $ConfigDir 'foreign-market-overrides.json')
 if ($null -eq $countriesConfig) {
@@ -482,6 +663,7 @@ try {
     $providersUsed = @()
     $staleCountries = @()
     $countryProviders = [pscustomobject]@{}
+    $cycleHistoryMap = $null
 
     foreach ($country in $collectionCountries) {
         $selection = Select-LiveCountryProvider -ProviderSet $providerSet -Country $country -NowEpoch $now -MaximumAgeSeconds $MaximumProviderAgeSeconds
@@ -510,17 +692,25 @@ try {
             # market. Per-country provider selection only changes the live source;
             # stable country:item identity keeps cycle evidence continuous.
             $destState = Get-DestinationState -EngineState $engineState -Key $key
+            $boundaryPolicy = Get-DynamicProperty -Object $destState -Name 'boundaryPolicy'
+            if ($null -eq $boundaryPolicy) {
+                if ($null -eq $cycleHistoryMap) { $cycleHistoryMap = Read-CycleHistoryMap -Paths @($SeedCycleFile,$CycleFile) }
+                $marketCycles = if ($cycleHistoryMap.ContainsKey($key)) { @($cycleHistoryMap[$key].ToArray()) } else { @() }
+                $boundaryPolicy = Get-CycleBoundaryPolicy -Cycles $marketCycles -ExpectedPollIntervalSeconds $MinimumPollIntervalSeconds
+                Set-DynamicProperty -Object $destState -Name 'boundaryPolicy' -Value $boundaryPolicy
+            }
             if (-not (Test-ObservationChanged -DestState $destState -Observation $observation)) {
+                [void](Invalidate-PhaseAnchorForGap -DestState $destState -Observation $observation -BoundaryPolicy $boundaryPolicy)
                 $destState.lastForeignPrice = [long]$observation.foreignPrice
-                $destState.lastSourceTimestamp = [long]$observation.sourceTimestamp
+                $destState.lastSourceTimestamp = $(if ([long]$observation.sourceTimestamp -gt 0) { [long]$observation.sourceTimestamp } else { [long]$observation.timestamp })
                 continue
             }
 
-            Append-JsonLine -Path $ObservationFile -Value $observation
+            Append-JsonLine -Path $ObservationFile -Value $observation -FallbackPath $PendingObservationFile
             $observationsWritten++
-            $completed = Update-CycleState -DestState $destState -Observation $observation
-            if ($null -ne $completed -and [long]$completed.availabilitySeconds -gt 0) {
-                Append-JsonLine -Path $CycleFile -Value $completed
+            $completed = Update-CycleState -DestState $destState -Observation $observation -BoundaryPolicy $boundaryPolicy
+            if ($null -ne $completed) {
+                Append-JsonLine -Path $CycleFile -Value $completed -FallbackPath $PendingCycleFile
                 $cyclesCompleted++
             }
         }
@@ -539,6 +729,8 @@ try {
     $engineState.shadowCollection.cyclesCompleted = $cyclesCompleted
     Set-DynamicProperty -Object $engineState.shadowCollection -Name 'countryProviders' -Value $countryProviders
     Set-DynamicProperty -Object $engineState.shadowCollection -Name 'staleCountries' -Value ([string[]]@($staleCountries | Sort-Object))
+    Set-DynamicProperty -Object $engineState.shadowCollection -Name 'pendingObservationJournal' -Value (Test-Path -LiteralPath $PendingObservationFile)
+    Set-DynamicProperty -Object $engineState.shadowCollection -Name 'pendingCycleJournal' -Value (Test-Path -LiteralPath $PendingCycleFile)
     $engineState.shadowCollection.lastErrorAt = 0
     $engineState.shadowCollection.lastError = ''
     if (Test-Path -LiteralPath $ErrorFile) { Remove-Item -LiteralPath $ErrorFile -Force -ErrorAction SilentlyContinue }

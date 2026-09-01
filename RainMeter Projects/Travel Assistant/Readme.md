@@ -110,8 +110,14 @@ Both graph surfaces use an 8-hour display while learning retention remains appro
 Primary filters:
 
 ```text
-ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
+S [flags...] ON OFF
+M [flags...] ON OFF
+L [flags...] ON OFF
+CATEGORIES ... ON OFF
+ITEMS [search] ON OFF
 ```
+
+The item list is scoped immediately by the current country and category selections. Reset, Save, and Cancel share the bottom action row.
 
 Trip bands are presentation labels only:
 

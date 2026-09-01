@@ -68,8 +68,8 @@ if ($enabledItems.Count -ne 1 -or [int]$enabledItems[0].itemId -ne 206) {
 
 $itemExpectations = @(
     [pscustomobject]@{ itemId = 206; name = 'Xanax'; category = 'Drug'; country = $null; visible = $true; optimizerEligible = $true },
-    [pscustomobject]@{ itemId = 266; name = 'Nessie Plushie'; category = 'Plushie'; country = 'united_kingdom'; visible = $false; optimizerEligible = $false },
-    [pscustomobject]@{ itemId = 277; name = 'Cherry Blossom'; category = 'Flower'; country = 'japan'; visible = $false; optimizerEligible = $false }
+    [pscustomobject]@{ itemId = 266; name = 'Nessie Plushie'; category = 'Plushie'; country = 'united_kingdom'; visible = $true; optimizerEligible = $false },
+    [pscustomobject]@{ itemId = 277; name = 'Cherry Blossom'; category = 'Flower'; country = 'japan'; visible = $true; optimizerEligible = $false }
 )
 foreach ($expected in $itemExpectations) {
     $row = @($items.items | Where-Object { [int]$_.itemId -eq [int]$expected.itemId } | Select-Object -First 1)
@@ -101,10 +101,10 @@ if (-not (Test-Path -LiteralPath $collectorPath)) {
     Fail 'ShadowCollector.ps1 is missing.'
 } else {
     $collector = Get-Content -LiteralPath $collectorPath -Raw
-    if ($collector -notmatch '(?m)^\s*\[int\]\$MinimumPollIntervalSeconds\s*=\s*120') {
-        Fail 'Shadow collector default interval must remain 120 seconds for the initial rollout.'
+    if ($collector -notmatch '(?m)^\s*\[int\]\$MinimumPollIntervalSeconds\s*=\s*60') {
+        Fail 'Shadow collector default interval must remain aligned with the 60-second Rainmeter heartbeat.'
     }
-    foreach ($token in @('observedMarkets','providerName','itemName','Test-IsPrimaryMarket','Get-LiveStockObservationsForCountry','Get-InactiveMarketIndex','foreign-market-overrides.json','legacyMarketsSeen')) {
+    foreach ($token in @('observedMarkets','providerName','itemName','Get-LiveStockObservationsForCountry','Get-InactiveMarketIndex','foreign-market-overrides.json','legacyMarketsSeen','Get-CycleBoundaryPolicy','Invalidate-PhaseAnchorForGap')) {
         if (-not $collector.Contains($token)) { Fail "Shadow collector contract is missing '$token'." }
     }
     if ($collector -notmatch '(?s)Update-ObservedMarketMetadata.+?\$marketsSeen\+\+.+?\$inactiveMarketIndex\.ContainsKey\(\$key\).+?continue') {
@@ -117,12 +117,12 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
 } else {
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
     if (-not $wrapper.Contains('ShadowCollector.ps1')) { Fail 'RunUpdate.ps1 must invoke ShadowCollector.ps1.' }
-    if (-not $wrapper.Contains('Write-ShadowFailure')) { Fail 'RunUpdate.ps1 must keep unexpected shadow failures fail-soft and diagnosable.' }
-    if ($wrapper.IndexOf('& $Updater -Action $Action') -gt $wrapper.IndexOf('& $ShadowCollector')) {
-        Fail 'Primary updater must run before shadow collection.'
-    }
-    if ($wrapper.IndexOf('& $ShadowCollector') -gt $wrapper.IndexOf('& $Finalizer')) {
+    if (-not $wrapper.Contains('Invoke-FailSoftScript -Path $ShadowCollector')) { Fail 'RunUpdate.ps1 must keep unexpected shadow failures fail-soft and diagnosable.' }
+    if ($wrapper.IndexOf('Invoke-FailSoftScript -Path $ShadowCollector') -gt $wrapper.IndexOf('& $Finalizer')) {
         Fail 'Shadow collection should complete before finalization while sharing serialized engine state.'
+    }
+    if ($wrapper -notmatch '(?s)if \(\$Action -eq ''Update''\).*?\$ShadowCollector.*?else.*?& \$Updater -Action \$Action') {
+        Fail 'Normal Update must use ShadowCollector as sole live-stock owner; UpdateTracker is legacy-action only.'
     }
 }
 

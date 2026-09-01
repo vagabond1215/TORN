@@ -3,6 +3,7 @@ Set-StrictMode -Version 2.0
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $CollectorPath = Join-Path $ProjectRoot '@Resources\Scripts\ShadowCollector.ps1'
+. (Join-Path $ProjectRoot '@Resources\Scripts\CycleForecastFilter.ps1')
 
 function Assert-Equal {
     param([string]$Name, $Actual, $Expected)
@@ -23,7 +24,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ShadowCollector.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-LiveStockObservationsForCountry','Update-CycleState','Test-IsPrimaryMarket','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
+$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-CountryProviderCode','Get-LiveStockObservationsForCountry','Write-SharedAppendBytes','Append-JsonLine','Flush-PendingJsonLines','Invalidate-PhaseAnchorForGap','Update-CycleState','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -36,6 +37,7 @@ foreach ($name in $wanted) {
     $scoped = $source -replace ('^function\s+' + [regex]::Escape($name)), ('function script:' + $name)
     Invoke-Expression $scoped
 }
+$script:blockedAppendPaths=@{}
 
 $payload = [pscustomobject]@{
     stocks = [pscustomobject]@{
@@ -82,14 +84,37 @@ Update-ObservedMarketMetadata -EngineState $catalogState -Observation $renamedOb
 Assert-Equal 'Observed market keeps provider name across refresh' ([string]$catalogEntry.providerName) 'Nessie Plushie'
 Assert-Equal 'Observed market refresh still updates stock' ([int]$catalogEntry.lastStock) 400
 
-$primaryCountries = New-Object 'System.Collections.Generic.HashSet[string]'
-[void]$primaryCountries.Add('united_kingdom')
-[void]$primaryCountries.Add('japan')
-$primaryItems = New-Object 'System.Collections.Generic.HashSet[int]'
-[void]$primaryItems.Add(206)
-Assert-True 'UK Xanax is protected primary market' (Test-IsPrimaryMarket -CountryId 'united_kingdom' -ItemId 206 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems)
-Assert-Equal 'UK Nessie remains shadow-collected' (Test-IsPrimaryMarket -CountryId 'united_kingdom' -ItemId 266 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems) $false
-Assert-Equal 'Non-primary country Xanax remains shadow-collected' (Test-IsPrimaryMarket -CountryId 'mexico' -ItemId 206 -PrimaryCountryIds $primaryCountries -PrimaryItemIds $primaryItems) $false
+$appendPath=Join-Path ([System.IO.Path]::GetTempPath()) ('travel-shadow-append-'+[guid]::NewGuid().ToString('N')+'.jsonl')
+$readStream=$null
+try {
+    [System.IO.File]::WriteAllText($appendPath,'',[System.Text.UTF8Encoding]::new($false))
+    $share=[System.IO.FileShare]([int][System.IO.FileShare]::ReadWrite -bor [int][System.IO.FileShare]::Delete)
+    $readStream=[System.IO.File]::Open($appendPath,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,$share)
+    Append-JsonLine -Path $appendPath -Value ([pscustomobject]@{stock=1;source='test'})
+    Assert-Equal 'Transition append tolerates a shared runtime reader' (@([System.IO.File]::ReadAllLines($appendPath)).Count) 1
+} finally {
+    if($null -ne $readStream){$readStream.Dispose()}
+    Remove-Item -LiteralPath $appendPath -Force -ErrorAction SilentlyContinue
+}
+
+$lockedPath=Join-Path ([System.IO.Path]::GetTempPath()) ('travel-shadow-locked-'+[guid]::NewGuid().ToString('N')+'.jsonl')
+$pendingPath=$lockedPath+'.pending'
+$exclusiveReader=$null
+try {
+    [System.IO.File]::WriteAllText($lockedPath,'',[System.Text.UTF8Encoding]::new($false))
+    $exclusiveReader=[System.IO.File]::Open($lockedPath,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::Read)
+    Append-JsonLine -Path $lockedPath -FallbackPath $pendingPath -Value ([pscustomobject]@{stock=2;source='pending-test'})
+    Assert-Equal 'Locked canonical history falls back to pending journal' (@([System.IO.File]::ReadAllLines($pendingPath)).Count) 1
+    $exclusiveReader.Dispose();$exclusiveReader=$null
+    $script:blockedAppendPaths=@{}
+    Assert-True 'Pending journal flushes after canonical lock clears' (Flush-PendingJsonLines -Path $lockedPath -PendingPath $pendingPath)
+    Assert-Equal 'Flushed transition reaches canonical history' (@([System.IO.File]::ReadAllLines($lockedPath)).Count) 1
+    Assert-Equal 'Successful flush removes pending journal' (Test-Path -LiteralPath $pendingPath) $false
+} finally {
+    if($null -ne $exclusiveReader){$exclusiveReader.Dispose()}
+    Remove-Item -LiteralPath $lockedPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $pendingPath -Force -ErrorAction SilentlyContinue
+}
 
 $overrideFixture = [pscustomobject]@{
     marketOverrides = [pscustomobject]@{
@@ -120,7 +145,7 @@ Assert-Equal 'Provider timestamp alone does not create raw history' (Test-Observ
 $stockChange = [pscustomobject]@{ stock = 449; foreignPrice = 200; sourceTimestamp = 200 }
 Assert-True 'Stock change creates raw history' (Test-ObservationChanged -DestState $unchangedState -Observation $stockChange)
 $priceChange = [pscustomobject]@{ stock = 450; foreignPrice = 250; sourceTimestamp = 200 }
-Assert-True 'Foreign-price change creates raw history' (Test-ObservationChanged -DestState $unchangedState -Observation $priceChange)
+Assert-Equal 'Foreign-price-only change stays in observed market state' (Test-ObservationChanged -DestState $unchangedState -Observation $priceChange) $false
 
 $destState = [pscustomobject]@{
     lastStock = 0
@@ -140,6 +165,18 @@ $restockObservation = [pscustomobject]@{
 }
 $null = Update-CycleState -DestState $destState -Observation $restockObservation
 Assert-Equal 'Shadow cycle records restock transition' ([long]$destState.activeCycle.restockAt) 200
+Assert-Equal 'Restock lower bound uses last observed OOS point' ([long]$destState.activeCycle.restockLowerBoundAt) 100
+
+$positiveObservation = [pscustomobject]@{
+    timestamp = 230
+    country = 'united_kingdom'
+    itemId = 266
+    stock = 400
+    foreignPrice = 200
+    source = 'prometheus'
+    sourceTimestamp = 230
+}
+$null = Update-CycleState -DestState $destState -Observation $positiveObservation
 
 $soldOutObservation = [pscustomobject]@{
     timestamp = 260
@@ -153,8 +190,33 @@ $soldOutObservation = [pscustomobject]@{
 $completed = Update-CycleState -DestState $destState -Observation $soldOutObservation
 Assert-Equal 'Completed cycle keeps item identity' ([int]$completed.itemId) 266
 Assert-Equal 'Completed cycle keeps country identity' ([string]$completed.country) 'united_kingdom'
-Assert-Equal 'Completed cycle availability is isolated' ([long]$completed.availabilitySeconds) 60
+Assert-Equal 'Completed cycle uses conservative confirmed availability' ([long]$completed.availabilitySeconds) 30
+Assert-Equal 'Completed cycle retains maximum availability bound' ([long]$completed.availabilityMaximumSeconds) 160
 Assert-Equal 'Completed cycle restock delay is isolated' ([long]$completed.restockDelaySeconds) 100
+Assert-True 'Bounded completed cycle remains forecast eligible' ([bool]$completed.forecastEligible)
+
+$gapPolicy = [pscustomobject]@{
+    expectedPollSeconds=60
+    selloutSafeGapSeconds=180
+    restockSafeGapSeconds=180
+    selloutHardGapSeconds=600
+    restockHardGapSeconds=600
+}
+$longGapState = [pscustomobject]@{
+    lastStock=0
+    lastForeignPrice=200
+    lastSourceTimestamp=100
+    lastSellOutAt=100
+    lastSellOutLowerBoundAt=90
+    lastSellOutUpperBoundAt=100
+    lastSellOutBoundaryQuality='bounded'
+    continuityInvalidatedAt=0
+    activeCycle=$null
+}
+$longGapObservation = [pscustomobject]@{timestamp=800;sourceTimestamp=800;stock=0;foreignPrice=200}
+Assert-True 'Long unchanged gap invalidates the current phase anchor' (Invalidate-PhaseAnchorForGap -DestState $longGapState -Observation $longGapObservation -BoundaryPolicy $gapPolicy)
+Assert-Equal 'Long OOS gap clears unknown sellout anchor' ([long]$longGapState.lastSellOutAt) 0
+Assert-Equal 'Long OOS gap records invalidation point' ([long]$longGapState.continuityInvalidatedAt) 800
 
 Write-Host 'Shadow collection tests passed.' -ForegroundColor Green
 exit 0

@@ -265,6 +265,8 @@ try {
     # was already lost by previous retention pruning. Deleted history is not invented.
     Invoke-HistoryMaintenance -Phase 'PostUpdate'
 
+    # Canonical catalog maintenance is intentionally NOT part of this heartbeat;
+    # LocalCatalog only projects committed/provider metadata already on disk.
     Invoke-FailSoftScript -Path $LocalCatalog -ErrorPath $LocalCatalogErrorFile
 
     # Persist engine-state schema normalization even when collection failed and the

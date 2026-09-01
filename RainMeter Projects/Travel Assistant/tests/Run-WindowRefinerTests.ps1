@@ -85,6 +85,27 @@ $slowCadenceCycles=@(
 $slowFiltered=@(Select-CadenceAwareForecastCycles -Cycles $slowCadenceCycles)
 Assert-Equal $slowFiltered.Count 5 'Once-daily or slower markets should retain a wider cadence-relative forecast history.'
 
+$boundaryCycles=@(
+    [pscustomobject]@{restockDelaySeconds=6000L;availabilitySeconds=900L;soldOutAt=401L},
+    [pscustomobject]@{restockDelaySeconds=6060L;availabilitySeconds=960L;soldOutAt=402L},
+    [pscustomobject]@{restockDelaySeconds=6120L;availabilitySeconds=1020L;soldOutAt=403L},
+    [pscustomobject]@{restockDelaySeconds=6180L;availabilitySeconds=1080L;soldOutAt=404L},
+    [pscustomobject]@{restockDelaySeconds=6240L;availabilitySeconds=1140L;soldOutAt=405L}
+)
+$boundaryPolicy=Get-CycleBoundaryPolicy -Cycles $boundaryCycles -ExpectedPollIntervalSeconds 60
+Assert-Equal ([long]$boundaryPolicy.selloutSafeGapSeconds) 180L 'Safe boundary gap should never be less than three expected polls.'
+Assert-Equal ([long]$boundaryPolicy.selloutHardGapSeconds) 1020L 'Sellout hard gap should be capped by normal availability duration.'
+Assert-Equal (Get-CycleBoundaryQuality -GapSeconds 180 -Policy $boundaryPolicy -Phase sellout) 'bounded' 'A short gap within half-variance/poll tolerance should remain bounded evidence.'
+Assert-Equal (Get-CycleBoundaryQuality -GapSeconds 1020 -Policy $boundaryPolicy -Phase sellout) 'unknown_gap' 'A phase-length gap must not fabricate an exact sellout boundary.'
+
+$eligibilityCycles=@(
+    [pscustomobject]@{restockDelaySeconds=6000L;availabilitySeconds=900L;soldOutAt=501L;availabilityEligible=$true;restockDelayEligible=$true;trendEligible=$true},
+    [pscustomobject]@{restockDelaySeconds=6060L;availabilitySeconds=960L;soldOutAt=502L;availabilityEligible=$true;restockDelayEligible=$true;trendEligible=$false},
+    [pscustomobject]@{restockDelaySeconds=6120L;availabilitySeconds=1020L;soldOutAt=503L;availabilityEligible=$false;restockDelayEligible=$true;trendEligible=$false}
+)
+Assert-Equal (@(Select-CadenceAwareForecastCycles -Cycles $eligibilityCycles -Purpose Forecast).Count) 2 'Forecast selection should exclude cycles with an unknown required boundary.'
+Assert-Equal (@(Select-CadenceAwareForecastCycles -Cycles $eligibilityCycles -Purpose Trend).Count) 1 'Trend selection should also exclude uncertain bounded cycles.'
+
 $projectionCycles=@(
     [pscustomobject]@{restockDelaySeconds=6900L;availabilitySeconds=1200L;soldOutAt=301L},
     [pscustomobject]@{restockDelaySeconds=7200L;availabilitySeconds=1300L;soldOutAt=302L},

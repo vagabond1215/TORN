@@ -11,6 +11,7 @@ $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $SeedDir = Join-Path $ProjectRoot 'data\seed'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
+$RuntimePendingObservationFile = Join-Path $RuntimeDir 'observations.pending.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
 
 function Read-AnchorJson {
@@ -135,13 +136,15 @@ if ($wanted.Count -eq 0) { return }
 # Runtime observations are authoritative, matching the inline graph. Seed rows are
 # used only when a market has no retained real runtime observations.
 $runtimeMap = Read-AnchorObservationMap -Path $RuntimeObservationFile -Wanted $wanted
+$pendingRuntimeMap = Read-AnchorObservationMap -Path $RuntimePendingObservationFile -Wanted $wanted
 $seedMap = Read-AnchorObservationMap -Path $SeedObservationFile -Wanted $wanted
 $changed = $false
 
 foreach ($key in @($wanted.Keys)) {
     $rows = @()
-    if ($runtimeMap.ContainsKey($key) -and $runtimeMap[$key].Count -gt 0) { $rows = @($runtimeMap[$key].ToArray()) }
-    elseif ($seedMap.ContainsKey($key) -and $seedMap[$key].Count -gt 0) { $rows = @($seedMap[$key].ToArray()) }
+    if ($runtimeMap.ContainsKey($key) -and $runtimeMap[$key].Count -gt 0) { $rows += @($runtimeMap[$key].ToArray()) }
+    if ($pendingRuntimeMap.ContainsKey($key) -and $pendingRuntimeMap[$key].Count -gt 0) { $rows += @($pendingRuntimeMap[$key].ToArray()) }
+    if ($rows.Count -eq 0 -and $seedMap.ContainsKey($key) -and $seedMap[$key].Count -gt 0) { $rows = @($seedMap[$key].ToArray()) }
     if ($rows.Count -lt 2) { continue }
 
     $transition = Get-AnchorTransitions -Rows $rows
@@ -149,8 +152,9 @@ foreach ($key in @($wanted.Keys)) {
     if ($null -eq $market) { continue }
     $stock = [long](Get-AnchorProperty $market 'lastStock')
     $destination = Get-AnchorDestination -Engine $engine -Key $key
+    $continuityInvalidatedAt = [long](Get-AnchorProperty $destination 'continuityInvalidatedAt')
 
-    if ($stock -gt 0 -and [long]$transition.lastRestockAt -gt 0) {
+    if ($stock -gt 0 -and [long]$transition.lastRestockAt -gt 0 -and $continuityInvalidatedAt -lt [long]$transition.lastRestockAt) {
         $activeCycle = Get-AnchorProperty $destination 'activeCycle'
         if ($null -eq $activeCycle) {
             $activeCycle = [pscustomobject]@{}
@@ -163,7 +167,7 @@ foreach ($key in @($wanted.Keys)) {
         }
         Set-AnchorProperty -Object $activeCycle -Name 'anchorSource' -Value 'observations'
         Set-AnchorProperty -Object $activeCycle -Name 'anchorObservedAt' -Value ([long]$transition.latestTimestamp)
-    } elseif ($stock -le 0 -and [long]$transition.lastSellOutAt -gt 0) {
+    } elseif ($stock -le 0 -and [long]$transition.lastSellOutAt -gt 0 -and $continuityInvalidatedAt -lt [long]$transition.lastSellOutAt) {
         $before = [long](Get-AnchorProperty $destination 'lastSellOutAt')
         if ($before -ne [long]$transition.lastSellOutAt) {
             Set-AnchorProperty -Object $destination -Name 'lastSellOutAt' -Value ([long]$transition.lastSellOutAt)

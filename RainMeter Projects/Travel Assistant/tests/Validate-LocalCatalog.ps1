@@ -84,12 +84,12 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     Fail 'Missing RunUpdate.ps1.'
 } else {
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
-    foreach ($token in @('ShadowCollector.ps1','LocalCatalog.ps1','FinalizeState.ps1','Write-LocalCatalogFailure')) {
+    foreach ($token in @('ShadowCollector.ps1','LocalCatalog.ps1','FinalizeState.ps1','Invoke-FailSoftScript -Path $LocalCatalog')) {
         if (-not $wrapper.Contains($token)) { Fail "RunUpdate.ps1 is missing $token." }
     }
     if ($wrapper.Contains("Join-Path `$PSScriptRoot 'ItemMetadata.ps1'")) { Fail 'Network ItemMetadata.ps1 must remain outside the heartbeat path.' }
-    $shadowIndex = $wrapper.IndexOf('& $ShadowCollector')
-    $catalogIndex = $wrapper.IndexOf('& $LocalCatalog')
+    $shadowIndex = $wrapper.IndexOf('Invoke-FailSoftScript -Path $ShadowCollector')
+    $catalogIndex = $wrapper.IndexOf('Invoke-FailSoftScript -Path $LocalCatalog')
     $finalizerIndex = $wrapper.IndexOf('& $Finalizer')
     if ($shadowIndex -lt 0 -or $catalogIndex -lt 0 -or $finalizerIndex -lt 0 -or -not ($shadowIndex -lt $catalogIndex -and $catalogIndex -lt $finalizerIndex)) {
         Fail 'RunUpdate.ps1 must run shadow collection, then local catalog enrichment, then finalization.'

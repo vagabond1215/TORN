@@ -36,7 +36,7 @@ NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
 Implementation details:
 
 - filter and settings are bundled 24x24 PNG Image meters;
-- filter icon opens one unified `TRIP & FILTERS` popup;
+- filter icon opens one unified compact filter popup;
 - settings gear opens the existing Opportunity Settings popup;
 - sort row moves upward into the retired filter-band space;
 - `HeaderLayout.lua` shifts the already-laid-out opportunity stack upward exactly 32 px and reduces panel height by the same amount;
@@ -56,22 +56,22 @@ Protected card files were intentionally not edited by the redesign:
 
 ### Countries
 
-- grouped SHORT / MEDIUM / LONG from `config/countries.json`;
-- FlagKit-backed compact chips;
-- All/None globally and per band;
+- grouped S / M / L rows from `config/countries.json`;
+- FlagKit-backed flag-only chips with country-name tooltips;
+- per-band ON/OFF controls inline with each row;
 - `displayTripBands` is derived from bands containing at least one selected country;
 - `selectedTripBands` remains all three for broad candidate projection.
 
 ### Categories
 
 - compact toggle chips;
-- All/None;
+- ON/OFF;
 - active local catalog categories.
 
 ### Items
 
-- searchable `CheckedListBox`;
-- All/None;
+- searchable `CheckedListBox` scoped live by the selected countries and categories;
+- compact inline search and ON/OFF controls;
 - search covers item name/category/id;
 - engine metadata is optional; committed catalog is the local fallback.
 
@@ -80,7 +80,7 @@ Protected card files were intentionally not edited by the redesign:
 - changes are staged until Save;
 - Cancel writes nothing;
 - Save writes one coherent preference state and calls `Start-FilterProjectionRefresh` once;
-- Reset stages all countries/categories/items selected, all display bands restored, and profitable-only cleared;
+- Reset is aligned with Save/Cancel and stages all countries/categories/items selected, all display bands restored, and profitable-only cleared;
 - Item/Country/Category legacy launcher values route to the unified panel;
 - Ignore List remains separate for nested Opportunity Settings use.
 

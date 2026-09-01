@@ -56,7 +56,7 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         'observations.jsonl','history_bootstrap','history_repair_baseline',
         'Runtime observations are authoritative','lastRestockAt','lastSellOutAt',
-        "'anchorSource' -Value 'observations'"
+        "'anchorSource' -Value 'observations'",'continuityInvalidatedAt'
     )) {
         if (-not $anchor.Contains($token)) { Fail "CycleAnchorReconciler.ps1 missing '$token'." }
     }
@@ -71,7 +71,7 @@ if ($errors.Count -eq 0) {
         if (-not $refiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing '$token'." }
     }
     if ($refiner -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'WindowPlanRefiner.ps1 must remain local-only.' }
-    foreach ($token in @('Select-CadenceAwareForecastCycles','$medianPeriod -le 10800L','$maximumPeriod = 86400L','$maximumPeriod = 172800L','604800L')) {
+    foreach ($token in @('Select-CadenceAwareForecastCycles','Get-CycleBoundaryPolicy','Get-CycleBoundaryQuality','availabilityEligible','restockDelayEligible','trendEligible','$medianPeriod -le 10800L','$maximumPeriod = 86400L','$maximumPeriod = 172800L','604800L')) {
         if (-not $cycleFilter.Contains($token)) { Fail "CycleForecastFilter.ps1 missing cadence-aware contract '$token'." }
     }
     if ($cycleFilter -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'Cadence-aware cycle filtering must remain local-only.' }

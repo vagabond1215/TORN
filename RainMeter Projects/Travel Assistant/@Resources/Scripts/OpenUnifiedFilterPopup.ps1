@@ -64,6 +64,7 @@ if($null -eq $countriesConfig -or -not $countriesConfig.PSObject.Properties['cou
 
 function Get-ActiveCatalogRows {
     $activeIds=@{}
+    $countriesByItem=@{}
     if($null -ne $engine -and $engine.PSObject.Properties['observedMarkets']) {
         foreach($p in $engine.observedMarkets.PSObject.Properties) {
             $market=$p.Value
@@ -71,7 +72,13 @@ function Get-ActiveCatalogRows {
             if(($market.PSObject.Properties['catalogActive'] -and $market.catalogActive -eq $false) -or ($market.PSObject.Properties['catalogStatus'] -and [string]$market.catalogStatus -eq 'legacy_removed')) { continue }
             if($market.PSObject.Properties['itemId']) {
                 $id=0
-                if([int]::TryParse([string]$market.itemId,[ref]$id) -and $id -gt 0) { $activeIds[[string]$id]=$true }
+                if([int]::TryParse([string]$market.itemId,[ref]$id) -and $id -gt 0) {
+                    $idKey=[string]$id
+                    $activeIds[$idKey]=$true
+                    if(-not $countriesByItem.ContainsKey($idKey)) { $countriesByItem[$idKey]=@{} }
+                    $countryId=if($market.PSObject.Properties['country']){[string]$market.country}else{([string]$p.Name).Split(':')[0]}
+                    if(-not [string]::IsNullOrWhiteSpace($countryId)) { $countriesByItem[$idKey][$countryId]=$true }
+                }
             }
         }
     }
@@ -86,7 +93,8 @@ function Get-ActiveCatalogRows {
             if($null -eq $value) { continue }
             $name=if($value.PSObject.Properties['name'] -and -not [string]::IsNullOrWhiteSpace([string]$value.name)){[string]$value.name}else{'Item '+$id}
             $category=if($value.PSObject.Properties['category'] -and -not [string]::IsNullOrWhiteSpace([string]$value.category)){[string]$value.category}else{'Unknown'}
-            $rows += [pscustomobject]@{itemId=$id;name=$name;category=$category}
+            $countryIds=if($countriesByItem.ContainsKey([string]$id)){[string[]]@($countriesByItem[[string]$id].Keys)}else{[string[]]@()}
+            $rows += [pscustomobject]@{itemId=$id;name=$name;category=$category;countryIds=$countryIds}
         }
     }
 
@@ -98,7 +106,8 @@ function Get-ActiveCatalogRows {
             if($activeIds.Count -gt 0 -and -not $activeIds.ContainsKey([string]$id)) { continue }
             $name=if(-not [string]::IsNullOrWhiteSpace([string]$item.name)){[string]$item.name}else{'Item '+$id}
             $category=if(-not [string]::IsNullOrWhiteSpace([string]$item.category)){[string]$item.category}else{'Unknown'}
-            $rows += [pscustomobject]@{itemId=$id;name=$name;category=$category}
+            $countryIds=if($item.PSObject.Properties['countries']){[string[]]@($item.countries)}elseif($countriesByItem.ContainsKey([string]$id)){[string[]]@($countriesByItem[[string]$id].Keys)}else{[string[]]@()}
+            $rows += [pscustomobject]@{itemId=$id;name=$name;category=$category;countryIds=$countryIds}
         }
     }
     return @($rows | Sort-Object name,itemId)
@@ -109,7 +118,7 @@ if($catalog.Count -eq 0) { throw 'No active item catalog rows are available for 
 $countries=@($countriesConfig.countries | Where-Object { $_.collect -eq $true })
 $categories=@($catalog | ForEach-Object { [string]$_.category } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
 $bandOrder=@('short','medium','long')
-$bandLabels=@{short='SHORT';medium='MEDIUM';long='LONG'}
+$bandLabels=@{short='S';medium='M';long='L'}
 
 $selectedCountrySet=New-StringSet @($prefs.selectedCountryIds)
 $displayBandSet=New-StringSet @($prefs.displayTripBands)
@@ -137,6 +146,8 @@ $script:countryChips=@{}
 $script:categoryChips=@{}
 $script:itemRowsByIndex=@()
 $script:itemListRefreshing=$false
+$script:itemListReady=$false
+$script:scopeRefreshSuspended=$false
 $script:resetProfitable=$false
 $script:ownedImages=New-Object System.Collections.Generic.List[System.Drawing.Image]
 
@@ -239,13 +250,38 @@ function Set-CountrySelection([string]$CountryId,[bool]$Value) {
         Set-ChipStyle $chip
     }
 }
+function Request-ScopedItemRefresh {
+    if($script:itemListReady -and -not $script:scopeRefreshSuspended) { Refresh-ItemList }
+}
 function Set-BandSelection([string]$Band,[bool]$Value) {
-    foreach($country in $countries) {
-        if([string]$country.tripBand -eq $Band) { Set-CountrySelection -CountryId ([string]$country.id) -Value $Value }
-    }
+    $wasSuspended=$script:scopeRefreshSuspended
+    $script:scopeRefreshSuspended=$true
+    try {
+        foreach($country in $countries) {
+            if([string]$country.tripBand -eq $Band) { Set-CountrySelection -CountryId ([string]$country.id) -Value $Value }
+        }
+    } finally { $script:scopeRefreshSuspended=$wasSuspended }
+    if(-not $wasSuspended) { Request-ScopedItemRefresh }
 }
 function Set-AllCountries([bool]$Value) {
-    foreach($country in $countries) { Set-CountrySelection -CountryId ([string]$country.id) -Value $Value }
+    $wasSuspended=$script:scopeRefreshSuspended
+    $script:scopeRefreshSuspended=$true
+    try {
+        foreach($country in $countries) { Set-CountrySelection -CountryId ([string]$country.id) -Value $Value }
+    } finally { $script:scopeRefreshSuspended=$wasSuspended }
+    if(-not $wasSuspended) { Request-ScopedItemRefresh }
+}
+function Test-ItemInCurrentScope([object]$Item) {
+    $category=[string]$Item.category
+    if(-not $script:categorySelection.ContainsKey($category) -or -not [bool]$script:categorySelection[$category]) { return $false }
+    foreach($countryId in @($Item.countryIds)) {
+        $id=[string]$countryId
+        if($script:countrySelection.ContainsKey($id) -and [bool]$script:countrySelection[$id]) { return $true }
+    }
+    return $false
+}
+function Get-ScopedCatalogRows {
+    return @($catalog | Where-Object { Test-ItemInCurrentScope -Item $_ })
 }
 function Set-CategorySelection([string]$Category,[bool]$Value) {
     $script:categorySelection[$Category]=$Value
@@ -256,7 +292,12 @@ function Set-CategorySelection([string]$Category,[bool]$Value) {
     }
 }
 function Set-AllCategories([bool]$Value) {
-    foreach($category in $categories) { Set-CategorySelection -Category $category -Value $Value }
+    $wasSuspended=$script:scopeRefreshSuspended
+    $script:scopeRefreshSuspended=$true
+    try {
+        foreach($category in $categories) { Set-CategorySelection -Category $category -Value $Value }
+    } finally { $script:scopeRefreshSuspended=$wasSuspended }
+    if(-not $wasSuspended) { Request-ScopedItemRefresh }
 }
 
 function Country-ChipChanged([object]$Sender) {
@@ -266,6 +307,7 @@ function Country-ChipChanged([object]$Sender) {
     if([string]::IsNullOrWhiteSpace($id)) { return }
     $script:countrySelection[$id]=[bool]$chip.Checked
     Set-ChipStyle $chip
+    Request-ScopedItemRefresh
 }
 function Category-ChipChanged([object]$Sender) {
     if($null -eq $Sender) { return }
@@ -274,6 +316,7 @@ function Category-ChipChanged([object]$Sender) {
     if([string]::IsNullOrWhiteSpace($category)) { return }
     $script:categorySelection[$category]=[bool]$chip.Checked
     Set-ChipStyle $chip
+    Request-ScopedItemRefresh
 }
 function Band-LinkClicked([object]$Sender) {
     if($null -eq $Sender) { return }
@@ -303,18 +346,10 @@ $form.Add_FormClosed({
     try { $script:countryToolTip.Dispose() } catch { }
 })
 
-$title=New-Object System.Windows.Forms.Label
-$title.Text='TRIP & FILTERS'
-$title.Location=New-Object System.Drawing.Point(16,13)
-$title.Size=New-Object System.Drawing.Size(240,28)
-$title.Font=New-Object System.Drawing.Font('Segoe UI Semibold',13)
-$title.ForeColor=$ColorText
-$form.Controls.Add($title)
-
 $reset=New-Object System.Windows.Forms.Button
 $reset.Text='Reset'
-$reset.Location=New-Object System.Drawing.Point(354,10)
-$reset.Size=New-Object System.Drawing.Size(70,28)
+$reset.Location=New-Object System.Drawing.Point(16,695)
+$reset.Size=New-Object System.Drawing.Size(70,32)
 $reset.FlatStyle=[System.Windows.Forms.FlatStyle]::Flat
 $reset.FlatAppearance.BorderColor=$ColorBorder
 $reset.BackColor=$ColorCard
@@ -322,43 +357,37 @@ $reset.ForeColor=$ColorMuted
 $form.Controls.Add($reset)
 
 $content=New-Object System.Windows.Forms.Panel
-$content.Location=New-Object System.Drawing.Point(14,47)
-$content.Size=New-Object System.Drawing.Size(414,630)
+$content.Location=New-Object System.Drawing.Point(14,12)
+$content.Size=New-Object System.Drawing.Size(414,665)
 $content.AutoScroll=$true
 $content.BackColor=$ColorPanel
 $form.Controls.Add($content)
 
 $y=0
-[void](New-SectionHeader 'COUNTRIES' $y $content)
-$countryAll=New-ActionLink 'All' 318 $y $content
-$countryNone=New-ActionLink 'None' 360 $y $content
-$countryAll.Add_Click({ Set-AllCountries $true })
-$countryNone.Add_Click({ Set-AllCountries $false })
-$y+=24
 
 foreach($band in $bandOrder) {
     $panel=New-Object System.Windows.Forms.Panel
     $panel.Location=New-Object System.Drawing.Point(0,$y)
-    $panel.Size=New-Object System.Drawing.Size(394,60)
+    $panel.Size=New-Object System.Drawing.Size(394,38)
     $panel.BackColor=$ColorPanel
     $content.Controls.Add($panel)
 
     $label=New-Object System.Windows.Forms.Label
     $label.Text=$bandLabels[$band]
-    $label.Location=New-Object System.Drawing.Point(4,1)
-    $label.Size=New-Object System.Drawing.Size(150,20)
-    $label.Font=New-Object System.Drawing.Font('Segoe UI Semibold',8)
+    $label.Location=New-Object System.Drawing.Point(4,5)
+    $label.Size=New-Object System.Drawing.Size(22,26)
+    $label.Font=New-Object System.Drawing.Font('Segoe UI Semibold',12)
     $label.ForeColor=$ColorMuted
     $panel.Controls.Add($label)
 
-    $all=New-ActionLink 'All' 306 0 $panel ($band+'|1')
-    $none=New-ActionLink 'None' 348 0 $panel ($band+'|0')
+    $all=New-ActionLink 'ON' 306 7 $panel ($band+'|1')
+    $none=New-ActionLink 'OFF' 348 7 $panel ($band+'|0')
     $all.Add_Click({ param($sender,$eventArgs); Band-LinkClicked -Sender $sender })
     $none.Add_Click({ param($sender,$eventArgs); Band-LinkClicked -Sender $sender })
 
     $flow=New-Object System.Windows.Forms.FlowLayoutPanel
-    $flow.Location=New-Object System.Drawing.Point(4,23)
-    $flow.Size=New-Object System.Drawing.Size(386,34)
+    $flow.Location=New-Object System.Drawing.Point(28,2)
+    $flow.Size=New-Object System.Drawing.Size(270,34)
     $flow.WrapContents=$true
     $flow.FlowDirection=[System.Windows.Forms.FlowDirection]::LeftToRight
     $flow.BackColor=$ColorPanel
@@ -371,7 +400,7 @@ foreach($band in $bandOrder) {
         $chip.Add_CheckedChanged({ param($sender,$eventArgs); Country-ChipChanged -Sender $sender })
         $flow.Controls.Add($chip)
     }
-    $y+=60
+    $y+=38
 }
 
 $separator1=New-Object System.Windows.Forms.Label
@@ -382,8 +411,8 @@ $content.Controls.Add($separator1)
 $y+=15
 
 [void](New-SectionHeader 'CATEGORIES' $y $content)
-$categoryAll=New-ActionLink 'All' 318 $y $content
-$categoryNone=New-ActionLink 'None' 360 $y $content
+$categoryAll=New-ActionLink 'ON' 318 $y $content
+$categoryNone=New-ActionLink 'OFF' 360 $y $content
 $categoryAll.Add_Click({ Set-AllCategories $true })
 $categoryNone.Add_Click({ Set-AllCategories $false })
 $y+=24
@@ -416,18 +445,17 @@ $content.Controls.Add($separator2)
 $y+=15
 
 [void](New-SectionHeader 'ITEMS' $y $content)
-$itemAll=New-ActionLink 'All' 318 $y $content
-$itemNone=New-ActionLink 'None' 360 $y $content
-$y+=25
+$itemAll=New-ActionLink 'ON' 318 $y $content
+$itemNone=New-ActionLink 'OFF' 360 $y $content
 
 $search=New-Object System.Windows.Forms.TextBox
-$search.Location=New-Object System.Drawing.Point(4,$y)
-$search.Size=New-Object System.Drawing.Size(386,27)
+$search.Location=New-Object System.Drawing.Point(54,($y-2))
+$search.Size=New-Object System.Drawing.Size(244,25)
 $search.BackColor=$ColorInput
 $search.ForeColor=$ColorText
 $search.BorderStyle=[System.Windows.Forms.BorderStyle]::FixedSingle
 $content.Controls.Add($search)
-$y+=32
+$y+=29
 
 $itemCount=New-Object System.Windows.Forms.Label
 $itemCount.Location=New-Object System.Drawing.Point(4,$y)
@@ -451,9 +479,10 @@ $y+=238
 $content.AutoScrollMinSize=[System.Drawing.Size]::new(0,($y+8))
 
 function Update-ItemCount {
+    $scoped=@(Get-ScopedCatalogRows)
     $selected=0
-    foreach($item in $catalog) { if([bool]$script:itemSelection[[string][int]$item.itemId]) { $selected++ } }
-    $itemCount.Text=('Search items  |  {0} of {1} selected' -f $selected,$catalog.Count)
+    foreach($item in $scoped) { if([bool]$script:itemSelection[[string][int]$item.itemId]) { $selected++ } }
+    $itemCount.Text=('{0} of {1} matching items selected' -f $selected,$scoped.Count)
 }
 function Refresh-ItemList {
     $query=([string]$search.Text).Trim().ToLowerInvariant()
@@ -461,7 +490,7 @@ function Refresh-ItemList {
     try {
         $itemList.Items.Clear()
         $visible=@()
-        foreach($item in $catalog) {
+        foreach($item in @(Get-ScopedCatalogRows)) {
             $id=[string][int]$item.itemId
             $haystack=(([string]$item.name)+' '+([string]$item.category)+' '+$id).ToLowerInvariant()
             if($query -ne '' -and -not $haystack.Contains($query)) { continue }
@@ -483,16 +512,20 @@ $itemList.Add_ItemCheck({
     $form.BeginInvoke([Action]{ Update-ItemCount }) | Out-Null
 })
 $search.Add_TextChanged({ Refresh-ItemList })
-$itemAll.Add_Click({ foreach($item in $catalog) { $script:itemSelection[[string][int]$item.itemId]=$true }; Refresh-ItemList })
-$itemNone.Add_Click({ foreach($item in $catalog) { $script:itemSelection[[string][int]$item.itemId]=$false }; Refresh-ItemList })
+$itemAll.Add_Click({ foreach($item in @(Get-ScopedCatalogRows)) { $script:itemSelection[[string][int]$item.itemId]=$true }; Refresh-ItemList })
+$itemNone.Add_Click({ foreach($item in @(Get-ScopedCatalogRows)) { $script:itemSelection[[string][int]$item.itemId]=$false }; Refresh-ItemList })
+$script:itemListReady=$true
 Refresh-ItemList
 
 $reset.Add_Click({
-    Set-AllCountries $true
-    Set-AllCategories $true
-    foreach($item in $catalog) { $script:itemSelection[[string][int]$item.itemId]=$true }
-    $script:resetProfitable=$true
-    $search.Text=''
+    $script:scopeRefreshSuspended=$true
+    try {
+        Set-AllCountries $true
+        Set-AllCategories $true
+        foreach($item in $catalog) { $script:itemSelection[[string][int]$item.itemId]=$true }
+        $script:resetProfitable=$true
+        $search.Text=''
+    } finally { $script:scopeRefreshSuspended=$false }
     Refresh-ItemList
 })
 
