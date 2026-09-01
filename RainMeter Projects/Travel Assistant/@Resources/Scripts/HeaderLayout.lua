@@ -33,6 +33,6 @@ function Update()
     end
 
     local panel=tonumber(SKIN:GetVariable('PanelHeight','164')) or 164
-    SKIN:Bang('!SetVariable','PanelHeight',tostring(math.max(132,math.floor(panel-compactOffset))))
+    SKIN:Bang('!SetVariable','PanelHeight',tostring(math.max(160,math.floor(panel-compactOffset))))
     return 0
 end
