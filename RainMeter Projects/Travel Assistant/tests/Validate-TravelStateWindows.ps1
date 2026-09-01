@@ -8,11 +8,13 @@ $cardPath = Join-Path $ProjectRoot '@Resources\Scripts\CardPresenter.lua'
 $tooltipPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowTooltipTweaks.lua'
 $travelPath = Join-Path $ProjectRoot '@Resources\Scripts\TravelContext.ps1'
 $anchorPath = Join-Path $ProjectRoot '@Resources\Scripts\CycleAnchorReconciler.ps1'
+$stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
+$iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $errors.Add($Message) }
 
-foreach ($path in @($luaPath,$infoPath,$cardPath,$tooltipPath,$travelPath,$anchorPath)) {
+foreach ($path in @($luaPath,$infoPath,$cardPath,$tooltipPath,$travelPath,$anchorPath,$stateReaderPath,$iniPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail ("Missing required file: {0}" -f $path) }
 }
 
@@ -20,10 +22,8 @@ if ($errors.Count -eq 0) {
     $lua = Get-Content -LiteralPath $luaPath -Raw
     foreach ($token in @(
         "travelState=='returning'",
-        "'ARRIVE IN TORN: '",
-        'returningTooltip',
-        "'Home in: '..formatDuration(liveTravelRemainingSeconds(state,now))",
-        "applyTooltip(prefix,returningTooltip(state,now),'Return estimate')",
+        "Character travel status belongs in MeterTitle",
+        "return 'MARKET DATA PENDING'",
         'averageRestockDelay(plan)',
         'averageAvailability(plan)',
         'landingRelevantGroup(plan,landingAt)',
@@ -49,10 +49,13 @@ if ($errors.Count -eq 0) {
     foreach ($retired in @('Safe formula:','Best formula:')) {
         if ($lua.Contains($retired)) { Fail ("Travel-state tooltip must not contain generic home-window detail '{0}'." -f $retired) }
     }
-    $selloutLineAt=$lua.IndexOf("table.insert(lines,'Sellout in: '",[System.StringComparison]::Ordinal)
-    $landingLineAt=$lua.IndexOf("table.insert(lines,'Landing in '",[System.StringComparison]::Ordinal)
-    if ($selloutLineAt -lt 0 -or $landingLineAt -lt 0 -or $selloutLineAt -gt $landingLineAt) { Fail 'Outbound live-stock tooltip must present sellout timing before landing/restock context.' }
 
+    foreach ($forbidden in @(
+        "setOption(prefix..'Leave','Text',returningStatus(state,now))",
+        "applyTooltip(prefix,returningTooltip(state,now),'Return estimate')"
+    )) {
+        if ($lua.Contains($forbidden)) { Fail ("Character travel state must not overwrite item-card action text; found '{0}'." -f $forbidden) }
+    }
     $travel = Get-Content -LiteralPath $travelPath -Raw
     foreach ($token in @(
         "if (`$destLower -in @('torn','torn city','home'))",
@@ -93,6 +96,29 @@ if ($errors.Count -eq 0) {
         if (-not $card.Contains($token)) { Fail ("CardPresenter.lua missing return/home availability contract '{0}'." -f $token) }
     }
 
+    foreach ($forbidden in @("return 'EN ROUTE'","return 'AT DEST.'")) {
+        if ($card.Contains($forbidden)) { Fail ("CardPresenter.lua must not repeat character travel state on item cards; found '{0}'." -f $forbidden) }
+    }
+
+    $stateReader = Get-Content -LiteralPath $stateReaderPath -Raw
+    foreach ($token in @(
+        'travelHeaderText',
+        'updateTravelHeader',
+        "return 'In Torn'",
+        "'In Flight to '",
+        "'Landing in '",
+        "'Abroad in '",
+        "'MeterTitle'"
+    )) {
+        if (-not $stateReader.Contains($token)) { Fail ("StateReader.lua missing global travel-header token '{0}'." -f $token) }
+    }
+
+    $ini = Get-Content -LiteralPath $iniPath -Raw
+    $titleSection=[regex]::Match($ini,'(?ms)^\[MeterTitle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    foreach ($token in @('W=474','ClipString=1','LeftMouseUpAction=["https://www.torn.com/page.php?sid=travel"]')) {
+        if (-not $titleSection.Contains($token)) { Fail ("MeterTitle missing dynamic travel-header layout token '{0}'." -f $token) }
+    }
+
     $tooltip = Get-Content -LiteralPath $tooltipPath -Raw
     foreach ($token in @(
         "if travelState=='traveling' or travelState=='returning' or travelState=='abroad' or travelState=='foreign' then",
@@ -117,5 +143,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Four-state window tooltip ownership validation passed.' -ForegroundColor Green
-Write-Host 'Home owns the current/next-cycle model and collecting-data state; outbound uses landing estimates; returning uses a Torn-arrival countdown; abroad uses the current foreign-market cycle.' -ForegroundColor Green
+Write-Host 'Character travel state lives in the header; item cards retain only market/window actions. Home owns current/next-cycle and collecting-data state.' -ForegroundColor Green
 exit 0
