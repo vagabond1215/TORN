@@ -107,6 +107,14 @@ local function buildLookup(state)
                 liveCycleProjectionMode=trim(state[prefix..'LiveCycleProjectionMode']),
                 windowDataQuality=trim(state[prefix..'WindowDataQuality']):lower(),
                 windowDataQualityReason=trim(state[prefix..'WindowDataQualityReason']),
+                forecastMode=trim(state[prefix..'ForecastMode']):lower(),
+                restockEstimateAt=number(state[prefix..'RestockEstimateAt']),
+                restockAverageDelaySeconds=number(state[prefix..'RestockAverageDelaySeconds']),
+                restockEarliestDelaySeconds=number(state[prefix..'RestockEarliestDelaySeconds']),
+                restockLatestDelaySeconds=number(state[prefix..'RestockLatestDelaySeconds']),
+                restockLifetimeShortestDelaySeconds=number(state[prefix..'RestockLifetimeShortestDelaySeconds']),
+                restockLifetimeLongestDelaySeconds=number(state[prefix..'RestockLifetimeLongestDelaySeconds']),
+                restockSampleCount=number(state[prefix..'RestockSampleCount']),
                 nextCycleOrdinal=math.floor(number(state[prefix..'NextCycleOrdinal']))
             }
         end
@@ -177,6 +185,14 @@ end
 local function buildHomeTooltip(row,travelText,now)
     if row==nil then return '' end
     local nl='#CRLF#'
+    if row.forecastMode=='sleeping_oos' and row.restockEstimateAt>now then
+        return 'Lightweight OOS estimate'..nl..
+            'Restocks in ~'..formatDuration(row.restockEstimateAt-now)..nl..
+            'Average OOS -> restock: '..formatDuration(row.restockAverageDelaySeconds)..' over '..tostring(math.floor(row.restockSampleCount))..' verified cycle(s)'..nl..
+            'Recent range: '..formatDuration(row.restockEarliestDelaySeconds)..' to '..formatDuration(row.restockLatestDelaySeconds)..nl..
+            'Lifetime range: '..formatDuration(row.restockLifetimeShortestDelaySeconds)..' to '..formatDuration(row.restockLifetimeLongestDelaySeconds)..nl..
+            'Detailed forecast wakes 10m before historical earliest restock or while focused.'
+    end
     if row.windowDataQuality=='collecting' then
         local reason=row.windowDataQualityReason~='' and row.windowDataQualityReason or 'a required stock-cycle boundary was not observed or recovered'
         return 'Collecting Data'..nl..
