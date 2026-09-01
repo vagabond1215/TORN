@@ -67,6 +67,31 @@ function Get-CycleBoundaryQuality {
     return 'unknown_gap'
 }
 
+function Test-CycleForecastBoundaryEvidence {
+    param([object]$Cycle,[ValidateSet('Forecast','Trend')][string]$Purpose='Forecast')
+    if ($null -eq $Cycle) { return $false }
+
+    # Runtime schema-v1 cycles predate boundary observability metadata. Retain them
+    # for audit/history, but never let them teach the forecast: a collector outage
+    # could have been misread as hours of stock or OOS time.
+    if ($Cycle.PSObject.Properties['schemaVersion'] -and [int]$Cycle.schemaVersion -lt 2) {
+        return $false
+    }
+
+    if ($Cycle.PSObject.Properties['forecastEligible'] -and -not [bool]$Cycle.forecastEligible) { return $false }
+    if ($Cycle.PSObject.Properties['availabilityEligible'] -and -not [bool]$Cycle.availabilityEligible) { return $false }
+    if ($Cycle.PSObject.Properties['restockDelayEligible'] -and -not [bool]$Cycle.restockDelayEligible) { return $false }
+    if ($Purpose -eq 'Trend' -and $Cycle.PSObject.Properties['trendEligible'] -and -not [bool]$Cycle.trendEligible) { return $false }
+
+    foreach ($qualityName in @('restockBoundaryQuality','soldOutBoundaryQuality','previousSellOutBoundaryQuality')) {
+        if (-not $Cycle.PSObject.Properties[$qualityName]) { continue }
+        $quality=([string]$Cycle.$qualityName).Trim().ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($quality)) { continue }
+        if ($quality -notin @('observed','bounded','recovered')) { return $false }
+    }
+    return $true
+}
+
 function Select-CadenceAwareForecastCycles {
     param(
         [object[]]$Cycles,
@@ -78,9 +103,7 @@ function Select-CadenceAwareForecastCycles {
         $null -ne $_ -and
         $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0 -and
         $_.PSObject.Properties['availabilitySeconds'] -and [long]$_.availabilitySeconds -gt 0 -and
-        (-not $_.PSObject.Properties['availabilityEligible'] -or [bool]$_.availabilityEligible) -and
-        (-not $_.PSObject.Properties['restockDelayEligible'] -or [bool]$_.restockDelayEligible) -and
-        ($Purpose -ne 'Trend' -or -not $_.PSObject.Properties['trendEligible'] -or [bool]$_.trendEligible)
+        (Test-CycleForecastBoundaryEvidence -Cycle $_ -Purpose $Purpose)
     } | Sort-Object @{Expression={ if ($_.PSObject.Properties['soldOutAt']) { [long]$_.soldOutAt } else { 0L } };Descending=$true})
     if ($MaximumSamples -gt 0 -and $usable.Count -gt $MaximumSamples) { $usable = @($usable | Select-Object -First $MaximumSamples) }
     if ($usable.Count -lt 5) { return $usable }
