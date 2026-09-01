@@ -25,15 +25,6 @@ local function parenthesizedMoneyPattern(value)
     return '\\('..moneyPattern(value)..'\\)'
 end
 
-local function polishSafeText(index)
-    local leave='MeterOpportunity'..index..'Leave'
-    local text=meterOption(leave,'Text')
-    local remaining=text:match('^SAFE%s*%-%s*LEAVE BEFORE%s+(.+)$')
-    if remaining~=nil and trim(remaining)~='' then
-        setOption(leave,'Text','SAFE FOR '..trim(remaining))
-    end
-end
-
 local function polishHeader(index)
     local prefix='MeterOpportunity'..index
     local name=meterOption(prefix..'Name','Text')
@@ -74,8 +65,9 @@ local function polishHeader(index)
 end
 
 function Update()
+    -- Preserve explicit departure semantics from CardPresenter:
+    -- LEAVE IN = wait before departing; LEAVE BEFORE = latest departure deadline.
     for i=1,8 do
-        polishSafeText(i)
         polishHeader(i)
     end
     return 0
