@@ -28,7 +28,9 @@ if ($errors.Count -eq 0) {
         "'history_bootstrap','history_repair_baseline'",
         "`$spec['HoverCount']=`$BandCount",
         "'Hover{0:D2}'",
-        'Get-HoverStockAt'
+        'Get-HoverStockAt',
+        'AtomicFile.ps1',
+        'Open-TravelAssistantSharedTextReader -Path $Path'
     )) {
         if (-not $builder.Contains($token)) { Fail ("BuildGraphHoverData.ps1 missing contract '{0}'." -f $token) }
     }
