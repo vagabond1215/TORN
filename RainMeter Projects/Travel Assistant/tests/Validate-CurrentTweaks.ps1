@@ -69,6 +69,7 @@ if ($errors.Count -eq 0) {
         'Collector outages can turn one apparent out-of-stock span','Select-StableWindowPlanGroup',
         'Get-CurrentCycleDeparturePlan','SafetyMarginFraction = 0.05','NextCycleOrdinal',
         'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
+        "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
         "'PriceVaries'","'MinObservedPrice'","'MaxObservedPrice'"
     )) {
         if (-not $refiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing '$token'." }
@@ -94,7 +95,7 @@ if ($errors.Count -eq 0) {
         Fail 'Retired standalone optimizer must not return to the one-minute updater path.'
     }
 
-    foreach ($token in @('$width = 528','$height = 125','$plotRight = 522.0','$plotBottom = 98.0')) {
+    foreach ($token in @('$width = 528','$height = 125','$plotRight = 522.0','$plotBottom = 98.0','focus-market.kv','Write-TravelAssistantAtomicText -Path $FocusMarketFile')) {
         if (-not $graph.Contains($token)) { Fail "RenderInlineGraph.ps1 missing expanded graph token '$token'." }
     }
 
