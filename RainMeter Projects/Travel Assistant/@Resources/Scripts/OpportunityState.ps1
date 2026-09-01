@@ -665,7 +665,15 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             $focused=([bool]$focusMarker.fresh -and [string]$focusMarker.marketKey -eq $marketKey)
             if ($null -ne $restockSummary -and $lastSellOutAt -gt 0 -and (Test-OpportunityBoundaryQuality -Quality $lastSellOutQuality)) {
                 $restockEstimateAt=$lastSellOutAt+[long]$restockSummary.averageDelaySeconds
-                $earlyRestockAt=$lastSellOutAt+[long]$restockSummary.earliestDelaySeconds
+                $wakeDelay=[long]$restockSummary.earliestDelaySeconds
+                $lifetimeForWake=if ($null -ne $destinationState) { Get-OptimalProperty $destinationState 'lifetimeStats' } else { $null }
+                if ($null -ne $lifetimeForWake) {
+                    $lifetimeShortestForWake=[long](Get-OptimalProperty $lifetimeForWake 'shortestRestockDelaySeconds')
+                    if ($lifetimeShortestForWake -gt 0 -and ($wakeDelay -le 0 -or $lifetimeShortestForWake -lt $wakeDelay)) {
+                        $wakeDelay=$lifetimeShortestForWake
+                    }
+                }
+                $earlyRestockAt=$lastSellOutAt+$wakeDelay
                 $wakeAt=$earlyRestockAt-600L
                 $sleeping=(
                     -not $focused -and
