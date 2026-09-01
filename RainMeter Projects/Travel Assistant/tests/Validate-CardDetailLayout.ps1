@@ -7,13 +7,13 @@ $readerPath=Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 $presenterPath=Join-Path $ProjectRoot '@Resources\Scripts\CardPresenter.lua'
 $tweaksPath=Join-Path $ProjectRoot '@Resources\Scripts\CardTweaks.lua'
 $polishPath=Join-Path $ProjectRoot '@Resources\Scripts\FinalCardPolish.lua'
-$iniPath=Join-Path $ProjectRoot 'TravelAssistant.ini'
 $headerPath=Join-Path $ProjectRoot '@Resources\Scripts\HeaderLayout.lua'
+$iniPath=Join-Path $ProjectRoot 'TravelAssistant.ini'
 
 $errors=New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message){$script:errors.Add($Message)}
 
-foreach($path in @($rowsPath,$readerPath,$presenterPath,$tweaksPath,$polishPath,$iniPath,$headerPath)){
+foreach($path in @($rowsPath,$readerPath,$presenterPath,$tweaksPath,$polishPath,$headerPath,$iniPath)){
     if(-not(Test-Path -LiteralPath $path)){Fail "Missing compact-card asset: $path"}
 }
 
@@ -23,8 +23,8 @@ if($errors.Count -eq 0){
     $presenter=Get-Content -LiteralPath $presenterPath -Raw
     $tweaks=Get-Content -LiteralPath $tweaksPath -Raw
     $polish=Get-Content -LiteralPath $polishPath -Raw
-    $ini=Get-Content -LiteralPath $iniPath -Raw
     $header=Get-Content -LiteralPath $headerPath -Raw
+    $ini=Get-Content -LiteralPath $iniPath -Raw
 
     foreach($i in 1..8){
         foreach($suffix in @('Card','Flag','Name','Gross','Price','Leave','DetailToggle','Graph','InlineGraph')){
@@ -42,10 +42,14 @@ if($errors.Count -eq 0){
         if($graph -notmatch ('ToggleInlineGraph\('+[string]$i+'\)')){Fail "Row $i graph toggle must call ToggleInlineGraph($i)."}
 
         $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($nameBody -notmatch '(?im)^W=170\s*$' -or $nameBody -notmatch '(?im)^FontSize=9\s*$'){Fail "Row $i Name meter must preserve the canonical item-name surface."}
+        if($nameBody -notmatch '(?im)^W=170\s*$' -or $nameBody -notmatch '(?im)^FontSize=9\s*$'){
+            Fail "Row $i Name meter must preserve the canonical item-name surface."
+        }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=252\s*$' -or $priceBody -notmatch '(?im)^W=266\s*$' -or $priceBody -notmatch '(?im)^FontSize=7\s*$'){Fail "Row $i price/Take/Make meter must own the remaining first-line width."}
+        if($priceBody -notmatch '(?im)^X=252\s*$' -or $priceBody -notmatch '(?im)^W=266\s*$' -or $priceBody -notmatch '(?im)^FontSize=7\s*$'){
+            Fail "Row $i price/Take/Make meter must own the remaining first-line width."
+        }
 
         $strip=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         foreach($token in @('W=500','H=14','FontSize=7','Hidden=1')){
@@ -99,18 +103,11 @@ if($errors.Count -eq 0){
         Fail 'HeaderLayout.lua must shift DetailToggle with every compact card row.'
     }
 
-    foreach($retired in @(
-        'applyExpandedGraphGeometry',
-        'applyHeader',
-        'applySecondLine',
-        'polishHeader',
-        'polishWindowStatus'
-    )){
+    foreach($retired in @('applyExpandedGraphGeometry','applyHeader','applySecondLine','polishHeader','polishWindowStatus')){
         if($tweaks.Contains($retired) -or $polish.Contains($retired)){
             Fail "Legacy presentation pass retains retired card owner '$retired'."
         }
     }
-
     if($tweaks -match "!SetOption.*(?:Card|Flag|Name|Gross|Price|Leave|Graph|InlineGraph)"){
         Fail 'CardTweaks.lua must not mutate active compact-card geometry or content.'
     }
@@ -119,54 +116,11 @@ if($errors.Count -eq 0){
     }
 
     $sortGross=[regex]::Match($ini,'(?ms)^\[MeterSortGross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortGross -notmatch '(?im)^Text=GROSS PROFIT\s*
-    $sortHour=[regex]::Match($ini,'(?ms)^\[MeterSortProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortHour -notmatch '(?im)^ToolTipText=Gross profit divided by total elapsed hours; likelihood stays separate\s*}
-
-if($errors.Count -gt 0){
-    foreach($error in $errors){Write-Host "FAIL: $error" -ForegroundColor Red}
-    Write-Host "Compact card detail-layout validation failed with $($errors.Count) error(s)." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
-Write-Host 'Base card, slide-up economics strip, independent graph expansion, Take/Make line, unified window line, gross-profit sorts, and single-owner geometry are enforced.'
-exit 0
-){Fail 'Gross sort surface must remain GROSS PROFIT.'}
-    if($sortGross -notmatch '(?im)^ToolTipText=Highest total trip gross profit first\s*
-    $sortHour=[regex]::Match($ini,'(?ms)^\[MeterSortProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortHour -notmatch '(?im)^ToolTipText=After-tax Make divided by total elapsed hours; likelihood stays separate\s*$'){
-        Fail 'PROFIT/HR sort tooltip must describe after-tax Make per hour.'
-    }
-}
-
-if($errors.Count -gt 0){
-    foreach($error in $errors){Write-Host "FAIL: $error" -ForegroundColor Red}
-    Write-Host "Compact card detail-layout validation failed with $($errors.Count) error(s)." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
-Write-Host 'Base card, slide-up economics strip, independent graph expansion, Take/Make line, unified window line, and single-owner geometry are enforced.'
-exit 0
-){Fail 'Gross sort tooltip must describe pre-tax gross profit.'}
+    if($sortGross -notmatch '(?im)^Text=GROSS PROFIT\s*$'){Fail 'Gross sort surface must remain GROSS PROFIT.'}
+    if($sortGross -notmatch '(?im)^ToolTipText=Highest total trip gross profit first\s*$'){Fail 'Gross sort tooltip must describe pre-tax gross profit.'}
 
     $sortHour=[regex]::Match($ini,'(?ms)^\[MeterSortProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortHour -notmatch '(?im)^ToolTipText=After-tax Make divided by total elapsed hours; likelihood stays separate\s*$'){
-        Fail 'PROFIT/HR sort tooltip must describe after-tax Make per hour.'
-    }
-}
-
-if($errors.Count -gt 0){
-    foreach($error in $errors){Write-Host "FAIL: $error" -ForegroundColor Red}
-    Write-Host "Compact card detail-layout validation failed with $($errors.Count) error(s)." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
-Write-Host 'Base card, slide-up economics strip, independent graph expansion, Take/Make line, unified window line, and single-owner geometry are enforced.'
-exit 0
-){
+    if($sortHour -notmatch '(?im)^ToolTipText=Gross profit divided by total elapsed hours; likelihood stays separate\s*$'){
         Fail 'PROFIT/HR sort tooltip must describe gross profit per hour.'
     }
 }
@@ -178,39 +132,5 @@ if($errors.Count -gt 0){
 }
 
 Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
-Write-Host 'Base card, slide-up economics strip, independent graph expansion, Take/Make line, unified window line, and single-owner geometry are enforced.'
-exit 0
-){Fail 'Gross sort surface must remain GROSS PROFIT.'}
-    if($sortGross -notmatch '(?im)^ToolTipText=Highest total trip gross profit first\s*
-    $sortHour=[regex]::Match($ini,'(?ms)^\[MeterSortProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortHour -notmatch '(?im)^ToolTipText=After-tax Make divided by total elapsed hours; likelihood stays separate\s*$'){
-        Fail 'PROFIT/HR sort tooltip must describe after-tax Make per hour.'
-    }
-}
-
-if($errors.Count -gt 0){
-    foreach($error in $errors){Write-Host "FAIL: $error" -ForegroundColor Red}
-    Write-Host "Compact card detail-layout validation failed with $($errors.Count) error(s)." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
-Write-Host 'Base card, slide-up economics strip, independent graph expansion, Take/Make line, unified window line, and single-owner geometry are enforced.'
-exit 0
-){Fail 'Gross sort tooltip must describe pre-tax gross profit.'}
-
-    $sortHour=[regex]::Match($ini,'(?ms)^\[MeterSortProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortHour -notmatch '(?im)^ToolTipText=After-tax Make divided by total elapsed hours; likelihood stays separate\s*$'){
-        Fail 'PROFIT/HR sort tooltip must describe after-tax Make per hour.'
-    }
-}
-
-if($errors.Count -gt 0){
-    foreach($error in $errors){Write-Host "FAIL: $error" -ForegroundColor Red}
-    Write-Host "Compact card detail-layout validation failed with $($errors.Count) error(s)." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
-Write-Host 'Base card, slide-up economics strip, independent graph expansion, Take/Make line, unified window line, and single-owner geometry are enforced.'
+Write-Host 'Base card, slide-up economics strip, independent graph expansion, Take/Make line, unified window line, gross-profit sorts, and single-owner geometry are enforced.'
 exit 0
