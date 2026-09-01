@@ -27,12 +27,16 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Name','InlinePattern2',parenthesizedMoneyPattern(mv))",
         "setOption(prefix..'Name','InlineSetting2','Color | #Muted#')",
         'polishWindowStatus',
-        "text:match('^Window Open:')",
-        "text:match('^Safe Hit Window')",
+        "text:match('^Leave before:')",
+        "text:match('^Window opens:')",
+        "text:match('^Window Open')",
+        "text:match('^Guaranteed Hit for:')",
         "text:match('^Collecting Data:')",
+        "setOption(leave,'W',236)",
         "setOption(leave,'W',285)",
         "setOption(leave,'FontSize',7)",
-        "SKIN:Bang('!HideMeter',prefix..'Chance')",
+        "SKIN:Bang('!ShowMeter',chance)",
+        "SKIN:Bang('!HideMeter',chance)",
         "SKIN:Bang('!HideMeter',prefix..'Info')"
     )) {
         if (-not $scriptText.Contains($token)) { Fail "FinalCardPolish.lua missing '$token'." }
@@ -45,7 +49,10 @@ if ($errors.Count -eq 0) {
     $polishAt = $includeText.IndexOf('[MeasureFinalCardPolish]',[System.StringComparison]::Ordinal)
     if ($tooltipAt -lt 0 -or $polishAt -le $tooltipAt) { Fail 'Final card polish must run after the window tooltip pass.' }
 
-    if ($scriptText.Contains('SAFE FOR ')) { Fail 'FinalCardPolish.lua must not collapse an explicit LEAVE BEFORE deadline into ambiguous SAFE FOR wording.' }
+    if ($scriptText.Contains('SAFE FOR ')) { Fail 'FinalCardPolish.lua must not collapse an explicit countdown into ambiguous SAFE FOR wording.' }
+    foreach ($obsolete in @("^Safe Hit Window","^Safe window closed","^NEXT RESTOCK")) {
+        if ($scriptText.Contains("text:match('$obsolete')")) { Fail "FinalCardPolish.lua retains obsolete window status prefix '$obsolete'." }
+    }
     if ($scriptText -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FinalCardPolish.lua must remain presentation-only and local.' }
 }
 
