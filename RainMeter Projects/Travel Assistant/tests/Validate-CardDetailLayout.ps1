@@ -39,6 +39,12 @@ if($errors.Count -eq 0){
         $graph=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($graph -notmatch ('ToggleInlineGraph\('+[string]$i+'\)')){Fail "Row $i graph toggle must call ToggleInlineGraph($i)."}
 
+        $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        if($nameBody -notmatch '(?im)^W=170\s*$' -or $nameBody -notmatch '(?im)^FontSize=9\s*$'){Fail "Row $i Name meter must preserve the canonical item-name surface."}
+
+        $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        if($priceBody -notmatch '(?im)^X=252\s*$' -or $priceBody -notmatch '(?im)^W=266\s*$' -or $priceBody -notmatch '(?im)^FontSize=7\s*$'){Fail "Row $i price/Take/Make meter must own the remaining first-line width."}
+
         $strip=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         foreach($token in @('W=500','H=14','FontSize=7','Hidden=1')){
             if(-not$strip.Contains($token)){Fail "Row $i detail strip missing '$token'."}
@@ -71,8 +77,9 @@ if($errors.Count -eq 0){
     }
 
     foreach($token in @(
-        "nameText=nameText..' | '..formatMoney(unitCost)",
-        "setOption(prefix..'Price','Text','Take: '..takeText..'  Make: '..formatMoney(make))",
+        "setOption(prefix..'Name','Text',itemName)",
+        "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
+        "setOption(prefix..'Price','Text','| '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))",
         "'MV:'..formatMoney(mv)",
         "'  Each:'..formatMoney(each)",
         "'  Gross:'..formatMoney(grossSale)",
