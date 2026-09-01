@@ -17,6 +17,7 @@ $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
+$FocusMarketFile = Join-Path $RuntimeDir 'focus-market.kv'
 
 function Format-OpportunityDuration {
     param([long]$Seconds)
@@ -248,6 +249,86 @@ function Get-OpportunityNextRecurringWindow {
     }
 }
 
+function Test-OpportunityBoundaryQuality {
+    param([string]$Quality)
+    return (([string]$Quality).Trim().ToLowerInvariant() -in @('observed','bounded','recovered'))
+}
+
+function Get-OpportunityRestockSummary {
+    param([object[]]$Cycles,[int]$RecentSamples = 12)
+
+    $usable=@($Cycles | Where-Object {
+        $null -ne $_ -and
+        $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0 -and
+        (Test-CycleForecastBoundaryEvidence -Cycle $_ -Purpose Forecast)
+    } | Sort-Object @{Expression={ if ($_.PSObject.Properties['soldOutAt']) { [long]$_.soldOutAt } else { 0L } };Descending=$true})
+    if ($usable.Count -eq 0) { return $null }
+
+    $recent=@($usable)
+    if ($RecentSamples -gt 0 -and $recent.Count -gt $RecentSamples) { $recent=@($recent | Select-Object -First $RecentSamples) }
+    $recentDelays=[long[]]@($recent | ForEach-Object { [long]$_.restockDelaySeconds })
+    $lifetimeDelays=[long[]]@($usable | ForEach-Object { [long]$_.restockDelaySeconds })
+    $average=[long][Math]::Round([double]($recentDelays | Measure-Object -Average).Average)
+    return [pscustomobject]@{
+        sampleCount=[int]$recent.Count
+        averageDelaySeconds=$average
+        earliestDelaySeconds=[long]($recentDelays | Measure-Object -Minimum).Minimum
+        latestDelaySeconds=[long]($recentDelays | Measure-Object -Maximum).Maximum
+        lifetimeShortestDelaySeconds=[long]($lifetimeDelays | Measure-Object -Minimum).Minimum
+        lifetimeLongestDelaySeconds=[long]($lifetimeDelays | Measure-Object -Maximum).Maximum
+    }
+}
+
+function Read-OpportunityFocusMarker {
+    param([string]$Path,[long]$NowEpoch,[long]$MaximumAgeSeconds = 180L)
+    $result=[pscustomobject]@{ marketKey=''; updatedAt=0L; fresh=$false }
+    if (-not (Test-Path -LiteralPath $Path)) { return $result }
+    $values=@{}
+    foreach ($line in Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $at=$line.IndexOf('=')
+        if ($at -lt 1) { continue }
+        $values[$line.Substring(0,$at).Trim()]=$line.Substring($at+1).Trim()
+    }
+    $updated=0L
+    if ($values.ContainsKey('UpdatedAt')) { [void][long]::TryParse([string]$values['UpdatedAt'],[ref]$updated) }
+    $key=if ($values.ContainsKey('MarketKey')) { ([string]$values['MarketKey']).Trim().ToLowerInvariant() } else { '' }
+    $fresh=(-not [string]::IsNullOrWhiteSpace($key) -and $updated -gt 0 -and ($NowEpoch-$updated) -ge 0 -and ($NowEpoch-$updated) -le [Math]::Max(60L,$MaximumAgeSeconds))
+    return [pscustomobject]@{ marketKey=$key; updatedAt=$updated; fresh=[bool]$fresh }
+}
+
+function Get-OpportunityEligibleEvidenceKeys {
+    param(
+        [object]$Engine,
+        [object]$Countries,
+        [object]$Preferences,
+        [string]$FixedCountry
+    )
+    $wanted=@{}
+    if ($null -eq $Engine -or $null -eq $Countries -or -not $Engine.PSObject.Properties['observedMarkets']) { return $wanted }
+    $countryMap=@{}
+    foreach ($country in @($Countries.countries | Where-Object { $_.collect -eq $true })) {
+        $countryMap[[string]$country.id]=$country
+    }
+    foreach ($property in @($Engine.observedMarkets.PSObject.Properties)) {
+        $market=$property.Value
+        if ($null -eq $market) { continue }
+        $countryId=[string](Get-OptimalProperty $market 'country')
+        if (-not $countryMap.ContainsKey($countryId)) { continue }
+        $country=$countryMap[$countryId]
+        $tripBand=[string]$country.tripBand
+        if (-not [string]::IsNullOrWhiteSpace($FixedCountry) -and $countryId -ne $FixedCountry) { continue }
+        if (@($Preferences.selectedTripBands) -notcontains $tripBand) { continue }
+        if (@($Preferences.selectedCountryIds) -notcontains $countryId) { continue }
+        $itemId=[int](Get-OptimalProperty $market 'itemId')
+        if ($itemId -le 0) { continue }
+        $metadata=Get-OptimalMarketMetadata -Engine $Engine -ItemId $itemId -Market $market
+        if (-not (Test-OptimalMarketFilters -Preferences $Preferences -CountryId $countryId -TripBand $tripBand -ItemId $itemId -Category ([string]$metadata.category))) { continue }
+        $wanted[($countryId+':'+[string]$itemId).ToLowerInvariant()]=$true
+    }
+    return $wanted
+}
+
 function Get-OpportunityActiveRestockAt {
     param([object]$DestinationState)
     if ($null -eq $DestinationState) { return 0L }
@@ -410,7 +491,6 @@ $preferences = Read-UiPreferences
 $sortMode = [string]$preferences.sortMode
 if ($sortMode -notin @('name','upcoming','gross','profit_per_hour')) { $sortMode = 'upcoming' }
 $profile = Get-TravelProfile -BaseSettings $settings -LocalSettings $local
-$evidence = Get-OptimalEvidence
 $optimizerSettings = Get-OptimalProperty $settings 'optimizer'
 $minimumSamples = 3
 $purchaseBuffer = 60L
@@ -441,6 +521,11 @@ if ($travelState -in @('traveling_unknown','abroad_unknown')) {
 
 $fixedCountry = ''
 if ($null -ne $travelContext -and [bool](Get-OptimalProperty $travelContext 'filterActive')) { $fixedCountry = [string](Get-OptimalProperty $travelContext 'destinationCountryId') }
+
+$eligibleEvidenceKeys=Get-OpportunityEligibleEvidenceKeys -Engine $engine -Countries $countries -Preferences $preferences -FixedCountry $fixedCountry
+$evidence=Get-OptimalEvidence -WantedKeys $eligibleEvidenceKeys
+$focusMarker=Read-OpportunityFocusMarker -Path $FocusMarketFile -NowEpoch $Now
+
 $returningWait = 0L
 if ($travelState -eq 'returning' -and $null -ne $travelContext) { $returningWait = [Math]::Max(0L,[long](Get-OptimalProperty $travelContext 'timeLeft')) }
 
