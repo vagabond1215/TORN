@@ -15,6 +15,8 @@ local pendingTripBands = nil
 local activeTripBands = { short=true, medium=true, long=true }
 local expandedKey = ''
 local expandedRow = 0
+local expandedDetailKey = ''
+local expandedDetailRow = 0
 local lastInlineRenderRequestAt = 0
 local lastLayoutSignature = ''
 local lastGraphSignature = ''
@@ -22,8 +24,8 @@ local lastFlagKeys = {}
 
 local collapsedCardHeight = 50
 local rowStride = 54
-local graphExtra = 108
-local expandedCardHeight = collapsedCardHeight + graphExtra
+local detailExtra = 18
+local graphExtra = 133
 local maxCandidateRows = 256
 
 local opportunitySuffixes = {
@@ -548,46 +550,98 @@ local function collapseInlineGraph()
     end
 end
 
-local function syncExpandedRow(data, count)
-    if expandedKey == '' then expandedRow = 0 return end
-    local found = 0
-    for i = 1, count do
-        if safeText(data['Opportunity' .. i .. 'Key'], '') == expandedKey then found = i break end
+local function collapseCardDetails()
+    expandedDetailKey = ''
+    expandedDetailRow = 0
+    lastLayoutSignature = ''
+    for i = 1, 8 do
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Gross')
+        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'DetailToggle', 'Text', '+')
+        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'DetailToggle', 'ToolTipText', 'Show card economics')
     end
-    if found == 0 then collapseInlineGraph() else expandedRow = found end
+end
+
+local function syncExpandedRows(data, count)
+    if expandedKey == '' then
+        expandedRow = 0
+    else
+        local found = 0
+        for i = 1, count do
+            if safeText(data['Opportunity' .. i .. 'Key'], '') == expandedKey then found = i break end
+        end
+        if found == 0 then collapseInlineGraph() else expandedRow = found end
+    end
+
+    if expandedDetailKey == '' then
+        expandedDetailRow = 0
+    else
+        local found = 0
+        for i = 1, count do
+            if safeText(data['Opportunity' .. i .. 'Key'], '') == expandedDetailKey then found = i break end
+        end
+        if found == 0 then collapseCardDetails() else expandedDetailRow = found end
+    end
 end
 
 local function layoutRows(data, count)
-    syncExpandedRow(data, count)
-    local signature = tostring(count) .. ':' .. tostring(expandedRow)
+    syncExpandedRows(data, count)
+
+    -- ShowMeterGroup runs before layout and can resurrect hidden child meters.
+    -- Reassert the compact-card visibility contract on every pass even when Y/H
+    -- geometry is unchanged.
+    for i = 1, 8 do
+        local p = 'MeterOpportunity' .. i
+        if i == expandedDetailRow then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end
+        SKIN:Bang('!HideMeter', p .. 'Window')
+        SKIN:Bang('!HideMeter', p .. 'Chance')
+    end
+
+    local signature = tostring(count) .. ':' .. tostring(expandedRow) .. ':' .. tostring(expandedDetailRow)
     if signature == lastLayoutSignature then return end
     lastLayoutSignature = signature
 
     for i = 1, 8 do
         local p = 'MeterOpportunity' .. i
-        local extraBefore = (expandedRow > 0 and i > expandedRow) and graphExtra or 0
+        local extraBefore = 0
+        if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + detailExtra end
+        if expandedRow > 0 and i > expandedRow then extraBefore = extraBefore + graphExtra end
+
         local y = 120 + ((i-1) * rowStride) + extraBefore
-        local isExpanded = (i == expandedRow)
-        local cardHeight = isExpanded and expandedCardHeight or collapsedCardHeight
+        local detailExpanded = (i == expandedDetailRow)
+        local graphExpanded = (i == expandedRow)
+        local bodyOffset = detailExpanded and detailExtra or 0
+        local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)
 
         SKIN:Bang('!SetOption', p .. 'Card', 'Y', tostring(y))
         SKIN:Bang('!SetOption', p .. 'Card', 'H', tostring(cardHeight))
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape', 'Rectangle 0,0,536,' .. cardHeight .. ',5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#')
-        SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+3))
-        SKIN:Bang('!SetOption', p .. 'Name', 'Y', tostring(y+6))
-        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+6))
-        SKIN:Bang('!SetOption', p .. 'Window', 'Y', tostring(y+27))
-        SKIN:Bang('!SetOption', p .. 'Leave', 'Y', tostring(y+27))
-        SKIN:Bang('!SetOption', p .. 'Chance', 'Y', tostring(y+27))
-        SKIN:Bang('!SetOption', p .. 'Price', 'Y', tostring(y+26))
-        SKIN:Bang('!SetOption', p .. 'Graph', 'Y', tostring(y+24))
-        SKIN:Bang('!SetOption', p .. 'Graph', 'Text', isExpanded and '^' or 'v')
-        SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y', tostring(y+53))
-        if not isExpanded then SKIN:Bang('!HideMeter', p .. 'InlineGraph') end
+
+        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+2))
+        if detailExpanded then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end
+
+        SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+3+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Name', 'Y', tostring(y+6+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Price', 'Y', tostring(y+6+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'Y', tostring(y+3+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'Text', detailExpanded and '-' or '+')
+        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'ToolTipText', detailExpanded and 'Hide card economics' or 'Show card economics')
+
+        SKIN:Bang('!SetOption', p .. 'Window', 'Y', tostring(y+27+bodyOffset))
+        SKIN:Bang('!HideMeter', p .. 'Window')
+        SKIN:Bang('!SetOption', p .. 'Leave', 'Y', tostring(y+27+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Chance', 'Y', tostring(y+27+bodyOffset))
+        SKIN:Bang('!HideMeter', p .. 'Chance')
+
+        SKIN:Bang('!SetOption', p .. 'Graph', 'Y', tostring(y+24+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Graph', 'Text', graphExpanded and '^' or 'v')
+        SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y', tostring(y+53+bodyOffset))
+        if not graphExpanded then SKIN:Bang('!HideMeter', p .. 'InlineGraph') end
     end
 
     local panelHeight = 164
-    if count > 0 then panelHeight = 120 + (count * rowStride) + ((expandedRow > 0) and graphExtra or 0) + 8 end
+    if count > 0 then
+        panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8
+    end
     setVariable('PanelHeight', panelHeight)
 end
 
@@ -782,6 +836,24 @@ function SetSortMode(mode)
     setVariable('PreferenceValue', mode)
     SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
+    refreshPresentation()
+end
+
+function ToggleCardDetails(index)
+    if lastDisplayedData == nil then return end
+    local row = math.floor(number(index))
+    if row < 1 or row > 8 then return end
+    local key = safeText(lastDisplayedData['Opportunity' .. row .. 'Key'], '')
+    if key == '' then return end
+
+    if expandedDetailKey == key then
+        collapseCardDetails()
+    else
+        collapseCardDetails()
+        expandedDetailKey = key
+        expandedDetailRow = row
+    end
+    updateOpportunities(lastDisplayedData)
     refreshPresentation()
 end
 
