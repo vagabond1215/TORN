@@ -432,8 +432,6 @@ for ($i=1; $i -le $count; $i++) {
             $collectingReason='current restock boundary was not observed or recovered'
         } elseif ([long]$liveProjection.activeSelloutEstimateAt -le 0) {
             $collectingReason='current sellout cannot yet be estimated from verified evidence'
-        } elseif ([int]$model.sampleCount -le 0) {
-            $collectingReason='no verified completed cycles are available'
         }
     } else {
         $lastSellOutAt=if ($null -ne $destinationState) { [long](Get-WindowProperty $destinationState 'lastSellOutAt') } else { 0L }
@@ -497,6 +495,16 @@ for ($i=1; $i -le $count; $i++) {
             $state[$prefix+'ProbabilityValue']=(Convert-WindowProbabilityText ([double]$currentProbability))
             $state[$prefix+'ChanceText']=('{0:N0}%' -f (100.0*[double]$currentProbability))
         }
+        continue
+    }
+
+    if ([int]$model.sampleCount -le 0) {
+        $state[$prefix+'WindowDataQuality']='collecting'
+        $state[$prefix+'WindowDataQualityReason']='no verified completed cycles are available for the next restock'
+        $state[$prefix+'WindowStartAt']='0'
+        $state[$prefix+'WindowText']='Collecting Data: See Weav3r'
+        $state[$prefix+'ChanceText']=''
+        $state[$prefix+'ProbabilityValue']='-1'
         continue
     }
 
