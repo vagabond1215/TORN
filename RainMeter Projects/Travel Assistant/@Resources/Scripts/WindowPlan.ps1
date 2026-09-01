@@ -260,20 +260,35 @@ function Test-WindowPriceVaries {
     return $false
 }
 
+function Get-WindowCycleLineKey {
+    param([string]$Line)
+    if ([string]::IsNullOrWhiteSpace($Line)) { return '' }
+    $country=[System.Text.RegularExpressions.Regex]::Match(
+        $Line,
+        '"country"\s*:\s*"([^"]+)"',
+        [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+    )
+    $item=[System.Text.RegularExpressions.Regex]::Match(
+        $Line,
+        '"itemId"\s*:\s*([1-9][0-9]*)',
+        [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+    )
+    if (-not $country.Success -or -not $item.Success) { return '' }
+    return ($country.Groups[1].Value.Trim().ToLowerInvariant()+':'+$item.Groups[1].Value)
+}
+
 function Read-WindowCyclesForKeys {
     param([string[]]$Paths,[hashtable]$Wanted)
     $map=@{}
     $seen=@{}
+    if ($null -eq $Wanted -or $Wanted.Count -eq 0) { return $map }
     foreach ($path in $Paths) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
         foreach ($line in [System.IO.File]::ReadLines($path)) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $key=Get-WindowCycleLineKey -Line $line
+            if ([string]::IsNullOrWhiteSpace($key) -or -not $Wanted.ContainsKey($key)) { continue }
             try { $row=$line | ConvertFrom-Json } catch { continue }
-            $country=[string](Get-WindowProperty $row 'country')
-            $itemId=[int](Get-WindowProperty $row 'itemId')
-            if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0) { continue }
-            $key=$country+':'+[string]$itemId
-            if (-not $Wanted.ContainsKey($key)) { continue }
             $identity=('{0}:{1}:{2}' -f $key,[long](Get-WindowProperty $row 'restockAt'),[long](Get-WindowProperty $row 'soldOutAt'))
             if ($seen.ContainsKey($identity)) { continue }
             $seen[$identity]=$true
