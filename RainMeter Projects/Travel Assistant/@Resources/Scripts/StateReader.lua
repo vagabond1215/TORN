@@ -440,6 +440,46 @@ local function formatDuration(seconds)
     return '<1m'
 end
 
+local function liveTravelRemaining(data, now)
+    local arrivalAt = number(data.TravelArrivalAt)
+    if arrivalAt > now then return arrivalAt - now end
+    local projectedLeft = number(data.TravelTimeLeft)
+    local projectedAt = number(data.TravelContextLastSuccessAt)
+    if projectedLeft > 0 and projectedAt > 0 then
+        return math.max(0, projectedLeft - math.max(0, now - projectedAt))
+    end
+    return math.max(0, projectedLeft)
+end
+
+local function travelHeaderText(data, now)
+    local state = safeText(data.TravelState, 'home'):lower()
+    local destination = safeText(data.TravelDestination, '')
+    if destination == '' then destination = safeText(data.TravelDestinationCountryId, ''):gsub('_', ' ') end
+
+    if state == 'home' then return 'In Torn' end
+    if state == 'returning' then
+        local remaining = liveTravelRemaining(data, now)
+        if remaining <= 600 then return 'Landing in Torn: ' .. formatDuration(remaining) end
+        return 'In Flight to Torn: ' .. formatDuration(remaining)
+    end
+    if state == 'traveling' then
+        local remaining = liveTravelRemaining(data, now)
+        if destination == '' then destination = 'destination' end
+        if remaining <= 600 then return 'Landing in ' .. destination .. ': ' .. formatDuration(remaining) end
+        return 'In Flight to ' .. destination .. ': ' .. formatDuration(remaining)
+    end
+    if state == 'abroad' or state == 'foreign' then
+        if destination == '' then destination = 'destination' end
+        return 'Abroad in ' .. destination
+    end
+    return 'Travel status unavailable'
+end
+
+local function updateTravelHeader(data, now)
+    SKIN:Bang('!SetOption', 'MeterTitle', 'Text', travelHeaderText(data, now))
+    SKIN:Bang('!SetOption', 'MeterTitle', 'ToolTipText', 'Open Torn travel')
+end
+
 local function travelSecondsForCountry(data, countryId)
     local key = nil
     if countryId == 'united_kingdom' then key = 'UKTravelSeconds'
@@ -808,6 +848,7 @@ function Update()
 
     if expandedKey ~= '' and (now - lastInlineRenderRequestAt) >= 60 then requestInlineGraph(expandedKey) end
 
+    updateTravelHeader(data, now)
     updateHeartbeatText(data, now)
     updateFilters(data, activeTripBands)
     applySortColors(renderMode)
