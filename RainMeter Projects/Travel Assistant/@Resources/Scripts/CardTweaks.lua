@@ -211,6 +211,9 @@ local function guaranteedWindowText(line)
 end
 
 local function buildWindowTooltip(index,rawTooltip,row,state,now)
+    if tostring(rawTooltip or ''):find('Current Cycle Sellout:',1,true)~=nil then
+        return trim(rawTooltip)
+    end
     local earlyLine=tooltipLine(rawTooltip,'Early Restock')
     local lateLine=tooltipLine(rawTooltip,'Late Restock')
     if earlyLine=='' and lateLine=='' then return '' end
