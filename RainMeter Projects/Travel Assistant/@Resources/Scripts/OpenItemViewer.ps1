@@ -21,13 +21,16 @@ $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
 $HistoryMaintenanceScript = Join-Path $PSScriptRoot 'MaintainObservationHistory.ps1'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared viewer reads.' }
+. $AtomicFileScript
 
 if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
 
 function Read-ViewerJson {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    $raw = Read-TravelAssistantSharedText -Path $Path
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
     return ($raw | ConvertFrom-Json)
 }
@@ -36,12 +39,18 @@ function Read-ViewerStateKv {
     param([string]$Path)
     $values = @{}
     if (-not (Test-Path -LiteralPath $Path)) { return $values }
-    foreach ($line in Get-Content -LiteralPath $Path) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        $index = $line.IndexOf('=')
-        if ($index -lt 1) { continue }
-        $key = $line.Substring(0,$index).Trim([char]0xFEFF).Trim()
-        $values[$key] = $line.Substring($index+1).Trim()
+    $reader=$null
+    try {
+        $reader=Open-TravelAssistantSharedTextReader -Path $Path
+        while (($line=$reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $index = $line.IndexOf('=')
+            if ($index -lt 1) { continue }
+            $key = $line.Substring(0,$index).Trim([char]0xFEFF).Trim()
+            $values[$key] = $line.Substring($index+1).Trim()
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
     }
     return $values
 }
@@ -201,22 +210,28 @@ $history = @{}
 $baseline = @{}
 foreach ($path in @($SeedObservationFile,$RuntimeObservationFile)) {
     if (-not (Test-Path -LiteralPath $path)) { continue }
-    foreach ($line in Get-Content -LiteralPath $path) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try {
-            $row = $line | ConvertFrom-Json
-            $timestamp = [long](Get-ViewerProperty $row 'timestamp')
-            $country = [string](Get-ViewerProperty $row 'country')
-            $itemId = [int](Get-ViewerProperty $row 'itemId')
-            if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0) { continue }
-            $key = $country + ':' + [string]$itemId
-            if ($timestamp -lt $cutoff) {
-                if (-not $baseline.ContainsKey($key) -or [long](Get-ViewerProperty $baseline[$key] 'timestamp') -lt $timestamp) { $baseline[$key] = $row }
-                continue
-            }
-            if (-not $history.ContainsKey($key)) { $history[$key] = @() }
-            $history[$key] = @($history[$key] + $row)
-        } catch { }
+    $reader=$null
+    try {
+        $reader=Open-TravelAssistantSharedTextReader -Path $path
+        while (($line=$reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $row = $line | ConvertFrom-Json
+                $timestamp = [long](Get-ViewerProperty $row 'timestamp')
+                $country = [string](Get-ViewerProperty $row 'country')
+                $itemId = [int](Get-ViewerProperty $row 'itemId')
+                if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0) { continue }
+                $key = $country + ':' + [string]$itemId
+                if ($timestamp -lt $cutoff) {
+                    if (-not $baseline.ContainsKey($key) -or [long](Get-ViewerProperty $baseline[$key] 'timestamp') -lt $timestamp) { $baseline[$key] = $row }
+                    continue
+                }
+                if (-not $history.ContainsKey($key)) { $history[$key] = @() }
+                $history[$key] = @($history[$key] + $row)
+            } catch { }
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
     }
 }
 
