@@ -479,7 +479,8 @@ try {
 
     if (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue) { Clear-TravelAssistantLatestError -Component 'run-update' }
     $UpdatePerformanceOutcome = 'success'
-    exit 0
+    # Do not call exit here. The finally block owns performance telemetry, process
+    # disposal, and explicit mutex release; falling through returns success naturally.
 } catch {
     $UpdatePerformanceOutcome = 'error'
     if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
