@@ -43,7 +43,7 @@ if ($errors.Count -eq 0) {
         'quantityFromTooltip','buyPriceFromVisibleText','bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
         'statusText(fallbackWindow,fallbackLeave)',
-        'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCyclePurchaseBufferSeconds','formatCurrentCycleTooltip'
+        'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCyclePurchaseBufferSeconds','formatCurrentCycleTooltip','opportunityStatePrefix'
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
