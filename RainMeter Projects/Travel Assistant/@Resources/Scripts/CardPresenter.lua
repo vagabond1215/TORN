@@ -292,6 +292,12 @@ end
 
 local function bestNextRestockArrival(plan,group,ordinal)
     if plan==nil or group==nil then return 0,0 end
+    -- The model already identified the highest-overlap interval. Use its midpoint
+    -- as the Optimal Departure target instead of substituting a historical restock
+    -- boundary, which can point at the edge of the actual best-hit plateau.
+    if number(group.bestStart)>0 and number(group.bestEnd)>number(group.bestStart) and number(group.bestProbability)>0 then
+        return math.floor((number(group.bestStart)+number(group.bestEnd))/2),clampProbability(group.bestProbability)
+    end
     local bestAt=number(group.earlyRestock); local bestP=clampProbability(probabilityAt(plan,bestAt))
     for _,cycle in ipairs(plan.cycles or {}) do
         local at=nextRestockStartForCycle(plan,cycle,ordinal)
