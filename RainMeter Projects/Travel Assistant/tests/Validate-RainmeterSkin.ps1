@@ -49,14 +49,474 @@ if ($inlineBody -notmatch 'RenderInlineGraph\.ps1' -or $inlineBody -notmatch '#I
 if ($inlineBody -match 'LaunchItemViewer|PopupHost|ViewerMarketKey') { Fail 'Inline history measure must not route through the popup Viewer.' }
 
 foreach ($i in 1..8) {
-    foreach ($suffix in @('Card','Flag','Name','Gross','Window','Leave','Chance','Price','Graph','InlineGraph')) {
+    foreach ($suffix in @('Card','Flag','Name','Gross','Window','Leave','Chance','Price','DetailToggle','Graph','InlineGraph')) {
         $section='MeterOpportunity'+$i+$suffix
         if ($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "OpportunityRows.inc missing [$section]." }
     }
     $flagBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Flag\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailToggle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $grossBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if ($flagBody -notmatch '(?im)^Meter=Image\s*$' -or $flagBody -notmatch '(?im)^W=62\s*$' -or $flagBody -notmatch '(?im)^H=44\s*$') { Fail "Opportunity $i flag must be a near-full-height native Image meter." }
-    if ($graphBody -notmatch '(?im)^Meter=Image\s*$') { Fail "Opportunity $i inline graph must be a native Image meter." }
+    if ($flagBody -notmatch '(?im)^Meter=Image\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','local function collapseCardDetails()','function ToggleCardDetails(index)',
+    'local detailExtra = 18','local graphExtra = 133','expandedDetailKey','expandedDetailRow',
+    "if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + detailExtra end",
+    "local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)",
+    "if detailExpanded then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end",
+    "SKIN:Bang('!HideMeter', p .. 'Window')","SKIN:Bang('!HideMeter', p .. 'Chance')",
+    'if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $flagBody -notmatch '(?im)^W=62\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $flagBody -notmatch '(?im)^H=44\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+) { Fail "Opportunity $i flag must be a near-full-height native Image meter." }
+    if ($detailBody -notmatch '(?im)^Text=\+\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $detailBody -notmatch ('ToggleCardDetails\('+[string]$i+'\)')) { Fail "Opportunity $i detail toggle must control the top economics strip." }
+    if ($grossBody -notmatch '(?im)^W=500\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $grossBody -notmatch '(?im)^FontSize=7\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+) { Fail "Opportunity $i Gross meter must be the one-line economics detail strip." }
+    if ($graphBody -notmatch '(?im)^Meter=Image\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $graphBody -notmatch '(?im)^W=528\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $graphBody -notmatch '(?im)^H=125\s*
+    if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
+    if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Country\]')) { Fail "Opportunity $i must not add a separate country meter; country belongs in the title." }
+    if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
+}
+
+foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+foreach ($token in @(
+    "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
+    "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function collapseInlineGraph()','if lastSortMode ~= mode then collapseInlineGraph() end',
+    "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
+    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+)) {
+    if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
+}
+if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+) { Fail "Opportunity $i inline graph must be the 528x125 native Image surface." }
     if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
     if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
     if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
