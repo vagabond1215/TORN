@@ -78,9 +78,9 @@ if ($errors.Count -eq 0) {
         if (-not $history.Contains($token)) { Fail "MaintainObservationHistory.ps1 missing shared/atomic IO token '$token'." }
     }
     foreach ($retired in @(
-        "$ObservationFile + '.cleanup.tmp'",
-        "$ObservationFile + '.history.tmp'",
-        "$CycleFile + '.history.tmp'",
+        '$ObservationFile + ''.cleanup.tmp''',
+        '$ObservationFile + ''.history.tmp''',
+        '$CycleFile + ''.history.tmp''',
         'Move-Item -LiteralPath $tmp -Destination $ObservationFile -Force',
         'Move-Item -LiteralPath $tmp -Destination $CycleFile -Force'
     )) {
