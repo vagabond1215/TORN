@@ -15,7 +15,7 @@ if ($errors.Count -eq 0) {
     $includeText = Get-Content -LiteralPath $includePath -Raw
 
     foreach ($token in @(
-        "'SAFE FOR '..trim(remaining)",
+        'LEAVE IN = wait before departing; LEAVE BEFORE = latest departure deadline.',
         "header:match('^(.-)%s+MV:(.-)%s+|%s+(.+)$')",
         "name..' - '..cost..' ('..mv..')'",
         "setOption(prefix..'Gross','Text',profit)",
@@ -37,6 +37,7 @@ if ($errors.Count -eq 0) {
     $polishAt = $includeText.IndexOf('[MeasureFinalCardPolish]',[System.StringComparison]::Ordinal)
     if ($tooltipAt -lt 0 -or $polishAt -le $tooltipAt) { Fail 'Final card polish must run after the window tooltip pass.' }
 
+    if ($scriptText.Contains('SAFE FOR ')) { Fail 'FinalCardPolish.lua must not collapse an explicit LEAVE BEFORE deadline into ambiguous SAFE FOR wording.' }
     if ($scriptText -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FinalCardPolish.lua must remain presentation-only and local.' }
 }
 
@@ -46,5 +47,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Final card polish validation passed.' -ForegroundColor Green
-Write-Host 'Open Safe windows read SAFE FOR; fixed foreign costs remain white, variable costs retain their scale, Torn MV is muted gray, and profit/item remains green at far right.'
+Write-Host 'Departure wording preserves LEAVE IN versus LEAVE BEFORE; fixed foreign costs remain white, Torn MV muted gray, and profit/item green at far right.'
 exit 0
