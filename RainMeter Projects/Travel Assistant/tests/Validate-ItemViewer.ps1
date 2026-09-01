@@ -33,7 +33,7 @@ if(Test-Path -LiteralPath $hostPath){
 
 if(Test-Path -LiteralPath $viewerPath){
  $viewer=Get-Content -LiteralPath $viewerPath -Raw
- foreach($token in @('[string]$MarketKey','RuntimeObservationFile','SeedObservationFile','MaintainObservationHistory.ps1','graphWindowHours','observedMarkets','resaleCache','sourceTimestamp','carry_forward',"ToString('HH:mm')",'Green: observed restock','Red: observed sellout','Dropdown is sorted by known profit/item.')){if(-not$viewer.Contains($token)){Fail "Standalone Viewer missing '$token'."}}
+ foreach($token in @('[string]$MarketKey','RuntimeObservationFile','SeedObservationFile','MaintainObservationHistory.ps1','graphWindowHours','observedMarkets','resaleCache','sourceTimestamp','carry_forward',"ToString('HH:mm')",'Green: observed restock','Red: observed sellout','Dropdown is sorted by known profit/item.','AtomicFile.ps1','Read-TravelAssistantSharedText -Path $Path','Open-TravelAssistantSharedTextReader -Path $path')){if(-not$viewer.Contains($token)){Fail "Standalone Viewer missing '$token'."}}
  if($viewer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|api\.torn\.com|prombot\.co\.uk|yata\.yt'){Fail 'Standalone Viewer must remain local-only.'}
 }
 
@@ -43,7 +43,8 @@ if(Test-Path -LiteralPath $inlineRendererPath){
   'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
   'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
   'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
-  'PointCount','ChangeCount','StableImageFile','stableImagePath','UnknownBeforeTimestamp','WindowStartTimestamp'
+  'PointCount','ChangeCount','StableImageFile','stableImagePath','UnknownBeforeTimestamp','WindowStartTimestamp',
+  'AtomicFile.ps1','Open-TravelAssistantSharedTextReader -Path $Path'
  )){if(-not$inline.Contains($token)){Fail "Inline card renderer missing '$token'."}}
  if($inline -match '(?i)Invoke-RestMethod|Invoke-WebRequest|api\.torn\.com|prombot\.co\.uk|yata\.yt'){Fail 'Inline card renderer must remain local-only.'}
  foreach($retired in @('Path GraphPath','display_carry')){if($inline.Contains($retired)){Fail "Inline card renderer retains retired fabricated/Shape behavior '$retired'."}}
