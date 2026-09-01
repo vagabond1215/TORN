@@ -637,6 +637,90 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             }
         }
 
+        # Long-OOS markets do not need a full recurring-window/waste calculation
+        # every minute. Keep a cheap absolute restock estimate from verified cycle
+        # delays and wake detailed forecasting only near the historically earliest
+        # restock boundary or while the user is explicitly viewing the market.
+        if ($stock -le 0) {
+            $lastSellOutAt=0L
+            $lastSellOutQuality=''
+            if ($null -ne $destinationState) {
+                if ($destinationState.PSObject.Properties['lastSellOutAt']) { $lastSellOutAt=[long]$destinationState.lastSellOutAt }
+                if ($destinationState.PSObject.Properties['lastSellOutBoundaryQuality']) { $lastSellOutQuality=[string]$destinationState.lastSellOutBoundaryQuality }
+            }
+            $restockSummary=Get-OpportunityRestockSummary -Cycles $recurringCycles -RecentSamples 12
+            $focused=([bool]$focusMarker.fresh -and [string]$focusMarker.marketKey -eq $marketKey)
+            if ($null -ne $restockSummary -and $lastSellOutAt -gt 0 -and (Test-OpportunityBoundaryQuality -Quality $lastSellOutQuality)) {
+                $restockEstimateAt=$lastSellOutAt+[long]$restockSummary.averageDelaySeconds
+                $earlyRestockAt=$lastSellOutAt+[long]$restockSummary.earliestDelaySeconds
+                $wakeAt=$earlyRestockAt-600L
+                $sleeping=(
+                    -not $focused -and
+                    $restockEstimateAt -gt $Now -and
+                    $Now -lt $wakeAt
+                )
+                if ($sleeping) {
+                    $availableQuantity=$capacity
+                    if ($evidence.restockStock.ContainsKey($marketKey)) {
+                        $samples=[long[]]@($evidence.restockStock[$marketKey] | ForEach-Object { [long]$_ })
+                        $sampleQuantity=Get-OptimalMedian $samples
+                        if ($sampleQuantity -gt 0) { $availableQuantity=[Math]::Min($capacity,[int]$sampleQuantity) }
+                    }
+                    $quantity=[Math]::Max(1,[Math]::Min($capacity,[int]$availableQuantity))
+                    $grossProfit=[long]($quantity*$profitPerItem)
+                    $remaining=[Math]::Max(1L,$restockEstimateAt-$Now)
+                    $elapsedSeconds=[Math]::Max(1L,$remaining+$returnSeconds+$purchaseBuffer)
+                    $elapsedHours=[Math]::Max(1.0/60.0,$elapsedSeconds/3600.0)
+                    $profitPerHour=[double]$grossProfit/$elapsedHours
+                    $priceColor=if (-not $marketValueFresh) { '145,152,164,255' } elseif ($foreignPrice -le $sellBasis) { '86,190,116,255' } else { '224,90,90,255' }
+                    $restockText='Restocks in ~'+(Format-OpportunityDuration $remaining)
+                    $tooltip=('{0} - {1} | {2} | average OOS->restock {3} over {4} verified cycle(s); recent earliest {5}, recent latest {6}; detailed forecast sleeps until 10m before the historical early-restock boundary or while focused' -f
+                        [string]$metadata.name,[string]$country.name,$restockText,
+                        (Format-OpportunityDuration ([long]$restockSummary.averageDelaySeconds)),
+                        [int]$restockSummary.sampleCount,
+                        (Format-OpportunityDuration ([long]$restockSummary.earliestDelaySeconds)),
+                        (Format-OpportunityDuration ([long]$restockSummary.latestDelaySeconds)))
+
+                    $rows.Add([pscustomobject]@{
+                        key=$marketKey
+                        countryId=$countryId
+                        countryName=[string]$country.name
+                        countryCode=Get-OpportunityCountryCode $countryId
+                        tripBand=$tripBand
+                        itemId=$itemId
+                        name=[string]$metadata.name
+                        category=[string]$metadata.category
+                        probability=-1.0
+                        probabilityKnown=$false
+                        quantity=[int]$quantity
+                        grossProfit=$grossProfit
+                        profitPerHour=[double]$profitPerHour
+                        elapsedSeconds=[long]$elapsedSeconds
+                        windowStartAt=[long]$restockEstimateAt
+                        windowEndAt=0L
+                        leaveDelaySeconds=[long][Math]::Max(0L,$restockEstimateAt-$Now)
+                        windowText='RESTOCK ESTIMATE'
+                        leaveText=$restockText
+                        foreignPrice=$foreignPrice
+                        marketValue=[long]$resaleUse.marketValue
+                        marketValueFresh=[bool]$marketValueFresh
+                        priceColor=$priceColor
+                        tooltip=$tooltip
+                        forecastMode='sleeping_oos'
+                        restockEstimateAt=[long]$restockEstimateAt
+                        restockAverageDelaySeconds=[long]$restockSummary.averageDelaySeconds
+                        restockEarliestDelaySeconds=[long]$restockSummary.earliestDelaySeconds
+                        restockLatestDelaySeconds=[long]$restockSummary.latestDelaySeconds
+                        restockLifetimeShortestDelaySeconds=[long]$restockSummary.lifetimeShortestDelaySeconds
+                        restockLifetimeLongestDelaySeconds=[long]$restockSummary.lifetimeLongestDelaySeconds
+                        restockSampleCount=[int]$restockSummary.sampleCount
+                    })
+                    $countryStats[$countryId].rows=[int]$countryStats[$countryId].rows+1
+                    continue
+                }
+            }
+        }
+
         $probability = -1.0
         $probabilityKnown = $false
         $availableQuantity = 0L
