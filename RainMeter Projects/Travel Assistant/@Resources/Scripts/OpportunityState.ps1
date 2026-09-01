@@ -318,7 +318,7 @@ function Get-OpportunityEligibleEvidenceKeys {
         $country=$countryMap[$countryId]
         $tripBand=[string]$country.tripBand
         if (-not [string]::IsNullOrWhiteSpace($FixedCountry) -and $countryId -ne $FixedCountry) { continue }
-        if (@($Preferences.selectedTripBands) -notcontains $tripBand) { continue }
+        if (@($Preferences.displayTripBands) -notcontains $tripBand) { continue }
         if (@($Preferences.selectedCountryIds) -notcontains $countryId) { continue }
         $itemId=[int](Get-OptimalProperty $market 'itemId')
         if ($itemId -le 0) { continue }
@@ -554,7 +554,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
     $tripBand = [string]$country.tripBand
     $countryStats[$countryId] = [pscustomobject]@{ observed=0; staleStock=0; forecastStock=0; missingMv=0; staleMv=0; rows=0 }
     if (-not [string]::IsNullOrWhiteSpace($fixedCountry) -and $countryId -ne $fixedCountry) { continue }
-    if (@($preferences.selectedTripBands) -notcontains $tripBand) { continue }
+    if (@($preferences.displayTripBands) -notcontains $tripBand) { continue }
     if (@($preferences.selectedCountryIds) -notcontains $countryId) { continue }
     if (-not $country.PSObject.Properties['travelSeconds']) { continue }
     $travelProperty = $country.travelSeconds.PSObject.Properties[$travelMode]
