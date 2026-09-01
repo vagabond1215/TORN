@@ -18,13 +18,10 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         'parseWindowPlan',
         'medianAvailableSeconds',
-        'findPreferredGroup(plan,now)',
-        'group.safeEnd>now',
-        'group.bestEnd>now',
-        "return group,'safe'",
-        "return group,'best'",
-        "relative='starts in '..formatDuration(group.safeStart-now)",
-        "relative='closes in '..formatDuration(group.safeEnd-now)",
+        'nextCycleGroup(row)',
+        'number(group.ordinal)==ordinal',
+        "'Next Restock Only'",
+        "'No farther cycle is selected while in Torn'",
         "'Estimated Arrival in '..arrival",
         "'Estimated In Stock Duration '..stockedText",
         "'Early Restock: '..formatMoment(group.earlyRestock,now)",
@@ -34,9 +31,11 @@ if ($errors.Count -eq 0) {
         'currentCycleReachable=number(state[prefix..''CurrentCycleReachable''])>0',
         'activeSelloutEstimateAt=number(state[prefix..''ActiveSelloutEstimateAt''])',
         'currentCycleLeaveDeadlineAt=number(state[prefix..''CurrentCycleLeaveDeadlineAt''])',
+        'currentCycleSafetyMarginSeconds=number(state[prefix..''CurrentCycleSafetyMarginSeconds''])',
+        'nextCycleOrdinal=math.floor(number(state[prefix..''NextCycleOrdinal'']))',
         "'Current Cycle Sellout: '..formatMoment(row.activeSelloutEstimateAt,now)",
         "'Leave Before: '..formatMoment(row.currentCycleLeaveDeadlineAt,now)",
-        "'Purchase Buffer: '..formatDuration(row.currentCyclePurchaseBufferSeconds)",
+        "'5% Sellout Safety: '..formatDuration(row.currentCycleSafetyMarginSeconds)",
         "'Basis: live depletion of current observed stock'",
         "if travelState=='traveling' or travelState=='returning' or travelState=='abroad' or travelState=='foreign' then",
         "setOption(prefix..'Chance','Text','')",
@@ -83,6 +82,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Current-cycle and recurring home window-tooltip validation passed.' -ForegroundColor Green
-Write-Host 'Reachable current stock shows its live sellout and leave-before deadline; later cycles retain arrival, stock-duration, Early/Late restock, and Guaranteed-or-Best context.'
+Write-Host 'Current/next-cycle home window-tooltip validation passed.' -ForegroundColor Green
+Write-Host 'Reachable current stock shows sellout plus 5% safety deadline; otherwise the tooltip is pinned to the immediate next restock and never a farther cycle.'
 exit 0
