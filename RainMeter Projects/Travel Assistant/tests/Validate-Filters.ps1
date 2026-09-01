@@ -152,6 +152,26 @@ if(Test-Path -LiteralPath $files.Ini){
  foreach($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeasureHeaderLayout','MeterFilterIcon','MeterSettingsIcon','MeterSortName','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')){if($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){Fail "TravelAssistant.ini missing [$section]."}}
  foreach($retired in @('MeterItemFilter','MeterTripLabel','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine','MeterSettings','MeterSortOptimal','MeterSortTime','MeterSortLabel')){if($ini -match ('(?m)^\['+[regex]::Escape($retired)+'\]\s*$')){Fail "Retired main-UI meter [$retired] returned."}}
  foreach($token in @('FilterRequest=Filters',"OpenFilter('Filters')",'ScriptFile=#@#Scripts\HeaderLayout.lua','PanelHeight=132','Y=58','ImageName=#@#Images\UI\filter.png','ImageName=#@#Images\UI\settings.png')){if(-not$ini.Contains($token)){Fail "TravelAssistant.ini compact-header token missing '$token'."}}
+ if($ini -notmatch '(?ms)^\[MeterSortGross\].*?^Text=MAKE\s*
+  $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+  if($body -notmatch '(?im)^Meter=Image\s*$' -or $body -notmatch '(?im)^W=24\s*$' -or $body -notmatch '(?im)^H=24\s*$'){Fail "$section must remain a compact 24x24 image meter."}
+ }
+ if($ini.Contains('Text=SETTINGS  >')){Fail 'Main header must use the settings gear image, not SETTINGS > text.'}
+}
+
+if(Test-Path -LiteralPath $files.Countries){
+ $countriesJson=Get-Content -LiteralPath $files.Countries -Raw|ConvertFrom-Json
+ $collect=@($countriesJson.countries|Where-Object{$_.collect -eq $true})
+ if($collect.Count -ne 11){Fail "Expected 11 collect=true destinations; found $($collect.Count)."}
+ $short=@($collect|Where-Object{$_.tripBand -eq 'short'});$medium=@($collect|Where-Object{$_.tripBand -eq 'medium'});$long=@($collect|Where-Object{$_.tripBand -eq 'long'})
+ if($short.Count -ne 3 -or $medium.Count -ne 4 -or $long.Count -ne 4){Fail "Trip subdivisions must remain 3 short / 4 medium / 4 long; found $($short.Count)/$($medium.Count)/$($long.Count)."}
+}
+
+if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Unified opportunity filter/header validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
+Write-Host 'Unified trip/country/category/item filter panel and compact image-icon header validation passed.' -ForegroundColor Green
+Write-Host 'Legacy main filter meters are retired, Ignore List remains separate, and HeaderLayout can only shift the existing card stack upward.' -ForegroundColor Green
+exit 0
+){Fail 'Gross sort surface must display MAKE for the after-tax net-profit sort.'}
  foreach($section in @('MeterFilterIcon','MeterSettingsIcon')) {
   $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
   if($body -notmatch '(?im)^Meter=Image\s*$' -or $body -notmatch '(?im)^W=24\s*$' -or $body -notmatch '(?im)^H=24\s*$'){Fail "$section must remain a compact 24x24 image meter."}
