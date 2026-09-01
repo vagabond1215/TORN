@@ -423,7 +423,9 @@ function Write-OpportunityProjection {
         foreach ($suffix in @(
             'Key','RankText','OptimalText','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
             'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip',
-            'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds'
+            'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds',
+            'ForecastMode','RestockEstimateAt','RestockAverageDelaySeconds','RestockEarliestDelaySeconds','RestockLatestDelaySeconds',
+            'RestockLifetimeShortestDelaySeconds','RestockLifetimeLongestDelaySeconds','RestockSampleCount'
         )) {
             $State['Opportunity'+$index+$suffix] = ''
         }
@@ -466,6 +468,14 @@ function Write-OpportunityProjection {
         $State['Opportunity'+$n+'WindowStartAt'] = [long]$row.windowStartAt
         $State['Opportunity'+$n+'ProbabilityValue'] = if ($probabilityKnown) { ('{0:R}' -f [double]$row.probability) } else { '-1' }
         $State['Opportunity'+$n+'ElapsedSeconds'] = [long]$row.elapsedSeconds
+        $State['Opportunity'+$n+'ForecastMode'] = if ($row.PSObject.Properties['forecastMode']) { [string]$row.forecastMode } else { '' }
+        $State['Opportunity'+$n+'RestockEstimateAt'] = if ($row.PSObject.Properties['restockEstimateAt']) { [long]$row.restockEstimateAt } else { 0 }
+        $State['Opportunity'+$n+'RestockAverageDelaySeconds'] = if ($row.PSObject.Properties['restockAverageDelaySeconds']) { [long]$row.restockAverageDelaySeconds } else { 0 }
+        $State['Opportunity'+$n+'RestockEarliestDelaySeconds'] = if ($row.PSObject.Properties['restockEarliestDelaySeconds']) { [long]$row.restockEarliestDelaySeconds } else { 0 }
+        $State['Opportunity'+$n+'RestockLatestDelaySeconds'] = if ($row.PSObject.Properties['restockLatestDelaySeconds']) { [long]$row.restockLatestDelaySeconds } else { 0 }
+        $State['Opportunity'+$n+'RestockLifetimeShortestDelaySeconds'] = if ($row.PSObject.Properties['restockLifetimeShortestDelaySeconds']) { [long]$row.restockLifetimeShortestDelaySeconds } else { 0 }
+        $State['Opportunity'+$n+'RestockLifetimeLongestDelaySeconds'] = if ($row.PSObject.Properties['restockLifetimeLongestDelaySeconds']) { [long]$row.restockLifetimeLongestDelaySeconds } else { 0 }
+        $State['Opportunity'+$n+'RestockSampleCount'] = if ($row.PSObject.Properties['restockSampleCount']) { [int]$row.restockSampleCount } else { 0 }
     }
 }
 
