@@ -74,7 +74,8 @@ if ($errors.Count -eq 0) {
         '$medianAvailable = Get-StableWindowMedian',
         'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
         "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
-        'MaximumOrdinal = 1','immediately next cycle'
+        'MaximumOrdinal = 1','immediately next cycle',
+        'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock'
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
     }
@@ -84,6 +85,7 @@ if ($errors.Count -eq 0) {
         'bestProbability','Convert-WindowPlanMachineText','Select-WindowPlanGroup','WP2:',
         '$RuntimeCycleFile','$SeedCycleFile','MaximumSamples = 48','$cycleParts','$phaseCode','restockDelaySeconds','availabilitySeconds',
         'MaximumOrdinal = 1',"'sleeping_oos'",'Do not deserialize cycle rows or build WP2 probability geometry',
+        'Get-WindowCycleLineKey','Do not build fallback recurring geometry for live stock',
         'Test-WindowPriceVaries','cycleAnalytics','foreignPrice','currentForeignPrice','lastForeignPrice','priceEvents','PV1#','PV0#'
     )) {
         if (-not $windowPlan.Contains($token)) { Fail "WindowPlan.ps1 missing '$token'." }
