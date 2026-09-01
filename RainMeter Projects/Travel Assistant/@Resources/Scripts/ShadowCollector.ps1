@@ -470,6 +470,70 @@ function Test-ForecastBoundaryQuality {
     return (([string]$Quality).Trim().ToLowerInvariant() -in @('observed','bounded','recovered'))
 }
 
+function Get-CycleLifetimeStats {
+    param([object]$DestState)
+    $stats=Get-DynamicProperty $DestState 'lifetimeStats'
+    if ($null -eq $stats) {
+        $stats=[pscustomobject]@{
+            shortestRestockDelaySeconds=0L
+            shortestRestockSoldOutAt=0L
+            longestRestockDelaySeconds=0L
+            longestRestockSoldOutAt=0L
+            minimumForeignPrice=0L
+            minimumForeignPriceSoldOutAt=0L
+            maximumForeignPrice=0L
+            maximumForeignPriceSoldOutAt=0L
+        }
+        Set-DynamicProperty -Object $DestState -Name 'lifetimeStats' -Value $stats
+    }
+    return $stats
+}
+
+function Update-ActiveCyclePriceExtrema {
+    param([object]$DestState,[object]$Observation)
+    if ($null -eq $DestState -or $null -eq $Observation -or [int]$Observation.stock -le 0) { return }
+    $active=Get-DynamicProperty $DestState 'activeCycle'
+    if ($null -eq $active) { return }
+    $price=[long]$Observation.foreignPrice
+    if ($price -le 0) { return }
+
+    $minimum=[long](Get-DynamicProperty $active 'minimumForeignPrice')
+    $maximum=[long](Get-DynamicProperty $active 'maximumForeignPrice')
+    if ($minimum -le 0 -or $price -lt $minimum) { Set-DynamicProperty -Object $active -Name 'minimumForeignPrice' -Value $price }
+    if ($maximum -le 0 -or $price -gt $maximum) { Set-DynamicProperty -Object $active -Name 'maximumForeignPrice' -Value $price }
+}
+
+function Update-DestinationLifetimeStats {
+    param([object]$DestState,[object]$CompletedCycle)
+    if ($null -eq $DestState -or $null -eq $CompletedCycle) { return }
+    $stats=Get-CycleLifetimeStats -DestState $DestState
+
+    $delay=[long](Get-DynamicProperty $CompletedCycle 'restockDelaySeconds')
+    $delayAnchor=[long](Get-DynamicProperty $CompletedCycle 'previousSoldOutAt')
+    if ($delay -gt 0) {
+        if ([long]$stats.shortestRestockDelaySeconds -le 0 -or $delay -lt [long]$stats.shortestRestockDelaySeconds) {
+            $stats.shortestRestockDelaySeconds=$delay
+            $stats.shortestRestockSoldOutAt=$delayAnchor
+        }
+        if ([long]$stats.longestRestockDelaySeconds -le 0 -or $delay -gt [long]$stats.longestRestockDelaySeconds) {
+            $stats.longestRestockDelaySeconds=$delay
+            $stats.longestRestockSoldOutAt=$delayAnchor
+        }
+    }
+
+    $soldOutAt=[long](Get-DynamicProperty $CompletedCycle 'soldOutAt')
+    $minimumPrice=[long](Get-DynamicProperty $CompletedCycle 'minimumForeignPrice')
+    $maximumPrice=[long](Get-DynamicProperty $CompletedCycle 'maximumForeignPrice')
+    if ($minimumPrice -gt 0 -and ([long]$stats.minimumForeignPrice -le 0 -or $minimumPrice -lt [long]$stats.minimumForeignPrice)) {
+        $stats.minimumForeignPrice=$minimumPrice
+        $stats.minimumForeignPriceSoldOutAt=$soldOutAt
+    }
+    if ($maximumPrice -gt 0 -and ([long]$stats.maximumForeignPrice -le 0 -or $maximumPrice -gt [long]$stats.maximumForeignPrice)) {
+        $stats.maximumForeignPrice=$maximumPrice
+        $stats.maximumForeignPriceSoldOutAt=$soldOutAt
+    }
+}
+
 function Update-CycleState {
     param([object]$DestState, [object]$Observation, [object]$BoundaryPolicy)
     $previousStock = [int]$DestState.lastStock
@@ -505,6 +569,8 @@ function Update-CycleState {
                 restockGapSeconds = $gapSeconds
                 restockQuantity = $currentStock
                 foreignPrice = [long]$Observation.foreignPrice
+                minimumForeignPrice = [long]$Observation.foreignPrice
+                maximumForeignPrice = [long]$Observation.foreignPrice
                 source = [string]$Observation.source
             }
             if ($restockKnown) {
@@ -548,6 +614,8 @@ function Update-CycleState {
                     country = [string]$Observation.country
                     itemId = [int]$Observation.itemId
                     foreignPrice = [long]$DestState.activeCycle.foreignPrice
+                    minimumForeignPrice = $(if ([long](Get-DynamicProperty $DestState.activeCycle 'minimumForeignPrice') -gt 0) { [long](Get-DynamicProperty $DestState.activeCycle 'minimumForeignPrice') } else { [long]$DestState.activeCycle.foreignPrice })
+                    maximumForeignPrice = $(if ([long](Get-DynamicProperty $DestState.activeCycle 'maximumForeignPrice') -gt 0) { [long](Get-DynamicProperty $DestState.activeCycle 'maximumForeignPrice') } else { [long]$DestState.activeCycle.foreignPrice })
                     restockAt = $restockAt
                     restockLowerBoundAt = $restockLower
                     restockUpperBoundAt = $restockUpper
@@ -723,6 +791,7 @@ try {
                 $boundaryPolicy = Get-CycleBoundaryPolicy -Cycles $marketCycles -ExpectedPollIntervalSeconds $MinimumPollIntervalSeconds
                 Set-DynamicProperty -Object $destState -Name 'boundaryPolicy' -Value $boundaryPolicy
             }
+            Update-ActiveCyclePriceExtrema -DestState $destState -Observation $observation
             if (-not (Test-ObservationChanged -DestState $destState -Observation $observation)) {
                 [void](Invalidate-PhaseAnchorForGap -DestState $destState -Observation $observation -BoundaryPolicy $boundaryPolicy)
                 $destState.lastForeignPrice = [long]$observation.foreignPrice
@@ -746,6 +815,7 @@ try {
             $observationsWritten++
             $completed = Update-CycleState -DestState $destState -Observation $observation -BoundaryPolicy $boundaryPolicy
             if ($null -ne $completed) {
+                Update-DestinationLifetimeStats -DestState $destState -CompletedCycle $completed
                 Append-JsonLine -Path $CycleFile -Value $completed -FallbackPath $PendingCycleFile
                 $cyclesCompleted++
             }
