@@ -17,11 +17,14 @@ $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
 $SettingsFile = Join-Path $ConfigDir 'settings.example.json'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared graph history reads.' }
+. $AtomicFileScript
 
 function Read-InlineJson {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    $raw = Read-TravelAssistantSharedText -Path $Path
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
     return ($raw | ConvertFrom-Json)
 }
@@ -53,25 +56,31 @@ function Read-MarketHistory {
     if (-not (Test-Path -LiteralPath $Path)) { return $rows }
     $countryNeedle = '"country":"' + $Country + '"'
     $itemPattern = '"itemId"\s*:\s*' + [regex]::Escape([string]$ItemId) + '(?=\s*[,}])'
-    foreach ($line in [System.IO.File]::ReadLines($Path)) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        if ($line.IndexOf($countryNeedle,[System.StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
-        if ($line -notmatch $itemPattern) { continue }
-        try {
-            $row = $line | ConvertFrom-Json
-            $timestamp = [long](Get-InlineProperty $row 'timestamp')
-            if ($timestamp -le 0) { continue }
-            $source = [string](Get-InlineProperty $row 'source')
-            # Older migration builds wrote current stock backward through time as
-            # history_bootstrap/history_repair_baseline. Those are not observations
-            # and must never be rendered as historical truth.
-            if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
-            $rows += [pscustomobject]@{
-                timestamp = $timestamp
-                stock = [long](Get-InlineProperty $row 'stock')
-                source = $source
-            }
-        } catch { }
+    $reader = $null
+    try {
+        $reader = Open-TravelAssistantSharedTextReader -Path $Path
+        while (($line = $reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            if ($line.IndexOf($countryNeedle,[System.StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+            if ($line -notmatch $itemPattern) { continue }
+            try {
+                $row = $line | ConvertFrom-Json
+                $timestamp = [long](Get-InlineProperty $row 'timestamp')
+                if ($timestamp -le 0) { continue }
+                $source = [string](Get-InlineProperty $row 'source')
+                # Older migration builds wrote current stock backward through time as
+                # history_bootstrap/history_repair_baseline. Those are not observations
+                # and must never be rendered as historical truth.
+                if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
+                $rows += [pscustomobject]@{
+                    timestamp = $timestamp
+                    stock = [long](Get-InlineProperty $row 'stock')
+                    source = $source
+                }
+            } catch { }
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
     }
     return $rows
 }
