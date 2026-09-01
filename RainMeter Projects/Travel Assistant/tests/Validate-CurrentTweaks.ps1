@@ -106,52 +106,25 @@ if ($errors.Count -eq 0) {
         if (-not $asset.Contains($token)) { Fail "EnsureUiAssets.ps1 missing '$token'." }
     }
 
-    # Keep this validator source ASCII-only for Windows PowerShell 5.1.
+    # CardTweaks is now a defensive compatibility pass only. It must never
+    # compete with StateReader geometry or CardPresenter text ownership.
     foreach ($token in @(
-        'stripDebugQuantity',
-        "local header=cost..'   MV:'..mv..' | '..formatMoney(unitProfit)",
-        "setOption(prefix..'Gross','X',235)",
-        "setOption(prefix..'Gross','StringAlign','Left')",
-        'local function costColor(row)',
-        'redThreshold=mv/1.05',
-        'minObservedPrice',
-        "return '255,255,255,255'",
-        "setOption(prefix..'Gross','InlineSetting2','Color | 86,190,116,255')",
-        'local function relevantArrivalText',
-        'TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt',
-        'local function medianAvailableSeconds',
-        "'Estimated Arrival in '",
-        "'Estimated In Stock Duration '",
-        "'Early Restock: '",
-        "'Late Restock: '",
-        "'Guaranteed Window: '",
-        "setOption(prefix..'Window','Text','')",
-        "setOption(prefix..'Window','W',1)",
-        "setOption(prefix..'Leave','X',78)",
-        "if show then SKIN:Bang('!ShowMeter',info) else SKIN:Bang('!HideMeter',info) end",
-        "setOption(info,'ToolTipTitle','Window estimate')",
-        "setOption(info,'ToolTipText',text)",
-        "setOption(leave,'ToolTipText',text)",
-        "meterOption(leave,'Text'):match('^SAFE')",
-        "setOption(graph,'W',528)",
-        "setOption(graph,'H',125)",
-        "setOption(card,'H',183)",
-        "panel+25"
+        'local function hideRetiredCardMeters()',
+        'StateReader owns geometry; CardPresenter owns text.',
+        "SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Info')",
+        "SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Window')",
+        "SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Chance')",
+        'function Initialize()',
+        'function Update()'
     )) {
-        if (-not $tweaks.Contains($token)) { Fail "CardTweaks.lua missing '$token'." }
+        if (-not $tweaks.Contains($token)) { Fail "CardTweaks.lua missing compact-card compatibility token '$token'." }
     }
-    foreach ($forbidden in @(
-        "setOption(info,'ToolTipHidden'",
-        "setOption(leave,'ToolTipHidden'",
-        "setOption(info,'ImageAlpha',show and 255 or 0)",
-        "setOption(prefix..'Window','W',0)"
+    foreach ($retired in @(
+        'applyHeader','applySecondLine','applyExpandedGraphGeometry','applyGraphSize',
+        'configureInfo','costColor','shiftMeterY','panel+25',"setOption(card,'H',183)"
     )) {
-        if ($tweaks.Contains($forbidden)) { Fail "CardTweaks.lua restores target-host unsafe visibility bang '$forbidden'." }
+        if ($tweaks.Contains($retired)) { Fail "CardTweaks.lua retains retired layout/header owner '$retired'." }
     }
-    if ($tweaks.Contains("title=title..'  '..tostring(quantity)..' qty'")) { Fail 'CardTweaks.lua must not print quantity in the title.' }
-    if ($tweaks.Contains("local header='Cost '")) { Fail 'CardTweaks.lua must not print the Cost label.' }
-    if ($tweaks.Contains('/ea x')) { Fail 'CardTweaks.lua must not restore the retired /ea x qty = header.' }
-    if ($tweaks.Contains('Safe formula:') -or $tweaks.Contains('Best formula:')) { Fail 'Final card tooltip layer must not expose implementation formulas.' }
     if ($tweaks -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'CardTweaks.lua must remain local presentation only.' }
 
     foreach ($index in 1..8) {
@@ -177,6 +150,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Stable-window refiner, tooltip-only travel timing, card economics colors, bang-safe image info anchor, and expanded graph validation passed.' -ForegroundColor Green
+Write-Host 'Stable-window refiner, single-owner card geometry, defensive legacy visibility, and expanded graph validation passed.' -ForegroundColor Green
 Write-Host 'Expected live result: no flight duration on the card; hover shows pertinent arrival time, median in-stock duration, early/late restock, and guaranteed overlap; economics colors and stable window timing remain intact.'
 exit 0
