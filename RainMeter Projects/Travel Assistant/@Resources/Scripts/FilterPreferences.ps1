@@ -92,7 +92,7 @@ function Get-FilterVisibleCategories {
 
 function New-DefaultUiPreferences {
     return [pscustomobject]@{
-        schemaVersion = 7
+        schemaVersion = 8
         travelMode = 'airstrip'
         pinnedMarket = ''
         itemFilterAll = $true
@@ -105,12 +105,21 @@ function New-DefaultUiPreferences {
         showProfitableOnly = $false
         ignoredItemIds = [int[]]@()
         use95PercentMarketValue = $false
+        itemMarketFeePercent = 0
         energyWastePolicy = 'allowed'
         maxEnergyLoss = 0
         nerveWastePolicy = 'allowed'
         maxNerveLoss = 0
         sortMode = 'upcoming'
     }
+}
+
+function Normalize-ItemMarketFeePercent {
+    param([object]$Value)
+    $percent=0.0
+    if (-not [double]::TryParse([string]$Value,[ref]$percent)) { return 0 }
+    if ([Math]::Abs($percent-5.0) -lt 0.001) { return 5 }
+    return 0
 }
 
 function Normalize-WastePolicy {
@@ -158,7 +167,7 @@ function Normalize-UiPreferences {
     foreach ($property in @($defaults.PSObject.Properties)) {
         if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
-    Set-FilterProperty $Preferences 'schemaVersion' 7
+    Set-FilterProperty $Preferences 'schemaVersion' 8
 
     $mode = [string]$Preferences.travelMode
     if ($mode -notin @('standard','airstrip','wlt','business')) { Set-FilterProperty $Preferences 'travelMode' 'airstrip' }
@@ -214,6 +223,7 @@ function Normalize-UiPreferences {
     Set-FilterProperty $Preferences 'categoryFilterAll' ([bool]$Preferences.categoryFilterAll)
     Set-FilterProperty $Preferences 'showProfitableOnly' ([bool]$Preferences.showProfitableOnly)
     Set-FilterProperty $Preferences 'use95PercentMarketValue' ([bool]$Preferences.use95PercentMarketValue)
+    Set-FilterProperty $Preferences 'itemMarketFeePercent' (Normalize-ItemMarketFeePercent $Preferences.itemMarketFeePercent)
     Set-FilterProperty $Preferences 'energyWastePolicy' (Normalize-WastePolicy $Preferences.energyWastePolicy)
     Set-FilterProperty $Preferences 'nerveWastePolicy' (Normalize-WastePolicy $Preferences.nerveWastePolicy)
     Set-FilterProperty $Preferences 'maxEnergyLoss' ([Math]::Max(0, [Math]::Min(1000, [int]$Preferences.maxEnergyLoss)))
@@ -270,7 +280,7 @@ function Reset-UiFilterPreferences {
     if ($availableCountries.Count -eq 0) { throw 'Cannot reset filters because no collected countries are available.' }
     if ($visibleItems.Count -eq 0) { throw 'Cannot reset filters because no visible items are available.' }
 
-    Set-FilterProperty $normalized 'schemaVersion' 7
+    Set-FilterProperty $normalized 'schemaVersion' 8
     Set-FilterProperty $normalized 'itemFilterAll' $true
     Set-FilterProperty $normalized 'selectedItemIds' ([int[]]@($visibleItems))
     Set-FilterProperty $normalized 'selectedTripBands' ([string[]]@('short','medium','long'))
