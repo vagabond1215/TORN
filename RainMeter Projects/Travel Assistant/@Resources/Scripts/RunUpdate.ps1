@@ -1,6 +1,8 @@
 param(
     [ValidateSet('Update', 'CycleTravelMode')]
-    [string]$Action = 'Update'
+    [string]$Action = 'Update',
+    [ValidateRange(0,300)]
+    [int]$MutexWaitSeconds = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -292,14 +294,20 @@ function Invoke-HistoryMaintenance {
 }
 
 try {
+    $mutexWaitMilliseconds = [int]([Math]::Min(300000,[Math]::Max(0,$MutexWaitSeconds * 1000)))
     try {
-        $acquired = $mutex.WaitOne(0)
+        $acquired = $mutex.WaitOne($mutexWaitMilliseconds)
     } catch [System.Threading.AbandonedMutexException] {
         # WaitOne transfers ownership to this thread before throwing for an abandoned mutex.
         # Treat it as acquired so a crashed predecessor cannot poison subsequent updates.
         $acquired = $true
     }
-    if (-not $acquired) { exit 0 }
+    if (-not $acquired) {
+        if ($MutexWaitSeconds -gt 0) {
+            throw ('Timed out waiting {0}s for the Travel Assistant updater mutex.' -f $MutexWaitSeconds)
+        }
+        exit 0
+    }
     $UpdatePerformanceActive = $true
     $UpdatePerformanceOutcome = 'running'
 
