@@ -49,7 +49,7 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Name','Text',itemName)","setOption(prefix..'Name','ToolTipText','Item name')",
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
         "setOption(prefix..'Price','Text','| '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))",
-        "state[projectedPrefix..'PriceColor']","setOption(prefix..'Price','InlinePattern','^\\\\|\\\\s+-?\\\\$[0-9,]+')","setOption(prefix..'Price','InlineSetting','Color | '..priceColor)",
+        "state[projectedPrefix..'PriceColor']","setOption(prefix..'Price','InlinePattern','^\\|\\s+-?\\$[0-9,]+')","setOption(prefix..'Price','InlineSetting','Color | '..priceColor)",
         "'MV:'..formatMoney(mv)","'  Each:'..formatMoney(each)","'  Gross:'..formatMoney(grossSale)",
         "'  Per Hour:'..formatMoney(grossProfitHour)","'  Tax:'..formatMoney(marketTax)",
         "setOption(prefix..'Window','Text','')","setOption(prefix..'Chance','Text','')",
