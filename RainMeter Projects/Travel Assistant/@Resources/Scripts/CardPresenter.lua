@@ -295,6 +295,15 @@ local function formatNextCycleTooltip(group,bestArrival,bestChance,flightSeconds
         'Safe Departure Window: '..safe
 end
 
+local function formatCollectingTooltip(reason)
+    local nl='#CRLF#'
+    local detail=trim(reason)
+    if detail=='' then detail='a required stock-cycle boundary was not observed or recovered' end
+    return 'Collecting Data'..nl..
+        'Reason: '..detail..nl..
+        'Stale/frozen intervals are excluded from forecast timing.'..nl..
+        'See Weav3r for the current travel-stock snapshot.'
+end
 local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,now)
     if plan==nil or #plan.groups==0 then return 'WAIT DATA','',nil end
     local group=groupByOrdinal(plan,nextOrdinal)
@@ -352,7 +361,13 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         local deadlineAt=statePrefix~='' and number(state[statePrefix..'CurrentCycleLeaveDeadlineAt']) or 0
         local safetySeconds=statePrefix~='' and number(state[statePrefix..'CurrentCycleSafetyMarginSeconds']) or 0
         local projectionMode=statePrefix~='' and trim(state[statePrefix..'LiveCycleProjectionMode']) or ''
+        local dataQuality=statePrefix~='' and trim(state[statePrefix..'WindowDataQuality']):lower() or ''
+        local dataQualityReason=statePrefix~='' and trim(state[statePrefix..'WindowDataQualityReason']) or ''
         local nextOrdinal=statePrefix~='' and math.floor(number(state[statePrefix..'NextCycleOrdinal'])) or ((currentStock>0) and 1 or 0)
+
+        if dataQuality=='collecting' then
+            return 'Collecting Data: See Weav3r','',formatCollectingTooltip(dataQualityReason)
+        end
 
         if currentStock>0 and reachable and selloutAt>now and deadlineAt>=now then
             local action=(deadlineAt-now)<=60 and 'Leave Now to hit.' or ('Leave Before '..formatDuration(deadlineAt-now)..' to hit.')
