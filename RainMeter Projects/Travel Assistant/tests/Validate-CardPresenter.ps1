@@ -46,6 +46,7 @@ if ($errors.Count -eq 0) {
         'statusText(fallbackWindow,fallbackLeave)',
         'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
         'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','NEXT RESTOCK WITHIN FLIGHT',
+        "'Collecting Data: See Weav3r'",
         'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'"
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
