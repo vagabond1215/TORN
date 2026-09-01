@@ -4,6 +4,7 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $CollectorPath = Join-Path $ProjectRoot '@Resources\Scripts\ShadowCollector.ps1'
 . (Join-Path $ProjectRoot '@Resources\Scripts\CycleForecastFilter.ps1')
+. (Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1')
 
 function Assert-Equal {
     param([string]$Name, $Actual, $Expected)
