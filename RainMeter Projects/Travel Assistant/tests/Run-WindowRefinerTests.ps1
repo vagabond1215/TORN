@@ -118,6 +118,14 @@ Assert-Equal ([long]$projection.activeSelloutEstimateAt) 11334L 'Live sellout sh
 Assert-Equal ([long]$projection.medianRestockDelaySeconds) 7200L 'Next restock should use the cleaned median OOS delay.'
 Assert-Equal ([long]$projection.nextRestockEstimateAt) 18534L 'Restock projection must begin after the projected sellout.'
 
+# Positive stock must still get a current-cycle sellout estimate when there is not
+# enough quantity-change evidence for live depletion. This is the Whale Meat case:
+# current stock exists and completed cycles provide a stable in-stock duration.
+$fallbackState=[pscustomobject]@{lastSellOutAt=5000L;activeCycle=[pscustomobject]@{restockAt=6000L;restockQuantity=600L}}
+$fallbackProjection=Get-LiveCycleProjection -CurrentStock 600L -SourceTimestamp 6500L -DestinationState $fallbackState -Cycles $projectionCycles -NowEpoch 6500L
+Assert-Equal ([string]$fallbackProjection.mode) 'historical-duration' 'Positive stock without depletion-rate evidence should fall back to cleaned historical availability duration.'
+Assert-Equal ([long]$fallbackProjection.activeSelloutEstimateAt) 7300L 'Historical current-cycle sellout should equal active restock plus median 1300-second availability.'
+
 # A live current cycle that survives travel plus purchase buffer must be used before
 # any later recurring Safe/Best window.
 $currentDeparture=Get-CurrentCycleDeparturePlan -CurrentStock 600L -ActiveSelloutEstimateAt 20000L -FlightSeconds 7200L -EarliestDepartureAt 10000L -NowEpoch 10000L -SafetyMarginFraction 0.05
