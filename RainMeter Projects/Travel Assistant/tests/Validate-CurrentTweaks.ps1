@@ -66,6 +66,7 @@ if ($errors.Count -eq 0) {
         'Get-StableWindowMedian','Get-StableWindowUsableCycles','Get-StableRecurringScenarioModel',
         '$medianPeriod','(($ordinal-1) * $medianPeriod) + $period','($ordinal * $medianPeriod) + $delay',
         'Collector outages can turn one apparent out-of-stock span','Select-StableWindowPlanGroup',
+        'Get-CurrentCycleDeparturePlan','SafetyMarginFraction = 0.05','NextCycleOrdinal',
         "'PriceVaries'","'MinObservedPrice'","'MaxObservedPrice'"
     )) {
         if (-not $refiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing '$token'." }
@@ -82,11 +83,13 @@ if ($errors.Count -eq 0) {
     $travelAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $TravelContext',[System.StringComparison]::Ordinal)
     $capacityAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $CurrentCapacityRefresh',[System.StringComparison]::Ordinal)
     $anchorAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $CycleAnchorReconciler',[System.StringComparison]::Ordinal)
-    $optimalAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $OptimalRoute',[System.StringComparison]::Ordinal)
     $opportunityAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $OpportunityState',[System.StringComparison]::Ordinal)
     $windowAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $WindowPlan',[System.StringComparison]::Ordinal)
-    if (@($travelAt,$capacityAt,$anchorAt,$optimalAt,$opportunityAt,$windowAt) -contains -1 -or -not ($travelAt -lt $capacityAt -and $capacityAt -lt $anchorAt -and $anchorAt -lt $optimalAt -and $optimalAt -lt $opportunityAt -and $opportunityAt -lt $windowAt)) {
-        Fail 'Runtime order must be TravelContext -> current capacity -> observation anchor -> optimizer -> opportunity -> window plan.'
+    if (@($travelAt,$capacityAt,$anchorAt,$opportunityAt,$windowAt) -contains -1 -or -not ($travelAt -lt $capacityAt -and $capacityAt -lt $anchorAt -and $anchorAt -lt $opportunityAt -and $opportunityAt -lt $windowAt)) {
+        Fail 'Runtime order must be TravelContext -> current capacity -> observation anchor -> opportunity -> window plan.'
+    }
+    if ($runUpdate.Contains('Invoke-FailSoftScript -Path $OptimalRoute')) {
+        Fail 'Retired standalone optimizer must not return to the one-minute updater path.'
     }
 
     foreach ($token in @('$width = 528','$height = 125','$plotRight = 522.0','$plotBottom = 98.0')) {
