@@ -106,41 +106,28 @@ function Complete-UpdateStageTimer {
 function Write-UpdatePerformanceRecord {
     param([Parameter(Mandatory = $true)][string]$Line)
 
-    $directory = Split-Path $UpdatePerformanceFile -Parent
-    New-Item -ItemType Directory -Force -Path $directory | Out-Null
-    $mutex = New-Object System.Threading.Mutex($false,(Get-TravelAssistantAtomicMutexName -Path $UpdatePerformanceFile))
-    $acquired = $false
-    try {
-        try { $acquired = $mutex.WaitOne(5000) }
-        catch [System.Threading.AbandonedMutexException] { $acquired = $true }
-        if (-not $acquired) { return }
-
-        $shareValue = ([int][System.IO.FileShare]::ReadWrite -bor [int][System.IO.FileShare]::Delete)
-        $share = [System.IO.FileShare]$shareValue
-        $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($Line + [Environment]::NewLine)
-        for ($attempt=1; $attempt -le 10; $attempt++) {
-            $stream = $null
-            try {
-                $stream = New-Object System.IO.FileStream(
-                    $UpdatePerformanceFile,
-                    [System.IO.FileMode]::Append,
-                    [System.IO.FileAccess]::Write,
-                    $share
-                )
-                $stream.Write($bytes,0,$bytes.Length)
-                $stream.Flush($true)
-                return
-            } catch {
-                if ($attempt -ge 10 -or -not (Test-TravelAssistantAtomicRetryableException -Exception $_.Exception)) { return }
-                Start-Sleep -Milliseconds (25 * [Math]::Min($attempt,5))
-            } finally {
-                if ($null -ne $stream) { $stream.Dispose() }
-            }
-        }
-    } finally {
-        if ($acquired) { try { $mutex.ReleaseMutex() } catch { } }
-        $mutex.Dispose()
+    # RunUpdate already owns the single updater mutex, so performance telemetry has
+    # exactly one writer. Reuse the proven atomic publication primitive instead of a
+    # second bespoke append/FileStream path. Keep a bounded history for profiling.
+    $existing = ''
+    if (Test-Path -LiteralPath $UpdatePerformanceFile) {
+        try { $existing = Read-TravelAssistantSharedText -Path $UpdatePerformanceFile }
+        catch { $existing = '' }
     }
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    if (-not [string]::IsNullOrWhiteSpace($existing)) {
+        foreach ($existingLine in @([System.Text.RegularExpressions.Regex]::Split($existing.TrimEnd(),"\r\n|\n|\r"))) {
+            if (-not [string]::IsNullOrWhiteSpace($existingLine)) { [void]$lines.Add([string]$existingLine) }
+        }
+    }
+    [void]$lines.Add($Line)
+
+    # 1,000 one-minute samples is more than 16 hours of history and keeps telemetry
+    # small enough that atomic rewrite cost remains negligible.
+    $retained = @($lines | Select-Object -Last 1000)
+    $text = (($retained -join [Environment]::NewLine) + [Environment]::NewLine)
+    Write-TravelAssistantAtomicText -Path $UpdatePerformanceFile -Text $text
 }
 
 function Write-UpdatePerformanceSummary {
