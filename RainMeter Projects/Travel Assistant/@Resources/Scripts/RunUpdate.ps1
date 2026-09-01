@@ -17,7 +17,6 @@ $EngineStateSchema = Join-Path $PSScriptRoot 'EnsureEngineStateSchema.ps1'
 $TravelContext = Join-Path $PSScriptRoot 'TravelContext.ps1'
 $CurrentCapacityRefresh = Join-Path $PSScriptRoot 'CurrentCapacityRefresh.ps1'
 $CycleAnchorReconciler = Join-Path $PSScriptRoot 'CycleAnchorReconciler.ps1'
-$OptimalRoute = Join-Path $PSScriptRoot 'OptimalRoute.ps1'
 $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
 $WindowPlan = Join-Path $PSScriptRoot 'WindowPlan.ps1'
 $PriceVariationRefiner = Join-Path $PSScriptRoot 'PriceVariationRefiner.ps1'
@@ -41,7 +40,6 @@ $EngineStateSchemaErrorFile = Join-Path $RuntimeDir 'engine-state-schema-error.t
 $TravelContextErrorFile = Join-Path $RuntimeDir 'travel-context-error.txt'
 $CurrentCapacityRefreshErrorFile = Join-Path $RuntimeDir 'current-capacity-refresh-error.txt'
 $CycleAnchorReconcilerErrorFile = Join-Path $RuntimeDir 'cycle-anchor-reconciler-error.txt'
-$OptimalRouteErrorFile = Join-Path $RuntimeDir 'optimal-route-error.txt'
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $WindowPlanErrorFile = Join-Path $RuntimeDir 'window-plan-error.txt'
 $PriceVariationRefinerErrorFile = Join-Path $RuntimeDir 'price-variation-refiner-error.txt'
@@ -394,7 +392,6 @@ try {
     Invoke-FailSoftScript -Path $CycleAnchorReconciler -ErrorPath $CycleAnchorReconcilerErrorFile
 
     # Keep the route optimizer as a background decision/pricing-priority model.
-    Invoke-FailSoftScript -Path $OptimalRoute -ErrorPath $OptimalRouteErrorFile
 
     # Primary presentation is the sortable opportunity surface.
     Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
