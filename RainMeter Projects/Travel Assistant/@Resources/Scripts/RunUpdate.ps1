@@ -53,6 +53,12 @@ $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $PendingUiGeneration = $null
 $mutex = New-Object System.Threading.Mutex($false, 'Local\TornTravelAssistantUpdater')
 $acquired = $false
+$UpdatePerformanceRows = New-Object System.Collections.Generic.List[object]
+$UpdatePerformanceProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+$UpdatePerformanceWall = [System.Diagnostics.Stopwatch]::StartNew()
+$UpdatePerformanceCpuStart = [double]$UpdatePerformanceProcess.TotalProcessorTime.TotalMilliseconds
+$UpdatePerformanceActive = $false
+$UpdatePerformanceOutcome = 'not-started'
 
 if (Test-Path -LiteralPath $RuntimeLogScript) { . $RuntimeLogScript }
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for safe Travel Assistant state publication.' }
@@ -62,6 +68,58 @@ function Get-UpdateFailureComponent {
     param([string]$Path)
     $name = [System.IO.Path]::GetFileNameWithoutExtension([string]$Path)
     return ($name -replace '-error$','')
+}
+
+function Get-UpdateCpuMilliseconds {
+    try {
+        $script:UpdatePerformanceProcess.Refresh()
+        return [double]$script:UpdatePerformanceProcess.TotalProcessorTime.TotalMilliseconds
+    } catch { return 0.0 }
+}
+
+function New-UpdateStageTimer {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    return [pscustomobject]@{
+        Name = $Name
+        Wall = [System.Diagnostics.Stopwatch]::StartNew()
+        CpuStart = Get-UpdateCpuMilliseconds
+    }
+}
+
+function Complete-UpdateStageTimer {
+    param([object]$Timer)
+    if ($null -eq $Timer) { return }
+    try {
+        $Timer.Wall.Stop()
+        $cpuEnd = Get-UpdateCpuMilliseconds
+        [void]$script:UpdatePerformanceRows.Add([pscustomobject]@{
+            Name = [string]$Timer.Name
+            WallMs = [double]$Timer.Wall.Elapsed.TotalMilliseconds
+            CpuMs = [Math]::Max(0.0, [double]$cpuEnd - [double]$Timer.CpuStart)
+        })
+    } catch { }
+}
+
+function Write-UpdatePerformanceSummary {
+    if (-not $script:UpdatePerformanceActive) { return }
+    if (-not (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue)) { return }
+    try {
+        $script:UpdatePerformanceWall.Stop()
+        $totalCpu = [Math]::Max(0.0, (Get-UpdateCpuMilliseconds) - [double]$script:UpdatePerformanceCpuStart)
+        $stageParts = New-Object System.Collections.Generic.List[string]
+        foreach ($row in @($script:UpdatePerformanceRows)) {
+            [void]$stageParts.Add(('{0}:{1}cpu/{2}wall' -f
+                [string]$row.Name,
+                [long][Math]::Round([double]$row.CpuMs),
+                [long][Math]::Round([double]$row.WallMs)))
+        }
+        $message = ('outcome={0} total_cpu_ms={1} total_wall_ms={2} stages={3}' -f
+            [string]$script:UpdatePerformanceOutcome,
+            [long][Math]::Round($totalCpu),
+            [long][Math]::Round([double]$script:UpdatePerformanceWall.Elapsed.TotalMilliseconds),
+            ($stageParts -join ','))
+        Write-TravelAssistantLog -Level INFO -Component 'performance' -Message $message
+    } catch { }
 }
 
 function Invoke-TornJsonWithCurl {
@@ -212,22 +270,25 @@ function Invoke-FailSoftScript {
         [bool]$ClearErrorOnSuccess = $true
     )
     if (-not (Test-Path -LiteralPath $Path)) { return }
+    $timer = New-UpdateStageTimer -Name (Get-UpdateFailureComponent $ErrorPath)
     try {
         & $Path
         if ($ClearErrorOnSuccess) { Clear-CompactFailure -Path $ErrorPath }
         else { Mirror-ChildOwnedFailure -ErrorPath $ErrorPath }
     } catch { Write-CompactFailure -Path $ErrorPath -Message $_.Exception.ToString() }
+    finally { Complete-UpdateStageTimer -Timer $timer }
 }
 
 function Invoke-HistoryMaintenance {
     param([string]$Phase)
     if (-not (Test-Path -LiteralPath $ObservationHistory)) { return }
+    $timer = New-UpdateStageTimer -Name ('history-' + ([string]$Phase).ToLowerInvariant())
     try {
         & $ObservationHistory -Phase $Phase
         Clear-CompactFailure -Path $HistoryErrorFile
     } catch {
         Write-CompactFailure -Path $HistoryErrorFile -Message $_.Exception.ToString()
-    }
+    } finally { Complete-UpdateStageTimer -Timer $timer }
 }
 
 try {
@@ -239,6 +300,8 @@ try {
         $acquired = $true
     }
     if (-not $acquired) { exit 0 }
+    $UpdatePerformanceActive = $true
+    $UpdatePerformanceOutcome = 'running'
 
     # Preserve one predecessor per market before any legacy maintenance can prune
     # the shared high-resolution evidence store.
@@ -261,9 +324,9 @@ try {
         Invoke-FailSoftScript -Path $ShadowCollector -ErrorPath $ShadowErrorFile -ClearErrorOnSuccess $false
     }
 
-    # Bootstrap truthful current snapshots for active markets whose older baseline
-    # was already lost by previous retention pruning. Deleted history is not invented.
-    Invoke-HistoryMaintenance -Phase 'PostUpdate'
+    # PreUpdate already performs the one-time history cleanup and the hourly prune.
+    # The legacy PostUpdate path now returns without additional work, so avoid a
+    # second script launch and state/settings parse on every one-minute heartbeat.
 
     # Canonical catalog maintenance is intentionally NOT part of this heartbeat;
     # LocalCatalog only projects committed/provider metadata already on disk.
@@ -273,8 +336,11 @@ try {
     # UI is temporarily operating from the last known state.
     Invoke-FailSoftScript -Path $EngineStateSchema -ErrorPath $EngineStateSchemaErrorFile
 
-    & $Finalizer
-    if (-not $?) { throw 'FinalizeState returned failure.' }
+    $finalizerTimer = New-UpdateStageTimer -Name 'finalize-state'
+    try {
+        & $Finalizer
+        if (-not $?) { throw 'FinalizeState returned failure.' }
+    } finally { Complete-UpdateStageTimer -Timer $finalizerTimer }
 
     # TravelContext owns its diagnostic file because it catches transient API failures
     # internally while preserving the last successful destination/bar context.
@@ -317,20 +383,29 @@ try {
     }
 
     if (Test-Path -LiteralPath $FilterState) {
+        $filterTimer = New-UpdateStageTimer -Name 'filter-state'
         try { & $FilterState; Clear-CompactFailure -Path $FilterStateErrorFile }
         catch { Write-CompactFailure -Path $FilterStateErrorFile -Message $_.Exception.ToString() }
+        finally { Complete-UpdateStageTimer -Timer $filterTimer }
     }
 
     # state.kv is a private build artifact. Only this final publication touches the
     # Rainmeter-consumed UI state. A failed final publish leaves the previous complete
     # UI generation visible rather than exposing a partial/intermediate projection.
-    Publish-UpdateUiState
+    $publishTimer = New-UpdateStageTimer -Name 'publish-ui'
+    try { Publish-UpdateUiState }
+    finally { Complete-UpdateStageTimer -Timer $publishTimer }
 
     # Heartbeat represents successful final UI publication, not merely collection or
     # an intermediate stage. Analytics and resale work below cannot make UI look fresh
     # unless the complete immutable snapshot was successfully selected first.
-    Write-UpdateHeartbeat
-    Remove-OldUiStateGenerations
+    $heartbeatTimer = New-UpdateStageTimer -Name 'publish-heartbeat'
+    try { Write-UpdateHeartbeat }
+    finally { Complete-UpdateStageTimer -Timer $heartbeatTimer }
+
+    $cleanupTimer = New-UpdateStageTimer -Name 'generation-cleanup'
+    try { Remove-OldUiStateGenerations }
+    finally { Complete-UpdateStageTimer -Timer $cleanupTimer }
 
     if ($Action -eq 'Update') {
         Invoke-FailSoftScript -Path $CycleAnalytics -ErrorPath $CycleAnalyticsErrorFile
@@ -341,8 +416,14 @@ try {
 
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
         try {
-            if (Test-Path -LiteralPath $ResalePriority) { & $ResalePriority }
-            & $ResaleQueue
+            if (Test-Path -LiteralPath $ResalePriority) {
+                $resalePriorityTimer = New-UpdateStageTimer -Name 'resale-priority'
+                try { & $ResalePriority }
+                finally { Complete-UpdateStageTimer -Timer $resalePriorityTimer }
+            }
+            $resaleQueueTimer = New-UpdateStageTimer -Name 'resale-queue'
+            try { & $ResaleQueue }
+            finally { Complete-UpdateStageTimer -Timer $resaleQueueTimer }
             if (Test-Path -LiteralPath $ResaleQueueErrorFile) {
                 try {
                     $queueState = Get-Content -LiteralPath (Join-Path $RuntimeDir 'engine-state.json') -Raw | ConvertFrom-Json
@@ -353,13 +434,17 @@ try {
     }
 
     if (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue) { Clear-TravelAssistantLatestError -Component 'run-update' }
+    $UpdatePerformanceOutcome = 'success'
     exit 0
 } catch {
+    $UpdatePerformanceOutcome = 'error'
     if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
         Write-TravelAssistantLog -Level ERROR -Component 'run-update' -Message (Format-TravelAssistantErrorRecord $_)
     }
     throw
 } finally {
+    Write-UpdatePerformanceSummary
+    if ($null -ne $UpdatePerformanceProcess) { try { $UpdatePerformanceProcess.Dispose() } catch { } }
     if ($acquired) { try { $mutex.ReleaseMutex() } catch { } }
     $mutex.Dispose()
 }
