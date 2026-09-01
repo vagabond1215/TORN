@@ -185,13 +185,13 @@ local function formatMoment(at,now)
     return os.date('%H:%M',at)..' ('..relation..')'
 end
 
-local function formatCurrentCycleTooltip(selloutAt,deadlineAt,safetySeconds,flightSeconds,now)
+local function formatCurrentCycleTooltip(selloutAt,deadlineAt,safetySeconds,flightSeconds,basis,now)
     local nl='#CRLF#'
     return 'Current Cycle Sellout: '..formatMoment(selloutAt,now)..nl..
         'Travel Time: '..formatDuration(flightSeconds)..nl..
         '5% Sellout Safety: '..formatDuration(safetySeconds)..nl..
         'Leave Before: '..formatMoment(deadlineAt,now)..nl..
-        'Basis: live depletion of current observed stock'
+        'Basis: '..basis
 end
 local function formatWindowTooltip(group,now)
     if group==nil then return 'Window evidence unavailable' end
@@ -351,11 +351,13 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         local selloutAt=statePrefix~='' and number(state[statePrefix..'ActiveSelloutEstimateAt']) or 0
         local deadlineAt=statePrefix~='' and number(state[statePrefix..'CurrentCycleLeaveDeadlineAt']) or 0
         local safetySeconds=statePrefix~='' and number(state[statePrefix..'CurrentCycleSafetyMarginSeconds']) or 0
+        local projectionMode=statePrefix~='' and trim(state[statePrefix..'LiveCycleProjectionMode']) or ''
         local nextOrdinal=statePrefix~='' and math.floor(number(state[statePrefix..'NextCycleOrdinal'])) or ((currentStock>0) and 1 or 0)
 
         if currentStock>0 and reachable and selloutAt>now and deadlineAt>=now then
             local action=(deadlineAt-now)<=60 and 'Leave Now to hit.' or ('Leave Before '..formatDuration(deadlineAt-now)..' to hit.')
-            return action,'',formatCurrentCycleTooltip(selloutAt,deadlineAt,safetySeconds,flightSeconds,now)
+            local basis=(projectionMode=='historical-duration') and 'active restock + median completed-cycle stock duration' or 'live depletion of current observed stock'
+            return action,'',formatCurrentCycleTooltip(selloutAt,deadlineAt,safetySeconds,flightSeconds,basis,now)
         end
 
         -- Current stock cannot beat the live sellout estimate (or is out of stock).
