@@ -46,6 +46,7 @@ if ($errors.Count -eq 0) {
         'statusText(fallbackWindow,fallbackLeave)',
         'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
         'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','NEXT RESTOCK WITHIN FLIGHT',
+        'formatSleepingRestockTooltip',"'Restocks in ~'",
         "'Collecting Data: See Weav3r'",
         'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'"
     )) {
@@ -62,7 +63,8 @@ if ($errors.Count -eq 0) {
         '-ActiveSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt)',
         '-SafetyMarginFraction 0.05',
         '$medianAvailable = Get-StableWindowMedian',
-        'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r'
+        'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
+        "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry'
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
     }
@@ -88,7 +90,13 @@ if ($errors.Count -eq 0) {
 
     foreach ($token in @(
         "if (`$null -ne `$travelContext -and [bool](Get-OptimalProperty `$travelContext 'filterActive')) { `$fixedCountry = [string](Get-OptimalProperty `$travelContext 'destinationCountryId') }",
-        "if (-not [string]::IsNullOrWhiteSpace(`$fixedCountry) -and `$countryId -ne `$fixedCountry) { continue }"
+        "if (-not [string]::IsNullOrWhiteSpace(`$fixedCountry) -and `$countryId -ne `$fixedCountry) { continue }",
+        'Get-OpportunityEligibleEvidenceKeys',
+        'Get-OptimalEvidence -WantedKeys $eligibleEvidenceKeys',
+        'Get-OpportunityRestockSummary',
+        "forecastMode='sleeping_oos'",
+        '$wakeAt=$earlyRestockAt-600L',
+        '$focusMarker=Read-OpportunityFocusMarker'
     )) {
         if (-not $opportunity.Contains($token)) { Fail "OpportunityState outbound destination filter missing '$token'." }
     }
