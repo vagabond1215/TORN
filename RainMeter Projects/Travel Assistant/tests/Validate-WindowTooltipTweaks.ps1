@@ -46,7 +46,8 @@ if ($errors.Count -eq 0) {
         "if travelState=='traveling' or travelState=='returning' or travelState=='abroad' or travelState=='foreign' then",
         "setOption(prefix..'Chance','Text','')",
         "setOption(prefix..'Leave','ToolTipText',tooltip)",
-        "setOption(prefix..'Info','ToolTipText',tooltip)"
+        "setOption(prefix..'Info','ToolTipText',tooltip)",
+        "CardPresenter owns the home-state probability text"
     )) {
         if (-not $script.Contains($token)) { Fail "WindowTooltipTweaks.lua missing '$token'." }
     }
@@ -59,6 +60,10 @@ if ($errors.Count -eq 0) {
         'groupDepartureTimes'
     )) {
         if ($script.Contains($forbidden)) { Fail "Home tooltip must track raw market windows without prior tooltip/departure-cutoff coupling; found '$forbidden'." }
+    }
+
+    if ($script -match "(?ms)applyTooltip\(prefix,buildHomeTooltip\(row,travelText,now\)\).*?setOption\(prefix\.\.'Chance','Text',''\)") {
+        Fail 'Home tooltip refinement must preserve CardPresenter probability text.'
     }
 
     if ($script -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') {
