@@ -66,6 +66,32 @@ Assert-Equal ([long]$eventMarket.priceEvents[0].fromPrice) 100L 'Price event sho
 Assert-Equal ([long]$eventMarket.priceEvents[0].toPrice) 106L 'Price event should retain the new significant price.'
 Assert-Equal ([int]$eventMarket.priceEvents[0].priceToMvRatioBps) 5300 'Price event should capture contemporaneous foreign-price/MV ratio.'
 
+$scopeState=@{
+    OpportunityCount='2'
+    Opportunity1Key='japan:206'
+    Opportunity1ForecastMode=''
+    Opportunity2Key='china:999'
+    Opportunity2ForecastMode='sleeping_oos'
+}
+$scope=Get-CycleAnalyticsActiveMarketScope -State $scopeState
+Assert-Equal $scope.Count 1 'Transient cycle snapshot scope excludes sleeping OOS markets.'
+Assert-True ($scope.ContainsKey('japan:206')) 'Awake projected market remains in transient cycle snapshot scope.'
+
+$scopedEngine=[pscustomobject]@{
+    observedMarkets=[pscustomobject]@{
+        'japan:206'=[pscustomobject]@{itemId=206;lastForeignPrice=100L;lastStock=50L}
+        'china:999'=[pscustomobject]@{itemId=999;lastForeignPrice=200L;lastStock=50L}
+    }
+    resaleCache=[pscustomobject]@{
+        '206'=[pscustomobject]@{average=200L}
+        '999'=[pscustomobject]@{average=400L}
+    }
+}
+$scopedRoot=New-CycleAnalyticsRoot -Config $config
+[void](Update-CurrentCycleMarketSnapshots -Root $scopedRoot -EngineState $scopedEngine -Config $config -NowEpoch 20300L -WantedKeys $scope)
+Assert-True ($null -ne $scopedRoot.markets.PSObject.Properties['japan:206']) 'Awake market current snapshot is retained.'
+Assert-True ($null -eq $scopedRoot.markets.PSObject.Properties['china:999']) 'Sleeping market does not receive transient current snapshot work.'
+
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" -ForegroundColor Red }
     Write-Host "Cycle analytics deterministic tests failed with $($failures.Count) error(s)." -ForegroundColor Red
