@@ -106,6 +106,15 @@ $eligibilityCycles=@(
 Assert-Equal (@(Select-CadenceAwareForecastCycles -Cycles $eligibilityCycles -Purpose Forecast).Count) 2 'Forecast selection should exclude cycles with an unknown required boundary.'
 Assert-Equal (@(Select-CadenceAwareForecastCycles -Cycles $eligibilityCycles -Purpose Trend).Count) 1 'Trend selection should also exclude uncertain bounded cycles.'
 
+$verifiedBoundaryCycles=@(
+    [pscustomobject]@{schemaVersion=1;restockDelaySeconds=6000L;availabilitySeconds=900L;soldOutAt=601L},
+    [pscustomobject]@{schemaVersion=2;restockDelaySeconds=6060L;availabilitySeconds=960L;soldOutAt=602L;forecastEligible=$false;availabilityEligible=$false;restockDelayEligible=$true;restockBoundaryQuality='bounded';soldOutBoundaryQuality='unknown_gap';previousSellOutBoundaryQuality='bounded'},
+    [pscustomobject]@{schemaVersion=2;restockDelaySeconds=6120L;availabilitySeconds=1020L;soldOutAt=603L;forecastEligible=$true;availabilityEligible=$true;restockDelayEligible=$true;trendEligible=$true;restockBoundaryQuality='bounded';soldOutBoundaryQuality='observed';previousSellOutBoundaryQuality='recovered'}
+)
+$verifiedFiltered=@(Select-CadenceAwareForecastCycles -Cycles $verifiedBoundaryCycles -Purpose Forecast)
+Assert-Equal $verifiedFiltered.Count 1 'Runtime legacy and missing-boundary cycles must not teach the forecast.'
+Assert-Equal ([long]$verifiedFiltered[0].soldOutAt) 603L 'Observed/bounded/recovered boundary evidence remains forecast-eligible.'
+
 $projectionCycles=@(
     [pscustomobject]@{restockDelaySeconds=6900L;availabilitySeconds=1200L;soldOutAt=301L},
     [pscustomobject]@{restockDelaySeconds=7200L;availabilitySeconds=1300L;soldOutAt=302L},
