@@ -118,6 +118,18 @@ Assert-Equal ([long]$projection.activeSelloutEstimateAt) 11334L 'Live sellout sh
 Assert-Equal ([long]$projection.medianRestockDelaySeconds) 7200L 'Next restock should use the cleaned median OOS delay.'
 Assert-Equal ([long]$projection.nextRestockEstimateAt) 18534L 'Restock projection must begin after the projected sellout.'
 
+# A live current cycle that survives travel plus purchase buffer must be used before
+# any later recurring Safe/Best window.
+$currentDeparture=Get-CurrentCycleDeparturePlan -CurrentStock 600L -ActiveSelloutEstimateAt 20000L -FlightSeconds 7200L -PurchaseBufferSeconds 60L -EarliestDepartureAt 10000L -NowEpoch 10000L
+Assert-True ([bool]$currentDeparture.reachable) 'Current stock should remain actionable when projected sellout is later than travel plus buffer.'
+Assert-Equal ([long]$currentDeparture.leaveDeadlineAt) 12740L 'Leave-before deadline must equal projected sellout minus flight minus purchase buffer.'
+
+$missedCurrent=Get-CurrentCycleDeparturePlan -CurrentStock 600L -ActiveSelloutEstimateAt 16000L -FlightSeconds 7200L -PurchaseBufferSeconds 60L -EarliestDepartureAt 10000L -NowEpoch 10000L
+Assert-True (-not [bool]$missedCurrent.reachable) 'Current cycle must fall back to a later recurring window once travel plus buffer cannot beat projected sellout.'
+
+$currentProbability=Get-StableCurrentCycleArrivalProbability -Cycles $projectionCycles -ActiveRestockAt 10000L -ArrivalAt 11250L
+Assert-Near ([double]$currentProbability) (2.0/3.0) 0.0001 'Current-cycle arrival confidence should use completed-cycle availability durations at the live restock anchor.'
+
 # Selection is chronological. A near-term >50% Best Hit should not be skipped just
 # because some later cycle eventually has a Safe Window.
 $selectionModel=[pscustomobject]@{ groups=@(
@@ -133,5 +145,5 @@ if ($failures.Count -gt 0) {
     Write-Host "Stable recurring-window tests failed with $($failures.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Stable recurring-window phase, cadence-aware outage filtering, live depletion timing, and chronological Safe/Best selection tests passed.' -ForegroundColor Green
+Write-Host 'Stable recurring-window phase, live current-cycle deadlines, cadence-aware filtering, and chronological Safe/Best selection tests passed.' -ForegroundColor Green
 exit 0
