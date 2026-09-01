@@ -205,7 +205,8 @@ function Get-StableRecurringScenarioModel {
         [ValidateSet('sellout','restock')][string]$AnchorPhase,
         [long]$NowEpoch,
         [long]$FutureHorizonSeconds = 86400L,
-        [long]$MinimumSafeWindowSeconds = 60L
+        [long]$MinimumSafeWindowSeconds = 60L,
+        [int]$MaximumOrdinal = 1
     )
     $usable = @(Get-StableWindowUsableCycles -Cycles $Cycles)
     if ($AnchorAt -le 0 -or $usable.Count -eq 0) {
@@ -248,10 +249,11 @@ function Get-StableRecurringScenarioModel {
         $delay = [long]$cycle.restockDelaySeconds
         $available = [long]$cycle.availabilitySeconds
         $period = $delay + $available
-        for ($ordinal=0; $ordinal -lt 2048; $ordinal++) {
-            # Treat each future cycle as another draw from the observed distribution.
-            # Do not repeat one historical period forever: doing so compounds harmless
-            # period variance until otherwise-stable cycles drift many hours out of phase.
+        for ($ordinal=0; $ordinal -le [Math]::Max(0,$MaximumOrdinal); $ordinal++) {
+            # Home/Torn currently supports only the current cycle and the
+            # immediately next cycle. Do not spend CPU projecting cycle +2/+3 until
+            # those scenarios are explicitly implemented. Each retained cycle remains
+            # an empirical draw for the supported ordinal(s).
             if ($AnchorPhase -eq 'restock') {
                 $startAge = if ($ordinal -eq 0) { 0L } else { (($ordinal-1) * $medianPeriod) + $period }
             } else {
