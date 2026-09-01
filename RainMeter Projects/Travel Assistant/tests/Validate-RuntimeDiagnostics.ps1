@@ -126,10 +126,9 @@ if (Test-Path -LiteralPath $updatePath) {
     foreach ($token in @(
         'RuntimeLog.ps1','Write-TravelAssistantLog','Clear-TravelAssistantLatestError','filter-state-error.txt','run-update',
         'UpdatePerformanceRows','System.Diagnostics.Stopwatch','TotalProcessorTime','New-UpdateStageTimer','Complete-UpdateStageTimer',
-        'Write-UpdatePerformanceSummary','Write-UpdatePerformanceRecord','update-performance.log',
-        'Read-TravelAssistantSharedText -Path $UpdatePerformanceFile',
-        'Write-TravelAssistantAtomicText -Path $UpdatePerformanceFile -Text $text',
-        'Select-Object -Last 1000',
+        'Write-UpdatePerformanceSummary','Write-UpdatePerformanceRecord','update-performance.log','update-performance-error.txt',
+        '[System.IO.File]::AppendAllText(','Performance telemetry record was not created:',
+        "Write-TravelAssistantLog -Level WARN -Component 'performance'",
         "-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
         "'publish-ui'","'publish-heartbeat'","'generation-cleanup'"
     )) {
