@@ -302,7 +302,10 @@ function Get-OpportunityEligibleEvidenceKeys {
         [object]$Engine,
         [object]$Countries,
         [object]$Preferences,
-        [string]$FixedCountry
+        [string]$FixedCountry,
+        [long]$NowEpoch,
+        [int]$BasisPercent,
+        [long]$ResaleFallbackMaxAgeSeconds
     )
     $wanted=@{}
     if ($null -eq $Engine -or $null -eq $Countries -or -not $Engine.PSObject.Properties['observedMarkets']) { return $wanted }
@@ -324,6 +327,16 @@ function Get-OpportunityEligibleEvidenceKeys {
         if ($itemId -le 0) { continue }
         $metadata=Get-OptimalMarketMetadata -Engine $Engine -ItemId $itemId -Market $market
         if (-not (Test-OptimalMarketFilters -Preferences $Preferences -CountryId $countryId -TripBand $tripBand -ItemId $itemId -Category ([string]$metadata.category))) { continue }
+
+        if ([bool]$Preferences.showProfitableOnly) {
+            $resale=Get-OptimalResaleSnapshot -Engine $Engine -ItemId $itemId -NowEpoch $NowEpoch
+            $resaleUse=Get-OpportunityResaleUse -Resale $resale -NowEpoch $NowEpoch -MaximumAgeSeconds $ResaleFallbackMaxAgeSeconds
+            if (-not [bool]$resaleUse.usable) { continue }
+            $foreignPrice=[long](Get-OptimalProperty $market 'lastForeignPrice')
+            $sellBasis=[long][Math]::Floor([long]$resaleUse.marketValue * ($BasisPercent/100.0))
+            if ($foreignPrice -le 0 -or ($sellBasis-$foreignPrice) -le 0) { continue }
+        }
+
         $wanted[($countryId+':'+[string]$itemId).ToLowerInvariant()]=$true
     }
     return $wanted
@@ -532,7 +545,7 @@ if ($travelState -in @('traveling_unknown','abroad_unknown')) {
 $fixedCountry = ''
 if ($null -ne $travelContext -and [bool](Get-OptimalProperty $travelContext 'filterActive')) { $fixedCountry = [string](Get-OptimalProperty $travelContext 'destinationCountryId') }
 
-$eligibleEvidenceKeys=Get-OpportunityEligibleEvidenceKeys -Engine $engine -Countries $countries -Preferences $preferences -FixedCountry $fixedCountry
+$eligibleEvidenceKeys=Get-OpportunityEligibleEvidenceKeys -Engine $engine -Countries $countries -Preferences $preferences -FixedCountry $fixedCountry -NowEpoch $Now -BasisPercent $basisPercent -ResaleFallbackMaxAgeSeconds $resaleFallbackMaxAge
 $evidence=Get-OptimalEvidence -WantedKeys $eligibleEvidenceKeys
 $focusMarker=Read-OpportunityFocusMarker -Path $FocusMarketFile -NowEpoch $Now
 
