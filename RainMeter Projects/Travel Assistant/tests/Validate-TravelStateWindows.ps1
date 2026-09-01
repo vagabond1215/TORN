@@ -66,8 +66,10 @@ if ($errors.Count -eq 0) {
     $anchor = Get-Content -LiteralPath $anchorPath -Raw
     foreach ($token in @(
         '[long]$previousStock -gt 0 -and $stock -le 0',
-        '$lastSellOutAt = $timestamp',
+        '$lastSellOutAt=$lower',
+        'Test-AnchorBoundaryQuality -Quality $quality',
         "Set-AnchorProperty -Object `$destination -Name 'lastSellOutAt'",
+        "Set-AnchorProperty -Object `$destination -Name 'lastSellOutBoundaryQuality'",
         "anchorSource' -Value 'observations'"
     )) {
         if (-not $anchor.Contains($token)) { Fail ("CycleAnchorReconciler.ps1 missing real sellout-anchor contract '{0}'." -f $token) }
