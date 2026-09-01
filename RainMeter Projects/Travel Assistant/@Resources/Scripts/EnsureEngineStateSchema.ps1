@@ -74,12 +74,24 @@ foreach ($name in @('lastPollAt','lastProvider','countriesSeen','marketsSeen','l
 
 # Migration/self-heal: a state file can be inherited while an item is already in
 # stock, leaving destinations.<market>.activeCycle null even though retained real
-# observations contain a later 0 -> positive transition. Reconstruct only the
-# current restock anchor from those observed transitions; never invent a transition.
-if (Test-Path -LiteralPath $ObservationFile) {
+# observations contain a later 0 -> positive transition. This is an exceptional
+# repair path, not normal heartbeat work: identify repair candidates first so the
+# steady-state updater never scans the full observation JSONL unnecessarily.
+$activeCycleRepairKeys = New-Object 'System.Collections.Generic.HashSet[string]'
+foreach ($property in @($state.observedMarkets.PSObject.Properties)) {
+    $key = ([string]$property.Name).ToLowerInvariant()
+    $market = $property.Value
+    if ($null -eq $market -or [long](Get-StateProperty $market 'lastStock') -le 0) { continue }
+    $destProperty = $state.destinations.PSObject.Properties[$key]
+    if ($null -eq $destProperty -or $null -eq $destProperty.Value) { continue }
+    if ($null -ne (Get-StateProperty $destProperty.Value 'activeCycle')) { continue }
+    [void]$activeCycleRepairKeys.Add($key)
+}
+
+if ($activeCycleRepairKeys.Count -gt 0 -and (Test-Path -LiteralPath $ObservationFile)) {
     $previousStock = @{}
     $latestRestock = @{}
-    foreach ($line in Get-Content -LiteralPath $ObservationFile) {
+    foreach ($line in [System.IO.File]::ReadLines($ObservationFile)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         try { $row = $line | ConvertFrom-Json } catch { continue }
         $country = [string](Get-StateProperty $row 'country')
@@ -88,16 +100,14 @@ if (Test-Path -LiteralPath $ObservationFile) {
         $stock = [long](Get-StateProperty $row 'stock')
         if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $timestamp -le 0) { continue }
         $key = ($country + ':' + $itemId).ToLowerInvariant()
+        if (-not $activeCycleRepairKeys.Contains($key)) { continue }
         if ($previousStock.ContainsKey($key) -and [long]$previousStock[$key] -eq 0 -and $stock -gt 0) {
             $latestRestock[$key] = $row
         }
         $previousStock[$key] = $stock
     }
 
-    foreach ($property in @($state.observedMarkets.PSObject.Properties)) {
-        $key = ([string]$property.Name).ToLowerInvariant()
-        $market = $property.Value
-        if ($null -eq $market -or [long](Get-StateProperty $market 'lastStock') -le 0) { continue }
+    foreach ($key in @($activeCycleRepairKeys)) {
         if (-not $latestRestock.ContainsKey($key)) { continue }
         $destProperty = $state.destinations.PSObject.Properties[$key]
         if ($null -eq $destProperty -or $null -eq $destProperty.Value) { continue }
