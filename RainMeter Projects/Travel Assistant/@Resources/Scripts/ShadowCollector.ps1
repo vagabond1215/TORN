@@ -20,8 +20,11 @@ $SeedCycleFile = Join-Path $ProjectRoot 'data\seed\cycles.jsonl'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $ErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $CycleForecastFilter = Join-Path $PSScriptRoot 'CycleForecastFilter.ps1'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 
 . $CycleForecastFilter
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared history/state IO.' }
+. $AtomicFileScript
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
 $script:blockedAppendPaths=@{}
@@ -29,16 +32,14 @@ $script:blockedAppendPaths=@{}
 function Read-JsonFile {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    $raw = Read-TravelAssistantSharedText -Path $Path
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
     return ($raw | ConvertFrom-Json)
 }
 
 function Write-JsonAtomic {
     param([string]$Path, [object]$Value, [int]$Depth = 16)
-    $tmp = $Path + '.tmp'
-    $Value | ConvertTo-Json -Depth $Depth | Set-Content -LiteralPath $tmp -Encoding UTF8
-    Move-Item -LiteralPath $tmp -Destination $Path -Force
+    Write-TravelAssistantAtomicJson -Path $Path -Value $Value -Depth $Depth
 }
 
 function Get-DynamicProperty {
@@ -356,19 +357,30 @@ function Write-SharedAppendBytes {
     param([string]$Path,[byte[]]$Bytes,[int]$MaximumAttempts=12)
     $shareValue = ([int][System.IO.FileShare]::ReadWrite -bor [int][System.IO.FileShare]::Delete)
     $share = [System.IO.FileShare]$shareValue
-    for ($attempt=1; $attempt -le $MaximumAttempts; $attempt++) {
-        $stream = $null
-        try {
-            $stream = New-Object System.IO.FileStream($Path,[System.IO.FileMode]::Append,[System.IO.FileAccess]::Write,$share)
-            $stream.Write($Bytes,0,$Bytes.Length)
-            $stream.Flush($true)
-            return
-        } catch {
-            if ($attempt -ge $MaximumAttempts -or ($_.Exception -isnot [System.IO.IOException] -and $_.Exception -isnot [System.UnauthorizedAccessException])) { throw }
-            Start-Sleep -Milliseconds (50 * [Math]::Min($attempt,5))
-        } finally {
-            if ($null -ne $stream) { $stream.Dispose() }
+    $appendMutex = New-Object System.Threading.Mutex($false,(Get-TravelAssistantAtomicMutexName -Path $Path))
+    $appendAcquired = $false
+    try {
+        try { $appendAcquired = $appendMutex.WaitOne(5000) }
+        catch [System.Threading.AbandonedMutexException] { $appendAcquired = $true }
+        if (-not $appendAcquired) { throw ('Timed out waiting to append shared journal: ' + $Path) }
+
+        for ($attempt=1; $attempt -le $MaximumAttempts; $attempt++) {
+            $stream = $null
+            try {
+                $stream = New-Object System.IO.FileStream($Path,[System.IO.FileMode]::Append,[System.IO.FileAccess]::Write,$share)
+                $stream.Write($Bytes,0,$Bytes.Length)
+                $stream.Flush($true)
+                return
+            } catch {
+                if ($attempt -ge $MaximumAttempts -or ($_.Exception -isnot [System.IO.IOException] -and $_.Exception -isnot [System.UnauthorizedAccessException])) { throw }
+                Start-Sleep -Milliseconds (50 * [Math]::Min($attempt,5))
+            } finally {
+                if ($null -ne $stream) { $stream.Dispose() }
+            }
         }
+    } finally {
+        if ($appendAcquired) { try { $appendMutex.ReleaseMutex() } catch { } }
+        $appendMutex.Dispose()
     }
 }
 
