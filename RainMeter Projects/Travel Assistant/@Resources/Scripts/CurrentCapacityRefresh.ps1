@@ -145,4 +145,4 @@ Set-CapacityProperty -Object $profile -Name 'currentCapacity' -Value ([int]$resu
 Set-CapacityProperty -Object $profile -Name 'currentCapacityBonus' -Value $generalBonus
 Set-CapacityProperty -Object $profile -Name 'currentCapacitySyncedAt' -Value $Now
 Write-CapacityJsonAtomic -Path $LocalSettingsFile -Value $local
-exit 0
+return
