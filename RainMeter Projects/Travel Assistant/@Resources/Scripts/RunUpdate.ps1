@@ -31,6 +31,7 @@ $RuntimeLogScript = Join-Path $PSScriptRoot 'RuntimeLog.ps1'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$UpdatePerformanceFile = Join-Path $RuntimeDir 'update-performance.log'
 $HistoryErrorFile = Join-Path $RuntimeDir 'history-maintenance-error.txt'
 $ShadowErrorFile = Join-Path $RuntimeDir 'shadow-collection-error.txt'
 $CollectedStateErrorFile = Join-Path $RuntimeDir 'collected-state-error.txt'
@@ -102,9 +103,48 @@ function Complete-UpdateStageTimer {
     } catch { }
 }
 
+function Write-UpdatePerformanceRecord {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $directory = Split-Path $UpdatePerformanceFile -Parent
+    New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    $mutex = New-Object System.Threading.Mutex($false,(Get-TravelAssistantAtomicMutexName -Path $UpdatePerformanceFile))
+    $acquired = $false
+    try {
+        try { $acquired = $mutex.WaitOne(5000) }
+        catch [System.Threading.AbandonedMutexException] { $acquired = $true }
+        if (-not $acquired) { return }
+
+        $shareValue = ([int][System.IO.FileShare]::ReadWrite -bor [int][System.IO.FileShare]::Delete)
+        $share = [System.IO.FileShare]$shareValue
+        $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($Line + [Environment]::NewLine)
+        for ($attempt=1; $attempt -le 10; $attempt++) {
+            $stream = $null
+            try {
+                $stream = New-Object System.IO.FileStream(
+                    $UpdatePerformanceFile,
+                    [System.IO.FileMode]::Append,
+                    [System.IO.FileAccess]::Write,
+                    $share
+                )
+                $stream.Write($bytes,0,$bytes.Length)
+                $stream.Flush($true)
+                return
+            } catch {
+                if ($attempt -ge 10 -or -not (Test-TravelAssistantAtomicRetryableException -Exception $_.Exception)) { return }
+                Start-Sleep -Milliseconds (25 * [Math]::Min($attempt,5))
+            } finally {
+                if ($null -ne $stream) { $stream.Dispose() }
+            }
+        }
+    } finally {
+        if ($acquired) { try { $mutex.ReleaseMutex() } catch { } }
+        $mutex.Dispose()
+    }
+}
+
 function Write-UpdatePerformanceSummary {
     if (-not $script:UpdatePerformanceActive) { return }
-    if (-not (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue)) { return }
     try {
         $script:UpdatePerformanceWall.Stop()
         $totalCpu = [Math]::Max(0.0, (Get-UpdateCpuMilliseconds) - [double]$script:UpdatePerformanceCpuStart)
@@ -120,7 +160,16 @@ function Write-UpdatePerformanceSummary {
             [long][Math]::Round($totalCpu),
             [long][Math]::Round([double]$script:UpdatePerformanceWall.Elapsed.TotalMilliseconds),
             ($stageParts -join ','))
-        Write-TravelAssistantLog -Level INFO -Component 'performance' -Message $message
+        $record = ('{0} {1}' -f
+            [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ',[System.Globalization.CultureInfo]::InvariantCulture),
+            $message)
+        Write-UpdatePerformanceRecord -Line $record
+
+        # Keep the main runtime log copy as a convenience only. Profiling correctness
+        # no longer depends on this best-effort logger.
+        if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
+            Write-TravelAssistantLog -Level INFO -Component 'performance' -Message $message
+        }
     } catch { }
 }
 
