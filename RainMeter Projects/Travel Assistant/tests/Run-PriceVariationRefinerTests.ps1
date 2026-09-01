@@ -56,6 +56,19 @@ $currentResult=Test-PVRecentVariation -Market $currentChange
 Assert-True ([bool]$currentResult.varies) 'material current price change is detected immediately'
 Assert-True ([string]$currentResult.reason -eq 'current-vs-recent') 'current transition reason is explicit'
 
+$scopedStale=[pscustomobject]@{
+    currentForeignPrice=14000L
+    recentSamples=@(
+        New-PriceSample 1 14000
+        New-PriceSample 2 14000
+        New-PriceSample 3 14000
+        New-PriceSample 4 14000
+    )
+}
+$overrideResult=Test-PVRecentVariation -Market $scopedStale -CurrentOverride 15000L
+Assert-True ([bool]$overrideResult.varies) 'current observed price override detects variation even when transient analytics are sleeping'
+Assert-True ([string]$overrideResult.reason -eq 'current-vs-recent') 'sleeping/current override reports current-vs-recent reason'
+
 $recurring=[pscustomobject]@{
     currentForeignPrice=15000L
     recentSamples=@(
@@ -74,6 +87,9 @@ Assert-True ([bool]$recurringResult.varies) 'recurring materially separated pric
 
 $enveloped=Set-PVEnvelope -Text 'WP2:abc#PV1#human' -Varies $false
 Assert-True ($enveloped -eq 'WP2:abc#PV0#human') 'WP2 price-variance envelope can be corrected to fixed'
+
+$sleepEnvelope=Set-PVEnvelope -Text 'Sleeping OOS estimate' -Varies $true
+Assert-True ($sleepEnvelope -eq 'PV1#Sleeping OOS estimate') 'sleeping rows can carry price-variance metadata without WP2 geometry'
 
 Write-Host 'Recent fixed/variable price classification tests passed.' -ForegroundColor Green
 exit 0
