@@ -159,6 +159,7 @@ $longCycles=@(
 )
 $longModel=Get-StableRecurringScenarioModel -Cycles $longCycles -AnchorAt $longCycleAnchor -AnchorPhase restock -NowEpoch $longCycleNow -FutureHorizonSeconds 86400L
 Assert-True (@($longModel.groups | Where-Object { [int]$_.ordinal -eq 1 }).Count -eq 1) 'Immediate next cycle must exist even when its long period extends beyond the default 24-hour horizon.'
+Assert-Equal (@($longModel.groups | Where-Object { [int]$_.ordinal -gt 1 }).Count) 0 'Current implementation must not spend CPU projecting cycle +2/+3.'
 
 # Selection is chronological. A near-term >50% Best Hit should not be skipped just
 # because some later cycle eventually has a Safe Window.
