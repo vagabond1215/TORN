@@ -127,18 +127,24 @@ if (Test-Path -LiteralPath $updatePath) {
         'RuntimeLog.ps1','Write-TravelAssistantLog','Clear-TravelAssistantLatestError','filter-state-error.txt','run-update',
         'UpdatePerformanceRows','System.Diagnostics.Stopwatch','TotalProcessorTime','New-UpdateStageTimer','Complete-UpdateStageTimer',
         'Write-UpdatePerformanceSummary','Write-UpdatePerformanceRecord','update-performance.log',
-        'Read-TravelAssistantSharedText -Path $UpdatePerformanceFile','Write-TravelAssistantAtomicText -Path $UpdatePerformanceFile -Text $text',
+        'Read-TravelAssistantSharedText -Path $UpdatePerformanceFile',
+        'Write-TravelAssistantAtomicText -Path $UpdatePerformanceFile -Text $text',
         'Select-Object -Last 1000',
         "-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
         "'publish-ui'","'publish-heartbeat'","'generation-cleanup'"
     )) {
-        if (-not $text.Contains($token)) { Fail "RunUpdate.ps1 missing centralized diagnostic/performance token '$token'." }
+        if (-not $text.Contains($token)) {
+            Fail "RunUpdate.ps1 missing centralized diagnostic/performance token '$token'."
+        }
     }
+
     if ($text.Contains("Invoke-HistoryMaintenance -Phase 'PostUpdate'")) {
         Fail 'RunUpdate.ps1 must not pay for the retired no-op PostUpdate history pass on every heartbeat.'
     }
-    $successExitPattern = '(?m)^\s*\$UpdatePerformanceOutcome\s*=\s*''success''\s*\r?\n\s*exit 0\s*$'
-    if ($text -match $successExitPattern) {
+
+    $successExitWindows = "`$UpdatePerformanceOutcome = 'success'`r`n    exit 0"
+    $successExitUnix = "`$UpdatePerformanceOutcome = 'success'`n    exit 0"
+    if ($text.Contains($successExitWindows) -or $text.Contains($successExitUnix)) {
         Fail 'RunUpdate.ps1 must fall through after success so finally always writes performance telemetry and releases the updater mutex.'
     }
 }
@@ -149,49 +155,9 @@ foreach ($childName in @('ProjectCollectedState.ps1','CurrentCapacityRefresh.ps1
         Fail "Missing in-process updater child $childName."
         continue
     }
+
     $childText = Get-Content -LiteralPath $childPath -Raw
-    if ($childText -match '(?m)^\s*exit\s+0\s*
-if (-not (Test-Path -LiteralPath $analyzerPath)) {
-    Fail 'Missing tools\Analyze-UpdatePerformance.ps1.'
-} else {
-    $analyzerText = Get-Content -LiteralPath $analyzerPath -Raw
-    foreach ($token in @(
-        'update-performance.log',
-        'AtomicFile.ps1',
-        'Open-TravelAssistantSharedTextReader -Path $sourcePath',
-        'No updater performance samples are present yet.'
-    )) {
-        if (-not $analyzerText.Contains($token)) { Fail "Analyze-UpdatePerformance.ps1 missing durable telemetry token '$token'." }
-    }
-}
-
-$schemaPath = Join-Path $Scripts 'EnsureEngineStateSchema.ps1'
-if (Test-Path -LiteralPath $schemaPath) {
-    $schemaText = Get-Content -LiteralPath $schemaPath -Raw
-    foreach ($token in @(
-        'activeCycleRepairKeys',
-        '$activeCycleRepairKeys.Count -gt 0',
-        'Open-TravelAssistantSharedTextReader -Path $ObservationFile',
-        '$activeCycleRepairKeys.Contains($key)',
-        'exceptional',
-        'steady-state updater never scans'
-    )) {
-        if (-not $schemaText.Contains($token)) { Fail "EnsureEngineStateSchema.ps1 missing CPU-efficiency token '$token'." }
-    }
-    if ($schemaText.Contains('foreach ($line in Get-Content -LiteralPath $ObservationFile)')) {
-        Fail 'EnsureEngineStateSchema.ps1 must use the delete-sharing reader and only enter the repair scan when candidates exist.'
-    }
-}
-
-if ($errors.Count -gt 0) {
-    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
-    Write-Host "Runtime diagnostics validation failed with $($errors.Count) error(s)." -ForegroundColor Red
-    exit 1
-}
-Write-Host 'Reusable detached popup hosts, PS7 settings refresh routing, bounded runtime logging, and updater CPU profiling/steady-state scan guards validation passed.' -ForegroundColor Green
-Write-Host 'Runtime log: data\runtime\logs\travel-assistant.log (7-day / 256 KiB bounded, local and Git-ignored).'
-exit 0
-) {
+    if ($childText -match '(?m)^\s*exit\s+0\s*$') {
         Fail "$childName must return to RunUpdate.ps1 rather than terminate the hosting PowerShell process with exit 0."
     }
 }
@@ -207,7 +173,9 @@ if (-not (Test-Path -LiteralPath $analyzerPath)) {
         'Open-TravelAssistantSharedTextReader -Path $sourcePath',
         'No updater performance samples are present yet.'
     )) {
-        if (-not $analyzerText.Contains($token)) { Fail "Analyze-UpdatePerformance.ps1 missing durable telemetry token '$token'." }
+        if (-not $analyzerText.Contains($token)) {
+            Fail "Analyze-UpdatePerformance.ps1 missing durable telemetry token '$token'."
+        }
     }
 }
 
@@ -222,18 +190,24 @@ if (Test-Path -LiteralPath $schemaPath) {
         'exceptional',
         'steady-state updater never scans'
     )) {
-        if (-not $schemaText.Contains($token)) { Fail "EnsureEngineStateSchema.ps1 missing CPU-efficiency token '$token'." }
+        if (-not $schemaText.Contains($token)) {
+            Fail "EnsureEngineStateSchema.ps1 missing CPU-efficiency token '$token'."
+        }
     }
+
     if ($schemaText.Contains('foreach ($line in Get-Content -LiteralPath $ObservationFile)')) {
         Fail 'EnsureEngineStateSchema.ps1 must use the delete-sharing reader and only enter the repair scan when candidates exist.'
     }
 }
 
 if ($errors.Count -gt 0) {
-    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    foreach ($message in $errors) {
+        Write-Host "FAIL: $message" -ForegroundColor Red
+    }
     Write-Host "Runtime diagnostics validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
+
 Write-Host 'Reusable detached popup hosts, PS7 settings refresh routing, bounded runtime logging, and updater CPU profiling/steady-state scan guards validation passed.' -ForegroundColor Green
 Write-Host 'Runtime log: data\runtime\logs\travel-assistant.log (7-day / 256 KiB bounded, local and Git-ignored).'
 exit 0
