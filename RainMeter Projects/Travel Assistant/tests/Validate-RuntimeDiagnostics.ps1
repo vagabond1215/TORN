@@ -142,7 +142,7 @@ if (Test-Path -LiteralPath $schemaPath) {
     foreach ($token in @(
         'activeCycleRepairKeys',
         '$activeCycleRepairKeys.Count -gt 0',
-        '[System.IO.File]::ReadLines($ObservationFile)',
+        'Open-TravelAssistantSharedTextReader -Path $ObservationFile',
         '$activeCycleRepairKeys.Contains($key)',
         'exceptional',
         'steady-state updater never scans'
@@ -150,7 +150,7 @@ if (Test-Path -LiteralPath $schemaPath) {
         if (-not $schemaText.Contains($token)) { Fail "EnsureEngineStateSchema.ps1 missing CPU-efficiency token '$token'." }
     }
     if ($schemaText.Contains('foreach ($line in Get-Content -LiteralPath $ObservationFile)')) {
-        Fail 'EnsureEngineStateSchema.ps1 must stream the repair scan and only enter it when repair candidates exist.'
+        Fail 'EnsureEngineStateSchema.ps1 must use the delete-sharing reader and only enter the repair scan when candidates exist.'
     }
 }
 
