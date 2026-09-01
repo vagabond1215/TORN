@@ -94,7 +94,9 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         "if travelState=='traveling' or travelState=='returning' or travelState=='abroad' or travelState=='foreign' then",
         'buildHomeTooltip',
-        'findPreferredGroup',
+        'nextCycleGroup',
+        'windowDataQuality',
+        "'Collecting Data'",
         "setOption(prefix..'Chance','Text','')",
         'return'
     )) {
@@ -112,5 +114,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Four-state window tooltip ownership validation passed.' -ForegroundColor Green
-Write-Host 'Home uses the raw five-line forecast; outbound uses landing estimates; returning uses a Torn-arrival countdown; abroad uses the current foreign-market cycle.' -ForegroundColor Green
+Write-Host 'Home owns the current/next-cycle model and collecting-data state; outbound uses landing estimates; returning uses a Torn-arrival countdown; abroad uses the current foreign-market cycle.' -ForegroundColor Green
 exit 0
