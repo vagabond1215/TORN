@@ -472,7 +472,7 @@ function Write-OpportunityProjection {
             'Key','RankText','OptimalText','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
             'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip',
             'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds',
-            'MarketValueValue','SaleBasisValue','PurchaseCostValue','GrossSaleValue','GrossProfitValue','MarketTaxValue','MakeValue','ProfitEachValue','GrossProfitHourValue','MarketFeePercent','MvBasisPercent','TakeValue',
+            'MarketValueValue','SaleBasisValue','PurchaseCostValue','GrossSaleValue','GrossProfitValue','MarketTaxValue','MakeValue','ProfitEachValue','GrossProfitHourValue','MarketFeePercent','MvBasisPercent','TakeValue','TakeBufferPercent',
             'ForecastMode','RestockEstimateAt','RestockAverageDelaySeconds','RestockEarliestDelaySeconds','RestockLatestDelaySeconds',
             'RestockLifetimeShortestDelaySeconds','RestockLifetimeLongestDelaySeconds','RestockSampleCount'
         )) {
@@ -526,6 +526,7 @@ function Write-OpportunityProjection {
         $State['Opportunity'+$n+'MarketFeePercent'] = if ($row.PSObject.Properties['marketFeePercent']) { [int]$row.marketFeePercent } else { 0 }
         $State['Opportunity'+$n+'MvBasisPercent'] = if ($row.PSObject.Properties['basisPercent']) { [int]$row.basisPercent } else { 100 }
         $State['Opportunity'+$n+'TakeValue'] = if ($row.PSObject.Properties['purchaseCost']) { [long]$row.purchaseCost } else { 0L }
+        $State['Opportunity'+$n+'TakeBufferPercent'] = 0
         $State['Opportunity'+$n+'WindowStartAt'] = [long]$row.windowStartAt
         $State['Opportunity'+$n+'ProbabilityValue'] = if ($probabilityKnown) { ('{0:R}' -f [double]$row.probability) } else { '-1' }
         $State['Opportunity'+$n+'ElapsedSeconds'] = [long]$row.elapsedSeconds
