@@ -42,6 +42,16 @@ local function formatDuration(seconds)
     return '<1m'
 end
 
+local function formatBestCountdown(seconds)
+    local value=math.max(0,math.floor(number(seconds)))
+    if value<60 then return string.format('%02ds',value) end
+    return formatDuration(value)
+end
+
+local function usefulWindowHorizon(flightSeconds)
+    return math.min(8*3600,math.max(3*3600,math.floor(number(flightSeconds)*1.10+0.5)))
+end
+
 local function parseDurationText(text)
     local value=trim(text):lower(); local hours=tonumber(value:match('(%d+)%s*h')) or 0; local minutes=tonumber(value:match('(%d+)%s*m')) or 0
     return (hours*3600)+(minutes*60)
@@ -290,7 +300,7 @@ local function formatNextCycleTooltip(group,bestArrival,bestChance,flightSeconds
     end
     return 'Next Restock Only'..nl..
         'Earliest Departure: '..formatMoment(group.earlyRestock-flightSeconds,now)..nl..
-        'Best Departure: '..formatMoment(bestArrival-flightSeconds,now)..' ['..chancePercent(bestChance)..']'..nl..
+        'Best Departure: '..formatMoment(bestArrival-flightSeconds,now)..' '..chancePercent(bestChance)..nl..
         'Late Restock Departure: '..formatMoment(group.lateRestock-flightSeconds,now)..nl..
         'Safe Departure Window: '..safe
 end
@@ -334,8 +344,12 @@ local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,n
     if safeValid then
         local safeOpen=group.safeStart-flightSeconds
         local safeClose=group.safeEnd-flightSeconds
+        local usefulHorizon=usefulWindowHorizon(flightSeconds)
         if now<safeOpen then return 'Safe Hit Window Open: '..formatDuration(safeOpen-now),'',tooltip end
-        if now<safeClose then return 'Safe Hit Window Open. Closes: '..formatDuration(safeClose-now),'',tooltip end
+        if now<safeClose then
+            if (safeClose-now)>usefulHorizon then return 'Safe Hit Window Open','',tooltip end
+            return 'Safe Hit Window Open. Closes: '..formatDuration(safeClose-now),'',tooltip
+        end
         local liveChance=clampProbability(probabilityAt(plan,now+flightSeconds))
         if liveChance>0.5 then return 'Safe window closed. Leave Now: '..chancePercent(liveChance),'',tooltip end
         return 'Safe window closed.','',tooltip
@@ -348,10 +362,10 @@ local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,n
     local liveChance=clampProbability(probabilityAt(plan,now+flightSeconds))
 
     if now<openDeparture then
-        return 'Window Open: '..formatDuration(openDeparture-now)..' ['..chancePercent(openChance)..'] Best: '..formatDuration(math.max(0,bestDeparture-now))..' ['..chancePercent(bestChance)..'] Closes: '..formatDuration(math.max(0,closeDeparture-now)),'',tooltip
+        return 'Window Open: '..formatDuration(openDeparture-now)..' '..chancePercent(openChance)..' Best: '..formatBestCountdown(math.max(0,bestDeparture-now))..' '..chancePercent(bestChance)..' Closes: '..formatDuration(math.max(0,closeDeparture-now)),'',tooltip
     end
     if now<bestDeparture then
-        return 'Window Open: '..chancePercent(liveChance)..' Best: '..formatDuration(bestDeparture-now)..' ['..chancePercent(bestChance)..'] Closes: '..formatDuration(math.max(0,closeDeparture-now)),'',tooltip
+        return 'Window Open: '..chancePercent(liveChance)..' Best: '..formatBestCountdown(bestDeparture-now)..' '..chancePercent(bestChance)..' Closes: '..formatDuration(math.max(0,closeDeparture-now)),'',tooltip
     end
     if now<closeDeparture then
         return 'Window Open: '..chancePercent(liveChance)..' Closes: '..formatDuration(closeDeparture-now),'',tooltip
