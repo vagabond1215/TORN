@@ -1,7 +1,6 @@
-; Opportunity row meters. Positions are updated dynamically by StateReader.lua.
-; Each row uses a FlagKit PNG plus a generated local inline-history PNG.
-; Inline graph meters intentionally use a separate group so showing a row never
-; resurrects a previously collapsed graph image.
+; Opportunity card meters. StateReader.lua owns all dynamic Y/height geometry.
+; Gross is repurposed as the optional one-line economics detail strip.
+; Inline graphs remain in a separate group so showing a card never resurrects a collapsed graph.
 
 [MeterOpportunity1Card]
 Meter=Shape
@@ -28,102 +27,121 @@ DynamicVariables=1
 ImageName=
 ToolTipText=
 
+[MeterOpportunity1Gross]
+Meter=String
+Group=OpportunityRow1
+X=14
+Y=122
+W=500
+H=14
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI
+FontSize=7
+FontColor=#Muted#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
 [MeterOpportunity1Name]
 Meter=String
 Group=OpportunityRow1
 X=78
 Y=126
-W=230
+W=200
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=10
+FontSize=9
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
 
-[MeterOpportunity1Gross]
+[MeterOpportunity1Price]
 Meter=String
 Group=OpportunityRow1
-X=504
+X=282
 Y=126
-W=184
-StringAlign=Right
+W=236
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=9
-FontColor=#Good#
+FontSize=8
+FontColor=#Text#
 AntiAlias=1
+ClipString=1
 Text=
 ToolTipText=
+
+[MeterOpportunity1DetailToggle]
+Meter=String
+Group=OpportunityRow1
+X=522
+Y=123
+W=18
+H=18
+StringAlign=Center
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI Semibold
+FontSize=10
+FontColor=#Accent#
+AntiAlias=1
+SolidColor=0,0,0,1
+Text=+
+ToolTipText=Show card economics
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(1)"]
 
 [MeterOpportunity1Window]
 Meter=String
 Group=OpportunityRow1
 X=78
 Y=147
-W=86
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
+DynamicVariables=1
 Text=
 
 [MeterOpportunity1Leave]
 Meter=String
 Group=OpportunityRow1
-X=166
+X=78
 Y=147
-W=92
+W=440
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=8
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
+SolidColor=0,0,0,1
 Text=
+ToolTipText=
 
 [MeterOpportunity1Chance]
 Meter=String
 Group=OpportunityRow1
-X=260
+X=78
 Y=147
-W=62
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
+DynamicVariables=1
 Text=
-
-[MeterOpportunity1Price]
-Meter=String
-Group=OpportunityRow1
-X=326
-Y=146
-W=174
-Hidden=1
-FontFace=Segoe UI Semibold
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
-Text=
-InlinePattern=(\([^\)]+\))$
-InlineSetting=Size | 7
-InlineSetting2=Color | #Muted#
 
 [MeterOpportunity1Graph]
 Meter=String
 Group=OpportunityRow1
 X=522
-Y=145
+Y=144
 W=18
+H=18
 StringAlign=Center
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=11
 FontColor=#Accent#
@@ -136,10 +154,10 @@ LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(1)"]
 [MeterOpportunity1InlineGraph]
 Meter=Image
 Group=OpportunityInlineGraph1
-X=58
+X=12
 Y=173
-W=470
-H=100
+W=528
+H=125
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -170,102 +188,121 @@ DynamicVariables=1
 ImageName=
 ToolTipText=
 
+[MeterOpportunity2Gross]
+Meter=String
+Group=OpportunityRow2
+X=14
+Y=176
+W=500
+H=14
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI
+FontSize=7
+FontColor=#Muted#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
 [MeterOpportunity2Name]
 Meter=String
 Group=OpportunityRow2
 X=78
 Y=180
-W=230
+W=200
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=10
+FontSize=9
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
 
-[MeterOpportunity2Gross]
+[MeterOpportunity2Price]
 Meter=String
 Group=OpportunityRow2
-X=504
+X=282
 Y=180
-W=184
-StringAlign=Right
+W=236
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=9
-FontColor=#Good#
+FontSize=8
+FontColor=#Text#
 AntiAlias=1
+ClipString=1
 Text=
 ToolTipText=
+
+[MeterOpportunity2DetailToggle]
+Meter=String
+Group=OpportunityRow2
+X=522
+Y=177
+W=18
+H=18
+StringAlign=Center
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI Semibold
+FontSize=10
+FontColor=#Accent#
+AntiAlias=1
+SolidColor=0,0,0,1
+Text=+
+ToolTipText=Show card economics
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(2)"]
 
 [MeterOpportunity2Window]
 Meter=String
 Group=OpportunityRow2
 X=78
 Y=201
-W=86
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
+DynamicVariables=1
 Text=
 
 [MeterOpportunity2Leave]
 Meter=String
 Group=OpportunityRow2
-X=166
+X=78
 Y=201
-W=92
+W=440
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=8
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
+SolidColor=0,0,0,1
 Text=
+ToolTipText=
 
 [MeterOpportunity2Chance]
 Meter=String
 Group=OpportunityRow2
-X=260
+X=78
 Y=201
-W=62
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
+DynamicVariables=1
 Text=
-
-[MeterOpportunity2Price]
-Meter=String
-Group=OpportunityRow2
-X=326
-Y=200
-W=174
-Hidden=1
-FontFace=Segoe UI Semibold
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
-Text=
-InlinePattern=(\([^\)]+\))$
-InlineSetting=Size | 7
-InlineSetting2=Color | #Muted#
 
 [MeterOpportunity2Graph]
 Meter=String
 Group=OpportunityRow2
 X=522
-Y=199
+Y=198
 W=18
+H=18
 StringAlign=Center
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=11
 FontColor=#Accent#
@@ -278,10 +315,10 @@ LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(2)"]
 [MeterOpportunity2InlineGraph]
 Meter=Image
 Group=OpportunityInlineGraph2
-X=58
+X=12
 Y=227
-W=470
-H=100
+W=528
+H=125
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -312,102 +349,121 @@ DynamicVariables=1
 ImageName=
 ToolTipText=
 
+[MeterOpportunity3Gross]
+Meter=String
+Group=OpportunityRow3
+X=14
+Y=230
+W=500
+H=14
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI
+FontSize=7
+FontColor=#Muted#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
 [MeterOpportunity3Name]
 Meter=String
 Group=OpportunityRow3
 X=78
 Y=234
-W=230
+W=200
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=10
+FontSize=9
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
 
-[MeterOpportunity3Gross]
+[MeterOpportunity3Price]
 Meter=String
 Group=OpportunityRow3
-X=504
+X=282
 Y=234
-W=184
-StringAlign=Right
+W=236
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=9
-FontColor=#Good#
+FontSize=8
+FontColor=#Text#
 AntiAlias=1
+ClipString=1
 Text=
 ToolTipText=
+
+[MeterOpportunity3DetailToggle]
+Meter=String
+Group=OpportunityRow3
+X=522
+Y=231
+W=18
+H=18
+StringAlign=Center
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI Semibold
+FontSize=10
+FontColor=#Accent#
+AntiAlias=1
+SolidColor=0,0,0,1
+Text=+
+ToolTipText=Show card economics
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(3)"]
 
 [MeterOpportunity3Window]
 Meter=String
 Group=OpportunityRow3
 X=78
 Y=255
-W=86
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
+DynamicVariables=1
 Text=
 
 [MeterOpportunity3Leave]
 Meter=String
 Group=OpportunityRow3
-X=166
+X=78
 Y=255
-W=92
+W=440
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=8
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
+SolidColor=0,0,0,1
 Text=
+ToolTipText=
 
 [MeterOpportunity3Chance]
 Meter=String
 Group=OpportunityRow3
-X=260
+X=78
 Y=255
-W=62
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
+DynamicVariables=1
 Text=
-
-[MeterOpportunity3Price]
-Meter=String
-Group=OpportunityRow3
-X=326
-Y=254
-W=174
-Hidden=1
-FontFace=Segoe UI Semibold
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
-Text=
-InlinePattern=(\([^\)]+\))$
-InlineSetting=Size | 7
-InlineSetting2=Color | #Muted#
 
 [MeterOpportunity3Graph]
 Meter=String
 Group=OpportunityRow3
 X=522
-Y=253
+Y=252
 W=18
+H=18
 StringAlign=Center
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=11
 FontColor=#Accent#
@@ -420,10 +476,10 @@ LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(3)"]
 [MeterOpportunity3InlineGraph]
 Meter=Image
 Group=OpportunityInlineGraph3
-X=58
+X=12
 Y=281
-W=470
-H=100
+W=528
+H=125
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -454,102 +510,121 @@ DynamicVariables=1
 ImageName=
 ToolTipText=
 
+[MeterOpportunity4Gross]
+Meter=String
+Group=OpportunityRow4
+X=14
+Y=284
+W=500
+H=14
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI
+FontSize=7
+FontColor=#Muted#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
 [MeterOpportunity4Name]
 Meter=String
 Group=OpportunityRow4
 X=78
 Y=288
-W=230
+W=200
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=10
+FontSize=9
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
 
-[MeterOpportunity4Gross]
+[MeterOpportunity4Price]
 Meter=String
 Group=OpportunityRow4
-X=504
+X=282
 Y=288
-W=184
-StringAlign=Right
+W=236
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=9
-FontColor=#Good#
+FontSize=8
+FontColor=#Text#
 AntiAlias=1
+ClipString=1
 Text=
 ToolTipText=
+
+[MeterOpportunity4DetailToggle]
+Meter=String
+Group=OpportunityRow4
+X=522
+Y=285
+W=18
+H=18
+StringAlign=Center
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI Semibold
+FontSize=10
+FontColor=#Accent#
+AntiAlias=1
+SolidColor=0,0,0,1
+Text=+
+ToolTipText=Show card economics
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(4)"]
 
 [MeterOpportunity4Window]
 Meter=String
 Group=OpportunityRow4
 X=78
 Y=309
-W=86
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
+DynamicVariables=1
 Text=
 
 [MeterOpportunity4Leave]
 Meter=String
 Group=OpportunityRow4
-X=166
+X=78
 Y=309
-W=92
+W=440
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=8
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
+SolidColor=0,0,0,1
 Text=
+ToolTipText=
 
 [MeterOpportunity4Chance]
 Meter=String
 Group=OpportunityRow4
-X=260
+X=78
 Y=309
-W=62
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
+DynamicVariables=1
 Text=
-
-[MeterOpportunity4Price]
-Meter=String
-Group=OpportunityRow4
-X=326
-Y=308
-W=174
-Hidden=1
-FontFace=Segoe UI Semibold
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
-Text=
-InlinePattern=(\([^\)]+\))$
-InlineSetting=Size | 7
-InlineSetting2=Color | #Muted#
 
 [MeterOpportunity4Graph]
 Meter=String
 Group=OpportunityRow4
 X=522
-Y=307
+Y=306
 W=18
+H=18
 StringAlign=Center
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=11
 FontColor=#Accent#
@@ -562,10 +637,10 @@ LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(4)"]
 [MeterOpportunity4InlineGraph]
 Meter=Image
 Group=OpportunityInlineGraph4
-X=58
+X=12
 Y=335
-W=470
-H=100
+W=528
+H=125
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -596,102 +671,121 @@ DynamicVariables=1
 ImageName=
 ToolTipText=
 
+[MeterOpportunity5Gross]
+Meter=String
+Group=OpportunityRow5
+X=14
+Y=338
+W=500
+H=14
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI
+FontSize=7
+FontColor=#Muted#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
 [MeterOpportunity5Name]
 Meter=String
 Group=OpportunityRow5
 X=78
 Y=342
-W=230
+W=200
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=10
+FontSize=9
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
 
-[MeterOpportunity5Gross]
+[MeterOpportunity5Price]
 Meter=String
 Group=OpportunityRow5
-X=504
+X=282
 Y=342
-W=184
-StringAlign=Right
+W=236
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=9
-FontColor=#Good#
+FontSize=8
+FontColor=#Text#
 AntiAlias=1
+ClipString=1
 Text=
 ToolTipText=
+
+[MeterOpportunity5DetailToggle]
+Meter=String
+Group=OpportunityRow5
+X=522
+Y=339
+W=18
+H=18
+StringAlign=Center
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI Semibold
+FontSize=10
+FontColor=#Accent#
+AntiAlias=1
+SolidColor=0,0,0,1
+Text=+
+ToolTipText=Show card economics
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(5)"]
 
 [MeterOpportunity5Window]
 Meter=String
 Group=OpportunityRow5
 X=78
 Y=363
-W=86
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
+DynamicVariables=1
 Text=
 
 [MeterOpportunity5Leave]
 Meter=String
 Group=OpportunityRow5
-X=166
+X=78
 Y=363
-W=92
+W=440
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=8
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
+SolidColor=0,0,0,1
 Text=
+ToolTipText=
 
 [MeterOpportunity5Chance]
 Meter=String
 Group=OpportunityRow5
-X=260
+X=78
 Y=363
-W=62
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
+DynamicVariables=1
 Text=
-
-[MeterOpportunity5Price]
-Meter=String
-Group=OpportunityRow5
-X=326
-Y=362
-W=174
-Hidden=1
-FontFace=Segoe UI Semibold
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
-Text=
-InlinePattern=(\([^\)]+\))$
-InlineSetting=Size | 7
-InlineSetting2=Color | #Muted#
 
 [MeterOpportunity5Graph]
 Meter=String
 Group=OpportunityRow5
 X=522
-Y=361
+Y=360
 W=18
+H=18
 StringAlign=Center
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=11
 FontColor=#Accent#
@@ -704,10 +798,10 @@ LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(5)"]
 [MeterOpportunity5InlineGraph]
 Meter=Image
 Group=OpportunityInlineGraph5
-X=58
+X=12
 Y=389
-W=470
-H=100
+W=528
+H=125
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -738,102 +832,121 @@ DynamicVariables=1
 ImageName=
 ToolTipText=
 
+[MeterOpportunity6Gross]
+Meter=String
+Group=OpportunityRow6
+X=14
+Y=392
+W=500
+H=14
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI
+FontSize=7
+FontColor=#Muted#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
 [MeterOpportunity6Name]
 Meter=String
 Group=OpportunityRow6
 X=78
 Y=396
-W=230
+W=200
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=10
+FontSize=9
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
 
-[MeterOpportunity6Gross]
+[MeterOpportunity6Price]
 Meter=String
 Group=OpportunityRow6
-X=504
+X=282
 Y=396
-W=184
-StringAlign=Right
+W=236
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=9
-FontColor=#Good#
+FontSize=8
+FontColor=#Text#
 AntiAlias=1
+ClipString=1
 Text=
 ToolTipText=
+
+[MeterOpportunity6DetailToggle]
+Meter=String
+Group=OpportunityRow6
+X=522
+Y=393
+W=18
+H=18
+StringAlign=Center
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI Semibold
+FontSize=10
+FontColor=#Accent#
+AntiAlias=1
+SolidColor=0,0,0,1
+Text=+
+ToolTipText=Show card economics
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(6)"]
 
 [MeterOpportunity6Window]
 Meter=String
 Group=OpportunityRow6
 X=78
 Y=417
-W=86
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
+DynamicVariables=1
 Text=
 
 [MeterOpportunity6Leave]
 Meter=String
 Group=OpportunityRow6
-X=166
+X=78
 Y=417
-W=92
+W=440
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=8
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
+SolidColor=0,0,0,1
 Text=
+ToolTipText=
 
 [MeterOpportunity6Chance]
 Meter=String
 Group=OpportunityRow6
-X=260
+X=78
 Y=417
-W=62
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
+DynamicVariables=1
 Text=
-
-[MeterOpportunity6Price]
-Meter=String
-Group=OpportunityRow6
-X=326
-Y=416
-W=174
-Hidden=1
-FontFace=Segoe UI Semibold
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
-Text=
-InlinePattern=(\([^\)]+\))$
-InlineSetting=Size | 7
-InlineSetting2=Color | #Muted#
 
 [MeterOpportunity6Graph]
 Meter=String
 Group=OpportunityRow6
 X=522
-Y=415
+Y=414
 W=18
+H=18
 StringAlign=Center
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=11
 FontColor=#Accent#
@@ -846,10 +959,10 @@ LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(6)"]
 [MeterOpportunity6InlineGraph]
 Meter=Image
 Group=OpportunityInlineGraph6
-X=58
+X=12
 Y=443
-W=470
-H=100
+W=528
+H=125
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -880,102 +993,121 @@ DynamicVariables=1
 ImageName=
 ToolTipText=
 
+[MeterOpportunity7Gross]
+Meter=String
+Group=OpportunityRow7
+X=14
+Y=446
+W=500
+H=14
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI
+FontSize=7
+FontColor=#Muted#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
 [MeterOpportunity7Name]
 Meter=String
 Group=OpportunityRow7
 X=78
 Y=450
-W=230
+W=200
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=10
+FontSize=9
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
 
-[MeterOpportunity7Gross]
+[MeterOpportunity7Price]
 Meter=String
 Group=OpportunityRow7
-X=504
+X=282
 Y=450
-W=184
-StringAlign=Right
+W=236
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=9
-FontColor=#Good#
+FontSize=8
+FontColor=#Text#
 AntiAlias=1
+ClipString=1
 Text=
 ToolTipText=
+
+[MeterOpportunity7DetailToggle]
+Meter=String
+Group=OpportunityRow7
+X=522
+Y=447
+W=18
+H=18
+StringAlign=Center
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI Semibold
+FontSize=10
+FontColor=#Accent#
+AntiAlias=1
+SolidColor=0,0,0,1
+Text=+
+ToolTipText=Show card economics
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(7)"]
 
 [MeterOpportunity7Window]
 Meter=String
 Group=OpportunityRow7
 X=78
 Y=471
-W=86
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
+DynamicVariables=1
 Text=
 
 [MeterOpportunity7Leave]
 Meter=String
 Group=OpportunityRow7
-X=166
+X=78
 Y=471
-W=92
+W=440
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=8
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
+SolidColor=0,0,0,1
 Text=
+ToolTipText=
 
 [MeterOpportunity7Chance]
 Meter=String
 Group=OpportunityRow7
-X=260
+X=78
 Y=471
-W=62
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
+DynamicVariables=1
 Text=
-
-[MeterOpportunity7Price]
-Meter=String
-Group=OpportunityRow7
-X=326
-Y=470
-W=174
-Hidden=1
-FontFace=Segoe UI Semibold
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
-Text=
-InlinePattern=(\([^\)]+\))$
-InlineSetting=Size | 7
-InlineSetting2=Color | #Muted#
 
 [MeterOpportunity7Graph]
 Meter=String
 Group=OpportunityRow7
 X=522
-Y=469
+Y=468
 W=18
+H=18
 StringAlign=Center
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=11
 FontColor=#Accent#
@@ -988,10 +1120,10 @@ LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(7)"]
 [MeterOpportunity7InlineGraph]
 Meter=Image
 Group=OpportunityInlineGraph7
-X=58
+X=12
 Y=497
-W=470
-H=100
+W=528
+H=125
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1022,102 +1154,121 @@ DynamicVariables=1
 ImageName=
 ToolTipText=
 
+[MeterOpportunity8Gross]
+Meter=String
+Group=OpportunityRow8
+X=14
+Y=500
+W=500
+H=14
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI
+FontSize=7
+FontColor=#Muted#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
 [MeterOpportunity8Name]
 Meter=String
 Group=OpportunityRow8
 X=78
 Y=504
-W=230
+W=200
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=10
+FontSize=9
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
 
-[MeterOpportunity8Gross]
+[MeterOpportunity8Price]
 Meter=String
 Group=OpportunityRow8
-X=504
+X=282
 Y=504
-W=184
-StringAlign=Right
+W=236
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
-FontSize=9
-FontColor=#Good#
+FontSize=8
+FontColor=#Text#
 AntiAlias=1
+ClipString=1
 Text=
 ToolTipText=
+
+[MeterOpportunity8DetailToggle]
+Meter=String
+Group=OpportunityRow8
+X=522
+Y=501
+W=18
+H=18
+StringAlign=Center
+Hidden=1
+DynamicVariables=1
+FontFace=Segoe UI Semibold
+FontSize=10
+FontColor=#Accent#
+AntiAlias=1
+SolidColor=0,0,0,1
+Text=+
+ToolTipText=Show card economics
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(8)"]
 
 [MeterOpportunity8Window]
 Meter=String
 Group=OpportunityRow8
 X=78
 Y=525
-W=86
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
+DynamicVariables=1
 Text=
 
 [MeterOpportunity8Leave]
 Meter=String
 Group=OpportunityRow8
-X=166
+X=78
 Y=525
-W=92
+W=440
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=8
 FontColor=#Text#
 AntiAlias=1
 ClipString=1
+SolidColor=0,0,0,1
 Text=
+ToolTipText=
 
 [MeterOpportunity8Chance]
 Meter=String
 Group=OpportunityRow8
-X=260
+X=78
 Y=525
-W=62
+W=1
 Hidden=1
-FontFace=Segoe UI
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
+DynamicVariables=1
 Text=
-
-[MeterOpportunity8Price]
-Meter=String
-Group=OpportunityRow8
-X=326
-Y=524
-W=174
-Hidden=1
-FontFace=Segoe UI Semibold
-FontSize=8
-FontColor=#Muted#
-AntiAlias=1
-ClipString=1
-Text=
-InlinePattern=(\([^\)]+\))$
-InlineSetting=Size | 7
-InlineSetting2=Color | #Muted#
 
 [MeterOpportunity8Graph]
 Meter=String
 Group=OpportunityRow8
 X=522
-Y=523
+Y=522
 W=18
+H=18
 StringAlign=Center
 Hidden=1
+DynamicVariables=1
 FontFace=Segoe UI Semibold
 FontSize=11
 FontColor=#Accent#
@@ -1130,10 +1281,10 @@ LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(8)"]
 [MeterOpportunity8InlineGraph]
 Meter=Image
 Group=OpportunityInlineGraph8
-X=58
+X=12
 Y=551
-W=470
-H=100
+W=528
+H=125
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
