@@ -19,7 +19,7 @@ if (Test-Path -LiteralPath $analyticsPath) {
     foreach ($token in @(
         'cycleAnalytics','restockDelay','selloutDuration','priceToMvRatioBps','recentSamples','regimes','priceEvents',
         'significantPriceChangePercent','significantSelloutChangePercent','significantSelloutChangeSeconds',
-        'sourceLength','Read-CycleLinesFromOffset','Update-CycleRunningStats','stdDev','priceEventAnchor'
+        'sourceLength','Read-CycleLinesFromOffset','Update-CycleRunningStats','stdDev','priceEventAnchor','Get-CycleAnalyticsActiveMarketScope','StateKvFile','WantedKeys',"'sleeping_oos'"
     )) {
         if (-not $text.Contains($token)) { Fail "CycleAnalytics.ps1 missing '$token'." }
     }
@@ -55,5 +55,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Cycle analytics runtime contract validation passed.' -ForegroundColor Green
-Write-Host 'Restock/sellout bounds and variance, price regimes, MV-ratio samples, and significant price events are local post-heartbeat engine analytics.'
+Write-Host 'Completed-cycle analytics remain global retained evidence; transient current-market snapshots are scoped to awake projected markets.'
 exit 0
