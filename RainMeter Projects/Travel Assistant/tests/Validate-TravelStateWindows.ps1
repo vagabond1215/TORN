@@ -66,7 +66,8 @@ if ($errors.Count -eq 0) {
     $anchor = Get-Content -LiteralPath $anchorPath -Raw
     foreach ($token in @(
         '[long]$previousStock -gt 0 -and $stock -le 0',
-        '$lastSellOutAt=$lower',
+        '$lastSellOutAt=$timestamp',
+        '$lastSellOutLowerBoundAt=$lower',
         'Test-AnchorBoundaryQuality -Quality $quality',
         "Set-AnchorProperty -Object `$destination -Name 'lastSellOutAt'",
         "Set-AnchorProperty -Object `$destination -Name 'lastSellOutBoundaryQuality'",
