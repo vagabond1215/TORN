@@ -295,6 +295,15 @@ local function formatNextCycleTooltip(group,bestArrival,bestChance,flightSeconds
         'Safe Departure Window: '..safe
 end
 
+local function formatSleepingRestockTooltip(estimateAt,averageDelay,earlyDelay,lateDelay,lifetimeShort,lifetimeLong,samples,now)
+    local nl='#CRLF#'
+    return 'Lightweight OOS estimate'..nl..
+        'Restocks in ~'..formatDuration(math.max(0,estimateAt-now))..nl..
+        'Average OOS -> restock: '..formatDuration(averageDelay)..' over '..tostring(math.floor(samples))..' verified cycle(s)'..nl..
+        'Recent range: '..formatDuration(earlyDelay)..' to '..formatDuration(lateDelay)..nl..
+        'Lifetime range: '..formatDuration(lifetimeShort)..' to '..formatDuration(lifetimeLong)..nl..
+        'Detailed forecast wakes 10m before historical earliest restock or while focused.'
+end
 local function formatCollectingTooltip(reason)
     local nl='#CRLF#'
     local detail=trim(reason)
@@ -365,7 +374,20 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         local projectionMode=statePrefix~='' and trim(state[statePrefix..'LiveCycleProjectionMode']) or ''
         local dataQuality=statePrefix~='' and trim(state[statePrefix..'WindowDataQuality']):lower() or ''
         local dataQualityReason=statePrefix~='' and trim(state[statePrefix..'WindowDataQualityReason']) or ''
+        local forecastMode=statePrefix~='' and trim(state[statePrefix..'ForecastMode']):lower() or ''
+        local restockEstimateAt=statePrefix~='' and number(state[statePrefix..'RestockEstimateAt']) or 0
+        local restockAverageDelay=statePrefix~='' and number(state[statePrefix..'RestockAverageDelaySeconds']) or 0
+        local restockEarlyDelay=statePrefix~='' and number(state[statePrefix..'RestockEarliestDelaySeconds']) or 0
+        local restockLateDelay=statePrefix~='' and number(state[statePrefix..'RestockLatestDelaySeconds']) or 0
+        local restockLifetimeShort=statePrefix~='' and number(state[statePrefix..'RestockLifetimeShortestDelaySeconds']) or 0
+        local restockLifetimeLong=statePrefix~='' and number(state[statePrefix..'RestockLifetimeLongestDelaySeconds']) or 0
+        local restockSamples=statePrefix~='' and number(state[statePrefix..'RestockSampleCount']) or 0
         local nextOrdinal=statePrefix~='' and math.floor(number(state[statePrefix..'NextCycleOrdinal'])) or ((currentStock>0) and 1 or 0)
+
+        if forecastMode=='sleeping_oos' and restockEstimateAt>now then
+            return 'Restocks in ~'..formatDuration(restockEstimateAt-now),'',
+                formatSleepingRestockTooltip(restockEstimateAt,restockAverageDelay,restockEarlyDelay,restockLateDelay,restockLifetimeShort,restockLifetimeLong,restockSamples,now)
+        end
 
         if dataQuality=='collecting' then
             return 'Collecting Data: See Weav3r','',formatCollectingTooltip(dataQualityReason)
