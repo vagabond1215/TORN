@@ -213,6 +213,8 @@ $sleepRows=@(
 )
 Write-OpportunityProjection -State $sleepState -Rows $sleepRows -SortMode 'upcoming' -Message ''
 Assert-Equal $sleepState['Opportunity1ForecastMode'] 'sleeping_oos' 'Sleeping OOS mode must survive projection into state.kv.'
+Assert-Equal $sleepState['Opportunity1QuantityText'] 'x10' 'Sleeping OOS rows must retain projected purchase quantity for Take calculation.'
+Assert-Equal $sleepState['Opportunity1PriceText'] '$100' 'Sleeping OOS rows must retain projected foreign unit price for Take calculation.'
 Assert-Equal ([long]$sleepState['Opportunity1RestockEstimateAt']) 140000L 'Absolute cheap restock estimate must be projected for live countdown rendering.'
 Assert-Equal ([int]$sleepState['Opportunity1RestockSampleCount']) 3 'Verified restock sample count must be projected for tooltip context.'
 
