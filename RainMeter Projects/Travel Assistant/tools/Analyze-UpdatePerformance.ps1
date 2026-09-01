@@ -9,6 +9,9 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $PerformanceFile = Join-Path $ProjectRoot 'data\runtime\update-performance.log'
 $LogFile = Join-Path $ProjectRoot 'data\runtime\logs\travel-assistant.log'
+$AtomicFileScript = Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for writer-safe performance analysis.' }
+. $AtomicFileScript
 
 function Get-PerformancePercentile {
     param([double[]]$Values,[double]$Percentile)
@@ -19,29 +22,25 @@ function Get-PerformancePercentile {
     return [double]$sorted[$index]
 }
 
-$sources = New-Object System.Collections.Generic.List[object]
+$sourcePath = $null
+$sourcePattern = $null
 if (Test-Path -LiteralPath $PerformanceFile) {
-    [void]$sources.Add([pscustomobject]@{
-        Path = $PerformanceFile
-        Pattern = '^\S+\s+outcome=(\S+)\s+total_cpu_ms=(\d+)\s+total_wall_ms=(\d+)\s+stages=(.*)$'
-    })
-}
-if (Test-Path -LiteralPath $LogFile) {
-    [void]$sources.Add([pscustomobject]@{
-        Path = $LogFile
-        Pattern = '\[performance\]\s+outcome=(\S+)\s+total_cpu_ms=(\d+)\s+total_wall_ms=(\d+)\s+stages=(.*)$'
-    })
-}
-if ($sources.Count -eq 0) {
+    $sourcePath = $PerformanceFile
+    $sourcePattern = '^\S+\s+outcome=(\S+)\s+total_cpu_ms=(\d+)\s+total_wall_ms=(\d+)\s+stages=(.*)$'
+} elseif (Test-Path -LiteralPath $LogFile) {
+    $sourcePath = $LogFile
+    $sourcePattern = '\[performance\]\s+outcome=(\S+)\s+total_cpu_ms=(\d+)\s+total_wall_ms=(\d+)\s+stages=(.*)$'
+} else {
     Write-Host 'No updater performance or runtime log files are present yet.' -ForegroundColor Yellow
     exit 2
 }
 
 $updates = New-Object System.Collections.Generic.List[object]
-$seen = New-Object 'System.Collections.Generic.HashSet[string]'
-foreach ($source in @($sources)) {
-    foreach ($line in [System.IO.File]::ReadLines([string]$source.Path)) {
-        $match = [regex]::Match($line,[string]$source.Pattern)
+$reader = $null
+try {
+    $reader = Open-TravelAssistantSharedTextReader -Path $sourcePath
+    while (($line = $reader.ReadLine()) -ne $null) {
+        $match = [regex]::Match($line,$sourcePattern)
         if (-not $match.Success) { continue }
 
         $stageRows = New-Object System.Collections.Generic.List[object]
@@ -56,13 +55,6 @@ foreach ($source in @($sources)) {
             })
         }
 
-        $fingerprint = ('{0}|{1}|{2}|{3}' -f
-            [string]$match.Groups[1].Value,
-            [string]$match.Groups[2].Value,
-            [string]$match.Groups[3].Value,
-            $stageText)
-        if (-not $seen.Add($fingerprint)) { continue }
-
         [void]$updates.Add([pscustomobject]@{
             Outcome = [string]$match.Groups[1].Value
             TotalCpuMs = [double]$match.Groups[2].Value
@@ -70,6 +62,8 @@ foreach ($source in @($sources)) {
             Stages = $stageRows.ToArray()
         })
     }
+} finally {
+    if ($null -ne $reader) { $reader.Dispose() }
 }
 
 if ($updates.Count -eq 0) {
