@@ -29,7 +29,11 @@ local maxCandidateRows = 256
 local opportunitySuffixes = {
     'Key','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
     'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor',
-    'Tooltip','GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds'
+    'Tooltip','GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds',
+    'MarketValueValue','SaleBasisValue','PurchaseCostValue','GrossSaleValue','GrossProfitValue',
+    'MarketTaxValue','MakeValue','ProfitEachValue','GrossProfitHourValue','MarketFeePercent',
+    'MvBasisPercent','TakeValue','TakeBufferPercent','PriceVaries','PriceVariationReason',
+    'MinObservedPrice','MaxObservedPrice'
 }
 
 local flagCodes = {
