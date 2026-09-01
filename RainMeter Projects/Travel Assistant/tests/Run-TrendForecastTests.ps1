@@ -72,6 +72,22 @@ Assert-True ($accuracy.count -eq 1) 'next completed cycle scores one shadow fore
 Assert-True ([Math]::Round([double]$accuracy.availabilityMaeSeconds) -eq 60) 'availability forecast error is retained'
 Assert-True ([Math]::Round([double]$accuracy.restockDelayMaeSeconds) -eq 60) 'restock forecast error is retained'
 
+$scopeState=@{
+    OpportunityCount='3'
+    Opportunity1Key='canada:1'
+    Opportunity1ForecastMode=''
+    Opportunity2Key='china:2'
+    Opportunity2ForecastMode='sleeping_oos'
+    Opportunity3Key='mexico:3'
+    Opportunity3ForecastMode='detailed'
+}
+$scope=Get-TFActiveMarketScope -State $scopeState
+Assert-True ($scope.keys.Count -eq 2) 'shadow trend scope contains only awake computed markets'
+Assert-True ($scope.keys.ContainsKey('canada:1')) 'awake market remains in shadow trend scope'
+Assert-True (-not $scope.keys.ContainsKey('china:2')) 'sleeping OOS market is excluded from shadow trend scope'
+Assert-True ($scope.keys.ContainsKey('mexico:3')) 'second awake market remains in shadow trend scope'
+Assert-True ([string]$scope.signature -eq 'canada:1|mexico:3') 'scope signature changes deterministically with filters/wake state'
+
 $market=[pscustomobject]@{ recentSamples=$growing; trendForecast=$null }
 Assert-True (Update-TFMarket -Market $market -NowEpoch 100) 'market trend forecast is projected'
 Assert-True ([string]$market.trendForecast.mode -eq 'shadow') 'trend forecast remains explicitly shadow-only'
