@@ -65,8 +65,7 @@ local function polishHeader(index)
 end
 
 function Update()
-    -- Preserve explicit departure semantics from CardPresenter:
-    -- LEAVE IN = wait before departing; LEAVE BEFORE = latest departure deadline.
+    -- Preserve the explicit current/next-cycle status text produced by CardPresenter.
     for i=1,8 do
         polishHeader(i)
     end
