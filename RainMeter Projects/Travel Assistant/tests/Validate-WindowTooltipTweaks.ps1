@@ -31,6 +31,13 @@ if ($errors.Count -eq 0) {
         "'Late Restock: '..formatMoment(group.lateRestock,now)",
         "'Guaranteed Window: '..startClock..' to '..endClock",
         "'Best Hit Window: '..formatMoment(target,now)..' ['..chance..']'",
+        'currentCycleReachable=number(state[prefix..''CurrentCycleReachable''])>0',
+        'activeSelloutEstimateAt=number(state[prefix..''ActiveSelloutEstimateAt''])',
+        'currentCycleLeaveDeadlineAt=number(state[prefix..''CurrentCycleLeaveDeadlineAt''])',
+        "'Current Cycle Sellout: '..formatMoment(row.activeSelloutEstimateAt,now)",
+        "'Leave Before: '..formatMoment(row.currentCycleLeaveDeadlineAt,now)",
+        "'Purchase Buffer: '..formatDuration(row.currentCyclePurchaseBufferSeconds)",
+        "'Basis: live depletion of current observed stock'",
         "if travelState=='traveling' or travelState=='returning' or travelState=='abroad' or travelState=='foreign' then",
         "setOption(prefix..'Chance','Text','')",
         "setOption(prefix..'Leave','ToolTipText',tooltip)",
@@ -76,6 +83,6 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Raw five-line home market-window tooltip validation passed.' -ForegroundColor Green
-Write-Host 'Home shows arrival, stock duration, early/late restock, and one Guaranteed-or-Best line; Guaranteed timing advances from starts-in to closes-in and then to the next market window after close.'
+Write-Host 'Current-cycle and recurring home window-tooltip validation passed.' -ForegroundColor Green
+Write-Host 'Reachable current stock shows its live sellout and leave-before deadline; later cycles retain arrival, stock-duration, Early/Late restock, and Guaranteed-or-Best context.'
 exit 0
