@@ -105,6 +105,8 @@ local function buildLookup(state)
                 currentCycleLeaveDeadlineAt=number(state[prefix..'CurrentCycleLeaveDeadlineAt']),
                 currentCycleSafetyMarginSeconds=number(state[prefix..'CurrentCycleSafetyMarginSeconds']),
                 liveCycleProjectionMode=trim(state[prefix..'LiveCycleProjectionMode']),
+                windowDataQuality=trim(state[prefix..'WindowDataQuality']):lower(),
+                windowDataQualityReason=trim(state[prefix..'WindowDataQualityReason']),
                 nextCycleOrdinal=math.floor(number(state[prefix..'NextCycleOrdinal']))
             }
         end
@@ -173,10 +175,18 @@ local function finalWindowLine(group,mode,now)
 end
 
 local function buildHomeTooltip(row,travelText,now)
-    if row==nil or row.plan==nil then return '' end
+    if row==nil then return '' end
+    local nl='#CRLF#'
+    if row.windowDataQuality=='collecting' then
+        local reason=row.windowDataQualityReason~='' and row.windowDataQualityReason or 'a required stock-cycle boundary was not observed or recovered'
+        return 'Collecting Data'..nl..
+            'Reason: '..reason..nl..
+            'Stale/frozen intervals are excluded from forecast timing.'..nl..
+            'See Weav3r for the current travel-stock snapshot.'
+    end
+    if row.plan==nil then return '' end
     local plan=row.plan
     local arrival=travelText~='' and travelText or '?'
-    local nl='#CRLF#'
 
     if row.currentStock>0 and row.currentCycleReachable and row.activeSelloutEstimateAt>now and row.currentCycleLeaveDeadlineAt>=now then
         local basis=(row.liveCycleProjectionMode=='historical-duration') and 'active restock + median completed-cycle stock duration' or 'live depletion of current observed stock'
@@ -223,7 +233,7 @@ local function updateRow(index,lookup,now,state)
     local name=trim(meterOption(prefix..'Name','Text'))
     local country,travelText=rowCountryAndTravel(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(name)]
-    if row~=nil and row.plan~=nil then
+    if row~=nil then
         applyTooltip(prefix,buildHomeTooltip(row,travelText,now))
     end
     setOption(prefix..'Chance','Text','')
