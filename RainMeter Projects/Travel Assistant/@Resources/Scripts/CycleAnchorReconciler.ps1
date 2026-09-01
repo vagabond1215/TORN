@@ -14,8 +14,11 @@ $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $RuntimePendingObservationFile = Join-Path $RuntimeDir 'observations.pending.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
+$CycleForecastFilterScript = Join-Path $PSScriptRoot 'CycleForecastFilter.ps1'
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared anchor IO.' }
+if (-not (Test-Path -LiteralPath $CycleForecastFilterScript)) { throw 'CycleForecastFilter.ps1 is required for boundary-quality reconciliation.' }
 . $AtomicFileScript
+. $CycleForecastFilterScript
 
 function Read-AnchorJson {
     param([string]$Path)
@@ -59,15 +62,21 @@ function Read-AnchorObservationMap {
             $country = [string](Get-AnchorProperty $row 'country')
             $itemId = [int](Get-AnchorProperty $row 'itemId')
             $timestamp = [long](Get-AnchorProperty $row 'timestamp')
-            if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $timestamp -le 0) { continue }
+            $sourceTimestamp = [long](Get-AnchorProperty $row 'sourceTimestamp')
+            $evidenceTimestamp = if ($sourceTimestamp -gt 0) { $sourceTimestamp } else { $timestamp }
+            if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $evidenceTimestamp -le 0) { continue }
             $key = $country + ':' + [string]$itemId
             if (-not $Wanted.ContainsKey($key)) { continue }
             $source = [string](Get-AnchorProperty $row 'source')
             if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
             if (-not $map.ContainsKey($key)) { $map[$key] = New-Object System.Collections.Generic.List[object] }
             $map[$key].Add([pscustomobject]@{
-                timestamp = $timestamp
+                timestamp = [long]$evidenceTimestamp
                 stock = [long](Get-AnchorProperty $row 'stock')
+                previousFreshSourceTimestamp = [long](Get-AnchorProperty $row 'previousFreshSourceTimestamp')
+                transitionGapSeconds = [long](Get-AnchorProperty $row 'transitionGapSeconds')
+                transitionBoundaryQuality = [string](Get-AnchorProperty $row 'transitionBoundaryQuality')
+                source = $source
             })
         }
     } finally {
@@ -76,10 +85,20 @@ function Read-AnchorObservationMap {
     return $map
 }
 
+function Test-AnchorBoundaryQuality {
+    param([string]$Quality)
+    return (([string]$Quality).Trim().ToLowerInvariant() -in @('observed','bounded','recovered'))
+}
+
 function Get-AnchorTransitions {
-    param([object[]]$Rows)
+    param([object[]]$Rows,[object]$BoundaryPolicy)
+    if ($null -eq $BoundaryPolicy) { $BoundaryPolicy=Get-CycleBoundaryPolicy -Cycles @() -ExpectedPollIntervalSeconds 60 }
+
     $lastRestockAt = 0L
     $lastSellOutAt = 0L
+    $lastRestockQuality = ''
+    $lastSellOutQuality = ''
+    $lastUnknownBoundaryAt = 0L
     $previousStock = $null
     $previousTimestamp = 0L
     foreach ($row in @($Rows | Sort-Object timestamp)) {
@@ -95,14 +114,37 @@ function Get-AnchorTransitions {
             $previousTimestamp = $timestamp
             continue
         }
-        if ([long]$previousStock -le 0 -and $stock -gt 0) { $lastRestockAt = $timestamp }
-        elseif ([long]$previousStock -gt 0 -and $stock -le 0) { $lastSellOutAt = $timestamp }
+
+        $phase = if ([long]$previousStock -le 0 -and $stock -gt 0) { 'restock' } elseif ([long]$previousStock -gt 0 -and $stock -le 0) { 'sellout' } else { '' }
+        if (-not [string]::IsNullOrWhiteSpace($phase)) {
+            $quality = ([string]$row.transitionBoundaryQuality).Trim().ToLowerInvariant()
+            $gap = [long]$row.transitionGapSeconds
+            if ($gap -le 0) {
+                $freshBefore=[long]$row.previousFreshSourceTimestamp
+                $gap = if ($freshBefore -gt 0 -and $timestamp -gt $freshBefore) { $timestamp-$freshBefore } else { [Math]::Max(0L,$timestamp-$previousTimestamp) }
+            }
+            if ([string]::IsNullOrWhiteSpace($quality)) {
+                $quality = Get-CycleBoundaryQuality -GapSeconds $gap -Policy $BoundaryPolicy -Phase $phase
+            }
+
+            if (Test-AnchorBoundaryQuality -Quality $quality) {
+                if ($phase -eq 'restock') { $lastRestockAt=$timestamp; $lastRestockQuality=$quality }
+                else { $lastSellOutAt=$timestamp; $lastSellOutQuality=$quality }
+            } else {
+                if ($phase -eq 'restock') { $lastRestockAt=0L; $lastRestockQuality=$quality }
+                else { $lastSellOutAt=0L; $lastSellOutQuality=$quality }
+                $lastUnknownBoundaryAt=$timestamp
+            }
+        }
         $previousStock = $stock
         $previousTimestamp = $timestamp
     }
     return [pscustomobject]@{
         lastRestockAt = $lastRestockAt
         lastSellOutAt = $lastSellOutAt
+        lastRestockQuality = $lastRestockQuality
+        lastSellOutQuality = $lastSellOutQuality
+        lastUnknownBoundaryAt = $lastUnknownBoundaryAt
         latestTimestamp = $previousTimestamp
     }
 }
@@ -152,14 +194,21 @@ foreach ($key in @($wanted.Keys)) {
     if ($rows.Count -eq 0 -and $seedMap.ContainsKey($key) -and $seedMap[$key].Count -gt 0) { $rows = @($seedMap[$key].ToArray()) }
     if ($rows.Count -lt 2) { continue }
 
-    $transition = Get-AnchorTransitions -Rows $rows
     $market = $engine.observedMarkets.PSObject.Properties[$key].Value
     if ($null -eq $market) { continue }
     $stock = [long](Get-AnchorProperty $market 'lastStock')
     $destination = Get-AnchorDestination -Engine $engine -Key $key
+    $boundaryPolicy = Get-AnchorProperty $destination 'boundaryPolicy'
+    if ($null -eq $boundaryPolicy) { $boundaryPolicy=Get-CycleBoundaryPolicy -Cycles @() -ExpectedPollIntervalSeconds 60 }
+    $transition = Get-AnchorTransitions -Rows $rows -BoundaryPolicy $boundaryPolicy
     $continuityInvalidatedAt = [long](Get-AnchorProperty $destination 'continuityInvalidatedAt')
+    if ([long]$transition.lastUnknownBoundaryAt -gt $continuityInvalidatedAt) {
+        $continuityInvalidatedAt=[long]$transition.lastUnknownBoundaryAt
+        Set-AnchorProperty -Object $destination -Name 'continuityInvalidatedAt' -Value $continuityInvalidatedAt
+        $changed=$true
+    }
 
-    if ($stock -gt 0 -and [long]$transition.lastRestockAt -gt 0 -and $continuityInvalidatedAt -lt [long]$transition.lastRestockAt) {
+    if ($stock -gt 0 -and [long]$transition.lastRestockAt -gt $continuityInvalidatedAt) {
         $activeCycle = Get-AnchorProperty $destination 'activeCycle'
         if ($null -eq $activeCycle) {
             $activeCycle = [pscustomobject]@{}
@@ -170,16 +219,30 @@ foreach ($key in @($wanted.Keys)) {
             Set-AnchorProperty -Object $activeCycle -Name 'restockAt' -Value ([long]$transition.lastRestockAt)
             $changed = $true
         }
+        Set-AnchorProperty -Object $activeCycle -Name 'restockBoundaryQuality' -Value ([string]$transition.lastRestockQuality)
         Set-AnchorProperty -Object $activeCycle -Name 'anchorSource' -Value 'observations'
         Set-AnchorProperty -Object $activeCycle -Name 'anchorObservedAt' -Value ([long]$transition.latestTimestamp)
-    } elseif ($stock -le 0 -and [long]$transition.lastSellOutAt -gt 0 -and $continuityInvalidatedAt -lt [long]$transition.lastSellOutAt) {
+    } elseif ($stock -gt 0 -and $continuityInvalidatedAt -gt 0) {
+        $activeCycle=Get-AnchorProperty $destination 'activeCycle'
+        if ($null -ne $activeCycle -and [long](Get-AnchorProperty $activeCycle 'restockAt') -le $continuityInvalidatedAt) {
+            Set-AnchorProperty -Object $destination -Name 'activeCycle' -Value $null
+            $changed=$true
+        }
+    } elseif ($stock -le 0 -and [long]$transition.lastSellOutAt -gt $continuityInvalidatedAt) {
         $before = [long](Get-AnchorProperty $destination 'lastSellOutAt')
         if ($before -ne [long]$transition.lastSellOutAt) {
             Set-AnchorProperty -Object $destination -Name 'lastSellOutAt' -Value ([long]$transition.lastSellOutAt)
             $changed = $true
         }
+        Set-AnchorProperty -Object $destination -Name 'lastSellOutBoundaryQuality' -Value ([string]$transition.lastSellOutQuality)
         Set-AnchorProperty -Object $destination -Name 'anchorSource' -Value 'observations'
         Set-AnchorProperty -Object $destination -Name 'anchorObservedAt' -Value ([long]$transition.latestTimestamp)
+    } elseif ($stock -le 0 -and $continuityInvalidatedAt -gt 0) {
+        if ([long](Get-AnchorProperty $destination 'lastSellOutAt') -le $continuityInvalidatedAt) {
+            Set-AnchorProperty -Object $destination -Name 'lastSellOutAt' -Value 0L
+            Set-AnchorProperty -Object $destination -Name 'lastSellOutBoundaryQuality' -Value 'unknown_gap'
+            $changed=$true
+        }
     }
 }
 
