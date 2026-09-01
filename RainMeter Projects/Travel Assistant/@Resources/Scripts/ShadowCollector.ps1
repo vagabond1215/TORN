@@ -587,7 +587,7 @@ function Update-CycleState {
             $selloutKnown = Test-ForecastBoundaryQuality -Quality $quality
             $selloutLower = if ($selloutKnown) { $previousObservedAt } else { 0L }
             $selloutUpper = if ($selloutKnown) { $ts } else { 0L }
-            $DestState.lastSellOutAt = $selloutLower
+            $DestState.lastSellOutAt = $(if ($selloutKnown) { $ts } else { 0L })
             Set-DynamicProperty -Object $DestState -Name 'lastSellOutLowerBoundAt' -Value $selloutLower
             Set-DynamicProperty -Object $DestState -Name 'lastSellOutUpperBoundAt' -Value $selloutUpper
             Set-DynamicProperty -Object $DestState -Name 'lastSellOutBoundaryQuality' -Value $quality
@@ -621,7 +621,7 @@ function Update-CycleState {
                     restockUpperBoundAt = $restockUpper
                     restockBoundaryQuality = $restockQuality
                     restockQuantity = [int]$DestState.activeCycle.restockQuantity
-                    soldOutAt = $selloutLower
+                    soldOutAt = $(if ($selloutKnown) { $ts } else { 0L })
                     soldOutLowerBoundAt = $selloutLower
                     soldOutUpperBoundAt = $selloutUpper
                     soldOutBoundaryQuality = $quality
