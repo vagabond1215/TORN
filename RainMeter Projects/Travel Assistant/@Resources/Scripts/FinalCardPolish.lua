@@ -25,6 +25,25 @@ local function parenthesizedMoneyPattern(value)
     return '\\('..moneyPattern(value)..'\\)'
 end
 
+local function polishWindowStatus(index)
+    local prefix='MeterOpportunity'..index
+    local leave=prefix..'Leave'
+    local text=meterOption(leave,'Text')
+    local longStatus=(
+        text:match('^Window Open:')~=nil or
+        text:match('^Safe Hit Window')~=nil or
+        text:match('^Safe window closed')~=nil or
+        text:match('^NEXT RESTOCK')~=nil
+    )
+    if longStatus then
+        setOption(leave,'X',78)
+        setOption(leave,'W',285)
+        setOption(leave,'FontSize',7)
+        setOption(leave,'ClipString',1)
+        SKIN:Bang('!HideMeter',prefix..'Chance')
+        SKIN:Bang('!HideMeter',prefix..'Info')
+    end
+end
 local function polishHeader(index)
     local prefix='MeterOpportunity'..index
     local name=meterOption(prefix..'Name','Text')
@@ -67,6 +86,7 @@ end
 function Update()
     -- Preserve the explicit current/next-cycle status text produced by CardPresenter.
     for i=1,8 do
+        polishWindowStatus(i)
         polishHeader(i)
     end
     return 0
