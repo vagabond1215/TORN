@@ -70,6 +70,7 @@ if ($errors.Count -eq 0) {
         'Get-CurrentCycleDeparturePlan','SafetyMarginFraction = 0.05','NextCycleOrdinal',
         'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
         "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
+        'MaximumOrdinal = 1','immediately next cycle',
         "'PriceVaries'","'MinObservedPrice'","'MaxObservedPrice'"
     )) {
         if (-not $refiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing '$token'." }
