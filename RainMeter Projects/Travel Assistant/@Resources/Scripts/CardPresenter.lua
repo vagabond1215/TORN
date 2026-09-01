@@ -480,14 +480,15 @@ end
 
 local function applyCompactLayout(index)
     local prefix='MeterOpportunity'..index
-    setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',500); setOption(prefix..'Gross','FontSize',7); setOption(prefix..'Gross','StringAlign','Left'); setOption(prefix..'Gross','ClipString',1)
-    setOption(prefix..'Name','X',78); setOption(prefix..'Name','W',170); setOption(prefix..'Name','FontSize',9); setOption(prefix..'Name','ClipString',1)
-    setOption(prefix..'Price','X',252); setOption(prefix..'Price','W',266); setOption(prefix..'Price','FontSize',7); setOption(prefix..'Price','ClipString',1)
+    local face='Nirmala UI Semilight'
+    setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',500); setOption(prefix..'Gross','FontFace',face); setOption(prefix..'Gross','FontSize',7); setOption(prefix..'Gross','StringAlign','Left'); setOption(prefix..'Gross','ClipString',1)
+    setOption(prefix..'Name','X',78); setOption(prefix..'Name','W',1); setOption(prefix..'Name','FontFace',face); setOption(prefix..'Name','FontSize',11); setOption(prefix..'Name','FontColor','0,0,0,0'); setOption(prefix..'Name','ClipString',1)
+    setOption(prefix..'Price','X',78); setOption(prefix..'Price','W',440); setOption(prefix..'Price','FontFace',face); setOption(prefix..'Price','FontSize',11); setOption(prefix..'Price','ClipString',1)
     setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',1)
-    setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',440); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
+    setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',440); setOption(prefix..'Leave','FontFace',face); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
     setOption(prefix..'Chance','X',78); setOption(prefix..'Chance','W',1)
-    setOption(prefix..'DetailToggle','X',522); setOption(prefix..'DetailToggle','W',18)
-    setOption(prefix..'Graph','X',522); setOption(prefix..'Graph','W',18)
+    setOption(prefix..'DetailToggle','X',522); setOption(prefix..'DetailToggle','W',18); setOption(prefix..'DetailToggle','FontFace',face)
+    setOption(prefix..'Graph','X',522); setOption(prefix..'Graph','W',18); setOption(prefix..'Graph','FontFace',face)
 end
 
 local function configureWindowTooltipMeter(name,tooltip)
@@ -539,14 +540,16 @@ local function updateRow(index,state,now)
 
     setOption(prefix..'Name','Text',itemName)
     setOption(prefix..'Name','ToolTipText','Item name')
+    setOption(prefix..'Name','FontColor','0,0,0,0')
 
     local takeText=take>0 and formatMoney(take) or '?'
     local unitCostText=unitCost>0 and formatMoney(unitCost) or '?'
-    setOption(prefix..'Price','Text','| '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))
-    local priceColor=trim(state[projectedPrefix..'PriceColor'])
-    if priceColor=='' then priceColor='#Text#' end
-    setOption(prefix..'Price','InlinePattern','^\\|\\s+-?\\$[0-9,]+')
-    setOption(prefix..'Price','InlineSetting','Color | '..priceColor)
+    setOption(prefix..'Price','Text',itemName..' | '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))
+    setOption(prefix..'Price','FontColor','#Text#')
+    setOption(prefix..'Price','InlinePattern','\\|')
+    setOption(prefix..'Price','InlineSetting','Color | #Muted#')
+    setOption(prefix..'Price','InlinePattern2','')
+    setOption(prefix..'Price','InlineSetting2','')
     if priceVaries then
         setOption(prefix..'Price','ToolTipText','Take includes a 5% cash reserve because the foreign price varies. Make uses actual purchase cost, not the reserve.')
     else
@@ -561,10 +564,16 @@ local function updateRow(index,state,now)
     setOption(prefix..'Gross','Text',detail)
     setOption(prefix..'Gross','FontColor','#Muted#')
     setOption(prefix..'Gross','ToolTipText','Market value | net profit per item | Gross Sale | pre-tax gross profit per hour | market tax')
-    setOption(prefix..'Gross','InlinePattern','')
-    setOption(prefix..'Gross','InlineSetting','')
-    setOption(prefix..'Gross','InlinePattern2','')
-    setOption(prefix..'Gross','InlineSetting2','')
+    setOption(prefix..'Gross','InlinePattern','MV:')
+    setOption(prefix..'Gross','InlineSetting','Color | 218,178,69,255')
+    setOption(prefix..'Gross','InlinePattern2','Each:')
+    setOption(prefix..'Gross','InlineSetting2','Color | 255,255,255,255')
+    setOption(prefix..'Gross','InlinePattern3','Gross:')
+    setOption(prefix..'Gross','InlineSetting3','Color | 255,255,255,255')
+    setOption(prefix..'Gross','InlinePattern4','Per Hour:')
+    setOption(prefix..'Gross','InlineSetting4','Color | 255,255,255,255')
+    setOption(prefix..'Gross','InlinePattern5','Tax:')
+    setOption(prefix..'Gross','InlineSetting5','Color | 232,104,70,255')
 
     setOption(prefix..'Window','Text','')
     setOption(prefix..'Chance','Text','')
