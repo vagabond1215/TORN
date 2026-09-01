@@ -116,6 +116,13 @@ function Test-PVRecentVariation {
     return [pscustomobject]@{ varies=$false; reason='recent-fixed'; minimum=$minimum; maximum=$maximum }
 }
 
+function Get-PVTakeValue {
+    param([long]$PurchaseCost,[bool]$PriceVaries)
+    if ($PurchaseCost -le 0) { return 0L }
+    if (-not $PriceVaries) { return [long]$PurchaseCost }
+    return [long][Math]::Ceiling([double]$PurchaseCost*1.05)
+}
+
 function Set-PVEnvelope {
     param([string]$Text,[bool]$Varies)
     $flag=if ($Varies) { 'PV1#' } else { 'PV0#' }
@@ -161,6 +168,10 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'PriceVariationReason']=[string]$classification.reason
     $state[$prefix+'MinObservedPrice']=[long]$classification.minimum
     $state[$prefix+'MaxObservedPrice']=[long]$classification.maximum
+    $purchaseCost=0L
+    if ($state.ContainsKey($prefix+'PurchaseCostValue')) { [void][long]::TryParse([string]$state[$prefix+'PurchaseCostValue'],[ref]$purchaseCost) }
+    $state[$prefix+'TakeValue']=Get-PVTakeValue -PurchaseCost $purchaseCost -PriceVaries ([bool]$classification.varies)
+    $state[$prefix+'TakeBufferPercent']=if ([bool]$classification.varies) { 5 } else { 0 }
     if ($state.ContainsKey($prefix+'Tooltip')) {
         $state[$prefix+'Tooltip']=Set-PVEnvelope -Text ([string]$state[$prefix+'Tooltip']) -Varies ([bool]$classification.varies)
     }
