@@ -77,7 +77,8 @@ if(Test-Path -LiteralPath $files.UnifiedPopup){
  foreach($constructor in @('[System.Drawing.Point]::new(0,($y+2))','[System.Drawing.Size]::new(0,($y+8))')){if(-not$text.Contains($constructor)){Fail "Unified filter popup missing the PowerShell-safe dynamic constructor '$constructor'."}}
  foreach($token in @(
   'New-CountryFlagChip',"New-Chip -Text '' -Width 53",'System.Drawing.Size(53,36)','System.Drawing.Bitmap($source,49,32)',
-  '$script:countryToolTip.SetToolTip($chip,$Name)',"New-SectionHeader 'COUNTRIES'","New-ActionLink 'ON' 318","New-ActionLink 'OFF' 360",
+  '$chip.BackgroundImage=$Image','$chip.BackgroundImageLayout=[System.Windows.Forms.ImageLayout]::Center','$script:countryToolTip.SetToolTip($chip,$Name)',
+  "New-SectionHeader 'COUNTRIES'","New-ActionLink 'ON' 306","New-ActionLink 'OFF' 348",
   '$categoryColumnCount=4','-Width 93',"'Miscellaneous'){'Misc'}","System.Drawing.Font('Segoe UI Semibold',9.5)",
   '$itemHeader.Size=New-Object System.Drawing.Size(48,22)','$search.BringToFront()'
  )){if(-not$text.Contains($token)){Fail "Unified filter popup missing requested compact layout contract '$token'."}}

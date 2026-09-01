@@ -207,11 +207,11 @@ function New-Chip([string]$Text,[int]$Width,[bool]$Checked,[string]$Tag,[System.
 }
 
 function New-CountryFlagChip([string]$Name,[bool]$Checked,[string]$Tag,[System.Drawing.Image]$Image) {
-    $chip=New-Chip -Text '' -Width 53 -Checked $Checked -Tag $Tag -Image $Image
+    $chip=New-Chip -Text '' -Width 53 -Checked $Checked -Tag $Tag
     $chip.Size=New-Object System.Drawing.Size(53,36)
     $chip.Margin=New-Object System.Windows.Forms.Padding(0,0,6,4)
-    $chip.ImageAlign=[System.Drawing.ContentAlignment]::MiddleCenter
-    $chip.TextImageRelation=[System.Windows.Forms.TextImageRelation]::Overlay
+    $chip.BackgroundImage=$Image
+    $chip.BackgroundImageLayout=[System.Windows.Forms.ImageLayout]::Center
     $chip.Padding=New-Object System.Windows.Forms.Padding(0)
     $script:countryToolTip.SetToolTip($chip,$Name)
     return $chip
@@ -367,8 +367,8 @@ $form.Controls.Add($content)
 
 $y=0
 [void](New-SectionHeader 'COUNTRIES' $y $content)
-$countryAll=New-ActionLink 'ON' 318 $y $content
-$countryNone=New-ActionLink 'OFF' 360 $y $content
+$countryAll=New-ActionLink 'ON' 306 $y $content
+$countryNone=New-ActionLink 'OFF' 348 $y $content
 $countryAll.Add_Click({ Set-AllCountries $true })
 $countryNone.Add_Click({ Set-AllCountries $false })
 $y+=24
