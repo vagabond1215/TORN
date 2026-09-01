@@ -71,6 +71,16 @@ local function quantityFromTooltip(tooltip)
     return tonumber(q) or 0
 end
 
+local function quantityFromProjectedState(state,prefix)
+    if state==nil or prefix==nil or prefix=='' then return 0 end
+    return tonumber(trim(state[prefix..'QuantityText']):match('(%d+)')) or 0
+end
+
+local function buyPriceFromProjectedState(state,prefix)
+    if state==nil or prefix==nil or prefix=='' then return 0 end
+    return parseMoney(state[prefix..'PriceText'])
+end
+
 local function buyPriceFromVisibleText(text)
     local raw=trim(text):match('BUY%s+([^|]+)'); if raw==nil then raw=text end; return parseMoney(raw)
 end
@@ -481,9 +491,15 @@ end
 local function updateRow(index,state,now)
     local prefix='MeterOpportunity'..index; applyCompactLayout(index); local rawTitle=meterOption(prefix..'Name','Text'); if rawTitle=='' then return end
     local country,travel=rowCountryAndTravel(index); local itemName=removeCountrySuffix(rawTitle,country); local totalProfit=parseMoney(meterOption(prefix..'Gross','Text'))
-    local rawTooltip=meterOption(prefix..'Gross','ToolTipText'); local plan,humanTooltip,priceVaries=parseWindowPlan(rawTooltip); local quantity=quantityFromTooltip(humanTooltip); local unitProfit=quantity>0 and totalProfit/quantity or 0
+    local rawTooltip=meterOption(prefix..'Gross','ToolTipText'); local plan,humanTooltip,priceVaries=parseWindowPlan(rawTooltip)
+    local projectedPrefix=opportunityStatePrefix(state,country,itemName)
+    local quantity=quantityFromProjectedState(state,projectedPrefix)
+    if quantity<=0 then quantity=quantityFromTooltip(humanTooltip) end
+    local unitProfit=quantity>0 and totalProfit/quantity or 0
     local equation=formatMoney(unitProfit)..'/ea'; if quantity>0 then equation=equation..' x'..tostring(quantity)..' = '..formatMoney(totalProfit) else equation=formatMoney(totalProfit) end
-    local buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')); local bufferRate=priceVaries and 0.05 or 0.0
+    local buyPrice=buyPriceFromProjectedState(state,projectedPrefix)
+    if buyPrice<=0 then buyPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')) end
+    local bufferRate=priceVaries and 0.05 or 0.0
     local take=(buyPrice>0 and quantity>0) and math.ceil(buyPrice*quantity*(1.0+bufferRate)) or 0
     local fallbackWindow=meterOption(prefix..'Window','Text'); local fallbackLeave=meterOption(prefix..'Leave','Text'); local fallbackCertainty=meterOption(prefix..'Chance','Text')
     local liveAction,liveCertainty,windowTooltip=liveWindowAction(index,plan,state,country,travel,now)
