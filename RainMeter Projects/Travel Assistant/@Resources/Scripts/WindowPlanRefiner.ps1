@@ -13,6 +13,7 @@ Set-StrictMode -Version 2.0
 . (Join-Path $PSScriptRoot 'WindowPlan.ps1') -SkipMain
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$ConfigDir = Join-Path $ProjectRoot 'config'
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $SeedDir = Join-Path $ProjectRoot 'data\seed'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
@@ -20,6 +21,7 @@ $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeCycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
 $SeedCycleFile = Join-Path $SeedDir 'cycles.jsonl'
+$SettingsFile = Join-Path $ConfigDir 'settings.example.json'
 
 function Get-StableWindowMedian {
     param([long[]]$Values)
@@ -30,6 +32,51 @@ function Get-StableWindowMedian {
     return [long][Math]::Round(([double]$sorted[$mid-1] + [double]$sorted[$mid]) / 2.0)
 }
 
+function Get-CurrentCycleDeparturePlan {
+    param(
+        [long]$CurrentStock,
+        [long]$ActiveSelloutEstimateAt,
+        [long]$FlightSeconds,
+        [long]$PurchaseBufferSeconds,
+        [long]$EarliestDepartureAt,
+        [long]$NowEpoch
+    )
+
+    $buffer=[Math]::Max(0L,$PurchaseBufferSeconds)
+    $flight=[Math]::Max(0L,$FlightSeconds)
+    $deadline=0L
+    if ($ActiveSelloutEstimateAt -gt 0) {
+        $deadline=[long]$ActiveSelloutEstimateAt-$flight-$buffer
+    }
+    $reachable=(
+        $CurrentStock -gt 0 -and
+        $ActiveSelloutEstimateAt -gt $NowEpoch -and
+        $deadline -ge [Math]::Max($NowEpoch,$EarliestDepartureAt)
+    )
+    return [pscustomobject]@{
+        reachable=[bool]$reachable
+        leaveDeadlineAt=[long]$deadline
+        selloutAt=[long]$ActiveSelloutEstimateAt
+        flightSeconds=[long]$flight
+        purchaseBufferSeconds=[long]$buffer
+    }
+}
+
+function Get-StableCurrentCycleArrivalProbability {
+    param(
+        [object[]]$Cycles,
+        [long]$ActiveRestockAt,
+        [long]$ArrivalAt
+    )
+    $usable=@(Get-StableWindowUsableCycles -Cycles $Cycles)
+    if ($usable.Count -eq 0 -or $ActiveRestockAt -le 0 -or $ArrivalAt -lt $ActiveRestockAt) { return -1.0 }
+    $age=[Math]::Max(0L,$ArrivalAt-$ActiveRestockAt)
+    $hits=0
+    foreach ($cycle in $usable) {
+        if ([long]$cycle.availabilitySeconds -gt $age) { $hits++ }
+    }
+    return ($hits/[double]$usable.Count)
+}
 function Get-StableWindowUsableCycles {
     param(
         [object[]]$Cycles,
@@ -299,7 +346,12 @@ if ($WindowPlanRefinerSkipMain) { return }
 if ($Now -le 0) { $Now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 $state=Read-WindowStateKv $StateKvFile
 $engine=Read-WindowJson $EngineStateFile
+$settings=Read-WindowJson $SettingsFile
 if ($state.Count -eq 0 -or $null -eq $engine -or -not $engine.PSObject.Properties['observedMarkets']) { return }
+$purchaseBuffer=60L
+if ($null -ne $settings -and $settings.PSObject.Properties['optimizer'] -and $settings.optimizer.PSObject.Properties['purchaseBufferSeconds']) {
+    $purchaseBuffer=[Math]::Max(0L,[long]$settings.optimizer.purchaseBufferSeconds)
+}
 $count=0
 [void][int]::TryParse([string]$state['OpportunityCount'],[ref]$count)
 $count=[Math]::Min(256,[Math]::Max(0,$count))
@@ -371,6 +423,25 @@ for ($i=1; $i -le $count; $i++) {
         $earliestArrival=$Now
         $flightSeconds=0L
     }
+    $state[$prefix+'CurrentCycleReachable']='0'
+    $state[$prefix+'CurrentCycleLeaveDeadlineAt']='0'
+    $state[$prefix+'CurrentCyclePurchaseBufferSeconds']=[long]$purchaseBuffer
+
+    $currentCycle=Get-CurrentCycleDeparturePlan -CurrentStock $stock -ActiveSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt) -FlightSeconds $flightSeconds -PurchaseBufferSeconds $purchaseBuffer -EarliestDepartureAt $earliestDeparture -NowEpoch $Now
+
+    if ([bool]$currentCycle.reachable) {
+        $state[$prefix+'CurrentCycleReachable']='1'
+        $state[$prefix+'CurrentCycleLeaveDeadlineAt']=[long]$currentCycle.leaveDeadlineAt
+        $state[$prefix+'WindowStartAt']=[Math]::Max($Now,$earliestDeparture)
+        $state[$prefix+'WindowText']='IN STOCK'
+        $currentProbability=Get-StableCurrentCycleArrivalProbability -Cycles $cycles -ActiveRestockAt ([long]$liveProjection.activeRestockAt) -ArrivalAt $earliestArrival
+        if ($currentProbability -ge 0) {
+            $state[$prefix+'ProbabilityValue']=(Convert-WindowProbabilityText ([double]$currentProbability))
+            $state[$prefix+'ChanceText']=('{0:N0}%' -f (100.0*[double]$currentProbability))
+        }
+        continue
+    }
+
     $selected=Select-StableWindowPlanGroup -Model $model -EarliestArrivalAt $earliestArrival
     if ($null -ne $selected) {
         $departureStart=[long]$selected.startAt-$flightSeconds
