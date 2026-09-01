@@ -35,7 +35,8 @@ if ($errors.Count -eq 0) {
         'removeCountrySuffix','rowCountryAndTravel','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
         'parseWindowPlan','parsePriceVarianceEnvelope','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
         'WP2:','PV([01])','group.safeEnd-group.safeStart>=60','group.bestProbability>0.5','currentProbability>0.5',
-        "'LEAVE BEFORE '","'SAFE - LEAVE IN '","'SAFE - LEAVE BEFORE '","'BEST - LEAVE NOW'","'BEST - LEAVE IN '",
+        "'Leave Before '..formatDuration","'Window Open: '","' Best: '","' Closes: '",
+        "'Safe Hit Window Open: '","'Safe Hit Window Open. Closes: '","'Safe window closed. Leave Now: '",
         'Safe formula: max(restock starts) -> min(sellout ends)','Best formula: completed-cycle overlap / usable cycle count',
         'Early Restock: ','Late Restock: ','Safe Window: ','Best Hit Window: ',
         'configureWindowTooltipMeter','ToolTipTitle','ToolTipWidth','SolidColor','safeInfo','Empty ToolTipText disables the tooltip naturally',
@@ -43,26 +44,22 @@ if ($errors.Count -eq 0) {
         'quantityFromTooltip','buyPriceFromVisibleText','bufferRate=priceVaries and 0.05 or 0.0','math.ceil(buyPrice*quantity*(1.0+bufferRate))',
         "'Take: '..formatMoney(take)",'Purchase cash required plus a 5% buffer because retained foreign price has varied','Exact purchase cash; retained foreign price has not varied',
         'statusText(fallbackWindow,fallbackLeave)',
-        'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCyclePurchaseBufferSeconds','formatCurrentCycleTooltip','opportunityStatePrefix'
+        'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
+        'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','NEXT RESTOCK WITHIN FLIGHT'
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
     if ($presenter.Contains("setOption(name,'ToolTipHidden'")) { Fail 'CardPresenter.lua must not dynamically mutate ToolTipHidden; empty tooltip text owns visibility on the target host.' }
     if ($presenter -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand|LaunchItemViewer') { Fail 'CardPresenter.lua must remain presentation-only and local.' }
-    foreach ($ambiguous in @(
-        "return 'SAFE - LEAVE '..formatDuration",
-        "return 'BEST - LEAVE '..formatDuration"
-    )) {
-        if ($presenter.Contains($ambiguous)) { Fail "CardPresenter.lua retains ambiguous departure wording '$ambiguous'." }
-    }
-
     foreach ($token in @(
         'Get-CurrentCycleDeparturePlan',
         'CurrentCycleReachable',
         'CurrentCycleLeaveDeadlineAt',
-        'CurrentCyclePurchaseBufferSeconds',
+        'CurrentCycleSafetyMarginSeconds',
+        'NextCycleOrdinal',
         '-ActiveSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt)',
-        '-PurchaseBufferSeconds $purchaseBuffer'
+        '-SafetyMarginFraction 0.05',
+        '$medianAvailable = Get-StableWindowMedian'
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
     }
@@ -99,6 +96,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Compact trade-card validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Compact trade-card current-cycle and recurring-window validation passed.' -ForegroundColor Green
-Write-Host 'Reachable live stock uses LEAVE BEFORE; future modeled departures use LEAVE IN; fixed-price items use exact Take cash.'
+Write-Host 'Compact trade-card current/next-cycle validation passed.' -ForegroundColor Green
+Write-Host 'In Torn, current stock uses a 5% sellout safety deadline; otherwise only the immediate next restock exposes Window Open/Best/Closes or Safe Hit state.'
 exit 0
