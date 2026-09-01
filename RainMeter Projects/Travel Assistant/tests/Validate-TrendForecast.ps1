@@ -24,12 +24,12 @@ if ($errors.Count -eq 0) {
         foreach ($parseError in @($parseErrors)) { Fail "$([IO.Path]::GetFileName($path)) parse error: $($parseError.Message)" }
     }
 
-    foreach ($token in @('mode=''shadow''','Get-TFLinearTrend','Get-TFCorrelation','availabilityVsPriceCorrelation','availabilityVsRatioCorrelation','Update-TFAccuracy','pending=$pendingNext','CycleForecastFilter.ps1','Select-CadenceAwareForecastCycles','trendForecastSourceLength','trendForecastSourceLastWriteUtcTicks','trendForecastSchemaVersion')) {
+    foreach ($token in @('mode=''shadow''','Get-TFLinearTrend','Get-TFCorrelation','availabilityVsPriceCorrelation','availabilityVsRatioCorrelation','Update-TFAccuracy','pending=$pendingNext','CycleForecastFilter.ps1','Select-CadenceAwareForecastCycles','trendForecastSourceLength','trendForecastSourceLastWriteUtcTicks','trendForecastSchemaVersion','Get-TFActiveMarketScope','trendForecastScopeSignature',"'sleeping_oos'",'$scope.keys.ContainsKey($key)')) {
         if (-not $trend.Contains($token)) { Fail "TrendForecast.ps1 missing '$token'." }
     }
     if ($trend -match '(?i)Invoke-RestMethod|Invoke-WebRequest|https?://|curl\.exe') { Fail 'TrendForecast.ps1 must remain local-only.' }
 
-    foreach ($token in @('Test-PVRecentVariation','current-vs-recent','recurring-levels','recent-fixed','Set-PVEnvelope','OpportunityCount','PriceVariationReason')) {
+    foreach ($token in @('Test-PVRecentVariation','current-vs-recent','recurring-levels','recent-fixed','Set-PVEnvelope','OpportunityCount','PriceVariationReason',"'ForecastMode'", "'sleeping_oos'")) {
         if (-not $price.Contains($token)) { Fail "PriceVariationRefiner.ps1 missing '$token'." }
     }
     if ($price.Contains("reason='recent-transition'")) { Fail 'PriceVariationRefiner.ps1 must not reintroduce single-transition variable classification.' }
@@ -55,5 +55,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Shadow trend forecast and recent price classification validation passed.' -ForegroundColor Green
-Write-Host 'Trend forecasts are logged/scored after heartbeat and cannot change current Safe/Best timing; a single historical price transition does not mark a stable item variable.'
+Write-Host 'Trend forecasts are shadow-only and scoped to awake projected markets; sleeping/filtered rows avoid derived work while collection history remains global.'
 exit 0
