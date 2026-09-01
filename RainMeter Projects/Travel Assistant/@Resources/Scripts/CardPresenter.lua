@@ -185,11 +185,11 @@ local function formatMoment(at,now)
     return os.date('%H:%M',at)..' ('..relation..')'
 end
 
-local function formatCurrentCycleTooltip(selloutAt,deadlineAt,bufferSeconds,flightSeconds,now)
+local function formatCurrentCycleTooltip(selloutAt,deadlineAt,safetySeconds,flightSeconds,now)
     local nl='#CRLF#'
     return 'Current Cycle Sellout: '..formatMoment(selloutAt,now)..nl..
         'Travel Time: '..formatDuration(flightSeconds)..nl..
-        'Purchase Buffer: '..formatDuration(bufferSeconds)..nl..
+        '5% Sellout Safety: '..formatDuration(safetySeconds)..nl..
         'Leave Before: '..formatMoment(deadlineAt,now)..nl..
         'Basis: live depletion of current observed stock'
 end
@@ -239,29 +239,128 @@ local function opportunityStatePrefix(state,country,itemName)
     end
     return ''
 end
+local function clampProbability(value)
+    return math.max(0,math.min(1,number(value)))
+end
+
+local function chancePercent(value)
+    return string.format('%.0f%%',clampProbability(value)*100)
+end
+
+local function groupByOrdinal(plan,ordinal)
+    if plan==nil then return nil end
+    for _,group in ipairs(plan.groups or {}) do
+        if number(group.ordinal)==ordinal then return group end
+    end
+    return nil
+end
+
+local function nextRestockStartForCycle(plan,cycle,ordinal)
+    if plan==nil or cycle==nil then return 0 end
+    local delay=number(cycle.delay); local available=number(cycle.available); local period=delay+available
+    if period<=0 then return 0 end
+    if plan.anchorPhase=='R' then
+        if ordinal==0 then return plan.anchorAt end
+        if ordinal==1 then return plan.anchorAt+period end
+        return 0
+    end
+    if ordinal==0 then return plan.anchorAt+delay end
+    return 0
+end
+
+local function bestNextRestockArrival(plan,group,ordinal)
+    if plan==nil or group==nil then return 0,0 end
+    local bestAt=number(group.earlyRestock); local bestP=clampProbability(probabilityAt(plan,bestAt))
+    for _,cycle in ipairs(plan.cycles or {}) do
+        local at=nextRestockStartForCycle(plan,cycle,ordinal)
+        if at>=number(group.earlyRestock) and at<=number(group.lateRestock) then
+            local p=clampProbability(probabilityAt(plan,at))
+            if p>bestP or (p==bestP and (bestAt<=0 or at<bestAt)) then bestAt=at; bestP=p end
+        end
+    end
+    return bestAt,bestP
+end
+
+local function formatNextCycleTooltip(group,bestArrival,bestChance,flightSeconds,now)
+    if group==nil then return 'Next-cycle evidence unavailable' end
+    local nl='#CRLF#'
+    local safe='none'
+    if group.safeStart>0 and group.safeEnd>group.safeStart then
+        safe=formatMoment(group.safeStart-flightSeconds,now)..' -> '..formatMoment(group.safeEnd-flightSeconds,now)
+    end
+    return 'Next Restock Only'..nl..
+        'Earliest Departure: '..formatMoment(group.earlyRestock-flightSeconds,now)..nl..
+        'Best Departure: '..formatMoment(bestArrival-flightSeconds,now)..' ['..chancePercent(bestChance)..']'..nl..
+        'Late Restock Departure: '..formatMoment(group.lateRestock-flightSeconds,now)..nl..
+        'Safe Departure Window: '..safe
+end
+
+local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,now)
+    if plan==nil or #plan.groups==0 then return 'WAIT DATA','',nil end
+    local group=groupByOrdinal(plan,nextOrdinal)
+    if group==nil then return 'NEXT CYCLE UNAVAILABLE','',nil end
+
+    local estimatedRestock=math.floor((number(group.earlyRestock)+number(group.lateRestock))/2)
+    local bestArrival,bestChance=bestNextRestockArrival(plan,group,nextOrdinal)
+    local tooltip=formatNextCycleTooltip(group,bestArrival,bestChance,flightSeconds,now)
+
+    -- Scenario 2 Logic 1 only: the immediately next estimated restock must still
+    -- be farther away than one full flight. Never search cycle +2/+3 here.
+    if estimatedRestock<=0 or (estimatedRestock-now)<=flightSeconds then
+        return 'NEXT RESTOCK WITHIN FLIGHT','',tooltip
+    end
+
+    local safeValid=group.safeStart>0 and group.safeEnd>group.safeStart
+    if safeValid then
+        local safeOpen=group.safeStart-flightSeconds
+        local safeClose=group.safeEnd-flightSeconds
+        if now<safeOpen then return 'Safe Hit Window Open: '..formatDuration(safeOpen-now),'',tooltip end
+        if now<safeClose then return 'Safe Hit Window Open. Closes: '..formatDuration(safeClose-now),'',tooltip end
+        local liveChance=clampProbability(probabilityAt(plan,now+flightSeconds))
+        if liveChance>0.5 then return 'Safe window closed. Leave Now: '..chancePercent(liveChance),'',tooltip end
+        return 'Safe window closed.','',tooltip
+    end
+
+    local openDeparture=group.earlyRestock-flightSeconds
+    local closeDeparture=group.lateRestock-flightSeconds
+    local bestDeparture=bestArrival-flightSeconds
+    local openChance=clampProbability(probabilityAt(plan,group.earlyRestock))
+    local liveChance=clampProbability(probabilityAt(plan,now+flightSeconds))
+
+    if now<openDeparture then
+        return 'Window Open: '..formatDuration(openDeparture-now)..' ['..chancePercent(openChance)..'] Best: '..formatDuration(math.max(0,bestDeparture-now))..' ['..chancePercent(bestChance)..'] Closes: '..formatDuration(math.max(0,closeDeparture-now)),'',tooltip
+    end
+    if now<bestDeparture then
+        return 'Window Open: '..chancePercent(liveChance)..' Best: '..formatDuration(bestDeparture-now)..' ['..chancePercent(bestChance)..'] Closes: '..formatDuration(math.max(0,closeDeparture-now)),'',tooltip
+    end
+    if now<closeDeparture then
+        return 'Window Open: '..chancePercent(liveChance)..' Closes: '..formatDuration(closeDeparture-now),'',tooltip
+    end
+    return 'Window closed.','',tooltip
+end
 local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     local countryId=countryIdsByName[country] or ''; local travelState=trim(state.TravelState):lower(); local destinationId=trim(state.TravelDestinationCountryId):lower()
     local flightSeconds=countryTravelSeconds(state,country,defaultTravel); if flightSeconds<=0 then return nil,nil,nil end
 
-    -- Home-state current stock gets first refusal. WindowPlanRefiner publishes a
-    -- live depletion sellout estimate plus the latest safe departure deadline
-    -- (sellout - one-way travel - purchase buffer). If that deadline is still
-    -- ahead of us, do not jump to a later recurring Safe/Best window.
-    if travelState~='traveling' and travelState~='returning' and travelState~='abroad' and travelState~='foreign' then
+    local atHome=(travelState~='traveling' and travelState~='returning' and travelState~='abroad' and travelState~='foreign')
+    if atHome then
         local displayedName=removeCountrySuffix(meterOption('MeterOpportunity'..tostring(index)..'Name','Text'),country)
         local statePrefix=opportunityStatePrefix(state,country,displayedName)
         local currentStock=statePrefix~='' and number(state[statePrefix..'CurrentStock']) or 0
         local reachable=statePrefix~='' and number(state[statePrefix..'CurrentCycleReachable'])>0
         local selloutAt=statePrefix~='' and number(state[statePrefix..'ActiveSelloutEstimateAt']) or 0
         local deadlineAt=statePrefix~='' and number(state[statePrefix..'CurrentCycleLeaveDeadlineAt']) or 0
-        local bufferSeconds=statePrefix~='' and number(state[statePrefix..'CurrentCyclePurchaseBufferSeconds']) or 0
+        local safetySeconds=statePrefix~='' and number(state[statePrefix..'CurrentCycleSafetyMarginSeconds']) or 0
+        local nextOrdinal=statePrefix~='' and math.floor(number(state[statePrefix..'NextCycleOrdinal'])) or ((currentStock>0) and 1 or 0)
+
         if currentStock>0 and reachable and selloutAt>now and deadlineAt>=now then
-            local arrivalAt=now+flightSeconds
-            local p=probabilityAt(plan,arrivalAt)
-            local certainty=p>0 and string.format('%.0f%%',p*100) or ''
-            local action=(deadlineAt-now)<=60 and 'LEAVE NOW' or ('LEAVE BEFORE '..formatDuration(deadlineAt-now))
-            return action,certainty,formatCurrentCycleTooltip(selloutAt,deadlineAt,bufferSeconds,flightSeconds,now)
+            local action=(deadlineAt-now)<=60 and 'Leave Now to hit.' or ('Leave Before '..formatDuration(deadlineAt-now)..' to hit.')
+            return action,'',formatCurrentCycleTooltip(selloutAt,deadlineAt,safetySeconds,flightSeconds,now)
         end
+
+        -- Current stock cannot beat the live sellout estimate (or is out of stock).
+        -- Evaluate exactly one next-restock group and stop there.
+        return homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,now)
     end
 
     if plan==nil or #plan.groups==0 then return nil,nil,nil end
