@@ -314,7 +314,10 @@ for ($i=1; $i -le $count; $i++) {
     $prefix='Opportunity'+$i
     $key=[string]$state[$prefix+'Key']
     $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
-    if (-not [string]::IsNullOrWhiteSpace($key) -and $forecastMode -ne 'sleeping_oos') { $wanted[$key]=$true }
+    if ([string]::IsNullOrWhiteSpace($key) -or $forecastMode -eq 'sleeping_oos') { continue }
+    $market=Get-WindowProperty $engine.observedMarkets $key
+    $stock=if ($null -ne $market) { [long](Get-WindowProperty $market 'lastStock') } else { 0L }
+    if ($stock -le 0) { $wanted[$key]=$true }
 }
 $cycleMap=Read-WindowCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile) -Wanted $wanted
 $travelState=([string]$state['TravelState']).Trim().ToLowerInvariant()
@@ -340,14 +343,13 @@ for ($i=1; $i -le $count; $i++) {
     if ($engine.PSObject.Properties['destinations']) { $destinationState=Get-WindowProperty $engine.destinations $key }
     $stock=0L
     if ($null -ne $market) { $stock=[long](Get-WindowProperty $market 'lastStock') }
-    $anchorAt=0L; $phase='sellout'
     if ($stock -gt 0) {
-        $phase='restock'
-        $activeCycle=Get-WindowProperty $destinationState 'activeCycle'
-        if ($null -ne $activeCycle) { $anchorAt=[long](Get-WindowProperty $activeCycle 'restockAt') }
-    } else {
-        $anchorAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')
+        # The authoritative refiner evaluates the cheap current-cycle sellout
+        # deadline first. Do not build fallback recurring geometry for live stock.
+        continue
     }
+    $anchorAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')
+    $phase='sellout'
 
     $model=Get-RecurringScenarioModel -Cycles $cycles -AnchorAt $anchorAt -AnchorPhase $phase -NowEpoch $Now
     $machine=Convert-WindowPlanMachineText -Model $model
