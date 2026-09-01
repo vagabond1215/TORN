@@ -56,7 +56,8 @@ if ($errors.Count -eq 0) {
     foreach ($token in @(
         'observations.jsonl','history_bootstrap','history_repair_baseline',
         'Runtime observations are authoritative','lastRestockAt','lastSellOutAt',
-        "'anchorSource' -Value 'observations'",'continuityInvalidatedAt'
+        "'anchorSource' -Value 'observations'",'continuityInvalidatedAt',
+        'transitionGapSeconds','transitionBoundaryQuality','Test-AnchorBoundaryQuality'
     )) {
         if (-not $anchor.Contains($token)) { Fail "CycleAnchorReconciler.ps1 missing '$token'." }
     }
@@ -67,12 +68,13 @@ if ($errors.Count -eq 0) {
         '$medianPeriod','(($ordinal-1) * $medianPeriod) + $period','($ordinal * $medianPeriod) + $delay',
         'Collector outages can turn one apparent out-of-stock span','Select-StableWindowPlanGroup',
         'Get-CurrentCycleDeparturePlan','SafetyMarginFraction = 0.05','NextCycleOrdinal',
+        'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
         "'PriceVaries'","'MinObservedPrice'","'MaxObservedPrice'"
     )) {
         if (-not $refiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing '$token'." }
     }
     if ($refiner -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'WindowPlanRefiner.ps1 must remain local-only.' }
-    foreach ($token in @('Select-CadenceAwareForecastCycles','Get-CycleBoundaryPolicy','Get-CycleBoundaryQuality','availabilityEligible','restockDelayEligible','trendEligible','$medianPeriod -le 10800L','$maximumPeriod = 86400L','$maximumPeriod = 172800L','604800L')) {
+    foreach ($token in @('Select-CadenceAwareForecastCycles','Test-CycleForecastBoundaryEvidence','Get-CycleBoundaryPolicy','Get-CycleBoundaryQuality','forecastEligible','availabilityEligible','restockDelayEligible','trendEligible','schemaVersion','recovered','$medianPeriod -le 10800L','$maximumPeriod = 86400L','$maximumPeriod = 172800L','604800L')) {
         if (-not $cycleFilter.Contains($token)) { Fail "CycleForecastFilter.ps1 missing cadence-aware contract '$token'." }
     }
     if ($cycleFilter -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'Cadence-aware cycle filtering must remain local-only.' }
