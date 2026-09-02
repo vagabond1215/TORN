@@ -144,11 +144,26 @@ Assert-Equal ([int]$overall[0].anyCount) 1 'Aggregate must count the prospective
 Assert-Near ([double]$overall[0].anyBrierSum) 0.09 0.00001 'A 0.7 forecast followed by success has Brier contribution 0.09.'
 Assert-Near ([double]$overall[0].anyOutcomeSum) 1.0 0.000001 'Aggregate observed-rate numerator must preserve the actual outcome.'
 
+Assert-Equal ([string]$overall[0].scopeType) 'all' 'Overall calibration aggregate should identify its scope explicitly.'
+Assert-Equal ([string]$overall[0].scopeValue) 'all' 'Overall calibration aggregate should use the all scope value.'
+
+$qualityAggregate=@($scoreState.aggregates | Where-Object {$_.modelVersion -eq 'stochastic-v1.1' -and $_.scopeType -eq 'evidence_quality' -and $_.scopeValue -eq 'bounded_fresh'})
+Assert-Equal $qualityAggregate.Count 1 'Prospective resolution must maintain an evidence-quality aggregate.'
+Assert-Equal ([int]$qualityAggregate[0].anyCount) 1 'Evidence-quality aggregate must count the prospective outcome once.'
+
+$marketAggregate=@($scoreState.aggregates | Where-Object {$_.modelVersion -eq 'stochastic-v1.1' -and $_.scopeType -eq 'market' -and $_.scopeValue -eq 'test_country:1'})
+Assert-Equal $marketAggregate.Count 1 'Prospective resolution must maintain a market-specific aggregate.'
+Assert-Equal ([int]$marketAggregate[0].anyCount) 1 'Market-specific aggregate must count the prospective outcome once.'
+
 $summary=New-SCCalibrationSummary -State $scoreState -NowEpoch 1700L -CurrentModelVersion 'stochastic-v1.1' -FreezeSeconds 3600 -GraceSeconds 300 -MaximumWaitSeconds 604800
 $summaryOverall=@($summary.models | Where-Object {$_.modelVersion -eq 'stochastic-v1.1' -and $_.evidenceQuality -eq 'all'})
 Assert-Equal $summaryOverall.Count 1 'Calibration summary must expose the model-level aggregate.'
 Assert-Near ([double]$summaryOverall[0].anyStock.brierScore) 0.09 0.00001 'Calibration summary must report mean Brier score.'
 Assert-Near ([double]$summaryOverall[0].anyStock.observedRate) 1.0 0.000001 'Calibration summary must report empirical observed rate.'
+
+$summaryMarket=@($summary.models | Where-Object {$_.modelVersion -eq 'stochastic-v1.1' -and $_.scopeType -eq 'market' -and $_.scopeValue -eq 'test_country:1'})
+Assert-Equal $summaryMarket.Count 1 'Calibration summary must expose market-specific reliability metrics.'
+Assert-Near ([double]$summaryMarket[0].anyStock.brierScore) 0.09 0.00001 'Market-specific summary must retain the same prospective Brier contribution.'
 
 # Unknown outcomes eventually expire without contaminating calibration metrics.
 $expiredState=New-SCCalibrationState
@@ -167,6 +182,7 @@ foreach($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','S
 Assert-True ($scriptText.Contains("forecastSelection='one best-expected-profit arrival per market/model/hour bucket'")) 'Calibration methodology must make the freeze sampling rule explicit.'
 Assert-True ($scriptText.Contains('selected arrival must be strictly after artifact generation')) 'Prospective calibration must explicitly exclude already-observable zero-horizon states.'
 Assert-True ($scriptText.Contains("calibrationStatus='diagnostic only; no probability transformation is applied'")) 'Prospective scorer must not silently recalibrate user-facing probabilities.'
+Assert-True ($scriptText.Contains("aggregateScopes='overall, evidence_quality, and market'")) 'Prospective scorer must expose overall, evidence-quality, and market calibration scopes.'
 
 $runUpdate=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1')
 $forecastIndex=$runUpdate.IndexOf('Invoke-FailSoftScript -Path $StochasticForecast')
