@@ -1,6 +1,6 @@
 # Next Codex Run: Live Shadow Scoring and Calibration
 
-**Status: ACTIVE — STOCHASTIC-V1.1 PROSPECTIVE SHADOW CALIBRATION; 0.6.0 RAINMETER ACCEPTANCE REMAINS OPEN**
+**Status: ACTIVE — STOCHASTIC-V1.1 SHADOW CALIBRATION + RESTRICTED MULTI-CYCLE CHANCE FALLBACK; 0.6.0 RAINMETER ACCEPTANCE REMAINS OPEN**
 
 The next forecasting phase is deliberately:
 
@@ -11,9 +11,7 @@ live shadow scoring / backtesting
             -> only then visible UI migration
 ```
 
-Do not show stochastic percentages or label them safe/guaranteed until frozen
-prospective forecasts demonstrate calibration. Keep the current Safe/Best card
-pipeline as the production baseline and score both models without future leakage.
+Do not promote the general stochastic decision/search or label stochastic output Safe/Guaranteed. One explicit exception is now production: `MultiCycleChanceBridge.ps1` may show `Chance to hit: NN%` when the earliest feasible arrival spans >=2 weighted mean cycles, >=3 usable completed cycles exist, and stronger legacy current-cycle/Safe/Best guidance cannot act. Keep legacy actionable guidance as the production baseline and continue scoring the general stochastic model without future leakage.
 
 Use ignored `data/runtime/stochastic-forecast.json` as the challenger artifact,
 `data/runtime/stochastic-calibration-state.json` /
@@ -55,7 +53,7 @@ update and inspect all three stochastic artifacts. The pre-review 25.3-second /
 ~1 MB measurement is no longer authoritative because adaptive refinement,
 observation-shape extraction, prospective evidence scans, and current-stock
 conditioning changed. After 20-60 minutes, use updater performance telemetry to
-measure both `stochastic-forecast` and `stochastic-calibration` stages.
+measure `multi-cycle-chance-bridge`, `stochastic-forecast`, and `stochastic-calibration` stages. The bridge is pre-publication and therefore has a stricter latency budget than the shadow search.
 
 Also inspect `stochastic-calibration.json`: confirm `pendingCount` grows
 reasonably, `maximumPendingPerMarket=24`, `maximumPendingTotal=4096`, and no
@@ -76,6 +74,7 @@ Known stochastic-v1.1 research gaps remain deliberately open:
   restock/sellout interval coverage, profit and regret remain scaffold extensions;
 - no calibrated probabilities, change-point model, risk preference, or
   value-of-information solver exists.
+- time-of-day conditioning and current-price-conditioned reweighting are not implemented; add them only if walk-forward/prospective scoring demonstrates incremental calibration value beyond joint-cycle resampling.
 
 Do not solve all of these at once. First obtain post-review live shadow evidence.
 
