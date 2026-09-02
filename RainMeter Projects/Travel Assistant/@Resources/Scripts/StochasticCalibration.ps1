@@ -424,10 +424,11 @@ function Get-SCAggregate {
 
 function Add-SCProbabilityScore {
     param([object]$Aggregate,[string]$Prefix,[double]$Probability,[int]$Outcome)
-    $p=[Math]::Max(0.000001,[Math]::Min(0.999999,$Probability))
+    $p=[Math]::Max(0.0,[Math]::Min(1.0,$Probability))
+    $logP=[Math]::Max(0.000001,[Math]::Min(0.999999,$p))
     $y=if($Outcome -gt 0){1}else{0}
     $brier=[Math]::Pow($p-$y,2)
-    $logLoss=-($y*[Math]::Log($p)+(1-$y)*[Math]::Log(1-$p))
+    $logLoss=-($y*[Math]::Log($logP)+(1-$y)*[Math]::Log(1-$logP))
 
     if ($Prefix -eq 'any') {
         $Aggregate.anyCount=[int]$Aggregate.anyCount+1
