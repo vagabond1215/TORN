@@ -540,8 +540,10 @@ bounds state growth: by default no new row is frozen when that model/market alre
 has 24 unresolved predictions or when total pending reaches 4,096. Capacity
 pressure never deletes, relabels, or prematurely expires an existing prediction.
 
-Scored records increment model-wide, evidence-quality and market-specific
-Brier/log-loss, reliability buckets, and exact-snapshot quantity MAE/RMSE. Recent
+Scored records increment model-wide, evidence-quality, market-specific, and
+forecast-horizon Brier/log-loss/reliability aggregates. Horizon strata are
+`<=30m`, `30m_to_2h`, `2h_to_6h`, and `gt_6h`; exact-snapshot quantity
+MAE/RMSE is carried in the same aggregate scopes. Recent
 scored/expired records are bounded for audit while aggregate statistics are
 retained. Brier uses the raw probability; only log loss is epsilon-clipped. No
 calibration mapping is applied back to forecast probabilities yet.
