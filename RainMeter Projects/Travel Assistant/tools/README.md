@@ -134,7 +134,7 @@ It intentionally does **not** loop provider requests or claim Travel Assistant-o
 
 ## `Invoke-StochasticReplay.ps1`
 
-Runs stochastic-v1 and simple empirical/deterministic comparators in
+Runs stochastic-v1.1 and simple empirical/deterministic comparators in
 chronological offline replay. At decision time T it admits only cycles whose upper
 completion bound was available by T. Arrivals intersecting a restock/sellout censor
 interval are marked unscorable rather than receiving a fabricated exact label.
