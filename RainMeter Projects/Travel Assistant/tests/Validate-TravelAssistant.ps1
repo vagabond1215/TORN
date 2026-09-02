@@ -11,10 +11,10 @@ $required = @(
     'data\seed\metadata.json','data\seed\observations.jsonl','data\seed\cycles.jsonl',
     '@Resources\Includes\OpportunityRows.inc',
     '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\ProjectCollectedState.ps1','@Resources\Scripts\MaintainObservationHistory.ps1','@Resources\Scripts\TravelContext.ps1',
-    '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1','@Resources\Scripts\StochasticForecast.ps1','@Resources\Scripts\StochasticCalibration.ps1',
+    '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1','@Resources\Scripts\StochasticForecast.ps1','@Resources\Scripts\StochasticCalibration.ps1','@Resources\Scripts\MultiCycleChanceBridge.ps1',
     '@Resources\Scripts\StateReader.lua','@Resources\Scripts\RenderInlineGraph.ps1','@Resources\Scripts\EnsureItemImages.ps1',
     '@Resources\Images\Flags\LICENSE-FlagKit.txt','@Resources\Images\UI\flag-mask-both.png','@Resources\Images\UI\flag-mask-top.png','@Resources\Images\UI\flag-mask-bottom.png',
-    'tests\Validate-RainmeterSkin.ps1','tests\Run-OpportunityStateTests.ps1','tests\Run-StochasticForecastTests.ps1','tests\Run-StochasticCalibrationTests.ps1','tools\Invoke-StochasticReplay.ps1'
+    'tests\Validate-RainmeterSkin.ps1','tests\Run-OpportunityStateTests.ps1','tests\Run-StochasticForecastTests.ps1','tests\Run-StochasticCalibrationTests.ps1','tests\Run-MultiCycleChanceBridgeTests.ps1','tools\Invoke-StochasticReplay.ps1'
 )
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $relative))) { Fail "Missing required file: $relative" }
