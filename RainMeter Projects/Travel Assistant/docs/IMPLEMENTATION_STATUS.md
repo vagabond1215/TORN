@@ -67,6 +67,16 @@ full scenario count then scores those candidates independently; discovery worlds
 do not supply the reported probabilities. This remains shadow-only and requires
 target-host performance/calibration evidence before promotion.
 
+Stochastic-v1.1 now also consumes retained intermediate stock observations for
+future-cycle quantity. Informative positive-stock declines form a monotone
+piecewise depletion shape tied to the sampled cycle; shapes with transition-censor
+width greater than 50% of cycle span are rejected and use linear fallback. The
+runtime artifact exposes uncapped expected available quantity separately from
+requested-load quantity. Offline replay admits only observations whose evidence
+timestamp is at or before the historical decision time, and quantity error is
+scored only when an exact retained provider snapshot exists at the historical
+arrival.
+
 ## Accepted target-host baseline before this redesign
 
 At commit `f5a4f0b`, target testing confirmed:
