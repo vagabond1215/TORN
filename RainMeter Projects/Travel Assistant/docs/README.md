@@ -37,15 +37,14 @@ Recorded data foundation at the last target-Windows check:
 
 The active **0.6.0 candidate** is now a compact opportunity-card surface:
 
-- `NAME`, `UPCOMING`, `GROSS PROFIT`, `PROFIT/HR` sort locally/immediately;
+- `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR` are the selectable local/immediate sorts; Name is fallback-only when timing/profit inputs are unavailable;
 - no user-facing OPTIMAL score or row place numbers;
 - fresh current in-stock rows stay visible even when likelihood is `LEARNING`;
 - each card uses a destination flag rail with a white elapsed-time strip;
 - country name/code and duplicate elapsed time are removed from the card body;
 - gross is displayed as a bare dollar amount, while quantity remains available in tooltip/internal projection;
-- each row has a `v`/`^` control for a one-at-a-time **inline 8-hour graph**;
-- `VIEWER >` remains a separate standalone market browser;
-- inline and standalone graphs are local-only and share retained observation truth;
+- each row has a highlighted chart button for a one-at-a-time **inline 8-hour graph**;
+- the inline graph is local-only and uses retained observation truth;
 - 48h raw / 90d completed-cycle retention remains independent of the 8h display;
 - background `OptimalRoute.ps1` remains compatibility/MV-priority infrastructure only.
 
