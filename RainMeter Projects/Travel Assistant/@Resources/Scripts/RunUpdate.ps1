@@ -445,6 +445,9 @@ try {
 
     # Primary presentation is the sortable opportunity surface.
     Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
+    if (Test-Path -LiteralPath $OpportunityStateErrorFile) {
+        throw 'OpportunityState failed; refusing to publish a stale opportunity projection as a fresh generation.'
+    }
 
     # Refine every projected candidate with conservative safe-window bounds and
     # empirical best-hit segments. This stage is local-only and writes absolute
@@ -461,6 +464,9 @@ try {
         # Recompute after the targeted MV refresh so newly enabled items can enter
         # this same published generation instead of waiting for the next minute poll.
         Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
+        if (Test-Path -LiteralPath $OpportunityStateErrorFile) {
+            throw 'OpportunityState refresh failed; refusing to publish pre-refresh opportunities.'
+        }
         Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
         Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
     }
@@ -474,7 +480,9 @@ try {
         }
     } catch { $hasOpportunityProjection = $false }
     if (-not $hasOpportunityProjection) {
-        Write-CompactFailure -Path $OpportunityStateErrorFile -Message 'OpportunityState completed without writing OpportunityCount to build state.kv.'
+        $projectionFailure = 'OpportunityState completed without writing OpportunityCount to build state.kv.'
+        Write-CompactFailure -Path $OpportunityStateErrorFile -Message $projectionFailure
+        throw $projectionFailure
     }
 
     if (Test-Path -LiteralPath $FilterState) {
