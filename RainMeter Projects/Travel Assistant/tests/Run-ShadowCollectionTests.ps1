@@ -269,6 +269,25 @@ Assert-True 'Same-phase outage long enough to hide a full cycle invalidates cont
 Assert-Equal 'Full-cycle OOS gap clears the sellout anchor' ([long]$longGapState.lastSellOutAt) 0
 Assert-Equal 'Full-cycle gap records invalidation point' ([long]$longGapState.continuityInvalidatedAt) 1400
 
+$positiveGapState = [pscustomobject]@{
+    lastStock=50
+    lastForeignPrice=200
+    lastSourceTimestamp=100
+    lastSellOutAt=0
+    lastSellOutLowerBoundAt=0
+    lastSellOutUpperBoundAt=0
+    lastSellOutBoundaryQuality='unknown'
+    continuityInvalidatedAt=0
+    activeCycle=[pscustomobject]@{restockAt=50;restockQuantity=100;foreignPrice=200}
+}
+$positiveGapObservation=[pscustomobject]@{timestamp=1400;sourceTimestamp=1400;stock=40;foreignPrice=210;source='fixture'}
+Assert-True 'Long same-phase in-stock gap invalidates the old phase anchor' (Invalidate-PhaseAnchorForGap -DestState $positiveGapState -Observation $positiveGapObservation -BoundaryPolicy $gapPolicy)
+Assert-Equal 'Fresh positive state after a long gap is retained as left-censored evidence' ([string]$positiveGapState.activeCycle.evidenceQuality) 'left_censored'
+Assert-True 'Fresh positive state after a long gap remains explicitly right-censored' ([bool]$positiveGapState.activeCycle.isRightCensored)
+Assert-Equal 'Long-gap partial cycle does not invent a restock timestamp' ([long]$positiveGapState.activeCycle.restockAt) 0
+Assert-Equal 'Long-gap partial cycle records only the known upper restock bound' ([long]$positiveGapState.activeCycle.restockUpperBoundAt) 1400
+Assert-Equal 'Long-gap partial cycle retains the fresh observed quantity' ([long]$positiveGapState.activeCycle.restockQuantity) 40
+
 $unknownBoundaryState = [pscustomobject]@{
     lastStock=400
     lastForeignPrice=200
