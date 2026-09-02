@@ -16,6 +16,7 @@ Assert-NotContains $runUpdate "`$WindowPlanRefiner =" 'RunUpdate must not expose
 Assert-NotContains $filterState 'WindowPlanRefiner.ps1' 'FilterState must not run a second legacy timing producer.'
 Assert-Contains $windowPlan "& (Join-Path `$PSScriptRoot 'WindowPlanRefiner.ps1') -Now `$Now" 'WindowPlan must explicitly delegate to the richer implementation.'
 Assert-Contains $refiner "`$state['LegacyWindowPlanAuthority']='WindowPlan'" 'Authoritative stage must stamp its ownership.'
+Assert-Contains $opportunity "`$State['LegacyWindowPlanAuthority'] = ''" 'OpportunityState must clear the authority stamp before each generation so a fail-soft window error cannot leave stale ownership metadata.'
 Assert-Contains $refiner "`$state[`$prefix+'WindowDataQualityReason']='window evidence was not evaluated'" 'Every projected row must initialize generation-scoped timing state before fast paths.'
 
 foreach ($suffix in @(
