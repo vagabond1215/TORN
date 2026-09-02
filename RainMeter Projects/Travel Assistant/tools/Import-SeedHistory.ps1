@@ -77,7 +77,7 @@ function Validate-Observation {
     foreach ($name in @('schemaVersion','timestamp','country','itemId','stock','foreignPrice','source','sourceTimestamp')) {
         if (-not $Row.PSObject.Properties[$name]) { throw "Observation is missing '$name'." }
     }
-    if ([int]$Row.schemaVersion -ne 1) { throw 'Unsupported observation schemaVersion.' }
+    if ([int]$Row.schemaVersion -notin @(1,2)) { throw 'Unsupported observation schemaVersion.' }
     if ([long]$Row.timestamp -le 0) { throw 'Observation timestamp must be positive.' }
     if ([long]$Row.sourceTimestamp -lt 0) { throw 'Observation sourceTimestamp cannot be negative.' }
     if ([int]$Row.stock -lt 0) { throw 'Observation stock cannot be negative.' }
@@ -92,13 +92,41 @@ function Validate-Cycle {
     foreach ($name in @('schemaVersion','country','itemId','foreignPrice','restockAt','restockQuantity','soldOutAt','availabilitySeconds','source')) {
         if (-not $Row.PSObject.Properties[$name]) { throw "Cycle is missing '$name'." }
     }
-    if ([int]$Row.schemaVersion -ne 1) { throw 'Unsupported cycle schemaVersion.' }
+    $schema=[int]$Row.schemaVersion
+    if ($schema -notin @(1,2)) { throw 'Unsupported cycle schemaVersion.' }
     if (-not $KnownCountries.Contains([string]$Row.country)) { throw "Unknown configured country '$($Row.country)'." }
     if (-not $KnownItems.Contains([int]$Row.itemId)) { throw "Unknown configured itemId '$($Row.itemId)'." }
-    if ([long]$Row.restockAt -le 0 -or [long]$Row.soldOutAt -le [long]$Row.restockAt) { throw 'Cycle restock/sellout timestamps are invalid.' }
-    if ([long]$Row.availabilitySeconds -ne ([long]$Row.soldOutAt - [long]$Row.restockAt)) { throw 'Cycle availabilitySeconds does not match soldOutAt - restockAt.' }
     if ([int]$Row.restockQuantity -le 0) { throw 'Cycle restockQuantity must be positive.' }
     if ([string]::IsNullOrWhiteSpace([string]$Row.source)) { throw 'Cycle source cannot be empty.' }
+
+    if ($schema -eq 1) {
+        if ([long]$Row.restockAt -le 0 -or [long]$Row.soldOutAt -le [long]$Row.restockAt) { throw 'Cycle restock/sellout timestamps are invalid.' }
+        if ([long]$Row.availabilitySeconds -ne ([long]$Row.soldOutAt - [long]$Row.restockAt)) { throw 'Cycle availabilitySeconds does not match soldOutAt - restockAt.' }
+        return
+    }
+
+    foreach ($name in @(
+        'restockLowerBoundAt','restockUpperBoundAt','restockBoundaryQuality',
+        'soldOutLowerBoundAt','soldOutUpperBoundAt','soldOutBoundaryQuality',
+        'availabilityMinimumSeconds','availabilityMaximumSeconds','availabilityEligible',
+        'previousSoldOutLowerBoundAt','previousSoldOutUpperBoundAt','previousSellOutBoundaryQuality',
+        'restockDelayMinimumSeconds','restockDelayMaximumSeconds','restockDelayEligible',
+        'forecastEligible','evidenceQuality'
+    )) {
+        if (-not $Row.PSObject.Properties[$name]) { throw "Schema-v2 cycle is missing '$name'." }
+    }
+    $restockLower=[long]$Row.restockLowerBoundAt
+    $restockUpper=[long]$Row.restockUpperBoundAt
+    $selloutLower=[long]$Row.soldOutLowerBoundAt
+    $selloutUpper=[long]$Row.soldOutUpperBoundAt
+    if ($restockLower -lt 0 -or $restockUpper -lt 0 -or ($restockLower -gt 0 -and $restockUpper -lt $restockLower)) { throw 'Schema-v2 restock bounds are invalid.' }
+    if ($selloutLower -lt 0 -or $selloutUpper -le 0 -or ($selloutLower -gt 0 -and $selloutUpper -lt $selloutLower)) { throw 'Schema-v2 sellout bounds are invalid.' }
+    if ([long]$Row.availabilityMinimumSeconds -lt 0 -or [long]$Row.availabilityMaximumSeconds -lt [long]$Row.availabilityMinimumSeconds) { throw 'Schema-v2 availability bounds are invalid.' }
+    if ([long]$Row.restockDelayMinimumSeconds -lt 0 -or [long]$Row.restockDelayMaximumSeconds -lt [long]$Row.restockDelayMinimumSeconds) { throw 'Schema-v2 restock-delay bounds are invalid.' }
+    if ([bool]$Row.forecastEligible) {
+        if ([long]$Row.restockAt -le 0 -or [long]$Row.soldOutAt -le [long]$Row.restockAt) { throw 'Forecast-eligible schema-v2 cycle needs usable representative restock/sellout times.' }
+        if ([long]$Row.availabilityMinimumSeconds -le 0 -or [long]$Row.restockDelayMaximumSeconds -le 0) { throw 'Forecast-eligible schema-v2 cycle needs positive duration evidence.' }
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($ObservationPath) -and [string]::IsNullOrWhiteSpace($CyclePath)) {
@@ -136,7 +164,13 @@ $cycleSeen = New-Object 'System.Collections.Generic.HashSet[string]'
 $mergedCycles = New-Object System.Collections.Generic.List[object]
 foreach ($row in @($existingCycles + $incomingCycles | Sort-Object country, itemId, restockAt, soldOutAt)) {
     Validate-Cycle -Row $row -KnownCountries $knownCountries -KnownItems $knownItems
-    $key = ('{0}|{1}|{2}|{3}|{4}' -f [string]$row.country, [int]$row.itemId, [long]$row.restockAt, [long]$row.soldOutAt, [long]$row.foreignPrice)
+    $restockIdentity=[long]$row.restockAt
+    $selloutIdentity=[long]$row.soldOutAt
+    if ([int]$row.schemaVersion -ge 2) {
+        if ($row.PSObject.Properties['restockUpperBoundAt']) { $restockIdentity=[long]$row.restockUpperBoundAt }
+        if ($row.PSObject.Properties['soldOutUpperBoundAt']) { $selloutIdentity=[long]$row.soldOutUpperBoundAt }
+    }
+    $key = ('{0}|{1}|{2}|{3}|{4}' -f [string]$row.country, [int]$row.itemId, $restockIdentity, $selloutIdentity, [long]$row.foreignPrice)
     if ($cycleSeen.Add($key)) { $mergedCycles.Add($row) }
 }
 
