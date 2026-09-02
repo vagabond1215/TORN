@@ -273,7 +273,7 @@ function Get-SCLastFrozen {
 
 function Set-SCLastFrozen {
     param([object]$State,[string]$ModelVersion,[string]$MarketKey,[long]$Bucket)
-    $found=Get-SCLastFrozen -State $State -ModelVersion $ModelVersion -MarketKey $MarketKey
+    $found=@(Get-SCLastFrozen -State $State -ModelVersion $ModelVersion -MarketKey $MarketKey)
     if ($found.Count -gt 0) {
         Set-SCProperty -Object $found[0] -Name 'bucket' -Value $Bucket
         return
@@ -329,7 +329,7 @@ function Get-SCFreezeRows {
         $marketPending=if($pendingByMarket.ContainsKey($pendingIdentity)){[int]$pendingByMarket[$pendingIdentity]}else{0}
         if ($marketPending -ge [Math]::Max(1,$MaximumPendingPerMarket)) { continue }
 
-        $last=Get-SCLastFrozen -State $State -ModelVersion $modelVersion -MarketKey $marketKey
+        $last=@(Get-SCLastFrozen -State $State -ModelVersion $modelVersion -MarketKey $marketKey)
         if ($last.Count -gt 0 -and [long](Get-SCProperty $last[0] 'bucket') -ge $bucket) { continue }
 
         $arrival=@((Get-SCProperty $market 'arrivals') | Where-Object { [long](Get-SCProperty $_ 'arrivalAt') -eq $arrivalAt } | Select-Object -First 1)
