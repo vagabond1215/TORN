@@ -213,10 +213,12 @@ function Get-SCConfirmedOutcome {
         if ($ArrivalAt -ge [long]$cycle.restockUpper -and $ArrivalAt -lt [long]$cycle.selloutLower) {
             return [pscustomobject]@{
                 anyScorable=$true; anyStock=1
-                targetScorable=$false; targetSuccess=-1
-                quantityScorable=$false; actualQuantity=0L
+                targetScorable=[bool]$exact.targetScorable
+                targetSuccess=[int]$exact.targetSuccess
+                quantityScorable=[bool]$exact.quantityScorable
+                actualQuantity=[long]$exact.actualQuantity
                 reason='arrival lies inside confirmed completed-cycle in-stock interval'
-                evidenceAt=[long]$cycle.availableAt
+                evidenceAt=[Math]::Max([long]$cycle.availableAt,[long]$exact.evidenceAt)
             }
         }
     }
@@ -244,8 +246,8 @@ function Get-SCConfirmedOutcome {
         if ($linked -and $ArrivalAt -ge [long]$left.selloutUpper -and $ArrivalAt -lt [long]$right.restockLower) {
             return [pscustomobject]@{
                 anyScorable=$true; anyStock=0
-                targetScorable=$false; targetSuccess=-1
-                quantityScorable=$false; actualQuantity=0L
+                targetScorable=$true; targetSuccess=0
+                quantityScorable=$true; actualQuantity=0L
                 reason='arrival lies inside continuity-linked confirmed between-cycle out-of-stock interval'
                 evidenceAt=[Math]::Max([long]$left.availableAt,[long]$right.availableAt)
             }
@@ -693,8 +695,8 @@ function New-SCCalibrationSummary {
             forecastSelection='one best-expected-profit arrival per market/model/hour bucket'
             freezeRule='artifact must be <=5 minutes old and selected arrival must be strictly after artifact generation'
             anyStockOutcome='exact provider snapshot, confirmed completed-cycle in-stock interval, or continuity-linked confirmed between-cycle OOS interval'
-            targetQuantityOutcome='exact provider snapshot only'
-            availableQuantityOutcome='exact non-conflicting provider snapshot only'
+            targetQuantityOutcome='exact provider snapshot or continuity-linked confirmed OOS failure'
+            availableQuantityOutcome='exact non-conflicting provider snapshot or continuity-linked confirmed OOS quantity zero'
             unscorablePolicy='retain pending until maximum wait, then expire without affecting calibration metrics'
             calibrationStatus='diagnostic only; no probability transformation is applied'
             aggregateScopes='overall, evidence_quality, market, and horizon'
