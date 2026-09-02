@@ -116,10 +116,11 @@ function Get-SFReplayMetrics {
     $buckets=@{}
     foreach ($row in $scored) {
         $p=[double](Get-SFProperty $row.predictions $PredictionName)
-        $p=[Math]::Max(0.000001,[Math]::Min(0.999999,$p))
+        $p=[Math]::Max(0.0,[Math]::Min(1.0,$p))
+        $logP=[Math]::Max(0.000001,[Math]::Min(0.999999,$p))
         $y=[int]$row.label
         $brier+=[Math]::Pow($p-$y,2)
-        $log+=-($y*[Math]::Log($p)+(1-$y)*[Math]::Log(1-$p))
+        $log+=-($y*[Math]::Log($logP)+(1-$y)*[Math]::Log(1-$logP))
         $bucket=[int][Math]::Min(9,[Math]::Floor($p*10.0))
         if (-not $buckets.ContainsKey($bucket)) { $buckets[$bucket]=[pscustomobject]@{ bucket=$bucket; count=0; probabilitySum=0.0; outcomeSum=0.0 } }
         $buckets[$bucket].count++
