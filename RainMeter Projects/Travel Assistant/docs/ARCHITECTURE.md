@@ -45,9 +45,11 @@ finalized ui-state.kv
         ↓
 visible heartbeat
         ↓
-CycleAnalytics / TrendForecast / StochasticForecast (shadow only)
+CycleAnalytics / TrendForecast
         ↓
 ResalePriority / ResaleQueue
+        ↓
+StochasticForecast (shadow only; lowest-priority local stage)
 ```
 
 Completed cycle rows remain retained for audit and long-horizon analysis. Route, window, and shadow-trend forecasts apply a market-specific cadence filter: markets normally completing at least eight cycles per day reject apparent cycles over 24 hours, other multi-cycle/day markets reject periods over 48 hours, and once-daily or slower markets retain a wider cadence-relative window. Transition boundaries also carry lower/upper observation bounds. The safe gap for each phase is the larger of three poll intervals or half its robust historical variance; the hard gap is bounded by the normal phase/cycle duration. Short gaps produce conservative availability/restock values, uncertain gaps are excluded from trend fitting, and hard gaps invalidate the current phase anchor instead of fabricating a cycle. The shadow trend pass is keyed to the completed-cycle file signature and skips its all-market recalculation/state rewrite when no cycle evidence changed. Fresh positive stock uses its observed restock quantity and live depletion rate for the active sellout estimate; restock timing begins only after observed stock reaches zero and uses the cleaned median out-of-stock delay.
@@ -458,8 +460,11 @@ stored bounds.
 Each of 128 deterministic seeded scenarios is represented as stock intervals, not
 second-by-second rows. Simulation continues through as many future cycles as needed
 to pass the latest evaluated arrival. The default grid is 15 minutes over a 12-hour
-departure search. Current stock is conditioned on fresh direct evidence, but later
-cycles remain eligible when it cannot survive the flight.
+departure search. Current stock is anchored to the provider observation timestamp.
+Only an observation describing the exact forecast origin is treated as certain
+current stock. Older-but-fresh positive evidence is propagated forward through the
+learned survival distribution, so it may sell out before `Now`; later cycles remain
+eligible when the observed cycle cannot survive to an evaluated arrival.
 
 Travel feasibility is a separate transform: home departures add outbound time;
 returning departures start no earlier than landing in Torn; outbound-to-target uses
@@ -476,6 +481,9 @@ already projected trip quantity and utility as expected profit. The configured
 
 These probabilities are uncalibrated shadow diagnostics. Limitations include
 linear within-cycle depletion, no value-of-information solver, no online
-change-point model, and no risk-preference surface. Promotion requires frozen live
+change-point model, and no risk-preference surface. The offline replay currently
+compares stochastic-v1 with simple mean/median and empirical overlap proxies;
+`empirical_all_overlap` / `empirical_overlap` are not an exact historical replay
+of production WindowPlan Safe/Best decisions. Promotion requires frozen live
 scoring, calibration, one accepted authoritative stochastic decision object, and
 only then a separate visible UI migration.
