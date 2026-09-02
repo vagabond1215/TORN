@@ -195,7 +195,7 @@ Assert-Equal $fallbackSortState['OpportunitySortEffectiveMode'] 'name' 'Name ord
 $economicsState=@{}
 $economicsRows=@([pscustomobject]@{
     key='canada:99'; name='Economics'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=.75; probabilityKnown=$true;
-    elapsedSeconds=3600L; grossProfit=420L; quantity=10; profitPerHour=420.0; windowStartAt=100000L; foreignPrice=100L; marketValue=150L;
+    elapsedSeconds=3600L; grossProfit=500L; quantity=10; profitPerHour=425.0; windowStartAt=100000L; foreignPrice=100L; marketValue=150L;
     marketValueFresh=$true; priceColor='86,190,116,255'; windowText='WINDOW'; leaveText='LEAVE'; tooltip='economics';
     purchaseCost=1000L; grossSale=1500L; grossProfitBeforeTax=500L; marketTax=75L; make=425L; profitEach=43L;
     marketFeePercent=5
@@ -208,6 +208,8 @@ Assert-Equal ([long]$economicsState['Opportunity1MarketTaxValue']) 75L 'Projecte
 Assert-Equal ([long]$economicsState['Opportunity1MakeValue']) 425L 'Projected Make is after-tax net profit.'
 Assert-Equal ([long]$economicsState['Opportunity1ProfitEachValue']) 43L 'Projected Each value is net profit per item.'
 Assert-Equal ([int]$economicsState['Opportunity1MarketFeePercent']) 5 'Projected market fee percentage is explicit.'
+Assert-Equal ([long]$economicsState['Opportunity1GrossValue']) 500L 'Gross sort value remains pre-tax gross profit.'
+Assert-Near ([double]$economicsState['Opportunity1ProfitHourValue']) 425.0 0.001 'Profit/hour sort value is after-tax net profit per hour.'
 Assert-Equal ([long]$economicsState['Opportunity1TakeValue']) 1000L 'Take starts at actual purchase cost before price-variation refinement.'
 Assert-Equal (Get-OpportunityCountryCode 'united_kingdom') 'UK' 'United Kingdom display code remains available internally.'
 
