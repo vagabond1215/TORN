@@ -351,14 +351,21 @@ function Get-SCFreezeRows {
 }
 
 function New-SCAggregate {
-    param([string]$ModelVersion,[string]$EvidenceQuality)
+    param([string]$ModelVersion,[string]$ScopeType,[string]$ScopeValue)
+    $scopeType=([string]$ScopeType).Trim().ToLowerInvariant()
+    $scopeValue=([string]$ScopeValue).Trim().ToLowerInvariant()
+    if ($scopeType -notin @('all','evidence_quality','market')) { $scopeType='all' }
+    if ([string]::IsNullOrWhiteSpace($scopeValue)) { $scopeValue='all' }
+
     $buckets=New-Object System.Collections.Generic.List[object]
     for ($i=0; $i -lt 10; $i++) {
         $buckets.Add([pscustomobject]@{index=$i;count=0;probabilitySum=0.0;outcomeSum=0.0})
     }
     return [pscustomobject]@{
         modelVersion=$ModelVersion
-        evidenceQuality=$EvidenceQuality
+        scopeType=$scopeType
+        scopeValue=$scopeValue
+        evidenceQuality=$(if($scopeType -eq 'evidence_quality'){$scopeValue}elseif($scopeType -eq 'all'){'all'}else{''})
         anyCount=0
         anyBrierSum=0.0
         anyLogLossSum=0.0
@@ -377,14 +384,33 @@ function New-SCAggregate {
 }
 
 function Get-SCAggregate {
-    param([object]$State,[string]$ModelVersion,[string]$EvidenceQuality)
+    param([object]$State,[string]$ModelVersion,[string]$ScopeType,[string]$ScopeValue)
+    $scopeType=([string]$ScopeType).Trim().ToLowerInvariant()
+    $scopeValue=([string]$ScopeValue).Trim().ToLowerInvariant()
+    if ($scopeType -notin @('all','evidence_quality','market')) { $scopeType='all' }
+    if ([string]::IsNullOrWhiteSpace($scopeValue)) { $scopeValue='all' }
+
+    foreach ($aggregate in @($State.aggregates)) {
+        if ($null -eq $aggregate.PSObject.Properties['scopeType']) {
+            $legacyQuality=([string](Get-SCProperty $aggregate 'evidenceQuality')).Trim().ToLowerInvariant()
+            if ($legacyQuality -eq 'all') {
+                $aggregate | Add-Member -MemberType NoteProperty -Name scopeType -Value 'all'
+                $aggregate | Add-Member -MemberType NoteProperty -Name scopeValue -Value 'all'
+            } else {
+                $aggregate | Add-Member -MemberType NoteProperty -Name scopeType -Value 'evidence_quality'
+                $aggregate | Add-Member -MemberType NoteProperty -Name scopeValue -Value $(if([string]::IsNullOrWhiteSpace($legacyQuality)){'unknown'}else{$legacyQuality})
+            }
+        }
+    }
+
     $match=@($State.aggregates | Where-Object {
         [string](Get-SCProperty $_ 'modelVersion') -eq $ModelVersion -and
-        [string](Get-SCProperty $_ 'evidenceQuality') -eq $EvidenceQuality
+        [string](Get-SCProperty $_ 'scopeType') -eq $scopeType -and
+        [string](Get-SCProperty $_ 'scopeValue') -eq $scopeValue
     } | Select-Object -First 1)
     if ($match.Count -gt 0) { return $match[0] }
 
-    $aggregate=New-SCAggregate -ModelVersion $ModelVersion -EvidenceQuality $EvidenceQuality
+    $aggregate=New-SCAggregate -ModelVersion $ModelVersion -ScopeType $scopeType -ScopeValue $scopeValue
     $State.aggregates=@($State.aggregates)+@($aggregate)
     return $aggregate
 }
@@ -423,8 +449,17 @@ function Add-SCScoreToAggregate {
     $quality=([string](Get-SCProperty $Score 'evidenceQuality')).Trim().ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($quality)) { $quality='unknown' }
 
-    foreach ($scope in @('all',$quality)) {
-        $aggregate=Get-SCAggregate -State $State -ModelVersion $modelVersion -EvidenceQuality $scope
+    $marketKey=([string](Get-SCProperty $Score 'marketKey')).Trim().ToLowerInvariant()
+    $scopes=@(
+        [pscustomobject]@{type='all';value='all'},
+        [pscustomobject]@{type='evidence_quality';value=$quality}
+    )
+    if (-not [string]::IsNullOrWhiteSpace($marketKey)) {
+        $scopes+=@([pscustomobject]@{type='market';value=$marketKey})
+    }
+
+    foreach ($scope in $scopes) {
+        $aggregate=Get-SCAggregate -State $State -ModelVersion $modelVersion -ScopeType ([string]$scope.type) -ScopeValue ([string]$scope.value)
         Add-SCProbabilityScore -Aggregate $aggregate -Prefix 'any' -Probability ([double](Get-SCProperty $Score 'pAnyStock')) -Outcome ([int](Get-SCProperty $Score 'anyStock'))
 
         if ([bool](Get-SCProperty $Score 'targetScorable')) {
@@ -463,6 +498,8 @@ function ConvertTo-SCAggregateSummary {
 
     return [pscustomobject]@{
         modelVersion=[string](Get-SCProperty $Aggregate 'modelVersion')
+        scopeType=[string](Get-SCProperty $Aggregate 'scopeType')
+        scopeValue=[string](Get-SCProperty $Aggregate 'scopeValue')
         evidenceQuality=[string](Get-SCProperty $Aggregate 'evidenceQuality')
         anyStock=[pscustomobject]@{
             count=$anyCount
@@ -606,6 +643,7 @@ function New-SCCalibrationSummary {
             availableQuantityOutcome='exact non-conflicting provider snapshot only'
             unscorablePolicy='retain pending until maximum wait, then expire without affecting calibration metrics'
             calibrationStatus='diagnostic only; no probability transformation is applied'
+            aggregateScopes='overall, evidence_quality, and market'
         }
         models=$models.ToArray()
     }
