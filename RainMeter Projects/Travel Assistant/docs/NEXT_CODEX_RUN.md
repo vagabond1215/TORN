@@ -7,8 +7,10 @@ The next forecasting phase is deliberately:
 ```text
 live shadow scoring / backtesting
     -> calibration
-        -> one authoritative stochastic decision object
-            -> only then visible UI migration
+        -> one authoritative general stochastic decision object
+            -> only then general stochastic UI migration
+
+Restricted exception already approved: multi-cycle fallback may expose only earliest-arrival pAnyStock as "Chance to hit: NN%" under its production gate.
 ```
 
 Do not promote the general stochastic decision/search or label stochastic output Safe/Guaranteed. One explicit exception is now production: `MultiCycleChanceBridge.ps1` may show `Chance to hit: NN%` when the earliest feasible arrival spans >=2 weighted mean cycles, >=3 usable completed cycles exist, and stronger legacy current-cycle/Safe/Best guidance cannot act. Keep legacy actionable guidance as the production baseline and continue scoring the general stochastic model without future leakage.
