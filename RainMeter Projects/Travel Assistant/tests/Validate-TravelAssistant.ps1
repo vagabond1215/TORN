@@ -12,9 +12,9 @@ $required = @(
     '@Resources\Includes\OpportunityRows.inc',
     '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\ProjectCollectedState.ps1','@Resources\Scripts\MaintainObservationHistory.ps1','@Resources\Scripts\TravelContext.ps1',
     '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1',
-    '@Resources\Scripts\StateReader.lua','@Resources\Scripts\LaunchItemViewer.ps1','@Resources\Scripts\OpenItemViewer.ps1','@Resources\Scripts\RenderInlineGraph.ps1',
+    '@Resources\Scripts\StateReader.lua','@Resources\Scripts\RenderInlineGraph.ps1',
     '@Resources\Images\Flags\LICENSE-FlagKit.txt',
-    'tests\Validate-RainmeterSkin.ps1','tests\Validate-ItemViewer.ps1','tests\Run-OpportunityStateTests.ps1'
+    'tests\Validate-RainmeterSkin.ps1','tests\Run-OpportunityStateTests.ps1'
 )
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $relative))) { Fail "Missing required file: $relative" }
@@ -62,11 +62,11 @@ foreach($file in $parsePaths) {
 $iniPath=Join-Path $ProjectRoot 'TravelAssistant.ini'
 if (Test-Path -LiteralPath $iniPath) {
     $ini=Get-Content -LiteralPath $iniPath -Raw
-    foreach($token in @('@IncludeRows=#@#Includes\OpportunityRows.inc','[MeasureItemViewer]','[MeasureInlineGraph]','[MeterSortName]','[MeterSortUpcoming]','[MeterSortGross]','[MeterSortProfitHour]','[MeterViewer]')) {
+    foreach($token in @('@IncludeRows=#@#Includes\OpportunityRows.inc','[MeasureInlineGraph]','[MeterSortUpcoming]','[MeterSortGross]','[MeterSortProfitHour]')) {
         if (-not $ini.Contains($token)) { Fail "Rainmeter skin missing '$token'." }
     }
     if ($ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'Opportunity rows must not be included before MeterBackground.' }
-    foreach($retired in @('[MeterRouteCard]','[MeterUKCard]','[MeterJPCard]','[MeterSortOptimal]','[MeterOpportunity1Rank]')) {
+    foreach($retired in @('[MeterRouteCard]','[MeterUKCard]','[MeterJPCard]','[MeterSortName]','[MeterSortNameButton]','[MeterViewer]','[MeasureItemViewer]','[MeterSortOptimal]','[MeterOpportunity1Rank]')) {
         if ($ini.Contains($retired)) { Fail "Rainmeter skin contains retired UI token '$retired'." }
     }
 }
@@ -125,7 +125,7 @@ if (Test-Path -LiteralPath $historyPath) {
 $opportunityPath=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 if (Test-Path -LiteralPath $opportunityPath) {
     $opportunity=Get-Content -LiteralPath $opportunityPath -Raw
-    foreach($token in @('grossProfit','profitPerHour','Get-OpportunityNextWindow',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'probabilityKnown',"'LEARNING'",'$availableQuantity = $stock')) {
+    foreach($token in @('grossProfit','profitPerHour','Get-OpportunityNextWindow','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'probabilityKnown',"'LEARNING'",'$availableQuantity = $stock')) {
         if (-not $opportunity.Contains($token)) { Fail "Opportunity model missing '$token'." }
     }
     if ($opportunity -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Opportunity projection must remain local-only.' }
@@ -134,9 +134,10 @@ if (Test-Path -LiteralPath $opportunityPath) {
 $readerPath=Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 if (Test-Path -LiteralPath $readerPath) {
     $reader=Get-Content -LiteralPath $readerPath -Raw
-    foreach($token in @('flagCodes','@3x.png','collapseInlineGraph','MeasureInlineGraph','MeasureItemViewer','safeLeaveText',"return 'WAIT DATA'","return 'NO HIT'")) {
+    foreach($token in @('flagCodes','@3x.png','collapseInlineGraph','MeasureInlineGraph','effectiveSortMode','OpportunitySortEffectiveMode','safeLeaveText',"return 'WAIT DATA'","return 'NO HIT'")) {
         if (-not $reader.Contains($token)) { Fail "StateReader missing '$token'." }
     }
+    foreach($retired in @('OpenViewer','ViewerMarketKey','MeasureItemViewer')) { if($reader.Contains($retired)){ Fail "StateReader retains retired Viewer token '$retired'." } }
 }
 
 $rendererPath=Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
