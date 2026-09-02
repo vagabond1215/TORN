@@ -57,6 +57,48 @@ function Get-CHLong {
     return $Default
 }
 
+function Get-CHTravelSeconds {
+    param([hashtable]$State,[string]$Country)
+    $countryId=([string]$Country).Trim().ToLowerInvariant()
+    $key=if($countryId -eq 'united_kingdom'){'UKTravelSeconds'}elseif($countryId -eq 'japan'){'JPTravelSeconds'}else{$countryId.ToUpperInvariant()+'TravelSeconds'}
+    return Get-CHLong -State $State -Key $key -Default 0L
+}
+
+function Get-CHArrivalPlan {
+    param([hashtable]$State,[string]$Country,[long]$NowEpoch,[long]$OneWaySeconds)
+    $travelState=([string]$State['TravelState']).Trim().ToLowerInvariant()
+    $destination=([string]$State['TravelDestinationCountryId']).Trim().ToLowerInvariant()
+    $countryId=([string]$Country).Trim().ToLowerInvariant()
+    $left=Get-CHLong -State $State -Key 'TravelTimeLeft' -Default 0L
+
+    if($travelState -in @('traveling_unknown','abroad_unknown','unknown')){
+        return [pscustomobject]@{feasible=$false;travelMode='unknown';departureAt=0L;arrivalAt=0L}
+    }
+    if($travelState -in @('traveling','outbound','outbound_to_target')){
+        if([string]::IsNullOrWhiteSpace($destination) -or $destination -ne $countryId){
+            return [pscustomobject]@{feasible=$false;travelMode='traveling_elsewhere';departureAt=0L;arrivalAt=0L}
+        }
+        return [pscustomobject]@{feasible=$true;travelMode='committed';departureAt=0L;arrivalAt=[long]($NowEpoch+[Math]::Max(0L,$left))}
+    }
+    if($travelState -in @('abroad','foreign','abroad_at_target')){
+        return [pscustomobject]@{feasible=$false;travelMode='already_abroad';departureAt=0L;arrivalAt=0L}
+    }
+    if($OneWaySeconds -le 0){
+        return [pscustomobject]@{feasible=$false;travelMode='missing_travel_time';departureAt=0L;arrivalAt=0L}
+    }
+    $departure=$NowEpoch
+    if($travelState -eq 'returning'){$departure=$NowEpoch+[Math]::Max(0L,$left)}
+    elseif($travelState -notin @('home','torn','in_torn','')){
+        return [pscustomobject]@{feasible=$false;travelMode='unsupported';departureAt=0L;arrivalAt=0L}
+    }
+    return [pscustomobject]@{
+        feasible=$true
+        travelMode=$(if($travelState -eq 'returning'){'returning'}else{'home'})
+        departureAt=[long]$departure
+        arrivalAt=[long]($departure+$OneWaySeconds)
+    }
+}
+
 function ConvertTo-CHLine {
     param([object]$Value)
     return ($Value | ConvertTo-Json -Compress -Depth 6)
@@ -144,12 +186,24 @@ for ($i=1; $i -le $count; $i++) {
     $key=([string]$state[$prefix+'Key']).Trim().ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($key)) { continue }
 
+    $parts=@($key -split ':',2)
+    $country=if($parts.Count -gt 0){[string]$parts[0]}else{''}
+    $itemId=0
+    if($parts.Count -gt 1){[void][int]::TryParse([string]$parts[1],[ref]$itemId)}
+    $oneWay=Get-CHTravelSeconds -State $state -Country $country
+    $arrivalPlan=Get-CHArrivalPlan -State $state -Country $country -NowEpoch $Now -OneWaySeconds $oneWay
+
     $probability=-1.0
     $source=''
     $modelVersion=''
     $arrivalAt=0L
+    $departureAt=0L
+    $travelMode=[string]$arrivalPlan.travelMode
     $ratio=0.0
     $sampleCount=0
+    $targetQuantity=1
+    $quantityText=[string]$state[$prefix+'QuantityText']
+    if($quantityText -match '([1-9][0-9]*)'){$targetQuantity=[int]$Matches[1]}
 
     $multiEligible=(Get-CHLong -State $state -Key ($prefix+'MultiCycleChanceEligible')) -gt 0
     $multiProbability=Get-CHDouble -State $state -Key ($prefix+'MultiCycleChanceProbability')
@@ -158,6 +212,7 @@ for ($i=1; $i -le $count; $i++) {
         $source='multi_cycle_arrival'
         $modelVersion=([string]$state[$prefix+'MultiCycleModelVersion']).Trim()
         $arrivalAt=Get-CHLong -State $state -Key ($prefix+'MultiCycleArrivalAt')
+        $departureAt=[long]$arrivalPlan.departureAt
         $ratio=Get-CHDouble -State $state -Key ($prefix+'MultiCycleArrivalCycleRatio') -Default 0.0
         $sampleCount=[int](Get-CHLong -State $state -Key ($prefix+'MultiCycleSampleCount'))
     } else {
@@ -166,24 +221,31 @@ for ($i=1; $i -le $count; $i++) {
             $probability=$legacyProbability
             $source='legacy_arrival'
             $modelVersion='window-plan'
+            if([bool]$arrivalPlan.feasible){
+                $departureAt=[long]$arrivalPlan.departureAt
+                $arrivalAt=[long]$arrivalPlan.arrivalAt
+            }
         }
     }
-    if ($probability -lt 0.0 -or $probability -gt 1.0) { continue }
+    # Only journal genuinely prospective travel forecasts. A current-state value
+    # with no future arrival cannot later be scored as a travel prediction.
+    if ($probability -lt 0.0 -or $probability -gt 1.0 -or $arrivalAt -le $Now) { continue }
 
-    $parts=@($key -split ':',2)
-    $country=if($parts.Count -gt 0){[string]$parts[0]}else{''}
-    $itemId=0
-    if($parts.Count -gt 1){[void][int]::TryParse([string]$parts[1],[ref]$itemId)}
     $current.Add([pscustomobject]@{
         schemaVersion=1
         timestamp=[long]$Now
+        forecastAt=[long]$Now
+        departureAt=[long]$departureAt
+        arrivalAt=[long]$arrivalAt
+        flightSeconds=[long]$oneWay
+        travelMode=$travelMode
+        targetQuantity=[int]$targetQuantity
         marketKey=$key
         country=$country
         itemId=$itemId
         probability=[Math]::Round([double]$probability,6)
         source=$source
         modelVersion=$modelVersion
-        arrivalAt=[long]$arrivalAt
         arrivalCycleRatio=[Math]::Round([double]$ratio,6)
         sampleCount=[int]$sampleCount
     })
