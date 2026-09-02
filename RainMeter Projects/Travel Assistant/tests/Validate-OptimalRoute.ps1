@@ -31,9 +31,8 @@ if (Test-Path -LiteralPath $optimizerPath) {
     }
     if ($text.Contains('$state = Read-OptimalStateKv $StateKvFile')) { Fail 'OptimalRoute.ps1 must not retain a standalone state-writing main path.' }
     foreach ($token in @(
-        "PSObject.Properties['average']",'marketValue = $marketValue','use95PercentMarketValue','-EnergyStackBypass',
-        'energyWastePolicy','nerveWastePolicy','showProfitableOnly','catalogActive','legacy_removed','availabilitySeconds',
-        'restockDelaySeconds','expectedTripProfit','$priceColor = ''224,90,90,255''','$priceColor = ''86,190,116,255''','pricingPriorityItemIds'
+        "PSObject.Properties['average']",'marketValue = $marketValue','EnergyStackBypass','ShowProfitableOnly',
+        'Test-OptimalMarketFilters','Get-OptimalMarketMetadata','availabilitySeconds','restockDelaySeconds','expectedTripProfit'
     )) {
         if (-not $text.Contains($token)) { Fail "Optimal route contract missing '$token'." }
     }
