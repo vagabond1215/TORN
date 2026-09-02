@@ -455,6 +455,10 @@ function Write-OpportunityProjection {
     $State['OpportunitySortText'] = if ($SortMode -eq 'gross') { 'PROFIT' } else { $SortMode.ToUpperInvariant() }
     $State['OpportunityMessage'] = $Message
     $State['OpportunityCount'] = $projectCount
+    # WindowPlan stamps this only after the authoritative legacy timing pass
+    # completes. Clear it with the base projection so a fail-soft window error
+    # cannot make the new generation look as though legacy refinement succeeded.
+    $State['LegacyWindowPlanAuthority'] = ''
 
     # Purge fields left by the retired ranked / OPTIMAL card surfaces instead of
     # continuing to publish blank compatibility values on every projection.
