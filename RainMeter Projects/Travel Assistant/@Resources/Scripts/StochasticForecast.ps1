@@ -683,6 +683,7 @@ function Invoke-SFMarketForecast {
         [object]$Destination,
         [object]$Travel,
         [long]$NowEpoch,
+        [object[]]$Observations=@(),
         [int]$ScenarioCount=128,
         [int]$TargetQuantity=1,
         [long]$MarketValue=0L,
@@ -693,10 +694,12 @@ function Invoke-SFMarketForecast {
         [bool]$EnableAdaptiveGrid=$true,
         [int]$CoarseGridSeconds=900
     )
-    $evidence=@(Select-SFJointCycleEvidence -Cycles $Cycles -AsOf $NowEpoch -HalfLifeSeconds $HalfLifeSeconds)
+    $evidence=@(Select-SFJointCycleEvidence -Cycles $Cycles -AsOf $NowEpoch -Observations $Observations -HalfLifeSeconds $HalfLifeSeconds)
     $candidates=@(Get-SFProperty $Travel 'candidates')
     $sampleCount=$evidence.Count
     $effective=Get-SFEffectiveSampleSize -Evidence $evidence
+    $shapeEvidenceCount=@($evidence | Where-Object { $null -ne (Get-SFProperty $_ 'depletionShape') }).Count
+    $depletionModel=if($shapeEvidenceCount -gt 0){'empirical_piecewise_with_linear_fallback'}else{'linear_fallback'}
     $adaptiveGrid=[pscustomobject]@{
         enabled=$false; reason='not evaluated'; referenceAvailabilitySeconds=0L; desiredFineStepSeconds=0
         discoveryScenarioCount=0; refinedCellCount=0; additionalCandidateCount=0; totalCandidateCount=$candidates.Count; maximumHiddenSupport=0
@@ -709,11 +712,11 @@ function Invoke-SFMarketForecast {
             if ($null -ne $observed) { $direct=@($observed) }
         }
         $decision=Get-SFDecision -Travel $Travel -Arrivals $direct -SampleCount $(if($direct.Count -gt 0){3}else{$sampleCount}) -NowEpoch $NowEpoch
-        return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality=$(if($direct.Count -gt 0){'bounded_fresh'}else{'insufficient'}); arrivals=$direct; decision=$decision; maximumCycleOrdinal=0; adaptiveGrid=$adaptiveGrid }
+        return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality=$(if($direct.Count -gt 0){'bounded_fresh'}else{'insufficient'}); arrivals=$direct; decision=$decision; maximumCycleOrdinal=0; adaptiveGrid=$adaptiveGrid; depletionModel=$depletionModel; depletionShapeEvidenceCount=$shapeEvidenceCount }
     }
     if (-not [bool](Get-SFProperty $Travel 'feasible') -or $candidates.Count -eq 0) {
         $decision=Get-SFDecision -Travel $Travel -Arrivals @() -SampleCount $sampleCount -NowEpoch $NowEpoch
-        return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality='usable'; arrivals=@(); decision=$decision; maximumCycleOrdinal=0; adaptiveGrid=$adaptiveGrid }
+        return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality='usable'; arrivals=@(); decision=$decision; maximumCycleOrdinal=0; adaptiveGrid=$adaptiveGrid; depletionModel=$depletionModel; depletionShapeEvidenceCount=$shapeEvidenceCount }
     }
 
     $adaptiveGrid=Get-SFAdaptiveGridPlan -Evidence $evidence -Travel $Travel -CoarseStepSeconds $CoarseGridSeconds -Enabled $EnableAdaptiveGrid
@@ -760,9 +763,7 @@ function Invoke-SFMarketForecast {
             if ($worldIndex -lt $world.Count) {
                 $interval=$world[$worldIndex]
                 if ($arrivalAt -ge [long]$interval.startAt -and $arrivalAt -lt [long]$interval.endAt) {
-                    $duration=[Math]::Max(1L,[long]$interval.endAt-[long]$interval.startAt)
-                    $remaining=[Math]::Max(0L,[long]$interval.endAt-$arrivalAt)
-                    $stock.quantity=[long][Math]::Ceiling(([double][long]$interval.quantity*$remaining)/$duration)
+                    $stock.quantity=Get-SFIntervalQuantity -Interval $interval -ArrivalAt $arrivalAt
                     $stock.foreignPrice=[long]$interval.foreignPrice
                     $stock.cycleOrdinal=[int]$interval.cycleOrdinal
                 }
@@ -807,6 +808,8 @@ function Invoke-SFMarketForecast {
         decision=$decision
         maximumCycleOrdinal=$(if($maxOrdinal.Count -gt 0){[int](@($maxOrdinal | Measure-Object -Maximum).Maximum)}else{0})
         adaptiveGrid=$adaptiveGrid
+        depletionModel=$depletionModel
+        depletionShapeEvidenceCount=$shapeEvidenceCount
     }
 }
 
@@ -830,6 +833,28 @@ function Read-SFCyclesForKeys {
             if ([string]::IsNullOrWhiteSpace($key) -or -not $Wanted.ContainsKey($key)) { continue }
             try { $row=$line | ConvertFrom-Json } catch { continue }
             $identity=$key+':'+[string](Get-SFProperty $row 'restockUpperBoundAt')+':'+[string](Get-SFProperty $row 'soldOutUpperBoundAt')
+            if ($seen.ContainsKey($identity)) { continue }
+            $seen[$identity]=$true
+            if (-not $map.ContainsKey($key)) { $map[$key]=New-Object System.Collections.Generic.List[object] }
+            $map[$key].Add($row)
+        }
+    }
+    return $map
+}
+
+function Read-SFObservationsForKeys {
+    param([string[]]$Paths,[hashtable]$Wanted)
+    $map=@{}
+    $seen=@{}
+    foreach ($path in @($Paths)) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        foreach ($line in [System.IO.File]::ReadLines($path)) {
+            $key=Get-SFCycleLineKey -Line $line
+            if ([string]::IsNullOrWhiteSpace($key) -or -not $Wanted.ContainsKey($key)) { continue }
+            try { $row=$line | ConvertFrom-Json } catch { continue }
+            $at=Get-SFObservationAt $row
+            if ($at -le 0) { continue }
+            $identity=$key+':'+[string]$at+':'+[string](Get-SFProperty $row 'stock')+':'+[string](Get-SFProperty $row 'foreignPrice')
             if ($seen.ContainsKey($identity)) { continue }
             $seen[$identity]=$true
             if (-not $map.ContainsKey($key)) { $map[$key]=New-Object System.Collections.Generic.List[object] }
@@ -863,6 +888,7 @@ for ($i=1; $i -le $count; $i++) {
     if (-not [string]::IsNullOrWhiteSpace($key)) { $wanted[$key]=$true }
 }
 $cycleMap=Read-SFCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile) -Wanted $wanted
+$observationMap=Read-SFObservationsForKeys -Paths @($SeedObservationFile,$RuntimeObservationFile) -Wanted $wanted
 $travelState=([string]$state['TravelState']).Trim().ToLowerInvariant()
 $travelDestination=([string]$state['TravelDestinationCountryId']).Trim().ToLowerInvariant()
 $travelLeft=0L
@@ -884,6 +910,8 @@ for ($i=1; $i -le $count; $i++) {
     if ($null -eq $destination) { $destination=[pscustomobject]@{} }
     $cycles=@()
     if ($cycleMap.ContainsKey($key)) { $cycles=@($cycleMap[$key].ToArray()) }
+    $observations=@()
+    if ($observationMap.ContainsKey($key)) { $observations=@($observationMap[$key].ToArray()) }
     $oneWay=Get-SFTravelSeconds -State $state -Country $country
     $travel=Get-SFTravelCandidates -TravelState $travelState -MarketCountry $country -TravelDestinationCountry $travelDestination -TravelTimeLeft $travelLeft -OneWaySeconds $oneWay -NowEpoch $Now -StepSeconds $GridSeconds -SearchSeconds $DepartureSearchSeconds
     $targetQuantity=1
@@ -893,7 +921,7 @@ for ($i=1; $i -le $count; $i++) {
     [void][long]::TryParse([string]$state[$prefix+'MarketValueValue'],[ref]$marketValue)
     [void][int]::TryParse([string]$state[$prefix+'MarketFeePercent'],[ref]$fee)
     $marketSeed=Get-SFStableSeed -MarketKey $key -BaseSeed $Seed
-    $forecast=Invoke-SFMarketForecast -MarketKey $key -Cycles $cycles -Market $market -Destination $destination -Travel $travel -NowEpoch $Now -ScenarioCount $SimulationCount -TargetQuantity $targetQuantity -MarketValue $marketValue -MarketFeePercent $fee -OneWaySeconds $oneWay -RandomSeed $marketSeed -CoarseGridSeconds $GridSeconds
+    $forecast=Invoke-SFMarketForecast -MarketKey $key -Cycles $cycles -Market $market -Destination $destination -Travel $travel -NowEpoch $Now -Observations $observations -ScenarioCount $SimulationCount -TargetQuantity $targetQuantity -MarketValue $marketValue -MarketFeePercent $fee -OneWaySeconds $oneWay -RandomSeed $marketSeed -CoarseGridSeconds $GridSeconds
     $best=$null
     if (@($forecast.arrivals).Count -gt 0) { $best=@($forecast.arrivals | Sort-Object @{Expression='expectedProfit';Descending=$true},@{Expression='pTargetQty';Descending=$true},arrivalAt | Select-Object -First 1)[0] }
     $lastGoodDepartureAt=0L
@@ -906,6 +934,8 @@ for ($i=1; $i -le $count; $i++) {
         sampleCount=[int]$forecast.sampleCount; effectiveSampleSize=[double]$forecast.effectiveSampleSize; evidenceQuality=[string]$forecast.evidenceQuality
         targetQuantity=$targetQuantity; targetQuantityDefinition='projected trip quantity'; simulationCount=$SimulationCount; gridSeconds=$GridSeconds
         adaptiveGrid=$(Get-SFProperty $forecast 'adaptiveGrid')
+        depletionModel=[string](Get-SFProperty $forecast 'depletionModel')
+        depletionShapeEvidenceCount=[int](Get-SFProperty $forecast 'depletionShapeEvidenceCount')
         arrivals=@($forecast.arrivals)
         bestArrivalAt=$(if($null -ne $best){[long]$best.arrivalAt}else{0L})
         bestDepartureAt=$(if($null -ne $best){[long]$best.departureAt}else{0L})
@@ -944,7 +974,7 @@ $artifact=[pscustomobject]@{
     marketCount=$markets.Count
     decisionStates=@('INSUFFICIENT_DATA','NO_ACTIONABLE_TRIP','WAIT','LEAVE_IN','LEAVE_NOW','LEAVE_BEFORE','COMMITTED','BUY_NOW','MISSED_TARGET')
     adaptiveGridMode='bounded coarse-to-fine hidden-support refinement'
-    limitations=@('uncalibrated probabilities','linear within-cycle depletion','empirical cycles only','bounded adaptive candidate budget','no value-of-information solver','expectedProfit utility')
+    limitations=@('uncalibrated probabilities','empirical depletion shapes require retained intermediate observations and otherwise fall back to linear','empirical cycles only','bounded adaptive candidate budget','no value-of-information solver','expectedProfit utility')
     markets=$markets.ToArray()
 }
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
