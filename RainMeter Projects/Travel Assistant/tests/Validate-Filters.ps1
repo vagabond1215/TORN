@@ -105,7 +105,7 @@ if(Test-Path -LiteralPath $files.PopupHost){
 
 if(Test-Path -LiteralPath $files.Settings){
  $text=Get-Content -LiteralPath $files.Settings -Raw
- foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1','& $UpdateLauncher -Action Update -MutexWaitSeconds 120',"& `$FilterLauncher -Filter 'Ignore'")){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','Start-FilterProjectionRefresh -Action RefreshFilters',"& `$FilterLauncher -Filter 'Ignore'")){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
  foreach($token in @('Tax / trader rate','itemMarketFeePercent','foreach($rate in 0..5)','marketTax.SelectedIndex')){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
  if(-not$text.Contains('$save.BackColor=[System.Drawing.Color]::FromArgb(126,190,73)')){Fail 'OpenOptimizerSettings.ps1 Save accent must use Torn lime.'}
  foreach($retired in @('Use 95% MV profit calculation','use95PercentMarketValue')){if($text.Contains($retired)){Fail "OpenOptimizerSettings.ps1 retains retired MV-basis token '$retired'."}}
@@ -138,6 +138,50 @@ if(Test-Path -LiteralPath $files.Opportunities){
   '$maxProjectedRows = 256',"'TripBand'",'tripBand=$tripBand','OpportunityCount'
  )){if(-not$text.Contains($token)){Fail "OpportunityState.ps1 missing '$token'."}}
  foreach($retired in @('expectedGross=','optimalScore=')){if($text.Contains($retired)){Fail "OpportunityState.ps1 retains retired hidden-ranking token '$retired'."}}
+ if([regex]::Matches($text,'if \(\$OpportunityStateSkipMain\) \{ return \}').Count -ne 1){Fail 'OpportunityState.ps1 must contain exactly one executable main boundary.'}
+ if($text -match '(?m)^\) \{
+
+if(Test-Path -LiteralPath $files.StateReader){
+ $text=Get-Content -LiteralPath $files.StateReader -Raw
+ foreach($token in @(
+  'function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)',
+  'currentOpportunityRows','sortOpportunityRows','locallyFilteredSortedProjection','pendingTripBands','activeTripBands','projectedTripBands',
+  'maxCandidateRows = 256','TripBand','collapseInlineGraph','MeasureInlineGraph','effectiveSortMode','OpportunitySortEffectiveMode','safeLeaveText','UIOldestMarketSourceTimestamp',
+  'resolvedItemName',"name:match('^Item%s+%d+$')","combinedPrice = 'BUY ' .. price .. '/ea'","combinedPrice = combinedPrice .. ' | '","return name .. ' - ' .. country"
+ )){if(-not$text.Contains($token)){Fail "StateReader.lua missing '$token'."}}
+ foreach($retired in @('OpenViewer','ViewerMarketKey','MeasureItemViewer')){if($text.Contains($retired)){Fail "StateReader retains retired Viewer token '$retired'."}}
+}
+
+if(Test-Path -LiteralPath $files.Ini){
+ $ini=Get-Content -LiteralPath $files.Ini -Raw
+ foreach($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeasureHeaderLayout','MeterFilterIcon','MeterSettingsIcon','MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')){if($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){Fail "TravelAssistant.ini missing [$section]."}}
+ foreach($retired in @('MeterItemFilter','MeterTripLabel','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine','MeterSettings','MeterSortNameButton','MeterSortName','MeterViewer','MeasureItemViewer','MeterSortOptimal','MeterSortTime','MeterSortLabel')){if($ini -match ('(?m)^\['+[regex]::Escape($retired)+'\]\s*$')){Fail "Retired main-UI meter [$retired] returned."}}
+ foreach($token in @('FilterRequest=Filters',"OpenFilter('Filters')",'ScriptFile=#@#Scripts\HeaderLayout.lua','PanelHeight=160','Y=67','StringAlign=CenterCenter','ImageName=#@#Images\UI\filter.png','ImageName=#@#Images\UI\settings.png')){if(-not$ini.Contains($token)){Fail "TravelAssistant.ini compact-header token missing '$token'."}}
+ foreach($section in @('MeterFilterIcon','MeterSettingsIcon')) {
+  $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+  if($body -notmatch '(?im)^Meter=Image\s*$' -or $body -notmatch '(?im)^W=24\s*$' -or $body -notmatch '(?im)^H=24\s*$'){Fail "$section must remain a compact 24x24 image meter."}
+ }
+ foreach($section in @('MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')) {
+  $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+  foreach($token in @('W=92','H=23','Shape=Rectangle 0,0,92,23,4 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#')){if(-not$body.Contains($token)){Fail "$section must remain a standard 92x23 rounded sort button surface."}}
+ }
+ foreach($retiredSeparator in @('MeterHeaderBottomLine','MeterSortBottomLine')){if($ini -match ('(?m)^\['+[regex]::Escape($retiredSeparator)+'\]\s*$')){Fail "Retired separator [$retiredSeparator] returned."}}
+ if($ini.Contains('Text=SETTINGS  >')){Fail 'Main header must use the settings gear image, not SETTINGS > text.'}
+}
+
+if(Test-Path -LiteralPath $files.Countries){
+ $countriesJson=Get-Content -LiteralPath $files.Countries -Raw|ConvertFrom-Json
+ $collect=@($countriesJson.countries|Where-Object{$_.collect -eq $true})
+ if($collect.Count -ne 11){Fail "Expected 11 collect=true destinations; found $($collect.Count)."}
+ $short=@($collect|Where-Object{$_.tripBand -eq 'short'});$medium=@($collect|Where-Object{$_.tripBand -eq 'medium'});$long=@($collect|Where-Object{$_.tripBand -eq 'long'})
+ if($short.Count -ne 3 -or $medium.Count -ne 4 -or $long.Count -ne 4){Fail "Trip subdivisions must remain 3 short / 4 medium / 4 long; found $($short.Count)/$($medium.Count)/$($long.Count)."}
+}
+
+if($errors.Count -gt 0){foreach($message in $errors){Write-Host "FAIL: $message" -ForegroundColor Red};Write-Host "Unified opportunity filter/header validation failed with $($errors.Count) error(s)." -ForegroundColor Red;exit 1}
+Write-Host 'Unified trip/country/category/item filter panel and compact image-icon header validation passed.' -ForegroundColor Green
+Write-Host 'Legacy main filter meters are retired, Ignore List remains separate, and HeaderLayout can only shift the existing card stack upward.' -ForegroundColor Green
+exit 0
+){Fail 'OpportunityState.ps1 retains the malformed duplicated legacy-cleanup tail.'}
 }
 
 if(Test-Path -LiteralPath $files.StateReader){
