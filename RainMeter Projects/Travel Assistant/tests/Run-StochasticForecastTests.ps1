@@ -82,6 +82,16 @@ $agedAbroadForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles 
 Assert-Equal ([string]$agedAbroadForecast.decision.state) 'INSUFFICIENT_DATA' 'An aged positive snapshot must not become a fabricated 100% current-stock claim without survival evidence.'
 Assert-Equal @($agedAbroadForecast.arrivals).Count 0 'Aged direct stock with insufficient cycles should remain probabilistically unknown.'
 
+$agedActive=[pscustomobject]@{activeCycle=[pscustomobject]@{restockAt=($now-70);restockLowerBoundAt=($now-70);restockUpperBoundAt=($now-70)}}
+$shortSurvivalCycles=New-TestCycles -DelayMin 100 -DelayMax 100 -AvailableMin 30 -AvailableMax 30
+$shortAgedForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $shortSurvivalCycles -Market $agedAbroadMarket -Destination $agedActive -Travel $abroad -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 31
+Assert-Near ([double]$shortAgedForecast.arrivals[0].pAnyStock) 0.0 0.000001 'A positive snapshot from one minute ago must be allowed to sell out before Now when learned duration is short.'
+
+$longSurvivalCycles=New-TestCycles -DelayMin 100 -DelayMax 100 -AvailableMin 120 -AvailableMax 120
+$longAgedForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $longSurvivalCycles -Market $agedAbroadMarket -Destination $agedActive -Travel $abroad -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 31
+Assert-Near ([double]$longAgedForecast.arrivals[0].pAnyStock) 1.0 0.000001 'Aged positive evidence may still survive to Now when empirical duration supports it.'
+Assert-True ([double]$longAgedForecast.arrivals[0].expectedQty -le 5.0) 'Current-stock quantity must deplete forward from the provider observation rather than restart at Now.'
+
 $elsewhere=Get-SFTravelCandidates -TravelState traveling -MarketCountry test_country -TravelDestinationCountry other_country -TravelTimeLeft 400 -OneWaySeconds 100 -NowEpoch $now
 $elsewhereForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $cycles -Market $oosMarket -Destination $oosDestination -Travel $elsewhere -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 2
 Assert-True (-not [bool]$elsewhere.feasible) 'Traveling elsewhere must make a new Torn departure physically infeasible.'
