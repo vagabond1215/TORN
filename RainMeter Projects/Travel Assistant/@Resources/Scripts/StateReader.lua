@@ -40,7 +40,12 @@ local opportunitySuffixes = {
     'MarketValueValue','PurchaseCostValue','TotalCostValue','GrossSaleValue','GrossProfitValue',
     'MarketTaxValue','MakeValue','ProfitEachValue','MarketFeePercent',
     'PriceVaries','PriceVariationReason',
-    'MinObservedPrice','MaxObservedPrice'
+    'MinObservedPrice','MaxObservedPrice',
+    'MultiCycleChanceEligible','MultiCycleChanceProbability','MultiCycleTargetProbability','MultiCycleDutyCycleProbability',
+    'MultiCycleMeanPeriodSeconds','MultiCycleMeanInStockSeconds','MultiCyclePeriodStdDevSeconds','MultiCycleArrivalCycleRatio',
+    'MultiCycleExpectedFullCycles','MultiCyclePhaseStdDevSeconds','MultiCyclePhaseStdDevCycles','MultiCycleSampleCount',
+    'MultiCycleEffectiveSampleSize','MultiCycleMaximumOrdinal','MultiCycleArrivalAt','MultiCycleGeneratedAt',
+    'MultiCycleSimulationCount','MultiCycleModelVersion','MultiCycleReason'
 }
 
 local flagCodes = {
