@@ -257,6 +257,8 @@ Assert-True ($scriptText.Contains("forecastSelection='one best-expected-profit a
 Assert-True ($scriptText.Contains('selected arrival must be strictly after artifact generation')) 'Prospective calibration must explicitly exclude already-observable zero-horizon states.'
 Assert-True ($scriptText.Contains("calibrationStatus='diagnostic only; no probability transformation is applied'")) 'Prospective scorer must not silently recalibrate user-facing probabilities.'
 Assert-True ($scriptText.Contains('Read-SCJson $StateFile -Strict')) 'Durable calibration state must be read strictly so malformed JSON cannot reset accumulated evidence.'
+Assert-True ($scriptText.Contains('$summaryGeneratedAt -lt [long]$state.updatedAt')) 'Calibration summary must self-heal when durable state is newer than a stale summary.'
+Assert-True ($scriptText.Contains('$null -eq $existingSummary')) 'Missing or malformed replaceable calibration summaries must be regenerated from durable state.'
 Assert-True ($scriptText.Contains("aggregateScopes='overall, evidence_quality, market, and horizon'")) 'Prospective scorer must expose overall, evidence-quality, market, and horizon calibration scopes.'
 Assert-True ($scriptText.Contains("horizonBuckets='<=30m, >30m-2h, >2h-6h, >6h'")) 'Calibration horizon buckets must remain explicit and stable for longitudinal metrics.'
 Assert-True ($scriptText.Contains("targetQuantityOutcome='exact provider snapshot or continuity-linked confirmed OOS failure'")) 'Target-quantity methodology must retain deterministic confirmed-OOS failures.'
