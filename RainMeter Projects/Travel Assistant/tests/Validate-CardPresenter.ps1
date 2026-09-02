@@ -31,7 +31,7 @@ if ($errors.Count -eq 0) {
 
     # Keep this PowerShell validator ASCII-only for Windows PowerShell 5.1.
     foreach ($token in @(
-        'removeCountrySuffix','rowCountryAndTravel','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
+        'removeCountrySuffix','rowCountryAndTravel','countryTravelSeconds','liveTravelRemainingSeconds','TravelDestinationCountryId','TravelArrivalAt','TravelTimeLeft','TravelContextLastSuccessAt','os.time()',
         'parseWindowPlan','parsePriceVarianceEnvelope','probabilityAt','staysAboveThresholdUntil','groupMode','liveWindowAction','nextBetterBestBefore',
         'WP2:','PV([01])','group.safeEnd-group.safeStart>=60','group.bestProbability>0.5','currentProbability>0.5',
         'formatCountdown',"string.format('%02d:%02d:%02d',hours,minutes,secs)",
@@ -65,15 +65,22 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Gross','Text','MV:'..formatMoney(mv))",
         "setOption(prefix..'DetailEachNet','Text','Net:'..formatSignedMoney(each))",
         "setOption(prefix..'DetailEachTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax:'..formatMoney(taxEach)) or '')",
+        "local flightSeconds=countryTravelSeconds(state,country,travel)","local roundTripHours=(flightSeconds>0) and ((flightSeconds*2)/3600.0) or 0",
+        "local eachFlightProfitHour=(roundTripHours>0) and (each/roundTripHours) or 0","local totalFlightProfitHour=(roundTripHours>0) and (make/roundTripHours) or 0",
+        "setOption(prefix..'DetailEachProfitHour','Text',flightRateKnown and ('$/hr:'..formatSignedMoney(eachFlightProfitHour)) or '$/hr:?')",
         "setOption(prefix..'DetailTotalLabel','Text','Total')","setOption(prefix..'DetailTotalLabel','SolidColor','#Border#')",
         "setOption(prefix..'DetailTotal','Text','MV:'..formatMoney(grossSale))",
         "setOption(prefix..'DetailTotalNet','Text','Net:'..formatSignedMoney(make))",
         "setOption(prefix..'DetailTotalTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax:'..formatMoney(marketTax)) or '')",
+        "setOption(prefix..'DetailTotalProfitHour','Text',flightRateKnown and ('$/hr:'..formatSignedMoney(totalFlightProfitHour)) or '$/hr:?')",
         "setOption(prefix..'DetailEachNet','FontColor',eachNetColor)","setOption(prefix..'DetailTotalNet','FontColor',totalNetColor)",
+        "setOption(prefix..'DetailEachProfitHour','FontColor',flightRateKnown and profitColor(eachFlightProfitHour) or '#Muted#')","setOption(prefix..'DetailTotalProfitHour','FontColor',flightRateKnown and profitColor(totalFlightProfitHour) or '#Muted#')",
         "setOption(prefix..'DetailEachTax','FontColor',taxColor)","setOption(prefix..'DetailTotalTax','FontColor',taxColor)",
         "setOption(prefix..'DetailEachNet','StringAlign','RightCenter')","setOption(prefix..'DetailTotalNet','StringAlign','RightCenter')",
+        "setOption(prefix..'DetailEachProfitHour','StringAlign','RightCenter')","setOption(prefix..'DetailTotalProfitHour','StringAlign','RightCenter')",
+        "setOption(prefix..'DetailEachProfitHour','FontSize',8)","setOption(prefix..'DetailTotalProfitHour','FontSize',8)",
         "setOption(prefix..'DetailEachTax','StringAlign','LeftCenter')","setOption(prefix..'DetailTotalTax','StringAlign','LeftCenter')",
-        "local detailLabelHeight=(marketTaxRate>0) and 32 or 16",
+        "local detailLabelHeight=32",
         "setOption(prefix..'DetailToggle','W',24)","setOption(prefix..'DetailToggle','H',23)",
         "setOption(prefix..'Graph','X',519)","setOption(prefix..'Graph','W',24)","setOption(prefix..'Graph','H',23)",
         "setOption(prefix..'Window','Text','')","setOption(prefix..'Chance','Text','')",
@@ -118,6 +125,7 @@ if ($errors.Count -eq 0) {
     }
     if ($presenter.Contains("setOption(name,'ToolTipHidden'")) { Fail 'CardPresenter.lua must not dynamically mutate ToolTipHidden; empty tooltip text owns visibility on the target host.' }
     if ($presenter -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand|LaunchItemViewer') { Fail 'CardPresenter.lua must remain presentation-only and local.' }
+    if ($presenter.Contains("state[projectedPrefix..'ElapsedSeconds']") -and $presenter.Contains('FlightProfitHour')) { Fail 'Expanded flight $/hr must use round-trip flight duration, not opportunity elapsed/wait time.' }
     foreach ($token in @(
         'Get-CurrentCycleDeparturePlan',
         'CurrentCycleReachable',
