@@ -499,7 +499,7 @@ and one mutually exclusive shadow decision. V1.1 defines target quantity as the
 already projected trip quantity and utility as expected profit. The configured
 `itemMarketFeePercent` and existing round-trip flight hours remain authoritative.
 
-These probabilities are uncalibrated shadow diagnostics. Limitations include
+The full departure-search/decision surface remains a shadow diagnostic. A restricted production bridge reuses the same simulator at exactly one earliest-feasible arrival for long-flight/short-cycle fallback display; that selective `pAnyStock` use does not promote the stochastic decision object. Limitations include
 sparse empirical depletion-shape coverage with a linear fallback, a bounded
 adaptive search that can still omit low-support cells, no value-of-information
 solver, no online change-point model, and no risk-preference surface. The offline replay currently
@@ -508,6 +508,25 @@ compares stochastic-v1.1 with simple mean/median and empirical overlap proxies;
 of production WindowPlan Safe/Best decisions. Promotion requires frozen live
 scoring, calibration, one accepted authoritative stochastic decision object, and
 only then a separate visible UI migration.
+
+### Production multi-cycle chance bridge
+
+`MultiCycleChanceBridge.ps1` executes after authoritative legacy `WindowPlan` and before price/filter/UI publication. It is local-only and fail-soft. Rather than running the full 12-hour candidate search, it constructs one physically feasible earliest arrival: leave now from Torn, leave immediately after a return completes, or evaluate an already committed landing. Other-destination travel fails closed and already-abroad state does not need this fallback.
+
+Using the same `Select-SFJointCycleEvidence` and `Invoke-SFMarketForecast` functions as stochastic-v1.1, it evaluates 256 seeded scenarios with adaptive-grid search disabled. The bridge is eligible only with at least three usable completed cycles and an arrival-horizon / weighted-mean-full-cycle ratio of at least 2.0.
+
+The bridge also computes interpretable timing diagnostics from the weighted evidence:
+
+- weighted mean full-cycle duration = OOS duration + in-stock duration;
+- weighted mean in-stock duration;
+- long-run occupancy baseline = `E[in-stock] / E[full cycle]`;
+- weighted full-cycle timing standard deviation;
+- expected complete cycles crossed = `floor(arrival horizon / mean cycle)`;
+- an independence-reference phase standard deviation = `sqrt(N) * cycle timing SD`.
+
+The occupancy and phase-dispersion values are diagnostics/baselines only. The displayed probability is the simulator's `pAnyStock`, not a Gaussian approximation and not the occupancy ratio. `CardPresenter.lua` consumes the bridge only when legacy current-stock/Safe/Best guidance cannot produce an actionable state; actionable legacy guidance always retains precedence. The visible text is `Chance to hit: NN%` and the tooltip explicitly says the result is a modeled arrival probability, not a Safe/Best guarantee.
+
+Time-of-day conditioning and current-price-conditioned weighting are intentionally not part of this first production bridge. Historical foreign price remains joint with each resampled cycle, preserving observed price/duration association without asserting a causal or current-price effect. Those conditioning variables require walk-forward/prospective evidence before promotion.
 
 ### Prospective stochastic calibration
 
