@@ -129,6 +129,11 @@ foreach($row in @($replay.rows)){
 Assert-True ($replay.PSObject.Properties['forecastMetrics'] -ne $null) 'Replay scaffold must expose forecast metrics.'
 Assert-True ($replay.PSObject.Properties['decisionMetrics'] -ne $null) 'Replay scaffold must expose decision metrics.'
 
+Assert-True ($replay.forecastMetrics.PSObject.Properties['empirical_all_overlap'] -ne $null) 'Replay must label all-cycle coverage as an empirical overlap proxy, not exact production Safe replay.'
+Assert-True ($replay.forecastMetrics.PSObject.Properties['empirical_overlap'] -ne $null) 'Replay must label fractional coverage as an empirical overlap proxy, not exact production Best replay.'
+Assert-True ($replay.forecastMetrics.PSObject.Properties['current_safe'] -eq $null) 'Replay must not mislabel an empirical overlap proxy as the production Safe baseline.'
+Assert-True ($replay.forecastMetrics.PSObject.Properties['current_best'] -eq $null) 'Replay must not mislabel an empirical overlap proxy as the production Best baseline.'
+
 $stableSeedA=Get-SFStableSeed -MarketKey 'test_country:1' -BaseSeed 42
 $stableSeedB=Get-SFStableSeed -MarketKey 'test_country:1' -BaseSeed 42
 Assert-Equal $stableSeedA $stableSeedB 'Market seed must remain stable across repeated minute updates when evidence is unchanged.'
