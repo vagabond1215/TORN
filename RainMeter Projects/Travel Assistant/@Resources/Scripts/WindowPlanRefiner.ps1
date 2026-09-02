@@ -20,6 +20,10 @@ $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeCycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
 $SeedCycleFile = Join-Path $SeedDir 'cycles.jsonl'
+$RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
+$AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
+if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared depletion-history reads.' }
+. $AtomicFileScript
 
 function Get-StableWindowMedian {
     param([long[]]$Values)
@@ -135,6 +139,156 @@ function Get-StableWindowUsableCycles {
     $minimumKeep = [Math]::Max(3,[int][Math]::Ceiling($usable.Count * 0.5))
     if ($filtered.Count -ge $minimumKeep) { return $filtered }
     return $usable
+}
+
+function Read-WindowObservationsForKeys {
+    param([string]$Path,[hashtable]$Wanted,[long]$Cutoff)
+    $map=@{}
+    if ($null -eq $Wanted -or $Wanted.Count -eq 0 -or -not (Test-Path -LiteralPath $Path)) { return $map }
+    $reader=$null
+    try {
+        $reader=Open-TravelAssistantSharedTextReader -Path $Path
+        while (($line=$reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $key=Get-WindowCycleLineKey -Line $line
+            if ([string]::IsNullOrWhiteSpace($key) -or -not $Wanted.ContainsKey($key)) { continue }
+            try { $row=$line | ConvertFrom-Json } catch { continue }
+            $at=[long](Get-WindowProperty $row 'sourceTimestamp')
+            if ($at -le 0) { $at=[long](Get-WindowProperty $row 'timestamp') }
+            if ($at -lt $Cutoff) { continue }
+            if (-not $map.ContainsKey($key)) { $map[$key]=New-Object System.Collections.Generic.List[object] }
+            $map[$key].Add($row)
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
+    }
+    return $map
+}
+
+function Get-CurrentStockSafetyProjection {
+    param(
+        [long]$CurrentStock,
+        [long]$SourceTimestamp,
+        [object[]]$Observations,
+        [long]$EarliestArrivalAt,
+        [long]$NowEpoch,
+        [long]$LiveMaximumAgeSeconds=300L,
+        [int]$MinimumDepletionSamples=3,
+        [long]$MinimumEvidenceSpanSeconds=600L,
+        [long]$MaximumDepletionIntervalSeconds=600L,
+        [double]$RateGuardMultiplier=1.5,
+        [double]$MinimumGuardedUnitsPerHour=60.0,
+        [double]$MinimumRunwayToArrivalRatio=2.0,
+        [long]$MinimumArrivalMarginSeconds=1800L
+    )
+
+    $sourceAt=if($SourceTimestamp -gt 0){[Math]::Min($SourceTimestamp,$NowEpoch)}else{0L}
+    $sourceFresh=($sourceAt -gt 0 -and ($NowEpoch-$sourceAt) -le $LiveMaximumAgeSeconds)
+    if (-not $sourceFresh -or $CurrentStock -le 0 -or $EarliestArrivalAt -le $sourceAt) {
+        return [pscustomobject]@{
+            eligible=$false; reason='fresh positive stock and a future arrival are required'
+            sampleCount=0; evidenceSpanSeconds=0L; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
+            runwaySeconds=0L; arrivalHorizonSeconds=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt); arrivalMarginSeconds=0L
+            selloutEstimateAt=0L
+        }
+    }
+
+    $rows=@($Observations | Sort-Object {
+        $at=[long](Get-WindowProperty $_ 'sourceTimestamp')
+        if($at -le 0){$at=[long](Get-WindowProperty $_ 'timestamp')}
+        $at
+    })
+    $rates=New-Object System.Collections.Generic.List[object]
+    $previousStock=$null
+    foreach($row in $rows){
+        $at=[long](Get-WindowProperty $row 'sourceTimestamp')
+        if($at -le 0){$at=[long](Get-WindowProperty $row 'timestamp')}
+        if($at -le 0 -or $at -gt ($sourceAt+60L)){continue}
+        $stock=[long](Get-WindowProperty $row 'stock')
+        $transitionGap=[long](Get-WindowProperty $row 'transitionGapSeconds')
+
+        # A zero state, an observed positive jump, or a long source gap can mark a
+        # different stock run. Never carry depletion rates across that boundary.
+        $reset=($stock -le 0 -or ($null -ne $previousStock -and $previousStock -gt 0 -and $stock -gt $previousStock) -or $transitionGap -gt $MaximumDepletionIntervalSeconds)
+        if($reset){$rates.Clear()}
+
+        $kind=([string](Get-WindowProperty $row 'depletionEvidence')).Trim().ToLowerInvariant()
+        $censored=[bool](Get-WindowProperty $row 'depletionCensored')
+        $interval=[long](Get-WindowProperty $row 'depletionIntervalSeconds')
+        $units=[long](Get-WindowProperty $row 'depletionUnits')
+        if(
+            $stock -gt 0 -and
+            $kind -eq 'observed_nonzero' -and
+            -not $censored -and
+            $interval -ge 10L -and
+            $interval -le $MaximumDepletionIntervalSeconds -and
+            $units -gt 0
+        ){
+            $rates.Add([pscustomobject]@{at=$at;unitsPerSecond=($units/[double]$interval)})
+        }
+        $previousStock=$stock
+    }
+
+    $sampleCount=$rates.Count
+    if($sampleCount -lt $MinimumDepletionSamples){
+        return [pscustomobject]@{
+            eligible=$false; reason='too few uncensored positive-stock depletion samples'
+            sampleCount=$sampleCount; evidenceSpanSeconds=0L; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
+            runwaySeconds=0L; arrivalHorizonSeconds=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt); arrivalMarginSeconds=0L
+            selloutEstimateAt=0L
+        }
+    }
+
+    $ordered=@($rates.ToArray() | Sort-Object unitsPerSecond)
+    $firstAt=[long](@($rates.ToArray() | Sort-Object at | Select-Object -First 1)[0].at)
+    $lastAt=[long](@($rates.ToArray() | Sort-Object at | Select-Object -Last 1)[0].at)
+    $span=[Math]::Max(0L,$lastAt-$firstAt)
+    if($span -lt $MinimumEvidenceSpanSeconds){
+        return [pscustomobject]@{
+            eligible=$false; reason='depletion evidence does not yet span enough time'
+            sampleCount=$sampleCount; evidenceSpanSeconds=$span; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
+            runwaySeconds=0L; arrivalHorizonSeconds=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt); arrivalMarginSeconds=0L
+            selloutEstimateAt=0L
+        }
+    }
+
+    # Use a high observed depletion quantile rather than the mean, then apply an
+    # additional multiplier and a hard one-unit-per-minute floor. This deliberately
+    # biases the runway shorter while avoiding one isolated burst becoming the sole
+    # definition of a many-hour slow-depletion market.
+    $rank=[int][Math]::Ceiling(0.90*$ordered.Count)-1
+    $rank=[Math]::Max(0,[Math]::Min($ordered.Count-1,$rank))
+    $percentileRate=[double]$ordered[$rank].unitsPerSecond
+    $guardedRate=[Math]::Max($MinimumGuardedUnitsPerHour/3600.0,$percentileRate*[Math]::Max(1.0,$RateGuardMultiplier))
+    if($guardedRate -le 0){
+        return [pscustomobject]@{
+            eligible=$false; reason='guarded depletion rate is unavailable'
+            sampleCount=$sampleCount; evidenceSpanSeconds=$span; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
+            runwaySeconds=0L; arrivalHorizonSeconds=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt); arrivalMarginSeconds=0L
+            selloutEstimateAt=0L
+        }
+    }
+
+    $runway=[long][Math]::Ceiling($CurrentStock/$guardedRate)
+    $arrivalHorizon=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt)
+    $requiredRunway=[long][Math]::Ceiling([Math]::Max(
+        $arrivalHorizon*[Math]::Max(1.0,$MinimumRunwayToArrivalRatio),
+        $arrivalHorizon+[Math]::Max(0L,$MinimumArrivalMarginSeconds)
+    ))
+    $eligible=($runway -ge $requiredRunway)
+    $selloutAt=$sourceAt+$runway
+    return [pscustomobject]@{
+        eligible=[bool]$eligible
+        reason=$(if($eligible){'conservative current-stock runway comfortably exceeds time to arrival'}else{'conservative current-stock runway is not large enough for the safety gate'})
+        sampleCount=$sampleCount
+        evidenceSpanSeconds=[long]$span
+        percentileUnitsPerHour=[Math]::Round($percentileRate*3600.0,3)
+        guardedUnitsPerHour=[Math]::Round($guardedRate*3600.0,3)
+        runwaySeconds=[long]$runway
+        arrivalHorizonSeconds=[long]$arrivalHorizon
+        arrivalMarginSeconds=[long][Math]::Max(0L,$runway-$arrivalHorizon)
+        selloutEstimateAt=[long]$selloutAt
+    }
 }
 
 function Get-LiveCycleProjection {
@@ -401,6 +555,7 @@ for ($i=1; $i -le $count; $i++) {
     if (-not [string]::IsNullOrWhiteSpace($key) -and $forecastMode -ne 'sleeping_oos') { $wanted[$key]=$true }
 }
 $cycleMap=Read-WindowCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile) -Wanted $wanted
+$observationMap=Read-WindowObservationsForKeys -Path $RuntimeObservationFile -Wanted $wanted -Cutoff ($Now-28800L)
 $travelState=([string]$state['TravelState']).Trim().ToLowerInvariant()
 $destinationCountry=([string]$state['TravelDestinationCountryId']).Trim().ToLowerInvariant()
 $travelLeft=0L
@@ -428,6 +583,16 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
     $state[$prefix+'NextCycleOrdinal']='0'
     $state[$prefix+'WindowMedianPeriodSeconds']='0'
+    $state[$prefix+'CurrentStockSafetyEligible']='0'
+    $state[$prefix+'CurrentStockSafetySampleCount']='0'
+    $state[$prefix+'CurrentStockSafetyEvidenceSpanSeconds']='0'
+    $state[$prefix+'CurrentStockSafetyPercentileUnitsPerHour']='0'
+    $state[$prefix+'CurrentStockSafetyGuardedUnitsPerHour']='0'
+    $state[$prefix+'CurrentStockSafetyRunwaySeconds']='0'
+    $state[$prefix+'CurrentStockSafetyArrivalHorizonSeconds']='0'
+    $state[$prefix+'CurrentStockSafetyMarginSeconds']='0'
+    $state[$prefix+'CurrentStockSafetySelloutEstimateAt']='0'
+    $state[$prefix+'CurrentStockSafetyReason']=''
     $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
     if ($forecastMode -eq 'sleeping_oos') {
         # OpportunityState already published the cheap absolute restock estimate.
@@ -514,6 +679,36 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'CurrentCycleLeaveDeadlineAt']='0'
     $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
     $state[$prefix+'NextCycleOrdinal']=if ($stock -gt 0) { '1' } else { '0' }
+
+    # A left-censored restock boundary does not make directly observed current
+    # depletion useless. When the normal authoritative path would otherwise say
+    # Collecting Data, test whether a pessimistic current-stock runway is plainly
+    # longer than the physically earliest arrival. This never writes a percentage,
+    # never creates a completed cycle, and never changes recurring Safe/Best evidence.
+    if ([string]$state[$prefix+'WindowDataQuality'] -eq 'collecting' -and $stock -gt 0) {
+        $marketObservations=@()
+        if($observationMap.ContainsKey($key)){$marketObservations=@($observationMap[$key].ToArray())}
+        $safety=Get-CurrentStockSafetyProjection -CurrentStock $stock -SourceTimestamp $sourceTimestamp -Observations $marketObservations -EarliestArrivalAt $earliestArrival -NowEpoch $Now
+        $state[$prefix+'CurrentStockSafetySampleCount']=[int]$safety.sampleCount
+        $state[$prefix+'CurrentStockSafetyEvidenceSpanSeconds']=[long]$safety.evidenceSpanSeconds
+        $state[$prefix+'CurrentStockSafetyPercentileUnitsPerHour']=[double]$safety.percentileUnitsPerHour
+        $state[$prefix+'CurrentStockSafetyGuardedUnitsPerHour']=[double]$safety.guardedUnitsPerHour
+        $state[$prefix+'CurrentStockSafetyRunwaySeconds']=[long]$safety.runwaySeconds
+        $state[$prefix+'CurrentStockSafetyArrivalHorizonSeconds']=[long]$safety.arrivalHorizonSeconds
+        $state[$prefix+'CurrentStockSafetyMarginSeconds']=[long]$safety.arrivalMarginSeconds
+        $state[$prefix+'CurrentStockSafetySelloutEstimateAt']=[long]$safety.selloutEstimateAt
+        $state[$prefix+'CurrentStockSafetyReason']=[string]$safety.reason
+        if([bool]$safety.eligible){
+            $state[$prefix+'CurrentStockSafetyEligible']='1'
+            $state[$prefix+'WindowDataQuality']='current_stock_safe'
+            $state[$prefix+'WindowDataQualityReason']='current stock is conservatively safe to the earliest arrival despite an unknown cycle boundary'
+            $state[$prefix+'WindowStartAt']=[Math]::Max($Now,$earliestDeparture)
+            $state[$prefix+'WindowText']='SAFE WINDOW OPEN'
+            $state[$prefix+'ChanceText']=''
+            $state[$prefix+'ProbabilityValue']='-1'
+            continue
+        }
+    }
 
     if ([string]$state[$prefix+'WindowDataQuality'] -eq 'collecting') {
         $state[$prefix+'WindowStartAt']='0'
