@@ -21,10 +21,10 @@ ToolTipText=
 [MeterOpportunity1Flag]
 Meter=Image
 Group=OpportunityRow1
-X=9
-Y=121
-W=64
-H=48
+X=8
+Y=120
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -34,10 +34,10 @@ ToolTipText=
 [MeterOpportunity1FlagMask]
 Meter=Image
 Group=OpportunityRow1
-X=9
-Y=121
-W=64
-H=48
+X=8
+Y=120
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -48,7 +48,7 @@ ToolTipText=
 [MeterOpportunity1ItemImage]
 Meter=Image
 Group=OpportunityRow1
-X=75
+X=77
 Y=131
 W=28
 H=28
@@ -109,7 +109,7 @@ ToolTipText=
 [MeterOpportunity1Name]
 Meter=String
 Group=OpportunityRow1
-X=106
+X=108
 Y=126
 W=1
 Hidden=1
@@ -125,9 +125,9 @@ ToolTipText=
 [MeterOpportunity1Price]
 Meter=String
 Group=OpportunityRow1
-X=106
+X=108
 Y=126
-W=282
+W=280
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -141,7 +141,7 @@ ToolTipText=
 [MeterOpportunity1Take]
 Meter=String
 Group=OpportunityRow1
-X=106
+X=108
 Y=126
 W=1
 Hidden=1
@@ -188,13 +188,13 @@ FontColor=#ToggleIdle#
 AntiAlias=1
 SolidColor=0,0,0,1
 Text=$
-ToolTipText=Show card economics
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(1)"]
 
 [MeterOpportunity1Window]
 Meter=String
 Group=OpportunityRow1
-X=106
+X=108
 Y=154
 W=1
 Hidden=1
@@ -204,9 +204,9 @@ Text=
 [MeterOpportunity1Leave]
 Meter=String
 Group=OpportunityRow1
-X=106
+X=108
 Y=154
-W=280
+W=278
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -221,7 +221,7 @@ ToolTipText=
 [MeterOpportunity1Chance]
 Meter=String
 Group=OpportunityRow1
-X=106
+X=108
 Y=154
 W=1
 Hidden=1
@@ -244,7 +244,7 @@ Shape3=Line 7,16,17,16 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape4=Line 8,14,11,11 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape5=Line 11,11,13,13 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape6=Line 13,13,17,8 | StrokeWidth 1 | Stroke Color #ToggleIdle#
-ToolTipText=Expand 8-hour stock history in this card
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(1)"]
 
 [MeterOpportunity1InlineGraph]
@@ -278,10 +278,10 @@ ToolTipText=
 [MeterOpportunity2Flag]
 Meter=Image
 Group=OpportunityRow2
-X=9
-Y=175
-W=64
-H=48
+X=8
+Y=174
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -291,10 +291,10 @@ ToolTipText=
 [MeterOpportunity2FlagMask]
 Meter=Image
 Group=OpportunityRow2
-X=9
-Y=175
-W=64
-H=48
+X=8
+Y=174
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -305,7 +305,7 @@ ToolTipText=
 [MeterOpportunity2ItemImage]
 Meter=Image
 Group=OpportunityRow2
-X=75
+X=77
 Y=185
 W=28
 H=28
@@ -366,7 +366,7 @@ ToolTipText=
 [MeterOpportunity2Name]
 Meter=String
 Group=OpportunityRow2
-X=106
+X=108
 Y=180
 W=1
 Hidden=1
@@ -382,9 +382,9 @@ ToolTipText=
 [MeterOpportunity2Price]
 Meter=String
 Group=OpportunityRow2
-X=106
+X=108
 Y=180
-W=282
+W=280
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -398,7 +398,7 @@ ToolTipText=
 [MeterOpportunity2Take]
 Meter=String
 Group=OpportunityRow2
-X=106
+X=108
 Y=180
 W=1
 Hidden=1
@@ -445,13 +445,13 @@ FontColor=#ToggleIdle#
 AntiAlias=1
 SolidColor=0,0,0,1
 Text=$
-ToolTipText=Show card economics
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(2)"]
 
 [MeterOpportunity2Window]
 Meter=String
 Group=OpportunityRow2
-X=106
+X=108
 Y=208
 W=1
 Hidden=1
@@ -461,9 +461,9 @@ Text=
 [MeterOpportunity2Leave]
 Meter=String
 Group=OpportunityRow2
-X=106
+X=108
 Y=208
-W=280
+W=278
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -478,7 +478,7 @@ ToolTipText=
 [MeterOpportunity2Chance]
 Meter=String
 Group=OpportunityRow2
-X=106
+X=108
 Y=208
 W=1
 Hidden=1
@@ -501,7 +501,7 @@ Shape3=Line 7,16,17,16 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape4=Line 8,14,11,11 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape5=Line 11,11,13,13 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape6=Line 13,13,17,8 | StrokeWidth 1 | Stroke Color #ToggleIdle#
-ToolTipText=Expand 8-hour stock history in this card
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(2)"]
 
 [MeterOpportunity2InlineGraph]
@@ -535,10 +535,10 @@ ToolTipText=
 [MeterOpportunity3Flag]
 Meter=Image
 Group=OpportunityRow3
-X=9
-Y=229
-W=64
-H=48
+X=8
+Y=228
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -548,10 +548,10 @@ ToolTipText=
 [MeterOpportunity3FlagMask]
 Meter=Image
 Group=OpportunityRow3
-X=9
-Y=229
-W=64
-H=48
+X=8
+Y=228
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -562,7 +562,7 @@ ToolTipText=
 [MeterOpportunity3ItemImage]
 Meter=Image
 Group=OpportunityRow3
-X=75
+X=77
 Y=239
 W=28
 H=28
@@ -623,7 +623,7 @@ ToolTipText=
 [MeterOpportunity3Name]
 Meter=String
 Group=OpportunityRow3
-X=106
+X=108
 Y=234
 W=1
 Hidden=1
@@ -639,9 +639,9 @@ ToolTipText=
 [MeterOpportunity3Price]
 Meter=String
 Group=OpportunityRow3
-X=106
+X=108
 Y=234
-W=282
+W=280
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -655,7 +655,7 @@ ToolTipText=
 [MeterOpportunity3Take]
 Meter=String
 Group=OpportunityRow3
-X=106
+X=108
 Y=234
 W=1
 Hidden=1
@@ -702,13 +702,13 @@ FontColor=#ToggleIdle#
 AntiAlias=1
 SolidColor=0,0,0,1
 Text=$
-ToolTipText=Show card economics
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(3)"]
 
 [MeterOpportunity3Window]
 Meter=String
 Group=OpportunityRow3
-X=106
+X=108
 Y=262
 W=1
 Hidden=1
@@ -718,9 +718,9 @@ Text=
 [MeterOpportunity3Leave]
 Meter=String
 Group=OpportunityRow3
-X=106
+X=108
 Y=262
-W=280
+W=278
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -735,7 +735,7 @@ ToolTipText=
 [MeterOpportunity3Chance]
 Meter=String
 Group=OpportunityRow3
-X=106
+X=108
 Y=262
 W=1
 Hidden=1
@@ -758,7 +758,7 @@ Shape3=Line 7,16,17,16 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape4=Line 8,14,11,11 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape5=Line 11,11,13,13 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape6=Line 13,13,17,8 | StrokeWidth 1 | Stroke Color #ToggleIdle#
-ToolTipText=Expand 8-hour stock history in this card
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(3)"]
 
 [MeterOpportunity3InlineGraph]
@@ -792,10 +792,10 @@ ToolTipText=
 [MeterOpportunity4Flag]
 Meter=Image
 Group=OpportunityRow4
-X=9
-Y=283
-W=64
-H=48
+X=8
+Y=282
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -805,10 +805,10 @@ ToolTipText=
 [MeterOpportunity4FlagMask]
 Meter=Image
 Group=OpportunityRow4
-X=9
-Y=283
-W=64
-H=48
+X=8
+Y=282
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -819,7 +819,7 @@ ToolTipText=
 [MeterOpportunity4ItemImage]
 Meter=Image
 Group=OpportunityRow4
-X=75
+X=77
 Y=293
 W=28
 H=28
@@ -880,7 +880,7 @@ ToolTipText=
 [MeterOpportunity4Name]
 Meter=String
 Group=OpportunityRow4
-X=106
+X=108
 Y=288
 W=1
 Hidden=1
@@ -896,9 +896,9 @@ ToolTipText=
 [MeterOpportunity4Price]
 Meter=String
 Group=OpportunityRow4
-X=106
+X=108
 Y=288
-W=282
+W=280
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -912,7 +912,7 @@ ToolTipText=
 [MeterOpportunity4Take]
 Meter=String
 Group=OpportunityRow4
-X=106
+X=108
 Y=288
 W=1
 Hidden=1
@@ -959,13 +959,13 @@ FontColor=#ToggleIdle#
 AntiAlias=1
 SolidColor=0,0,0,1
 Text=$
-ToolTipText=Show card economics
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(4)"]
 
 [MeterOpportunity4Window]
 Meter=String
 Group=OpportunityRow4
-X=106
+X=108
 Y=316
 W=1
 Hidden=1
@@ -975,9 +975,9 @@ Text=
 [MeterOpportunity4Leave]
 Meter=String
 Group=OpportunityRow4
-X=106
+X=108
 Y=316
-W=280
+W=278
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -992,7 +992,7 @@ ToolTipText=
 [MeterOpportunity4Chance]
 Meter=String
 Group=OpportunityRow4
-X=106
+X=108
 Y=316
 W=1
 Hidden=1
@@ -1015,7 +1015,7 @@ Shape3=Line 7,16,17,16 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape4=Line 8,14,11,11 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape5=Line 11,11,13,13 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape6=Line 13,13,17,8 | StrokeWidth 1 | Stroke Color #ToggleIdle#
-ToolTipText=Expand 8-hour stock history in this card
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(4)"]
 
 [MeterOpportunity4InlineGraph]
@@ -1049,10 +1049,10 @@ ToolTipText=
 [MeterOpportunity5Flag]
 Meter=Image
 Group=OpportunityRow5
-X=9
-Y=337
-W=64
-H=48
+X=8
+Y=336
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1062,10 +1062,10 @@ ToolTipText=
 [MeterOpportunity5FlagMask]
 Meter=Image
 Group=OpportunityRow5
-X=9
-Y=337
-W=64
-H=48
+X=8
+Y=336
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1076,7 +1076,7 @@ ToolTipText=
 [MeterOpportunity5ItemImage]
 Meter=Image
 Group=OpportunityRow5
-X=75
+X=77
 Y=347
 W=28
 H=28
@@ -1137,7 +1137,7 @@ ToolTipText=
 [MeterOpportunity5Name]
 Meter=String
 Group=OpportunityRow5
-X=106
+X=108
 Y=342
 W=1
 Hidden=1
@@ -1153,9 +1153,9 @@ ToolTipText=
 [MeterOpportunity5Price]
 Meter=String
 Group=OpportunityRow5
-X=106
+X=108
 Y=342
-W=282
+W=280
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1169,7 +1169,7 @@ ToolTipText=
 [MeterOpportunity5Take]
 Meter=String
 Group=OpportunityRow5
-X=106
+X=108
 Y=342
 W=1
 Hidden=1
@@ -1216,13 +1216,13 @@ FontColor=#ToggleIdle#
 AntiAlias=1
 SolidColor=0,0,0,1
 Text=$
-ToolTipText=Show card economics
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(5)"]
 
 [MeterOpportunity5Window]
 Meter=String
 Group=OpportunityRow5
-X=106
+X=108
 Y=370
 W=1
 Hidden=1
@@ -1232,9 +1232,9 @@ Text=
 [MeterOpportunity5Leave]
 Meter=String
 Group=OpportunityRow5
-X=106
+X=108
 Y=370
-W=280
+W=278
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1249,7 +1249,7 @@ ToolTipText=
 [MeterOpportunity5Chance]
 Meter=String
 Group=OpportunityRow5
-X=106
+X=108
 Y=370
 W=1
 Hidden=1
@@ -1272,7 +1272,7 @@ Shape3=Line 7,16,17,16 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape4=Line 8,14,11,11 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape5=Line 11,11,13,13 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape6=Line 13,13,17,8 | StrokeWidth 1 | Stroke Color #ToggleIdle#
-ToolTipText=Expand 8-hour stock history in this card
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(5)"]
 
 [MeterOpportunity5InlineGraph]
@@ -1306,10 +1306,10 @@ ToolTipText=
 [MeterOpportunity6Flag]
 Meter=Image
 Group=OpportunityRow6
-X=9
-Y=391
-W=64
-H=48
+X=8
+Y=390
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1319,10 +1319,10 @@ ToolTipText=
 [MeterOpportunity6FlagMask]
 Meter=Image
 Group=OpportunityRow6
-X=9
-Y=391
-W=64
-H=48
+X=8
+Y=390
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1333,7 +1333,7 @@ ToolTipText=
 [MeterOpportunity6ItemImage]
 Meter=Image
 Group=OpportunityRow6
-X=75
+X=77
 Y=401
 W=28
 H=28
@@ -1394,7 +1394,7 @@ ToolTipText=
 [MeterOpportunity6Name]
 Meter=String
 Group=OpportunityRow6
-X=106
+X=108
 Y=396
 W=1
 Hidden=1
@@ -1410,9 +1410,9 @@ ToolTipText=
 [MeterOpportunity6Price]
 Meter=String
 Group=OpportunityRow6
-X=106
+X=108
 Y=396
-W=282
+W=280
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1426,7 +1426,7 @@ ToolTipText=
 [MeterOpportunity6Take]
 Meter=String
 Group=OpportunityRow6
-X=106
+X=108
 Y=396
 W=1
 Hidden=1
@@ -1473,13 +1473,13 @@ FontColor=#ToggleIdle#
 AntiAlias=1
 SolidColor=0,0,0,1
 Text=$
-ToolTipText=Show card economics
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(6)"]
 
 [MeterOpportunity6Window]
 Meter=String
 Group=OpportunityRow6
-X=106
+X=108
 Y=424
 W=1
 Hidden=1
@@ -1489,9 +1489,9 @@ Text=
 [MeterOpportunity6Leave]
 Meter=String
 Group=OpportunityRow6
-X=106
+X=108
 Y=424
-W=280
+W=278
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1506,7 +1506,7 @@ ToolTipText=
 [MeterOpportunity6Chance]
 Meter=String
 Group=OpportunityRow6
-X=106
+X=108
 Y=424
 W=1
 Hidden=1
@@ -1529,7 +1529,7 @@ Shape3=Line 7,16,17,16 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape4=Line 8,14,11,11 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape5=Line 11,11,13,13 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape6=Line 13,13,17,8 | StrokeWidth 1 | Stroke Color #ToggleIdle#
-ToolTipText=Expand 8-hour stock history in this card
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(6)"]
 
 [MeterOpportunity6InlineGraph]
@@ -1563,10 +1563,10 @@ ToolTipText=
 [MeterOpportunity7Flag]
 Meter=Image
 Group=OpportunityRow7
-X=9
-Y=445
-W=64
-H=48
+X=8
+Y=444
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1576,10 +1576,10 @@ ToolTipText=
 [MeterOpportunity7FlagMask]
 Meter=Image
 Group=OpportunityRow7
-X=9
-Y=445
-W=64
-H=48
+X=8
+Y=444
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1590,7 +1590,7 @@ ToolTipText=
 [MeterOpportunity7ItemImage]
 Meter=Image
 Group=OpportunityRow7
-X=75
+X=77
 Y=455
 W=28
 H=28
@@ -1651,7 +1651,7 @@ ToolTipText=
 [MeterOpportunity7Name]
 Meter=String
 Group=OpportunityRow7
-X=106
+X=108
 Y=450
 W=1
 Hidden=1
@@ -1667,9 +1667,9 @@ ToolTipText=
 [MeterOpportunity7Price]
 Meter=String
 Group=OpportunityRow7
-X=106
+X=108
 Y=450
-W=282
+W=280
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1683,7 +1683,7 @@ ToolTipText=
 [MeterOpportunity7Take]
 Meter=String
 Group=OpportunityRow7
-X=106
+X=108
 Y=450
 W=1
 Hidden=1
@@ -1730,13 +1730,13 @@ FontColor=#ToggleIdle#
 AntiAlias=1
 SolidColor=0,0,0,1
 Text=$
-ToolTipText=Show card economics
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(7)"]
 
 [MeterOpportunity7Window]
 Meter=String
 Group=OpportunityRow7
-X=106
+X=108
 Y=478
 W=1
 Hidden=1
@@ -1746,9 +1746,9 @@ Text=
 [MeterOpportunity7Leave]
 Meter=String
 Group=OpportunityRow7
-X=106
+X=108
 Y=478
-W=280
+W=278
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1763,7 +1763,7 @@ ToolTipText=
 [MeterOpportunity7Chance]
 Meter=String
 Group=OpportunityRow7
-X=106
+X=108
 Y=478
 W=1
 Hidden=1
@@ -1786,7 +1786,7 @@ Shape3=Line 7,16,17,16 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape4=Line 8,14,11,11 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape5=Line 11,11,13,13 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape6=Line 13,13,17,8 | StrokeWidth 1 | Stroke Color #ToggleIdle#
-ToolTipText=Expand 8-hour stock history in this card
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(7)"]
 
 [MeterOpportunity7InlineGraph]
@@ -1820,10 +1820,10 @@ ToolTipText=
 [MeterOpportunity8Flag]
 Meter=Image
 Group=OpportunityRow8
-X=9
-Y=499
-W=64
-H=48
+X=8
+Y=498
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1833,10 +1833,10 @@ ToolTipText=
 [MeterOpportunity8FlagMask]
 Meter=Image
 Group=OpportunityRow8
-X=9
-Y=499
-W=64
-H=48
+X=8
+Y=498
+W=67
+H=50
 PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
@@ -1847,7 +1847,7 @@ ToolTipText=
 [MeterOpportunity8ItemImage]
 Meter=Image
 Group=OpportunityRow8
-X=75
+X=77
 Y=509
 W=28
 H=28
@@ -1908,7 +1908,7 @@ ToolTipText=
 [MeterOpportunity8Name]
 Meter=String
 Group=OpportunityRow8
-X=106
+X=108
 Y=504
 W=1
 Hidden=1
@@ -1924,9 +1924,9 @@ ToolTipText=
 [MeterOpportunity8Price]
 Meter=String
 Group=OpportunityRow8
-X=106
+X=108
 Y=504
-W=282
+W=280
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1940,7 +1940,7 @@ ToolTipText=
 [MeterOpportunity8Take]
 Meter=String
 Group=OpportunityRow8
-X=106
+X=108
 Y=504
 W=1
 Hidden=1
@@ -1987,13 +1987,13 @@ FontColor=#ToggleIdle#
 AntiAlias=1
 SolidColor=0,0,0,1
 Text=$
-ToolTipText=Show card economics
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardDetails(8)"]
 
 [MeterOpportunity8Window]
 Meter=String
 Group=OpportunityRow8
-X=106
+X=108
 Y=532
 W=1
 Hidden=1
@@ -2003,9 +2003,9 @@ Text=
 [MeterOpportunity8Leave]
 Meter=String
 Group=OpportunityRow8
-X=106
+X=108
 Y=532
-W=280
+W=278
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -2020,7 +2020,7 @@ ToolTipText=
 [MeterOpportunity8Chance]
 Meter=String
 Group=OpportunityRow8
-X=106
+X=108
 Y=532
 W=1
 Hidden=1
@@ -2043,7 +2043,7 @@ Shape3=Line 7,16,17,16 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape4=Line 8,14,11,11 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape5=Line 11,11,13,13 | StrokeWidth 1 | Stroke Color #ToggleIdle#
 Shape6=Line 13,13,17,8 | StrokeWidth 1 | Stroke Color #ToggleIdle#
-ToolTipText=Expand 8-hour stock history in this card
+ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleInlineGraph(8)"]
 
 [MeterOpportunity8InlineGraph]

@@ -12,12 +12,10 @@ $tests = @(
     'Validate-CardDetailLayout.ps1',
     'Validate-CurrentTweaks.ps1',
     'Validate-RainmeterBangSafety.ps1',
-    'Validate-GraphHover.ps1',
     'Validate-GraphWindow.ps1',
     'Validate-FreshnessGuard.ps1',
     'Validate-AtomicStateWrites.ps1',
     'Validate-TravelStateWindows.ps1',
-    'Validate-WindowTooltipTweaks.ps1',
     'Validate-FinalCardPolish.ps1',
     'Validate-RuntimeDiagnostics.ps1',
     'Validate-Filters.ps1',
@@ -62,5 +60,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify the private build state and finalized UI state advance, final UI publication stays error-free, outbound destination rows use the concise landing-centric tooltip, inline graph hover reports retained time/stock values, abroad rows avoid departure language, returning respects home availability, fixed-price items remain white, and shadow trend forecasting remains non-authoritative.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify final UI publication stays error-free, only flag/window text expose tooltips, active-window tooltips do not advertise past departures, graph transition ticks sit below the X axis, flags fill behind the rounded border, abroad rows avoid departure language, returning respects home availability, and fixed-price items remain white.' -ForegroundColor Yellow
 exit 0

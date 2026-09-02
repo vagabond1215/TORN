@@ -47,20 +47,22 @@ if ($errors.Count -eq 0) {
         "state[projectedPrefix..'MarketValueValue']","state[projectedPrefix..'ProfitEachValue']",
         "state[projectedPrefix..'GrossSaleValue']","state[projectedPrefix..'MarketTaxValue']","state[projectedPrefix..'MarketFeePercent']",
         "local face='Nirmala UI Semilight'",
-        "setOption(prefix..'Name','X',106)","setOption(prefix..'Price','X',106)","setOption(prefix..'Price','W',282)",
-        "setOption(prefix..'Leave','X',106)","setOption(prefix..'Leave','W',280)",
-        "setOption(prefix..'Name','Text',itemName)","setOption(prefix..'Name','ToolTipText','Item name')","setOption(prefix..'Name','FontColor','0,0,0,0')",
+        "setOption(prefix..'Name','X',108)","setOption(prefix..'Price','X',108)","setOption(prefix..'Price','W',280)",
+        "setOption(prefix..'Leave','X',108)","setOption(prefix..'Leave','W',278)",
+        "setOption(prefix..'Name','Text',itemName)","setOption(prefix..'Name','ToolTipText','')","setOption(prefix..'Name','FontColor','0,0,0,0')",
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)",
         "setOption(prefix..'Price','InlinePattern','\\|')","setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
         "state[projectedPrefix..'PriceColor']","setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')","setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
         "setOption(prefix..'Price','InlinePattern3','-?\\$[0-9,]+$')","setOption(prefix..'Price','InlineSetting3','Color | #ToggleIdle#')",
         "setOption(prefix..'Take','Text','')","setOption(prefix..'Take','FontColor','0,0,0,0')",
+        "setOption(prefix..'Price','ToolTipText','')","setOption(prefix..'Take','ToolTipText','')","setOption(prefix..'Make','ToolTipText','')",
         "setOption(prefix..'Make','Text',formatSignedMoney(make))","setOption(prefix..'Make','FontColor',profitColor(make))",
         "formatSignedMoney","profitColor",
         "local eachDetail='MV:'..formatMoney(mv)","'% Tax:'..formatMoney(taxEach)","' Net:'..formatSignedMoney(each)",
         "local totalDetail='MV:'..formatMoney(grossSale)","'% Tax:'..formatMoney(marketTax)","' Net:'..formatSignedMoney(make)",
         "setOption(prefix..'Gross','FontSize',9)","setOption(prefix..'DetailTotal','FontSize',9)",
+        "setOption(prefix..'Gross','ToolTipText','')","setOption(prefix..'DetailTotal','ToolTipText','')",
         "setOption(prefix..'DetailToggle','W',24)","setOption(prefix..'DetailToggle','H',23)",
         "setOption(prefix..'Graph','X',519)","setOption(prefix..'Graph','W',24)","setOption(prefix..'Graph','H',23)",
         "setOption(prefix..'Gross','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')",
@@ -72,6 +74,8 @@ if ($errors.Count -eq 0) {
         'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
         'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','highest-overlap interval',
         "math.floor((number(group.bestStart)+number(group.bestEnd))/2)",'group.lateSellout','Window opens:',
+        "'Departure Window: OPEN NOW'","'Safe Departure Window: closed'","'Safe Departure Window: NOW -> '","'Window Closes: '",
+        'if earliestDeparture>now then','if bestDeparture>now then','if lateRestockDeparture>now then',
         'formatSleepingRestockTooltip',"'Restocks in ~'",
         "'Collecting Data: See Weav3r'",
         'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'"
@@ -93,7 +97,12 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Take','Text','Take: ",
         "setOption(prefix..'Make','Text','Make: ",
         "bufferRate=priceVaries",
-        "Each | Gross:","Total | Gross:","setOption(prefix..'Take','Text','| '..totalCostText)"
+        "Each | Gross:","Total | Gross:","setOption(prefix..'Take','Text','| '..totalCostText)",
+        "setOption(prefix..'Name','ToolTipText','Item name')",
+        "setOption(prefix..'Price','ToolTipText','Item | foreign unit cost | full-load purchase cost')",
+        "setOption(prefix..'Make','ToolTipText','After-tax total net profit for the full load.')",
+        "setOption(prefix..'Gross','ToolTipText','Per item: declared MV | selected tax | after-tax net profit')",
+        "setOption(prefix..'DetailTotal','ToolTipText','Full load: total declared MV | selected tax | after-tax net profit')"
     )) {
         if ($presenter.Contains($forbidden)) { Fail "CardPresenter.lua retains obsolete/cluttered status token '$forbidden'." }
     }

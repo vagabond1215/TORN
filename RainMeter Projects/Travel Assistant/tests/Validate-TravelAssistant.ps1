@@ -25,6 +25,13 @@ foreach ($relative in $required) {
 foreach ($relative in @(
     '@Resources\Scripts\CardPreference.ps1',
     '@Resources\Scripts\VisibleItems.ps1',
+    '@Resources\Scripts\GraphHover.lua',
+    '@Resources\Scripts\BuildGraphHoverData.ps1',
+    '@Resources\Scripts\WindowTooltipTweaks.lua',
+    '@Resources\Scripts\EnsureUiAssets.ps1',
+    '@Resources\Includes\GraphHover.inc',
+    'tests\Validate-GraphHover.ps1',
+    'tests\Validate-WindowTooltipTweaks.ps1',
     'tests\Run-VisibleItemsTests.ps1',
     'tests\Validate-VisibleItems.ps1'
 )) {
@@ -77,7 +84,7 @@ if (Test-Path -LiteralPath $iniPath) {
         if (-not $ini.Contains($token)) { Fail "Rainmeter skin missing '$token'." }
     }
     if ($ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'Opportunity rows must not be included before MeterBackground.' }
-    foreach($retired in @('[MeterRouteCard]','[MeterUKCard]','[MeterJPCard]','[MeterSortName]','[MeterSortNameButton]','[MeterViewer]','[MeasureItemViewer]','[MeterSortOptimal]','[MeterOpportunity1Rank]')) {
+    foreach($retired in @('[MeterRouteCard]','[MeterUKCard]','[MeterJPCard]','[MeterSortName]','[MeterSortNameButton]','[MeterViewer]','[MeasureItemViewer]','[MeterSortOptimal]','[MeterOpportunity1Rank]','[MeasureWindowTooltipTweaks]','[MeasureGraphHover]','[MeasureGraphHoverData]')) {
         if ($ini.Contains($retired)) { Fail "Rainmeter skin contains retired UI token '$retired'." }
     }
 }

@@ -163,8 +163,6 @@ local function applyTooltip(prefix,tooltip,title)
     setOption(prefix..'Leave','ToolTipTitle',heading)
     setOption(prefix..'Leave','ToolTipText',text)
     setOption(prefix..'Leave','DynamicVariables',1)
-    setOption(prefix..'Info','ToolTipTitle',heading)
-    setOption(prefix..'Info','ToolTipText',text)
 end
 
 local function liveTravelRemainingSeconds(state,now)

@@ -54,15 +54,15 @@ if($errors.Count -eq 0){
         if($graph -notmatch ('ToggleInlineGraph\('+[string]$i+'\)')){Fail "Row $i graph toggle must call ToggleInlineGraph($i)."}
 
         $flagBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Flag\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        foreach($token in @('X=9','W=64','H=48','PreserveAspectRatio=1')){
-            if(-not$flagBody.Contains($token)){Fail "Row $i flag must fill the card interior without covering its border; missing '$token'."}
+        foreach($token in @('X=8','W=67','H=50','PreserveAspectRatio=1')){
+            if(-not$flagBody.Contains($token)){Fail "Row $i flag must extend under the rounded card border without leaving a top/bottom gap; missing '$token'."}
         }
         $flagMask=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'FlagMask\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        foreach($token in @('X=9','W=64','H=48','ImageTint=#Panel#')){
+        foreach($token in @('X=8','W=67','H=50','ImageTint=#Panel#')){
             if(-not$flagMask.Contains($token)){Fail "Row $i flag mask missing '$token'."}
         }
         $itemImage=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'ItemImage\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        foreach($token in @('X=75','W=28','H=28','PreserveAspectRatio=1')){
+        foreach($token in @('X=77','W=28','H=28','PreserveAspectRatio=1')){
             if(-not$itemImage.Contains($token)){Fail "Row $i item image missing '$token'."}
         }
         $cardBorder=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'CardBorder\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -73,11 +73,11 @@ if($errors.Count -eq 0){
         }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=106\s*$' -or $priceBody -notmatch '(?im)^W=282\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
-            Fail "Row $i combined item/unit/full-load-cost line must start after the item art at x=106 with a 282px width."
+        if($priceBody -notmatch '(?im)^X=108\s*$' -or $priceBody -notmatch '(?im)^W=280\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
+            Fail "Row $i combined item/unit/full-load-cost line must start after the item art at x=108 with a 280px width."
         }
         $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($takeBody -notmatch '(?im)^X=106\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
+        if($takeBody -notmatch '(?im)^X=108\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
             Fail "Row $i retired Take surface must remain inert; full-load cost belongs in the Price text run."
         }
         $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -126,8 +126,8 @@ if($errors.Count -eq 0){
         "'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25)",
         "'Gross', 'Y', tostring(y+9)","'DetailTotal', 'Y', tostring(y+9)",
         "'DetailToggle', 'Y', tostring(y+13+bodyOffset)",
-        "'Flag', 'Y', tostring(y+1+bodyOffset)","'Flag', 'W', '64'","'Flag', 'H', '48'",
-        "'FlagMask', 'Y', tostring(y+1+bodyOffset)","'ItemImage', 'Y', tostring(y+11+bodyOffset)",
+        "'Flag', 'Y', tostring(y+bodyOffset)","'Flag', 'W', '67'","'Flag', 'H', '50'",
+        "'FlagMask', 'Y', tostring(y+bodyOffset)","'ItemImage', 'Y', tostring(y+11+bodyOffset)",
         "'CardBorder', 'Shape', 'Rectangle 0,0,536,' .. cardHeight",
         "'Window', 'Y', tostring(y+34+bodyOffset)","'Leave', 'Y', tostring(y+34+bodyOffset)",
         "'Make', 'Y', tostring(y+25+bodyOffset)","'Graph', 'Y', tostring(y+26+bodyOffset)",
@@ -154,6 +154,8 @@ if($errors.Count -eq 0){
         "totalCost=(fallbackPrice>0 and quantity>0) and (fallbackPrice*quantity) or 0",
         "setOption(prefix..'Price','X',106)","setOption(prefix..'Price','W',282)",
         "setOption(prefix..'Leave','X',106)","setOption(prefix..'Leave','W',280)",
+        "setOption(prefix..'Price','X',108)","setOption(prefix..'Price','W',280)",
+        "setOption(prefix..'Leave','X',108)","setOption(prefix..'Leave','W',278)",
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)",
         "setOption(prefix..'Price','InlinePattern','\\|')",
         "setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
@@ -247,11 +249,30 @@ if($errors.Count -eq 0){
 
     $sortGross=[regex]::Match($ini,'(?ms)^\[MeterSortGross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     if($sortGross -notmatch '(?im)^Text=GROSS PROFIT\s*$'){Fail 'Gross sort surface must remain GROSS PROFIT.'}
-    if($sortGross -notmatch '(?im)^ToolTipText=Highest total trip gross profit first\s*$'){Fail 'Gross sort tooltip must describe pre-tax gross profit.'}
+    if($sortGross -notmatch '(?im)^ToolTipText=\s*$'){Fail 'Gross sort button tooltip must remain disabled.'}
 
     $sortHour=[regex]::Match($ini,'(?ms)^\[MeterSortProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortHour -notmatch '(?im)^ToolTipText=Net profit after tax divided by total elapsed hours; likelihood stays separate\s*$'){
-        Fail 'PROFIT/HR sort tooltip must describe after-tax net profit per hour.'
+    if($sortHour -notmatch '(?im)^ToolTipText=\s*$'){
+        Fail 'PROFIT/HR sort button tooltip must remain disabled.'
+    }
+
+    foreach($staticSurface in @($ini,$rows)){
+        foreach($match in [regex]::Matches($staticSurface,'(?im)^ToolTipText=(.+)        if(-not$ini.Contains($paletteToken)){Fail "Neutral main-skin palette missing '$paletteToken'."}
+    }
+}
+
+if($errors.Count -gt 0){
+    foreach($error in $errors){Write-Host "FAIL: $error" -ForegroundColor Red}
+    Write-Host "Compact card detail-layout validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
+Write-Host 'Base card, split per-item/total economics strip, exact full-load cost, large signed net, centered lime toggles, inline graph expansion, compact footer, and single-owner geometry are enforced.'
+exit 0
+)){
+            if(-not[string]::IsNullOrWhiteSpace($match.Groups[1].Value)){Fail "Static non-window tooltip must remain disabled: $($match.Groups[1].Value)"}
+        }
     }
 
     foreach($paletteToken in @('Panel=17,17,17,248','Card=32,32,32,248','Border=64,64,64,255','Muted=150,150,150,255','TornLime=126,190,73,255','ToggleDark=38,38,38,255','ToggleIdle=190,190,190,255')){

@@ -95,7 +95,7 @@ if ($errors.Count -eq 0) {
     }
     if ($info.Contains('RetryInterval=')) { Fail 'OpportunityInfo.inc must not configure a second freshness-guard updater cadence.' }
 
-    $presentationChain='[!UpdateMeasure MeasureState][!UpdateMeasure MeasureHeaderLayout][!UpdateMeasure MeasureCardPresenter][!UpdateMeasure MeasureCardTweaks][!UpdateMeasure MeasureFreshnessGuard][!UpdateMeasure MeasureTravelStateWindowTweaks][!UpdateMeasure MeasureWindowTooltipTweaks][!UpdateMeasure MeasureFinalCardPolish][!UpdateMeter *][!Redraw]'
+    $presentationChain='[!UpdateMeasure MeasureState][!UpdateMeasure MeasureHeaderLayout][!UpdateMeasure MeasureCardPresenter][!UpdateMeasure MeasureCardTweaks][!UpdateMeasure MeasureFreshnessGuard][!UpdateMeasure MeasureTravelStateWindowTweaks][!UpdateMeasure MeasureFinalCardPolish][!UpdateMeter *][!Redraw]'
     $finishActionCount=([regex]::Matches($ini,[regex]::Escape('FinishAction='+$presentationChain))).Count
     if($finishActionCount -ne 3){Fail "Expected all three explicit RunCommand FinishActions to complete the full presentation chain before redraw; found $finishActionCount."}
 
@@ -106,7 +106,6 @@ if ($errors.Count -eq 0) {
         "'MeasureCardTweaks'",
         "'MeasureFreshnessGuard'",
         "'MeasureTravelStateWindowTweaks'",
-        "'MeasureWindowTooltipTweaks'",
         "'MeasureFinalCardPolish'",
         'refreshPresentation()'
     )){

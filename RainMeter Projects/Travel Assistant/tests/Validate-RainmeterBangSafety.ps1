@@ -8,9 +8,7 @@ function Fail([string]$Message) { $script:errors.Add($Message) }
 $luaNames = @(
     'CardPresenter.lua',
     'CardTweaks.lua',
-    'WindowTooltipTweaks.lua',
-    'TravelStateWindowTweaks.lua',
-    'GraphHover.lua'
+    'TravelStateWindowTweaks.lua'
 )
 
 foreach ($name in $luaNames) {
@@ -55,19 +53,10 @@ if (Test-Path -LiteralPath $tweaksPath) {
         if ($tweaks.Contains($forbidden)) { Fail "CardTweaks.lua retains retired visibility mutation '$forbidden'." }
     }
     foreach ($required in @(
-        "SKIN:Bang('!ShowMeter',info)",
-        "SKIN:Bang('!HideMeter',info)",
-        "setOption(prefix..'Window','W',1)"
+        "SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Window')",
+        "SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Chance')"
     )) {
-        if (-not $tweaks.Contains($required)) { Fail "CardTweaks.lua missing explicit visibility contract '$required'." }
-    }
-}
-
-$graphPath = Join-Path $ProjectRoot '@Resources\Scripts\GraphHover.lua'
-if (Test-Path -LiteralPath $graphPath) {
-    $graph = Get-Content -LiteralPath $graphPath -Raw
-    if (-not $graph.Contains("if tip=='' then SKIN:Bang('!HideMeter',name) else SKIN:Bang('!ShowMeter',name) end")) {
-        Fail 'GraphHover.lua must use explicit meter visibility for empty hover bands.'
+        if (-not $tweaks.Contains($required)) { Fail "CardTweaks.lua missing retired-meter visibility contract '$required'." }
     }
 }
 

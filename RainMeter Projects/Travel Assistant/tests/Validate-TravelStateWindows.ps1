@@ -5,7 +5,6 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $luaPath = Join-Path $ProjectRoot '@Resources\Scripts\TravelStateWindowTweaks.lua'
 $infoPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
 $cardPath = Join-Path $ProjectRoot '@Resources\Scripts\CardPresenter.lua'
-$tooltipPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowTooltipTweaks.lua'
 $travelPath = Join-Path $ProjectRoot '@Resources\Scripts\TravelContext.ps1'
 $anchorPath = Join-Path $ProjectRoot '@Resources\Scripts\CycleAnchorReconciler.ps1'
 $stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
@@ -14,7 +13,7 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $errors.Add($Message) }
 
-foreach ($path in @($luaPath,$infoPath,$cardPath,$tooltipPath,$travelPath,$anchorPath,$stateReaderPath,$iniPath)) {
+foreach ($path in @($luaPath,$infoPath,$cardPath,$travelPath,$anchorPath,$stateReaderPath,$iniPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail ("Missing required file: {0}" -f $path) }
 }
 
@@ -83,12 +82,11 @@ if ($errors.Count -eq 0) {
 
     $info = Get-Content -LiteralPath $infoPath -Raw
     $travelMeasure = $info.IndexOf('[MeasureTravelStateWindowTweaks]')
-    $tooltipMeasure = $info.IndexOf('[MeasureWindowTooltipTweaks]')
     $polishMeasure = $info.IndexOf('[MeasureFinalCardPolish]')
     if ($travelMeasure -lt 0) { Fail 'OpportunityInfo.inc missing MeasureTravelStateWindowTweaks.' }
-    if ($tooltipMeasure -lt 0) { Fail 'OpportunityInfo.inc missing MeasureWindowTooltipTweaks.' }
-    if ($travelMeasure -ge 0 -and $tooltipMeasure -ge 0 -and $travelMeasure -gt $tooltipMeasure) { Fail 'Travel-state window pass must run before home tooltip finalization.' }
     if ($travelMeasure -ge 0 -and $polishMeasure -ge 0 -and $travelMeasure -gt $polishMeasure) { Fail 'Travel-state window pass must run before final card polish.' }
+    if ($info.Contains('[MeasureWindowTooltipTweaks]')) { Fail 'Retired WindowTooltipTweaks measure returned.' }
+    if ($info -match '(?m)^\[MeterOpportunity\d+Info\]\s*$') { Fail 'Retired invisible Info tooltip meters returned.' }
 
     $card = Get-Content -LiteralPath $cardPath -Raw
     foreach ($token in @(
@@ -122,20 +120,20 @@ if ($errors.Count -eq 0) {
         if (-not $titleSection.Contains($token)) { Fail ("MeterTitle missing dynamic travel-header layout token '{0}'." -f $token) }
     }
 
-    $tooltip = Get-Content -LiteralPath $tooltipPath -Raw
     foreach ($token in @(
-        "if travelState=='traveling' or travelState=='returning' or travelState=='abroad' or travelState=='foreign' then",
-        'buildHomeTooltip',
-        'nextCycleGroup',
-        'windowDataQuality',
-        "'Collecting Data'",
-        "setOption(prefix..'Chance','Text','')",
-        'return'
+        "'Departure Window: OPEN NOW'",
+        "'Safe Departure Window: closed'",
+        "'Safe Departure Window: NOW -> '",
+        "'Window Closes: '",
+        "configureWindowTooltipMeter(prefix..'Leave'"
     )) {
-        if (-not $tooltip.Contains($token)) { Fail ("WindowTooltipTweaks.lua missing home-only ownership contract '{0}'." -f $token) }
+        if (-not $card.Contains($token)) { Fail ("CardPresenter.lua missing current home window-tooltip contract '{0}'." -f $token) }
     }
-    foreach ($forbidden in @('existingTooltip',"meterOption(prefix..'Leave','ToolTipText')", "meterOption(prefix..'Info','ToolTipText')")) {
-        if ($tooltip.Contains($forbidden)) { Fail ("Home tooltip must not consume prior rendered tooltip text; found '{0}'." -f $forbidden) }
+    foreach ($forbidden in @(
+        "setOption(prefix..'Info','ToolTipText'",
+        "setOption(prefix..'Info','ToolTipTitle'"
+    )) {
+        if ($lua.Contains($forbidden) -or $card.Contains($forbidden)) { Fail ("Only the visible Leave/window meter may own the window tooltip; found '{0}'." -f $forbidden) }
     }
 }
 
@@ -146,5 +144,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Four-state window tooltip ownership validation passed.' -ForegroundColor Green
-Write-Host 'Character travel state lives in the header; item cards retain only market/window actions. Home owns current/next-cycle and collecting-data state.' -ForegroundColor Green
+Write-Host 'Character travel state lives in the header; CardPresenter owns the home Leave tooltip and TravelStateWindowTweaks owns the same visible Leave tooltip while away.' -ForegroundColor Green
 exit 0

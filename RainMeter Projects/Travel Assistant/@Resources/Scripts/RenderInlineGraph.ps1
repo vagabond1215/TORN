@@ -210,8 +210,12 @@ foreach ($row in $rows) {
     if ($null -ne $previous) {
         $graphics.DrawLine($stockPen,[single]$previous.x,[single]$previous.y,$x,[single]$previous.y)
         $graphics.DrawLine($stockPen,$x,[single]$previous.y,$x,$y)
-        if ([long]$previous.stock -eq 0 -and [long]$row.stock -gt 0) { $graphics.DrawLine($restockPen,$x,[single]$plotTop,$x,[single]$plotBottom) }
-        if ([long]$previous.stock -gt 0 -and [long]$row.stock -eq 0) { $graphics.DrawLine($selloutPen,$x,[single]$plotTop,$x,[single]$plotBottom) }
+        # Restock/sellout transitions are event ticks, not stock magnitude. Draw
+        # them in the gutter below the X axis so they never obscure the stock trace.
+        $markerTop=[single]($plotBottom+2)
+        $markerBottom=[single]($plotBottom+8)
+        if ([long]$previous.stock -eq 0 -and [long]$row.stock -gt 0) { $graphics.DrawLine($restockPen,$x,$markerTop,$x,$markerBottom) }
+        if ([long]$previous.stock -gt 0 -and [long]$row.stock -eq 0) { $graphics.DrawLine($selloutPen,$x,$markerTop,$x,$markerBottom) }
     }
     $previous = [pscustomobject]@{ x=$x; y=$y; stock=[long]$row.stock }
 }
@@ -222,8 +226,8 @@ if ($null -ne $previous -and [single]$previous.x -lt [single]$plotRight) {
 $maxLabel = if ($maxStock -gt 0) { ('{0:N0}' -f $maxStock) } else { '0' }
 $graphics.DrawString($maxLabel,$labelFont,$labelBrush,0,0)
 $graphics.DrawString('0',$labelFont,$labelBrush,18,88)
-$graphics.DrawString(('-{0}h' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),104)
-$graphics.DrawString('now',$labelFont,$labelBrush,[single]($plotRight-18),104)
+$graphics.DrawString(('-{0}h' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)
+$graphics.DrawString('now',$labelFont,$labelBrush,[single]($plotRight-18),110)
 
 $safeName = ($MarketKey -replace '[^a-zA-Z0-9_-]','_')
 $imageFile = ('inline-graph-{0}-{1}.png' -f $safeName,$now)

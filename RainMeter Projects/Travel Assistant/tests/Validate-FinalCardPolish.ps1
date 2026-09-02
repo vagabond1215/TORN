@@ -34,9 +34,10 @@ if ($errors.Count -eq 0) {
     foreach ($token in @('[MeasureFinalCardPolish]','FinalCardPolish.lua')) {
         if (-not $includeText.Contains($token)) { Fail "OpportunityInfo.inc missing '$token'." }
     }
-    $tooltipAt = $includeText.IndexOf('[MeasureWindowTooltipTweaks]',[System.StringComparison]::Ordinal)
+    $travelAt = $includeText.IndexOf('[MeasureTravelStateWindowTweaks]',[System.StringComparison]::Ordinal)
     $polishAt = $includeText.IndexOf('[MeasureFinalCardPolish]',[System.StringComparison]::Ordinal)
-    if ($tooltipAt -lt 0 -or $polishAt -le $tooltipAt) { Fail 'Final compatibility pass must remain after the window tooltip pass.' }
+    if ($travelAt -lt 0 -or $polishAt -le $travelAt) { Fail 'Final compatibility pass must remain after the travel-state window pass.' }
+    if ($includeText.Contains('[MeasureWindowTooltipTweaks]')) { Fail 'Retired WindowTooltipTweaks measure returned.' }
 
     if ($scriptText -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FinalCardPolish.lua must remain presentation-only and local.' }
 }

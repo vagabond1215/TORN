@@ -8,7 +8,6 @@ $anchorPath = Join-Path $ProjectRoot '@Resources\Scripts\CycleAnchorReconciler.p
 $graphPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 $tweaksPath = Join-Path $ProjectRoot '@Resources\Scripts\CardTweaks.lua'
 $infoPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityInfo.inc'
-$assetPath = Join-Path $ProjectRoot '@Resources\Scripts\EnsureUiAssets.ps1'
 $refinerPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowPlanRefiner.ps1'
 $cycleFilterPath = Join-Path $ProjectRoot '@Resources\Scripts\CycleForecastFilter.ps1'
 $filterStatePath = Join-Path $ProjectRoot '@Resources\Scripts\FilterState.ps1'
@@ -16,12 +15,12 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$tweaksPath,$infoPath,$assetPath,$refinerPath,$cycleFilterPath,$filterStatePath,$iniPath)) {
+foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$tweaksPath,$infoPath,$refinerPath,$cycleFilterPath,$filterStatePath,$iniPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing current-tweak asset: $path" }
 }
 
 if ($errors.Count -eq 0) {
-    foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$assetPath,$refinerPath,$cycleFilterPath,$filterStatePath)) {
+    foreach ($path in @($runUpdatePath,$capacityPath,$anchorPath,$graphPath,$refinerPath,$cycleFilterPath,$filterStatePath)) {
         $tokens=$null; $parseErrors=$null
         [void][System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$parseErrors)
         foreach ($parseError in @($parseErrors)) { Fail "$([System.IO.Path]::GetFileName($path)) parse error: $($parseError.Message)" }
@@ -33,7 +32,6 @@ if ($errors.Count -eq 0) {
     $graph = Get-Content -LiteralPath $graphPath -Raw
     $tweaks = Get-Content -LiteralPath $tweaksPath -Raw
     $info = Get-Content -LiteralPath $infoPath -Raw
-    $asset = Get-Content -LiteralPath $assetPath -Raw
     $refiner = Get-Content -LiteralPath $refinerPath -Raw
     $cycleFilter = Get-Content -LiteralPath $cycleFilterPath -Raw
     $filterState = Get-Content -LiteralPath $filterStatePath -Raw
@@ -80,7 +78,7 @@ if ($errors.Count -eq 0) {
         if (-not $cycleFilter.Contains($token)) { Fail "CycleForecastFilter.ps1 missing cadence-aware contract '$token'." }
     }
     if ($cycleFilter -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'Cadence-aware cycle filtering must remain local-only.' }
-    foreach ($token in @('WindowPlanRefiner.ps1','EnsureUiAssets.ps1','& $WindowPlanRefiner','& $EnsureUiAssets')) {
+    foreach ($token in @('WindowPlanRefiner.ps1','& $WindowPlanRefiner')) {
         if (-not $filterState.Contains($token)) { Fail "FilterState.ps1 missing post-window refinement token '$token'." }
     }
 
@@ -100,18 +98,11 @@ if ($errors.Count -eq 0) {
         if (-not $graph.Contains($token)) { Fail "RenderInlineGraph.ps1 missing expanded graph token '$token'." }
     }
 
-    foreach ($token in @(
-        'info-icon.png','[System.Drawing.Bitmap]::new(64,64','FillEllipse','FillRectangle','ImageFormat]::Png'
-    )) {
-        if (-not $asset.Contains($token)) { Fail "EnsureUiAssets.ps1 missing '$token'." }
-    }
-
     # CardTweaks is now a defensive compatibility pass only. It must never
     # compete with StateReader geometry or CardPresenter text ownership.
     foreach ($token in @(
         'local function hideRetiredCardMeters()',
-        'StateReader owns geometry; CardPresenter owns text.',
-        "SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Info')",
+        'StateReader owns geometry; CardPresenter owns visible text/tooltips.',
         "SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Window')",
         "SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Chance')",
         'function Initialize()',
@@ -127,13 +118,28 @@ if ($errors.Count -eq 0) {
     }
     if ($tweaks -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'CardTweaks.lua must remain local presentation only.' }
 
-    foreach ($index in 1..8) {
-        $section = [regex]::Match($info,'(?ms)^\[MeterOpportunity'+$index+'Info\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if ([string]::IsNullOrWhiteSpace($section)) { Fail "OpportunityInfo.inc missing row $index info meter."; continue }
-        foreach ($token in @('Meter=Image','W=12','H=12','PreserveAspectRatio=1','ImageName=#@#Generated\info-icon.png','ToolTipWidth=420')) {
-            if (-not $section.Contains($token)) { Fail "OpportunityInfo row $index missing image-anchor token '$token'." }
-        }
-        if ($section.Contains('Meter=String')) { Fail "OpportunityInfo row $index must not use a Unicode String meter." }
+    if($info -match '(?m)^\[MeterOpportunity\d+Info\]\s*    foreach ($token in @('[MeasureCardTweaks]','CardTweaks.lua','@IncludeInfo=#@#Includes\OpportunityInfo.inc')) {
+        if (-not $ini.Contains($token)) { Fail "TravelAssistant.ini missing '$token'." }
+    }
+    $presenterAt = $ini.IndexOf('[MeasureCardPresenter]',[System.StringComparison]::Ordinal)
+    $tweaksAt = $ini.IndexOf('[MeasureCardTweaks]',[System.StringComparison]::Ordinal)
+    if ($presenterAt -lt 0 -or $tweaksAt -le $presenterAt) { Fail 'MeasureCardTweaks must update after MeasureCardPresenter.' }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($error in $errors) { Write-Host "FAIL: $error" -ForegroundColor Red }
+    Write-Host "Current tweak validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host 'Stable-window refiner, single-owner card geometry, defensive legacy visibility, and expanded graph validation passed.' -ForegroundColor Green
+Write-Host 'Expected live result: no flight duration on the card; only flag/window text expose tooltips; economics colors and stable window timing remain intact.'
+exit 0
+){
+        Fail 'Retired invisible Info tooltip meters must remain removed.'
+    }
+    if($filterState.Contains('EnsureUiAssets.ps1') -or $filterState.Contains('$EnsureUiAssets')){
+        Fail 'FilterState.ps1 must not invoke the retired info-icon generator.'
     }
 
     foreach ($token in @('[MeasureCardTweaks]','CardTweaks.lua','@IncludeInfo=#@#Includes\OpportunityInfo.inc')) {

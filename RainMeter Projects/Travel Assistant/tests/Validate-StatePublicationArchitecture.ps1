@@ -29,8 +29,8 @@ if ($errors.Count -eq 0) {
         Fail "MeasureState, MeasureCardPresenter, and MeasureCardTweaks must all read finalized ui-state.kv; found $mainReaderCount matching main StateFile entries."
     }
     $infoReaderCount = ([regex]::Matches($info,[regex]::Escape($uiStateToken))).Count
-    if ($infoReaderCount -ne 3) {
-        Fail "FreshnessGuard, TravelStateWindowTweaks, and WindowTooltipTweaks must all read finalized ui-state.kv; found $infoReaderCount matching included StateFile entries."
+    if ($infoReaderCount -ne 2) {
+        Fail "FreshnessGuard and TravelStateWindowTweaks must both read finalized ui-state.kv; found $infoReaderCount matching included StateFile entries."
     }
     foreach ($surface in @($ini,$info)) {
         if ($surface -match '(?m)^StateFile=#@#Generated\\state\.kv\s*$') {
@@ -87,7 +87,7 @@ if ($errors.Count -eq 0) {
         if (-not $compat.Contains($token)) { Fail "PublishedState.lua immutable-reader contract missing '$token'." }
     }
 
-    foreach ($luaName in @('StateReader.lua','CardPresenter.lua','CardTweaks.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua','WindowTooltipTweaks.lua')) {
+    foreach ($luaName in @('StateReader.lua','CardPresenter.lua','CardTweaks.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua')) {
         $luaText = Get-Content -LiteralPath (Join-Path $ProjectRoot ('@Resources\Scripts\' + $luaName)) -Raw
         foreach ($token in @('last-update.txt','ui%-state%-%d+%-%x+%.kv')) {
             if (-not $luaText.Contains($token)) {

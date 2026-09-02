@@ -30,11 +30,12 @@ Up to eight opportunities may be shown.
 - The right side is the signed, after-tax **total net profit**, rendered larger and centered vertically across the two text lines.
 - The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap. Active fills are inset so they do not paint over the border or T separators.
 - Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text.
-- The destination flag behaves as the card's left end cap: its visible left corners are alpha-masked to the card radius, with the bottom-left flag corner becoming square when the graph expands below it. A border-only overlay keeps the actual card edge visible above the flag.
+- The destination flag behaves as the card's left end cap and now extends behind the top/bottom border, removing the former 1px bands. Its visible left corners are alpha-masked to the card radius, with the bottom-left flag corner becoming square when the graph expands below it. A border-only overlay keeps the actual card edge visible above the flag.
 - Torn's transparent item art is displayed immediately to the right of the flag. The assistant caches `https://www.torn.com/images/items/<itemId>/large.png` locally on demand rather than depending on a live image URL every Rainmeter redraw.
 - The window/guidance text is lowered close to the bottom border.
 - Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering.
-- Inline graphs use a black background with a Torn-lime stock line, cobalt-blue in-stock/restock transitions, and pumpkin-orange out-of-stock/sellout transitions.
+- Inline graphs use a black background with a Torn-lime stock line. Cobalt-blue in-stock/restock and pumpkin-orange out-of-stock/sellout transitions are short ticks below the X axis so they do not cover the stock trace.
+- Only the flag and the visible window/guidance line have tooltips. When a departure window is already open, its tooltip uses `OPEN NOW` instead of listing past departure timestamps; expired Safe windows are labeled `closed`.
 
 Expanded economics are:
 

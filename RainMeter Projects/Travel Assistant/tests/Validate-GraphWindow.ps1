@@ -21,9 +21,20 @@ foreach($token in @(
     '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
     'FromArgb(126,190,73),2',
     'FromArgb(0,71,171),1',
-    'FromArgb(255,117,24),1'
+    'FromArgb(255,117,24),1',
+    '$markerTop=[single]($plotBottom+2)',
+    '$markerBottom=[single]($plotBottom+8)',
+    "$graphics.DrawString(('-{0}h' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)",
+    "$graphics.DrawString('now',$labelFont,$labelBrush,[single]($plotRight-18),110)"
 )){
     if(-not$renderer.Contains($token)){Fail "Inline graph palette missing '$token'."}
+}
+
+foreach($forbidden in @(
+    '$graphics.DrawLine($restockPen,$x,[single]$plotTop,$x,[single]$plotBottom)',
+    '$graphics.DrawLine($selloutPen,$x,[single]$plotTop,$x,[single]$plotBottom)'
+)){
+    if($renderer.Contains($forbidden)){Fail "Transition markers must stay below the X axis; found retired full-plot marker '$forbidden'."}
 }
 
 $ini = Get-Content -LiteralPath $iniPath -Raw
@@ -52,5 +63,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Graph window / retention validation passed.' -ForegroundColor Green
-Write-Host 'Visible: 8h | black graph | lime stock | cobalt restock | pumpkin sellout | raw learning retention: 48h' -ForegroundColor DarkGreen
+Write-Host 'Visible: 8h | black graph | lime stock | cobalt/pumpkin transition ticks below X axis | raw learning retention: 48h' -ForegroundColor DarkGreen
 exit 0

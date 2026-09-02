@@ -326,15 +326,42 @@ end
 local function formatNextCycleTooltip(group,bestArrival,bestChance,flightSeconds,now)
     if group==nil then return 'Next-cycle evidence unavailable' end
     local nl='#CRLF#'
-    local safe='none'
-    if group.safeStart>0 and group.safeEnd>group.safeStart then
-        safe=formatMoment(group.safeStart-flightSeconds,now)..' -> '..formatMoment(group.safeEnd-flightSeconds,now)
+    local lines={'Next Restock Only'}
+    local earliestDeparture=number(group.earlyRestock)-flightSeconds
+    local bestDeparture=number(bestArrival)-flightSeconds
+    local lateRestockDeparture=number(group.lateRestock)-flightSeconds
+    local closeDeparture=number(group.lateSellout)-flightSeconds
+
+    if earliestDeparture>now then
+        table.insert(lines,'Earliest Departure: '..formatMoment(earliestDeparture,now))
+    else
+        table.insert(lines,'Departure Window: OPEN NOW')
     end
-    return 'Next Restock Only'..nl..
-        'Earliest Departure: '..formatMoment(group.earlyRestock-flightSeconds,now)..nl..
-        'Best Departure: '..formatMoment(bestArrival-flightSeconds,now)..' '..chancePercent(bestChance)..nl..
-        'Late Restock Departure: '..formatMoment(group.lateRestock-flightSeconds,now)..nl..
-        'Safe Departure Window: '..safe
+    if bestDeparture>now then
+        table.insert(lines,'Best Departure: '..formatMoment(bestDeparture,now)..' '..chancePercent(bestChance))
+    end
+    if lateRestockDeparture>now then
+        table.insert(lines,'Late Restock Departure: '..formatMoment(lateRestockDeparture,now))
+    end
+
+    if group.safeStart>0 and group.safeEnd>group.safeStart then
+        local safeStart=number(group.safeStart)-flightSeconds
+        local safeEnd=number(group.safeEnd)-flightSeconds
+        if safeEnd<=now then
+            table.insert(lines,'Safe Departure Window: closed')
+        elseif safeStart<=now then
+            table.insert(lines,'Safe Departure Window: NOW -> '..formatMoment(safeEnd,now))
+        else
+            table.insert(lines,'Safe Departure Window: '..formatMoment(safeStart,now)..' -> '..formatMoment(safeEnd,now))
+        end
+    end
+
+    if closeDeparture>now then
+        table.insert(lines,'Window Closes: '..formatMoment(closeDeparture,now))
+    else
+        table.insert(lines,'Window Closed')
+    end
+    return table.concat(lines,nl)
 end
 
 local function formatSleepingRestockTooltip(estimateAt,averageDelay,earlyDelay,lateDelay,lifetimeShort,lifetimeLong,samples,now)
@@ -497,13 +524,13 @@ local function applyCompactLayout(index)
     local face='Nirmala UI Semilight'
     setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',256); setOption(prefix..'Gross','H',18); setOption(prefix..'Gross','FontFace',face); setOption(prefix..'Gross','FontSize',9); setOption(prefix..'Gross','StringAlign','LeftCenter'); setOption(prefix..'Gross','ClipString',1)
     setOption(prefix..'DetailTotal','X',282); setOption(prefix..'DetailTotal','W',256); setOption(prefix..'DetailTotal','H',18); setOption(prefix..'DetailTotal','FontFace',face); setOption(prefix..'DetailTotal','FontSize',9); setOption(prefix..'DetailTotal','StringAlign','LeftCenter'); setOption(prefix..'DetailTotal','ClipString',1)
-    setOption(prefix..'Name','X',106); setOption(prefix..'Name','W',1); setOption(prefix..'Name','FontFace',face); setOption(prefix..'Name','FontSize',11); setOption(prefix..'Name','FontColor','0,0,0,0'); setOption(prefix..'Name','ClipString',1)
-    setOption(prefix..'Price','X',106); setOption(prefix..'Price','W',282); setOption(prefix..'Price','FontFace',face); setOption(prefix..'Price','FontSize',11); setOption(prefix..'Price','ClipString',1)
-    setOption(prefix..'Take','X',106); setOption(prefix..'Take','W',1); setOption(prefix..'Take','FontFace',face); setOption(prefix..'Take','FontSize',11); setOption(prefix..'Take','FontColor','0,0,0,0'); setOption(prefix..'Take','ClipString',1)
+    setOption(prefix..'Name','X',108); setOption(prefix..'Name','W',1); setOption(prefix..'Name','FontFace',face); setOption(prefix..'Name','FontSize',11); setOption(prefix..'Name','FontColor','0,0,0,0'); setOption(prefix..'Name','ClipString',1)
+    setOption(prefix..'Price','X',108); setOption(prefix..'Price','W',280); setOption(prefix..'Price','FontFace',face); setOption(prefix..'Price','FontSize',11); setOption(prefix..'Price','ClipString',1)
+    setOption(prefix..'Take','X',108); setOption(prefix..'Take','W',1); setOption(prefix..'Take','FontFace',face); setOption(prefix..'Take','FontSize',11); setOption(prefix..'Take','FontColor','0,0,0,0'); setOption(prefix..'Take','ClipString',1)
     setOption(prefix..'Make','X',504); setOption(prefix..'Make','W',108); setOption(prefix..'Make','H',50); setOption(prefix..'Make','FontFace',face); setOption(prefix..'Make','FontSize',15); setOption(prefix..'Make','StringAlign','RightCenter'); setOption(prefix..'Make','ClipString',1)
-    setOption(prefix..'Window','X',106); setOption(prefix..'Window','W',1)
-    setOption(prefix..'Leave','X',106); setOption(prefix..'Leave','W',280); setOption(prefix..'Leave','FontFace',face); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
-    setOption(prefix..'Chance','X',106); setOption(prefix..'Chance','W',1)
+    setOption(prefix..'Window','X',108); setOption(prefix..'Window','W',1)
+    setOption(prefix..'Leave','X',108); setOption(prefix..'Leave','W',278); setOption(prefix..'Leave','FontFace',face); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
+    setOption(prefix..'Chance','X',108); setOption(prefix..'Chance','W',1)
     setOption(prefix..'DetailToggle','X',531); setOption(prefix..'DetailToggle','W',24); setOption(prefix..'DetailToggle','H',23); setOption(prefix..'DetailToggle','StringAlign','CenterCenter'); setOption(prefix..'DetailToggle','FontFace',face); setOption(prefix..'DetailToggle','FontSize',10)
     setOption(prefix..'Graph','X',519); setOption(prefix..'Graph','W',24); setOption(prefix..'Graph','H',23)
 end
@@ -556,7 +583,7 @@ local function updateRow(index,state,now)
     local taxEach=(quantity>0 and marketTax>0) and math.floor((marketTax/quantity)+0.5) or 0
 
     setOption(prefix..'Name','Text',itemName)
-    setOption(prefix..'Name','ToolTipText','Item name')
+    setOption(prefix..'Name','ToolTipText','')
     setOption(prefix..'Name','FontColor','0,0,0,0')
 
     local totalCostText=totalCost>0 and formatMoney(totalCost) or '?'
@@ -576,8 +603,8 @@ local function updateRow(index,state,now)
     setOption(prefix..'Make','Text',formatSignedMoney(make))
     setOption(prefix..'Make','FontColor',profitColor(make))
     setOption(prefix..'Take','ToolTipText','')
-    setOption(prefix..'Price','ToolTipText','Item | foreign unit cost | full-load purchase cost')
-    setOption(prefix..'Make','ToolTipText','After-tax total net profit for the full load.')
+    setOption(prefix..'Price','ToolTipText','')
+    setOption(prefix..'Make','ToolTipText','')
 
     local taxColor=marketTax>0 and '244,138,138,255' or '150,150,150,255'
     local eachNetColor=profitColor(each)
@@ -591,7 +618,7 @@ local function updateRow(index,state,now)
 
     setOption(prefix..'Gross','Text',eachDetail)
     setOption(prefix..'Gross','FontColor','#Text#')
-    setOption(prefix..'Gross','ToolTipText','Per item: declared MV | selected tax | after-tax net profit')
+    setOption(prefix..'Gross','ToolTipText','')
     setOption(prefix..'Gross','InlinePattern','(?<=MV:)\\$[0-9,]+')
     setOption(prefix..'Gross','InlineSetting','Color | 225,225,225,255')
     setOption(prefix..'Gross','InlinePattern2','(?<=Tax:)\\$[0-9,]+')
@@ -601,7 +628,7 @@ local function updateRow(index,state,now)
 
     setOption(prefix..'DetailTotal','Text',totalDetail)
     setOption(prefix..'DetailTotal','FontColor','#Text#')
-    setOption(prefix..'DetailTotal','ToolTipText','Full load: total declared MV | selected tax | after-tax net profit')
+    setOption(prefix..'DetailTotal','ToolTipText','')
     setOption(prefix..'DetailTotal','InlinePattern','(?<=MV:)\\$[0-9,]+')
     setOption(prefix..'DetailTotal','InlineSetting','Color | 225,225,225,255')
     setOption(prefix..'DetailTotal','InlinePattern2','(?<=Tax:)\\$[0-9,]+')

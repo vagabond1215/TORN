@@ -132,7 +132,7 @@ The renderer:
 - draws seven internal vertical separators for eight one-hour segments;
 - shows sparse numeric Y labels plus `-8h` / `now` X labels.
 
-`GraphHover.lua` and `BuildGraphHoverData.ps1` add local hover telemetry over the same generated graph.
+Graph-hover tooltip telemetry has been retired. The generated graph is display-only; window evidence remains on the card's window/guidance tooltip.
 
 If the first real retained sample occurs inside the 8-hour window, the earlier portion is deliberately left without a fabricated stock line.
 
@@ -153,13 +153,14 @@ Each compact row is:
 - No country name/code in the card body.
 - The left first-line content is Item / foreign unit cost / exact full-load cost; no variable-price reserve is applied.
 - Signed total net profit is larger, right-aligned, and vertically centered over the two card text lines.
-- Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license. Three tiny alpha-mask assets (`both`, `top`, `bottom`) tint to `#Panel#` and clip the flag's left corners according to expansion state; a border-only `CardBorder` meter redraws the rounded card outline over the flag. This makes the flag a true left-side end cap without leaking square pixels outside the radius.
+- Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license. The flag/mask surface is `67x50` starting at the card origin so color extends beneath the border instead of leaving 1px bands. Three tiny alpha-mask assets (`both`, `top`, `bottom`) tint to `#Panel#` and clip the flag's left corners according to expansion state; a border-only `CardBorder` meter redraws the rounded card outline over the flag.
 - Each row also has a transparent `28x28` item-art meter immediately right of the flag. `EnsureItemImages.ps1` caches Torn's direct `images/items/<id>/large.png` asset in `@Resources/Generated/Items`; missing/failed decorative art never blocks card rendering.
 - Hovering the flag exposes country + configured one-way travel time.
 - The `$` button expands a two-half 9pt economics row: per-item MV/Tax/Net on the left and total MV/Tax/Net on the right; the redundant Each/Total prefixes are omitted.
 - `$` and chart are centered in the two halves of one T-divided right-edge end cap; active cells use Torn-lime fill and dark-gray icons. Their fills are inset one pixel so the card border and separators remain unobscured.
 - Window/leave guidance is positioned low in the card body to minimize padding above the bottom border.
-- The chart button expands the local 8-hour graph. Graph PNGs are black with a Torn-lime stock trace, cobalt-blue restock/in-stock transition lines, and pumpkin-orange sellout/out-of-stock transition lines.
+- The chart button expands the local 8-hour graph. Graph PNGs are black with a Torn-lime stock trace; cobalt-blue restock/in-stock and pumpkin-orange sellout/out-of-stock events are short ticks below the X axis.
+- Tooltip ownership is limited to the Flag meter and the visible Leave/window meter. The former `Info`, graph-hover, and final WindowTooltipTweaks tooltip surfaces are retired. CardPresenter owns the home window tooltip and TravelStateWindowTweaks owns it while traveling/returning/abroad.
 - A known 0% arrival case displays `NO HIT` rather than `LEAVE NOW`; unknown likelihood displays `WAIT DATA`.
 
 `OpportunityRows.inc` is included after the full-panel background so cards render above, not beneath, the panel layer.

@@ -72,11 +72,13 @@ Card rules:
 - The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap. Their active fill is inset one pixel so the card border and T separators always remain visible above/around the highlight.
 - Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity.
-- Inline graph rendering uses a black background, Torn-lime stock trace, cobalt-blue restock/in-stock transition markers, and pumpkin-orange sellout/out-of-stock markers.
+- Inline graph rendering uses a black background and Torn-lime stock trace. Cobalt-blue restock/in-stock and pumpkin-orange sellout/out-of-stock transitions render as short ticks in a dedicated gutter below the X axis, not across the active plot.
 - Expanded economics use two equal unlabeled halves: per-item `MV / <rate>% Tax / Net` on the left and full-load `MV / <rate>% Tax / Net` on the right. Both halves are 9 pt and vertically centered; a divider separates the halves.
-- The FlagKit image is the visual left end cap. A panel-tinted alpha mask clips the flag to the card's rounded left corners and a border-only overlay redraws the card edge above it. Collapsed cards round both left corners; graph-expanded cards keep only the top-left flag corner rounded; economics-expanded cards keep only the bottom-left flag corner rounded; if both expansions are open the flag edge is square because neither flag corner coincides with the card corner.
+- The FlagKit image is the visual left end cap. It extends underneath the card's top/bottom border (`67x50` beginning at the card origin), eliminating the former 1px bands. A panel-tinted alpha mask clips the flag to the rounded left corners and a border-only overlay redraws the card edge above it. Collapsed cards round both left corners; graph-expanded cards keep only the top-left flag corner rounded; economics-expanded cards keep only the bottom-left flag corner rounded; if both expansions are open the flag edge is square because neither flag corner coincides with the card corner.
 - Decorative Torn item art is shown immediately to the right of the flag on a transparent `28x28` surface. The art is cached locally from Torn's direct item PNG path (`https://www.torn.com/images/items/<id>/large.png`) and is never required for economics or opportunity logic.
 - The window/guidance line sits low in the card with minimal bottom padding.
+- Tooltip policy is strict: only the destination flag and the visible window/guidance text may expose tooltips. Header controls, sort buttons, item art/text, economics, profit, end-cap buttons, and graph hover do not.
+- Active-window tooltips never present already-passed departure timestamps as actionable times. Once the departure window has opened they say `OPEN NOW`; expired Safe windows say `closed`, and only future departure/close timestamps remain.
 
 Ordering is selectable and persistent only for:
 
@@ -125,7 +127,7 @@ There is one graph surface: the inline card graph.
 - Opened with the per-row chart Shape button.
 - Rendered inside the Rainmeter card/list.
 - One expanded market at a time.
-- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering plus `GraphHover.lua` / `BuildGraphHoverData.ps1` for local hover telemetry.
+- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering. Graph-hover tooltip telemetry is retired; the graph is display-only.
 - Refreshing an open graph is local-only and may occur at approximately one-minute cadence.
 - The standalone WinForms Viewer and its launcher are retired; do not restore them.
 

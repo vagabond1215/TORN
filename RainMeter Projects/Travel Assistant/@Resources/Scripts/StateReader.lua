@@ -210,7 +210,6 @@ local function refreshPresentation()
         'MeasureCardTweaks',
         'MeasureFreshnessGuard',
         'MeasureTravelStateWindowTweaks',
-        'MeasureWindowTooltipTweaks',
         'MeasureFinalCardPolish'
     }) do
         SKIN:Bang('!UpdateMeasure', measure)
@@ -498,7 +497,7 @@ end
 
 local function updateTravelHeader(data, now)
     SKIN:Bang('!SetOption', 'MeterTitle', 'Text', travelHeaderText(data, now))
-    SKIN:Bang('!SetOption', 'MeterTitle', 'ToolTipText', 'Open Torn travel')
+    SKIN:Bang('!SetOption', 'MeterTitle', 'ToolTipText', '')
 end
 
 local function travelSecondsForCountry(data, countryId)
@@ -546,9 +545,7 @@ local function applyItemImageForRow(data, index, key)
     end
 
     local path = itemImagePath(itemId)
-    local prefix = 'Opportunity' .. index
-    local itemName = resolvedItemName(key, data[prefix .. 'Name'])
-    SKIN:Bang('!SetOption', meter, 'ToolTipText', itemName)
+    SKIN:Bang('!SetOption', meter, 'ToolTipText', '')
     if fileExists(path) then
         SKIN:Bang('!SetOption', meter, 'ImageName', path)
         SKIN:Bang('!ShowMeter', meter)
@@ -662,7 +659,7 @@ local function collapseCardDetails()
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Gross')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotal')
         setDetailButtonState('MeterOpportunity' .. i .. 'DetailToggle', false)
-        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'DetailToggle', 'ToolTipText', 'Show card economics')
+        SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'DetailToggle', 'ToolTipText', '')
     end
 end
 
@@ -759,15 +756,15 @@ local function layoutRows(data, count)
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
         end
 
-        SKIN:Bang('!SetOption', p .. 'Flag', 'X', '9')
-        SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+1+bodyOffset))
-        SKIN:Bang('!SetOption', p .. 'Flag', 'W', '64')
-        SKIN:Bang('!SetOption', p .. 'Flag', 'H', '48')
-        SKIN:Bang('!SetOption', p .. 'FlagMask', 'X', '9')
-        SKIN:Bang('!SetOption', p .. 'FlagMask', 'Y', tostring(y+1+bodyOffset))
-        SKIN:Bang('!SetOption', p .. 'FlagMask', 'W', '64')
-        SKIN:Bang('!SetOption', p .. 'FlagMask', 'H', '48')
-        SKIN:Bang('!SetOption', p .. 'ItemImage', 'X', '75')
+        SKIN:Bang('!SetOption', p .. 'Flag', 'X', '8')
+        SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Flag', 'W', '67')
+        SKIN:Bang('!SetOption', p .. 'Flag', 'H', '50')
+        SKIN:Bang('!SetOption', p .. 'FlagMask', 'X', '8')
+        SKIN:Bang('!SetOption', p .. 'FlagMask', 'Y', tostring(y+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'FlagMask', 'W', '67')
+        SKIN:Bang('!SetOption', p .. 'FlagMask', 'H', '50')
+        SKIN:Bang('!SetOption', p .. 'ItemImage', 'X', '77')
         SKIN:Bang('!SetOption', p .. 'ItemImage', 'Y', tostring(y+11+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'ItemImage', 'W', '28')
         SKIN:Bang('!SetOption', p .. 'ItemImage', 'H', '28')
@@ -777,7 +774,7 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Make', 'Y', tostring(y+25+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'DetailToggle', 'Y', tostring(y+13+bodyOffset))
         setDetailButtonState(p .. 'DetailToggle', detailExpanded)
-        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'ToolTipText', detailExpanded and 'Hide card economics' or 'Show card economics')
+        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'ToolTipText', '')
 
         SKIN:Bang('!SetOption', p .. 'Window', 'Y', tostring(y+34+bodyOffset))
         SKIN:Bang('!HideMeter', p .. 'Window')
@@ -854,7 +851,6 @@ local function updateOpportunities(data)
         setGroupVisible('OpportunityRow' .. i, visible)
         if visible then
             local key = safeText(data[prefix .. 'Key'], '')
-            local tooltip = safeText(data[prefix .. 'Tooltip'], '')
             local gross = safeText(data[prefix .. 'GrossText'], '')
             local price = safeText(data[prefix .. 'PriceText'], '')
             local mv = safeText(data[prefix .. 'MarketValueText'], '')
@@ -866,10 +862,10 @@ local function updateOpportunities(data)
             end
 
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'Text', cardTitle(data, prefix, key))
-            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'ToolTipText', tooltip)
+            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'ToolTipText', '')
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'Text', gross)
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '150,150,150,255'))
-            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'ToolTipText', tooltip)
+            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'ToolTipText', '')
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Window', 'Text', safeText(data[prefix .. 'WindowText'], ''))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Leave', 'Text', safeLeaveText(data, prefix))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Chance', 'Text', displayChanceText(data, prefix))

@@ -132,7 +132,7 @@ Do not change this logic during filter/header work:
 - Safe rows suppress confidence and expose the info anchor;
 - Best Hit requires strictly greater than 50% empirical support;
 - Best confidence updates locally from retained cycles;
-- Safe/Best departure text remains a tooltip hitbox with Early Restock, Late Restock, Safe Window and Best Hit evidence;
+- Only flag and visible window/guidance text expose tooltips. Home window tooltips come directly from CardPresenter, traveling/returning/abroad tooltips from TravelStateWindowTweaks, and past departure timestamps are never presented as actionable times;
 - outbound travel still filters to the recognized destination and uses landing timing;
 - return travel releases that outbound filter.
 
@@ -199,7 +199,7 @@ Rainmeter log should also remain free of repeating Lua / `!SetOption` errors.
 
 Target acceptance caught two follow-up issues after the unified-filter pull:
 
-- the short RunCommand launcher's `FinishAction` redrew after `StateReader -> HeaderLayout -> CardPresenter -> CardTweaks` but before `FreshnessGuard -> TravelStateWindowTweaks -> WindowTooltipTweaks -> FinalCardPolish`. On a stale provider snapshot this exposed a sub-second intermediate render: header text could flash `UPDATE STALE` before `FORECAST ONLY`, and card meters could flash the intermediate styling.
+- the short RunCommand launcher's `FinishAction` must redraw only after `StateReader -> HeaderLayout -> CardPresenter -> CardTweaks -> FreshnessGuard -> TravelStateWindowTweaks -> FinalCardPolish`. The retired WindowTooltipTweaks pass must not return.
 
 All explicit redraw paths now complete the entire presentation chain before `!Redraw`. `StateReader` also centralizes immediate sort/trip/graph redraws through that same chain. Hard-stale no-row mode uses the footer-aware 160 px minimum panel height.
 
