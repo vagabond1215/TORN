@@ -101,7 +101,7 @@ if (-not (Test-Path -LiteralPath $settingsPopupPath)) {
     foreach ($token in @(
         "Set-FilterProperty $current 'itemMarketFeePercent' $marketTaxPercent",
         '[void](Save-UiPreferences $current)',
-        '& $UpdateLauncher -Action Update -MutexWaitSeconds 120'
+        'Start-FilterProjectionRefresh -Action RefreshFilters'
     )) {
         if (-not $settingsPopup.Contains($token)) { Fail "Settings tax persistence/refresh contract missing '$token'." }
     }
@@ -127,5 +127,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Rainmeter updater runtime contract passed.' -ForegroundColor Green
-Write-Host 'MeasureUpdate uses a reusable spawn-only PS7 launcher; Settings queues normal refreshes and filters queue RefreshFilters behind an active poll so committed preference changes cannot be stranded.' -ForegroundColor Green
+Write-Host 'MeasureUpdate uses a reusable spawn-only PS7 launcher; Settings and filters queue RefreshFilters behind an active poll so committed local projection changes cannot be stranded.' -ForegroundColor Green
 exit 0
