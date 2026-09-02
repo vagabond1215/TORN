@@ -1,12 +1,9 @@
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet('Filter','OptimizerSettings','ItemViewer')]
+    [ValidateSet('Filter','OptimizerSettings')]
     [string]$Popup,
     [ValidateSet('Filters','Item','Country','Category','Ignore')]
-    [string]$Filter = 'Filters',
-    [ValidateRange(0,8)]
-    [int]$Row = 0,
-    [string]$MarketKey = ''
+    [string]$Filter = 'Filters'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,13 +33,6 @@ try {
             $target = Join-Path $PSScriptRoot 'OpenOptimizerSettings.ps1'
             if (-not (Test-Path -LiteralPath $target)) { throw 'OpenOptimizerSettings.ps1 is missing.' }
             & $target
-        }
-        'ItemViewer' {
-            $target = Join-Path $PSScriptRoot 'OpenItemViewer.ps1'
-            if (-not (Test-Path -LiteralPath $target)) { throw 'OpenItemViewer.ps1 is missing.' }
-            if (-not [string]::IsNullOrWhiteSpace($MarketKey) -and $MarketKey -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { throw 'MarketKey must be country:itemId.' }
-            if ([string]::IsNullOrWhiteSpace($MarketKey)) { & $target -Row $Row }
-            else { & $target -Row $Row -MarketKey $MarketKey }
         }
     }
     Clear-TravelAssistantLatestError -Component $component
