@@ -32,6 +32,14 @@ Add-SCProbabilityScore -Aggregate $perfectAggregate -Prefix any -Probability 0.0
 Assert-Near ([double]$perfectAggregate.anyBrierSum) 0.0 0.000000001 'Perfect 0%/100% forecasts must have exact zero Brier contribution.'
 Assert-True ([double]$perfectAggregate.anyLogLossSum -gt 0.0) 'Log loss should remain finite through epsilon clipping even for exact 0%/100% forecasts.'
 
+Assert-Equal (Get-SCHorizonScope -HorizonSeconds 0L) 'le_30m' 'Zero/near-term horizon should map to <=30m.'
+Assert-Equal (Get-SCHorizonScope -HorizonSeconds 1800L) 'le_30m' '30-minute boundary should remain in <=30m.'
+Assert-Equal (Get-SCHorizonScope -HorizonSeconds 1801L) '30m_to_2h' 'Horizon immediately above 30 minutes should enter 30m-2h.'
+Assert-Equal (Get-SCHorizonScope -HorizonSeconds 7200L) '30m_to_2h' 'Two-hour boundary should remain in 30m-2h.'
+Assert-Equal (Get-SCHorizonScope -HorizonSeconds 7201L) '2h_to_6h' 'Horizon immediately above two hours should enter 2h-6h.'
+Assert-Equal (Get-SCHorizonScope -HorizonSeconds 21600L) '2h_to_6h' 'Six-hour boundary should remain in 2h-6h.'
+Assert-Equal (Get-SCHorizonScope -HorizonSeconds 21601L) 'gt_6h' 'Horizon above six hours should enter >6h.'
+
 function New-CalCycle {
     param(
         [long]$RestockLower,
@@ -211,6 +219,10 @@ $marketAggregate=@($scoreState.aggregates | Where-Object {$_.modelVersion -eq 's
 Assert-Equal $marketAggregate.Count 1 'Prospective resolution must maintain a market-specific aggregate.'
 Assert-Equal ([int]$marketAggregate[0].anyCount) 1 'Market-specific aggregate must count the prospective outcome once.'
 
+$horizonAggregate=@($scoreState.aggregates | Where-Object {$_.modelVersion -eq 'stochastic-v1.1' -and $_.scopeType -eq 'horizon' -and $_.scopeValue -eq 'le_30m'})
+Assert-Equal $horizonAggregate.Count 1 'Prospective resolution must maintain a forecast-horizon aggregate.'
+Assert-Equal ([int]$horizonAggregate[0].anyCount) 1 'Forecast-horizon aggregate must count the prospective outcome once.'
+
 $summary=New-SCCalibrationSummary -State $scoreState -NowEpoch 1700L -CurrentModelVersion 'stochastic-v1.1' -FreezeSeconds 3600 -GraceSeconds 300 -MaximumWaitSeconds 604800
 $summaryOverall=@($summary.models | Where-Object {$_.modelVersion -eq 'stochastic-v1.1' -and $_.evidenceQuality -eq 'all'})
 Assert-Equal $summaryOverall.Count 1 'Calibration summary must expose the model-level aggregate.'
@@ -241,7 +253,8 @@ Assert-True ($scriptText.Contains("forecastSelection='one best-expected-profit a
 Assert-True ($scriptText.Contains('selected arrival must be strictly after artifact generation')) 'Prospective calibration must explicitly exclude already-observable zero-horizon states.'
 Assert-True ($scriptText.Contains("calibrationStatus='diagnostic only; no probability transformation is applied'")) 'Prospective scorer must not silently recalibrate user-facing probabilities.'
 Assert-True ($scriptText.Contains('Read-SCJson $StateFile -Strict')) 'Durable calibration state must be read strictly so malformed JSON cannot reset accumulated evidence.'
-Assert-True ($scriptText.Contains("aggregateScopes='overall, evidence_quality, and market'")) 'Prospective scorer must expose overall, evidence-quality, and market calibration scopes.'
+Assert-True ($scriptText.Contains("aggregateScopes='overall, evidence_quality, market, and horizon'")) 'Prospective scorer must expose overall, evidence-quality, market, and horizon calibration scopes.'
+Assert-True ($scriptText.Contains("horizonBuckets='<=30m, >30m-2h, >2h-6h, >6h'")) 'Calibration horizon buckets must remain explicit and stable for longitudinal metrics.'
 Assert-True ($scriptText.Contains("backlogPolicy='skip new freezes when pending per-market or total limits are reached; never relabel or drop pending outcomes for capacity'")) 'Calibration backlog policy must be explicit and non-destructive.'
 
 $runUpdate=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1')
