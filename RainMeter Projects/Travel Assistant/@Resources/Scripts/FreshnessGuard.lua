@@ -85,9 +85,8 @@ local function hideOpportunityRows(message)
         SKIN:Bang('!HideMeterGroup','OpportunityRow'..i)
         SKIN:Bang('!HideMeter','MeterOpportunity'..i..'InlineGraph')
         SKIN:Bang('!SetOption','MeterOpportunity'..i..'InlineGraph','ImageName','')
-        SKIN:Bang('!SetOption','MeterOpportunity'..i..'Graph','Text','v')
     end
-    setVariable('PanelHeight',132)
+    setVariable('PanelHeight',160)
     setVariable('OpportunityMessageText',message or 'Foreign stock is unavailable')
     SKIN:Bang('!ShowMeter','MeterOpportunityMessage')
 end
