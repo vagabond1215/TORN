@@ -211,13 +211,34 @@ function Get-SCConfirmedOutcome {
 
     for ($i=0; $i -lt ($ordered.Count-1); $i++) {
         $left=$ordered[$i]
+        $rightRaw=$Cycles | Where-Object {
+            $rightUpper=[long](Get-SCProperty $_ 'restockUpperBoundAt')
+            if ($rightUpper -le 0) { $rightUpper=[long](Get-SCProperty $_ 'restockAt') }
+            $rightUpper -eq [long]$ordered[$i+1].restockUpper
+        } | Select-Object -First 1
         $right=$ordered[$i+1]
-        if ($ArrivalAt -ge [long]$left.selloutUpper -and $ArrivalAt -lt [long]$right.restockLower) {
+
+        # A later restock confirms an OOS interval only when its stored
+        # previous-sellout anchor is the earlier completed cycle. Merely sorting
+        # two surviving cycle rows is insufficient because an outage may have
+        # hidden one or more complete stock cycles between them.
+        $linked=$false
+        if ($null -ne $rightRaw) {
+            $previousUpper=[long](Get-SCProperty $rightRaw 'previousSoldOutUpperBoundAt')
+            $previousQuality=([string](Get-SCProperty $rightRaw 'previousSellOutBoundaryQuality')).Trim().ToLowerInvariant()
+            $linked=(
+                $previousUpper -gt 0 -and
+                $previousUpper -eq [long]$left.selloutUpper -and
+                $previousQuality -in @('observed','bounded','recovered')
+            )
+        }
+
+        if ($linked -and $ArrivalAt -ge [long]$left.selloutUpper -and $ArrivalAt -lt [long]$right.restockLower) {
             return [pscustomobject]@{
                 anyScorable=$true; anyStock=0
                 targetScorable=$false; targetSuccess=-1
                 quantityScorable=$false; actualQuantity=0L
-                reason='arrival lies inside confirmed between-cycle out-of-stock interval'
+                reason='arrival lies inside continuity-linked confirmed between-cycle out-of-stock interval'
                 evidenceAt=[Math]::Max([long]$left.availableAt,[long]$right.availableAt)
             }
         }
