@@ -65,7 +65,39 @@ Meter=String
 Group=OpportunityRow1
 X=78
 Y=126
-W=440
+W=180
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity1Take]
+Meter=String
+Group=OpportunityRow1
+X=260
+Y=126
+W=134
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity1Make]
+Meter=String
+Group=OpportunityRow1
+X=396
+Y=126
+W=122
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -226,7 +258,39 @@ Meter=String
 Group=OpportunityRow2
 X=78
 Y=180
-W=440
+W=180
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity2Take]
+Meter=String
+Group=OpportunityRow2
+X=260
+Y=180
+W=134
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity2Make]
+Meter=String
+Group=OpportunityRow2
+X=396
+Y=180
+W=122
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -387,7 +451,39 @@ Meter=String
 Group=OpportunityRow3
 X=78
 Y=234
-W=440
+W=180
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity3Take]
+Meter=String
+Group=OpportunityRow3
+X=260
+Y=234
+W=134
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity3Make]
+Meter=String
+Group=OpportunityRow3
+X=396
+Y=234
+W=122
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -548,7 +644,39 @@ Meter=String
 Group=OpportunityRow4
 X=78
 Y=288
-W=440
+W=180
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity4Take]
+Meter=String
+Group=OpportunityRow4
+X=260
+Y=288
+W=134
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity4Make]
+Meter=String
+Group=OpportunityRow4
+X=396
+Y=288
+W=122
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -709,7 +837,39 @@ Meter=String
 Group=OpportunityRow5
 X=78
 Y=342
-W=440
+W=180
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity5Take]
+Meter=String
+Group=OpportunityRow5
+X=260
+Y=342
+W=134
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity5Make]
+Meter=String
+Group=OpportunityRow5
+X=396
+Y=342
+W=122
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -870,7 +1030,39 @@ Meter=String
 Group=OpportunityRow6
 X=78
 Y=396
-W=440
+W=180
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity6Take]
+Meter=String
+Group=OpportunityRow6
+X=260
+Y=396
+W=134
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity6Make]
+Meter=String
+Group=OpportunityRow6
+X=396
+Y=396
+W=122
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1031,7 +1223,39 @@ Meter=String
 Group=OpportunityRow7
 X=78
 Y=450
-W=440
+W=180
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity7Take]
+Meter=String
+Group=OpportunityRow7
+X=260
+Y=450
+W=134
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity7Make]
+Meter=String
+Group=OpportunityRow7
+X=396
+Y=450
+W=122
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
@@ -1192,7 +1416,39 @@ Meter=String
 Group=OpportunityRow8
 X=78
 Y=504
-W=440
+W=180
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity8Take]
+Meter=String
+Group=OpportunityRow8
+X=260
+Y=504
+W=134
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=11
+FontColor=#Text#
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+
+[MeterOpportunity8Make]
+Meter=String
+Group=OpportunityRow8
+X=396
+Y=504
+W=122
 Hidden=1
 DynamicVariables=1
 FontFace=Nirmala UI Semilight
