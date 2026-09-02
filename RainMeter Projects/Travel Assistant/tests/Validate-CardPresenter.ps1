@@ -7,11 +7,12 @@ $presenterPath = Join-Path $ProjectRoot '@Resources\Scripts\CardPresenter.lua'
 $opportunityPath = Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 $windowPlanPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowPlan.ps1'
 $windowRefinerPath = Join-Path $ProjectRoot '@Resources\Scripts\WindowPlanRefiner.ps1'
+$multiCycleBridgePath = Join-Path $ProjectRoot '@Resources\Scripts\MultiCycleChanceBridge.ps1'
 $wrapperPath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($iniPath,$presenterPath,$opportunityPath,$windowPlanPath,$windowRefinerPath,$wrapperPath)) {
+foreach ($path in @($iniPath,$presenterPath,$opportunityPath,$windowPlanPath,$windowRefinerPath,$multiCycleBridgePath,$wrapperPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing compact-card/window file: $path" }
 }
 if ($errors.Count -eq 0) {
@@ -20,6 +21,7 @@ if ($errors.Count -eq 0) {
     $opportunity = Get-Content -LiteralPath $opportunityPath -Raw
     $windowPlan = Get-Content -LiteralPath $windowPlanPath -Raw
     $windowRefiner = Get-Content -LiteralPath $windowRefinerPath -Raw
+    $multiCycleBridge = Get-Content -LiteralPath $multiCycleBridgePath -Raw
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
 
     foreach ($token in @('[MeasureCardPresenter]','CardPresenter.lua','StateFile=#@#Generated\ui-state.kv')) {
@@ -96,7 +98,11 @@ if ($errors.Count -eq 0) {
         'if earliestDeparture>now then','if bestDeparture>now then','if lateRestockDeparture>now then',
         'formatSleepingRestockTooltip',"'Restocks in ~'",
         "'Collecting Data: See Weav3r'",
-        'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'"
+        'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'",
+        'multiCycleChanceAction',"'MultiCycleChanceEligible'","'MultiCycleChanceProbability'","'MultiCycleTargetProbability'",
+        "'MultiCycleDutyCycleProbability'","'MultiCycleArrivalCycleRatio'","'MultiCycleExpectedFullCycles'","'MultiCyclePhaseStdDevSeconds'",
+        "'Multi-cycle arrival forecast'","'Modeled Chance to Hit: '","return 'Chance to hit:',chancePercent(probability)",
+        "'This is a modeled arrival probability, not a Safe/Best departure-window guarantee.'"
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
@@ -147,6 +153,24 @@ if ($errors.Count -eq 0) {
     }
 
     foreach ($token in @(
+        '. $StochasticScript -SkipMain',
+        'Get-MCWeightedTimingDiagnostics',
+        'Get-MCArrivalCandidate',
+        'Get-MCMultiCycleChance',
+        '[double]$MinimumFlightCycleRatio = 2.0',
+        '[int]$SimulationCount = 256',
+        '-EnableAdaptiveGrid $false',
+        "'MultiCycleChanceEligible'",
+        "'MultiCycleChanceProbability'",
+        "'MultiCycleDutyCycleProbability'",
+        "'MultiCycleArrivalCycleRatio'",
+        "'MultiCyclePhaseStdDevSeconds'"
+    )) {
+        if (-not $multiCycleBridge.Contains($token)) { Fail "MultiCycleChanceBridge.ps1 missing production fallback token '$token'." }
+    }
+    if ($multiCycleBridge -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'MultiCycleChanceBridge.ps1 must remain local-only/network-free.' }
+
+    foreach ($token in @(
         'Get-RecurringScenarioModel','safeStartAt = $lateRestockAt','safeEndAt = $earlySelloutAt','MinimumSafeWindowSeconds = 60L',
         'bestProbability','Convert-WindowPlanMachineText','Select-WindowPlanGroup',
         '$RuntimeCycleFile','$SeedCycleFile','MaximumSamples = 48','$cycleParts','$phaseCode','restockDelaySeconds','availabilitySeconds',
@@ -164,8 +188,9 @@ if ($errors.Count -eq 0) {
 
     $opportunityAt=$wrapper.IndexOf('Invoke-FailSoftScript -Path $OpportunityState',[System.StringComparison]::Ordinal)
     $windowAt=$wrapper.IndexOf('Invoke-FailSoftScript -Path $WindowPlan',[System.StringComparison]::Ordinal)
+    $bridgeAt=$wrapper.IndexOf('Invoke-FailSoftScript -Path $MultiCycleChanceBridge',[System.StringComparison]::Ordinal)
     $filterAt=$wrapper.IndexOf('if (Test-Path -LiteralPath $FilterState)',[System.StringComparison]::Ordinal)
-    if ($opportunityAt -lt 0 -or $windowAt -le $opportunityAt -or $filterAt -le $windowAt) { Fail 'RunUpdate must project WindowPlan after OpportunityState and before FilterState/final UI publication/heartbeat.' }
+    if ($opportunityAt -lt 0 -or $windowAt -le $opportunityAt -or $bridgeAt -le $windowAt -or $filterAt -le $bridgeAt) { Fail 'RunUpdate must project WindowPlan then MultiCycleChanceBridge after OpportunityState and before FilterState/final UI publication/heartbeat.' }
 
     foreach ($token in @(
         "if (`$null -ne `$travelContext -and [bool](Get-OptimalProperty `$travelContext 'filterActive')) { `$fixedCountry = [string](Get-OptimalProperty `$travelContext 'destinationCountryId') }",
