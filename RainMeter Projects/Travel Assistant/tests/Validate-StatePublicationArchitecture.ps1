@@ -45,6 +45,9 @@ if ($errors.Count -eq 0) {
         'Write-TravelAssistantAtomicText -Path (Join-Path $GeneratedDir $name) -Text $text',
         'UIGeneration=',
         'Build state.kv is incomplete after FilterState; refusing UI publication.',
+        'OpportunityState failed; refusing to publish a stale opportunity projection as a fresh generation.',
+        'OpportunityState refresh failed; refusing to publish pre-refresh opportunities.',
+        'throw $projectionFailure',
         'Publish-UpdateUiState',
         'Write-UpdateHeartbeat',
         'Remove-OldUiStateGenerations'
