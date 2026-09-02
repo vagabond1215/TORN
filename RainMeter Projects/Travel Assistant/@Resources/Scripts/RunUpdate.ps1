@@ -20,6 +20,7 @@ $CycleAnchorReconciler = Join-Path $PSScriptRoot 'CycleAnchorReconciler.ps1'
 $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
 $WindowPlan = Join-Path $PSScriptRoot 'WindowPlan.ps1'
 $MultiCycleChanceBridge = Join-Path $PSScriptRoot 'MultiCycleChanceBridge.ps1'
+$ChanceHistory = Join-Path $PSScriptRoot 'ChanceHistory.ps1'
 $PriceVariationRefiner = Join-Path $PSScriptRoot 'PriceVariationRefiner.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
@@ -47,6 +48,7 @@ $CycleAnchorReconcilerErrorFile = Join-Path $RuntimeDir 'cycle-anchor-reconciler
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $WindowPlanErrorFile = Join-Path $RuntimeDir 'window-plan-error.txt'
 $MultiCycleChanceBridgeErrorFile = Join-Path $RuntimeDir 'multi-cycle-chance-bridge-error.txt'
+$ChanceHistoryErrorFile = Join-Path $RuntimeDir 'chance-history-error.txt'
 $PriceVariationRefinerErrorFile = Join-Path $RuntimeDir 'price-variation-refiner-error.txt'
 $FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
 $CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
@@ -465,6 +467,10 @@ try {
     # current-cycle/Safe/Best guidance retains presentation precedence.
     Invoke-FailSoftScript -Path $MultiCycleChanceBridge -ErrorPath $MultiCycleChanceBridgeErrorFile
 
+    # Record the currently modeled hit probability independently from observed
+    # stock history. This forecast-only journal is retained for the 8-hour graph.
+    Invoke-FailSoftScript -Path $ChanceHistory -ErrorPath $ChanceHistoryErrorFile
+
     # Classify price variability from recent recurring evidence rather than one old
     # anomaly. This controls card cost coloring and whether Take gets a 5% buffer.
     Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
@@ -480,6 +486,7 @@ try {
         }
         Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
         Invoke-FailSoftScript -Path $MultiCycleChanceBridge -ErrorPath $MultiCycleChanceBridgeErrorFile
+        Invoke-FailSoftScript -Path $ChanceHistory -ErrorPath $ChanceHistoryErrorFile
         Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
     }
 
