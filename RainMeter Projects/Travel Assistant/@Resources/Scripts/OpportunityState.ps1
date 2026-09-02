@@ -17,7 +17,6 @@ $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
 $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
-$FocusMarketFile = Join-Path $RuntimeDir 'focus-market.kv'
 
 function Format-OpportunityDuration {
     param([long]$Seconds)
@@ -314,24 +313,6 @@ function Get-OpportunityRestockSummary {
     }
 }
 
-function Read-OpportunityFocusMarker {
-    param([string]$Path,[long]$NowEpoch,[long]$MaximumAgeSeconds = 180L)
-    $result=[pscustomobject]@{ marketKey=''; updatedAt=0L; fresh=$false }
-    if (-not (Test-Path -LiteralPath $Path)) { return $result }
-    $values=@{}
-    foreach ($line in Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        $at=$line.IndexOf('=')
-        if ($at -lt 1) { continue }
-        $values[$line.Substring(0,$at).Trim()]=$line.Substring($at+1).Trim()
-    }
-    $updated=0L
-    if ($values.ContainsKey('UpdatedAt')) { [void][long]::TryParse([string]$values['UpdatedAt'],[ref]$updated) }
-    $key=if ($values.ContainsKey('MarketKey')) { ([string]$values['MarketKey']).Trim().ToLowerInvariant() } else { '' }
-    $fresh=(-not [string]::IsNullOrWhiteSpace($key) -and $updated -gt 0 -and ($NowEpoch-$updated) -ge 0 -and ($NowEpoch-$updated) -le [Math]::Max(60L,$MaximumAgeSeconds))
-    return [pscustomobject]@{ marketKey=$key; updatedAt=$updated; fresh=[bool]$fresh }
-}
-
 function Get-OpportunityEligibleEvidenceKeys {
     param(
         [object]$Engine,
@@ -604,7 +585,6 @@ if ($null -ne $travelContext -and [bool](Get-OptimalProperty $travelContext 'fil
 
 $eligibleEvidenceKeys=Get-OpportunityEligibleEvidenceKeys -Engine $engine -Countries $countries -Preferences $preferences -FixedCountry $fixedCountry -NowEpoch $Now -BasisPercent $basisPercent -MarketFeePercent $marketFeePercent -ResaleFallbackMaxAgeSeconds $resaleFallbackMaxAge
 $evidence=Get-OptimalEvidence -WantedKeys $eligibleEvidenceKeys -SkipObservations
-$focusMarker=Read-OpportunityFocusMarker -Path $FocusMarketFile -NowEpoch $Now
 
 $returningWait = 0L
 if ($travelState -eq 'returning' -and $null -ne $travelContext) { $returningWait = [Math]::Max(0L,[long](Get-OptimalProperty $travelContext 'timeLeft')) }
@@ -711,7 +691,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         # Long-OOS markets do not need a full recurring-window/waste calculation
         # every minute. Keep a cheap absolute restock estimate from verified cycle
         # delays and wake detailed forecasting only near the historically earliest
-        # restock boundary or while the user is explicitly viewing the market.
+        # restock boundary.
         if ($stock -le 0) {
             $lastSellOutAt=0L
             $lastSellOutQuality=''
@@ -720,7 +700,6 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                 if ($destinationState.PSObject.Properties['lastSellOutBoundaryQuality']) { $lastSellOutQuality=[string]$destinationState.lastSellOutBoundaryQuality }
             }
             $restockSummary=Get-OpportunityRestockSummary -Cycles $recurringCycles -RecentSamples 12
-            $focused=([bool]$focusMarker.fresh -and [string]$focusMarker.marketKey -eq $marketKey)
             if ($null -ne $restockSummary -and $lastSellOutAt -gt 0 -and (Test-OpportunityBoundaryQuality -Quality $lastSellOutQuality)) {
                 $restockEstimateAt=$lastSellOutAt+[long]$restockSummary.averageDelaySeconds
                 $wakeDelay=[long]$restockSummary.earliestDelaySeconds
@@ -734,7 +713,6 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                 $earlyRestockAt=$lastSellOutAt+$wakeDelay
                 $wakeAt=$earlyRestockAt-600L
                 $sleeping=(
-                    -not $focused -and
                     $restockEstimateAt -gt $Now -and
                     $Now -lt $wakeAt
                 )
