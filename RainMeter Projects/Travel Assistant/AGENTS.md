@@ -55,7 +55,7 @@ In Torn                                      [filter] [settings]
 
 [UPCOMING] [PROFIT] [PROFIT/HR]
 
-[FLAG]  <item> | <foreign cost> | <full-load cost>      <signed total net>   [$]
+[FLAG]  <item>                              <selected Profit or PROFIT/HR>   [$]
         <window / leave guidance>                                      [chart]
 
 Updated ...
@@ -66,14 +66,14 @@ Card rules:
 - No visible row/place numbers (`#1`, `#2`, etc.).
 - Left side is a recognizable FlagKit destination flag.
 - The hidden canonical Name meter remains item-name-only for downstream row lookup.
-- The left first-line content is one continuous text run: `Item | foreign unit cost | full-load cost`. There is no fixed tab/column gap between the two prices. Full-load cost is always exact `unit cost x quantity`; price variation never adds a cash buffer.
-- The full-load cost is muted light gray.
-- Total after-tax net profit occupies the right side of both text lines at 16 pt, vertically centers on the flag, and is right-aligned. The combined item / unit cost / full-load cost line is 12 pt; window/guidance text is 9 pt. Positive values use `+` and green; negative values use `-` and red.
+- The left first-line content is the item name only. Foreign unit cost and exact full-load cost move into the expanded economics strip; price variation never adds a cash buffer.
+- Expanded full-load Price is muted light gray; per-item Price retains the projected price color.
+- The selected primary profitability metric occupies the right side of both text lines at 14 pt, vertically centers on the flag, and is right-aligned. `UPCOMING` / `PROFIT` show total after-tax Net; `PROFIT/HR` shows total after-tax Net divided by round-trip flight hours. The item line is 12 pt; window/guidance text is 9 pt. Positive values use `+` and green; negative values use `-` and red.
 - The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap. Their active fill is inset one pixel so the card border and T separators always remain visible above/around the highlight.
 - Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text. Active sort text plus the main filter/settings icons use Torn lime; the graph's cobalt event ticks are intentionally unchanged.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity. Clicking the card body toggles both sections together; the `$` and chart end-cap buttons retain independent control of their own section.
 - Inline graph rendering uses a black background and Torn-lime stock trace. Cobalt-blue restock/in-stock and pumpkin-orange sellout/out-of-stock transitions render as short ticks in a dedicated gutter below the X axis, not across the active plot.
-- Expanded economics use equal Each/Total halves with a vertical 40px label block at the left of each half. The label block is filled with `#Border#` and centers `Each` / `Total` vertically. MV and Net share the top row. The fixed second row uses Tax on the left when the saved rate is nonzero and round-trip flight `$/hr` on the right at all rates; `$/hr` is after-tax Each/Total net divided by `2 x` the configured one-way flight seconds and excludes waiting/window time. The expansion remains 34px at 0% tax, with only Tax hidden. Both text-row baselines are biased 1 px upward for visual centering. No pipe separators are used inside the economics strip.
+- Expanded economics use equal Each/Total halves with a vertical 40px label block at the left of each half. MV is top-left. Top-right shows the profitability metric not used by the primary card: round-trip flight `$/hr` for `UPCOMING` / `PROFIT`, or signed Net for `PROFIT/HR`. Bottom-left shows per-item foreign Price / exact total purchase Price, and bottom-right shows Tax when nonzero. `$/hr` is after-tax Each/Total net divided by `2 x` configured one-way flight seconds and excludes waiting/window time. The expansion remains 34px at 0% tax, with only Tax hidden.
 - The FlagKit image is the visual left end cap. It extends underneath the card's top/bottom border (`67x50` beginning at the card origin), eliminating the former 1px bands. A panel-tinted alpha mask clips the flag to the rounded left corners and a border-only overlay redraws the card edge above it. Collapsed cards round both left corners; graph-expanded cards keep only the top-left flag corner rounded; economics-expanded cards keep only the bottom-left flag corner rounded; if both expansions are open the flag edge is square because neither flag corner coincides with the card corner.
 - The region between the flag's right edge and the item-name text is a true `48x48` square, matching the card's interior height. Decorative Torn item art is rendered `44x44` with a 2px inset inside that square and cached locally from Torn's direct item PNG path (`https://www.torn.com/images/items/<id>/large.png`).
 - The window/guidance line sits low in the card with minimal bottom padding.
@@ -84,7 +84,7 @@ Ordering is selectable and persistent only for:
 
 - `UPCOMING`: soonest current/modeled stock window first.
 - `PROFIT`: highest displayed after-tax total Net first. Sorting is signed descending: all positive profits rank above all negative profits, and negatives are ordered normally (`-$100` above `-$1,000`), never by absolute magnitude.
-- `PROFIT/HR`: after-tax net trip profit divided by total elapsed hours.
+- `PROFIT/HR`: after-tax net trip profit divided by configured round-trip flight hours; waiting/window time is excluded.
 - Alphabetical Name ordering is internal fallback only when the visible rows have neither usable timing nor usable profit inputs.
 - Hit likelihood is a separate displayed metric; do not fold it into a hidden sort score.
 - There is no user-facing `NAME`, `OPTIMAL`, Chance, or shortest-Time sort.
@@ -97,7 +97,7 @@ gross sale = declared/list MV × quantity
 gross profit = gross sale - purchase cost
 tax = floor(gross sale × selected rate), where rate is 0%..5%
 make = gross profit - tax
-profit/hr = make / total elapsed hours
+profit/hr = make / round-trip flight hours
 ```
 
 Gross intentionally does not subtract travel cost. Total elapsed includes required wait, outbound travel, return travel, and purchase buffer; if returning to Torn, remaining return time precedes the next outbound opportunity.
