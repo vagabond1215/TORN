@@ -144,14 +144,15 @@ Do not change this logic during filter/header work:
 - outbound travel still filters to the recognized destination and uses landing timing;
 - return travel releases that outbound filter.
 
-## Sorting and graphs — unchanged
+## Sorting and graphs
 
 Sorting remains:
 
-- `NAME` — item name ascending, then destination;
 - `UPCOMING` — earliest actionable/projected opportunity;
 - `GROSS PROFIT` — highest total trip profit;
 - `PROFIT/HR` — trip profit divided by elapsed hours.
+
+Alphabetical Name ordering is fallback-only when no usable timing or profit inputs exist; it is not a selectable control.
 
 Hit likelihood remains separate from sort score.
 
