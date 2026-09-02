@@ -45,7 +45,11 @@ local opportunitySuffixes = {
     'MultiCycleMeanPeriodSeconds','MultiCycleMeanInStockSeconds','MultiCyclePeriodStdDevSeconds','MultiCycleArrivalCycleRatio',
     'MultiCycleExpectedFullCycles','MultiCyclePhaseStdDevSeconds','MultiCyclePhaseStdDevCycles','MultiCycleSampleCount',
     'MultiCycleEffectiveSampleSize','MultiCycleMaximumOrdinal','MultiCycleArrivalAt','MultiCycleGeneratedAt',
-    'MultiCycleSimulationCount','MultiCycleModelVersion','MultiCycleReason'
+    'MultiCycleSimulationCount','MultiCycleModelVersion','MultiCycleReason',
+    'CurrentStockSafetyEligible','CurrentStockSafetySampleCount','CurrentStockSafetyEvidenceSpanSeconds',
+    'CurrentStockSafetyPercentileUnitsPerHour','CurrentStockSafetyGuardedUnitsPerHour','CurrentStockSafetyRunwaySeconds',
+    'CurrentStockSafetyArrivalHorizonSeconds','CurrentStockSafetyMarginSeconds','CurrentStockSafetySelloutEstimateAt',
+    'CurrentStockSafetyReason'
 }
 
 local flagCodes = {
