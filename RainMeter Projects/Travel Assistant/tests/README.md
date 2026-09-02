@@ -17,7 +17,7 @@ The aggregate runner currently includes static/config validation plus determinis
 - shadow collection;
 - offline item metadata/catalog;
 - broad resale queue;
-- independent visible item cards;
+- compact opportunity-card presentation;
 - persistent filters / Ignore List contracts;
 - travel-context normalization;
 - historical pipeline and seed importer;
