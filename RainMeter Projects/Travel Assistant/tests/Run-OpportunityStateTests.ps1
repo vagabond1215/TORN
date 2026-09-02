@@ -211,6 +211,8 @@ Assert-Equal ([int]$economicsState['Opportunity1MarketFeePercent']) 5 'Projected
 Assert-Equal ([long]$economicsState['Opportunity1GrossValue']) 500L 'Gross sort value remains pre-tax gross profit.'
 Assert-Near ([double]$economicsState['Opportunity1ProfitHourValue']) 425.0 0.001 'Profit/hour sort value is after-tax net profit per hour.'
 Assert-Equal ([long]$economicsState['Opportunity1TotalCostValue']) 1000L 'Full-load total cost is exact purchase cost with no variable-price buffer.'
+Assert-True (-not $economicsState.ContainsKey('Opportunity1TakeValue')) 'Retired TakeValue is not republished.'
+Assert-True (-not $economicsState.ContainsKey('Opportunity1TakeBufferPercent')) 'Retired automatic Take buffer state is not republished.'
 Assert-Equal (Get-OpportunityCountryCode 'united_kingdom') 'UK' 'United Kingdom display code remains available internally.'
 
 # The state projection is a candidate pool, not merely the eight visible cards.
