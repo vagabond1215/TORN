@@ -11,10 +11,10 @@ $required = @(
     'data\seed\metadata.json','data\seed\observations.jsonl','data\seed\cycles.jsonl',
     '@Resources\Includes\OpportunityRows.inc',
     '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\ProjectCollectedState.ps1','@Resources\Scripts\MaintainObservationHistory.ps1','@Resources\Scripts\TravelContext.ps1',
-    '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1',
+    '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1','@Resources\Scripts\StochasticForecast.ps1',
     '@Resources\Scripts\StateReader.lua','@Resources\Scripts\RenderInlineGraph.ps1','@Resources\Scripts\EnsureItemImages.ps1',
     '@Resources\Images\Flags\LICENSE-FlagKit.txt','@Resources\Images\UI\flag-mask-both.png','@Resources\Images\UI\flag-mask-top.png','@Resources\Images\UI\flag-mask-bottom.png',
-    'tests\Validate-RainmeterSkin.ps1','tests\Run-OpportunityStateTests.ps1'
+    'tests\Validate-RainmeterSkin.ps1','tests\Run-OpportunityStateTests.ps1','tests\Run-StochasticForecastTests.ps1','tools\Invoke-StochasticReplay.ps1'
 )
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $relative))) { Fail "Missing required file: $relative" }
@@ -143,7 +143,7 @@ if (Test-Path -LiteralPath $historyPath) {
 $opportunityPath=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 if (Test-Path -LiteralPath $opportunityPath) {
     $opportunity=Get-Content -LiteralPath $opportunityPath -Raw
-    foreach($token in @('grossProfit','make','profitPerHour','Get-OpportunityRoundTripProfitPerHour','Get-OpportunityNextWindow','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'probabilityKnown',"'LEARNING'",'$availableQuantity = $stock',"PSObject.Properties['make']","Descending=$true")) {
+    foreach($token in @('grossProfit','make','profitPerHour','Get-OpportunityRoundTripProfitPerHour','Get-OpportunityNextWindow','hasKnownSortData','effectiveSortMode','$effectiveSortMode -eq ''gross''','$effectiveSortMode -eq ''profit_per_hour''','probabilityKnown',"'LEARNING'",'$availableQuantity = $stock',"PSObject.Properties['make']",'Descending=$true')) {
         if (-not $opportunity.Contains($token)) { Fail "Opportunity model missing '$token'." }
     }
     if ($opportunity -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Opportunity projection must remain local-only.' }

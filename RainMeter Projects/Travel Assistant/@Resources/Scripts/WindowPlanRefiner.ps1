@@ -410,6 +410,24 @@ for ($i=1; $i -le $count; $i++) {
     $prefix='Opportunity'+$i
     $key=[string]$state[$prefix+'Key']
     if ([string]::IsNullOrWhiteSpace($key)) { continue }
+
+    # Every field owned by the authoritative legacy window stage is initialized
+    # for this generation before any fast-path/continue branch. This prevents a
+    # previous row at the same numeric index from surviving into the new snapshot.
+    $state[$prefix+'CurrentStock']='0'
+    $state[$prefix+'StockEvidenceAt']='0'
+    $state[$prefix+'ActiveRestockAt']='0'
+    $state[$prefix+'ActiveSelloutEstimateAt']='0'
+    $state[$prefix+'NextRestockEstimateAt']='0'
+    $state[$prefix+'MedianRestockDelaySeconds']='0'
+    $state[$prefix+'LiveCycleProjectionMode']='none'
+    $state[$prefix+'WindowDataQuality']='collecting'
+    $state[$prefix+'WindowDataQualityReason']='window evidence was not evaluated'
+    $state[$prefix+'CurrentCycleReachable']='0'
+    $state[$prefix+'CurrentCycleLeaveDeadlineAt']='0'
+    $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
+    $state[$prefix+'NextCycleOrdinal']='0'
+    $state[$prefix+'WindowMedianPeriodSeconds']='0'
     $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
     if ($forecastMode -eq 'sleeping_oos') {
         # OpportunityState already published the cheap absolute restock estimate.
@@ -560,4 +578,6 @@ for ($i=1; $i -le $count; $i++) {
         }
     }
 }
+$state['LegacyWindowPlanAuthority']='WindowPlan'
+$state['LegacyWindowPlanGeneratedAt']=[long]$Now
 Write-WindowStateKvAtomic -Values $state -Path $StateKvFile

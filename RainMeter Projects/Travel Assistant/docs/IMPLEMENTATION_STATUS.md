@@ -1,8 +1,31 @@
 # Travel Assistant Implementation Status
 
-**Checkpoint:** 2026-08-26
+**Checkpoint:** 2026-09-02
 
-**Active run:** 0.6.0 compact opportunity surface + unified filter/header redesign. `docs/NEXT_CODEX_RUN.md` is the authoritative target-Windows acceptance checklist.
+**Active run:** stochastic-v1 live shadow scoring/calibration, while 0.6.0 compact
+opportunity surface target-Windows acceptance remains open. `docs/NEXT_CODEX_RUN.md`
+is the authoritative next-run handoff.
+
+## Stochastic-window Phase 1/2 — IMPLEMENTED IN SHADOW MODE
+
+- `WindowPlan.ps1` is the single production legacy timing entrypoint and now runs
+  the richer current-cycle/Safe/Best implementation;
+- generation-scoped refiner fields are cleared and initialized, eliminating stale
+  cross-generation values;
+- observation schema 2 records depletion evidence; a zero-ending interval is
+  explicitly demand-censored and stores only a lower bound;
+- cycle schema 2 retains transition bounds, explicit evidence quality,
+  left-censored partial starts, and durable right-censored active cycles;
+- `StochasticForecast.ps1` performs deterministic, recency-weighted empirical
+  joint-cycle resampling through multiple future cycles;
+- the default 128 scenarios evaluate a 15-minute grid over a 12-hour departure
+  search and publish only ignored `data/runtime/stochastic-forecast.json`;
+- the stochastic stage runs after immutable legacy UI publication and fails soft;
+- `tools/Invoke-StochasticReplay.ps1` provides chronological no-future-leakage
+  scoring scaffolding for stochastic-v1 and five deterministic baselines.
+
+No stochastic state, probability, sort, tooltip, or layout is user-facing. Existing
+Safe/Best behavior remains the production baseline.
 
 ## Accepted target-host baseline before this redesign
 
@@ -135,9 +158,10 @@ WindowPlan
 PriceVariationRefiner
 FilterState
 atomic finalized ui-state.kv + numeric heartbeat
-CycleAnalytics
-TrendForecast
-ResalePriority
+    CycleAnalytics
+    TrendForecast
+    StochasticForecast       # shadow-only; after UI publication; fail-soft
+    ResalePriority
 ResaleQueue
 ```
 
@@ -164,6 +188,22 @@ Static/focused tests have been updated to guard:
 - observation/cycle history readers used by inline graph, graph hover, cycle-anchor repair, and engine-schema repair use delete-sharing streams so they cannot block the collector's append/atomic-replace path;
 - ShadowCollector engine-state publication uses the shared unique-temp atomic writer and per-journal append mutexes, eliminating fixed .tmp collisions under Rainmeter/OneDrive contention;
 - the Lua multi-return SetOption regression.
+- censor-aware transition bounds and provider-source clock authority;
+- observed nonzero depletion versus sellout-censored demand;
+- left/right-censored cycle retention and weaker collection-gap quality;
+- authoritative WindowPlan ownership and stale-field clearing;
+- stochastic multi-cycle arrival simulation, travel feasibility, tax authority,
+  determinism, replay cutoffs, zero-network behavior, and fail-soft order.
+
+The 2026-09-02 retained-history performance check covered 72 projected markets.
+The initial 256-scenario diagnostic completed in about 35.2 seconds; the runtime
+default was therefore set to 128 scenarios. The final default run completed in
+25.30 seconds wall time under Windows PowerShell 5.1 (24.66 seconds recorded
+inside the stage), produced 49 arrival points per sufficiently trained market,
+and wrote a 1,011,026-byte artifact. All emitted probabilities were within
+`[0,1]`; the 72 market decisions were 47 insufficient-data, 16 leave-in, seven
+leave-now, and two wait. This stays within the once-per-minute shadow-stage
+budget, but artifact size and unchanged-input caching remain optimization targets.
 
 This execution environment does not provide Windows PowerShell/Rainmeter, so the redesigned WinForms surface and Rainmeter render have **not** been executed here. Target acceptance must run the focused checks and visual/interactivity checklist in `docs/NEXT_CODEX_RUN.md`.
 

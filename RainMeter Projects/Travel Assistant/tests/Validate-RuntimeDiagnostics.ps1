@@ -7,7 +7,7 @@ $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
 $required = @(
-    'RuntimeLog.ps1','PopupHost.ps1','LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','LaunchItemViewer.ps1','LaunchSettings.ps1','LaunchUpdate.ps1',
+    'RuntimeLog.ps1','PopupHost.ps1','LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1',
     'OpenOptimizerSettings.ps1','OpenFilterPopup.ps1','OpenSettings.ps1','FilterPreferences.ps1','OpportunityState.ps1','RunUpdate.ps1','EnsureEngineStateSchema.ps1'
 )
 foreach ($name in $required) {
@@ -40,12 +40,12 @@ if (Test-Path -LiteralPath $logPath) {
 $hostPath = Join-Path $Scripts 'PopupHost.ps1'
 if (Test-Path -LiteralPath $hostPath) {
     $text = Get-Content -LiteralPath $hostPath -Raw
-    foreach ($token in @('RuntimeLog.ps1','OpenFilterPopup.ps1','OpenOptimizerSettings.ps1','OpenItemViewer.ps1','Write-TravelAssistantLog','MessageBox','Clear-TravelAssistantLatestError')) {
+    foreach ($token in @('RuntimeLog.ps1','OpenFilterPopup.ps1','OpenOptimizerSettings.ps1','OpenUnifiedFilterPopup.ps1','Write-TravelAssistantLog','MessageBox','Clear-TravelAssistantLatestError')) {
         if (-not $text.Contains($token)) { Fail "PopupHost.ps1 missing '$token'." }
     }
 }
 
-foreach ($launcher in @('LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','LaunchItemViewer.ps1')) {
+foreach ($launcher in @('LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1')) {
     $path = Join-Path $Scripts $launcher
     if (-not (Test-Path -LiteralPath $path)) { continue }
     $text = Get-Content -LiteralPath $path -Raw
@@ -71,11 +71,11 @@ $settingsUiPath = Join-Path $Scripts 'OpenOptimizerSettings.ps1'
 if (Test-Path -LiteralPath $settingsUiPath) {
     $text = Get-Content -LiteralPath $settingsUiPath -Raw
     if ($text.Contains('-WindowStyle Normal')) { Fail 'OpenOptimizerSettings.ps1 must not spawn visible PowerShell consoles.' }
-    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','LaunchUpdate.ps1','& $UpdateLauncher -Action Update')) {
+    foreach ($token in @('RuntimeLog.ps1','Write-TravelAssistantLog','FilterPreferences.ps1','Start-FilterProjectionRefresh -Action RefreshFilters')) {
         if (-not $text.Contains($token)) { Fail "OpenOptimizerSettings.ps1 missing '$token'." }
     }
     if ($text.Contains("Join-Path `$PSScriptRoot 'RunUpdate.ps1'") -or $text.Contains("Start-Process -FilePath 'powershell.exe'")) {
-        Fail 'OpenOptimizerSettings.ps1 must refresh through LaunchUpdate.ps1 rather than start RunUpdate directly under Windows PowerShell.'
+        Fail 'OpenOptimizerSettings.ps1 must refresh through the shared filter projection launcher rather than start RunUpdate directly.'
     }
 }
 

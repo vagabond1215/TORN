@@ -35,7 +35,7 @@ if(Test-Path -LiteralPath $preferencesPath) {
     if(-not [bool]$reset.itemFilterAll) { Fail 'RESET must restore itemFilterAll=true.' }
     if(-not [bool]$reset.categoryFilterAll) { Fail 'RESET must restore categoryFilterAll=true.' }
     if(@($reset.displayTripBands).Count -ne 3) { Fail 'RESET must restore all three display trip bands.' }
-    if([int]$reset.schemaVersion -ne 7) { Fail 'RESET must persist schemaVersion=7.' }
+    if([int]$reset.schemaVersion -ne 8) { Fail 'RESET must persist schemaVersion=8.' }
 
     $emptyNormalized = Normalize-UiPreferences -Preferences ([pscustomobject]@{schemaVersion=7;selectedCountryIds=[string[]]@()})
     if(@($emptyNormalized.selectedCountryIds).Count -ne $availableCountries.Count) { Fail 'Empty startup country selection must normalize to all collected countries.' }

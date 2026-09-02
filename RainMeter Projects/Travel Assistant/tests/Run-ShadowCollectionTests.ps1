@@ -25,7 +25,7 @@ if (@($parseErrors).Count -gt 0) {
     throw ('ShadowCollector.ps1 has parser errors: ' + ((@($parseErrors) | ForEach-Object { $_.Message }) -join '; '))
 }
 
-$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-CountryProviderCode','Get-LiveStockObservationsForCountry','Write-SharedAppendBytes','Append-JsonLine','Flush-PendingJsonLines','Invalidate-PhaseAnchorForGap','Test-ForecastBoundaryQuality','Get-CycleLifetimeStats','Update-ActiveCyclePriceExtrema','Update-DestinationLifetimeStats','Update-CycleState','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
+$wanted = @('Get-DynamicProperty','Set-DynamicProperty','Get-CountryProviderCode','Get-LiveStockObservationsForCountry','Write-SharedAppendBytes','Append-JsonLine','Flush-PendingJsonLines','Invalidate-PhaseAnchorForGap','Test-ForecastBoundaryQuality','Get-CycleLifetimeStats','Update-ActiveCyclePriceExtrema','Update-DestinationLifetimeStats','Set-ObservationEvidenceMetadata','Get-CompletedCycleEvidenceQuality','Update-CycleState','Get-InactiveMarketIndex','Test-ObservationChanged','Update-ObservedMarketMetadata')
 $definitions = @($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
@@ -66,6 +66,7 @@ Assert-Equal 'Shadow normalization keeps provider item name' ([string]$rows[1].i
 Assert-Equal 'Shadow normalization keeps stock' ([int]$rows[1].stock) 450
 Assert-Equal 'Shadow normalization keeps foreign price' ([long]$rows[1].foreignPrice) 200
 Assert-Equal 'Shadow normalization keeps provider timestamp' ([long]$rows[1].sourceTimestamp) 1787327048
+Assert-Equal 'New observations advertise censor-aware schema' ([int]$rows[1].schemaVersion) 2
 
 $catalogState = [pscustomobject]@{ observedMarkets = [pscustomobject]@{} }
 Update-ObservedMarketMetadata -EngineState $catalogState -Observation $rows[1] -Now 1787327100
@@ -172,6 +173,11 @@ $null = Update-CycleState -DestState $destState -Observation $restockObservation
 Assert-Equal 'Shadow cycle records restock transition' ([long]$destState.activeCycle.restockAt) 200
 Assert-Equal 'Restock lower bound uses last observed OOS point' ([long]$destState.activeCycle.restockLowerBoundAt) 100
 
+$sourceClockState=[pscustomobject]@{lastStock=0;lastForeignPrice=200;lastSourceTimestamp=100;lastSellOutAt=100;lastSellOutLowerBoundAt=90;lastSellOutUpperBoundAt=100;lastSellOutBoundaryQuality='observed';activeCycle=$null}
+$sourceClockObservation=[pscustomobject]@{timestamp=999;sourceTimestamp=200;country='japan';itemId=206;stock=5;foreignPrice=500;source='fixture'}
+$null=Update-CycleState -DestState $sourceClockState -Observation $sourceClockObservation
+Assert-Equal 'Provider source timestamp outranks local collection timestamp' ([long]$sourceClockState.activeCycle.restockAt) 200
+
 $positiveObservation = [pscustomobject]@{
     timestamp = 230
     country = 'united_kingdom'
@@ -182,6 +188,10 @@ $positiveObservation = [pscustomobject]@{
     sourceTimestamp = 230
 }
 $null = Update-CycleState -DestState $destState -Observation $positiveObservation
+Set-ObservationEvidenceMetadata -DestState ([pscustomobject]@{lastStock=450;lastSourceTimestamp=200}) -Observation $positiveObservation
+Assert-Equal 'Positive-to-positive decline is observed depletion' ([string]$positiveObservation.depletionEvidence) 'observed_nonzero'
+Assert-Equal 'Observed depletion keeps exact stock delta' ([long]$positiveObservation.depletionUnits) 50
+Assert-Equal 'Observed depletion is not demand-censored' ([bool]$positiveObservation.depletionCensored) $false
 
 $priceOnlyObservation=[pscustomobject]@{
     timestamp=240
@@ -205,6 +215,10 @@ $soldOutObservation = [pscustomobject]@{
     source = 'prometheus'
     sourceTimestamp = 260
 }
+Set-ObservationEvidenceMetadata -DestState $destState -Observation $soldOutObservation
+Assert-Equal 'Transition to zero is sellout-censored depletion' ([string]$soldOutObservation.depletionEvidence) 'sellout_censored'
+Assert-Equal 'Sellout demand stores only a lower bound' ([long]$soldOutObservation.depletionLowerBoundUnits) 400
+Assert-True 'Sellout demand is explicitly censored' ([bool]$soldOutObservation.depletionCensored)
 $completed = Update-CycleState -DestState $destState -Observation $soldOutObservation
 Assert-Equal 'Completed cycle keeps item identity' ([int]$completed.itemId) 266
 Assert-Equal 'Completed cycle keeps country identity' ([string]$completed.country) 'united_kingdom'
@@ -216,6 +230,8 @@ Assert-Equal 'Completed cycle representative sellout is first observed OOS times
 Assert-Equal 'Completed cycle keeps lower sellout uncertainty bound' ([long]$completed.soldOutLowerBoundAt) 230
 Assert-Equal 'Completed cycle retains minimum foreign price from active stock' ([long]$completed.minimumForeignPrice) 180
 Assert-Equal 'Completed cycle retains maximum foreign price from active stock' ([long]$completed.maximumForeignPrice) 200
+Assert-Equal 'Completed cycle with a wider restock bracket has weaker quality' ([string]$completed.evidenceQuality) 'bounded_gap'
+Assert-Equal 'Completed cycle retains sellout demand lower bound' ([long]$completed.selloutDemandLowerBoundUnits) 400
 
 Update-DestinationLifetimeStats -DestState $destState -CompletedCycle $completed
 $lifetime=Get-CycleLifetimeStats -DestState $destState
@@ -282,6 +298,16 @@ $unknownCompleted=Update-CycleState -DestState $unknownBoundaryState -Observatio
 Assert-Equal 'Sellout across an unobservable outage is not assigned a fake timestamp' ([long]$unknownBoundaryState.lastSellOutAt) 0
 Assert-Equal 'Unobservable sellout boundary is explicitly unknown' ([string]$unknownBoundaryState.lastSellOutBoundaryQuality) 'unknown_gap'
 Assert-Equal 'Partial cycle with missing sellout boundary is excluded from forecast' ([bool]$unknownCompleted.forecastEligible) $false
+Assert-Equal 'Collection-gap cycle remains classified instead of becoming exact' ([string]$unknownCompleted.evidenceQuality) 'incomplete'
+Assert-Equal 'Collection-gap sellout lower bound remains durable' ([long]$unknownCompleted.soldOutLowerBoundAt) 100
+Assert-Equal 'Collection-gap sellout upper bound remains durable' ([long]$unknownCompleted.soldOutUpperBoundAt) 900
+
+$leftCensoredState=[pscustomobject]@{lastStock=-1;lastForeignPrice=0;lastSourceTimestamp=0;lastSellOutAt=0;activeCycle=$null}
+$firstPositive=[pscustomobject]@{timestamp=1000;sourceTimestamp=1000;country='japan';itemId=206;stock=75;foreignPrice=500;source='fixture'}
+$null=Update-CycleState -DestState $leftCensoredState -Observation $firstPositive -BoundaryPolicy $gapPolicy
+Assert-Equal 'Feed starting in stock retains a left-censored cycle' ([string]$leftCensoredState.activeCycle.evidenceQuality) 'left_censored'
+Assert-True 'Ongoing partial cycle is explicitly right-censored' ([bool]$leftCensoredState.activeCycle.isRightCensored)
+Assert-Equal 'Left-censored cycle does not invent a restock timestamp' ([long]$leftCensoredState.activeCycle.restockAt) 0
 
 Write-Host 'Shadow collection tests passed.' -ForegroundColor Green
 exit 0

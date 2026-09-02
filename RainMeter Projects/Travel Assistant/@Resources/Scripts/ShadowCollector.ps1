@@ -338,7 +338,7 @@ function Get-LiveStockObservationsForCountry {
         }
 
         $rows.Add([pscustomobject]@{
-            schemaVersion = 1
+            schemaVersion = 2
             timestamp = [long]$timestamp
             country = [string]$Country.id
             itemId = $itemId
@@ -351,6 +351,58 @@ function Get-LiveStockObservationsForCountry {
     }
 
     return $rows.ToArray()
+}
+
+function Set-ObservationEvidenceMetadata {
+    param([object]$DestState,[object]$Observation)
+    if ($null -eq $DestState -or $null -eq $Observation) { return }
+
+    $previousStock=[long](Get-DynamicProperty $DestState 'lastStock')
+    $currentStock=[long](Get-DynamicProperty $Observation 'stock')
+    $previousAt=[long](Get-DynamicProperty $DestState 'lastSourceTimestamp')
+    $currentAt=[long](Get-DynamicProperty $Observation 'sourceTimestamp')
+    if ($currentAt -le 0) { $currentAt=[long](Get-DynamicProperty $Observation 'timestamp') }
+    $elapsed=if ($previousAt -gt 0 -and $currentAt -gt $previousAt) { $currentAt-$previousAt } else { 0L }
+    $kind='none'
+    $units=0L
+    $lowerBound=0L
+    $censored=$false
+
+    if ($previousStock -gt 0 -and $currentStock -eq 0) {
+        # The provider only proves that at least the final observed positive stock
+        # was consumed before the zero snapshot. True demand may have been higher.
+        $kind='sellout_censored'
+        $lowerBound=$previousStock
+        $censored=$true
+    } elseif ($previousStock -gt $currentStock -and $currentStock -gt 0) {
+        $kind='observed_nonzero'
+        $units=$previousStock-$currentStock
+        $lowerBound=$units
+    }
+
+    Set-DynamicProperty -Object $Observation -Name 'depletionEvidence' -Value $kind
+    Set-DynamicProperty -Object $Observation -Name 'depletionIntervalSeconds' -Value ([long]$elapsed)
+    Set-DynamicProperty -Object $Observation -Name 'depletionUnits' -Value ([long]$units)
+    Set-DynamicProperty -Object $Observation -Name 'depletionLowerBoundUnits' -Value ([long]$lowerBound)
+    Set-DynamicProperty -Object $Observation -Name 'depletionCensored' -Value ([bool]$censored)
+
+    $quality=([string](Get-DynamicProperty $Observation 'transitionBoundaryQuality')).Trim().ToLowerInvariant()
+    $evidenceQuality=if ($quality -in @('observed','recovered')) { 'bounded_fresh' } elseif (-not [string]::IsNullOrWhiteSpace($quality)) { 'bounded_gap' } else { 'incomplete' }
+    Set-DynamicProperty -Object $Observation -Name 'evidenceQuality' -Value $evidenceQuality
+}
+
+function Get-CompletedCycleEvidenceQuality {
+    param(
+        [bool]$AvailabilityEligible,
+        [bool]$RestockDelayEligible,
+        [string[]]$BoundaryQualities,
+        [bool]$LeftCensored = $false
+    )
+    if ($LeftCensored) { return 'left_censored' }
+    if (-not $AvailabilityEligible -or -not $RestockDelayEligible) { return 'incomplete' }
+    $normalized=@($BoundaryQualities | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() })
+    if (@($normalized | Where-Object { $_ -notin @('observed','recovered') }).Count -eq 0) { return 'bounded_fresh' }
+    return 'bounded_gap'
 }
 
 function Write-SharedAppendBytes {
@@ -538,7 +590,10 @@ function Update-CycleState {
     param([object]$DestState, [object]$Observation, [object]$BoundaryPolicy)
     $previousStock = [int]$DestState.lastStock
     $currentStock = [int]$Observation.stock
-    $ts = [long]$Observation.timestamp
+    # Provider/source time is the evidence clock. Local collection time is only a
+    # fallback for sources that genuinely do not publish a usable timestamp.
+    $ts = [long](Get-DynamicProperty $Observation 'sourceTimestamp')
+    if ($ts -le 0) { $ts = [long]$Observation.timestamp }
     $previousObservedAt = [long]$DestState.lastSourceTimestamp
     if ($previousObservedAt -le 0 -or $previousObservedAt -gt $ts) { $previousObservedAt = $ts }
     if ($null -eq $BoundaryPolicy) { $BoundaryPolicy = Get-CycleBoundaryPolicy -Cycles @() -ExpectedPollIntervalSeconds 60 }
@@ -549,7 +604,28 @@ function Update-CycleState {
         [void](Invalidate-PhaseAnchorForGap -DestState $DestState -Observation $Observation -BoundaryPolicy $BoundaryPolicy)
     }
 
-    if ($previousStock -ge 0) {
+    if ($previousStock -lt 0 -and $currentStock -gt 0) {
+        # The feed began while stock was already positive. Retain the useful
+        # partial cycle without inventing a restock event before the first poll.
+        $DestState.activeCycle = [pscustomobject]@{
+            previousSoldOutAt = 0L
+            previousSoldOutLowerBoundAt = 0L
+            previousSoldOutUpperBoundAt = 0L
+            previousSellOutBoundaryQuality = 'left_censored'
+            restockAt = 0L
+            restockLowerBoundAt = 0L
+            restockUpperBoundAt = $ts
+            restockBoundaryQuality = 'left_censored'
+            restockGapSeconds = 0L
+            restockQuantity = $currentStock
+            foreignPrice = [long]$Observation.foreignPrice
+            minimumForeignPrice = [long]$Observation.foreignPrice
+            maximumForeignPrice = [long]$Observation.foreignPrice
+            evidenceQuality = 'left_censored'
+            isRightCensored = $true
+            source = [string]$Observation.source
+        }
+    } elseif ($previousStock -ge 0) {
         if ($previousStock -eq 0 -and $currentStock -gt 0) {
             $quality = Get-CycleBoundaryQuality -GapSeconds $gapSeconds -Policy $BoundaryPolicy -Phase restock
             $restockKnown = Test-ForecastBoundaryQuality -Quality $quality
@@ -563,14 +639,16 @@ function Update-CycleState {
                 previousSoldOutUpperBoundAt = $previousSoldOutUpper
                 previousSellOutBoundaryQuality = $previousSelloutQuality
                 restockAt = $(if ($restockKnown) { $ts } else { 0L })
-                restockLowerBoundAt = $(if ($restockKnown) { $previousObservedAt } else { 0L })
-                restockUpperBoundAt = $(if ($restockKnown) { $ts } else { 0L })
+                restockLowerBoundAt = $previousObservedAt
+                restockUpperBoundAt = $ts
                 restockBoundaryQuality = $quality
                 restockGapSeconds = $gapSeconds
                 restockQuantity = $currentStock
                 foreignPrice = [long]$Observation.foreignPrice
                 minimumForeignPrice = [long]$Observation.foreignPrice
                 maximumForeignPrice = [long]$Observation.foreignPrice
+                evidenceQuality = 'right_censored'
+                isRightCensored = $true
                 source = [string]$Observation.source
             }
             if ($restockKnown) {
@@ -585,8 +663,8 @@ function Update-CycleState {
         } elseif ($previousStock -gt 0 -and $currentStock -eq 0) {
             $quality = Get-CycleBoundaryQuality -GapSeconds $gapSeconds -Policy $BoundaryPolicy -Phase sellout
             $selloutKnown = Test-ForecastBoundaryQuality -Quality $quality
-            $selloutLower = if ($selloutKnown) { $previousObservedAt } else { 0L }
-            $selloutUpper = if ($selloutKnown) { $ts } else { 0L }
+            $selloutLower = $previousObservedAt
+            $selloutUpper = $ts
             $DestState.lastSellOutAt = $(if ($selloutKnown) { $ts } else { 0L })
             Set-DynamicProperty -Object $DestState -Name 'lastSellOutLowerBoundAt' -Value $selloutLower
             Set-DynamicProperty -Object $DestState -Name 'lastSellOutUpperBoundAt' -Value $selloutUpper
@@ -609,6 +687,8 @@ function Update-CycleState {
                 $availabilityEligible = ($selloutKnown -and $restockAt -gt 0 -and (Test-ForecastBoundaryQuality -Quality $restockQuality) -and $availabilityMinimum -gt 0)
                 $restockDelayEligible = ($restockAt -gt 0 -and $previousSoldOutAt -gt 0 -and (Test-ForecastBoundaryQuality -Quality $previousSelloutQuality) -and $delayMaximum -gt 0)
                 $trendEligible = ($availabilityEligible -and $restockDelayEligible)
+                $leftCensored=([string](Get-DynamicProperty $DestState.activeCycle 'evidenceQuality') -eq 'left_censored')
+                $cycleEvidenceQuality=Get-CompletedCycleEvidenceQuality -AvailabilityEligible $availabilityEligible -RestockDelayEligible $restockDelayEligible -BoundaryQualities @($restockQuality,$quality,$previousSelloutQuality) -LeftCensored $leftCensored
                 $completed = [pscustomobject]@{
                     schemaVersion = 2
                     country = [string]$Observation.country
@@ -638,6 +718,10 @@ function Update-CycleState {
                     restockDelayEligible = $restockDelayEligible
                     trendEligible = $trendEligible
                     forecastEligible = ($availabilityEligible -and $restockDelayEligible)
+                    evidenceQuality = $cycleEvidenceQuality
+                    isRightCensored = $false
+                    selloutDepletionEvidence = 'sellout_censored'
+                    selloutDemandLowerBoundUnits = [Math]::Max(0L,$previousStock)
                     source = [string]$DestState.activeCycle.source
                 }
                 $DestState.activeCycle = $null
@@ -810,6 +894,7 @@ try {
             if (-not [string]::IsNullOrWhiteSpace($transitionPhase)) {
                 Set-DynamicProperty -Object $observation -Name 'transitionBoundaryQuality' -Value (Get-CycleBoundaryQuality -GapSeconds $transitionGapSeconds -Policy $boundaryPolicy -Phase $transitionPhase)
             }
+            Set-ObservationEvidenceMetadata -DestState $destState -Observation $observation
 
             Append-JsonLine -Path $ObservationFile -Value $observation -FallbackPath $PendingObservationFile
             $observationsWritten++

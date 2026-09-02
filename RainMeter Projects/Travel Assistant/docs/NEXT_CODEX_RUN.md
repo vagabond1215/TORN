@@ -1,6 +1,26 @@
-# Next Codex Run: Compact Opportunity Cards + Unified Filters
+# Next Codex Run: Live Shadow Scoring and Calibration
 
-**Status: ACTIVE — 0.6.0 PENDING TARGET-WINDOWS / RAINMETER ACCEPTANCE OF THE 2026-08-26 HEADER/FILTER REDESIGN**
+**Status: ACTIVE — STOCHASTIC-V1 SHADOW SCORING; 0.6.0 RAINMETER ACCEPTANCE REMAINS OPEN**
+
+The next forecasting phase is deliberately:
+
+```text
+live shadow scoring / backtesting
+    -> calibration
+        -> one authoritative stochastic decision object
+            -> only then visible UI migration
+```
+
+Do not show stochastic percentages or label them safe/guaranteed until frozen
+prospective forecasts demonstrate calibration. Keep the current Safe/Best card
+pipeline as the production baseline and score both models without future leakage.
+
+Use ignored `data/runtime/stochastic-forecast.json` as the challenger artifact and
+`tools/Invoke-StochasticReplay.ps1` for offline walk-forward scaffolding. The next
+run should freeze predictions before outcomes, accumulate Brier/log-loss and
+calibration buckets by market/evidence quality, add interval/quantity scoring where
+ground truth is unambiguous, and investigate regime adaptation only after enough
+prospective evidence exists.
 
 ## Baseline already accepted on the target host
 

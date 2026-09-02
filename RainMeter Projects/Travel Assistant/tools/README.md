@@ -131,6 +131,24 @@ It:
 
 It intentionally does **not** loop provider requests or claim Travel Assistant-only RAM attribution. Use it to get the first real Windows/runtime evidence without turning validation into another persistent process.
 
+## `Invoke-StochasticReplay.ps1`
+
+Runs stochastic-v1 and deterministic legacy/simple baselines in chronological
+offline replay. At decision time T it admits only cycles whose upper completion
+bound was available by T. Arrivals intersecting a restock/sellout censor interval
+are marked unscorable rather than receiving a fabricated exact label.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Invoke-StochasticReplay.ps1 `
+  -ArrivalOffsetSeconds 7200 `
+  -SimulationCount 256
+```
+
+Output defaults to ignored `data/runtime/stochastic-replay.json` and includes Brier
+score, log loss, calibration buckets, decision counters, and explicit extension
+points for frozen interval, quantity, profit/hour, and regret scoring.
+
 ## Tests
 
 The shortest deterministic validation entry point is:

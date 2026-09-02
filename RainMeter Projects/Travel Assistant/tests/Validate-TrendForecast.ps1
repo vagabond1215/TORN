@@ -6,10 +6,11 @@ $trendPath=Join-Path $ProjectRoot '@Resources\Scripts\TrendForecast.ps1'
 $pricePath=Join-Path $ProjectRoot '@Resources\Scripts\PriceVariationRefiner.ps1'
 $runPath=Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
 $windowPath=Join-Path $ProjectRoot '@Resources\Scripts\WindowPlan.ps1'
+$windowRefinerPath=Join-Path $ProjectRoot '@Resources\Scripts\WindowPlanRefiner.ps1'
 $errors=New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($trendPath,$pricePath,$runPath,$windowPath)) {
+foreach ($path in @($trendPath,$pricePath,$runPath,$windowPath,$windowRefinerPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing trend/price file: $path" }
 }
 if ($errors.Count -eq 0) {
@@ -17,6 +18,7 @@ if ($errors.Count -eq 0) {
     $price=Get-Content -LiteralPath $pricePath -Raw
     $run=Get-Content -LiteralPath $runPath -Raw
     $window=Get-Content -LiteralPath $windowPath -Raw
+    $windowRefiner=Get-Content -LiteralPath $windowRefinerPath -Raw
 
     foreach ($path in @($trendPath,$pricePath)) {
         $tokens=$null; $parseErrors=$null
@@ -29,8 +31,11 @@ if ($errors.Count -eq 0) {
     }
     if ($trend -match '(?i)Invoke-RestMethod|Invoke-WebRequest|https?://|curl\.exe') { Fail 'TrendForecast.ps1 must remain local-only.' }
 
-    foreach ($token in @('Test-PVRecentVariation','current-vs-recent','recurring-levels','recent-fixed','Set-PVEnvelope','OpportunityCount','PriceVariationReason',"'ForecastMode'", "'sleeping_oos'")) {
+    foreach ($token in @('Test-PVRecentVariation','current-vs-recent','recurring-levels','recent-fixed','Set-PVEnvelope','OpportunityCount','PriceVariationReason')) {
         if (-not $price.Contains($token)) { Fail "PriceVariationRefiner.ps1 missing '$token'." }
+    }
+    foreach ($token in @("'ForecastMode'", "'sleeping_oos'")) {
+        if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing '$token'." }
     }
     if ($price.Contains("reason='recent-transition'")) { Fail 'PriceVariationRefiner.ps1 must not reintroduce single-transition variable classification.' }
     if ($price -match '(?i)Invoke-RestMethod|Invoke-WebRequest|https?://|curl\.exe') { Fail 'PriceVariationRefiner.ps1 must remain local-only.' }

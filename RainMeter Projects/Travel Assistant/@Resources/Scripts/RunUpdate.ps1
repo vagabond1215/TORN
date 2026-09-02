@@ -23,6 +23,7 @@ $PriceVariationRefiner = Join-Path $PSScriptRoot 'PriceVariationRefiner.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
 $TrendForecast = Join-Path $PSScriptRoot 'TrendForecast.ps1'
+$StochasticForecast = Join-Path $PSScriptRoot 'StochasticForecast.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
@@ -47,6 +48,7 @@ $PriceVariationRefinerErrorFile = Join-Path $RuntimeDir 'price-variation-refiner
 $FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
 $CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
 $TrendForecastErrorFile = Join-Path $RuntimeDir 'trend-forecast-error.txt'
+$StochasticForecastErrorFile = Join-Path $RuntimeDir 'stochastic-forecast-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
@@ -515,6 +517,10 @@ try {
         # Shadow forecast only: measure recent direction/correlation and score the
         # next-cycle prediction. It does not alter WindowPlan or current card timing.
         Invoke-FailSoftScript -Path $TrendForecast -ErrorPath $TrendForecastErrorFile
+        # The stochastic challenger consumes only retained local evidence and runs
+        # after immutable legacy UI publication. Its artifact/failure can therefore
+        # never block or partially replace a valid Safe/Best generation.
+        Invoke-FailSoftScript -Path $StochasticForecast -ErrorPath $StochasticForecastErrorFile
     }
 
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {

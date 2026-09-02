@@ -37,6 +37,7 @@ function Import-ProductionFunctions {
     $wanted = @(
         'Get-DynamicProperty',
         'Get-Median',
+        'Get-LiveStockObservation',
         'Get-YataObservation',
         'Load-Cycles',
         'Get-LiveStockoutEstimate',

@@ -90,7 +90,7 @@ if ($errors.Count -eq 0) {
         if (-not $compat.Contains($token)) { Fail "PublishedState.lua immutable-reader contract missing '$token'." }
     }
 
-    foreach ($luaName in @('StateReader.lua','CardPresenter.lua','CardTweaks.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua')) {
+    foreach ($luaName in @('StateReader.lua','CardPresenter.lua','FreshnessGuard.lua','TravelStateWindowTweaks.lua')) {
         $luaText = Get-Content -LiteralPath (Join-Path $ProjectRoot ('@Resources\Scripts\' + $luaName)) -Raw
         foreach ($token in @('last-update.txt','ui%-state%-%d+%-%x+%.kv')) {
             if (-not $luaText.Contains($token)) {

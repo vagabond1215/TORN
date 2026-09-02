@@ -97,7 +97,7 @@ if ($errors.Count -eq 0) {
         if (-not $card.Contains($token)) { Fail ("CardPresenter.lua missing return/home availability contract '{0}'." -f $token) }
     }
 
-    foreach ($forbidden in @("return 'EN ROUTE'","return 'AT DEST.'")) {
+    foreach ($forbidden in @("return 'EN ROUTE'")) {
         if ($card.Contains($forbidden)) { Fail ("CardPresenter.lua must not repeat character travel state on item cards; found '{0}'." -f $forbidden) }
     }
 

@@ -139,18 +139,19 @@ if ($errors.Count -eq 0) {
         'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
         "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
         'MaximumOrdinal = 1','immediately next cycle',
-        'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock'
+        'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock',
+        "'WP2:'","'PV1#'","'PV0#'"
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
     }
 
     foreach ($token in @(
         'Get-RecurringScenarioModel','safeStartAt = $lateRestockAt','safeEndAt = $earlySelloutAt','MinimumSafeWindowSeconds = 60L',
-        'bestProbability','Convert-WindowPlanMachineText','Select-WindowPlanGroup','WP2:',
+        'bestProbability','Convert-WindowPlanMachineText','Select-WindowPlanGroup',
         '$RuntimeCycleFile','$SeedCycleFile','MaximumSamples = 48','$cycleParts','$phaseCode','restockDelaySeconds','availabilitySeconds',
-        'MaximumOrdinal = 1',"'sleeping_oos'",'Do not deserialize cycle rows or build WP2 probability geometry',
-        'Get-WindowCycleLineKey','Do not build fallback recurring geometry for live stock',
-        'Test-WindowPriceVaries','cycleAnalytics','foreignPrice','currentForeignPrice','lastForeignPrice','priceEvents','PV1#','PV0#'
+        'MaximumOrdinal = 1','Get-WindowCycleLineKey','Test-WindowPriceVaries','cycleAnalytics','foreignPrice',
+        'currentForeignPrice','lastForeignPrice','priceEvents',
+        "& (Join-Path `$PSScriptRoot 'WindowPlanRefiner.ps1') -Now `$Now"
     )) {
         if (-not $windowPlan.Contains($token)) { Fail "WindowPlan.ps1 missing '$token'." }
     }
@@ -174,8 +175,7 @@ if ($errors.Count -eq 0) {
         'showProfitableOnly',
         'Get-OpportunityRestockSummary',
         "forecastMode='sleeping_oos'",
-        '$wakeAt=$earlyRestockAt-600L',
-        '$focusMarker=Read-OpportunityFocusMarker'
+        '$wakeAt=$earlyRestockAt-600L'
     )) {
         if (-not $opportunity.Contains($token)) { Fail "OpportunityState outbound destination filter missing '$token'." }
     }

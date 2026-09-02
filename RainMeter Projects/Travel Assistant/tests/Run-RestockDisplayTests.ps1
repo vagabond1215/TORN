@@ -50,6 +50,8 @@ function Read-StateKv {
 New-Item -ItemType Directory -Force -Path $scriptDir, $configDir, $runtimeDir, $seedDir, $generatedDir | Out-Null
 try {
     Copy-Item -LiteralPath $SourceFinalizer -Destination $finalizer
+    Copy-Item -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\TravelProfile.ps1') -Destination (Join-Path $scriptDir 'TravelProfile.ps1')
+    Copy-Item -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\AtomicFile.ps1') -Destination (Join-Path $scriptDir 'AtomicFile.ps1')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\settings.example.json') -Destination (Join-Path $configDir 'settings.example.json')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\items.json') -Destination (Join-Path $configDir 'items.json')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'config\countries.json') -Destination (Join-Path $configDir 'countries.json')
@@ -142,13 +144,13 @@ try {
     $result = Read-StateKv
 
     Assert-Equal 'LOW_MARGIN remains the travel recommendation status' $result.UKStatus 'LOW_MARGIN'
-    Assert-Equal 'Median restock delay is applied despite LOW_MARGIN' ([long]$result.UKRestockEstimateAt) ($lastSellOutAt + 7200)
-    Assert-Equal 'Restock sample count retained' ([int]$result.UKRestockSampleCount) 5
-    Assert-Equal 'Restock minimum delay retained' ([long]$result.UKRestockMinDelay) 7000
-    Assert-Equal 'Restock maximum delay retained' ([long]$result.UKRestockMaxDelay) 7400
+    Assert-Equal 'FinalizeState leaves restock projection to WindowPlan' ([long]$result.UKRestockEstimateAt) 0
+    Assert-Equal 'FinalizeState does not publish restock sample ownership' ([int]$result['UKRestockSampleCount']) 0
+    Assert-Equal 'FinalizeState does not publish restock minimum ownership' ([long]$result['UKRestockMinDelay']) 0
+    Assert-Equal 'FinalizeState does not publish restock maximum ownership' ([long]$result['UKRestockMaxDelay']) 0
     Assert-Equal 'LOW_MARGIN exposes no safe-window close' ([long]$result.UKWindowCloseAt) 0
 
-    Write-Host 'Independent restock display tests passed.' -ForegroundColor Green
+    Write-Host 'Independent restock ownership tests passed.' -ForegroundColor Green
     exit 0
 } finally {
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }

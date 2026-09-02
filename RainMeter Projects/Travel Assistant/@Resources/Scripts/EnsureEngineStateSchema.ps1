@@ -73,6 +73,23 @@ foreach ($name in @('lastPollAt','lastProvider','countriesSeen','marketsSeen','l
     Ensure-StateProperty -Object $state.shadowCollection -Name $name -DefaultValue $default
 }
 
+# Active cycles are durable right-censored evidence: the restock side may be
+# bracketed while the sellout has not happened yet. Normalize older engine files
+# in place without inventing an event timestamp.
+foreach ($property in @($state.destinations.PSObject.Properties)) {
+    $destination=$property.Value
+    if ($null -eq $destination) { continue }
+    $activeCycle=Get-StateProperty $destination 'activeCycle'
+    if ($null -eq $activeCycle) { continue }
+    $restockAt=[long](Get-StateProperty $activeCycle 'restockAt')
+    $quality=([string](Get-StateProperty $activeCycle 'restockBoundaryQuality')).Trim().ToLowerInvariant()
+    if (-not $activeCycle.PSObject.Properties['evidenceQuality']) {
+        $evidenceQuality=if ($restockAt -le 0 -or $quality -eq 'left_censored') { 'left_censored' } else { 'right_censored' }
+        Ensure-StateProperty -Object $activeCycle -Name 'evidenceQuality' -DefaultValue $evidenceQuality
+    }
+    Ensure-StateProperty -Object $activeCycle -Name 'isRightCensored' -DefaultValue $true
+}
+
 # Migration/self-heal: a state file can be inherited while an item is already in
 # stock, leaving destinations.<market>.activeCycle null even though retained real
 # observations contain a later 0 -> positive transition. This is an exceptional
@@ -122,15 +139,21 @@ if ($activeCycleRepairKeys.Count -gt 0 -and (Test-Path -LiteralPath $Observation
         if ($null -ne (Get-StateProperty $dest 'activeCycle')) { continue }
 
         $restock = $latestRestock[$key]
-        $restockAt = [long](Get-StateProperty $restock 'timestamp')
+        $restockAt = [long](Get-StateProperty $restock 'sourceTimestamp')
+        if ($restockAt -le 0) { $restockAt = [long](Get-StateProperty $restock 'timestamp') }
         if ($restockAt -le 0) { continue }
         $previousSoldOutAt = [long](Get-StateProperty $dest 'lastSellOutAt')
         if ($previousSoldOutAt -ge $restockAt) { $previousSoldOutAt = 0L }
         $dest.activeCycle = [pscustomobject]@{
             previousSoldOutAt = $previousSoldOutAt
             restockAt = $restockAt
+            restockLowerBoundAt = [long](Get-StateProperty $restock 'previousFreshSourceTimestamp')
+            restockUpperBoundAt = $restockAt
+            restockBoundaryQuality = [string](Get-StateProperty $restock 'transitionBoundaryQuality')
             restockQuantity = [long](Get-StateProperty $restock 'stock')
             foreignPrice = [long](Get-StateProperty $restock 'foreignPrice')
+            evidenceQuality = 'right_censored'
+            isRightCensored = $true
             source = [string](Get-StateProperty $restock 'source')
         }
         $changed = $true

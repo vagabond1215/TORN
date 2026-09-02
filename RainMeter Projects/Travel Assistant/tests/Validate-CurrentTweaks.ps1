@@ -79,7 +79,7 @@ if ($errors.Count -eq 0) {
     }
     if ($cycleFilter -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest|curl\.exe') { Fail 'Cadence-aware cycle filtering must remain local-only.' }
     foreach ($token in @('WindowPlanRefiner.ps1','& $WindowPlanRefiner')) {
-        if (-not $filterState.Contains($token)) { Fail "FilterState.ps1 missing post-window refinement token '$token'." }
+        if ($filterState.Contains($token)) { Fail "FilterState.ps1 must not retain competing post-window producer '$token'." }
     }
 
     $travelAt = $runUpdate.IndexOf('Invoke-FailSoftScript -Path $TravelContext',[System.StringComparison]::Ordinal)
@@ -118,24 +118,7 @@ if ($errors.Count -eq 0) {
     }
     if ($tweaks -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'CardTweaks.lua must remain local presentation only.' }
 
-    if($info -match '(?m)^\[MeterOpportunity\d+Info\]\s*    foreach ($token in @('[MeasureCardTweaks]','CardTweaks.lua','@IncludeInfo=#@#Includes\OpportunityInfo.inc')) {
-        if (-not $ini.Contains($token)) { Fail "TravelAssistant.ini missing '$token'." }
-    }
-    $presenterAt = $ini.IndexOf('[MeasureCardPresenter]',[System.StringComparison]::Ordinal)
-    $tweaksAt = $ini.IndexOf('[MeasureCardTweaks]',[System.StringComparison]::Ordinal)
-    if ($presenterAt -lt 0 -or $tweaksAt -le $presenterAt) { Fail 'MeasureCardTweaks must update after MeasureCardPresenter.' }
-}
-
-if ($errors.Count -gt 0) {
-    foreach ($error in $errors) { Write-Host "FAIL: $error" -ForegroundColor Red }
-    Write-Host "Current tweak validation failed with $($errors.Count) error(s)." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host 'Stable-window refiner, single-owner card geometry, defensive legacy visibility, and expanded graph validation passed.' -ForegroundColor Green
-Write-Host 'Expected live result: no flight duration on the card; only flag/window text expose tooltips; economics colors and stable window timing remain intact.'
-exit 0
-){
+    if($info -match '(?m)^\[MeterOpportunity\d+Info\]\s*$'){
         Fail 'Retired invisible Info tooltip meters must remain removed.'
     }
     if($filterState.Contains('EnsureUiAssets.ps1') -or $filterState.Contains('$EnsureUiAssets')){
@@ -157,5 +140,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Stable-window refiner, single-owner card geometry, defensive legacy visibility, and expanded graph validation passed.' -ForegroundColor Green
-Write-Host 'Expected live result: no flight duration on the card; hover shows pertinent arrival time, median in-stock duration, early/late restock, and guaranteed overlap; economics colors and stable window timing remain intact.'
+Write-Host 'Expected live result: no flight duration on the card; only flag/window text expose tooltips; economics colors and stable window timing remain intact.'
 exit 0

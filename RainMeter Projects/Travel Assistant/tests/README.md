@@ -25,9 +25,30 @@ The aggregate runner currently includes static/config validation plus determinis
 - provider normalization;
 - travel profile/current capacity;
 - final state/economics;
-- restock display.
+- restock display;
+- censor-aware cycle/depletion evidence;
+- authoritative legacy WindowPlan ownership;
+- stochastic-v1 multi-cycle simulation, travel/economics, deterministic replay,
+  fail-soft integration, and no-future-leakage cutoffs.
 
 No deterministic test should require a live web provider.
+
+Focused stochastic checks:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-StochasticForecastTests.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Validate-LegacyWindowAuthority.ps1
+```
+
+Offline replay against retained history (writes only ignored runtime output):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Invoke-StochasticReplay.ps1
+```
 
 ## Current 0.6.0 focused tests
 

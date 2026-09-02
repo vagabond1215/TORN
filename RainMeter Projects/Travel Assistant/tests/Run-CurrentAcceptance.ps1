@@ -38,6 +38,8 @@ $tests = @(
     'Run-OpportunityStateTests.ps1',
     'Run-WindowPlanTests.ps1',
     'Run-WindowRefinerTests.ps1',
+    'Validate-LegacyWindowAuthority.ps1',
+    'Run-StochasticForecastTests.ps1',
     'Validate-ResaleQueue.ps1',
     'Run-ResalePriorityTests.ps1',
     'Run-FinalizeStateTests.ps1'

@@ -4,6 +4,30 @@ Rainmeter-based Torn foreign-market opportunity assistant.
 
 The current committed **0.6.0 candidate** presents a compact list of current/future foreign-market opportunities with transparent ordering, local historical graphs and profile-aware economics.
 
+The next-generation stochastic forecast currently runs in **shadow mode only**.
+It does not change cards, sorts, tooltips, filters, or Safe/Best guidance.
+
+## Stochastic shadow artifact
+
+Once per serialized update, a local-only challenger resamples retained completed
+cycles as joint empirical observations, simulates through multiple future cycles,
+applies physical travel feasibility, and evaluates expected after-tax economics.
+Its ignored output is:
+
+```text
+data/runtime/stochastic-forecast.json
+```
+
+The schema includes arrival curves (`pAnyStock`, `pTargetQty`, expected quantity,
+expected profit, and expected profit/hour), evidence diagnostics, and one mutually
+exclusive shadow decision per market. Defaults are 128 deterministic seeded
+scenarios, a 15-minute grid, a 12-hour departure search, and a 14-day recency
+half-life. These probabilities are not calibrated or user-facing.
+
+Polling evidence is interval-censored: transition bounds are retained instead of
+treating the later poll timestamp as exact. Stock declines to a positive value are
+observed depletion; declines ending at zero are demand-censored lower bounds.
+
 ## Main view
 
 ```text
@@ -153,8 +177,10 @@ LocalCatalog
 FinalizeState
 TravelContext
 OpportunityState    # primary opportunity projection (uses local helpers from OptimalRoute.ps1)
+WindowPlan / PriceVariationRefiner
 FilterState
 visible heartbeat
+CycleAnalytics / TrendForecast / StochasticForecast (shadow)
 ResalePriority
 ResaleQueue
 ```

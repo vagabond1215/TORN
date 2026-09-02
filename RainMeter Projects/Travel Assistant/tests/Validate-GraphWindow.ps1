@@ -24,8 +24,8 @@ foreach($token in @(
     'FromArgb(255,117,24),1',
     '$markerTop=[single]($plotBottom+2)',
     '$markerBottom=[single]($plotBottom+8)',
-    "$graphics.DrawString(('-{0}h' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)",
-    "$graphics.DrawString('now',$labelFont,$labelBrush,[single]($plotRight-18),110)"
+    '$graphics.DrawString((''-{0}h'' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)',
+    '$graphics.DrawString(''now'',$labelFont,$labelBrush,[single]($plotRight-18),110)'
 )){
     if(-not$renderer.Contains($token)){Fail "Inline graph palette missing '$token'."}
 }
@@ -38,24 +38,12 @@ foreach($forbidden in @(
 }
 
 $ini = Get-Content -LiteralPath $iniPath -Raw
-foreach ($sectionName in @('MeterUKHourGrid','MeterJPHourGrid')) {
-    $pattern = '(?ms)^\[' + [regex]::Escape($sectionName) + '\]\s*(.*?)(?=^\[|\z)'
-    $match = [regex]::Match($ini, $pattern)
-    if (-not $match.Success) {
-        Fail "Missing [$sectionName]."
-        continue
-    }
-    $body = $match.Groups[1].Value
-    $lineCount = @([regex]::Matches($body, '(?im)^Shape\d*=Line\s+')).Count
-    if ($body -match '(?im)^Shape=Line\s+') { $lineCount++ }
-    if ($lineCount -ne 7) { Fail "[$sectionName] must contain 7 internal hourly lines for 8 one-hour segments; found $lineCount." }
-    if ($body -notmatch '60-minute intervals') { Fail "[$sectionName] should identify the grid as 60-minute intervals." }
-    foreach ($x in @(71,134,197,260,323,386,449)) {
-        if ($body -notmatch ('(?m)Line\s+' + $x + ',8,' + $x + ',110')) {
-            Fail "[$sectionName] is missing the expected hourly divider at x=$x."
-        }
-    }
+foreach ($token in @('[MeasureInlineGraph]','RenderInlineGraph.ps1','-MarketKey "#InlineGraphMarketKey#"')) {
+    if (-not $ini.Contains($token)) { Fail "TravelAssistant.ini missing inline graph contract '$token'." }
 }
+$rowsPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityRows.inc'
+$rows = Get-Content -LiteralPath $rowsPath -Raw
+if (-not $rows.Contains('[MeterOpportunity1InlineGraph]')) { Fail 'Opportunity rows must expose the generated inline graph image meter.' }
 
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL $failure" -ForegroundColor Red }

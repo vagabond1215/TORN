@@ -46,7 +46,7 @@ if (Test-Path -LiteralPath $opportunityPath) {
     foreach ($token in @(
         'grossProfit','profitPerHour','quantity','elapsedSeconds','Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge',
         'Get-OpportunityResaleUse','resaleFallbackMaxAgeSeconds','marketValueFresh',' STALE','OpportunityStaleMvCount','OpportunityCountry_',
-        'Write-OpportunityProjection',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'GrossValue','ProfitHourValue','WindowStartAt',
+        'Write-OpportunityProjection','$effectiveSortMode -eq ''name''','$effectiveSortMode -eq ''gross''','$effectiveSortMode -eq ''profit_per_hour''','GrossValue','ProfitHourValue','WindowStartAt',
         'ResalePricingPriorityItemIds','pricingPriorityIds.Add($itemId)'
     )) {
         if (-not $text.Contains($token)) { Fail "Opportunity ranking contract missing '$token'." }
@@ -66,7 +66,7 @@ if (Test-Path -LiteralPath $resalePriorityPath) {
 
 if (Test-Path -LiteralPath $settingsPath) {
     $text=Get-Content -LiteralPath $settingsPath -Raw
-    foreach ($token in @('Show profitable items only','Use 95% MV profit calculation','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Allowed','Forbidden','Limited','Profile / API...','Ignore List...')) {
+    foreach ($token in @('Show profitable items only','Tax / trader rate','itemMarketFeePercent','Energy Waste','Max Energy Loss','Nerve Waste','Max Nerve Loss','Allowed','Forbidden','Limited','Profile / API...','Ignore List...')) {
         if (-not $text.Contains($token)) { Fail "Optimizer settings UI missing '$token'." }
     }
     if (-not $text.Contains('energy is already above its natural maximum')) { Fail 'Settings must explain stacked Energy bypass.' }
@@ -112,7 +112,7 @@ if (Test-Path -LiteralPath $wrapperPath) {
     $opportunity=$wrapper.IndexOf('Invoke-FailSoftScript -Path $OpportunityState')
     $filter=$wrapper.IndexOf('& $FilterState')
     $heartbeat=$wrapper.LastIndexOf('Write-UpdateHeartbeat')
-    $resale=$wrapper.IndexOf('& $ResaleQueue')
+    $resale=$wrapper.LastIndexOf('& $ResaleQueue')
     if (@($finalizer,$travel,$opportunity,$filter,$heartbeat,$resale) -contains -1 -or -not ($finalizer -lt $travel -and $travel -lt $opportunity -and $opportunity -lt $filter -and $filter -lt $heartbeat -and $heartbeat -lt $resale)) {
         Fail 'Runtime order must remain FinalizeState -> TravelContext -> OpportunityState -> FilterState -> heartbeat -> ResaleQueue.'
     }

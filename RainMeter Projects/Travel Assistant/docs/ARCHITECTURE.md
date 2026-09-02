@@ -45,6 +45,8 @@ finalized ui-state.kv
         ↓
 visible heartbeat
         ↓
+CycleAnalytics / TrendForecast / StochasticForecast (shadow only)
+        ↓
 ResalePriority / ResaleQueue
 ```
 
@@ -384,3 +386,96 @@ Energy/Nerve waste policies remain local decision constraints and never mutate o
 `StateReader.lua` performs immediate local sorting so button response does not wait for PowerShell persistence. It reads only the last finalized `ui-state.kv`, so intermediate PowerShell mutations are never visible to the main Rainmeter surface. Genuine zero-result projections still replace the list when that completed generation is published.
 
 Steady-state one-second Rainmeter work remains local-only. A newly visible uncached item may enqueue a bounded static PNG cache fill from `www.torn.com/images/items/...`; this decorative CDN fetch is separate from provider/Torn API ownership. Normal foreign-stock collection remains approximately once per minute; inline rendering is local/on-demand; API credentials remain ignored/local.
+
+## Authoritative legacy window pipeline
+
+`WindowPlan.ps1` is the one production entrypoint for visible legacy timing.
+`RunUpdate.ps1` never invokes `WindowPlanRefiner.ps1` independently. The entrypoint
+currently delegates to that richer implementation module while its helpers are
+consolidated, so the former simpler producer is no longer executed.
+
+The pre-consolidation audit found that the refiner was **partially relied upon**,
+not dead: `RunUpdate` called the simpler WindowPlan, then `FilterState` indirectly
+called `WindowPlanRefiner`. The simpler pass handled only OOS recurring WP2
+geometry and skipped live stock; the refiner additionally produced `CurrentStock`,
+`StockEvidenceAt`, `ActiveRestockAt`, `ActiveSelloutEstimateAt`,
+`NextRestockEstimateAt`, `MedianRestockDelaySeconds`,
+`LiveCycleProjectionMode`, `WindowDataQuality/Reason`, current-cycle reachability
+and deadline/safety fields, `NextCycleOrdinal`, `WindowMedianPeriodSeconds`, and
+price-bound metadata. Those fields were not in OpportunityState's row-clear list,
+and several refiner fast paths did not initialize them, so stale values could
+survive when row identities moved between generations. FilterState no longer runs
+forecast code; WindowPlan runs the richer implementation exactly once before price
+refinement and filtering.
+
+Visible timing ownership is explicit:
+
+| Field family | Current owner |
+|---|---|
+| candidate identity and initial timing/probability values | `OpportunityState.ps1` |
+| final Safe/Best/current-cycle timing, live anchors, quality fields, WP2 timing envelope | `WindowPlan.ps1` (implementation in `WindowPlanRefiner.ps1`) |
+| price-variation fields and final PV tooltip envelope | `PriceVariationRefiner.ps1` |
+| traveling/returning/abroad wording and window tooltip | `TravelStateWindowTweaks.lua` |
+| home timing text and home window tooltip | `CardPresenter.lua` |
+| row projection, sorting, and meter assignment | `StateReader.lua` |
+
+`OpportunityState` clears every generation-scoped WindowPlan field before writing
+new rows. WindowPlan initializes every owned field before any fast path and stamps
+`LegacyWindowPlanAuthority=WindowPlan` plus the generation time. A refiner-era
+value produced for an older row therefore cannot survive at the same row index.
+
+## Censor-aware evidence
+
+Polling timestamps are observation times, not exact event times. New observation
+rows use schema 2. A `0 -> positive` transition stores the previous fresh timestamp
+as the restock lower bound and the positive observation timestamp as the upper
+bound; `positive -> 0` stores the analogous sellout bracket. Provider/source time
+is authoritative when present, with local collection time only as fallback.
+
+Completed schema-2 cycles retain restock, sellout, and previous-sellout bounds plus
+conservative duration bounds. `evidenceQuality` uses a compact classification:
+`bounded_fresh`, `bounded_gap`, `left_censored`, `right_censored`, or `incomplete`.
+Active cycles remain durable in `engine-state.json` with
+`isRightCensored=true`. Incomplete rows remain retained for audit but cannot teach
+the forecast when a required boundary is unsafe. Bounds remain stored even when
+their quality is too weak for forecasting.
+
+Stock declines ending above zero record `depletionEvidence=observed_nonzero` and
+the observed quantity delta. A transition ending at zero records
+`depletionEvidence=sellout_censored`, `depletionCensored=true`, and only a demand
+lower bound equal to the last observed positive stock. Missing provider rows do not
+create observations or out-of-stock transitions.
+
+## Stochastic-v1 shadow forecast
+
+After immutable legacy UI publication, `StochasticForecast.ps1` reads retained
+schema-2 cycles by stable `country:itemId`. It applies a 14-day exponential
+recency half-life and evidence-quality weight, then resamples each cycle jointly so
+restock delay, availability, restock quantity, foreign price, and censor bounds
+keep their observed relationship. Event and duration values are sampled inside the
+stored bounds.
+
+Each of 128 deterministic seeded scenarios is represented as stock intervals, not
+second-by-second rows. Simulation continues through as many future cycles as needed
+to pass the latest evaluated arrival. The default grid is 15 minutes over a 12-hour
+departure search. Current stock is conditioned on fresh direct evidence, but later
+cycles remain eligible when it cannot survive the flight.
+
+Travel feasibility is a separate transform: home departures add outbound time;
+returning departures start no earlier than landing in Torn; outbound-to-target uses
+the committed landing; abroad-at-target evaluates now; unknown or other-destination
+travel fails closed.
+
+The ignored, atomically replaced `data/runtime/stochastic-forecast.json` artifact
+uses schema 1/model `stochastic-v1`. Per market it contains arrival points with
+`pAnyStock`, `pTargetQty`, expected quantity, expected after-tax profit, and expected
+after-tax profit/hour; evidence/sample diagnostics; best/last departure summaries;
+and one mutually exclusive shadow decision. V1 defines target quantity as the
+already projected trip quantity and utility as expected profit. The configured
+`itemMarketFeePercent` and existing round-trip flight hours remain authoritative.
+
+These probabilities are uncalibrated shadow diagnostics. Limitations include
+linear within-cycle depletion, no value-of-information solver, no online
+change-point model, and no risk-preference surface. Promotion requires frozen live
+scoring, calibration, one accepted authoritative stochastic decision object, and
+only then a separate visible UI migration.

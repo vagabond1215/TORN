@@ -53,11 +53,10 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
     $finalizer = $wrapper.IndexOf('& $Finalizer')
     $travel = $wrapper.IndexOf('Invoke-FailSoftScript -Path $TravelContext')
-    $optimal = $wrapper.IndexOf('Invoke-FailSoftScript -Path $OptimalRoute')
     $opportunity = $wrapper.IndexOf('Invoke-FailSoftScript -Path $OpportunityState')
     $filterState = $wrapper.IndexOf('& $FilterState')
-    if (@($finalizer,$travel,$optimal,$opportunity,$filterState) -contains -1 -or -not ($finalizer -lt $travel -and $travel -lt $optimal -and $optimal -lt $opportunity -and $opportunity -lt $filterState)) {
-        Fail 'Runtime order must keep FinalizeState -> TravelContext -> OptimalRoute -> OpportunityState -> FilterState.'
+    if (@($finalizer,$travel,$opportunity,$filterState) -contains -1 -or -not ($finalizer -lt $travel -and $travel -lt $opportunity -and $opportunity -lt $filterState)) {
+        Fail 'Runtime order must keep FinalizeState -> TravelContext -> OpportunityState -> FilterState.'
     }
     if ($wrapper -notmatch '(?m)^\s*\[bool\]\$ClearErrorOnSuccess\s*=\s*\$true') { Fail 'Fail-soft helper must expose explicit error-file clearing policy.' }
     if ($wrapper -notmatch '(?m)Invoke-FailSoftScript -Path \$TravelContext -ErrorPath \$TravelContextErrorFile -ClearErrorOnSuccess \$false') { Fail 'TravelContext must retain ownership of its diagnostic file after internally caught API failures.' }

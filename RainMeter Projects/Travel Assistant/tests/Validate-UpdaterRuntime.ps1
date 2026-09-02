@@ -57,7 +57,6 @@ if (-not (Test-Path -LiteralPath $iniPath)) {
     foreach ($section in @(
         'MeasureSettings',
         'MeasureFilterPopup',
-        'MeasureItemViewer',
         'MeasureInlineGraph',
         'MeasurePreferenceAction'
     )) {
@@ -99,7 +98,7 @@ if (-not (Test-Path -LiteralPath $settingsPopupPath)) {
 } else {
     $settingsPopup = Get-Content -LiteralPath $settingsPopupPath -Raw
     foreach ($token in @(
-        "Set-FilterProperty $current 'itemMarketFeePercent' $marketTaxPercent",
+        'Set-FilterProperty $current ''itemMarketFeePercent'' $marketTaxPercent',
         '[void](Save-UiPreferences $current)',
         'Start-FilterProjectionRefresh -Action RefreshFilters'
     )) {

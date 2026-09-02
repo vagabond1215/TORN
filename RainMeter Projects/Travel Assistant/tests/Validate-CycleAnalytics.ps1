@@ -43,7 +43,7 @@ if (Test-Path -LiteralPath $wrapperPath) {
     }
     $heartbeat = $wrapper.LastIndexOf('Write-UpdateHeartbeat')
     $analytics = $wrapper.IndexOf('Invoke-FailSoftScript -Path $CycleAnalytics')
-    $resale = $wrapper.IndexOf('& $ResaleQueue')
+    $resale = $wrapper.LastIndexOf('& $ResaleQueue')
     if ($heartbeat -lt 0 -or $analytics -lt 0 -or $resale -lt 0 -or -not ($heartbeat -lt $analytics -and $analytics -lt $resale)) {
         Fail 'Cycle analytics must run after the visible heartbeat and before low-priority resale refresh.'
     }

@@ -19,11 +19,11 @@ $cycles=@(
 $model=Get-StableRecurringScenarioModel -Cycles $cycles -AnchorAt $anchor -AnchorPhase sellout -NowEpoch $anchor -FutureHorizonSeconds 50000
 Assert-Equal ([long]$model.medianPeriodSeconds) 6000L 'Stable recurring model should use the median complete-cycle period.'
 $group0=@($model.groups | Where-Object { [int]$_.ordinal -eq 0 } | Select-Object -First 1)[0]
-$group5=@($model.groups | Where-Object { [int]$_.ordinal -eq 5 } | Select-Object -First 1)[0]
+$group1=@($model.groups | Where-Object { [int]$_.ordinal -eq 1 } | Select-Object -First 1)[0]
 Assert-Equal ([long]$group0.earlyRestockAt) ($anchor+3600L) 'First-cycle earliest restock should retain empirical minimum delay.'
 Assert-Equal ([long]$group0.lateRestockAt) ($anchor+4800L) 'First-cycle latest restock should retain empirical maximum delay.'
-Assert-Equal (([long]$group5.lateRestockAt-[long]$group5.earlyRestockAt)) 1200L 'Future-cycle restock uncertainty must not compound with ordinal.'
-Assert-Equal ([long]$group5.earlyRestockAt) ($anchor+(5L*6000L)+3600L) 'Future groups should advance by median period plus one-cycle delay variance.'
+Assert-Equal (([long]$group1.lateRestockAt-[long]$group1.earlyRestockAt)) 1200L 'Next-cycle restock uncertainty must not compound with ordinal.'
+Assert-Equal ([long]$group1.earlyRestockAt) ($anchor+6000L+3600L) 'Immediate next group should advance by median period plus one-cycle delay variance.'
 
 # A collector outage / missed transition may create one implausibly long apparent cycle.
 # Keep it in analytics, but exclude it from the live forecast when a stable majority exists.

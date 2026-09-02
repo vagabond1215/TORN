@@ -471,7 +471,15 @@ function Write-OpportunityProjection {
             'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds',
             'MarketValueValue','PurchaseCostValue','TotalCostValue','GrossSaleValue','GrossProfitValue','MarketTaxValue','MakeValue','ProfitEachValue','MarketFeePercent',
             'ForecastMode','RestockEstimateAt','RestockAverageDelaySeconds','RestockEarliestDelaySeconds','RestockLatestDelaySeconds',
-            'RestockLifetimeShortestDelaySeconds','RestockLifetimeLongestDelaySeconds','RestockSampleCount'
+            'RestockLifetimeShortestDelaySeconds','RestockLifetimeLongestDelaySeconds','RestockSampleCount',
+            # WindowPlan owns these generation-scoped legacy timing fields. Clear
+            # them before every projection so an interrupted/degraded window pass
+            # cannot leak a value produced for an older row or generation.
+            'CurrentStock','StockEvidenceAt','ActiveRestockAt','ActiveSelloutEstimateAt','NextRestockEstimateAt',
+            'MedianRestockDelaySeconds','LiveCycleProjectionMode','WindowDataQuality','WindowDataQualityReason',
+            'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds',
+            'NextCycleOrdinal','WindowMedianPeriodSeconds','PriceVaries','PriceVariationReason',
+            'MinObservedPrice','MaxObservedPrice'
         )) {
             $State['Opportunity'+$index+$suffix] = ''
         }
