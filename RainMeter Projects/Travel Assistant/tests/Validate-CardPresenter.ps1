@@ -49,10 +49,11 @@ if ($errors.Count -eq 0) {
         "local face='Nirmala UI Semilight'",
         "setOption(prefix..'Name','Text',itemName)","setOption(prefix..'Name','ToolTipText','Item name')","setOption(prefix..'Name','FontColor','0,0,0,0')",
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
-        "setOption(prefix..'Price','Text',itemName..' | '..unitCostText)",
+        "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)",
         "setOption(prefix..'Price','InlinePattern','\\|')","setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
         "state[projectedPrefix..'PriceColor']","setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')","setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
-        "setOption(prefix..'Take','Text','| '..totalCostText)","setOption(prefix..'Take','FontColor','#ToggleIdle#')",
+        "setOption(prefix..'Price','InlinePattern3','-?\\$[0-9,]+$')","setOption(prefix..'Price','InlineSetting3','Color | #ToggleIdle#')",
+        "setOption(prefix..'Take','Text','')","setOption(prefix..'Take','FontColor','0,0,0,0')",
         "setOption(prefix..'Make','Text',formatSignedMoney(make))","setOption(prefix..'Make','FontColor',profitColor(make))",
         "formatSignedMoney","profitColor",
         "local eachDetail='MV:'..formatMoney(mv)","'% Tax:'..formatMoney(taxEach)","' Net:'..formatSignedMoney(each)",
@@ -90,7 +91,7 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Take','Text','Take: ",
         "setOption(prefix..'Make','Text','Make: ",
         "bufferRate=priceVaries",
-        "Each | Gross:","Total | Gross:"
+        "Each | Gross:","Total | Gross:","setOption(prefix..'Take','Text','| '..totalCostText)"
     )) {
         if ($presenter.Contains($forbidden)) { Fail "CardPresenter.lua retains obsolete/cluttered status token '$forbidden'." }
     }

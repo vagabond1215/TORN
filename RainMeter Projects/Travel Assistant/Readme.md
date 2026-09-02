@@ -26,7 +26,7 @@ Up to eight opportunities may be shown.
 
 - No visible row/place numbers.
 - Destination is represented by a flag on the left.
-- The visible left line is **Item | foreign unit cost | full-load total cost**. The total cost is exact and muted; no variable-price reserve is added.
+- The visible left line is one continuous **Item | foreign unit cost | full-load total cost** text run, so the total cost follows the unit cost directly instead of starting in a distant fixed column. The total cost is exact and muted; no variable-price reserve is added.
 - The right side is the signed, after-tax **total net profit**, rendered larger and centered vertically across the two text lines.
 - The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap. Active fills are inset so they do not paint over the border or T separators.
 - Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text.

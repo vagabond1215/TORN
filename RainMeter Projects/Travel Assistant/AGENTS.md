@@ -66,7 +66,7 @@ Card rules:
 - No visible row/place numbers (`#1`, `#2`, etc.).
 - Left side is a recognizable FlagKit destination flag.
 - The hidden canonical Name meter remains item-name-only for downstream row lookup.
-- The left first-line content is `Item | foreign unit cost | full-load cost`. Full-load cost is always exact `unit cost x quantity`; price variation never adds a cash buffer.
+- The left first-line content is one continuous text run: `Item | foreign unit cost | full-load cost`. There is no fixed tab/column gap between the two prices. Full-load cost is always exact `unit cost x quantity`; price variation never adds a cash buffer.
 - The full-load cost is muted light gray.
 - Total after-tax net profit occupies the right side of both text lines, is 4 pt larger than the old card value, vertically centers on the flag, and is right-aligned. Positive values use `+` and green; negative values use `-` and red.
 - The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap. Their active fill is inset one pixel so the card border and T separators always remain visible above/around the highlight.

@@ -63,12 +63,12 @@ if($errors.Count -eq 0){
         }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=198\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
-            Fail "Row $i item/unit-cost column must start at x=78 with a fixed 198px width."
+        if($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=310\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
+            Fail "Row $i combined item/unit/full-load-cost line must start at x=78 with a 310px width."
         }
         $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($takeBody -notmatch '(?im)^X=280\s*$' -or $takeBody -notmatch '(?im)^W=108\s*$' -or $takeBody -notmatch '(?im)^FontSize=11\s*$' -or $takeBody -notmatch '(?im)^FontColor=#ToggleIdle#\s*$'){
-            Fail "Row $i full-load cost column must be independently anchored at x=280 and remain light gray."
+        if($takeBody -notmatch '(?im)^X=78\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
+            Fail "Row $i retired Take surface must remain inert; full-load cost belongs in the Price text run."
         }
         $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=15\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$'){
@@ -136,13 +136,15 @@ if($errors.Count -eq 0){
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
         "totalCost=number(state[projectedPrefix..'TotalCostValue'])",
         "totalCost=(fallbackPrice>0 and quantity>0) and (fallbackPrice*quantity) or 0",
-        "setOption(prefix..'Price','Text',itemName..' | '..unitCostText)",
+        "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)",
         "setOption(prefix..'Price','InlinePattern','\\|')",
         "setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
         "setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')",
         "setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
-        "setOption(prefix..'Take','Text','| '..totalCostText)",
-        "setOption(prefix..'Take','FontColor','#ToggleIdle#')",
+        "setOption(prefix..'Price','InlinePattern3','-?\\$[0-9,]+$')",
+        "setOption(prefix..'Price','InlineSetting3','Color | #ToggleIdle#')",
+        "setOption(prefix..'Take','Text','')",
+        "setOption(prefix..'Take','FontColor','0,0,0,0')",
         "setOption(prefix..'Make','Text',formatSignedMoney(make))",
         "setOption(prefix..'Make','FontColor',profitColor(make))",
         "local eachDetail='MV:'..formatMoney(mv)",
