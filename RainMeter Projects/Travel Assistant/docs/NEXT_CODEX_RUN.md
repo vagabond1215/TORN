@@ -20,8 +20,9 @@ Use ignored `data/runtime/stochastic-forecast.json` as the challenger artifact,
 `stochastic-calibration.json` for prospective scoring, and
 `tools/Invoke-StochasticReplay.ps1` for offline walk-forward scaffolding.
 Prediction freezing, continuity-safe stock labels,
-overall/evidence-quality/market/horizon Brier/log-loss buckets, and exact-snapshot
-quantity scoring are implemented.
+overall/evidence-quality/market/horizon Brier/log-loss buckets, exact-snapshot
+quantity scoring, and deterministic zero-quantity scoring for continuity-confirmed
+OOS outcomes are implemented.
 The next run should validate them on Windows, measure their steady-state CPU/wall
 cost, and then accumulate prospective evidence before considering regime
 adaptation or any visible stochastic UI.
