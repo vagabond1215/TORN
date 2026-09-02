@@ -27,6 +27,34 @@ is the authoritative next-run handoff.
 No stochastic state, probability, sort, tooltip, or layout is user-facing. Existing
 Safe/Best behavior remains the production baseline.
 
+### Post-Codex connector review
+
+A static connector review of the initial stochastic push found and corrected several
+Phase-1/2 edge cases before any promotion work:
+
+- Monte Carlo common-random-number seeds are stable across minute updates instead
+  of rotating with wall-clock minute, preventing artificial probability jitter when
+  retained evidence has not changed;
+- missing one-way travel time fails closed instead of becoming zero-duration travel;
+- a long same-phase in-stock collection gap invalidates the old phase anchor but
+  retains the new positive snapshot as left-censored/right-censored current evidence;
+- the global legacy WindowPlan authority stamp is cleared before every opportunity
+  projection and is stamped again only after the authoritative timing pass succeeds;
+- offline history building/import now accepts censor-aware schema 2 and preserves
+  restock/sellout bounds instead of rebuilding schema-1 exact-event cycles;
+- an aged positive provider snapshot is no longer promoted directly to 100% stock-now
+  probability; with learned cycle evidence, current-stock survival is conditioned on
+  the provider observation time and may sell out before the forecast origin;
+- stochastic shadow work now runs after the production resale/MV queue so its
+  tens-of-seconds workload does not delay the bounded cache-refresh request;
+- replay's simple all-cycle/fractional overlap comparators are named
+  `empirical_all_overlap` / `empirical_overlap`; they are not claimed to be an
+  exact historical execution of production Safe/Best logic.
+
+These connector changes are statically reviewed only in this environment. The
+Windows PowerShell 5.1 focused suite and production shadow runtime must be rerun on
+the target host before treating the post-review branch as runtime-accepted.
+
 ## Accepted target-host baseline before this redesign
 
 At commit `f5a4f0b`, target testing confirmed:
@@ -160,9 +188,9 @@ FilterState
 atomic finalized ui-state.kv + numeric heartbeat
     CycleAnalytics
     TrendForecast
-    StochasticForecast       # shadow-only; after UI publication; fail-soft
     ResalePriority
 ResaleQueue
+    StochasticForecast       # shadow-only; last, fail-soft
 ```
 
 ## Validation status
@@ -202,8 +230,11 @@ default was therefore set to 128 scenarios. The final default run completed in
 inside the stage), produced 49 arrival points per sufficiently trained market,
 and wrote a 1,011,026-byte artifact. All emitted probabilities were within
 `[0,1]`; the 72 market decisions were 47 insufficient-data, 16 leave-in, seven
-leave-now, and two wait. This stays within the once-per-minute shadow-stage
-budget, but artifact size and unchanged-input caching remain optimization targets.
+leave-now, and two wait. This stayed within the once-per-minute shadow-stage
+budget for that pre-review run, but artifact size and unchanged-input caching remain
+optimization targets. Because stochastic sampling/current-stock conditioning changed
+during connector review, rerun this performance/decision-count measurement before
+using the recorded numbers as the current baseline.
 
 This execution environment does not provide Windows PowerShell/Rainmeter, so the redesigned WinForms surface and Rainmeter render have **not** been executed here. Target acceptance must run the focused checks and visual/interactivity checklist in `docs/NEXT_CODEX_RUN.md`.
 
