@@ -28,8 +28,7 @@ local lastItemImageRequestAt = 0
 
 local collapsedCardHeight = 50
 local rowStride = 54
-local detailExtraWithTax = 34
-local detailExtraNoTax = 18
+local detailExtra = 34
 local graphExtra = 133
 local footerExtra = 16
 local maxCandidateRows = 256
@@ -660,7 +659,9 @@ end
 
 local function detailExtraForRow(data, index)
     if index == nil or index <= 0 then return 0 end
-    return (detailTaxRate(data, index) > 0) and detailExtraWithTax or detailExtraNoTax
+    -- Two fixed economics rows: Tax is conditional at lower-left, while
+    -- round-trip flight $/hr is always rendered at lower-right.
+    return detailExtra
 end
 
 local function collapseCardDetails()
@@ -672,10 +673,12 @@ local function collapseCardDetails()
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Gross')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailEachNet')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailEachTax')
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailEachProfitHour')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalLabel')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotal')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalNet')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalTax')
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalProfitHour')
         setDetailButtonState('MeterOpportunity' .. i .. 'DetailToggle', false)
         SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'DetailToggle', 'ToolTipText', '')
     end
@@ -719,19 +722,23 @@ local function layoutRows(data, count)
             SKIN:Bang('!ShowMeter', p .. 'Gross')
             SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')
             if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end
+            SKIN:Bang('!ShowMeter', p .. 'DetailEachProfitHour')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotalLabel')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotal')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')
             if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax') else SKIN:Bang('!HideMeter', p .. 'DetailTotalTax') end
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotalProfitHour')
         else
             SKIN:Bang('!HideMeter', p .. 'DetailEachLabel')
             SKIN:Bang('!HideMeter', p .. 'Gross')
             SKIN:Bang('!HideMeter', p .. 'DetailEachNet')
             SKIN:Bang('!HideMeter', p .. 'DetailEachTax')
+            SKIN:Bang('!HideMeter', p .. 'DetailEachProfitHour')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalLabel')
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotalProfitHour')
         end
         local maskImage = ''
         if i <= count then maskImage = flagMaskImagePath(i == expandedDetailRow, i == expandedRow) end
@@ -786,29 +793,35 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+8))
         SKIN:Bang('!SetOption', p .. 'DetailEachNet', 'Y', tostring(y+8))
         SKIN:Bang('!SetOption', p .. 'DetailEachTax', 'Y', tostring(y+25))
+        SKIN:Bang('!SetOption', p .. 'DetailEachProfitHour', 'Y', tostring(y+25))
         SKIN:Bang('!SetOption', p .. 'DetailTotalLabel', 'Y', tostring(detailLabelCenterY))
         SKIN:Bang('!SetOption', p .. 'DetailTotalLabel', 'H', tostring(detailLabelHeight))
         SKIN:Bang('!SetOption', p .. 'DetailTotal', 'Y', tostring(y+8))
         SKIN:Bang('!SetOption', p .. 'DetailTotalNet', 'Y', tostring(y+8))
         SKIN:Bang('!SetOption', p .. 'DetailTotalTax', 'Y', tostring(y+25))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalProfitHour', 'Y', tostring(y+25))
         if detailExpanded then
             SKIN:Bang('!ShowMeter', p .. 'DetailEachLabel')
             SKIN:Bang('!ShowMeter', p .. 'Gross')
             SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')
             if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end
+            SKIN:Bang('!ShowMeter', p .. 'DetailEachProfitHour')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotalLabel')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotal')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')
             if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax') else SKIN:Bang('!HideMeter', p .. 'DetailTotalTax') end
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotalProfitHour')
         else
             SKIN:Bang('!HideMeter', p .. 'DetailEachLabel')
             SKIN:Bang('!HideMeter', p .. 'Gross')
             SKIN:Bang('!HideMeter', p .. 'DetailEachNet')
             SKIN:Bang('!HideMeter', p .. 'DetailEachTax')
+            SKIN:Bang('!HideMeter', p .. 'DetailEachProfitHour')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalLabel')
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotalProfitHour')
         end
 
         SKIN:Bang('!SetOption', p .. 'Flag', 'X', '8')
