@@ -451,7 +451,8 @@ function Write-OpportunityProjection {
         [hashtable]$State,
         [object[]]$Rows,
         [string]$SortMode,
-        [string]$Message
+        [string]$Message,
+        [string]$EffectiveSortMode = ''
     )
 
     # Keep a bounded local candidate pool in state.kv. Rainmeter renders only the
@@ -463,7 +464,11 @@ function Write-OpportunityProjection {
     $projectCount = [Math]::Min($maxProjectedRows,@($Rows).Count)
     $clearCount = [Math]::Min($maxProjectedRows,[Math]::Max(8,[Math]::Max($previousCount,$projectCount)))
 
+    if ([string]::IsNullOrWhiteSpace($EffectiveSortMode)) {
+        $EffectiveSortMode = if (@($Rows).Count -eq 0) { 'name' } else { $SortMode }
+    }
     $State['OpportunitySortMode'] = $SortMode
+    $State['OpportunitySortEffectiveMode'] = $EffectiveSortMode
     $State['OpportunitySortText'] = $SortMode.ToUpperInvariant()
     $State['OpportunityMessage'] = $Message
     $State['OpportunityCount'] = $projectCount
@@ -991,7 +996,6 @@ if ($effectiveSortMode -eq 'name') {
 } else {
     $sorted = @($allRows | Sort-Object @{Expression='windowStartAt';Ascending=$true},@{Expression='probability';Descending=$true},@{Expression='grossProfit';Descending=$true},name)
 }
-$state['OpportunitySortEffectiveMode']=$effectiveSortMode
 
 $state['OpportunityStaleStockCount'] = $stale
 $state['OpportunityForecastStockCount'] = $forecastOnly
@@ -1020,5 +1024,5 @@ if ($sorted.Count -eq 0) {
     elseif ($wasteBlocked -gt 0) { $message = 'Current Energy/Nerve waste limits block the available opportunities' }
     elseif ($stale -gt 0) { $message = 'Foreign stock is outside the forecast horizon - waiting for a fresh provider poll' }
 }
-Write-OpportunityProjection -State $state -Rows $sorted -SortMode $sortMode -Message $message
+Write-OpportunityProjection -State $state -Rows $sorted -SortMode $sortMode -EffectiveSortMode $effectiveSortMode -Message $message
 Write-OptimalStateKvAtomic -Values $state -Path $StateKvFile
