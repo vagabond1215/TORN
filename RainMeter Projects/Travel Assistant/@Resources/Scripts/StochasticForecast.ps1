@@ -370,7 +370,7 @@ function Get-SFDecision {
         if ([double]$best.pAnyStock -gt 0) { return [pscustomobject]@{ state='BUY_NOW'; reason='current target-market stock is observed or simulated available' } }
         return [pscustomobject]@{ state='MISSED_TARGET'; reason='no stock is available at the current target-market arrival' }
     }
-    if ([double]$best.pAnyStock -le 0 -or [double]$best.expectedProfit -le 0) { return [pscustomobject]@{ state='WAIT'; reason='no positive expected-profit arrival is present on the evaluated grid' } }
+    if ([double]$best.pAnyStock -le 0 -or [double]$best.expectedProfit -le 0) { return [pscustomobject]@{ state='NO_ACTIONABLE_TRIP'; reason='no positive expected-profit arrival is present on the evaluated grid' } }
     $departure=[long]$best.departureAt
     if ($departure -le ($NowEpoch+60L)) { return [pscustomobject]@{ state='LEAVE_NOW'; reason='best expected-profit feasible departure is now' } }
     return [pscustomobject]@{ state='LEAVE_IN'; reason='a later feasible departure has the highest expected profit' }
@@ -593,7 +593,7 @@ for ($i=1; $i -le $count; $i++) {
         }
         diagnostics=[pscustomobject]@{
             travelMode=[string]$travel.mode; travelReason=[string]$travel.reason; maximumCycleOrdinal=[int]$forecast.maximumCycleOrdinal
-            recencyHalfLifeSeconds=1209600L; utilityObjective='expectedProfit'; regimeAdaptation='extension_point'; valueOfInformation='not_implemented'
+            recencyHalfLifeSeconds=1209600L; utilityObjective='expectedProfit'; regimeAdaptation='extension_point'; valueOfInformation='not_implemented'; waitDecision='reserved_for_information_or_explicit_delay_model'
         }
     })
 }
