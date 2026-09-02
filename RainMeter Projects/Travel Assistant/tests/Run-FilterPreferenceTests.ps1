@@ -127,6 +127,9 @@ Assert-Equal 'Nerve limit clamps to zero' ([int]$fixed.maxNerveLoss) 0
 Assert-Equal 'Unsupported market tax normalizes to zero' ([int]$fixed.itemMarketFeePercent) 0
 Assert-Equal 'No separate chance sort is exposed' ([string]$fixed.sortMode) 'upcoming'
 
+$legacyNameSort = Normalize-UiPreferences -Preferences ([pscustomobject]@{ sortMode='name' })
+Assert-Equal 'Legacy Name sort migrates to Upcoming because Name is fallback-only' ([string]$legacyNameSort.sortMode) 'upcoming'
+
 $nullDisplay = Normalize-UiPreferences -Preferences ([pscustomobject]@{
     schemaVersion=6
     selectedTripBands=[string[]]@('short','medium','long')
