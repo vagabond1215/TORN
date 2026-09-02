@@ -448,7 +448,7 @@ the observed quantity delta. A transition ending at zero records
 lower bound equal to the last observed positive stock. Missing provider rows do not
 create observations or out-of-stock transitions.
 
-## Stochastic-v1 shadow forecast
+## Stochastic-v1.1 shadow forecast
 
 After immutable legacy UI publication, `StochasticForecast.ps1` reads retained
 schema-2 cycles by stable `country:itemId`. It applies a 14-day exponential
@@ -476,6 +476,16 @@ current stock. Older-but-fresh positive evidence is propagated forward through t
 learned survival distribution, so it may sell out before `Now`; later cycles remain
 eligible when the observed cycle cannot survive to an evaluated arrival.
 
+For completed future-cycle evidence, retained intermediate stock changes are mapped
+onto normalized cycle progress and converted to a monotone piecewise empirical
+depletion shape. The shape remains attached to the same joint cycle row as delay,
+availability, restock quantity, and foreign price. A shape is rejected when the
+combined restock/sellout censor width exceeds 50% of the observed cycle span; that
+cycle can still teach timing but quantity uses the linear fallback. This avoids
+turning coarse poll brackets into false within-cycle precision. `expectedQty`
+remains capped at the projected player load; `expectedAvailableQty` is uncapped
+market quantity for validation and diagnostics.
+
 Travel feasibility is a separate transform: home departures add outbound time;
 returning departures start no earlier than landing in Torn; outbound-to-target uses
 the committed landing; abroad-at-target evaluates now; unknown or other-destination
@@ -490,9 +500,9 @@ already projected trip quantity and utility as expected profit. The configured
 `itemMarketFeePercent` and existing round-trip flight hours remain authoritative.
 
 These probabilities are uncalibrated shadow diagnostics. Limitations include
-linear within-cycle depletion, a bounded adaptive search that can still omit
-low-support cells, no value-of-information solver, no online change-point model,
-and no risk-preference surface. The offline replay currently
+sparse empirical depletion-shape coverage with a linear fallback, a bounded
+adaptive search that can still omit low-support cells, no value-of-information
+solver, no online change-point model, and no risk-preference surface. The offline replay currently
 compares stochastic-v1.1 with simple mean/median and empirical overlap proxies;
 `empirical_all_overlap` / `empirical_overlap` are not an exact historical replay
 of production WindowPlan Safe/Best decisions. Promotion requires frozen live
