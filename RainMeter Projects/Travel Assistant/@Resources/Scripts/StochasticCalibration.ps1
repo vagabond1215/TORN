@@ -43,11 +43,18 @@ function Set-SCProperty {
 }
 
 function Read-SCJson {
-    param([string]$Path)
+    param([string]$Path,[switch]$Strict)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     $raw=Read-TravelAssistantSharedText -Path $Path
-    if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-    try { return ($raw | ConvertFrom-Json) } catch { return $null }
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        if ($Strict) { throw ('Calibration state is empty: '+$Path) }
+        return $null
+    }
+    try { return ($raw | ConvertFrom-Json) }
+    catch {
+        if ($Strict) { throw ('Calibration state is invalid JSON: '+$Path+' :: '+$_.Exception.Message) }
+        return $null
+    }
 }
 
 function New-SCCalibrationState {
@@ -652,7 +659,7 @@ function New-SCCalibrationSummary {
 if ($StochasticCalibrationSkipMain) { return }
 if ($Now -le 0) { $Now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 
-$state=Repair-SCCalibrationState (Read-SCJson $StateFile)
+$state=Repair-SCCalibrationState (Read-SCJson $StateFile -Strict)
 $artifact=Read-SCJson $ForecastFile
 $currentModelVersion=''
 if ($null -ne $artifact) { $currentModelVersion=([string](Get-SCProperty $artifact 'modelVersion')).Trim() }
