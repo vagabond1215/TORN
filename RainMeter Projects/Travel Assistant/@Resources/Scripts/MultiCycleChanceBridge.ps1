@@ -33,7 +33,7 @@ function Write-MCStateKvAtomic {
     param([hashtable]$Values,[string]$Path)
     $lines=New-Object System.Collections.Generic.List[string]
     foreach ($key in @($Values.Keys | Sort-Object)) {
-        $value=([string]$Values[$key]).Replace([char]13,' ').Replace([char]10,' ')
+        $value=([string]$Values[$key]).Replace([char]13,[char]32).Replace([char]10,[char]32)
         $lines.Add($key+'='+$value)
     }
     $text=($lines.ToArray() -join [Environment]::NewLine)+[Environment]::NewLine
@@ -266,7 +266,7 @@ for ($i=1; $i -le $count; $i++) {
 
     $key=([string]$state[$prefix+'Key']).Trim().ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($key)) { continue }
-    $parts=$key -split ':',2
+    $parts=@($key -split ':',2)
     if ($parts.Count -ne 2) { $state[$prefix+'MultiCycleReason']='invalid market key'; continue }
     $country=[string]$parts[0]
     $oneWay=Get-SFTravelSeconds -State $state -Country $country
