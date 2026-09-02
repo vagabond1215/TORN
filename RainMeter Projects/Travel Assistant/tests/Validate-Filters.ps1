@@ -132,7 +132,7 @@ if(Test-Path -LiteralPath $files.State){
 if(Test-Path -LiteralPath $files.Opportunities){
  $text=Get-Content -LiteralPath $files.Opportunities -Raw
  foreach($token in @(
-  'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Get-OpportunityNextRecurringWindow','Get-OpportunityEconomics','grossProfit','profitPerHour','elapsedSeconds','probabilityKnown',
+  'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Get-OpportunityNextRecurringWindow','Get-OpportunityEconomics','Get-OpportunityRoundTripProfitPerHour','grossProfit','profitPerHour','elapsedSeconds','probabilityKnown',
   'itemMarketFeePercent','MarketFeePercent','GrossSaleValue','MarketTaxValue','MakeValue','PurchaseCostValue','TotalCostValue','makePerHour',
   "'LEARNING'",'$availableQuantity = $stock','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",
   '$maxProjectedRows = 256',"'TripBand'",'tripBand=$tripBand','OpportunityCount'
