@@ -124,6 +124,7 @@ $shapeForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $shap
 $linearForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $shapeCycles.ToArray() -Market $oosMarket -Destination $shapeDestination -Travel $shapeTravel -NowEpoch $now -ScenarioCount 64 -TargetQuantity 100 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 55 -EnableAdaptiveGrid $false
 Assert-Equal ([string]$shapeForecast.depletionModel) 'empirical_piecewise_with_linear_fallback' 'Forecast diagnostics should identify empirical piecewise depletion when shape evidence exists.'
 Assert-Equal ([int]$shapeForecast.depletionShapeEvidenceCount) 3 'Forecast diagnostics should count shaped cycle evidence.'
+Assert-True ([double]$shapeForecast.arrivals[0].expectedAvailableQty -gt ([double]$linearForecast.arrivals[0].expectedAvailableQty+20.0)) 'Uncapped available-quantity forecast should reflect empirical depletion shape rather than only requested load.'
 Assert-Equal ([string]$linearForecast.depletionModel) 'linear_fallback' 'Forecast diagnostics should expose linear fallback when intermediate observations are absent.'
 Assert-True ([double]$shapeForecast.arrivals[0].expectedQty -gt ([double]$linearForecast.arrivals[0].expectedQty+20.0)) 'Empirical depletion shape should materially change expected arrival quantity versus the linear fallback.'
 
@@ -223,7 +224,7 @@ for($i=0;$i -lt 7;$i++){
         })
     }
 }
-$replay=Invoke-SFReplay -Cycles $replayCycles.ToArray() -Observations $replayObservations.ToArray() -ArrivalOffsetSeconds 50 -ScenarioCount 32 -RandomSeed 44
+$replay=Invoke-SFReplay -Cycles $replayCycles.ToArray() -Observations $replayObservations.ToArray() -ArrivalOffsetSeconds 200 -ScenarioCount 32 -RandomSeed 44
 foreach($row in @($replay.rows)){
     Assert-True ([long]$row.trainingLatestAvailableAt -le [long]$row.decisionAt) 'Replay training must enforce availableAt <= historical decision time.'
     Assert-True ([long]$row.trainingLatestObservationAt -le [long]$row.decisionAt) 'Replay shape training must enforce observation sourceTimestamp <= historical decision time.'
@@ -234,6 +235,9 @@ Assert-True ($replay.PSObject.Properties['decisionMetrics'] -ne $null) 'Replay s
 Assert-Equal ([string]$replay.modelVersion) 'stochastic-v1.1' 'Replay output must version the materially changed stochastic challenger.'
 Assert-True ($replay.forecastMetrics.PSObject.Properties['stochastic_v1_1'] -ne $null) 'Replay metrics must isolate stochastic-v1.1 from earlier challenger versions.'
 Assert-True (@($replay.rows | Where-Object {[int]$_.depletionShapeEvidenceCount -gt 0}).Count -gt 0) 'Replay should feed only historically available intermediate observations into empirical depletion shapes.'
+Assert-True ([int]$replay.intervalMetrics.quantityErrorScorable -gt 0) 'Replay should score available quantity when an exact retained provider snapshot exists at arrival.'
+Assert-True ([double]$replay.intervalMetrics.quantityMeanAbsoluteError -ge 0.0) 'Replay quantity MAE must be reported on exact-snapshot outcomes.'
+Assert-True (@($replay.rows | Where-Object {[bool]$_.quantityScorable}).Count -gt 0) 'Replay rows should identify exact-snapshot quantity outcomes explicitly.'
 
 Assert-True ($replay.forecastMetrics.PSObject.Properties['empirical_all_overlap'] -ne $null) 'Replay must label all-cycle coverage as an empirical overlap proxy, not exact production Safe replay.'
 Assert-True ($replay.forecastMetrics.PSObject.Properties['empirical_overlap'] -ne $null) 'Replay must label fractional coverage as an empirical overlap proxy, not exact production Best replay.'
