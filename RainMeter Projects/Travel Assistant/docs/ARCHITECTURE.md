@@ -535,8 +535,13 @@ stock failure is accepted only when the later cycle durably preserves
 two retained cycle rows alone is never treated as proof of continuous OOS.
 
 Unresolved predictions remain pending for at most seven days and then become
-`expired_unscorable`; they never enter calibration aggregates. Scored records
-increment model-wide, evidence-quality and market-specific Brier/log-loss,
-reliability buckets, and exact-snapshot quantity MAE/RMSE. Recent scored/expired
-records are bounded for audit while aggregate statistics are retained. No
+`expired_unscorable`; they never enter calibration aggregates. Backpressure also
+bounds state growth: by default no new row is frozen when that model/market already
+has 24 unresolved predictions or when total pending reaches 4,096. Capacity
+pressure never deletes, relabels, or prematurely expires an existing prediction.
+
+Scored records increment model-wide, evidence-quality and market-specific
+Brier/log-loss, reliability buckets, and exact-snapshot quantity MAE/RMSE. Recent
+scored/expired records are bounded for audit while aggregate statistics are
+retained. Brier uses the raw probability; only log loss is epsilon-clipped. No
 calibration mapping is applied back to forecast probabilities yet.
