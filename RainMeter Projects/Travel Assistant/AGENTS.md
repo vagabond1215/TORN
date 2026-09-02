@@ -87,6 +87,7 @@ Ordering is selectable and persistent only for:
 - `PROFIT/HR`: after-tax net trip profit divided by configured round-trip flight hours; waiting/window time is excluded.
 - Alphabetical Name ordering is internal fallback only when the visible rows have neither usable timing nor usable profit inputs.
 - Hit likelihood is a separate displayed metric; do not fold it into a hidden sort score.
+- Multi-cycle fallback hit likelihood is `pAnyStock` at the earliest feasible arrival. Full-load `pTargetQty`, long-run occupancy `E[in-stock]/E[full cycle]`, flight/cycle ratio, and phase-dispersion diagnostics belong in tooltip/diagnostic context; they do not alter sort ranking.
 - There is no user-facing `NAME`, `OPTIMAL`, Chance, or shortest-Time sort.
 - The three main sort/filter controls use equal-width 104px buttons with bold 11 pt labels so UPCOMING / PROFIT / PROFIT/HR remain legible without changing the header height.
 - Sort controls reorder already-projected rows immediately in Lua; persistence is a tiny local write and must not wait on a full opportunity recompute.
@@ -116,6 +117,7 @@ Fresh current stock is useful even before enough cycles exist to estimate arriva
 - Never fabricate a percentage for an untrained current market.
 - `LEARNING` likelihood must not erase the row or collapse the entire surface.
 - Known arrival probabilities remain displayed as percentages.
+- A restricted production multi-cycle fallback may show `Chance to hit: NN%` when the earliest feasible arrival spans at least two weighted mean full cycles, at least three usable completed joint cycles exist, and legacy current-cycle/Safe/Best guidance cannot produce an actionable result. It reuses stochastic-v1.1 joint-cycle renewal simulation at exactly one earliest-feasible arrival; it is not a second forecasting model and must never be labeled Safe/Guaranteed.
 - Sold-out/future opportunities still require completed sellout→restock + availability evidence before a future window is shown.
 - If already at a recognized destination, fresh current stock remains direct current-state evidence.
 
@@ -356,6 +358,7 @@ CurrentCapacityRefresh
 CycleAnchorReconciler
 OpportunityState        # primary opportunity projection; dot-sources OptimalRoute helpers
 WindowPlan
+MultiCycleChanceBridge  # restricted pAnyStock fallback; no departure-grid optimization
 PriceVariationRefiner
 FilterState
 immutable UI generation + last-update manifest
@@ -398,6 +401,7 @@ ResaleQueue              # <= 1 market request
 ## Performance budget
 
 - steady-state one-second Rainmeter loop: local only, except a bounded on-demand static item-art cache fill for newly visible uncached IDs;
+- `MultiCycleChanceBridge.ps1` is local-only/network-free and may reuse stochastic-v1.1 only for a single earliest-feasible arrival with adaptive departure search disabled; it must not move the full 12-hour stochastic search onto the pre-publication critical path.
 - immediate row sorting: local Lua only;
 - inline graph renderer: local/on demand, roughly no more often than once/minute while expanded;
 - serialized updater: roughly once/minute;
