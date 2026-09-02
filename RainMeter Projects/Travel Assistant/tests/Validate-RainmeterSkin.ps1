@@ -63,6 +63,7 @@ foreach ($i in 1..8) {
     $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $leaveBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Leave\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailEachLabelBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachLabel\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $grossBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -81,10 +82,11 @@ foreach ($i in 1..8) {
     if ($detailBody -notmatch '(?im)^Text=\$\s*$' -or $detailBody -notmatch ('ToggleCardDetails\('+[string]$i+'\)')) { Fail "Opportunity $i money button must control the top economics strip." }
     if ($graphButtonBody -notmatch '(?im)^Meter=Shape\s*$' -or $graphButtonBody -notmatch '(?im)^GraphExpanded=0\s*$') { Fail "Opportunity $i graph control must be a chart Shape button." }
     foreach($token in @('X=519','W=24','H=23','Shape=Rectangle 0,0,24,23 | Fill Color 0,0,0,1 | StrokeWidth 0','Stroke Color #ToggleIdle#','Shape2=Line 7,16,7,7','Shape3=Line 7,16,17,16','Shape4=Line 8,14,11,11','Shape5=Line 11,11,13,13','Shape6=Line 13,13,17,8')){if(-not$graphButtonBody.Contains($token)){Fail "Opportunity $i chart end-cap control missing '$token'."}}
-    if ($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=11\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i canonical Name meter must stay hidden behind the combined first line." }
-    if ($priceBody -notmatch '(?im)^X=123\s*$' -or $priceBody -notmatch '(?im)^W=265\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$') { Fail "Opportunity $i combined item/unit/full-load-cost line must start after the 48px item-art cell at x=123, width 265." }
+    if ($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=12\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i canonical Name meter must stay hidden behind the combined first line." }
+    if ($priceBody -notmatch '(?im)^X=123\s*$' -or $priceBody -notmatch '(?im)^W=265\s*$' -or $priceBody -notmatch '(?im)^FontSize=12\s*$') { Fail "Opportunity $i combined item/unit/full-load-cost line must start after the 48px item-art cell at x=123, width 265." }
     if ($takeBody -notmatch '(?im)^X=123\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i retired Take surface must remain inert." }
-    if ($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=15\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i signed total net must span both text lines and align right-center at x=504." }
+    if ($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=16\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i signed total net must span both text lines and align right-center at x=504." }
+    if ($leaveBody -notmatch '(?im)^FontSize=9\s*$') { Fail "Opportunity $i visible window/guidance line must use 9pt typography." }
     if ($detailEachLabelBody -notmatch '(?im)^X=29\s*$' -or $detailEachLabelBody -notmatch '(?im)^W=40\s*$' -or $detailEachLabelBody -notmatch '(?im)^H=32\s*$' -or $detailEachLabelBody -notmatch '(?im)^StringAlign=CenterCenter\s*$' -or $detailEachLabelBody -notmatch '(?im)^SolidColor=#Border#\s*$' -or $detailEachLabelBody -notmatch '(?im)^Text=Each\s*$') { Fail "Opportunity $i Each label must be a vertically centered border-colored block." }
     if ($grossBody -notmatch '(?im)^X=54\s*$' -or $grossBody -notmatch '(?im)^W=112\s*$' -or $grossBody -notmatch '(?im)^H=16\s*$' -or $grossBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each MV must be left-aligned on the top row." }
     if ($detailEachNetBody -notmatch '(?im)^X=270\s*$' -or $detailEachNetBody -notmatch '(?im)^W=98\s*$' -or $detailEachNetBody -notmatch '(?im)^H=16\s*$' -or $detailEachNetBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each Net must be right-aligned on the top row." }
@@ -166,6 +168,11 @@ foreach($forbiddenDynamicTooltip in @(
 }
 
 if($ini -notmatch '(?m)^Card=0,0,0,255\s*$'){Fail 'Opportunity card background must be pure black.'}
+if($ini -notmatch '(?m)^Accent=126,190,73,255\s*$'){Fail 'Main UI accent must use Torn lime.'}
+foreach($iconName in @('MeterFilterIcon','MeterSettingsIcon')){
+    $iconBody=[regex]::Match($ini,'(?ms)^\['+$iconName+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    if($iconBody -notmatch '(?im)^Greyscale=1\s*$' -or $iconBody -notmatch '(?im)^ImageTint=#TornLime#\s*$'){Fail "$iconName must render with the Torn-lime icon tint."}
+}
 if($ini -notmatch '(?m)^Control=32,32,32,248\s*$'){Fail 'Sort-control background must remain neutral gray.'}
 $sortProfit=[regex]::Match($ini,'(?ms)^\[MeterSortGross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if($sortProfit -notmatch '(?im)^Text=PROFIT\s*$'){Fail 'Displayed-profit sort must be labeled PROFIT.'}

@@ -1,6 +1,8 @@
 param(
     [ValidateSet('Update','CycleTravelMode')]
-    [string]$Action = 'Update'
+    [string]$Action = 'Update',
+    [ValidateRange(0,300)]
+    [int]$MutexWaitSeconds = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,7 +22,7 @@ try {
     # that can be delayed by OneDrive/AV/filter drivers. All real update work belongs to
     # the detached RunUpdate worker, whose named mutex prevents overlapping workers.
     # Return rather than exit so popup helpers can reuse this launcher safely.
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action {1}' -f $runner,$Action
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action {1} -MutexWaitSeconds {2}' -f $runner,$Action,$MutexWaitSeconds
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $pwsh.Source
     $psi.Arguments = $arguments

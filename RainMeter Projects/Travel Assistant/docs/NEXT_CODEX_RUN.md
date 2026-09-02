@@ -228,7 +228,7 @@ Rank the next optimization target by `AvgCpuMs` and `P95CpuMs`, not wall time al
 - Tax/trader rate options are 0%, 1%, 2%, 3%, 4%, and 5%.
 - Tax is calculated exactly once as `floor(gross sale × rate)` and is subtracted only for net profit.
 - `PROFIT/HR` uses after-tax net profit.
-- Expanded economics are split into per-item and total Gross / `<rate>% Tax` / Net halves; the old Per Hour field is no longer shown there.
+- Expanded economics use the current Each/Total label-block layout: MV + Net on the first row, Tax on the conditional second row. The displayed rate and all Net calculations must come from the saved `itemMarketFeePercent`; Settings saves queue a 120-second mutex-waiting refresh so the new rate is republished even if a normal poll is already running.
 
 ## Target-Windows acceptance for the new redesign
 
@@ -275,7 +275,7 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active Torn-lime fills are inset so the card border/T separators remain visible.
 7. Expanded economics use gray vertical `Each` / `Total` label blocks. MV is top-row left, Net is top-row right, and Tax is second-row left. With tax >0 the bar is 34px; at 0% Tax the second row disappears and the bar contracts to 18px. No `|` characters appear in the expanded strip.
 8. Flags act as left end caps. The 48px square immediately to the right contains 44px Torn item art with a 2px inset; item text begins after that square. Card fill is pure black while gray borders/separators remain visible.
-10. Inline graphs are black with a lime stock line, cobalt in-stock/restock markers, and pumpkin out-of-stock/sellout markers. The window/guidance line sits close to the card's bottom border and the Updated footer remains close beneath the final card.
+10. Inline graphs are black with a lime stock line, cobalt in-stock/restock markers, and pumpkin out-of-stock/sellout markers. Main sort/filter/settings accents are Torn lime. Card item/cost text is 12 pt, total profit is 16 pt, and the window/guidance line is 9 pt and sits close to the card's bottom border; the Updated footer remains close beneath the final card.
 9. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
 11. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
 12. Global country All/None and each band All/None work.

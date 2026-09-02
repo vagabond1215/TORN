@@ -294,7 +294,7 @@ local function projectedTripBands(data)
 end
 
 local function applyTripColors(bands)
-    local active = '82,174,255,255'
+    local active = '126,190,73,255'
     local inactive = '150,150,150,255'
     setVariable('TripShortColor', bands.short and active or inactive)
     setVariable('TripMediumColor', bands.medium and active or inactive)
@@ -308,7 +308,7 @@ local function updateFilters(data, bands)
 end
 
 local function applySortColors(mode)
-    local active = '82,174,255,255'
+    local active = '126,190,73,255'
     local inactive = '150,150,150,255'
     setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
     setVariable('SortGrossColor', mode == 'gross' and active or inactive)

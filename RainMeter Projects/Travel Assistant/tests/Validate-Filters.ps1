@@ -63,6 +63,7 @@ if(Test-Path -LiteralPath $files.Preferences){
 
 if(Test-Path -LiteralPath $files.UnifiedPopup){
  $text=Get-Content -LiteralPath $files.UnifiedPopup -Raw
+ if(-not$text.Contains('$ColorAccent=[System.Drawing.Color]::FromArgb(126,190,73)')){Fail 'Unified filter popup accent must use Torn lime.'}
  foreach($token in @(
   'COUNTRIES','CATEGORIES','ITEMS',"@('short','medium','long')","short='S';medium='M';long='L'",
   'Get-CountryFlagImage','@Resources\Images\Flags','CheckedListBox','TextChanged','Set-BandSelection','Set-AllCountries','Set-AllCategories',
@@ -104,8 +105,9 @@ if(Test-Path -LiteralPath $files.PopupHost){
 
 if(Test-Path -LiteralPath $files.Settings){
  $text=Get-Content -LiteralPath $files.Settings -Raw
- foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1','& $UpdateLauncher -Action Update',"& `$FilterLauncher -Filter 'Ignore'")){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1','& $UpdateLauncher -Action Update -MutexWaitSeconds 120',"& `$FilterLauncher -Filter 'Ignore'")){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
  foreach($token in @('Tax / trader rate','itemMarketFeePercent','foreach($rate in 0..5)','marketTax.SelectedIndex')){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ if(-not$text.Contains('$save.BackColor=[System.Drawing.Color]::FromArgb(126,190,73)')){Fail 'OpenOptimizerSettings.ps1 Save accent must use Torn lime.'}
  foreach($retired in @('Use 95% MV profit calculation','use95PercentMarketValue')){if($text.Contains($retired)){Fail "OpenOptimizerSettings.ps1 retains retired MV-basis token '$retired'."}}
  foreach($retiredText in @('OPPORTUNITY SETTINGS','Main sort choices are UPCOMING')){if($text.Contains($retiredText)){Fail "OpenOptimizerSettings.ps1 retains unnecessary settings copy '$retiredText'."}}
  if($text.Contains("Join-Path `$PSScriptRoot 'RunUpdate.ps1'")){Fail 'Optimizer Settings must not bypass LaunchUpdate.ps1.'}

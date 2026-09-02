@@ -101,7 +101,7 @@ $profile.Add_Click({
 })
 
 $save=New-Object System.Windows.Forms.Button
-$save.Text='Save'; $save.Location=New-Object System.Drawing.Point(326,312); $save.Size=New-Object System.Drawing.Size(78,30); $save.BackColor=[System.Drawing.Color]::FromArgb(82,174,255); $save.ForeColor=[System.Drawing.Color]::Black; $form.Controls.Add($save)
+$save.Text='Save'; $save.Location=New-Object System.Drawing.Point(326,312); $save.Size=New-Object System.Drawing.Size(78,30); $save.BackColor=[System.Drawing.Color]::FromArgb(126,190,73); $save.ForeColor=[System.Drawing.Color]::Black; $form.Controls.Add($save)
 $cancel=New-Object System.Windows.Forms.Button
 $cancel.Text='Cancel'; $cancel.Location=New-Object System.Drawing.Point(412,312); $cancel.Size=New-Object System.Drawing.Size(78,30); $form.Controls.Add($cancel)
 $cancel.Add_Click({ $form.Close() })
@@ -118,7 +118,9 @@ $save.Add_Click({
         Set-FilterProperty $current 'maxNerveLoss' ([int]$nerveMax.Value)
         [void](Save-UiPreferences $current)
         if (-not (Test-Path -LiteralPath $UpdateLauncher)) { throw 'LaunchUpdate.ps1 is missing.' }
-        & $UpdateLauncher -Action Update
+        # Queue this committed settings refresh behind any active poll so the
+        # selected tax rate always reaches the published opportunity state.
+        & $UpdateLauncher -Action Update -MutexWaitSeconds 120
         Clear-TravelAssistantLatestError -Component $logComponent
         $form.Close()
     } catch {

@@ -4,6 +4,8 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $launcherPath = Join-Path $ProjectRoot '@Resources\Scripts\LaunchUpdate.ps1'
+$settingsPopupPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
+$filterPreferencesPath = Join-Path $ProjectRoot '@Resources\Scripts\FilterPreferences.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
@@ -81,7 +83,7 @@ if (-not (Test-Path -LiteralPath $launcherPath)) {
     [void][System.Management.Automation.Language.Parser]::ParseFile($launcherPath,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail ('LaunchUpdate.ps1 parse error: ' + $parseError.Message) }
     $launcher = Get-Content -LiteralPath $launcherPath -Raw
-    foreach ($token in @('RunUpdate.ps1','Get-Command pwsh.exe','System.Diagnostics.ProcessStartInfo','[System.Diagnostics.Process]::Start($psi)','UseShellExecute = $false','CreateNoWindow = $true','-Action {1}','return')) {
+    foreach ($token in @('RunUpdate.ps1','Get-Command pwsh.exe','System.Diagnostics.ProcessStartInfo','[System.Diagnostics.Process]::Start($psi)','UseShellExecute = $false','CreateNoWindow = $true','[ValidateRange(0,300)]','[int]$MutexWaitSeconds = 0','-Action {1} -MutexWaitSeconds {2}','return')) {
         if (-not $launcher.Contains($token)) { Fail "LaunchUpdate.ps1 missing '$token'." }
     }
     if ($launcher.Contains('exit 0')) {
@@ -89,6 +91,28 @@ if (-not (Test-Path -LiteralPath $launcherPath)) {
     }
     foreach ($forbidden in @('FilterPreferences.ps1','Read-UiPreferences','Save-UiPreferences','Write-TravelAssistantAtomicText','Invoke-RestMethod')) {
         if ($launcher.Contains($forbidden)) { Fail "LaunchUpdate.ps1 must remain spawn-only and must not contain '$forbidden'." }
+    }
+}
+
+if (-not (Test-Path -LiteralPath $settingsPopupPath)) {
+    Fail 'Missing OpenOptimizerSettings.ps1.'
+} else {
+    $settingsPopup = Get-Content -LiteralPath $settingsPopupPath -Raw
+    foreach ($token in @(
+        "Set-FilterProperty $current 'itemMarketFeePercent' $marketTaxPercent",
+        '[void](Save-UiPreferences $current)',
+        '& $UpdateLauncher -Action Update -MutexWaitSeconds 120'
+    )) {
+        if (-not $settingsPopup.Contains($token)) { Fail "Settings tax persistence/refresh contract missing '$token'." }
+    }
+}
+
+if (-not (Test-Path -LiteralPath $filterPreferencesPath)) {
+    Fail 'Missing FilterPreferences.ps1.'
+} else {
+    $filterPreferences = Get-Content -LiteralPath $filterPreferencesPath -Raw
+    if (-not $filterPreferences.Contains('-Action Update -MutexWaitSeconds 120')) {
+        Fail 'Preference-triggered projection refreshes must queue behind an active updater rather than silently losing the refresh.'
     }
 }
 
@@ -101,5 +125,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Rainmeter updater runtime contract passed.' -ForegroundColor Green
-Write-Host 'MeasureUpdate uses a reusable spawn-only PS7 launcher; failures wait for the normal 60-second poll instead of an accelerated retry.' -ForegroundColor Green
+Write-Host 'MeasureUpdate uses a reusable spawn-only PS7 launcher; settings/filter saves queue a 120-second mutex-waiting refresh so committed preference changes cannot be stranded behind an active poll.' -ForegroundColor Green
 exit 0

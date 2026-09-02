@@ -27,9 +27,9 @@ Up to eight opportunities may be shown.
 - No visible row/place numbers.
 - Destination is represented by a flag on the left.
 - The visible left line is one continuous **Item | foreign unit cost | full-load total cost** text run, so the total cost follows the unit cost directly instead of starting in a distant fixed column. The total cost is exact and muted; no variable-price reserve is added.
-- The right side is the signed, after-tax **total net profit**, rendered larger and centered vertically across the two text lines. Cards use a pure black background while retaining the existing gray outer border and separators.
+- The right side is the signed, after-tax **total net profit**, rendered at 16 pt and centered vertically across the two text lines. The item / unit cost / full-load cost line is 12 pt and the window/guidance line is 9 pt. Cards use a pure black background while retaining the existing gray outer border and separators.
 - The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap. Active fills are inset so they do not paint over the border or T separators.
-- Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text.
+- Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text. Active sort text and the filter/settings icons use the same Torn-lime accent.
 - The destination flag behaves as the card's left end cap and now extends behind the top/bottom border, removing the former 1px bands. Its visible left corners are alpha-masked to the card radius, with the bottom-left flag corner becoming square when the graph expands below it. A border-only overlay keeps the actual card edge visible above the flag.
 - The space between the flag and item text is a 48×48 square matching the card's interior height. Torn's transparent item art is enlarged to 44×44 with a 2px inset in that square and cached from `https://www.torn.com/images/items/<itemId>/large.png` on demand.
 - The window/guidance text is lowered close to the bottom border.
@@ -86,7 +86,7 @@ profit/hr = make / total elapsed hours
 
 Gross profit intentionally excludes travel cost. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
 
-Settings control a 0%, 1%, 2%, 3%, 4%, or 5% sale-tax / trader rate plus profitable-only filtering. The declared MV itself is never discounted by this rate.
+Settings control a 0%, 1%, 2%, 3%, 4%, or 5% sale-tax / trader rate plus profitable-only filtering. The declared MV itself is never discounted by this rate. Saving Settings queues a post-save projection refresh behind any active updater, ensuring the published Tax and Net values are recalculated from the newly selected rate rather than remaining on a stale rate.
 
 ## Graphs
 

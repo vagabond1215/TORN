@@ -68,22 +68,24 @@ if($errors.Count -eq 0){
         $cardBorder=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'CardBorder\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if(-not$cardBorder.Contains('Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#')){Fail "Row $i card border overlay is missing."}
         $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=11\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
-            Fail "Row $i Name meter must remain a hidden canonical lookup surface at the new 11pt typography."
+        if($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=12\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
+            Fail "Row $i Name meter must remain a hidden canonical lookup surface at the new 12pt typography."
         }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=123\s*$' -or $priceBody -notmatch '(?im)^W=265\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
+        if($priceBody -notmatch '(?im)^X=123\s*$' -or $priceBody -notmatch '(?im)^W=265\s*$' -or $priceBody -notmatch '(?im)^FontSize=12\s*$'){
             Fail "Row $i combined item/unit/full-load-cost line must start after the 48px item-art cell at x=123 with a 265px width."
         }
         $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $leaveBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Leave\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($takeBody -notmatch '(?im)^X=123\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
             Fail "Row $i retired Take surface must remain inert; full-load cost belongs in the Price text run."
         }
         $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=15\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$'){
-            Fail "Row $i total net must be 15pt, vertically centered, and right-aligned at x=504."
+        if($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=16\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$'){
+            Fail "Row $i total net must be 16pt, vertically centered, and right-aligned at x=504."
         }
+        if($leaveBody -notmatch '(?im)^FontSize=9\s*$'){Fail "Row $i window/guidance line must use 9pt typography."}
         foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody)){
             if($fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Row $i first-line typography must use Nirmala UI Semilight."}
         }
@@ -141,7 +143,7 @@ if($errors.Count -eq 0){
         "'GraphExpanded', expanded and '1' or '0'",
         "'Rectangle 0,0,24,23 | Fill Color '..fill..' | StrokeWidth 0'",
         "SKIN:Bang('!SetOption', name, 'Text', '$')",
-        "'126,190,73,255'","'38,38,38,255'","'190,190,190,255'",
+        "'126,190,73,255'","local active = '126,190,73,255'","'38,38,38,255'","'190,190,190,255'",
         'local function collapseCardDetails()',
         'local function syncExpandedRows(data, count)',
         'function ToggleCardDetails(index)',
@@ -303,7 +305,7 @@ if($errors.Count -eq 0){
         }
     }
 
-    foreach($paletteToken in @('Panel=17,17,17,248','Card=0,0,0,255','Control=32,32,32,248','Border=64,64,64,255','Muted=150,150,150,255','TornLime=126,190,73,255','ToggleDark=38,38,38,255','ToggleIdle=190,190,190,255')){
+    foreach($paletteToken in @('Panel=17,17,17,248','Card=0,0,0,255','Control=32,32,32,248','Border=64,64,64,255','Muted=150,150,150,255','TornLime=126,190,73,255','Accent=126,190,73,255','SortUpcomingColor=126,190,73,255','Greyscale=1','ImageTint=#TornLime#','ToggleDark=38,38,38,255','ToggleIdle=190,190,190,255')){
         if(-not$ini.Contains($paletteToken)){Fail "Neutral main-skin palette missing '$paletteToken'."}
     }
 }

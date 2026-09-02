@@ -68,9 +68,9 @@ Card rules:
 - The hidden canonical Name meter remains item-name-only for downstream row lookup.
 - The left first-line content is one continuous text run: `Item | foreign unit cost | full-load cost`. There is no fixed tab/column gap between the two prices. Full-load cost is always exact `unit cost x quantity`; price variation never adds a cash buffer.
 - The full-load cost is muted light gray.
-- Total after-tax net profit occupies the right side of both text lines, is 4 pt larger than the old card value, vertically centers on the flag, and is right-aligned. Positive values use `+` and green; negative values use `-` and red.
+- Total after-tax net profit occupies the right side of both text lines at 16 pt, vertically centers on the flag, and is right-aligned. The combined item / unit cost / full-load cost line is 12 pt; window/guidance text is 9 pt. Positive values use `+` and green; negative values use `-` and red.
 - The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap. Their active fill is inset one pixel so the card border and T separators always remain visible above/around the highlight.
-- Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text.
+- Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text. Active sort text plus the main filter/settings icons use Torn lime; the graph's cobalt event ticks are intentionally unchanged.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity.
 - Inline graph rendering uses a black background and Torn-lime stock trace. Cobalt-blue restock/in-stock and pumpkin-orange sellout/out-of-stock transitions render as short ticks in a dedicated gutter below the X axis, not across the active plot.
 - Expanded economics use equal Each/Total halves with a vertical 40px label block at the left of each half. The label block is filled with `#Border#` and centers `Each` / `Total` vertically. On the top row, MV is left-aligned and signed Net is right-aligned. When tax is nonzero, a second row shows `<rate>% Tax:$...` left-aligned. At 0% tax the Tax meters are hidden and the expansion contracts from 34px to 18px; the label blocks contract with it. No pipe separators are used inside the economics strip.
@@ -384,7 +384,7 @@ ResaleQueue              # <= 1 market request
 - Stale compact error markers may clear after successful component runs.
 - Popups launch through hidden STA PowerShell; no visible console should persist.
 - Popup launchers are spawn-only and reusable: after spawning they `return` rather than `exit`, so nested popup calls do not terminate the parent Settings host.
-- Settings/filter saves that need a projection refresh route through `LaunchUpdate.ps1`; do not start `RunUpdate.ps1` directly under Windows PowerShell 5.1.
+- Settings/filter saves that need a projection refresh route through `LaunchUpdate.ps1`; do not start `RunUpdate.ps1` directly under Windows PowerShell 5.1. Committed preference saves queue a mutex-waiting refresh (`-MutexWaitSeconds 120`) so a concurrent poll cannot strand a new tax/trader rate behind stale published economics.
 - Runtime logs/history/preferences/generated graph specs remain ignored/local.
 
 ## Secrets / local files

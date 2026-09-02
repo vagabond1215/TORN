@@ -18,7 +18,7 @@ $ColorInput=[System.Drawing.Color]::FromArgb(20,23,27)
 $ColorBorder=[System.Drawing.Color]::FromArgb(58,64,73)
 $ColorText=[System.Drawing.Color]::FromArgb(222,226,232)
 $ColorMuted=[System.Drawing.Color]::FromArgb(145,152,164)
-$ColorAccent=[System.Drawing.Color]::FromArgb(82,174,255)
+$ColorAccent=[System.Drawing.Color]::FromArgb(126,190,73)
 $ColorSelected=[System.Drawing.Color]::FromArgb(37,46,55)
 
 function Read-PopupJson([string]$Path) {

@@ -253,7 +253,7 @@ function Start-FilterProjectionRefresh {
     if (-not (Test-Path -LiteralPath $launcher)) { throw 'LaunchUpdate.ps1 is required to republish filter changes.' }
     $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
     if ($null -eq $pwsh) { throw 'pwsh.exe is required to republish filter changes.' }
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Update' -f $launcher
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Update -MutexWaitSeconds 120' -f $launcher
     Start-Process -FilePath $pwsh.Source -ArgumentList $arguments -WindowStyle Hidden | Out-Null
 }
 
