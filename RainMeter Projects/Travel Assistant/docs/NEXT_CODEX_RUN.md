@@ -256,6 +256,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-CardPresenter.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-OpportunityStateTests.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Validate-StatePublicationArchitecture.ps1
 ```
 
 If those pass, run the full focused suite:
