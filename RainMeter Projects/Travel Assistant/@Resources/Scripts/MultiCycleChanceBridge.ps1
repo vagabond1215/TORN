@@ -181,11 +181,16 @@ function Get-MCMultiCycleChance {
     $evidence=@(Select-SFJointCycleEvidence -Cycles $Cycles -AsOf $NowEpoch -Observations $Observations)
     $horizon=[long](Get-SFProperty $Travel 'arrivalHorizonSeconds')
     $timing=Get-MCWeightedTimingDiagnostics -Evidence $evidence -ArrivalHorizonSeconds $horizon
+    $currentStock=[long](Get-SFProperty $Market 'lastStock')
+    $selloutAnchor=[long](Get-SFProperty $Destination 'lastSellOutUpperBoundAt')
+    if ($selloutAnchor -le 0) { $selloutAnchor=[long](Get-SFProperty $Destination 'lastSellOutAt') }
+    $phaseAnchorKnown=($currentStock -gt 0 -or $selloutAnchor -gt 0)
     $eligible=(
         [bool](Get-SFProperty $Travel 'feasible') -and
         [int]$timing.sampleCount -ge [Math]::Max(3,$MinimumSamples) -and
         [double]$timing.arrivalCycleRatio -ge $MinimumRatio -and
-        @((Get-SFProperty $Travel 'candidates')).Count -eq 1
+        @((Get-SFProperty $Travel 'candidates')).Count -eq 1 -and
+        $phaseAnchorKnown
     )
 
     if (-not $eligible) {
@@ -194,6 +199,7 @@ function Get-MCMultiCycleChance {
             reason=$(if(-not [bool](Get-SFProperty $Travel 'feasible')){[string](Get-SFProperty $Travel 'reason')}
                 elseif([int]$timing.sampleCount -lt [Math]::Max(3,$MinimumSamples)){'fewer than the required usable completed cycles'}
                 elseif([double]$timing.arrivalCycleRatio -lt $MinimumRatio){'arrival horizon does not span enough empirical cycles'}
+                elseif(-not $phaseAnchorKnown){'current stock phase has no observed positive state or sellout anchor'}
                 else{'single-arrival candidate is unavailable'})
             timing=$timing
             forecast=$null
