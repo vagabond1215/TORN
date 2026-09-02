@@ -26,8 +26,8 @@ Up to eight opportunities may be shown.
 
 - No visible row/place numbers.
 - Destination is represented by a flag on the left.
-- The visible left line is one continuous **Item | foreign unit cost | full-load total cost** text run, so the total cost follows the unit cost directly instead of starting in a distant fixed column. The total cost is exact and muted; no variable-price reserve is added.
-- The right side is the signed, after-tax **total net profit**, rendered at 16 pt and centered vertically across the two text lines. The item / unit cost / full-load cost line is 12 pt and the window/guidance line is 9 pt. Cards use a pure black background while retaining the existing gray outer border and separators.
+- The visible left line is now the **item name only**. Foreign unit price and exact full-load purchase price live in the expanded economics strip so long values cannot crowd or truncate the primary card line.
+- The right side is the selected primary profitability metric, rendered at 14 pt and centered vertically across both text lines. `UPCOMING` and `PROFIT` show signed after-tax total Net; `PROFIT/HR` shows signed after-tax total Net per round-trip flight hour. The item line remains 12 pt and the window/guidance line 9 pt.
 - The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap. Active fills are inset so they do not paint over the border or T separators.
 - Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text. Active sort text and the filter/settings icons use the same Torn-lime accent.
 - The destination flag behaves as the card's left end cap and now extends behind the top/bottom border, removing the former 1px bands. Its visible left corners are alpha-masked to the card radius, with the bottom-left flag corner becoming square when the graph expands below it. A border-only overlay keeps the actual card edge visible above the flag.
@@ -40,11 +40,11 @@ Up to eight opportunities may be shown.
 Expanded economics are:
 
 ```text
-[Each]  MV:$...          Net:+$...   || [Total]  MV:$...          Net:+$...
+[Each]  MV:$...          $/hr:+$...  || [Total]  MV:$...          $/hr:+$...
         5% Tax:$...                    5% Tax:$...
 ```
 
-`Each` and `Total` are separate vertical label blocks filled with the card-border gray and centered vertically. MV is left-aligned on the top row and Net is right-aligned on that same row. The second row keeps Tax on the left when the saved rate is nonzero and always shows `$/hr` on the right. That rate is after-tax Each/Total net profit divided by round-trip flight time (`one-way flight seconds x 2`), deliberately excluding opportunity wait/window time. The expansion therefore remains 34px tall even at **0% tax**; only the Tax text disappears. The value text baselines are shifted 1 px upward for optical centering, and there are no pipe characters inside the expanded economics strip.
+`Each` and `Total` are separate vertical label blocks filled with the card-border gray and centered vertically. MV stays top-left. The top-right cell shows the profitability metric **not** shown as the large primary value: with `UPCOMING` / `PROFIT`, it is round-trip flight `$/hr`; with `PROFIT/HR`, it becomes signed Net. The lower-left cells show foreign unit **Price** and exact full-load **Price** respectively, while Tax moves to the lower-right cells and remains hidden at 0%. The strip stays 34px tall. `$/hr` is after-tax Each/Total net divided by `2 x` configured one-way flight seconds and excludes window/wait time.
 
 ## Sort modes
 
@@ -52,7 +52,7 @@ Selectable sorts are:
 
 - **UPCOMING** — earliest current/modeled stock window first.
 - **PROFIT** — highest displayed after-tax total Net first. Positive profits always rank above negatives; negative values are compared as signed numbers rather than by magnitude.
-- **PROFIT/HR** — after-tax net trip profit divided by total elapsed hours.
+- **PROFIT/HR** — after-tax net trip profit divided by configured round-trip flight hours (`2 x` one-way flight time); window/wait time is excluded.
 
 Alphabetical **Name** ordering is not selectable. It is used only as an internal fallback when the visible rows have neither usable timing nor usable profit inputs.
 
@@ -81,7 +81,7 @@ purchase cost = foreign price × quantity
 gross profit = gross sale - purchase cost
 tax = floor(gross sale × selected 0%..5% rate)
 make = gross profit - tax
-profit/hr = make / total elapsed hours
+profit/hr = make / round-trip flight hours
 ```
 
 `Full-load cost` is always exact `foreign unit cost × quantity`. Historical price variation remains useful evidence but no longer adds any automatic purchase-cash buffer.
