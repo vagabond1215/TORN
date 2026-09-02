@@ -114,7 +114,8 @@ if($errors.Count -eq 0){
         "'DetailToggle', 'Y', tostring(y+13+bodyOffset)",
         "'Make', 'Y', tostring(y+25+bodyOffset)","'Graph', 'Y', tostring(y+25+bodyOffset)",
         "panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra",
-        "if i == expandedDetailRow then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end",
+        "SKIN:Bang('!ShowMeter', p .. 'DetailTotal')",
+        "SKIN:Bang('!HideMeter', p .. 'DetailTotal')",
         "SKIN:Bang('!HideMeter', p .. 'Name')",
         "SKIN:Bang('!HideMeter', p .. 'Window')",
         "SKIN:Bang('!HideMeter', p .. 'Chance')"
