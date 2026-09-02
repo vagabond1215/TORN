@@ -39,6 +39,11 @@ function Get-SFReplayLabel {
 
 function Get-SFReplayBaselineProbabilities {
     param([object[]]$Training,[long]$ArrivalAge)
+    # These are deliberately named empirical overlap baselines. They are not a
+    # historical execution of the production WindowPlan/WindowPlanRefiner state
+    # machine (which also applies regime filtering, chronology and live-state
+    # handling). Keeping the names explicit prevents calibration reports from
+    # overstating the comparison as exact legacy Safe/Best replay.
     $delays=New-Object System.Collections.Generic.List[long]
     $available=New-Object System.Collections.Generic.List[long]
     $hits=0
@@ -57,8 +62,8 @@ function Get-SFReplayBaselineProbabilities {
     $medianAvailable=[long](@($available.ToArray() | Sort-Object)[[int][Math]::Floor(($available.Count-1)/2.0)])
     $empirical=$hits/[double]$delays.Count
     return [ordered]@{
-        current_safe=$(if($hits -eq $delays.Count){1.0}else{0.0})
-        current_best=$empirical
+        empirical_all_overlap=$(if($hits -eq $delays.Count){1.0}else{0.0})
+        empirical_overlap=$empirical
         mean_cycle=$(if($ArrivalAge -ge $meanDelay -and $ArrivalAge -lt ($meanDelay+$meanAvailable)){1.0}else{0.0})
         median_cycle=$(if($ArrivalAge -ge $medianDelay -and $ArrivalAge -lt ($medianDelay+$medianAvailable)){1.0}else{0.0})
         expected_restock_minus_flight=$(if($ArrivalAge -ge $meanDelay -and $ArrivalAge -lt ($meanDelay+$meanAvailable)){1.0}else{0.0})
@@ -125,7 +130,7 @@ function Invoke-SFReplay {
             $label=Get-SFReplayLabel -Cycle $target -ArrivalAt $arrivalAt
             $baselines=Get-SFReplayBaselineProbabilities -Training @($selected | ForEach-Object {$_.cycle}) -ArrivalAge $ArrivalOffsetSeconds
             $predictions=[pscustomobject]@{
-                current_safe=[double]$baselines.current_safe; current_best=[double]$baselines.current_best
+                empirical_all_overlap=[double]$baselines.empirical_all_overlap; empirical_overlap=[double]$baselines.empirical_overlap
                 mean_cycle=[double]$baselines.mean_cycle; median_cycle=[double]$baselines.median_cycle
                 expected_restock_minus_flight=[double]$baselines.expected_restock_minus_flight
                 stochastic_v1=[double]$forecast.arrivals[0].pAnyStock
@@ -140,7 +145,7 @@ function Invoke-SFReplay {
         }
     }
     $rowArray=$rows.ToArray()
-    $metricNames=@('current_safe','current_best','mean_cycle','median_cycle','expected_restock_minus_flight','stochastic_v1')
+    $metricNames=@('empirical_all_overlap','empirical_overlap','mean_cycle','median_cycle','expected_restock_minus_flight','stochastic_v1')
     $metrics=[ordered]@{}
     foreach ($name in $metricNames) { $metrics[$name]=Get-SFReplayMetrics -Rows $rowArray -PredictionName $name }
     $scorable=@($rowArray | Where-Object {$_.scorable})
