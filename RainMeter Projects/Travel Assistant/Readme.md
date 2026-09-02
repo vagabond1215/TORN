@@ -90,7 +90,7 @@ Up to eight opportunities may be shown.
 - The visible left line is now the **item name only**. Foreign unit price and exact full-load purchase price live in the expanded economics strip so long values cannot crowd or truncate the primary card line.
 - The right side is the selected primary profitability metric, rendered at 14 pt and centered vertically across both text lines. `UPCOMING` and `PROFIT` show signed after-tax total Net; `PROFIT/HR` shows signed after-tax total Net per round-trip flight hour. The item line remains 12 pt and the window/guidance line 9 pt.
 - The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap. Active fills are inset so they do not paint over the border or T separators.
-- Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text. Active sort text and the filter/settings icons use the same Torn-lime accent.
+- Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text. Active sort text and the filter/settings icons use the same Torn-lime accent. The three sort controls use equal 104px widths with bold 11 pt labels for better readability.
 - The destination flag behaves as the card's left end cap and now extends behind the top/bottom border, removing the former 1px bands. Its visible left corners are alpha-masked to the card radius, with the bottom-left flag corner becoming square when the graph expands below it. A border-only overlay keeps the actual card edge visible above the flag.
 - The space between the flag and item text is a 48×48 square matching the card's interior height. Torn's transparent item art is enlarged to 44×44 with a 2px inset in that square and cached from `https://www.torn.com/images/items/<itemId>/large.png` on demand.
 - The window/guidance text is lowered close to the bottom border.
@@ -101,11 +101,11 @@ Up to eight opportunities may be shown.
 Expanded economics are:
 
 ```text
-[Each]  MV:$...          $/hr:+$...  || [Total]  MV:$...          $/hr:+$...
-        Price:$...      5% Tax:$...            Price:$...      5% Tax:$...
+[Each]  MV       $...   |  $/hr    +$...  || [Total]  MV       $...   |  $/hr    +$...
+        Price    $...   |  5% Tax   $...             Price    $...   |  5% Tax   $...
 ```
 
-`Each` and `Total` are separate vertical label blocks filled with the card-border gray and centered vertically. MV stays top-left. The top-right cell shows the profitability metric **not** shown as the large primary value: with `UPCOMING` / `PROFIT`, it is round-trip flight `$/hr`; with `PROFIT/HR`, it becomes signed Net. The lower-left cells show foreign unit **Price** and exact full-load **Price** respectively, while Tax moves to the lower-right cells and remains hidden at 0%. The strip stays 34px tall. `$/hr` is after-tax Each/Total net divided by `2 x` configured one-way flight seconds and excludes window/wait time.
+`Each` and `Total` remain separate vertical label blocks filled with the card-border gray and centered vertically. A subtle drawn vertical rule splits each half into its two metric cells. Inside every cell, the label is left-aligned and the monetary value is independently right-aligned; economics-strip typography is 9 pt. MV stays top-left. The top-right cell shows the profitability metric **not** shown as the large primary value: with `UPCOMING` / `PROFIT`, it is round-trip flight `$/hr`; with `PROFIT/HR`, it becomes signed Net. The lower-left cells show foreign unit **Price** and exact full-load **Price** respectively, while Tax occupies the lower-right cells and both its label/value remain hidden at 0%. The strip stays 34px tall. `$/hr` is after-tax Each/Total net divided by `2 x` configured one-way flight seconds and excludes window/wait time.
 
 ## Sort modes
 
