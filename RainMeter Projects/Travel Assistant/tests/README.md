@@ -28,9 +28,10 @@ The aggregate runner currently includes static/config validation plus determinis
 - restock display;
 - censor-aware cycle/depletion evidence;
 - authoritative legacy WindowPlan ownership;
-- stochastic-v1 multi-cycle simulation, travel/economics, stable common-random
-  seeds, current-stock survival conditioning, deterministic replay, honest proxy
-  baseline labels, fail-soft integration, and no-future-leakage cutoffs;
+- stochastic-v1 bounded adaptive coarse-to-fine arrival search, multi-cycle
+  simulation, travel/economics, stable common-random seeds, current-stock survival
+  conditioning, deterministic replay, honest proxy baseline labels, fail-soft
+  integration, and no-future-leakage cutoffs;
 - censor-aware offline history build/import compatibility for schema-v2 evidence.
 
 No deterministic test should require a live web provider.
