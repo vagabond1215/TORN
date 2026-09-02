@@ -134,10 +134,15 @@ It intentionally does **not** loop provider requests or claim Travel Assistant-o
 
 ## `Invoke-StochasticReplay.ps1`
 
-Runs stochastic-v1 and deterministic legacy/simple baselines in chronological
-offline replay. At decision time T it admits only cycles whose upper completion
-bound was available by T. Arrivals intersecting a restock/sellout censor interval
-are marked unscorable rather than receiving a fabricated exact label.
+Runs stochastic-v1 and simple empirical/deterministic comparators in
+chronological offline replay. At decision time T it admits only cycles whose upper
+completion bound was available by T. Arrivals intersecting a restock/sellout censor
+interval are marked unscorable rather than receiving a fabricated exact label.
+
+The `empirical_all_overlap` and `empirical_overlap` series are deliberately
+proxy baselines. They do **not** execute the full production
+`WindowPlan/WindowPlanRefiner` state machine and must not be reported as exact
+historical Safe/Best performance.
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
