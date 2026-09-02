@@ -40,6 +40,26 @@ used only when transition-censor width is at most half of the observed cycle spa
 otherwise quantity falls back explicitly to linear depletion. The artifact exposes
 both requested-load `expectedQty` and uncapped `expectedAvailableQty`.
 
+### Prospective shadow calibration
+
+After each successful shadow forecast, `StochasticCalibration.ps1` freezes at most
+one genuinely future best-expected-profit arrival per market/model/hour bucket.
+Zero-horizon current-state evaluations are excluded. Frozen rows are resolved only
+when later retained evidence makes the arrival outcome unambiguous; unresolved rows
+expire without affecting calibration statistics.
+
+Ignored local artifacts:
+
+```text
+data/runtime/stochastic-calibration-state.json
+data/runtime/stochastic-calibration.json
+```
+
+The summary reports Brier score, log loss and reliability buckets overall, by
+evidence quality and by market. Required-quantity and available-quantity scoring
+use exact provider snapshots only. These metrics are diagnostic: no probability
+recalibration is applied to the production UI.
+
 ## Main view
 
 ```text
