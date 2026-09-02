@@ -22,6 +22,44 @@ calibration buckets by market/evidence quality, add interval/quantity scoring wh
 ground truth is unambiguous, and investigate regime adaptation only after enough
 prospective evidence exists.
 
+## Post-Codex connector review before the next run
+
+The initial stochastic Phase-1/2 push was reviewed through the GitHub connector and
+several correctness issues were fixed directly on `main`. Treat current `main`,
+not the original `new forecast model setup` commit, as the starting point.
+
+The review established/fixed:
+
+- stable common-random-number sampling across minute updates;
+- fail-closed missing travel times;
+- left-censored current-stock retention after long collection gaps;
+- generation-scoped legacy WindowPlan authority stamps;
+- censor-aware schema-v2 offline history build/import;
+- no direct 100% stock-now claim from an aged positive provider snapshot;
+- current-stock survival conditioned on provider observation time;
+- stochastic shadow execution after the production resale/MV queue;
+- replay overlap comparators renamed to `empirical_all_overlap` and
+  `empirical_overlap` because they are proxies, not exact production Safe/Best
+  replay;
+- no-positive-EV grids classified as `NO_ACTIONABLE_TRIP`; `WAIT` is reserved
+  for a future explicit delay/value-of-information model.
+
+Before adding model complexity, rerun the target Windows PowerShell focused suite
+and one production shadow update. The pre-review 25.3-second / ~1 MB artifact
+measurement is no longer the authoritative performance baseline because sampling
+and current-stock conditioning changed.
+
+Known stochastic-v1 research gaps remain deliberately open:
+
+- fixed 15-minute runtime grid can miss ultra-short probability peaks;
+- within-cycle quantity remains linear rather than using empirical depletion shapes;
+- Torn resale MV is held fixed during each simulated horizon;
+- replay interval/quantity/profit/regret metrics are still scaffold extensions;
+- no calibrated probabilities, change-point model, risk preference, or
+  value-of-information solver exists.
+
+Do not solve all of these at once. First obtain post-review live shadow evidence.
+
 ## Baseline already accepted on the target host
 
 Immediately before the unified-filter redesign, target-host testing at commit `f5a4f0b` established the following:
