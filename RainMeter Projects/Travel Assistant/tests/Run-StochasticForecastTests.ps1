@@ -192,19 +192,36 @@ Assert-Equal $selected.Count $beforeCount 'All valid fixture cycles should remai
 
 # Replay cutoff must precede every target and uncertain event brackets remain unscored.
 $replayCycles=New-Object System.Collections.Generic.List[object]
+$replayObservations=New-Object System.Collections.Generic.List[object]
 for($i=0;$i -lt 7;$i++){
     $row=(New-TestCycles -Count 1 -BaseAt (100+($i*300)))[0]
     $row.country='replay';$row.itemId=9
     $row.previousSoldOutAt=([long]$row.soldOutAt-200)
     $replayCycles.Add($row)
+    $restock=[long]$row.restockUpperBoundAt
+    $sellout=[long]$row.soldOutUpperBoundAt
+    foreach($point in @(
+        [pscustomobject]@{at=$restock;stock=20},
+        [pscustomobject]@{at=($restock+50);stock=16},
+        [pscustomobject]@{at=$sellout;stock=0}
+    )){
+        $replayObservations.Add([pscustomobject]@{
+            schemaVersion=2;timestamp=[long]$point.at;sourceTimestamp=[long]$point.at;country='replay';itemId=9
+            stock=[int]$point.stock;foreignPrice=50L;source='replay-fixture'
+        })
+    }
 }
-$replay=Invoke-SFReplay -Cycles $replayCycles.ToArray() -ArrivalOffsetSeconds 50 -ScenarioCount 32 -RandomSeed 44
+$replay=Invoke-SFReplay -Cycles $replayCycles.ToArray() -Observations $replayObservations.ToArray() -ArrivalOffsetSeconds 50 -ScenarioCount 32 -RandomSeed 44
 foreach($row in @($replay.rows)){
     Assert-True ([long]$row.trainingLatestAvailableAt -le [long]$row.decisionAt) 'Replay training must enforce availableAt <= historical decision time.'
+    Assert-True ([long]$row.trainingLatestObservationAt -le [long]$row.decisionAt) 'Replay shape training must enforce observation sourceTimestamp <= historical decision time.'
     Assert-True ([long]$row.targetAvailableAt -gt [long]$row.decisionAt) 'Replay target must not leak into training.'
 }
 Assert-True ($replay.PSObject.Properties['forecastMetrics'] -ne $null) 'Replay scaffold must expose forecast metrics.'
 Assert-True ($replay.PSObject.Properties['decisionMetrics'] -ne $null) 'Replay scaffold must expose decision metrics.'
+Assert-Equal ([string]$replay.modelVersion) 'stochastic-v1.1' 'Replay output must version the materially changed stochastic challenger.'
+Assert-True ($replay.forecastMetrics.PSObject.Properties['stochastic_v1_1'] -ne $null) 'Replay metrics must isolate stochastic-v1.1 from earlier challenger versions.'
+Assert-True (@($replay.rows | Where-Object {[int]$_.depletionShapeEvidenceCount -gt 0}).Count -gt 0) 'Replay should feed only historically available intermediate observations into empirical depletion shapes.'
 
 Assert-True ($replay.forecastMetrics.PSObject.Properties['empirical_all_overlap'] -ne $null) 'Replay must label all-cycle coverage as an empirical overlap proxy, not exact production Safe replay.'
 Assert-True ($replay.forecastMetrics.PSObject.Properties['empirical_overlap'] -ne $null) 'Replay must label fractional coverage as an empirical overlap proxy, not exact production Best replay.'
