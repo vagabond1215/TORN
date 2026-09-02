@@ -135,7 +135,7 @@ function Normalize-SortMode {
     if ($mode -eq 'optimal') { return 'profit_per_hour' }
     if ($mode -eq 'profit') { return 'gross' }
     if ($mode -eq 'time') { return 'upcoming' }
-    if ($mode -notin @('name','upcoming','gross','profit_per_hour')) { return 'upcoming' }
+    if ($mode -notin @('upcoming','gross','profit_per_hour')) { return 'upcoming' }
     return $mode
 }
 
