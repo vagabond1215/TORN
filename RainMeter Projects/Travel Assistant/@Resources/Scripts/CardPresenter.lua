@@ -386,6 +386,37 @@ local function formatCollectingTooltip(reason)
         'Stale/frozen intervals are excluded from forecast timing.'..nl..
         'See Weav3r for the current travel-stock snapshot.'
 end
+local function currentStockSafetyAction(state,statePrefix,now)
+    if statePrefix=='' or number(state[statePrefix..'CurrentStockSafetyEligible'])<1 then return nil,nil,nil end
+    local stock=number(state[statePrefix..'CurrentStock'])
+    local samples=math.floor(number(state[statePrefix..'CurrentStockSafetySampleCount']))
+    local span=number(state[statePrefix..'CurrentStockSafetyEvidenceSpanSeconds'])
+    local percentileRate=number(state[statePrefix..'CurrentStockSafetyPercentileUnitsPerHour'])
+    local guardedRate=number(state[statePrefix..'CurrentStockSafetyGuardedUnitsPerHour'])
+    local runway=number(state[statePrefix..'CurrentStockSafetyRunwaySeconds'])
+    local arrival=number(state[statePrefix..'CurrentStockSafetyArrivalHorizonSeconds'])
+    local margin=number(state[statePrefix..'CurrentStockSafetyMarginSeconds'])
+    local selloutAt=number(state[statePrefix..'CurrentStockSafetySelloutEstimateAt'])
+    local reason=trim(state[statePrefix..'CurrentStockSafetyReason'])
+
+    local nl='#CRLF#'
+    local lines={
+        'Current-stock safety fallback',
+        'Current Stock: '..tostring(math.floor(stock)),
+        'Time to Arrival: '..formatDuration(arrival),
+        'Conservative Runway: '..formatDuration(runway),
+        'Arrival Margin: '..formatDuration(margin),
+        'Observed Depletion Samples: '..tostring(samples)..' across '..formatDuration(span)
+    }
+    if percentileRate>0 then table.insert(lines,'90th-percentile observed depletion: '..string.format('%.1f',percentileRate)..' units/hr') end
+    if guardedRate>0 then table.insert(lines,'Guarded depletion rate: '..string.format('%.1f',guardedRate)..' units/hr') end
+    if selloutAt>now then table.insert(lines,'Conservative Sellout Estimate: '..formatMoment(selloutAt,now)) end
+    if reason~='' then table.insert(lines,'Basis: '..reason) end
+    table.insert(lines,'The current restock boundary is not required for this direct stock-runway check.')
+    table.insert(lines,'No hit percentage is fabricated; recurring Safe/Best evidence remains unchanged.')
+    return 'Safe Window Open','',table.concat(lines,nl)
+end
+
 local function multiCycleChanceAction(state,statePrefix,flightSeconds,now)
     if statePrefix=='' or number(state[statePrefix..'MultiCycleChanceEligible'])<1 then return nil,nil,nil end
     local probability=number(state[statePrefix..'MultiCycleChanceProbability'])
@@ -498,6 +529,10 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
                 formatSleepingRestockTooltip(restockEstimateAt,restockAverageDelay,restockEarlyDelay,restockLateDelay,restockLifetimeShort,restockLifetimeLong,restockSamples,now)
         end
 
+        if dataQuality=='current_stock_safe' then
+            local safeAction,safeChance,safeTooltip=currentStockSafetyAction(state,statePrefix,now)
+            if safeAction~=nil then return safeAction,safeChance,safeTooltip end
+        end
         if dataQuality=='collecting' then
             local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
             if multiAction~=nil then return multiAction,multiChance,multiTooltip end
