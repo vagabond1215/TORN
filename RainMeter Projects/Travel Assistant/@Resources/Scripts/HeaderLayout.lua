@@ -1,6 +1,9 @@
 local compactOffset = 32
 local rowSuffixes = {
-    'Card','Flag','FlagMask','CardBorder','ItemImage','Name','DetailEachLabel','Gross','DetailEachNet','DetailEachTax','DetailEachProfitHour','DetailTotalLabel','DetailTotal','DetailTotalNet','DetailTotalTax','DetailTotalProfitHour','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph'
+    'Card','Flag','FlagMask','CardBorder','ItemImage','Name',
+    'DetailEachLabel','Gross','DetailEachGrossValue','DetailEachNet','DetailEachNetValue','DetailEachTax','DetailEachTaxValue','DetailEachProfitHour','DetailEachPriceValue',
+    'DetailTotalLabel','DetailTotal','DetailTotalGrossValue','DetailTotalNet','DetailTotalNetValue','DetailTotalTax','DetailTotalTaxValue','DetailTotalProfitHour','DetailTotalPriceValue',
+    'Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph'
 }
 
 local function meterY(name)
