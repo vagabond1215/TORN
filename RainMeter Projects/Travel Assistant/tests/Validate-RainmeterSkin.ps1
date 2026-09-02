@@ -58,9 +58,12 @@ foreach ($i in 1..8) {
     $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $grossBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $graphButtonBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     if ($flagBody -notmatch '(?im)^Meter=Image\s*$' -or $flagBody -notmatch '(?im)^W=62\s*$' -or $flagBody -notmatch '(?im)^H=44\s*$') { Fail "Opportunity $i flag must be a near-full-height native Image meter." }
-    if ($detailBody -notmatch '(?im)^Text=\+\s*$' -or $detailBody -notmatch ('ToggleCardDetails\('+[string]$i+'\)')) { Fail "Opportunity $i detail toggle must control the top economics strip." }
+    if ($detailBody -notmatch '(?im)^Text=\$\s*$' -or $detailBody -notmatch ('ToggleCardDetails\('+[string]$i+'\)')) { Fail "Opportunity $i money button must control the top economics strip." }
+    if ($graphButtonBody -notmatch '(?im)^Meter=Shape\s*$' -or $graphButtonBody -notmatch '(?im)^GraphExpanded=0\s*$') { Fail "Opportunity $i graph control must be a chart Shape button." }
+    foreach($token in @('Shape2=Line 4,13,4,5','Shape3=Line 4,13,14,13','Shape4=Line 5,11,8,8','Shape5=Line 8,8,10,10','Shape6=Line 10,10,14,6')){if(-not$graphButtonBody.Contains($token)){Fail "Opportunity $i chart button missing '$token'."}}
     if ($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=11\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i canonical Name meter must stay hidden behind the combined first line." }
     if ($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=440\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$') { Fail "Opportunity $i visible first line must use the full 440px card width at 11pt." }
     if ($grossBody -notmatch '(?im)^W=500\s*$' -or $grossBody -notmatch '(?im)^FontSize=7\s*$') { Fail "Opportunity $i Gross meter must be the one-line economics detail strip." }
@@ -81,6 +84,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { 
 foreach ($token in @(
     "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
     "return flagDir .. code .. '@3x.png'",'ToolTipText',"' | travel '",
+    'local function setGraphButtonState(name, expanded)','local function setDetailButtonState(name, expanded)',
+    "'GraphExpanded', expanded and '1' or '0'","SKIN:Bang('!SetOption', name, 'Text', '$')",
     'local function collapseInlineGraph()','local function collapseCardDetails()','function ToggleCardDetails(index)',
     'local detailExtra = 18','local graphExtra = 133','local footerExtra = 28','expandedDetailKey','expandedDetailRow',
     "if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + detailExtra end",
