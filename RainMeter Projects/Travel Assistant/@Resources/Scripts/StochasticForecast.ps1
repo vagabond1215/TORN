@@ -321,7 +321,11 @@ function Get-SFDirectObservedArrival {
     param([object]$Market,[long]$NowEpoch,[long]$ArrivalAt,[int]$TargetQuantity,[long]$MarketValue,[int]$MarketFeePercent,[long]$OneWaySeconds)
     $sourceAt=[long](Get-SFProperty $Market 'sourceTimestamp')
     $stock=[long](Get-SFProperty $Market 'lastStock')
-    if ($ArrivalAt -ne $NowEpoch -or $sourceAt -le 0 -or ($NowEpoch-$sourceAt) -gt 300L -or $stock -le 0) { return $null }
+    # A positive provider snapshot is certain only at the timestamp it describes.
+    # Do not turn the normal five-minute freshness allowance into a fabricated
+    # 100% "stock now" probability for fast-selling items. Older direct evidence
+    # requires a learned survival model; with insufficient cycles we stay unknown.
+    if ($ArrivalAt -ne $NowEpoch -or $sourceAt -ne $NowEpoch -or $stock -le 0) { return $null }
     $qty=[Math]::Min([Math]::Max(1,$TargetQuantity),[int]$stock)
     $economics=Get-SFEconomics -Quantity $qty -MarketValue $MarketValue -ForeignPrice ([long](Get-SFProperty $Market 'lastForeignPrice')) -MarketFeePercent $MarketFeePercent -OneWaySeconds $OneWaySeconds
     return [pscustomobject]@{
