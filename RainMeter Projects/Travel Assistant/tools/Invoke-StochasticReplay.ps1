@@ -71,6 +71,43 @@ function Get-SFReplayBaselineProbabilities {
     }
 }
 
+function Get-SFReplayQuantityLabel {
+    param([object[]]$Observations,[long]$ArrivalAt)
+    $matches=@($Observations | Where-Object { (Get-SFObservationAt $_) -eq $ArrivalAt })
+    if ($matches.Count -eq 0) {
+        return [pscustomobject]@{ scorable=$false; quantity=0L; reason='no exact provider snapshot at arrival' }
+    }
+    $stocks=[long[]]@($matches | ForEach-Object { [long](Get-SFProperty $_ 'stock') })
+    $minimum=[long](@($stocks | Measure-Object -Minimum).Minimum)
+    $maximum=[long](@($stocks | Measure-Object -Maximum).Maximum)
+    if ($minimum -ne $maximum) {
+        return [pscustomobject]@{ scorable=$false; quantity=0L; reason='conflicting exact provider snapshots at arrival' }
+    }
+    return [pscustomobject]@{ scorable=$true; quantity=$minimum; reason='exact provider snapshot at arrival' }
+}
+
+function Get-SFReplayQuantityMetrics {
+    param([object[]]$Rows)
+    $scored=@($Rows | Where-Object { [bool](Get-SFProperty $_ 'quantityScorable') })
+    if ($scored.Count -eq 0) {
+        return [pscustomobject]@{ count=0; meanAbsoluteError=0.0; rootMeanSquaredError=0.0 }
+    }
+    $absolute=0.0
+    $squared=0.0
+    foreach ($row in $scored) {
+        $actual=[double](Get-SFProperty $row 'actualQuantity')
+        $predicted=[double](Get-SFProperty $row 'predictedAvailableQuantity')
+        $error=$predicted-$actual
+        $absolute+=[Math]::Abs($error)
+        $squared+=($error*$error)
+    }
+    return [pscustomobject]@{
+        count=$scored.Count
+        meanAbsoluteError=[Math]::Round($absolute/$scored.Count,6)
+        rootMeanSquaredError=[Math]::Round([Math]::Sqrt($squared/$scored.Count),6)
+    }
+}
+
 function Get-SFReplayMetrics {
     param([object[]]$Rows,[string]$PredictionName)
     $scored=@($Rows | Where-Object { [bool]$_.scorable })
@@ -145,6 +182,9 @@ function Invoke-SFReplay {
             $forecast=Invoke-SFMarketForecast -MarketKey $key -Cycles $training -Observations $trainingObservations -Market $market -Destination $destination -Travel $travel -NowEpoch $decisionAt -ScenarioCount $ScenarioCount -TargetQuantity 1 -MarketValue 1 -MarketFeePercent 0 -OneWaySeconds $ArrivalOffsetSeconds -RandomSeed ($RandomSeed+$i)
             if (@($forecast.arrivals).Count -eq 0) { continue }
             $label=Get-SFReplayLabel -Cycle $target -ArrivalAt $arrivalAt
+            $outcomeObservations=@()
+            if ($observationsByMarket.ContainsKey($key)) { $outcomeObservations=@($observationsByMarket[$key].ToArray()) }
+            $quantityLabel=Get-SFReplayQuantityLabel -Observations $outcomeObservations -ArrivalAt $arrivalAt
             $baselines=Get-SFReplayBaselineProbabilities -Training @($selected | ForEach-Object {$_.cycle}) -ArrivalAge $ArrivalOffsetSeconds
             $predictions=[pscustomobject]@{
                 empirical_all_overlap=[double]$baselines.empirical_all_overlap; empirical_overlap=[double]$baselines.empirical_overlap
@@ -160,6 +200,10 @@ function Invoke-SFReplay {
                 depletionShapeEvidenceCount=[int](Get-SFProperty $forecast 'depletionShapeEvidenceCount')
                 targetAvailableAt=Get-SFReplayAvailableAt $target
                 scorable=[bool]$label.scorable; label=[int]$label.label; scoringReason=[string]$label.reason
+                quantityScorable=[bool]$quantityLabel.scorable
+                actualQuantity=[long]$quantityLabel.quantity
+                predictedAvailableQuantity=[double](Get-SFProperty $forecast.arrivals[0] 'expectedAvailableQty')
+                quantityScoringReason=[string]$quantityLabel.reason
                 predictions=$predictions
             })
         }
@@ -170,10 +214,18 @@ function Invoke-SFReplay {
     foreach ($name in $metricNames) { $metrics[$name]=Get-SFReplayMetrics -Rows $rowArray -PredictionName $name }
     $scorable=@($rowArray | Where-Object {$_.scorable})
     $uncertain=@($rowArray | Where-Object {-not $_.scorable})
+    $quantityMetrics=Get-SFReplayQuantityMetrics -Rows $rowArray
     return [pscustomobject]@{
         schemaVersion=1; modelVersion='stochastic-v1.1'; noFutureLeakagePolicy='cycle availableAt <= decisionAt; observation sourceTimestamp <= decisionAt'
         forecastMetrics=[pscustomobject]$metrics
-        intervalMetrics=[pscustomobject]@{ restockCoverageScorable=0; selloutCoverageScorable=0; quantityErrorScorable=0; note='extension points require frozen interval/quantity forecasts' }
+        intervalMetrics=[pscustomobject]@{
+            restockCoverageScorable=0
+            selloutCoverageScorable=0
+            quantityErrorScorable=[int]$quantityMetrics.count
+            quantityMeanAbsoluteError=[double]$quantityMetrics.meanAbsoluteError
+            quantityRootMeanSquaredError=[double]$quantityMetrics.rootMeanSquaredError
+            note='quantity is scored only against an exact retained provider snapshot at arrival; interval coverage remains an extension point'
+        }
         decisionMetrics=[pscustomobject]@{ scorableDecisions=$scorable.Count; censoredOrUnscorable=$uncertain.Count; arrivalSuccess=@($scorable | Where-Object {$_.label -eq 1}).Count; earlyArrival=0; lateArrival=0; profitScorable=0; regretScorable=0 }
         rows=$rowArray
     }
