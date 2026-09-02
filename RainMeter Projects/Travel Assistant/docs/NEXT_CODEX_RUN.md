@@ -55,6 +55,12 @@ observation-shape extraction, prospective evidence scans, and current-stock
 conditioning changed. After 20-60 minutes, use updater performance telemetry to
 measure both `stochastic-forecast` and `stochastic-calibration` stages.
 
+Also inspect `stochastic-calibration.json`: confirm `pendingCount` grows
+reasonably, `maximumPendingPerMarket=24`, `maximumPendingTotal=4096`, and no
+`stochastic-calibration-error.txt` is present. Do not interpret calibration
+quality from a handful of resolved rows; first verify that prospective freezes and
+later outcomes are accumulating at all.
+
 Known stochastic-v1.1 research gaps remain deliberately open:
 
 - the fixed-grid structural miss is now mitigated by bounded independent
