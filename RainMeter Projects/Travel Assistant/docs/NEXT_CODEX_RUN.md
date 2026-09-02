@@ -127,7 +127,7 @@ The accepted compact card presentation remains authoritative:
 - card title is item name only after the presentation pass;
 - header economics remain the accepted foreign-cost / MV / per-item-profit presentation;
 - lower line remains actionable Safe/Best state plus confidence/info and `Take:`;
-- far-right control remains the compact `v` / `^` chevron;
+- far-right control is the compact chart Shape button with visual active-state highlight;
 - inline history expands in-card through the dedicated local renderer;
 - `CardPresenter.lua` remains presentation-only;
 - `StateReader.lua` remains authoritative for projected-row identity, local sort/filter state, flag identity, row visibility, and inline graph expansion.
@@ -208,7 +208,7 @@ Target acceptance caught two follow-up issues after the unified-filter pull:
 
 - the short RunCommand launcher's `FinishAction` redrew after `StateReader -> HeaderLayout -> CardPresenter -> CardTweaks` but before `FreshnessGuard -> TravelStateWindowTweaks -> WindowTooltipTweaks -> FinalCardPolish`. On a stale provider snapshot this exposed a sub-second intermediate render: header text could flash `UPDATE STALE` before `FORECAST ONLY`, and card meters could flash the intermediate styling.
 
-All explicit redraw paths now complete the entire presentation chain before `!Redraw`. `StateReader` also centralizes immediate sort/trip/graph redraws through that same chain. Hard-stale no-row mode uses the compact 132 px base panel height rather than the retired 164 px header footprint.
+All explicit redraw paths now complete the entire presentation chain before `!Redraw`. `StateReader` also centralizes immediate sort/trip/graph redraws through that same chain. Hard-stale no-row mode uses the footer-aware 160 px minimum panel height.
 
 ### CPU profiling / first steady-state optimizations
 
