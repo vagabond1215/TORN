@@ -463,7 +463,7 @@ function Write-OpportunityProjection {
             'Key','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
             'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip',
             'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds',
-            'MarketValueValue','PurchaseCostValue','GrossSaleValue','GrossProfitValue','MarketTaxValue','MakeValue','ProfitEachValue','MarketFeePercent','TakeValue','TakeBufferPercent',
+            'MarketValueValue','PurchaseCostValue','TotalCostValue','GrossSaleValue','GrossProfitValue','MarketTaxValue','MakeValue','ProfitEachValue','MarketFeePercent',
             'ForecastMode','RestockEstimateAt','RestockAverageDelaySeconds','RestockEarliestDelaySeconds','RestockLatestDelaySeconds',
             'RestockLifetimeShortestDelaySeconds','RestockLifetimeLongestDelaySeconds','RestockSampleCount'
         )) {
@@ -512,8 +512,7 @@ function Write-OpportunityProjection {
         $State['Opportunity'+$n+'MakeValue'] = if ($row.PSObject.Properties['make']) { [long]$row.make } else { [long]$row.grossProfit }
         $State['Opportunity'+$n+'ProfitEachValue'] = if ($row.PSObject.Properties['profitEach']) { [long]$row.profitEach } else { 0L }
         $State['Opportunity'+$n+'MarketFeePercent'] = if ($row.PSObject.Properties['marketFeePercent']) { [int]$row.marketFeePercent } else { 0 }
-        $State['Opportunity'+$n+'TakeValue'] = if ($row.PSObject.Properties['purchaseCost']) { [long]$row.purchaseCost } else { 0L }
-        $State['Opportunity'+$n+'TakeBufferPercent'] = 0
+        $State['Opportunity'+$n+'TotalCostValue'] = if ($row.PSObject.Properties['purchaseCost']) { [long]$row.purchaseCost } else { 0L }
         $State['Opportunity'+$n+'WindowStartAt'] = [long]$row.windowStartAt
         $State['Opportunity'+$n+'ProbabilityValue'] = if ($probabilityKnown) { ('{0:R}' -f [double]$row.probability) } else { '-1' }
         $State['Opportunity'+$n+'ElapsedSeconds'] = [long]$row.elapsedSeconds

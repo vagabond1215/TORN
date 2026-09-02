@@ -74,7 +74,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-CardDet
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-Checks fixed Item/Cost, Take and Make columns, the $ economics strip, inline chart control, footer-safe reflow, fallback-only Name ordering, and the current Rainmeter card contract.
+Checks Item/unit/full-load cost layout, large signed total Net, split per-item/total economics, centered lime end-cap controls, compact footer reflow, fallback-only Name ordering, and the current Rainmeter card contract.
 
 ## Other important focused suites
 

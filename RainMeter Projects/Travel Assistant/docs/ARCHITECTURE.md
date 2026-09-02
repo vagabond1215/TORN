@@ -145,16 +145,18 @@ The standalone WinForms Viewer, its launcher, and its Rainmeter measure are reti
 Each compact row is:
 
 ```text
-[FlagKit flag]  Item | foreign cost   Take:cash   Make:profit   [$]
-                window / leave guidance                        [chart]
+[FlagKit flag]  Item | foreign cost | full-load cost   signed total net   [$]
+                window / leave guidance                              [chart]
 ```
 
 - No rank/place number.
 - No country name/code in the card body.
-- The visible first line uses fixed Item/Cost, Take, and Make columns.
+- The left first-line content is Item / foreign unit cost / exact full-load cost; no variable-price reserve is applied.
+- Signed total net profit is larger, right-aligned, and vertically centered over the two card text lines.
 - Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license.
 - Hovering the flag exposes country + configured one-way travel time.
-- The `$` button expands the vertically centered one-line MV/Each/Gross/Per Hour/<rate>% Tax strip. `$` and chart are the two halves of one T-divided right-edge end cap.
+- The `$` button expands a two-half economics row: per-item Gross/Tax/Net on the left and total Gross/Tax/Net on the right.
+- `$` and chart are centered in the two halves of one T-divided right-edge end cap; active cells use Torn-lime fill and dark-gray icons.
 - The chart button expands the local 8-hour graph.
 - A known 0% arrival case displays `NO HIT` rather than `LEAVE NOW`; unknown likelihood displays `WAIT DATA`.
 

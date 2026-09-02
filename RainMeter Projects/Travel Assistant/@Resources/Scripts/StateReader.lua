@@ -26,16 +26,16 @@ local collapsedCardHeight = 50
 local rowStride = 54
 local detailExtra = 18
 local graphExtra = 133
-local footerExtra = 28
+local footerExtra = 16
 local maxCandidateRows = 256
 
 local opportunitySuffixes = {
     'Key','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
     'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor',
     'Tooltip','GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds',
-    'MarketValueValue','SaleBasisValue','PurchaseCostValue','GrossSaleValue','GrossProfitValue',
-    'MarketTaxValue','MakeValue','ProfitEachValue','GrossProfitHourValue','MarketFeePercent',
-    'MvBasisPercent','TakeValue','TakeBufferPercent','PriceVaries','PriceVariationReason',
+    'MarketValueValue','PurchaseCostValue','TotalCostValue','GrossSaleValue','GrossProfitValue',
+    'MarketTaxValue','MakeValue','ProfitEachValue','MarketFeePercent',
+    'PriceVaries','PriceVariationReason',
     'MinObservedPrice','MaxObservedPrice'
 }
 
@@ -549,20 +549,21 @@ local function readGraphSpec(key)
 end
 
 local function setGraphButtonState(name, expanded)
-    local fill=expanded and '44,44,44,255' or '0,0,0,1'
+    local fill=expanded and '126,190,73,255' or '0,0,0,1'
+    local icon=expanded and '38,38,38,255' or '190,190,190,255'
     SKIN:Bang('!SetOption', name, 'GraphExpanded', expanded and '1' or '0')
     SKIN:Bang('!SetOption', name, 'Shape', 'Rectangle 0,0,26,25 | Fill Color '..fill..' | StrokeWidth 0')
-    SKIN:Bang('!SetOption', name, 'Shape2', 'Line 8,17,8,8 | StrokeWidth 1 | Stroke Color 150,150,150,255')
-    SKIN:Bang('!SetOption', name, 'Shape3', 'Line 8,17,18,17 | StrokeWidth 1 | Stroke Color 150,150,150,255')
-    SKIN:Bang('!SetOption', name, 'Shape4', 'Line 9,15,12,12 | StrokeWidth 1 | Stroke Color 82,174,255,255')
-    SKIN:Bang('!SetOption', name, 'Shape5', 'Line 12,12,14,14 | StrokeWidth 1 | Stroke Color 82,174,255,255')
-    SKIN:Bang('!SetOption', name, 'Shape6', 'Line 14,14,18,9 | StrokeWidth 1 | Stroke Color 82,174,255,255')
+    SKIN:Bang('!SetOption', name, 'Shape2', 'Line 8,17,8,8 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape3', 'Line 8,17,18,17 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape4', 'Line 9,15,12,12 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape5', 'Line 12,12,14,14 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape6', 'Line 14,14,18,9 | StrokeWidth 1 | Stroke Color '..icon)
 end
 
 local function setDetailButtonState(name, expanded)
     SKIN:Bang('!SetOption', name, 'Text', '$')
-    SKIN:Bang('!SetOption', name, 'FontColor', expanded and '218,178,69,255' or '150,150,150,255')
-    SKIN:Bang('!SetOption', name, 'SolidColor', expanded and '74,62,28,255' or '0,0,0,1')
+    SKIN:Bang('!SetOption', name, 'FontColor', expanded and '38,38,38,255' or '190,190,190,255')
+    SKIN:Bang('!SetOption', name, 'SolidColor', expanded and '126,190,73,255' or '0,0,0,1')
 end
 
 local function collapseInlineGraph()
@@ -584,6 +585,7 @@ local function collapseCardDetails()
     lastLayoutSignature = ''
     for i = 1, 8 do
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Gross')
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotal')
         setDetailButtonState('MeterOpportunity' .. i .. 'DetailToggle', false)
         SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'DetailToggle', 'ToolTipText', 'Show card economics')
     end
@@ -619,7 +621,13 @@ local function layoutRows(data, count)
     -- geometry is unchanged.
     for i = 1, 8 do
         local p = 'MeterOpportunity' .. i
-        if i == expandedDetailRow then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end
+        if i == expandedDetailRow then
+            SKIN:Bang('!ShowMeter', p .. 'Gross')
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotal')
+        else
+            SKIN:Bang('!HideMeter', p .. 'Gross')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotal')
+        end
         SKIN:Bang('!HideMeter', p .. 'Name')
         SKIN:Bang('!HideMeter', p .. 'Window')
         SKIN:Bang('!HideMeter', p .. 'Chance')
@@ -646,16 +654,30 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape', 'Rectangle 0,0,536,' .. cardHeight .. ',5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#')
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape2', 'Line 510,' .. bodyOffset .. ',510,' .. (bodyOffset+50) .. ' | StrokeWidth 1 | Stroke Color #Border#')
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25) .. ' | StrokeWidth 1 | Stroke Color #Border#')
+        if detailExpanded then
+            SKIN:Bang('!SetOption', p .. 'Card', 'Shape4', 'Line 268,0,268,' .. detailExtra .. ' | StrokeWidth 1 | Stroke Color #Border#')
+            SKIN:Bang('!SetOption', p .. 'Card', 'Shape5', 'Line 0,' .. detailExtra .. ',536,' .. detailExtra .. ' | StrokeWidth 1 | Stroke Color #Border#')
+        else
+            SKIN:Bang('!SetOption', p .. 'Card', 'Shape4', 'Line 0,0,0,0 | StrokeWidth 0')
+            SKIN:Bang('!SetOption', p .. 'Card', 'Shape5', 'Line 0,0,0,0 | StrokeWidth 0')
+        end
 
         SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+9))
-        if detailExpanded then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end
+        SKIN:Bang('!SetOption', p .. 'DetailTotal', 'Y', tostring(y+9))
+        if detailExpanded then
+            SKIN:Bang('!ShowMeter', p .. 'Gross')
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotal')
+        else
+            SKIN:Bang('!HideMeter', p .. 'Gross')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotal')
+        end
 
         SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+3+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Name', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Price', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Take', 'Y', tostring(y+6+bodyOffset))
-        SKIN:Bang('!SetOption', p .. 'Make', 'Y', tostring(y+6+bodyOffset))
-        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'Y', tostring(y+12+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Make', 'Y', tostring(y+25+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'Y', tostring(y+13+bodyOffset))
         setDetailButtonState(p .. 'DetailToggle', detailExpanded)
         SKIN:Bang('!SetOption', p .. 'DetailToggle', 'ToolTipText', detailExpanded and 'Hide card economics' or 'Show card economics')
 

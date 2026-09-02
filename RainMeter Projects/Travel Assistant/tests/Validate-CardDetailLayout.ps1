@@ -27,7 +27,7 @@ if($errors.Count -eq 0){
     $ini=Get-Content -LiteralPath $iniPath -Raw
 
     foreach($i in 1..8){
-        foreach($suffix in @('Card','Flag','Name','Gross','Price','Take','Make','Leave','DetailToggle','Graph','InlineGraph')){
+        foreach($suffix in @('Card','Flag','Name','Gross','DetailTotal','Price','Take','Make','Leave','DetailToggle','Graph','InlineGraph')){
             $section='MeterOpportunity'+$i+$suffix
             if($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){
                 Fail "OpportunityRows.inc missing [$section]."
@@ -41,14 +41,14 @@ if($errors.Count -eq 0){
 
         $detail=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailToggle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($detail -notmatch '(?im)^Text=\$\s*$'){Fail "Row $i detail toggle must default to the money button."}
-        foreach($token in @('X=531','W=26','H=25','StringAlign=CenterCenter','FontColor=#Muted#','SolidColor=0,0,0,1')){
+        foreach($token in @('X=531','W=26','H=25','StringAlign=CenterCenter','FontColor=#ToggleIdle#','SolidColor=0,0,0,1')){
             if(-not$detail.Contains($token)){Fail "Row $i money end-cap button missing '$token'."}
         }
         if($detail -notmatch ('ToggleCardDetails\('+[string]$i+'\)')){Fail "Row $i detail toggle must call ToggleCardDetails($i)."}
 
         $graph=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($graph -notmatch '(?im)^Meter=Shape\s*$' -or $graph -notmatch '(?im)^GraphExpanded=0\s*$'){Fail "Row $i graph button must be a collapsed Shape icon by default."}
-        foreach($token in @('X=518','W=26','H=25','Shape=Rectangle 0,0,26,25 | Fill Color 0,0,0,1 | StrokeWidth 0','Shape2=Line 8,17,8,8','Shape3=Line 8,17,18,17','Shape4=Line 9,15,12,12','Shape5=Line 12,12,14,14','Shape6=Line 14,14,18,9')){
+        foreach($token in @('X=518','W=26','H=25','Shape=Rectangle 0,0,26,25 | Fill Color 0,0,0,1 | StrokeWidth 0','Stroke Color #ToggleIdle#','Shape2=Line 8,17,8,8','Shape3=Line 8,17,18,17','Shape4=Line 9,15,12,12','Shape5=Line 12,12,14,14','Shape6=Line 14,14,18,9')){
             if(-not$graph.Contains($token)){Fail "Row $i chart end-cap button missing '$token'."}
         }
         if($graph -notmatch ('ToggleInlineGraph\('+[string]$i+'\)')){Fail "Row $i graph toggle must call ToggleInlineGraph($i)."}
@@ -59,24 +59,28 @@ if($errors.Count -eq 0){
         }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=180\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
-            Fail "Row $i item/cost column must start at x=78 with a fixed 180px width."
+        if($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=198\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
+            Fail "Row $i item/unit-cost column must start at x=78 with a fixed 198px width."
         }
         $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($takeBody -notmatch '(?im)^X=260\s*$' -or $takeBody -notmatch '(?im)^W=134\s*$' -or $takeBody -notmatch '(?im)^FontSize=11\s*$'){
-            Fail "Row $i Take column must be independently anchored at x=260."
+        if($takeBody -notmatch '(?im)^X=280\s*$' -or $takeBody -notmatch '(?im)^W=108\s*$' -or $takeBody -notmatch '(?im)^FontSize=11\s*$' -or $takeBody -notmatch '(?im)^FontColor=#Muted#\s*$'){
+            Fail "Row $i full-load cost column must be independently anchored at x=280 and remain muted."
         }
         $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($makeBody -notmatch '(?im)^X=396\s*$' -or $makeBody -notmatch '(?im)^W=122\s*$' -or $makeBody -notmatch '(?im)^FontSize=11\s*$'){
-            Fail "Row $i Make column must be independently anchored at x=396."
+        if($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=15\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$'){
+            Fail "Row $i total net must be 15pt, vertically centered, and right-aligned at x=504."
         }
         foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody)){
             if($fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Row $i first-line typography must use Nirmala UI Semilight."}
         }
 
         $strip=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        foreach($token in @('W=500','H=18','FontSize=9','StringAlign=LeftCenter','Hidden=1')){
-            if(-not$strip.Contains($token)){Fail "Row $i detail strip missing '$token'."}
+        $stripTotal=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotal\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        foreach($token in @('X=14','W=256','H=18','FontSize=10','StringAlign=LeftCenter','Hidden=1')){
+            if(-not$strip.Contains($token)){Fail "Row $i per-item detail half missing '$token'."}
+        }
+        foreach($token in @('X=282','W=256','H=18','FontSize=10','StringAlign=LeftCenter','Hidden=1')){
+            if(-not$stripTotal.Contains($token)){Fail "Row $i total detail half missing '$token'."}
         }
 
         $inline=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -88,7 +92,7 @@ if($errors.Count -eq 0){
     foreach($token in @(
         'local detailExtra = 18',
         'local graphExtra = 133',
-        'local footerExtra = 28',
+        'local footerExtra = 16',
         "local expandedDetailKey = ''",
         'local expandedDetailRow = 0',
         'local function setGraphButtonState(name, expanded)',
@@ -96,7 +100,7 @@ if($errors.Count -eq 0){
         "'GraphExpanded', expanded and '1' or '0'",
         "'Rectangle 0,0,26,25 | Fill Color '..fill..' | StrokeWidth 0'",
         "SKIN:Bang('!SetOption', name, 'Text', '$')",
-        "'218,178,69,255'",
+        "'126,190,73,255'","'38,38,38,255'","'190,190,190,255'",
         'local function collapseCardDetails()',
         'local function syncExpandedRows(data, count)',
         'function ToggleCardDetails(index)',
@@ -104,11 +108,11 @@ if($errors.Count -eq 0){
         "if expandedRow > 0 and i > expandedRow then extraBefore = extraBefore + graphExtra end",
         'local bodyOffset = detailExpanded and detailExtra or 0',
         'local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)',
-        "'Shape2', 'Line 510,' .. bodyOffset .. ',510,' .. (bodyOffset+50)",
+        "'Shape2', 'Line 510,' .. bodyOffset .. ',510,' .. (bodyOffset+50)","'Shape4', 'Line 268,0,268,' .. detailExtra","'Shape5', 'Line 0,' .. detailExtra .. ',536,' .. detailExtra",
         "'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25)",
-        "'Gross', 'Y', tostring(y+9)",
-        "'DetailToggle', 'Y', tostring(y+12+bodyOffset)",
-        "'Graph', 'Y', tostring(y+25+bodyOffset)",
+        "'Gross', 'Y', tostring(y+9)","'DetailTotal', 'Y', tostring(y+9)",
+        "'DetailToggle', 'Y', tostring(y+13+bodyOffset)",
+        "'Make', 'Y', tostring(y+25+bodyOffset)","'Graph', 'Y', tostring(y+25+bodyOffset)",
         "panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra",
         "if i == expandedDetailRow then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end",
         "SKIN:Bang('!HideMeter', p .. 'Name')",
@@ -123,31 +127,25 @@ if($errors.Count -eq 0){
         "setOption(prefix..'Name','Text',itemName)",
         "setOption(prefix..'Name','FontColor','0,0,0,0')",
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
+        "totalCost=number(state[projectedPrefix..'TotalCostValue'])",
+        "totalCost=(fallbackPrice>0 and quantity>0) and (fallbackPrice*quantity) or 0",
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText)",
         "setOption(prefix..'Price','InlinePattern','\\|')",
         "setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
         "setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')",
         "setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
-        "setOption(prefix..'Take','Text','Take: '..takeText)",
-        "setOption(prefix..'Make','Text','Make: '..formatMoney(make))",
-        "'MV:'..formatMoney(mv)",
-        "'  Each:'..formatMoney(each)",
-        "'  Gross:'..formatMoney(grossSale)",
-        "'  Per Hour:'..formatMoney(profitHour)",
-        "'  '..tostring(marketTaxRate)..'% Tax: '..formatMoney(marketTax)",
-        "setOption(prefix..'Gross','FontColor','255,255,255,255')",
-        "setOption(prefix..'Gross','InlinePattern','(?<=MV:)-?\\$[0-9,]+')",
-        "setOption(prefix..'Gross','InlineSetting','Color | 218,178,69,255')",
-        "setOption(prefix..'Gross','InlinePattern2','(?<=Each:)-?\\$[0-9,]+')",
-        "setOption(prefix..'Gross','InlineSetting2','Color | 255,255,255,255')",
-        "setOption(prefix..'Gross','InlinePattern3','(?<=Gross:)-?\\$[0-9,]+')",
-        "setOption(prefix..'Gross','InlineSetting3','Color | 255,255,255,255')",
-        "setOption(prefix..'Gross','InlinePattern4','(?<=Per Hour:)-?\\$[0-9,]+')",
-        "setOption(prefix..'Gross','InlineSetting4','Color | 255,255,255,255')",
-        "taxColor=marketTax>0 and '244,138,138,255' or '150,150,150,255'",
-        "marketTaxRate=math.max(0,math.min(5,math.floor(number(state[projectedPrefix..'MarketFeePercent'])+0.5)))",
-        "setOption(prefix..'Gross','InlinePattern5','(?<=Tax: )-?\\$[0-9,]+')",
-        "setOption(prefix..'Gross','InlineSetting5','Color | '..taxColor)",
+        "setOption(prefix..'Take','Text','| '..totalCostText)",
+        "setOption(prefix..'Take','FontColor','#Muted#')",
+        "setOption(prefix..'Make','Text',formatSignedMoney(make))",
+        "setOption(prefix..'Make','FontColor',profitColor(make))",
+        "local eachDetail='Each | Gross:'..formatMoney(grossEach)",
+        "local totalDetail='Total | Gross:'..formatMoney(grossSale)",
+        "'% Tax:'..formatMoney(taxEach)",
+        "'% Tax:'..formatMoney(marketTax)",
+        "' Net:'..formatSignedMoney(each)",
+        "' Net:'..formatSignedMoney(make)",
+        "setOption(prefix..'Gross','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')",
+        "setOption(prefix..'DetailTotal','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')",
         "setOption(prefix..'Window','Text','')",
         "setOption(prefix..'Chance','Text','')",
         "if certainty~='' then actionText=actionText..' '..certainty end",
@@ -156,7 +154,7 @@ if($errors.Count -eq 0){
         if(-not$presenter.Contains($token)){Fail "CardPresenter.lua missing compact-card presentation contract '$token'."}
     }
 
-    if(-not$header.Contains("'Card','Flag','Name','Gross','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph'")){
+    if(-not$header.Contains("'Card','Flag','Name','Gross','DetailTotal','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph'")){
         Fail 'HeaderLayout.lua must shift DetailToggle with every compact card row.'
     }
     if(-not$header.Contains('math.max(160,math.floor(panel-compactOffset))')){
@@ -228,7 +226,7 @@ if($errors.Count -eq 0){
         Fail 'PROFIT/HR sort tooltip must describe after-tax net profit per hour.'
     }
 
-    foreach($paletteToken in @('Panel=17,17,17,248','Card=32,32,32,248','Border=64,64,64,255','Muted=150,150,150,255')){
+    foreach($paletteToken in @('Panel=17,17,17,248','Card=32,32,32,248','Border=64,64,64,255','Muted=150,150,150,255','TornLime=126,190,73,255','ToggleDark=38,38,38,255','ToggleIdle=190,190,190,255')){
         if(-not$ini.Contains($paletteToken)){Fail "Neutral main-skin palette missing '$paletteToken'."}
     }
 }
@@ -240,5 +238,5 @@ if($errors.Count -gt 0){
 }
 
 Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
-Write-Host 'Base card, slide-up economics strip, independent graph expansion, Take/Make line, unified window line, gross-profit sorts, and single-owner geometry are enforced.'
+Write-Host 'Base card, split per-item/total economics strip, exact full-load cost, large signed net, centered lime toggles, inline graph expansion, compact footer, and single-owner geometry are enforced.'
 exit 0

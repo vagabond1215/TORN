@@ -11,10 +11,10 @@ In Torn                                      [filter] [settings]
 
 [UPCOMING] [GROSS PROFIT] [PROFIT/HR]
 
-[FLAG]  Xanax | $771,397   Take: $22,679,072   Make: $2,069,508   [$]
+[FLAG]  Xanax | $775,013 | $21,700,364              +$...   [$]
         Restocks in ~47m                                      [chart]
 
-[FLAG]  Ecstasy | $30,529  Take: $897,553      Make: $188,748     [$]
+[FLAG]  Ecstasy | $30,529 | $...                      +$...   [$]
         Collecting Data: See Weav3r                           [chart]
 
 Updated ...
@@ -26,20 +26,19 @@ Up to eight opportunities may be shown.
 
 - No visible row/place numbers.
 - Destination is represented by a flag on the left.
-- The visible first line uses fixed columns: **Item | foreign cost**, **Take**, and **Make**.
-- `Take` is exact purchase cash for fixed-price markets and adds a 5% reserve only for demonstrated variable-price markets.
-- `Make` is after-tax profit and never subtracts the unused Take reserve.
-- The top-right **$** button expands/collapses the one-line economics strip and highlights while open.
-- The lower-right chart button expands/collapses the local 8-hour stock graph and highlights while open. `$` and chart occupy the two halves of one T-divided right-edge end cap.
+- The visible left line is **Item | foreign unit cost | full-load total cost**. The total cost is exact and muted; no variable-price reserve is added.
+- The right side is the signed, after-tax **total net profit**, rendered larger and centered vertically across the two text lines.
+- The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap.
+- Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text.
 - Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering.
 
 Expanded economics are:
 
 ```text
-MV:$...  Each:$...  Gross:$...  Per Hour:$...  <rate>% Tax:$...
+Each | Gross:$...  <rate>% Tax:$...  Net:+$...   ||   Total | Gross:$...  <rate>% Tax:$...  Net:+$...
 ```
 
-Labels are white. MV value is gold-yellow; Each/Gross/Per Hour values are white; Tax value is muted gray at zero and light red when nonzero.
+The expanded row is split into equal per-item and total halves. Gross values are neutral, tax is muted at zero/light red when nonzero, and Net follows green/red profit coloring with an explicit sign.
 
 ## Sort modes
 
@@ -77,7 +76,7 @@ make = gross profit - tax
 profit/hr = make / total elapsed hours
 ```
 
-`Take` is the purchase-cash requirement: exact purchase cost for fixed-price markets, or `ceil(purchase cost × 1.05)` when retained evidence shows variable pricing. The 5% reserve is cash-on-hand only and never reduces `Make`.
+`Full-load cost` is always exact `foreign unit cost × quantity`. Historical price variation remains useful evidence but no longer adds any automatic purchase-cash buffer.
 
 Gross profit intentionally excludes travel cost. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
 

@@ -55,8 +55,8 @@ In Torn                                      [filter] [settings]
 
 [UPCOMING] [GROSS PROFIT] [PROFIT/HR]
 
-[FLAG]  <item> | <foreign cost>   Take:<cash>   Make:<profit>   [$]
-        <window / leave guidance>                              [chart]
+[FLAG]  <item> | <foreign cost> | <full-load cost>      <signed total net>   [$]
+        <window / leave guidance>                                      [chart]
 
 Updated ...
 ```
@@ -66,14 +66,13 @@ Card rules:
 - No visible row/place numbers (`#1`, `#2`, etc.).
 - Left side is a recognizable FlagKit destination flag.
 - The hidden canonical Name meter remains item-name-only for downstream row lookup.
-- The visible first line is three fixed columns: `Item | foreign cost`, `Take:`, and `Make:`.
-- The `|` separator is muted gray; foreign cost keeps its fixed/variable price color.
-- `Take:` is exact purchase cash for invariant foreign prices and adds a 5% reserve only after retained evidence demonstrates real price variance.
-- `Make:` is after-tax profit using actual purchase cost; the unused Take reserve is not an expense.
-- The top-right `$` button expands the economics strip and uses a gold active highlight.
-- The lower-right chart Shape button expands the 8-hour local stock graph. It shares the card's right-edge end cap with the `$` control; the card itself draws the T separator and the chart icon has no separate border.
+- The left first-line content is `Item | foreign unit cost | full-load cost`. Full-load cost is always exact `unit cost x quantity`; price variation never adds a cash buffer.
+- The full-load cost is muted light gray.
+- Total after-tax net profit occupies the right side of both text lines, is 4 pt larger than the old card value, vertically centers on the flag, and is right-aligned. Positive values use `+` and green; negative values use `-` and red.
+- The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap.
+- Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity.
-- Expanded economics show `MV`, `Each`, `Gross`, `Per Hour`, and `<rate>% Tax` on one vertically centered line. MV is the declared/list market value and never changes with tax. Each and Per Hour are after-tax net profit; Gross is gross sale proceeds. Tax is muted gray at zero and light red when nonzero.
+- Expanded economics use two equal halves: `Each | Gross / <rate>% Tax / Net` and `Total | Gross / <rate>% Tax / Net`. Both halves are 10 pt and vertically centered; a divider separates the halves.
 
 Ordering is selectable and persistent only for:
 

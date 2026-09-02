@@ -227,8 +227,8 @@ Rank the next optimization target by `AvgCpuMs` and `P95CpuMs`, not wall time al
 - Declared/list MV is always the sale price used for gross sale; the old 95% MV basis option is retired.
 - Tax/trader rate options are 0%, 1%, 2%, 3%, 4%, and 5%.
 - Tax is calculated exactly once as `floor(gross sale × rate)` and is subtracted only for net profit.
-- `PROFIT/HR` and expanded `Per Hour` use after-tax net profit.
-- Expanded tax text includes the selected rate, e.g. `5% Tax:$1,183,431`.
+- `PROFIT/HR` uses after-tax net profit.
+- Expanded economics are split into per-item and total Gross / `<rate>% Tax` / Net halves; the old Per Hour field is no longer shown there.
 
 ## Target-Windows acceptance for the new redesign
 
@@ -271,24 +271,26 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 2. `SETTINGS >` text is gone.
 3. ITEM/TRIP/CAT/RESET main band is gone.
 4. UPCOMING / GROSS PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only.
-5. Cards match the current compact contract: Item/Cost, independent Take and Make columns, a two-part T-divided right end cap with centered `$` and chart controls, and no separate chart-button border.
-6. Flags remain present; expansion reflow keeps the Updated footer clear.
-7. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
-8. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
-9. Global country All/None and each band All/None work.
-10. Category chips and category All/None work.
-11. Item search filters the local list while preserving each item's staged checked state.
-12. Item All/None works.
-13. Cancel makes no preference change.
-14. Save closes only the filter panel, launches one normal refresh, and the skin remains responsive.
-15. Reopen the panel and confirm saved country/category/item selections round-trip.
-16. Reset + Save restores every country/category/item and all three country bands.
-17. Gear image opens Opportunity Settings without expanding the main skin.
-18. Ignore List opens from Settings without closing Settings.
-19. Profile/API opens from Settings without closing Settings.
-20. Sorting still works; all three sort buttons are equal width with centered labels, and an expanded inline graph still works.
-22. Rainmeter log has zero repeating `publishedState`, `Skin "0"`, Lua nil-index, or malformed SetOption errors.
-23. Rainmeter remains running through at least two normal 60-second polling intervals.
+5. Cards show `Item | unit cost | exact full-load cost` on the left and a large signed total Net on the right; there are no Take/Make labels or variable-price cash buffer.
+6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active cells are Torn lime with dark icons.
+7. Expanded economics are two equal 10pt halves: Each Gross/Tax/Net and Total Gross/Tax/Net.
+8. Flags remain present; the Updated footer sits close beneath the final card without the old excess gap.
+9. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
+10. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
+11. Global country All/None and each band All/None work.
+12. Category chips and category All/None work.
+13. Item search filters the local list while preserving each item's staged checked state.
+14. Item All/None works.
+15. Cancel makes no preference change.
+16. Save closes only the filter panel, launches one normal refresh, and the skin remains responsive.
+17. Reopen the panel and confirm saved country/category/item selections round-trip.
+18. Reset + Save restores every country/category/item and all three country bands.
+19. Gear image opens Opportunity Settings without expanding the main skin.
+20. Ignore List opens from Settings without closing Settings.
+21. Profile/API opens from Settings without closing Settings.
+22. Sorting still works; all three sort buttons are equal width with centered labels, and an expanded inline graph still works.
+23. Rainmeter log has zero repeating `publishedState`, `Skin "0"`, Lua nil-index, or malformed SetOption errors.
+24. Rainmeter remains running through at least two normal 60-second polling intervals.
 
 If any popup fails, inspect:
 

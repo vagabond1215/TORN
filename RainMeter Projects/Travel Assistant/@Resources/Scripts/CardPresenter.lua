@@ -34,6 +34,20 @@ local function formatMoney(value)
     return (negative and '-$' or '$')..out
 end
 
+local function formatSignedMoney(value)
+    local rounded=value<0 and -math.floor(math.abs(value)+0.5) or math.floor(value+0.5)
+    local digits=tostring(math.abs(rounded)); local out=digits:reverse():gsub('(%d%d%d)','%1,'):reverse():gsub('^,','')
+    if rounded>0 then return '+$'..out end
+    if rounded<0 then return '-$'..out end
+    return '$0'
+end
+
+local function profitColor(value)
+    if value>0 then return '#Good#' end
+    if value<0 then return '#Bad#' end
+    return '#Muted#'
+end
+
 local function formatDuration(seconds)
     local value=math.max(0,math.floor(number(seconds))); if value<=0 then return '<1m' end
     local hours=math.floor(value/3600); local minutes=math.floor((value%3600)/60)
@@ -481,16 +495,17 @@ end
 local function applyCompactLayout(index)
     local prefix='MeterOpportunity'..index
     local face='Nirmala UI Semilight'
-    setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',500); setOption(prefix..'Gross','FontFace',face); setOption(prefix..'Gross','FontSize',7); setOption(prefix..'Gross','StringAlign','Left'); setOption(prefix..'Gross','ClipString',1)
+    setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',256); setOption(prefix..'Gross','H',18); setOption(prefix..'Gross','FontFace',face); setOption(prefix..'Gross','FontSize',10); setOption(prefix..'Gross','StringAlign','LeftCenter'); setOption(prefix..'Gross','ClipString',1)
+    setOption(prefix..'DetailTotal','X',282); setOption(prefix..'DetailTotal','W',256); setOption(prefix..'DetailTotal','H',18); setOption(prefix..'DetailTotal','FontFace',face); setOption(prefix..'DetailTotal','FontSize',10); setOption(prefix..'DetailTotal','StringAlign','LeftCenter'); setOption(prefix..'DetailTotal','ClipString',1)
     setOption(prefix..'Name','X',78); setOption(prefix..'Name','W',1); setOption(prefix..'Name','FontFace',face); setOption(prefix..'Name','FontSize',11); setOption(prefix..'Name','FontColor','0,0,0,0'); setOption(prefix..'Name','ClipString',1)
-    setOption(prefix..'Price','X',78); setOption(prefix..'Price','W',180); setOption(prefix..'Price','FontFace',face); setOption(prefix..'Price','FontSize',11); setOption(prefix..'Price','ClipString',1)
-    setOption(prefix..'Take','X',260); setOption(prefix..'Take','W',134); setOption(prefix..'Take','FontFace',face); setOption(prefix..'Take','FontSize',11); setOption(prefix..'Take','ClipString',1)
-    setOption(prefix..'Make','X',396); setOption(prefix..'Make','W',122); setOption(prefix..'Make','FontFace',face); setOption(prefix..'Make','FontSize',11); setOption(prefix..'Make','ClipString',1)
+    setOption(prefix..'Price','X',78); setOption(prefix..'Price','W',198); setOption(prefix..'Price','FontFace',face); setOption(prefix..'Price','FontSize',11); setOption(prefix..'Price','ClipString',1)
+    setOption(prefix..'Take','X',280); setOption(prefix..'Take','W',108); setOption(prefix..'Take','FontFace',face); setOption(prefix..'Take','FontSize',11); setOption(prefix..'Take','FontColor','#Muted#'); setOption(prefix..'Take','ClipString',1)
+    setOption(prefix..'Make','X',504); setOption(prefix..'Make','W',108); setOption(prefix..'Make','H',50); setOption(prefix..'Make','FontFace',face); setOption(prefix..'Make','FontSize',15); setOption(prefix..'Make','StringAlign','RightCenter'); setOption(prefix..'Make','ClipString',1)
     setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',1)
-    setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',440); setOption(prefix..'Leave','FontFace',face); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
+    setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',308); setOption(prefix..'Leave','FontFace',face); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
     setOption(prefix..'Chance','X',78); setOption(prefix..'Chance','W',1)
-    setOption(prefix..'DetailToggle','X',522); setOption(prefix..'DetailToggle','W',18); setOption(prefix..'DetailToggle','FontFace',face)
-    setOption(prefix..'Graph','X',522); setOption(prefix..'Graph','W',18); setOption(prefix..'Graph','FontFace',face)
+    setOption(prefix..'DetailToggle','X',531); setOption(prefix..'DetailToggle','W',26); setOption(prefix..'DetailToggle','H',25); setOption(prefix..'DetailToggle','StringAlign','CenterCenter'); setOption(prefix..'DetailToggle','FontFace',face); setOption(prefix..'DetailToggle','FontSize',10)
+    setOption(prefix..'Graph','X',518); setOption(prefix..'Graph','W',26); setOption(prefix..'Graph','H',25)
 end
 
 local function configureWindowTooltipMeter(name,tooltip)
@@ -518,17 +533,16 @@ local function updateRow(index,state,now)
     local fallbackLeave=meterOption(prefix..'Leave','Text')
 
     local rawTooltip=trim(state[projectedPrefix..'Tooltip'])
-    local plan,humanTooltip,priceVaries=parseWindowPlan(rawTooltip)
+    local plan,humanTooltip=parseWindowPlan(rawTooltip)
     local quantity=quantityFromProjectedState(state,projectedPrefix)
     if quantity<=0 then quantity=quantityFromTooltip(humanTooltip) end
 
     local unitCost=buyPriceFromProjectedState(state,projectedPrefix)
-    local take=number(state[projectedPrefix..'TakeValue'])
-    if take<=0 then
+    local totalCost=number(state[projectedPrefix..'TotalCostValue'])
+    if totalCost<=0 then
         local fallbackPrice=unitCost
         if fallbackPrice<=0 then fallbackPrice=buyPriceFromVisibleText(meterOption(prefix..'Price','Text')) end
-        local bufferRate=priceVaries and 0.05 or 0.0
-        take=(fallbackPrice>0 and quantity>0) and math.ceil(fallbackPrice*quantity*(1.0+bufferRate)) or 0
+        totalCost=(fallbackPrice>0 and quantity>0) and (fallbackPrice*quantity) or 0
     end
 
     local makeRaw=trim(state[projectedPrefix..'MakeValue'])
@@ -537,15 +551,16 @@ local function updateRow(index,state,now)
     if mv<=0 then mv=parseMoney(state[projectedPrefix..'MarketValueText']) end
     local each=number(state[projectedPrefix..'ProfitEachValue'])
     local grossSale=number(state[projectedPrefix..'GrossSaleValue'])
-    local profitHour=number(state[projectedPrefix..'ProfitHourValue'])
     local marketTax=number(state[projectedPrefix..'MarketTaxValue'])
     local marketTaxRate=math.max(0,math.min(5,math.floor(number(state[projectedPrefix..'MarketFeePercent'])+0.5)))
+    local grossEach=(quantity>0 and grossSale>0) and math.floor((grossSale/quantity)+0.5) or mv
+    local taxEach=(quantity>0 and marketTax>0) and math.floor((marketTax/quantity)+0.5) or 0
 
     setOption(prefix..'Name','Text',itemName)
     setOption(prefix..'Name','ToolTipText','Item name')
     setOption(prefix..'Name','FontColor','0,0,0,0')
 
-    local takeText=take>0 and formatMoney(take) or '?'
+    local totalCostText=totalCost>0 and formatMoney(totalCost) or '?'
     local unitCostText=unitCost>0 and formatMoney(unitCost) or '?'
     setOption(prefix..'Price','Text',itemName..' | '..unitCostText)
     setOption(prefix..'Price','FontColor','#Text#')
@@ -555,37 +570,43 @@ local function updateRow(index,state,now)
     if priceColor=='' then priceColor='#Text#' end
     setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')
     setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)
-    setOption(prefix..'Take','Text','Take: '..takeText)
-    setOption(prefix..'Take','FontColor','#Text#')
-    setOption(prefix..'Make','Text','Make: '..formatMoney(make))
-    setOption(prefix..'Make','FontColor','#Text#')
-    if priceVaries then
-        setOption(prefix..'Take','ToolTipText','Includes a 5% cash reserve because the foreign price varies.')
-    else
-        setOption(prefix..'Take','ToolTipText','Exact purchase cash for a fixed foreign price.')
-    end
-    setOption(prefix..'Price','ToolTipText','Item | foreign unit cost')
-    setOption(prefix..'Make','ToolTipText','After-tax profit using actual purchase cost; Take reserve is not an expense.')
+    setOption(prefix..'Take','Text','| '..totalCostText)
+    setOption(prefix..'Take','FontColor','#Muted#')
+    setOption(prefix..'Make','Text',formatSignedMoney(make))
+    setOption(prefix..'Make','FontColor',profitColor(make))
+    setOption(prefix..'Take','ToolTipText','Full-load purchase cost: foreign unit cost x quantity.')
+    setOption(prefix..'Price','ToolTipText','Item | foreign unit cost | full-load purchase cost')
+    setOption(prefix..'Make','ToolTipText','After-tax total net profit for the full load.')
 
-    local detail='MV:'..formatMoney(mv)..
-        '  Each:'..formatMoney(each)..
-        '  Gross:'..formatMoney(grossSale)..
-        '  Per Hour:'..formatMoney(profitHour)..
-        '  '..tostring(marketTaxRate)..'% Tax: '..formatMoney(marketTax)
-    setOption(prefix..'Gross','Text',detail)
-    setOption(prefix..'Gross','FontColor','255,255,255,255')
-    setOption(prefix..'Gross','ToolTipText','Declared market value | net profit per item | gross sale | net profit per hour | selected sale tax')
-    setOption(prefix..'Gross','InlinePattern','(?<=MV:)-?\\$[0-9,]+')
-    setOption(prefix..'Gross','InlineSetting','Color | 218,178,69,255')
-    setOption(prefix..'Gross','InlinePattern2','(?<=Each:)-?\\$[0-9,]+')
-    setOption(prefix..'Gross','InlineSetting2','Color | 255,255,255,255')
-    setOption(prefix..'Gross','InlinePattern3','(?<=Gross:)-?\\$[0-9,]+')
-    setOption(prefix..'Gross','InlineSetting3','Color | 255,255,255,255')
-    setOption(prefix..'Gross','InlinePattern4','(?<=Per Hour:)-?\\$[0-9,]+')
-    setOption(prefix..'Gross','InlineSetting4','Color | 255,255,255,255')
     local taxColor=marketTax>0 and '244,138,138,255' or '150,150,150,255'
-    setOption(prefix..'Gross','InlinePattern5','(?<=Tax: )-?\\$[0-9,]+')
-    setOption(prefix..'Gross','InlineSetting5','Color | '..taxColor)
+    local eachNetColor=profitColor(each)
+    local totalNetColor=profitColor(make)
+    local eachDetail='Each | Gross:'..formatMoney(grossEach)..
+        ' '..tostring(marketTaxRate)..'% Tax:'..formatMoney(taxEach)..
+        ' Net:'..formatSignedMoney(each)
+    local totalDetail='Total | Gross:'..formatMoney(grossSale)..
+        ' '..tostring(marketTaxRate)..'% Tax:'..formatMoney(marketTax)..
+        ' Net:'..formatSignedMoney(make)
+
+    setOption(prefix..'Gross','Text',eachDetail)
+    setOption(prefix..'Gross','FontColor','#Text#')
+    setOption(prefix..'Gross','ToolTipText','Per item: gross sale | selected tax | after-tax net profit')
+    setOption(prefix..'Gross','InlinePattern','(?<=Gross:)\\$[0-9,]+')
+    setOption(prefix..'Gross','InlineSetting','Color | 225,225,225,255')
+    setOption(prefix..'Gross','InlinePattern2','(?<=Tax:)\\$[0-9,]+')
+    setOption(prefix..'Gross','InlineSetting2','Color | '..taxColor)
+    setOption(prefix..'Gross','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')
+    setOption(prefix..'Gross','InlineSetting3','Color | '..eachNetColor)
+
+    setOption(prefix..'DetailTotal','Text',totalDetail)
+    setOption(prefix..'DetailTotal','FontColor','#Text#')
+    setOption(prefix..'DetailTotal','ToolTipText','Full load: gross sale | selected tax | after-tax net profit')
+    setOption(prefix..'DetailTotal','InlinePattern','(?<=Gross:)\\$[0-9,]+')
+    setOption(prefix..'DetailTotal','InlineSetting','Color | 225,225,225,255')
+    setOption(prefix..'DetailTotal','InlinePattern2','(?<=Tax:)\\$[0-9,]+')
+    setOption(prefix..'DetailTotal','InlineSetting2','Color | '..taxColor)
+    setOption(prefix..'DetailTotal','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')
+    setOption(prefix..'DetailTotal','InlineSetting3','Color | '..totalNetColor)
 
     setOption(prefix..'Window','Text','')
     setOption(prefix..'Chance','Text','')
