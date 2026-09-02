@@ -52,7 +52,7 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText)",
         "setOption(prefix..'Price','InlinePattern','\\|')","setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
         "state[projectedPrefix..'PriceColor']","setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')","setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
-        "setOption(prefix..'Take','Text','| '..totalCostText)","setOption(prefix..'Take','FontColor','#Muted#')",
+        "setOption(prefix..'Take','Text','| '..totalCostText)","setOption(prefix..'Take','FontColor','#ToggleIdle#')",
         "setOption(prefix..'Make','Text',formatSignedMoney(make))","setOption(prefix..'Make','FontColor',profitColor(make))",
         "formatSignedMoney","profitColor",
         "local eachDetail='Each | Gross:'..formatMoney(grossEach)","'% Tax:'..formatMoney(taxEach)","' Net:'..formatSignedMoney(each)",
