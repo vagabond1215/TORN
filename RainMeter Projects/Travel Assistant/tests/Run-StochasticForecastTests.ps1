@@ -64,6 +64,57 @@ $longEvidence=@(Select-SFJointCycleEvidence -Cycles $longGridCycles -AsOf $now)
 $longPlan=Get-SFAdaptiveGridPlan -Evidence $longEvidence -Travel $burstTravel -CoarseStepSeconds 900 -Enabled $true
 Assert-True (-not [bool]$longPlan.enabled) 'Stock durations longer than the coarse grid should not pay for adaptive refinement.'
 
+# Retained intermediate stock observations should preserve an empirical depletion
+# trajectory jointly with the sampled cycle. The linear model remains an explicit
+# fallback when no informative intermediate observations exist.
+$shapeCycles=New-Object System.Collections.Generic.List[object]
+$shapeObservations=New-Object System.Collections.Generic.List[object]
+foreach($spec in @(
+    [pscustomobject]@{restock=100L;sellout=200L;previous=50L},
+    [pscustomobject]@{restock=400L;sellout=500L;previous=350L},
+    [pscustomobject]@{restock=700L;sellout=800L;previous=650L}
+)){
+    $shapeCycles.Add([pscustomobject]@{
+        schemaVersion=2;country='test_country';itemId=1;foreignPrice=50L;restockQuantity=100
+        restockAt=$spec.restock;restockLowerBoundAt=$spec.restock;restockUpperBoundAt=$spec.restock;restockBoundaryQuality='observed'
+        soldOutAt=$spec.sellout;soldOutLowerBoundAt=$spec.sellout;soldOutUpperBoundAt=$spec.sellout;soldOutBoundaryQuality='observed'
+        previousSoldOutAt=$spec.previous;previousSoldOutLowerBoundAt=$spec.previous;previousSoldOutUpperBoundAt=$spec.previous;previousSellOutBoundaryQuality='observed'
+        restockDelaySeconds=50L;restockDelayMinimumSeconds=50L;restockDelayMaximumSeconds=50L;restockDelayEligible=$true
+        availabilitySeconds=100L;availabilityMinimumSeconds=100L;availabilityMaximumSeconds=100L;availabilityEligible=$true
+        forecastEligible=$true;trendEligible=$true;evidenceQuality='bounded_fresh'
+    })
+    foreach($point in @(
+        [pscustomobject]@{offset=0L;stock=100},
+        [pscustomobject]@{offset=50L;stock=80},
+        [pscustomobject]@{offset=75L;stock=20},
+        [pscustomobject]@{offset=100L;stock=0}
+    )){
+        $ts=[long]$spec.restock+[long]$point.offset
+        $shapeObservations.Add([pscustomobject]@{
+            schemaVersion=2;timestamp=$ts;sourceTimestamp=$ts;country='test_country';itemId=1
+            stock=[int]$point.stock;foreignPrice=50L;source='shape-fixture'
+        })
+    }
+}
+$shapeEvidence=@(Select-SFJointCycleEvidence -Cycles $shapeCycles.ToArray() -AsOf $now -Observations $shapeObservations.ToArray())
+Assert-Equal $shapeEvidence.Count 3 'All shape fixtures should remain usable joint-cycle evidence.'
+Assert-True (@($shapeEvidence | Where-Object {$null -ne $_.depletionShape}).Count -eq 3) 'Each shape fixture should retain an empirical depletion trajectory.'
+Assert-True ([int]$shapeEvidence[0].depletionShape.pointCount -ge 4) 'Empirical trajectory should include structural endpoints plus informative intermediate stock points.'
+
+$shapeInterval=New-SFStockInterval -StartAt 1000L -EndAt 1100L -Quantity 100L -ForeignPrice 50L -Ordinal 1 -DepletionShape $shapeEvidence[0].depletionShape
+$linearInterval=New-SFStockInterval -StartAt 1000L -EndAt 1100L -Quantity 100L -ForeignPrice 50L -Ordinal 1
+Assert-Equal (Get-SFIntervalQuantity -Interval $shapeInterval -ArrivalAt 1050L) 80L 'Empirical piecewise shape should preserve 80% stock at the historical halfway point.'
+Assert-Equal (Get-SFIntervalQuantity -Interval $linearInterval -ArrivalAt 1050L) 50L 'Missing shape evidence should retain the legacy linear fallback.'
+
+$shapeTravel=[pscustomobject]@{feasible=$true;mode='home';reason='shape';candidates=@([pscustomobject]@{departureAt=$now;arrivalAt=1100L})}
+$shapeDestination=[pscustomobject]@{lastSellOutAt=$now;lastSellOutLowerBoundAt=$now;lastSellOutUpperBoundAt=$now}
+$shapeForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $shapeCycles.ToArray() -Observations $shapeObservations.ToArray() -Market $oosMarket -Destination $shapeDestination -Travel $shapeTravel -NowEpoch $now -ScenarioCount 64 -TargetQuantity 100 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 55 -EnableAdaptiveGrid $false
+$linearForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $shapeCycles.ToArray() -Market $oosMarket -Destination $shapeDestination -Travel $shapeTravel -NowEpoch $now -ScenarioCount 64 -TargetQuantity 100 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 55 -EnableAdaptiveGrid $false
+Assert-Equal ([string]$shapeForecast.depletionModel) 'empirical_piecewise_with_linear_fallback' 'Forecast diagnostics should identify empirical piecewise depletion when shape evidence exists.'
+Assert-Equal ([int]$shapeForecast.depletionShapeEvidenceCount) 3 'Forecast diagnostics should count shaped cycle evidence.'
+Assert-Equal ([string]$linearForecast.depletionModel) 'linear_fallback' 'Forecast diagnostics should expose linear fallback when intermediate observations are absent.'
+Assert-True ([double]$shapeForecast.arrivals[0].expectedQty -gt ([double]$linearForecast.arrivals[0].expectedQty+20.0)) 'Empirical depletion shape should materially change expected arrival quantity versus the linear fallback.'
+
 # Fresh current stock that cannot survive the flight still permits a later cycle.
 $shortCurrent=New-TestCycles -DelayMin 100 -DelayMax 100 -AvailableMin 100 -AvailableMax 100
 $currentMarket=[pscustomobject]@{lastStock=10;lastForeignPrice=50;sourceTimestamp=$now}
@@ -166,6 +217,8 @@ Assert-Equal $stableSeedA $stableSeedB 'Market seed must remain stable across re
 
 $modelText=Get-Content -Raw -LiteralPath $modelPath
 Assert-True (-not $modelText.Contains('Floor($Now/60.0)')) 'Runtime stochastic seed must not rotate every minute and inject Monte Carlo noise into unchanged evidence.'
+Assert-True ($modelText.Contains('Read-SFObservationsForKeys')) 'Stochastic runtime must load retained observations for empirical depletion shapes.'
+Assert-True ($modelText.Contains('Get-SFIntervalQuantity')) 'All stochastic quantity scoring should route through the shared shape-aware interval quantity helper.'
 foreach($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','System.Net.WebClient')){
     Assert-True (-not $modelText.Contains($networkToken)) ("StochasticForecast must remain network-free; found "+$networkToken)
 }
@@ -177,5 +230,5 @@ Assert-True ($publishIndex -ge 0 -and $stochasticIndex -gt $publishIndex) 'Shado
 Assert-True ($resaleIndex -ge 0 -and $stochasticIndex -gt $resaleIndex) 'Shadow stochastic work must remain lower priority than the production resale/MV queue.'
 
 if($failures.Count -gt 0){foreach($failure in $failures){Write-Host "FAIL: $failure" -ForegroundColor Red};Write-Host "Stochastic tests failed with $($failures.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Stochastic-v1 adaptive-grid, multi-cycle, travel, economics, determinism, replay, and fail-soft tests passed.' -ForegroundColor Green
+Write-Host 'Stochastic-v1 adaptive-grid, empirical-depletion, multi-cycle, travel, economics, determinism, replay, and fail-soft tests passed.' -ForegroundColor Green
 exit 0
