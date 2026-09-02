@@ -26,6 +26,12 @@ try {
     Remove-Item -LiteralPath $tempJson -Force -ErrorAction SilentlyContinue
 }
 
+$perfectAggregate=New-SCAggregate -ModelVersion 'metric-fixture' -ScopeType all -ScopeValue all
+Add-SCProbabilityScore -Aggregate $perfectAggregate -Prefix any -Probability 1.0 -Outcome 1
+Add-SCProbabilityScore -Aggregate $perfectAggregate -Prefix any -Probability 0.0 -Outcome 0
+Assert-Near ([double]$perfectAggregate.anyBrierSum) 0.0 0.000000001 'Perfect 0%/100% forecasts must have exact zero Brier contribution.'
+Assert-True ([double]$perfectAggregate.anyLogLossSum -gt 0.0) 'Log loss should remain finite through epsilon clipping even for exact 0%/100% forecasts.'
+
 function New-CalCycle {
     param(
         [long]$RestockLower,
