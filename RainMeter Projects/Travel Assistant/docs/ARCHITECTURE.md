@@ -147,13 +147,13 @@ The standalone WinForms Viewer, its launcher, and its Rainmeter measure are reti
 Each compact row is:
 
 ```text
-[FlagKit flag]  Item | foreign cost | full-load cost   signed total net   [$]
+[FlagKit flag]  Item                         selected Profit / PROFIT/HR   [$]
                 window / leave guidance                              [chart]
 ```
 
 - No rank/place number.
 - No country name/code in the card body.
-- The left first-line content is Item / foreign unit cost / exact full-load cost; no variable-price reserve is applied.
+- The left first-line content is item name only; foreign unit cost and exact full-load purchase cost move to the expanded economics strip. No variable-price reserve is applied.
 - Signed total net profit is larger, right-aligned, and vertically centered over the two card text lines.
 - Card fill is pure black to match the inline graph background; the existing gray card border, internal half divider, and right end-cap separators remain unchanged.
 - Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license. The flag/mask surface is `67x50` starting at the card origin so color extends beneath the border instead of leaving 1px bands. Three tiny alpha-mask assets (`both`, `top`, `bottom`) tint to `#Panel#` and clip the flag's left corners according to expansion state; a border-only `CardBorder` meter redraws the rounded card outline over the flag.
@@ -308,19 +308,19 @@ The standalone WinForms Viewer, its launcher, and its Rainmeter measure are reti
 Each compact row is:
 
 ```text
-[FlagKit flag]  Item | foreign cost | full-load cost   signed total net   [$]
+[FlagKit flag]  Item                         selected Profit / PROFIT/HR   [$]
                 window / leave guidance                              [chart]
 ```
 
 - No rank/place number.
 - No country name/code in the card body.
-- The left first-line content is Item / foreign unit cost / exact full-load cost; no variable-price reserve is applied.
+- The left first-line content is item name only; foreign unit cost and exact full-load purchase cost move to the expanded economics strip. No variable-price reserve is applied.
 - Signed total net profit is larger, right-aligned, and vertically centered over the two card text lines.
 - Card fill is pure black to match the inline graph background; the existing gray card border, internal half divider, and right end-cap separators remain unchanged.
 - Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license. The flag/mask surface is `67x50` starting at the card origin so color extends beneath the border instead of leaving 1px bands. Three tiny alpha-mask assets (`both`, `top`, `bottom`) tint to `#Panel#` and clip the flag's left corners according to expansion state; a border-only `CardBorder` meter redraws the rounded card outline over the flag.
 - The item-art cell spans exactly 48px from the flag edge to the text origin, matching the 48px card interior height. A transparent `44x44` item image sits inside with a 2px inset. `EnsureItemImages.ps1` caches Torn's direct `images/items/<id>/large.png` asset in `@Resources/Generated/Items`; missing/failed decorative art never blocks card rendering.
 - Hovering the flag exposes country + configured one-way travel time.
- button expands a fixed 34px, two-row economics bar. Each half begins with a 40px `#Border#`-filled vertical label block (`Each` / `Total`). MV is left-aligned and Net right-aligned on the top row. Row two shows Tax on the left only when the saved rate is nonzero and always shows round-trip flight `$/hr` on the right. The flight rate uses after-tax Each/Total net divided by `2 x` configured one-way flight seconds and intentionally excludes waiting/window time. Both value baselines are shifted 1 px upward for optical centering. At 0% only Tax text is hidden; the second row remains for `$/hr`. Pipe separators are not part of this surface.
+ button expands a fixed 34px, two-row economics bar. Each half begins with a 40px `#Border#`-filled vertical label block (`Each` / `Total`). MV is top-left. Top-right displays whichever profitability metric is not primary: round-trip flight `$/hr` for `UPCOMING` / `PROFIT`, or signed Net for `PROFIT/HR`. Bottom-left displays foreign unit Price / exact total purchase Price, while Tax is right-aligned in the bottom-right cell when nonzero. The flight rate uses after-tax Each/Total net divided by `2 x` configured one-way flight seconds and intentionally excludes waiting/window time.
 - `$` and chart are centered in the two halves of one T-divided right-edge end cap; active cells use Torn-lime fill and dark-gray icons. Active sort text plus the top filter/settings icons use the same Torn-lime UI accent. Their fills are inset one pixel so the card border and separators remain unobscured.
 - Clicking the card body toggles both economics and inline graph expansion for that stable row key; the two end-cap controls continue to toggle their sections independently.
 - Window/leave guidance is positioned low in the card body to minimize padding above the bottom border.
@@ -368,7 +368,7 @@ gross sale = quantity × declared MV
 gross profit = gross sale - purchase cost
 tax = floor(gross sale × selected rate)
 net profit = gross profit - tax
-profit/hr = net profit / total elapsed hours
+profit/hr = net profit / round-trip flight hours
 ```
 
 Gross profit intentionally excludes travel cost; tax is a separate deduction into net profit. Hit probability is displayed separately and is not multiplied into `PROFIT/HR`.
