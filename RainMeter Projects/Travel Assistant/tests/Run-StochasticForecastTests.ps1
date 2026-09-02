@@ -62,6 +62,10 @@ Assert-Equal ([int]$many.arrivals[0].maximumCycleOrdinal) 3 'Simulator must cont
 $returning=Get-SFTravelCandidates -TravelState returning -MarketCountry test_country -TravelDestinationCountry '' -TravelTimeLeft 600 -OneWaySeconds 100 -NowEpoch $now -StepSeconds 300 -SearchSeconds 900
 Assert-True (@($returning.candidates | Where-Object {[long]$_.departureAt -lt 1600L}).Count -eq 0) 'Returning player must not receive a departure before return landing.'
 
+$missingTravel=Get-SFTravelCandidates -TravelState home -MarketCountry test_country -TravelDestinationCountry '' -TravelTimeLeft 0 -OneWaySeconds 0 -NowEpoch $now
+Assert-True (-not [bool]$missingTravel.feasible) 'Missing one-way travel time must fail closed rather than treat arrival as immediate.'
+Assert-Equal ([string]$missingTravel.mode) 'missing_travel_time' 'Missing travel time should expose an explicit shadow diagnostic mode.'
+
 $committed=Get-SFTravelCandidates -TravelState traveling -MarketCountry test_country -TravelDestinationCountry test_country -TravelTimeLeft 350 -OneWaySeconds 100 -NowEpoch $now
 $committedForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $cycles -Market $oosMarket -Destination $oosDestination -Travel $committed -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 9
 Assert-Equal ([string]$committedForecast.decision.state) 'COMMITTED' 'Already outbound to target must produce COMMITTED shadow state.'
@@ -110,7 +114,12 @@ foreach($row in @($replay.rows)){
 Assert-True ($replay.PSObject.Properties['forecastMetrics'] -ne $null) 'Replay scaffold must expose forecast metrics.'
 Assert-True ($replay.PSObject.Properties['decisionMetrics'] -ne $null) 'Replay scaffold must expose decision metrics.'
 
+$stableSeedA=Get-SFStableSeed -MarketKey 'test_country:1' -BaseSeed 42
+$stableSeedB=Get-SFStableSeed -MarketKey 'test_country:1' -BaseSeed 42
+Assert-Equal $stableSeedA $stableSeedB 'Market seed must remain stable across repeated minute updates when evidence is unchanged.'
+
 $modelText=Get-Content -Raw -LiteralPath $modelPath
+Assert-True (-not $modelText.Contains('Floor($Now/60.0)')) 'Runtime stochastic seed must not rotate every minute and inject Monte Carlo noise into unchanged evidence.'
 foreach($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','System.Net.WebClient')){
     Assert-True (-not $modelText.Contains($networkToken)) ("StochasticForecast must remain network-free; found "+$networkToken)
 }
