@@ -158,7 +158,7 @@ Static/focused tests have been updated to guard:
 - existing card presenter and Rainmeter card contracts;
 - popup launch detachment and updater routing;
 - full presentation-pipeline completion before any explicit Rainmeter redraw, preventing transient `UPDATE STALE` / intermediate-card flashes;
-- compact 132 px hard-stale/no-row geometry;
+- compact 160 px hard-stale/no-row geometry with footer reserve;
 - one compact updater performance sample per completed worker with per-stage pwsh CPU and wall milliseconds;
 - elimination of the retired no-op PostUpdate history invocation;
 - steady-state EngineState schema repair avoids scanning observations.jsonl unless an in-stock market actually lacks activeCycle;
