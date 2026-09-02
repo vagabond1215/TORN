@@ -552,12 +552,12 @@ local function setGraphButtonState(name, expanded)
     local fill=expanded and '126,190,73,255' or '0,0,0,1'
     local icon=expanded and '38,38,38,255' or '190,190,190,255'
     SKIN:Bang('!SetOption', name, 'GraphExpanded', expanded and '1' or '0')
-    SKIN:Bang('!SetOption', name, 'Shape', 'Rectangle 0,0,26,25 | Fill Color '..fill..' | StrokeWidth 0')
-    SKIN:Bang('!SetOption', name, 'Shape2', 'Line 8,17,8,8 | StrokeWidth 1 | Stroke Color '..icon)
-    SKIN:Bang('!SetOption', name, 'Shape3', 'Line 8,17,18,17 | StrokeWidth 1 | Stroke Color '..icon)
-    SKIN:Bang('!SetOption', name, 'Shape4', 'Line 9,15,12,12 | StrokeWidth 1 | Stroke Color '..icon)
-    SKIN:Bang('!SetOption', name, 'Shape5', 'Line 12,12,14,14 | StrokeWidth 1 | Stroke Color '..icon)
-    SKIN:Bang('!SetOption', name, 'Shape6', 'Line 14,14,18,9 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape', 'Rectangle 0,0,24,23 | Fill Color '..fill..' | StrokeWidth 0')
+    SKIN:Bang('!SetOption', name, 'Shape2', 'Line 7,16,7,7 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape3', 'Line 7,16,17,16 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape4', 'Line 8,14,11,11 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape5', 'Line 11,11,13,13 | StrokeWidth 1 | Stroke Color '..icon)
+    SKIN:Bang('!SetOption', name, 'Shape6', 'Line 13,13,17,8 | StrokeWidth 1 | Stroke Color '..icon)
 end
 
 local function setDetailButtonState(name, expanded)
@@ -672,7 +672,10 @@ local function layoutRows(data, count)
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
         end
 
-        SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+3+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Flag', 'X', '9')
+        SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+1+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Flag', 'W', '64')
+        SKIN:Bang('!SetOption', p .. 'Flag', 'H', '48')
         SKIN:Bang('!SetOption', p .. 'Name', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Price', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Take', 'Y', tostring(y+6+bodyOffset))
@@ -681,13 +684,13 @@ local function layoutRows(data, count)
         setDetailButtonState(p .. 'DetailToggle', detailExpanded)
         SKIN:Bang('!SetOption', p .. 'DetailToggle', 'ToolTipText', detailExpanded and 'Hide card economics' or 'Show card economics')
 
-        SKIN:Bang('!SetOption', p .. 'Window', 'Y', tostring(y+27+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Window', 'Y', tostring(y+34+bodyOffset))
         SKIN:Bang('!HideMeter', p .. 'Window')
-        SKIN:Bang('!SetOption', p .. 'Leave', 'Y', tostring(y+27+bodyOffset))
-        SKIN:Bang('!SetOption', p .. 'Chance', 'Y', tostring(y+27+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Leave', 'Y', tostring(y+34+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Chance', 'Y', tostring(y+34+bodyOffset))
         SKIN:Bang('!HideMeter', p .. 'Chance')
 
-        SKIN:Bang('!SetOption', p .. 'Graph', 'Y', tostring(y+25+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Graph', 'Y', tostring(y+26+bodyOffset))
         setGraphButtonState(p .. 'Graph', graphExpanded)
         SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y', tostring(y+53+bodyOffset))
         if not graphExpanded then SKIN:Bang('!HideMeter', p .. 'InlineGraph') end

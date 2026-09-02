@@ -153,10 +153,11 @@ Each compact row is:
 - No country name/code in the card body.
 - The left first-line content is Item / foreign unit cost / exact full-load cost; no variable-price reserve is applied.
 - Signed total net profit is larger, right-aligned, and vertically centered over the two card text lines.
-- Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license.
+- Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license. The image is `64x48` inside the `50px` card with a one-pixel inset, so the card border remains exposed and the asset's rounded corners remain visible.
 - Hovering the flag exposes country + configured one-way travel time.
-- The `$` button expands a two-half economics row: per-item Gross/Tax/Net on the left and total Gross/Tax/Net on the right.
-- `$` and chart are centered in the two halves of one T-divided right-edge end cap; active cells use Torn-lime fill and dark-gray icons.
+- The `$` button expands a two-half 9pt economics row: per-item MV/Tax/Net on the left and total MV/Tax/Net on the right; the redundant Each/Total prefixes are omitted.
+- `$` and chart are centered in the two halves of one T-divided right-edge end cap; active cells use Torn-lime fill and dark-gray icons. Their fills are inset one pixel so the card border and separators remain unobscured.
+- Window/leave guidance is positioned low in the card body to minimize padding above the bottom border.
 - The chart button expands the local 8-hour graph.
 - A known 0% arrival case displays `NO HIT` rather than `LEAVE NOW`; unknown likelihood displays `WAIT DATA`.
 

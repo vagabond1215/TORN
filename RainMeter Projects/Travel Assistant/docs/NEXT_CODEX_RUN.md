@@ -272,9 +272,9 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 3. ITEM/TRIP/CAT/RESET main band is gone.
 4. UPCOMING / GROSS PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only.
 5. Cards show `Item | unit cost | exact full-load cost` on the left and a large signed total Net on the right; there are no Take/Make labels or variable-price cash buffer.
-6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active cells are Torn lime with dark icons.
-7. Expanded economics are two equal 10pt halves: Each Gross/Tax/Net and Total Gross/Tax/Net.
-8. Flags remain present; the Updated footer sits close beneath the final card without the old excess gap.
+6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active Torn-lime fills are inset so the card border/T separators remain visible.
+7. Expanded economics are two equal 9pt unlabeled halves: per-item MV/Tax/Net and total MV/Tax/Net.
+8. Flags fill the card interior at a one-pixel inset and retain rounded transparent corners; the window/guidance line sits close to the card's bottom border. The Updated footer remains close beneath the final card.
 9. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
 10. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
 11. Global country All/None and each band All/None work.

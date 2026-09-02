@@ -69,10 +69,11 @@ Card rules:
 - The left first-line content is `Item | foreign unit cost | full-load cost`. Full-load cost is always exact `unit cost x quantity`; price variation never adds a cash buffer.
 - The full-load cost is muted light gray.
 - Total after-tax net profit occupies the right side of both text lines, is 4 pt larger than the old card value, vertically centers on the flag, and is right-aligned. Positive values use `+` and green; negative values use `-` and red.
-- The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap.
+- The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap. Their active fill is inset one pixel so the card border and T separators always remain visible above/around the highlight.
 - Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity.
-- Expanded economics use two equal halves: `Each | Gross / <rate>% Tax / Net` and `Total | Gross / <rate>% Tax / Net`. Both halves are 10 pt and vertically centered; a divider separates the halves.
+- Expanded economics use two equal unlabeled halves: per-item `MV / <rate>% Tax / Net` on the left and full-load `MV / <rate>% Tax / Net` on the right. Both halves are 9 pt and vertically centered; a divider separates the halves.
+- The FlagKit image fills the card interior at a one-pixel inset (`64x48` in a `50px` card), preserving the asset's rounded transparent corners without covering the card border. The window/guidance line sits low in the card with minimal bottom padding.
 
 Ordering is selectable and persistent only for:
 

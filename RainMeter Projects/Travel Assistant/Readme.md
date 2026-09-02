@@ -28,17 +28,18 @@ Up to eight opportunities may be shown.
 - Destination is represented by a flag on the left.
 - The visible left line is **Item | foreign unit cost | full-load total cost**. The total cost is exact and muted; no variable-price reserve is added.
 - The right side is the signed, after-tax **total net profit**, rendered larger and centered vertically across the two text lines.
-- The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap.
+- The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap. Active fills are inset so they do not paint over the border or T separators.
 - Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text.
+- The destination flag fills the card interior vertically with a one-pixel border inset, and the window/guidance text is lowered close to the bottom border.
 - Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering.
 
 Expanded economics are:
 
 ```text
-Each | Gross:$...  <rate>% Tax:$...  Net:+$...   ||   Total | Gross:$...  <rate>% Tax:$...  Net:+$...
+MV:$...  <rate>% Tax:$...  Net:+$...   ||   MV:$...  <rate>% Tax:$...  Net:+$...
 ```
 
-The expanded row is split into equal per-item and total halves. Gross values are neutral, tax is muted at zero/light red when nonzero, and Net follows green/red profit coloring with an explicit sign.
+The expanded row is split into equal 9pt per-item and total halves. The left MV is per item; the right MV is full-load MV. Tax is muted at zero/light red when nonzero, and Net follows green/red profit coloring with an explicit sign.
 
 ## Sort modes
 

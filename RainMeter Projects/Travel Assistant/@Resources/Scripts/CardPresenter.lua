@@ -495,8 +495,8 @@ end
 local function applyCompactLayout(index)
     local prefix='MeterOpportunity'..index
     local face='Nirmala UI Semilight'
-    setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',256); setOption(prefix..'Gross','H',18); setOption(prefix..'Gross','FontFace',face); setOption(prefix..'Gross','FontSize',10); setOption(prefix..'Gross','StringAlign','LeftCenter'); setOption(prefix..'Gross','ClipString',1)
-    setOption(prefix..'DetailTotal','X',282); setOption(prefix..'DetailTotal','W',256); setOption(prefix..'DetailTotal','H',18); setOption(prefix..'DetailTotal','FontFace',face); setOption(prefix..'DetailTotal','FontSize',10); setOption(prefix..'DetailTotal','StringAlign','LeftCenter'); setOption(prefix..'DetailTotal','ClipString',1)
+    setOption(prefix..'Gross','X',14); setOption(prefix..'Gross','W',256); setOption(prefix..'Gross','H',18); setOption(prefix..'Gross','FontFace',face); setOption(prefix..'Gross','FontSize',9); setOption(prefix..'Gross','StringAlign','LeftCenter'); setOption(prefix..'Gross','ClipString',1)
+    setOption(prefix..'DetailTotal','X',282); setOption(prefix..'DetailTotal','W',256); setOption(prefix..'DetailTotal','H',18); setOption(prefix..'DetailTotal','FontFace',face); setOption(prefix..'DetailTotal','FontSize',9); setOption(prefix..'DetailTotal','StringAlign','LeftCenter'); setOption(prefix..'DetailTotal','ClipString',1)
     setOption(prefix..'Name','X',78); setOption(prefix..'Name','W',1); setOption(prefix..'Name','FontFace',face); setOption(prefix..'Name','FontSize',11); setOption(prefix..'Name','FontColor','0,0,0,0'); setOption(prefix..'Name','ClipString',1)
     setOption(prefix..'Price','X',78); setOption(prefix..'Price','W',198); setOption(prefix..'Price','FontFace',face); setOption(prefix..'Price','FontSize',11); setOption(prefix..'Price','ClipString',1)
     setOption(prefix..'Take','X',280); setOption(prefix..'Take','W',108); setOption(prefix..'Take','FontFace',face); setOption(prefix..'Take','FontSize',11); setOption(prefix..'Take','FontColor','#ToggleIdle#'); setOption(prefix..'Take','ClipString',1)
@@ -504,8 +504,8 @@ local function applyCompactLayout(index)
     setOption(prefix..'Window','X',78); setOption(prefix..'Window','W',1)
     setOption(prefix..'Leave','X',78); setOption(prefix..'Leave','W',308); setOption(prefix..'Leave','FontFace',face); setOption(prefix..'Leave','FontSize',8); setOption(prefix..'Leave','ClipString',1)
     setOption(prefix..'Chance','X',78); setOption(prefix..'Chance','W',1)
-    setOption(prefix..'DetailToggle','X',531); setOption(prefix..'DetailToggle','W',26); setOption(prefix..'DetailToggle','H',25); setOption(prefix..'DetailToggle','StringAlign','CenterCenter'); setOption(prefix..'DetailToggle','FontFace',face); setOption(prefix..'DetailToggle','FontSize',10)
-    setOption(prefix..'Graph','X',518); setOption(prefix..'Graph','W',26); setOption(prefix..'Graph','H',25)
+    setOption(prefix..'DetailToggle','X',531); setOption(prefix..'DetailToggle','W',24); setOption(prefix..'DetailToggle','H',23); setOption(prefix..'DetailToggle','StringAlign','CenterCenter'); setOption(prefix..'DetailToggle','FontFace',face); setOption(prefix..'DetailToggle','FontSize',10)
+    setOption(prefix..'Graph','X',519); setOption(prefix..'Graph','W',24); setOption(prefix..'Graph','H',23)
 end
 
 local function configureWindowTooltipMeter(name,tooltip)
@@ -553,7 +553,6 @@ local function updateRow(index,state,now)
     local grossSale=number(state[projectedPrefix..'GrossSaleValue'])
     local marketTax=number(state[projectedPrefix..'MarketTaxValue'])
     local marketTaxRate=math.max(0,math.min(5,math.floor(number(state[projectedPrefix..'MarketFeePercent'])+0.5)))
-    local grossEach=(quantity>0 and grossSale>0) and math.floor((grossSale/quantity)+0.5) or mv
     local taxEach=(quantity>0 and marketTax>0) and math.floor((marketTax/quantity)+0.5) or 0
 
     setOption(prefix..'Name','Text',itemName)
@@ -581,17 +580,17 @@ local function updateRow(index,state,now)
     local taxColor=marketTax>0 and '244,138,138,255' or '150,150,150,255'
     local eachNetColor=profitColor(each)
     local totalNetColor=profitColor(make)
-    local eachDetail='Each | Gross:'..formatMoney(grossEach)..
+    local eachDetail='MV:'..formatMoney(mv)..
         ' '..tostring(marketTaxRate)..'% Tax:'..formatMoney(taxEach)..
         ' Net:'..formatSignedMoney(each)
-    local totalDetail='Total | Gross:'..formatMoney(grossSale)..
+    local totalDetail='MV:'..formatMoney(grossSale)..
         ' '..tostring(marketTaxRate)..'% Tax:'..formatMoney(marketTax)..
         ' Net:'..formatSignedMoney(make)
 
     setOption(prefix..'Gross','Text',eachDetail)
     setOption(prefix..'Gross','FontColor','#Text#')
-    setOption(prefix..'Gross','ToolTipText','Per item: gross sale | selected tax | after-tax net profit')
-    setOption(prefix..'Gross','InlinePattern','(?<=Gross:)\\$[0-9,]+')
+    setOption(prefix..'Gross','ToolTipText','Per item: declared MV | selected tax | after-tax net profit')
+    setOption(prefix..'Gross','InlinePattern','(?<=MV:)\\$[0-9,]+')
     setOption(prefix..'Gross','InlineSetting','Color | 225,225,225,255')
     setOption(prefix..'Gross','InlinePattern2','(?<=Tax:)\\$[0-9,]+')
     setOption(prefix..'Gross','InlineSetting2','Color | '..taxColor)
@@ -600,8 +599,8 @@ local function updateRow(index,state,now)
 
     setOption(prefix..'DetailTotal','Text',totalDetail)
     setOption(prefix..'DetailTotal','FontColor','#Text#')
-    setOption(prefix..'DetailTotal','ToolTipText','Full load: gross sale | selected tax | after-tax net profit')
-    setOption(prefix..'DetailTotal','InlinePattern','(?<=Gross:)\\$[0-9,]+')
+    setOption(prefix..'DetailTotal','ToolTipText','Full load: total declared MV | selected tax | after-tax net profit')
+    setOption(prefix..'DetailTotal','InlinePattern','(?<=MV:)\\$[0-9,]+')
     setOption(prefix..'DetailTotal','InlineSetting','Color | 225,225,225,255')
     setOption(prefix..'DetailTotal','InlinePattern2','(?<=Tax:)\\$[0-9,]+')
     setOption(prefix..'DetailTotal','InlineSetting2','Color | '..taxColor)

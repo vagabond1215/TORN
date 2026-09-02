@@ -55,8 +55,11 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Take','Text','| '..totalCostText)","setOption(prefix..'Take','FontColor','#ToggleIdle#')",
         "setOption(prefix..'Make','Text',formatSignedMoney(make))","setOption(prefix..'Make','FontColor',profitColor(make))",
         "formatSignedMoney","profitColor",
-        "local eachDetail='Each | Gross:'..formatMoney(grossEach)","'% Tax:'..formatMoney(taxEach)","' Net:'..formatSignedMoney(each)",
-        "local totalDetail='Total | Gross:'..formatMoney(grossSale)","'% Tax:'..formatMoney(marketTax)","' Net:'..formatSignedMoney(make)",
+        "local eachDetail='MV:'..formatMoney(mv)","'% Tax:'..formatMoney(taxEach)","' Net:'..formatSignedMoney(each)",
+        "local totalDetail='MV:'..formatMoney(grossSale)","'% Tax:'..formatMoney(marketTax)","' Net:'..formatSignedMoney(make)",
+        "setOption(prefix..'Gross','FontSize',9)","setOption(prefix..'DetailTotal','FontSize',9)",
+        "setOption(prefix..'DetailToggle','W',24)","setOption(prefix..'DetailToggle','H',23)",
+        "setOption(prefix..'Graph','X',519)","setOption(prefix..'Graph','W',24)","setOption(prefix..'Graph','H',23)",
         "setOption(prefix..'Gross','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')",
         "setOption(prefix..'DetailTotal','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')",
         "setOption(prefix..'Window','Text','')","setOption(prefix..'Chance','Text','')",
@@ -86,7 +89,8 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Chance','Text',certainty)",
         "setOption(prefix..'Take','Text','Take: ",
         "setOption(prefix..'Make','Text','Make: ",
-        "bufferRate=priceVaries"
+        "bufferRate=priceVaries",
+        "Each | Gross:","Total | Gross:"
     )) {
         if ($presenter.Contains($forbidden)) { Fail "CardPresenter.lua retains obsolete/cluttered status token '$forbidden'." }
     }
