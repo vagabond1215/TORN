@@ -193,6 +193,7 @@ function Get-SCConfirmedOutcome {
             selloutLower=$selloutLower
             selloutUpper=$selloutUpper
             availableAt=$availableAt
+            raw=$cycle
         })
     }
 
@@ -211,12 +212,8 @@ function Get-SCConfirmedOutcome {
 
     for ($i=0; $i -lt ($ordered.Count-1); $i++) {
         $left=$ordered[$i]
-        $rightRaw=$Cycles | Where-Object {
-            $rightUpper=[long](Get-SCProperty $_ 'restockUpperBoundAt')
-            if ($rightUpper -le 0) { $rightUpper=[long](Get-SCProperty $_ 'restockAt') }
-            $rightUpper -eq [long]$ordered[$i+1].restockUpper
-        } | Select-Object -First 1
         $right=$ordered[$i+1]
+        $rightRaw=Get-SCProperty $right 'raw'
 
         # A later restock confirms an OOS interval only when its stored
         # previous-sellout anchor is the earlier completed cycle. Merely sorting
