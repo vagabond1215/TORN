@@ -115,6 +115,16 @@ Assert-Equal $repeatFreeze.Count 0 'Same model/market/hour must not overwrite it
 $staleFreeze=@(Get-SCFreezeRows -Artifact $artifact -State (New-SCCalibrationState) -NowEpoch 1401L -IntervalSeconds 3600)
 Assert-Equal $staleFreeze.Count 0 'Artifact older than five minutes must not be frozen as a new prospective prediction.'
 
+$zeroHorizonArtifact=($artifact | ConvertTo-Json -Depth 12 | ConvertFrom-Json)
+$zeroHorizonArtifact.generatedAt=1000L
+$zeroHorizonArtifact.markets[0].bestArrivalAt=1000L
+$zeroHorizonArtifact.markets[0].bestDepartureAt=0L
+$zeroHorizonArtifact.markets[0].arrivals[0].arrivalAt=1000L
+$zeroHorizonArtifact.markets[0].arrivals[0].departureAt=0L
+$zeroHorizonFreeze=@(Get-SCFreezeRows -Artifact $zeroHorizonArtifact -State (New-SCCalibrationState) -NowEpoch 1010L -IntervalSeconds 3600)
+Assert-Equal $zeroHorizonFreeze.Count 0 'Current-state / BUY_NOW style zero-horizon evaluations must not enter prospective calibration.'
+
+
 # Resolve a genuinely frozen prediction and verify incremental reliability metrics.
 $scoreState=New-SCCalibrationState
 $scoreState.pending=@($firstFreeze[0])
@@ -155,6 +165,7 @@ foreach($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','S
     Assert-True (-not $scriptText.Contains($networkToken)) ("StochasticCalibration must remain network-free; found "+$networkToken)
 }
 Assert-True ($scriptText.Contains("forecastSelection='one best-expected-profit arrival per market/model/hour bucket'")) 'Calibration methodology must make the freeze sampling rule explicit.'
+Assert-True ($scriptText.Contains('selected arrival must be strictly after artifact generation')) 'Prospective calibration must explicitly exclude already-observable zero-horizon states.'
 Assert-True ($scriptText.Contains("calibrationStatus='diagnostic only; no probability transformation is applied'")) 'Prospective scorer must not silently recalibrate user-facing probabilities.'
 
 $runUpdate=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1')
