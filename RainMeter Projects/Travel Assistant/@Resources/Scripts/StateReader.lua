@@ -908,13 +908,6 @@ function ToggleInlineGraph(index)
     refreshPresentation()
 end
 
-function OpenViewer(marketKey)
-    deferPolling(5)
-    setVariable('ViewerMarketKey', marketKey or '')
-    SKIN:Bang('!UpdateMeasure', 'MeasureItemViewer')
-    SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')
-end
-
 function Update()
     local now = os.time()
     local baseData = stabilizeProjection(readState())
