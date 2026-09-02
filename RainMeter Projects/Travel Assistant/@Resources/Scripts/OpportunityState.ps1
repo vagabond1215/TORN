@@ -563,7 +563,7 @@ if ($missing.Count -gt 0) { throw ('Opportunity prerequisites missing or invalid
 
 $preferences = Read-UiPreferences
 $sortMode = [string]$preferences.sortMode
-if ($sortMode -notin @('name','upcoming','gross','profit_per_hour')) { $sortMode = 'upcoming' }
+if ($sortMode -notin @('upcoming','gross','profit_per_hour')) { $sortMode = 'upcoming' }
 $profile = Get-TravelProfile -BaseSettings $settings -LocalSettings $local
 $optimizerSettings = Get-OptimalProperty $settings 'optimizer'
 $minimumSamples = 3
@@ -974,16 +974,24 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
 }
 
 $allRows = @($rows.ToArray())
+$hasKnownSortData=$false
+foreach ($row in $allRows) {
+    $timeKnown=($row.PSObject.Properties['windowStartAt'] -and [long]$row.windowStartAt -gt 0)
+    $profitKnown=($row.PSObject.Properties['marketValue'] -and [long]$row.marketValue -gt 0 -and $row.PSObject.Properties['foreignPrice'] -and [long]$row.foreignPrice -gt 0)
+    if ($timeKnown -or $profitKnown) { $hasKnownSortData=$true; break }
+}
+$effectiveSortMode=if ($hasKnownSortData) { $sortMode } else { 'name' }
 $sorted = @()
-if ($sortMode -eq 'name') {
+if ($effectiveSortMode -eq 'name') {
     $sorted = @($allRows | Sort-Object name,countryName,key)
-} elseif ($sortMode -eq 'gross') {
+} elseif ($effectiveSortMode -eq 'gross') {
     $sorted = @($allRows | Sort-Object @{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},elapsedSeconds,name)
-} elseif ($sortMode -eq 'profit_per_hour') {
+} elseif ($effectiveSortMode -eq 'profit_per_hour') {
     $sorted = @($allRows | Sort-Object @{Expression='profitPerHour';Descending=$true},@{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},name)
 } else {
     $sorted = @($allRows | Sort-Object @{Expression='windowStartAt';Ascending=$true},@{Expression='probability';Descending=$true},@{Expression='grossProfit';Descending=$true},name)
 }
+$state['OpportunitySortEffectiveMode']=$effectiveSortMode
 
 $state['OpportunityStaleStockCount'] = $stale
 $state['OpportunityForecastStockCount'] = $forecastOnly
