@@ -45,7 +45,7 @@ Assert-True ([double]$broadForecast.arrivals[0].pAnyStock -lt 0.20) 'Broad timin
 # A short deterministic burst can live entirely between two 15-minute coarse
 # arrival points. The adaptive pass must discover that hidden support without
 # changing the configured coarse horizon or scoring on its discovery worlds.
-$burstCycles=New-TestCycles -DelayMin 450 -DelayMax 450 -AvailableMin 60 -AvailableMax 60 -Quantity 20
+$burstCycles=New-TestCycles -DelayMin 500 -DelayMax 500 -AvailableMin 60 -AvailableMax 60 -Quantity 20
 $burstTravel=Get-SFTravelCandidates -TravelState home -MarketCountry test_country -TravelDestinationCountry '' -TravelTimeLeft 0 -OneWaySeconds 100 -NowEpoch $now -StepSeconds 900 -SearchSeconds 900
 $burstCoarse=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $burstCycles -Market $oosMarket -Destination $oosDestination -Travel $burstTravel -NowEpoch $now -ScenarioCount 128 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 77 -EnableAdaptiveGrid $false -CoarseGridSeconds 900
 Assert-Equal @($burstCoarse.arrivals).Count 2 'Disabled adaptive search should retain only the two coarse test arrivals.'
