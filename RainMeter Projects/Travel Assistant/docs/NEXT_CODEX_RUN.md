@@ -1,6 +1,6 @@
 # Next Codex Run: Live Shadow Scoring and Calibration
 
-**Status: ACTIVE — STOCHASTIC-V1 SHADOW SCORING; 0.6.0 RAINMETER ACCEPTANCE REMAINS OPEN**
+**Status: ACTIVE — STOCHASTIC-V1.1 PROSPECTIVE SHADOW CALIBRATION; 0.6.0 RAINMETER ACCEPTANCE REMAINS OPEN**
 
 The next forecasting phase is deliberately:
 
@@ -15,12 +15,15 @@ Do not show stochastic percentages or label them safe/guaranteed until frozen
 prospective forecasts demonstrate calibration. Keep the current Safe/Best card
 pipeline as the production baseline and score both models without future leakage.
 
-Use ignored `data/runtime/stochastic-forecast.json` as the challenger artifact and
-`tools/Invoke-StochasticReplay.ps1` for offline walk-forward scaffolding. The next
-run should freeze predictions before outcomes, accumulate Brier/log-loss and
-calibration buckets by market/evidence quality, add interval/quantity scoring where
-ground truth is unambiguous, and investigate regime adaptation only after enough
-prospective evidence exists.
+Use ignored `data/runtime/stochastic-forecast.json` as the challenger artifact,
+`data/runtime/stochastic-calibration-state.json` /
+`stochastic-calibration.json` for prospective scoring, and
+`tools/Invoke-StochasticReplay.ps1` for offline walk-forward scaffolding.
+Prediction freezing, continuity-safe stock labels, overall/evidence-quality/market
+Brier/log-loss buckets, and exact-snapshot quantity scoring are implemented.
+The next run should validate them on Windows, measure their steady-state CPU/wall
+cost, and then accumulate prospective evidence before considering regime
+adaptation or any visible stochastic UI.
 
 ## Post-Codex connector review before the next run
 
@@ -45,10 +48,12 @@ The review established/fixed:
   for a future explicit delay/value-of-information model.
 
 Before adding model complexity, rerun the target Windows PowerShell focused suite
-and one production shadow update. The pre-review 25.3-second / ~1 MB artifact
-measurement is no longer the authoritative performance baseline because sampling,
-adaptive refinement, observation-shape extraction, and current-stock conditioning
-changed.
+including `Run-StochasticCalibrationTests.ps1`, then run one production shadow
+update and inspect all three stochastic artifacts. The pre-review 25.3-second /
+~1 MB measurement is no longer authoritative because adaptive refinement,
+observation-shape extraction, prospective evidence scans, and current-stock
+conditioning changed. After 20-60 minutes, use updater performance telemetry to
+measure both `stochastic-forecast` and `stochastic-calibration` stages.
 
 Known stochastic-v1.1 research gaps remain deliberately open:
 
