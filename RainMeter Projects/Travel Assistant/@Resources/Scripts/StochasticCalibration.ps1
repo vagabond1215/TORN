@@ -299,7 +299,7 @@ function Get-SCFreezeRows {
         if ([string]::IsNullOrWhiteSpace($marketKey) -or $arrivalAt -le $generatedAt) { continue }
 
         $last=Get-SCLastFrozen -State $State -ModelVersion $modelVersion -MarketKey $marketKey
-        if ($last.Count -gt 0 -and [long](Get-SCProperty $last[0] 'bucket') -eq $bucket) { continue }
+        if ($last.Count -gt 0 -and [long](Get-SCProperty $last[0] 'bucket') -ge $bucket) { continue }
 
         $arrival=@((Get-SCProperty $market 'arrivals') | Where-Object { [long](Get-SCProperty $_ 'arrivalAt') -eq $arrivalAt } | Select-Object -First 1)
         if ($arrival.Count -eq 0) { continue }
@@ -655,7 +655,15 @@ if ($Now -le 0) { $Now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 $state=Repair-SCCalibrationState (Read-SCJson $StateFile)
 $artifact=Read-SCJson $ForecastFile
 $currentModelVersion=''
-if ($null -ne $artifact) { $currentModelVersion=[string](Get-SCProperty $artifact 'modelVersion') }
+if ($null -ne $artifact) { $currentModelVersion=([string](Get-SCProperty $artifact 'modelVersion')).Trim() }
+if ([string]::IsNullOrWhiteSpace($currentModelVersion)) {
+    $knownVersions=@(
+        @($state.pending | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() }),
+        @($state.recentScores | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() }),
+        @($state.aggregates | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() })
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    if ($knownVersions.Count -gt 0) { $currentModelVersion=[string]$knownVersions[-1] }
+}
 
 $wanted=@{}
 foreach ($prediction in @($state.pending)) {
