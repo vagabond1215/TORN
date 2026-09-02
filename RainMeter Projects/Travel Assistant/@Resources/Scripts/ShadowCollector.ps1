@@ -507,7 +507,28 @@ function Invalidate-PhaseAnchorForGap {
 
     Set-DynamicProperty -Object $DestState -Name 'continuityInvalidatedAt' -Value $currentAt
     if ([int]$Observation.stock -gt 0) {
-        $DestState.activeCycle = $null
+        # The gap may have hidden a sellout and one or more restocks, so the old
+        # phase anchor is invalid. The fresh positive snapshot is still valuable:
+        # retain it as a new left-censored, right-censored active cycle rather than
+        # dropping current-stock evidence until a later 0 -> positive transition.
+        $DestState.activeCycle = [pscustomobject]@{
+            previousSoldOutAt = 0L
+            previousSoldOutLowerBoundAt = 0L
+            previousSoldOutUpperBoundAt = 0L
+            previousSellOutBoundaryQuality = 'left_censored'
+            restockAt = 0L
+            restockLowerBoundAt = 0L
+            restockUpperBoundAt = $currentAt
+            restockBoundaryQuality = 'left_censored'
+            restockGapSeconds = [long]$gap
+            restockQuantity = [int]$Observation.stock
+            foreignPrice = [long](Get-DynamicProperty $Observation 'foreignPrice')
+            minimumForeignPrice = [long](Get-DynamicProperty $Observation 'foreignPrice')
+            maximumForeignPrice = [long](Get-DynamicProperty $Observation 'foreignPrice')
+            evidenceQuality = 'left_censored'
+            isRightCensored = $true
+            source = [string](Get-DynamicProperty $Observation 'source')
+        }
     } else {
         $DestState.lastSellOutAt = 0L
         Set-DynamicProperty -Object $DestState -Name 'lastSellOutLowerBoundAt' -Value 0L
