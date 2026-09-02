@@ -21,6 +21,7 @@ $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
 $WindowPlan = Join-Path $PSScriptRoot 'WindowPlan.ps1'
 $MultiCycleChanceBridge = Join-Path $PSScriptRoot 'MultiCycleChanceBridge.ps1'
 $ChanceHistory = Join-Path $PSScriptRoot 'ChanceHistory.ps1'
+$ResolveChanceHistory = Join-Path $PSScriptRoot 'ResolveChanceHistory.ps1'
 $PriceVariationRefiner = Join-Path $PSScriptRoot 'PriceVariationRefiner.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
@@ -49,6 +50,7 @@ $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $WindowPlanErrorFile = Join-Path $RuntimeDir 'window-plan-error.txt'
 $MultiCycleChanceBridgeErrorFile = Join-Path $RuntimeDir 'multi-cycle-chance-bridge-error.txt'
 $ChanceHistoryErrorFile = Join-Path $RuntimeDir 'chance-history-error.txt'
+$ResolveChanceHistoryErrorFile = Join-Path $RuntimeDir 'resolve-chance-history-error.txt'
 $PriceVariationRefinerErrorFile = Join-Path $RuntimeDir 'price-variation-refiner-error.txt'
 $FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
 $CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
@@ -528,6 +530,13 @@ try {
     $cleanupTimer = New-UpdateStageTimer -Name 'generation-cleanup'
     try { Remove-OldUiStateGenerations }
     finally { Complete-UpdateStageTimer -Timer $cleanupTimer }
+
+    # Resolve older flight-aligned probabilities only after the immutable UI and
+    # heartbeat are safely published. Accuracy bookkeeping is local/fail-soft and
+    # cannot hold the visible update hostage.
+    if ($Action -eq 'Update') {
+        Invoke-FailSoftScript -Path $ResolveChanceHistory -ErrorPath $ResolveChanceHistoryErrorFile
+    }
 
     if ($Action -eq 'Update') {
         Invoke-FailSoftScript -Path $CycleAnalytics -ErrorPath $CycleAnalyticsErrorFile
