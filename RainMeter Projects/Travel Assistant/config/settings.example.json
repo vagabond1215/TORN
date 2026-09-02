@@ -25,7 +25,6 @@
   },
   "profitability": {
     "sellTarget": "market_value",
-    "itemMarketFeePercent": 0.0,
     "minimumProfitPerItem": 0,
     "minimumMarginPercent": 0.0,
     "minimumTotalTripProfit": 0,

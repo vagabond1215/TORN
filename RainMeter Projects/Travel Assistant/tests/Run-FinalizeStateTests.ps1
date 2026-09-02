@@ -44,7 +44,6 @@ function Write-LocalProfitabilitySettings {
             minimumProfitPerItem = 999999999
             minimumMarginPercent = 99
             minimumTotalTripProfit = 999999999
-            itemMarketFeePercent = 50
         }
     })
 }

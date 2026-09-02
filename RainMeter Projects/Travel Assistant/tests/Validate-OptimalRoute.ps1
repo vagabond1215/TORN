@@ -98,7 +98,7 @@ if (Test-Path -LiteralPath $countriesPath) {
 
 if (Test-Path -LiteralPath $baseSettingsPath) {
     $settings=Get-Content -LiteralPath $baseSettingsPath -Raw | ConvertFrom-Json
-    if ([double]$settings.profitability.itemMarketFeePercent -ne 0) { Fail 'Default legacy fee must be zero for MV valuation.' }
+    if ($settings.profitability.PSObject.Properties['itemMarketFeePercent']) { Fail 'Legacy profitability.itemMarketFeePercent must remain removed; UI preferences are the sole tax-rate authority.' }
     if ([double]$settings.profitability.minimumProfitPerItem -ne 0 -or [double]$settings.profitability.minimumMarginPercent -ne 0 -or [double]$settings.profitability.minimumTotalTripProfit -ne 0) { Fail 'Default legacy profit gates must all be zero.' }
     if ([int]$settings.profitability.resaleStaleAfterSeconds -ne 21600) { Fail 'Fresh resale MV window must remain six hours.' }
     if ([int]$settings.profitability.resaleFallbackMaxAgeSeconds -ne 604800) { Fail 'Opportunity display stale-MV fallback must be bounded to seven days.' }

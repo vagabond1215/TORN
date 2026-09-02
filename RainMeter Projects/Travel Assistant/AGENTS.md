@@ -147,6 +147,7 @@ Current schema includes:
 
 ```text
 travelMode
+itemMarketFeePercent          # sole tax/trader-rate authority; integer 0..5
 itemFilterAll
 selectedItemIds
 selectedTripBands            # always all candidate bands in schema 7
