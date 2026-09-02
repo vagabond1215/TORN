@@ -127,10 +127,12 @@ Implementation details:
 - filter icon opens one unified compact filter popup;
 - settings gear opens the existing Opportunity Settings popup;
 - sort row moves upward into the retired filter-band space;
+- the three sort controls are equal-width 104px buttons with bold 11 pt text;
+- expanded Each/Total economics use 9 pt split label/value cells with subtle internal vertical separators; labels stay left-aligned and money values right-aligned;
 - `HeaderLayout.lua` shifts the already-laid-out opportunity stack upward exactly 32 px and reduces panel height by the same amount;
 - the layout shim mutates only Y/PanelHeight and performs no provider/update work.
 
-Protected card files were intentionally not edited by the redesign:
+The compact card files remain the protected presentation authority; the current visual-polish pass intentionally updates them only for the requested economics separators/alignment/typography:
 
 ```text
 @Resources/Includes/OpportunityRows.inc
