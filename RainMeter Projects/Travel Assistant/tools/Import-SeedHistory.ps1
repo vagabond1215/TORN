@@ -121,8 +121,12 @@ function Validate-Cycle {
     $selloutUpper=[long]$Row.soldOutUpperBoundAt
     if ($restockLower -lt 0 -or $restockUpper -lt 0 -or ($restockLower -gt 0 -and $restockUpper -lt $restockLower)) { throw 'Schema-v2 restock bounds are invalid.' }
     if ($selloutLower -lt 0 -or $selloutUpper -le 0 -or ($selloutLower -gt 0 -and $selloutUpper -lt $selloutLower)) { throw 'Schema-v2 sellout bounds are invalid.' }
-    if ([long]$Row.availabilityMinimumSeconds -lt 0 -or [long]$Row.availabilityMaximumSeconds -lt [long]$Row.availabilityMinimumSeconds) { throw 'Schema-v2 availability bounds are invalid.' }
-    if ([long]$Row.restockDelayMinimumSeconds -lt 0 -or [long]$Row.restockDelayMaximumSeconds -lt [long]$Row.restockDelayMinimumSeconds) { throw 'Schema-v2 restock-delay bounds are invalid.' }
+    $availabilityMinimum=[long]$Row.availabilityMinimumSeconds
+    $availabilityMaximum=[long]$Row.availabilityMaximumSeconds
+    if ($availabilityMinimum -lt 0 -or $availabilityMaximum -lt 0 -or ($availabilityMaximum -gt 0 -and $availabilityMaximum -lt $availabilityMinimum)) { throw 'Schema-v2 availability bounds are invalid.' }
+    $delayMinimum=[long]$Row.restockDelayMinimumSeconds
+    $delayMaximum=[long]$Row.restockDelayMaximumSeconds
+    if ($delayMinimum -lt 0 -or $delayMaximum -lt 0 -or ($delayMaximum -gt 0 -and $delayMaximum -lt $delayMinimum)) { throw 'Schema-v2 restock-delay bounds are invalid.' }
     if ([bool]$Row.forecastEligible) {
         if ([long]$Row.restockAt -le 0 -or [long]$Row.soldOutAt -le [long]$Row.restockAt) { throw 'Forecast-eligible schema-v2 cycle needs usable representative restock/sellout times.' }
         if ([long]$Row.availabilityMinimumSeconds -le 0 -or [long]$Row.restockDelayMaximumSeconds -le 0) { throw 'Forecast-eligible schema-v2 cycle needs positive duration evidence.' }
