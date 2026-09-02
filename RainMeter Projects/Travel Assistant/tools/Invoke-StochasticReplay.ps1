@@ -2,6 +2,7 @@ param(
     [Alias('SkipMain')]
     [switch]$ReplaySkipMain,
     [string]$CyclesPath='',
+    [string]$ObservationsPath='',
     [string]$OutputPath='',
     [ValidateRange(60,86400)]
     [int]$ArrivalOffsetSeconds=3600,
@@ -96,7 +97,7 @@ function Get-SFReplayMetrics {
 }
 
 function Invoke-SFReplay {
-    param([object[]]$Cycles,[int]$ArrivalOffsetSeconds=3600,[int]$ScenarioCount=256,[int]$RandomSeed=1701)
+    param([object[]]$Cycles,[object[]]$Observations=@(),[int]$ArrivalOffsetSeconds=3600,[int]$ScenarioCount=256,[int]$RandomSeed=1701)
     $byMarket=@{}
     foreach ($cycle in @($Cycles)) {
         $country=[string](Get-SFProperty $cycle 'country'); $itemId=[int](Get-SFProperty $cycle 'itemId')
@@ -105,6 +106,18 @@ function Invoke-SFReplay {
         if (-not $byMarket.ContainsKey($key)) { $byMarket[$key]=New-Object System.Collections.Generic.List[object] }
         $byMarket[$key].Add($cycle)
     }
+
+    $observationsByMarket=@{}
+    foreach ($observation in @($Observations)) {
+        $country=[string](Get-SFProperty $observation 'country')
+        $itemId=[int](Get-SFProperty $observation 'itemId')
+        $at=Get-SFObservationAt $observation
+        if ([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0 -or $at -le 0) { continue }
+        $key=($country+':'+$itemId).ToLowerInvariant()
+        if (-not $observationsByMarket.ContainsKey($key)) { $observationsByMarket[$key]=New-Object System.Collections.Generic.List[object] }
+        $observationsByMarket[$key].Add($observation)
+    }
+
     $rows=New-Object System.Collections.Generic.List[object]
     foreach ($key in @($byMarket.Keys | Sort-Object)) {
         $ordered=@($byMarket[$key].ToArray() | Sort-Object @{Expression={Get-SFReplayAvailableAt $_}})
@@ -115,7 +128,11 @@ function Invoke-SFReplay {
             # The global cutoff is applied before feature/sample construction. No
             # cycle whose completion became available after T can enter training.
             $training=@($ordered | Where-Object { (Get-SFReplayAvailableAt $_) -le $decisionAt })
-            $selected=@(Select-SFJointCycleEvidence -Cycles $training -AsOf $decisionAt)
+            $trainingObservations=@()
+            if ($observationsByMarket.ContainsKey($key)) {
+                $trainingObservations=@($observationsByMarket[$key].ToArray() | Where-Object { (Get-SFObservationAt $_) -le $decisionAt })
+            }
+            $selected=@(Select-SFJointCycleEvidence -Cycles $training -AsOf $decisionAt -Observations $trainingObservations)
             if ($selected.Count -lt 3) { continue }
             $arrivalAt=$decisionAt+$ArrivalOffsetSeconds
             $market=[pscustomobject]@{lastStock=0;lastForeignPrice=[long](Get-SFProperty $ordered[$i-1] 'foreignPrice');sourceTimestamp=$decisionAt}
@@ -125,7 +142,7 @@ function Invoke-SFReplay {
                 lastSellOutUpperBoundAt=[long](Get-SFProperty $ordered[$i-1] 'soldOutUpperBoundAt')
             }
             $travel=[pscustomobject]@{feasible=$true;mode='home';reason='replay';candidates=@([pscustomobject]@{departureAt=$decisionAt;arrivalAt=$arrivalAt})}
-            $forecast=Invoke-SFMarketForecast -MarketKey $key -Cycles $training -Market $market -Destination $destination -Travel $travel -NowEpoch $decisionAt -ScenarioCount $ScenarioCount -TargetQuantity 1 -MarketValue 1 -MarketFeePercent 0 -OneWaySeconds $ArrivalOffsetSeconds -RandomSeed ($RandomSeed+$i)
+            $forecast=Invoke-SFMarketForecast -MarketKey $key -Cycles $training -Observations $trainingObservations -Market $market -Destination $destination -Travel $travel -NowEpoch $decisionAt -ScenarioCount $ScenarioCount -TargetQuantity 1 -MarketValue 1 -MarketFeePercent 0 -OneWaySeconds $ArrivalOffsetSeconds -RandomSeed ($RandomSeed+$i)
             if (@($forecast.arrivals).Count -eq 0) { continue }
             $label=Get-SFReplayLabel -Cycle $target -ArrivalAt $arrivalAt
             $baselines=Get-SFReplayBaselineProbabilities -Training @($selected | ForEach-Object {$_.cycle}) -ArrivalAge $ArrivalOffsetSeconds
@@ -138,6 +155,9 @@ function Invoke-SFReplay {
             $rows.Add([pscustomobject]@{
                 marketKey=$key; decisionAt=$decisionAt; arrivalAt=$arrivalAt
                 trainingCount=$selected.Count; trainingLatestAvailableAt=[long](@($selected.availableAt | Measure-Object -Maximum).Maximum)
+                trainingObservationCount=$trainingObservations.Count
+                trainingLatestObservationAt=$(if($trainingObservations.Count -gt 0){[long](@($trainingObservations | ForEach-Object {Get-SFObservationAt $_} | Measure-Object -Maximum).Maximum)}else{0L})
+                depletionShapeEvidenceCount=[int](Get-SFProperty $forecast 'depletionShapeEvidenceCount')
                 targetAvailableAt=Get-SFReplayAvailableAt $target
                 scorable=[bool]$label.scorable; label=[int]$label.label; scoringReason=[string]$label.reason
                 predictions=$predictions
@@ -151,7 +171,7 @@ function Invoke-SFReplay {
     $scorable=@($rowArray | Where-Object {$_.scorable})
     $uncertain=@($rowArray | Where-Object {-not $_.scorable})
     return [pscustomobject]@{
-        schemaVersion=1; modelVersion='stochastic-v1.1'; noFutureLeakagePolicy='cycle availableAt <= decisionAt'
+        schemaVersion=1; modelVersion='stochastic-v1.1'; noFutureLeakagePolicy='cycle availableAt <= decisionAt; observation sourceTimestamp <= decisionAt'
         forecastMetrics=[pscustomobject]$metrics
         intervalMetrics=[pscustomobject]@{ restockCoverageScorable=0; selloutCoverageScorable=0; quantityErrorScorable=0; note='extension points require frozen interval/quantity forecasts' }
         decisionMetrics=[pscustomobject]@{ scorableDecisions=$scorable.Count; censoredOrUnscorable=$uncertain.Count; arrivalSuccess=@($scorable | Where-Object {$_.label -eq 1}).Count; earlyArrival=0; lateArrival=0; profitScorable=0; regretScorable=0 }
@@ -162,8 +182,13 @@ function Invoke-SFReplay {
 if ($ReplaySkipMain) { return }
 if ([string]::IsNullOrWhiteSpace($CyclesPath)) { $CyclesPath=Join-Path $ProjectRoot 'data\runtime\cycles.jsonl' }
 if (-not (Test-Path -LiteralPath $CyclesPath)) { throw ('Cycle history not found: '+$CyclesPath) }
+if ([string]::IsNullOrWhiteSpace($ObservationsPath)) { $ObservationsPath=Join-Path $ProjectRoot 'data\runtime\observations.jsonl' }
 $cycles=@(Get-Content -LiteralPath $CyclesPath | Where-Object {-not [string]::IsNullOrWhiteSpace($_)} | ForEach-Object { $_ | ConvertFrom-Json })
-$result=Invoke-SFReplay -Cycles $cycles -ArrivalOffsetSeconds $ArrivalOffsetSeconds -ScenarioCount $SimulationCount -RandomSeed $Seed
+$observations=@()
+if (Test-Path -LiteralPath $ObservationsPath) {
+    $observations=@(Get-Content -LiteralPath $ObservationsPath | Where-Object {-not [string]::IsNullOrWhiteSpace($_)} | ForEach-Object { $_ | ConvertFrom-Json })
+}
+$result=Invoke-SFReplay -Cycles $cycles -Observations $observations -ArrivalOffsetSeconds $ArrivalOffsetSeconds -ScenarioCount $SimulationCount -RandomSeed $Seed
 if ([string]::IsNullOrWhiteSpace($OutputPath)) { $OutputPath=Join-Path $ProjectRoot 'data\runtime\stochastic-replay.json' }
 Write-TravelAssistantAtomicJson -Path $OutputPath -Value $result -Depth 14
 Write-Host ("Stochastic replay wrote {0} decision row(s) to {1}." -f @($result.rows).Count,$OutputPath) -ForegroundColor Green
