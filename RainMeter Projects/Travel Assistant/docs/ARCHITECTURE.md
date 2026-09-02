@@ -482,7 +482,7 @@ the committed landing; abroad-at-target evaluates now; unknown or other-destinat
 travel fails closed.
 
 The ignored, atomically replaced `data/runtime/stochastic-forecast.json` artifact
-uses schema 1/model `stochastic-v1`. Per market it contains arrival points with
+uses schema 1/model `stochastic-v1.1`. Per market it contains arrival points with
 `pAnyStock`, `pTargetQty`, expected quantity, expected after-tax profit, and expected
 after-tax profit/hour; evidence/sample diagnostics; best/last departure summaries;
 and one mutually exclusive shadow decision. V1 defines target quantity as the
@@ -493,7 +493,7 @@ These probabilities are uncalibrated shadow diagnostics. Limitations include
 linear within-cycle depletion, a bounded adaptive search that can still omit
 low-support cells, no value-of-information solver, no online change-point model,
 and no risk-preference surface. The offline replay currently
-compares stochastic-v1 with simple mean/median and empirical overlap proxies;
+compares stochastic-v1.1 with simple mean/median and empirical overlap proxies;
 `empirical_all_overlap` / `empirical_overlap` are not an exact historical replay
 of production WindowPlan Safe/Best decisions. Promotion requires frozen live
 scoring, calibration, one accepted authoritative stochastic decision object, and
