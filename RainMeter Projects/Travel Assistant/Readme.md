@@ -235,7 +235,9 @@ LocalCatalog
 FinalizeState
 TravelContext
 OpportunityState    # primary opportunity projection (uses local helpers from OptimalRoute.ps1)
-WindowPlan / PriceVariationRefiner
+WindowPlan
+MultiCycleChanceBridge   # restricted earliest-arrival pAnyStock fallback
+PriceVariationRefiner
 FilterState
 visible heartbeat
 CycleAnalytics / TrendForecast / StochasticForecast (shadow)
