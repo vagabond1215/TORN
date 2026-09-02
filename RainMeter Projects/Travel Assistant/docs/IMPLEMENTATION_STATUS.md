@@ -30,7 +30,7 @@ The new main chrome is:
 ```text
 Travel                                           [filter] [gear]
 Updated ...
-NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
+[UPCOMING] [GROSS PROFIT] [PROFIT/HR]
 ```
 
 Implementation details:
@@ -96,7 +96,7 @@ Accepted presentation remains:
 - Safe/Best timing guidance;
 - info/confidence behavior;
 - `Take:` cash requirement;
-- compact `v` / `^` inline graph control;
+- compact highlighted chart-button inline graph control;
 - no rank number;
 - no separate country label.
 
@@ -157,13 +157,12 @@ Static/focused tests have been updated to guard:
 - 32 px geometry-only header compaction;
 - existing card presenter and Rainmeter card contracts;
 - popup launch detachment and updater routing;
-- Viewer launcher validation against the reusable `.NET ProcessStartInfo` contract rather than retired `Start-Process`;
 - full presentation-pipeline completion before any explicit Rainmeter redraw, preventing transient `UPDATE STALE` / intermediate-card flashes;
 - compact 132 px hard-stale/no-row geometry;
 - one compact updater performance sample per completed worker with per-stage pwsh CPU and wall milliseconds;
 - elimination of the retired no-op PostUpdate history invocation;
 - steady-state EngineState schema repair avoids scanning observations.jsonl unless an in-stock market actually lacks activeCycle;
-- observation/cycle history readers used by inline graph, graph hover, Item Viewer, cycle-anchor repair, and engine-schema repair use delete-sharing streams so they cannot block the collector's append/atomic-replace path;
+- observation/cycle history readers used by inline graph, graph hover, cycle-anchor repair, and engine-schema repair use delete-sharing streams so they cannot block the collector's append/atomic-replace path;
 - ShadowCollector engine-state publication uses the shared unique-temp atomic writer and per-journal append mutexes, eliminating fixed .tmp collisions under Rainmeter/OneDrive contention;
 - the Lua multi-return SetOption regression.
 
@@ -176,6 +175,6 @@ This execution environment does not provide Windows PowerShell/Rainmeter, so the
 3. card screenshot matches the accepted card baseline except for the uniform 32 px upward shift;
 4. unified filter screenshot shows country bands, categories and searchable items;
 5. Save/Cancel/Reset round-trip correctly;
-6. Settings/Ignore/Profile/Viewer remain functional;
+6. Settings/Ignore/Profile remain functional and inline chart expansion is functional;
 7. Rainmeter log stays clean for at least two normal poll intervals;
 8. after 20-60 minutes, run `tools\Analyze-UpdatePerformance.ps1` and use AvgCpuMs / P95CpuMs to select the next CPU optimization target.
