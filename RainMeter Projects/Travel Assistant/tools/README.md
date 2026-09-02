@@ -63,11 +63,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-CyclesFrom
 
 The script recognizes:
 
-- `0 -> positive` as an observed restock;
-- `positive -> 0` as an observed sellout;
-- previous observed sellout -> next observed restock as the restock delay.
+- `0 -> positive` as an interval-censored restock bracketed by the adjacent evidence timestamps;
+- `positive -> 0` as an interval-censored sellout;
+- previous sellout bounds -> next restock bounds as a censored restock-delay interval;
+- feed-start / long-gap positive stock as left-censored partial-cycle evidence.
 
-It does not turn provider forecasts into historical events.
+It accepts observation schema 1 or 2 and emits schema-v2 cycle records with lower/upper transition bounds, eligibility flags, evidence quality, and sellout-censored demand lower bounds. It does not turn provider forecasts into historical events or collapse poll-bracketed transitions into fake exact timestamps.
 
 ## `Import-SeedHistory.ps1`
 
@@ -84,7 +85,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Import-SeedHisto
   -Notes "Bounded UK/Japan Xanax bootstrap after live contract verification"
 ```
 
-The importer rejects files under `tests/` and source names containing `synthetic`, `fixture`, or `test` unless `-AllowSynthetic` is explicitly supplied. **Do not use `-AllowSynthetic` for committed production seed data.**
+The importer accepts legacy schema-v1 history for audit compatibility and censor-aware schema-v2 observations/cycles for current forecasting. Schema-v2 cycles retain their transition bounds when deduplicated. The importer rejects files under `tests/` and source names containing `synthetic`, `fixture`, or `test` unless `-AllowSynthetic` is explicitly supplied. **Do not use `-AllowSynthetic` for committed production seed data.**
 
 ## `Analyze-History.ps1`
 
