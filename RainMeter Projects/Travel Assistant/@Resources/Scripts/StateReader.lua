@@ -306,7 +306,6 @@ end
 local function applySortColors(mode)
     local active = '82,174,255,255'
     local inactive = '145,152,164,255'
-    setVariable('SortNameColor', mode == 'name' and active or inactive)
     setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
     setVariable('SortGrossColor', mode == 'gross' and active or inactive)
     setVariable('SortProfitHourColor', mode == 'profit_per_hour' and active or inactive)
@@ -357,6 +356,8 @@ local function currentOpportunityRows(data)
                 gross = number(data[prefix .. 'GrossValue']),
                 profitHour = number(data[prefix .. 'ProfitHourValue']),
                 windowStart = number(data[prefix .. 'WindowStartAt']),
+                timeKnown = number(data[prefix .. 'WindowStartAt']) > 0,
+                profitKnown = number(data[prefix .. 'MarketValueValue']) > 0 and number(data[prefix .. 'PurchaseCostValue']) > 0,
                 probability = number(data[prefix .. 'ProbabilityValue']),
                 elapsed = number(data[prefix .. 'ElapsedSeconds']),
                 grossFallback = moneyNumber(data[prefix .. 'GrossText']),
@@ -375,6 +376,13 @@ local function actionRank(probability)
     if probability > 0 then return 0 end
     if probability < 0 then return 1 end
     return 2
+end
+
+local function effectiveSortMode(rows, requestedMode)
+    for _, row in ipairs(rows) do
+        if row.timeKnown or row.profitKnown then return requestedMode end
+    end
+    return 'name'
 end
 
 local function sortOpportunityRows(rows, mode)
@@ -409,7 +417,8 @@ local function locallyFilteredSortedProjection(data, mode, bands)
     for _, row in ipairs(rows) do
         if bands[row.tripBand] == true then table.insert(filtered, row) end
     end
-    sortOpportunityRows(filtered, mode)
+    local effectiveMode = effectiveSortMode(filtered, mode)
+    sortOpportunityRows(filtered, effectiveMode)
 
     local out = copyTable(data)
     for displayIndex = 1, 8 do
@@ -433,6 +442,7 @@ local function locallyFilteredSortedProjection(data, mode, bands)
     out.OpportunityFilteredCount = #filtered
     out.OpportunityCount = visibleCount
     out.OpportunitySortMode = mode
+    out.OpportunitySortEffectiveMode = effectiveMode
     if visibleCount == 0 and #rows > 0 then out.OpportunityMessage = 'No opportunities in selected trip bands' end
     return out
 end
@@ -766,7 +776,7 @@ end
 
 local function currentRenderMode(data)
     local mode = pendingSortMode or lastSortMode or safeText(data and data.OpportunitySortMode or '', 'upcoming'):lower()
-    if mode ~= 'name' and mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
+    if mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
     return mode
 end
 
@@ -841,7 +851,7 @@ end
 
 function SetSortMode(mode)
     mode = safeText(mode, 'upcoming'):lower()
-    if mode ~= 'name' and mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
+    if mode ~= 'upcoming' and mode ~= 'gross' and mode ~= 'profit_per_hour' then mode = 'upcoming' end
     if lastSortMode ~= mode then collapseInlineGraph() end
     deferPolling(2)
     pendingSortMode = mode
@@ -911,7 +921,7 @@ function Update()
     lastRenderData = baseData
 
     local projectedMode = safeText(baseData.OpportunitySortMode, 'upcoming'):lower()
-    if projectedMode ~= 'name' and projectedMode ~= 'upcoming' and projectedMode ~= 'gross' and projectedMode ~= 'profit_per_hour' then projectedMode = 'upcoming' end
+    if projectedMode ~= 'upcoming' and projectedMode ~= 'gross' and projectedMode ~= 'profit_per_hour' then projectedMode = 'upcoming' end
     if pendingSortMode ~= nil and projectedMode == pendingSortMode then pendingSortMode = nil end
     local renderMode = pendingSortMode or projectedMode
     if lastSortMode == nil then lastSortMode = renderMode end
