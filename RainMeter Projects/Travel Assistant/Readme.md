@@ -44,7 +44,7 @@ Expanded economics are:
         5% Tax:$...                    5% Tax:$...
 ```
 
-`Each` and `Total` are separate vertical label blocks filled with the card-border gray and centered vertically. MV is left-aligned on the top row, Net is right-aligned on that same row, and Tax is left-aligned on the second row; the value text baselines are shifted 1 px upward for optical centering. With a nonzero rate the expansion is 34px tall. At **0% tax**, the Tax fields and second row disappear entirely and the expansion contracts to a single 18px row; the label blocks contract to match. There are no pipe characters inside the expanded economics strip.
+`Each` and `Total` are separate vertical label blocks filled with the card-border gray and centered vertically. MV is left-aligned on the top row and Net is right-aligned on that same row. The second row keeps Tax on the left when the saved rate is nonzero and always shows `$/hr` on the right. That rate is after-tax Each/Total net profit divided by round-trip flight time (`one-way flight seconds x 2`), deliberately excluding opportunity wait/window time. The expansion therefore remains 34px tall even at **0% tax**; only the Tax text disappears. The value text baselines are shifted 1 px upward for optical centering, and there are no pipe characters inside the expanded economics strip.
 
 ## Sort modes
 
@@ -88,7 +88,7 @@ profit/hr = make / total elapsed hours
 
 Gross profit intentionally excludes travel cost. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
 
-Settings control a 0%, 1%, 2%, 3%, 4%, or 5% sale-tax / trader rate plus profitable-only filtering. The declared MV itself is never discounted by this rate. Saving Settings queues a post-save projection refresh behind any active updater, ensuring the published Tax and Net values are recalculated from the newly selected rate rather than remaining on a stale rate.
+Settings control a 0%, 1%, 2%, 3%, 4%, or 5% sale-tax / trader rate plus profitable-only filtering. The declared MV itself is never discounted by this rate. Saving Settings uses the same mutex-waiting `RefreshFilters` projection path as filter saves, ensuring the published Tax, Net, and flight-rate values are recalculated from the newly selected rate without issuing another foreign-stock collection request.
 
 ## Graphs
 
