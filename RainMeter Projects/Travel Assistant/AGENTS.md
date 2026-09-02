@@ -234,7 +234,7 @@ Negative-value items remain legal candidates unless `Show profitable items only`
 9. Estimated future restock quantity may use observed `0 -> positive` quantities.
 10. Stale provider markets are not visible opportunity candidates.
 11. Change-only pruning preserves one predecessor/baseline per market.
-12. Sorting, inline graph expansion and Viewer use never write forecast history.
+12. Sorting and inline graph expansion never write forecast history.
 
 ## Energy / Nerve constraints
 
