@@ -143,7 +143,7 @@ if (Test-Path -LiteralPath $historyPath) {
 $opportunityPath=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 if (Test-Path -LiteralPath $opportunityPath) {
     $opportunity=Get-Content -LiteralPath $opportunityPath -Raw
-    foreach($token in @('grossProfit','make','profitPerHour','Get-OpportunityNextWindow','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'probabilityKnown',"'LEARNING'",'$availableQuantity = $stock',"PSObject.Properties['make']","Descending=$true")) {
+    foreach($token in @('grossProfit','make','profitPerHour','Get-OpportunityRoundTripProfitPerHour','Get-OpportunityNextWindow','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'probabilityKnown',"'LEARNING'",'$availableQuantity = $stock',"PSObject.Properties['make']","Descending=$true")) {
         if (-not $opportunity.Contains($token)) { Fail "Opportunity model missing '$token'." }
     }
     if ($opportunity -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Opportunity projection must remain local-only.' }
