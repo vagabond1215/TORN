@@ -47,6 +47,8 @@ if ($errors.Count -eq 0) {
         "state[projectedPrefix..'MarketValueValue']","state[projectedPrefix..'ProfitEachValue']",
         "state[projectedPrefix..'GrossSaleValue']","state[projectedPrefix..'MarketTaxValue']","state[projectedPrefix..'MarketFeePercent']",
         "local face='Nirmala UI Semilight'",
+        "setOption(prefix..'Name','X',106)","setOption(prefix..'Price','X',106)","setOption(prefix..'Price','W',282)",
+        "setOption(prefix..'Leave','X',106)","setOption(prefix..'Leave','W',280)",
         "setOption(prefix..'Name','Text',itemName)","setOption(prefix..'Name','ToolTipText','Item name')","setOption(prefix..'Name','FontColor','0,0,0,0')",
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)",

@@ -27,7 +27,7 @@ if($errors.Count -eq 0){
     $ini=Get-Content -LiteralPath $iniPath -Raw
 
     foreach($i in 1..8){
-        foreach($suffix in @('Card','Flag','Name','Gross','DetailTotal','Price','Take','Make','Leave','DetailToggle','Graph','InlineGraph')){
+        foreach($suffix in @('Card','Flag','FlagMask','CardBorder','ItemImage','Name','Gross','DetailTotal','Price','Take','Make','Leave','DetailToggle','Graph','InlineGraph')){
             $section='MeterOpportunity'+$i+$suffix
             if($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){
                 Fail "OpportunityRows.inc missing [$section]."
@@ -57,17 +57,27 @@ if($errors.Count -eq 0){
         foreach($token in @('X=9','W=64','H=48','PreserveAspectRatio=1')){
             if(-not$flagBody.Contains($token)){Fail "Row $i flag must fill the card interior without covering its border; missing '$token'."}
         }
+        $flagMask=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'FlagMask\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        foreach($token in @('X=9','W=64','H=48','ImageTint=#Panel#')){
+            if(-not$flagMask.Contains($token)){Fail "Row $i flag mask missing '$token'."}
+        }
+        $itemImage=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'ItemImage\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        foreach($token in @('X=75','W=28','H=28','PreserveAspectRatio=1')){
+            if(-not$itemImage.Contains($token)){Fail "Row $i item image missing '$token'."}
+        }
+        $cardBorder=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'CardBorder\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        if(-not$cardBorder.Contains('Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#')){Fail "Row $i card border overlay is missing."}
         $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=11\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
             Fail "Row $i Name meter must remain a hidden canonical lookup surface at the new 11pt typography."
         }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=310\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
-            Fail "Row $i combined item/unit/full-load-cost line must start at x=78 with a 310px width."
+        if($priceBody -notmatch '(?im)^X=106\s*$' -or $priceBody -notmatch '(?im)^W=282\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
+            Fail "Row $i combined item/unit/full-load-cost line must start after the item art at x=106 with a 282px width."
         }
         $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($takeBody -notmatch '(?im)^X=78\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
+        if($takeBody -notmatch '(?im)^X=106\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
             Fail "Row $i retired Take surface must remain inert; full-load cost belongs in the Price text run."
         }
         $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -117,6 +127,8 @@ if($errors.Count -eq 0){
         "'Gross', 'Y', tostring(y+9)","'DetailTotal', 'Y', tostring(y+9)",
         "'DetailToggle', 'Y', tostring(y+13+bodyOffset)",
         "'Flag', 'Y', tostring(y+1+bodyOffset)","'Flag', 'W', '64'","'Flag', 'H', '48'",
+        "'FlagMask', 'Y', tostring(y+1+bodyOffset)","'ItemImage', 'Y', tostring(y+11+bodyOffset)",
+        "'CardBorder', 'Shape', 'Rectangle 0,0,536,' .. cardHeight",
         "'Window', 'Y', tostring(y+34+bodyOffset)","'Leave', 'Y', tostring(y+34+bodyOffset)",
         "'Make', 'Y', tostring(y+25+bodyOffset)","'Graph', 'Y', tostring(y+26+bodyOffset)",
         "panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra",
@@ -124,7 +136,11 @@ if($errors.Count -eq 0){
         "SKIN:Bang('!HideMeter', p .. 'DetailTotal')",
         "SKIN:Bang('!HideMeter', p .. 'Name')",
         "SKIN:Bang('!HideMeter', p .. 'Window')",
-        "SKIN:Bang('!HideMeter', p .. 'Chance')"
+        "SKIN:Bang('!HideMeter', p .. 'Chance')",
+        'local function flagMaskImagePath(detailExpanded, graphExpanded)',
+        "flagMaskDir .. 'flag-mask-both.png'","flagMaskDir .. 'flag-mask-top.png'","flagMaskDir .. 'flag-mask-bottom.png'",
+        'local function applyItemImageForRow(data, index, key)','local function requestItemImages(itemIds)',
+        "setVariable('VisibleItemImageIds', signature)","'MeasureItemImages'"
     )){
         if(-not$reader.Contains($token)){Fail "StateReader.lua missing detail/graph geometry contract '$token'."}
     }
@@ -136,6 +152,8 @@ if($errors.Count -eq 0){
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
         "totalCost=number(state[projectedPrefix..'TotalCostValue'])",
         "totalCost=(fallbackPrice>0 and quantity>0) and (fallbackPrice*quantity) or 0",
+        "setOption(prefix..'Price','X',106)","setOption(prefix..'Price','W',282)",
+        "setOption(prefix..'Leave','X',106)","setOption(prefix..'Leave','W',280)",
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)",
         "setOption(prefix..'Price','InlinePattern','\\|')",
         "setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
@@ -164,7 +182,7 @@ if($errors.Count -eq 0){
         if(-not$presenter.Contains($token)){Fail "CardPresenter.lua missing compact-card presentation contract '$token'."}
     }
 
-    if(-not$header.Contains("'Card','Flag','Name','Gross','DetailTotal','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph'")){
+    if(-not$header.Contains("'Card','Flag','FlagMask','CardBorder','ItemImage','Name','Gross','DetailTotal','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph'")){
         Fail 'HeaderLayout.lua must shift DetailToggle with every compact card row.'
     }
     if(-not$header.Contains('math.max(160,math.floor(panel-compactOffset))')){

@@ -58,6 +58,11 @@ if ($errors.Count -eq 0) {
             'RMSKIN.ini',
             'Skins\Travel Assistant\TravelAssistant.ini',
             'Skins\Travel Assistant\@Resources\Scripts\RunUpdate.ps1',
+            'Skins\Travel Assistant\@Resources\Scripts\EnsureItemImages.ps1',
+            'Skins\Travel Assistant\@Resources\Includes\OpportunityRows.inc',
+            'Skins\Travel Assistant\@Resources\Images\Flags\CA@3x.png',
+            'Skins\Travel Assistant\@Resources\Images\UI\flag-mask-both.png',
+            'Skins\Travel Assistant\@Resources\Images\UI\filter.png',
             'Skins\Travel Assistant\config\settings.local.example.json',
             'Skins\Travel Assistant\data\seed\observations.jsonl',
             'Skins\Travel Assistant\data\seed\cycles.jsonl'

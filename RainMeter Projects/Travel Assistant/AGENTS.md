@@ -72,8 +72,11 @@ Card rules:
 - The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap. Their active fill is inset one pixel so the card border and T separators always remain visible above/around the highlight.
 - Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity.
+- Inline graph rendering uses a black background, Torn-lime stock trace, cobalt-blue restock/in-stock transition markers, and pumpkin-orange sellout/out-of-stock markers.
 - Expanded economics use two equal unlabeled halves: per-item `MV / <rate>% Tax / Net` on the left and full-load `MV / <rate>% Tax / Net` on the right. Both halves are 9 pt and vertically centered; a divider separates the halves.
-- The FlagKit image fills the card interior at a one-pixel inset (`64x48` in a `50px` card), preserving the asset's rounded transparent corners without covering the card border. The window/guidance line sits low in the card with minimal bottom padding.
+- The FlagKit image is the visual left end cap. A panel-tinted alpha mask clips the flag to the card's rounded left corners and a border-only overlay redraws the card edge above it. Collapsed cards round both left corners; graph-expanded cards keep only the top-left flag corner rounded; economics-expanded cards keep only the bottom-left flag corner rounded; if both expansions are open the flag edge is square because neither flag corner coincides with the card corner.
+- Decorative Torn item art is shown immediately to the right of the flag on a transparent `28x28` surface. The art is cached locally from Torn's direct item PNG path (`https://www.torn.com/images/items/<id>/large.png`) and is never required for economics or opportunity logic.
+- The window/guidance line sits low in the card with minimal bottom padding.
 
 Ordering is selectable and persistent only for:
 
@@ -363,14 +366,14 @@ ResaleQueue              # <= 1 market request
 
 ## Projection / interaction stability
 
-- The one-second Lua loop is local-only.
+- The steady-state one-second Lua loop is local-only. If a newly visible item has no cached decorative art, Lua may enqueue one bounded `EnsureItemImages.ps1` fetch for the missing static PNG; failed IDs are throttled for five minutes.
 - `state.kv` is a private build artifact. Rainmeter consumes complete immutable `ui-state-<epoch>-<id>.kv` generations selected by `last-update.txt`.
 - Never replace a hot Rainmeter-read state pathname as the normal publication mechanism; a failed generation must leave the previous complete generation visible.
 - Never flash an already-populated surface to `Learning opportunities...` because a child stage is still running.
 - A transient learning-only zero pass is not authoritative over a previously valid nonzero projection.
 - Sorts are immediate local Lua reorderings.
 - Text/button controls need stable rectangular hitboxes.
-- Inline expansion should reflow the skin immediately without a provider/Torn call.
+- Inline expansion reflows immediately without a provider/Torn API call. Item-art CDN fetches are independent decorative cache fills and do not alter provider/API request ownership.
 
 ## Runtime diagnostics / popup contract
 
@@ -391,7 +394,7 @@ ResaleQueue              # <= 1 market request
 
 ## Performance budget
 
-- one-second Rainmeter loop: local only;
+- steady-state one-second Rainmeter loop: local only, except a bounded on-demand static item-art cache fill for newly visible uncached IDs;
 - immediate row sorting: local Lua only;
 - inline graph renderer: local/on demand, roughly no more often than once/minute while expanded;
 - serialized updater: roughly once/minute;

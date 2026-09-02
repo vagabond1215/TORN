@@ -2,6 +2,8 @@ local statePath = nil
 local heartbeatPath = nil
 local generatedDir = nil
 local flagDir = nil
+local flagMaskDir = nil
+local itemImageDir = nil
 local pollInterval = 60
 local failureRetryInterval = 15
 local failureRetryArmed = false
@@ -21,6 +23,8 @@ local lastInlineRenderRequestAt = 0
 local lastLayoutSignature = ''
 local lastGraphSignature = ''
 local lastFlagKeys = {}
+local lastItemImageRequestSignature = ''
+local lastItemImageRequestAt = 0
 
 local collapsedCardHeight = 50
 local rowStride = 54
@@ -511,6 +515,77 @@ local function flagImagePath(countryId)
     return flagDir .. code .. '@3x.png'
 end
 
+local function flagMaskImagePath(detailExpanded, graphExpanded)
+    if flagMaskDir == nil then return '' end
+    if detailExpanded and graphExpanded then return '' end
+    if detailExpanded then return flagMaskDir .. 'flag-mask-bottom.png' end
+    if graphExpanded then return flagMaskDir .. 'flag-mask-top.png' end
+    return flagMaskDir .. 'flag-mask-both.png'
+end
+
+local function fileExists(path)
+    if path == nil or path == '' then return false end
+    local file = io.open(path, 'rb')
+    if not file then return false end
+    file:close()
+    return true
+end
+
+local function itemImagePath(itemId)
+    if itemImageDir == nil or itemId == nil or itemId <= 0 then return '' end
+    return itemImageDir .. tostring(itemId) .. '.png'
+end
+
+local function applyItemImageForRow(data, index, key)
+    local meter = 'MeterOpportunity' .. index .. 'ItemImage'
+    local itemId = itemIdFromKey(key)
+    if itemId <= 0 then
+        SKIN:Bang('!SetOption', meter, 'ImageName', '')
+        SKIN:Bang('!HideMeter', meter)
+        return 0
+    end
+
+    local path = itemImagePath(itemId)
+    local prefix = 'Opportunity' .. index
+    local itemName = resolvedItemName(key, data[prefix .. 'Name'])
+    SKIN:Bang('!SetOption', meter, 'ToolTipText', itemName)
+    if fileExists(path) then
+        SKIN:Bang('!SetOption', meter, 'ImageName', path)
+        SKIN:Bang('!ShowMeter', meter)
+        return 0
+    end
+
+    SKIN:Bang('!SetOption', meter, 'ImageName', '')
+    SKIN:Bang('!HideMeter', meter)
+    return itemId
+end
+
+local function requestItemImages(itemIds)
+    local seen = {}
+    local ordered = {}
+    for _, itemId in ipairs(itemIds or {}) do
+        if itemId > 0 and not seen[itemId] then
+            seen[itemId] = true
+            table.insert(ordered, itemId)
+        end
+    end
+    local parts = {}
+    for _, itemId in ipairs(ordered) do table.insert(parts, tostring(itemId)) end
+    local signature = table.concat(parts, ',')
+    if signature == '' then
+        lastItemImageRequestSignature = ''
+        return
+    end
+
+    local now = os.time()
+    if signature == lastItemImageRequestSignature and (now - lastItemImageRequestAt) < 300 then return end
+    lastItemImageRequestSignature = signature
+    lastItemImageRequestAt = now
+    setVariable('VisibleItemImageIds', signature)
+    SKIN:Bang('!UpdateMeasure', 'MeasureItemImages')
+    SKIN:Bang('!CommandMeasure', 'MeasureItemImages', 'Run')
+end
+
 local function applyFlagForRow(data, index, key)
     local countryId = countryIdFromKey(key)
     local prefix = 'Opportunity' .. index
@@ -628,6 +703,15 @@ local function layoutRows(data, count)
             SKIN:Bang('!HideMeter', p .. 'Gross')
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
         end
+        local maskImage = ''
+        if i <= count then maskImage = flagMaskImagePath(i == expandedDetailRow, i == expandedRow) end
+        if maskImage == '' then
+            SKIN:Bang('!SetOption', p .. 'FlagMask', 'ImageName', '')
+            SKIN:Bang('!HideMeter', p .. 'FlagMask')
+        else
+            SKIN:Bang('!SetOption', p .. 'FlagMask', 'ImageName', maskImage)
+            SKIN:Bang('!ShowMeter', p .. 'FlagMask')
+        end
         SKIN:Bang('!HideMeter', p .. 'Name')
         SKIN:Bang('!HideMeter', p .. 'Window')
         SKIN:Bang('!HideMeter', p .. 'Chance')
@@ -652,6 +736,9 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Card', 'Y', tostring(y))
         SKIN:Bang('!SetOption', p .. 'Card', 'H', tostring(cardHeight))
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape', 'Rectangle 0,0,536,' .. cardHeight .. ',5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#')
+        SKIN:Bang('!SetOption', p .. 'CardBorder', 'Y', tostring(y))
+        SKIN:Bang('!SetOption', p .. 'CardBorder', 'H', tostring(cardHeight))
+        SKIN:Bang('!SetOption', p .. 'CardBorder', 'Shape', 'Rectangle 0,0,536,' .. cardHeight .. ',5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#')
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape2', 'Line 510,' .. bodyOffset .. ',510,' .. (bodyOffset+50) .. ' | StrokeWidth 1 | Stroke Color #Border#')
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25) .. ' | StrokeWidth 1 | Stroke Color #Border#')
         if detailExpanded then
@@ -676,6 +763,14 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+1+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Flag', 'W', '64')
         SKIN:Bang('!SetOption', p .. 'Flag', 'H', '48')
+        SKIN:Bang('!SetOption', p .. 'FlagMask', 'X', '9')
+        SKIN:Bang('!SetOption', p .. 'FlagMask', 'Y', tostring(y+1+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'FlagMask', 'W', '64')
+        SKIN:Bang('!SetOption', p .. 'FlagMask', 'H', '48')
+        SKIN:Bang('!SetOption', p .. 'ItemImage', 'X', '75')
+        SKIN:Bang('!SetOption', p .. 'ItemImage', 'Y', tostring(y+11+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'ItemImage', 'W', '28')
+        SKIN:Bang('!SetOption', p .. 'ItemImage', 'H', '28')
         SKIN:Bang('!SetOption', p .. 'Name', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Price', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Take', 'Y', tostring(y+6+bodyOffset))
@@ -751,6 +846,7 @@ local function updateOpportunities(data)
     local count = math.max(0, math.min(8, math.floor(number(data.OpportunityCount))))
     setVariable('OpportunityMessageText', safeText(data.OpportunityMessage, 'No current opportunities'))
     setMeterVisible('MeterOpportunityMessage', count == 0)
+    local missingItemImages = {}
 
     for i = 1, 8 do
         local prefix = 'Opportunity' .. i
@@ -779,8 +875,11 @@ local function updateOpportunities(data)
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Chance', 'Text', displayChanceText(data, prefix))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Price', 'Text', combinedPrice)
             applyFlagForRow(data, i, key)
+            local missingItemId = applyItemImageForRow(data, i, key)
+            if missingItemId > 0 then table.insert(missingItemImages, missingItemId) end
         end
     end
+    requestItemImages(missingItemImages)
 
     layoutRows(data, count)
     updateExpandedGraph()
@@ -819,6 +918,8 @@ function Initialize()
     heartbeatPath = SKIN:MakePathAbsolute(heartbeatConfigured)
     generatedDir = statePath:match('^(.*[\\/])') or ''
     flagDir = SKIN:ReplaceVariables('#@#Images\\Flags\\')
+    flagMaskDir = SKIN:ReplaceVariables('#@#Images\\UI\\')
+    itemImageDir = generatedDir .. 'Items\\'
     pollInterval = math.floor(configuredPoll)
     failureRetryInterval = math.floor(configuredFailureRetry)
     nextPollAt = os.time() + pollInterval

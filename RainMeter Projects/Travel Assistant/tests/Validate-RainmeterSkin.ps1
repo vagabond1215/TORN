@@ -6,11 +6,13 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $rowIncludePath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityRows.inc'
 $stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 $rendererPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
+$itemImageScriptPath = Join-Path $ProjectRoot '@Resources\Scripts\EnsureItemImages.ps1'
 $flagDir = Join-Path $ProjectRoot '@Resources\Images\Flags'
+$uiImageDir = Join-Path $ProjectRoot '@Resources\Images\UI'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($iniPath,$rowIncludePath,$stateReaderPath,$rendererPath)) {
+foreach ($path in @($iniPath,$rowIncludePath,$stateReaderPath,$rendererPath,$itemImageScriptPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing required UI file: $path" }
 }
 if ($errors.Count -gt 0) { foreach($e in $errors){Write-Host "FAIL: $e" -ForegroundColor Red}; exit 1 }
@@ -29,7 +31,7 @@ if ($includeAt -lt 0) { Fail 'TravelAssistant.ini must include OpportunityRows.i
 elseif ($includeAt -lt $backgroundAt -or $includeAt -lt $messageAt) { Fail 'OpportunityRows.inc must be included after the panel/background meters so cards render above the background.' }
 if ($ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'Retired early OpportunityRows include would darken the cards beneath MeterBackground.' }
 
-foreach ($section in @('MeasureUpdate','MeasureSettings','MeasureFilterPopup','MeasureInlineGraph','MeasurePreferenceAction','MeasureState','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')) {
+foreach ($section in @('MeasureUpdate','MeasureSettings','MeasureFilterPopup','MeasureInlineGraph','MeasureItemImages','MeasurePreferenceAction','MeasureState','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')) {
     if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing [$section]." }
 }
 
@@ -49,11 +51,14 @@ foreach($retired in @('MeasureItemViewer','MeterViewer','ViewerMarketKey','Launc
 }
 
 foreach ($i in 1..8) {
-    foreach ($suffix in @('Card','Flag','Name','Gross','DetailTotal','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph')) {
+    foreach ($suffix in @('Card','Flag','FlagMask','CardBorder','ItemImage','Name','Gross','DetailTotal','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph')) {
         $section='MeterOpportunity'+$i+$suffix
         if ($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "OpportunityRows.inc missing [$section]." }
     }
     $flagBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Flag\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $flagMaskBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'FlagMask\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $cardBorderBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'CardBorder\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $itemImageBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'ItemImage\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailToggle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -64,12 +69,15 @@ foreach ($i in 1..8) {
     $graphButtonBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     if ($flagBody -notmatch '(?im)^Meter=Image\s*$' -or $flagBody -notmatch '(?im)^X=9\s*$' -or $flagBody -notmatch '(?im)^W=64\s*$' -or $flagBody -notmatch '(?im)^H=48\s*$' -or $flagBody -notmatch '(?im)^PreserveAspectRatio=1\s*$') { Fail "Opportunity $i flag must fill the card interior with a one-pixel border inset." }
+    if ($flagMaskBody -notmatch '(?im)^X=9\s*$' -or $flagMaskBody -notmatch '(?im)^W=64\s*$' -or $flagMaskBody -notmatch '(?im)^H=48\s*$' -or $flagMaskBody -notmatch '(?im)^ImageTint=#Panel#\s*$') { Fail "Opportunity $i flag mask must match the flag and tint to the panel." }
+    if ($cardBorderBody -notmatch '(?im)^Shape=Rectangle 0,0,536,50,5 \| Fill Color 0,0,0,0 \| StrokeWidth 1 \| Stroke Color #Border#\s*$') { Fail "Opportunity $i must redraw the rounded card border over the flag edge." }
+    if ($itemImageBody -notmatch '(?im)^X=75\s*$' -or $itemImageBody -notmatch '(?im)^W=28\s*$' -or $itemImageBody -notmatch '(?im)^H=28\s*$' -or $itemImageBody -notmatch '(?im)^PreserveAspectRatio=1\s*$') { Fail "Opportunity $i item art must be a transparent 28px image immediately right of the flag." }
     if ($detailBody -notmatch '(?im)^Text=\$\s*$' -or $detailBody -notmatch ('ToggleCardDetails\('+[string]$i+'\)')) { Fail "Opportunity $i money button must control the top economics strip." }
     if ($graphButtonBody -notmatch '(?im)^Meter=Shape\s*$' -or $graphButtonBody -notmatch '(?im)^GraphExpanded=0\s*$') { Fail "Opportunity $i graph control must be a chart Shape button." }
     foreach($token in @('X=519','W=24','H=23','Shape=Rectangle 0,0,24,23 | Fill Color 0,0,0,1 | StrokeWidth 0','Stroke Color #ToggleIdle#','Shape2=Line 7,16,7,7','Shape3=Line 7,16,17,16','Shape4=Line 8,14,11,11','Shape5=Line 11,11,13,13','Shape6=Line 13,13,17,8')){if(-not$graphButtonBody.Contains($token)){Fail "Opportunity $i chart end-cap control missing '$token'."}}
     if ($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=11\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i canonical Name meter must stay hidden behind the combined first line." }
-    if ($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=310\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$') { Fail "Opportunity $i combined item/unit/full-load-cost line must be fixed at x=78, width 310." }
-    if ($takeBody -notmatch '(?im)^X=78\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i retired Take surface must remain inert." }
+    if ($priceBody -notmatch '(?im)^X=106\s*$' -or $priceBody -notmatch '(?im)^W=282\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$') { Fail "Opportunity $i combined item/unit/full-load-cost line must start after item art at x=106, width 282." }
+    if ($takeBody -notmatch '(?im)^X=106\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i retired Take surface must remain inert." }
     if ($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=15\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i signed total net must span both text lines and align right-center at x=504." }
     if ($grossBody -notmatch '(?im)^X=14\s*$' -or $grossBody -notmatch '(?im)^W=256\s*$' -or $grossBody -notmatch '(?im)^H=18\s*$' -or $grossBody -notmatch '(?im)^FontSize=9\s*$' -or $grossBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i per-item economics half must be 9pt and vertically centered." }
     if ($detailTotalBody -notmatch '(?im)^X=282\s*$' -or $detailTotalBody -notmatch '(?im)^W=256\s*$' -or $detailTotalBody -notmatch '(?im)^H=18\s*$' -or $detailTotalBody -notmatch '(?im)^FontSize=9\s*$' -or $detailTotalBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i total economics half must mirror the per-item half." }
@@ -82,10 +90,19 @@ foreach ($i in 1..8) {
     if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Time\]')) { Fail "Opportunity $i must not restore travel/elapsed text in the card body." }
 }
 
+foreach ($maskName in @('flag-mask-both.png','flag-mask-top.png','flag-mask-bottom.png')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $uiImageDir $maskName))) { Fail "Missing flag corner mask $maskName." }
+}
+
 foreach ($code in @('MX','KY','CA','US','GB','AR','CH','JP','CN','AE','ZA')) {
     if (-not (Test-Path -LiteralPath (Join-Path $flagDir ($code+'@3x.png')))) { Fail "Missing FlagKit asset ${code}@3x.png." }
 }
 if (-not (Test-Path -LiteralPath (Join-Path $flagDir 'LICENSE-FlagKit.txt'))) { Fail 'FlagKit MIT attribution file is missing.' }
+
+$itemImageScript=Get-Content -LiteralPath $itemImageScriptPath -Raw
+foreach($token in @('https://www.torn.com/images/items/{0}/large.png','@Resources\Generated','Items','System.Net.Http.HttpClient','$bytes[0] -ne 137')){
+    if(-not$itemImageScript.Contains($token)){Fail "EnsureItemImages.ps1 missing '$token'."}
+}
 
 foreach ($token in @(
     "mexico='MX'","cayman_islands='KY'","hawaii='US'","united_kingdom='GB'","united_arab_emirates='AE'",
@@ -97,7 +114,7 @@ foreach ($token in @(
     'local detailExtra = 18','local graphExtra = 133','local footerExtra = 16','expandedDetailKey','expandedDetailRow',
     "if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + detailExtra end",
     "local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)",
-    "'Flag', 'Y', tostring(y+1+bodyOffset)","'Window', 'Y', tostring(y+34+bodyOffset)","'Graph', 'Y', tostring(y+26+bodyOffset)",
+    "'Flag', 'Y', tostring(y+1+bodyOffset)","'FlagMask', 'Y', tostring(y+1+bodyOffset)","'ItemImage', 'Y', tostring(y+11+bodyOffset)","'Window', 'Y', tostring(y+34+bodyOffset)","'Graph', 'Y', tostring(y+26+bodyOffset)",
     "SKIN:Bang('!ShowMeter', p .. 'Gross')","SKIN:Bang('!ShowMeter', p .. 'DetailTotal')",
     "SKIN:Bang('!HideMeter', p .. 'Gross')","SKIN:Bang('!HideMeter', p .. 'DetailTotal')",
     "SKIN:Bang('!HideMeter', p .. 'Name')","SKIN:Bang('!HideMeter', p .. 'Window')","SKIN:Bang('!HideMeter', p .. 'Chance')",
@@ -105,7 +122,8 @@ foreach ($token in @(
     "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
     'local function effectiveSortMode(rows, requestedMode)',"out.OpportunitySortEffectiveMode = effectiveMode",
     'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
-    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
+    "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)',
+    'flagMaskImagePath','flag-mask-both.png','flag-mask-top.png','flag-mask-bottom.png','applyItemImageForRow','requestItemImages','MeasureItemImages','VisibleItemImageIds'
 )) {
     if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
 }
@@ -118,7 +136,9 @@ foreach ($token in @(
     'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
     'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
     'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
-    'UnknownBeforeTimestamp','WindowStartTimestamp'
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
 )) {
     if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
 }

@@ -30,8 +30,11 @@ Up to eight opportunities may be shown.
 - The right side is the signed, after-tax **total net profit**, rendered larger and centered vertically across the two text lines.
 - The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap. Active fills are inset so they do not paint over the border or T separators.
 - Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text.
-- The destination flag fills the card interior vertically with a one-pixel border inset, and the window/guidance text is lowered close to the bottom border.
+- The destination flag behaves as the card's left end cap: its visible left corners are alpha-masked to the card radius, with the bottom-left flag corner becoming square when the graph expands below it. A border-only overlay keeps the actual card edge visible above the flag.
+- Torn's transparent item art is displayed immediately to the right of the flag. The assistant caches `https://www.torn.com/images/items/<itemId>/large.png` locally on demand rather than depending on a live image URL every Rainmeter redraw.
+- The window/guidance text is lowered close to the bottom border.
 - Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering.
+- Inline graphs use a black background with a Torn-lime stock line, cobalt-blue in-stock/restock transitions, and pumpkin-orange out-of-stock/sellout transitions.
 
 Expanded economics are:
 
@@ -152,7 +155,7 @@ ResalePriority
 ResaleQueue
 ```
 
-Inline graph rendering is a separate local on-demand side path. The one-second Rainmeter loop is local-only. Normal runtime keeps one bounded travel/bars request and at most one broad Torn Item Market request/update.
+Inline graph rendering is a separate local on-demand side path. Steady-state one-second Rainmeter work is local; when a newly visible item lacks cached art, the skin may enqueue one bounded static PNG fetch from Torn's item-image path. This decorative fetch is separate from the travel/bars and broad Torn Item Market API request limits.
 
 ## Current data baseline
 

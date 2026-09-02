@@ -4,6 +4,7 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $settingsPath = Join-Path $ProjectRoot 'config\settings.example.json'
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
+$rendererPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 
 $failures = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:failures.Add($Message) }
@@ -14,6 +15,16 @@ if ([int]$settings.highResolutionRetentionHours -lt [int]$settings.graphWindowHo
 if ([int]$settings.highResolutionRetentionHours -ne 48) { Fail 'High-resolution learning retention should remain 48 hours.' }
 if ([int]$settings.cycleRetentionDays -ne 90) { Fail 'Completed-cycle learning retention should remain 90 days.' }
 if ([int]$settings.staleAfterSeconds -ne 300) { Fail 'Live-provider stale threshold should remain 300 seconds.' }
+
+$renderer = Get-Content -LiteralPath $rendererPath -Raw
+foreach($token in @(
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2',
+    'FromArgb(0,71,171),1',
+    'FromArgb(255,117,24),1'
+)){
+    if(-not$renderer.Contains($token)){Fail "Inline graph palette missing '$token'."}
+}
 
 $ini = Get-Content -LiteralPath $iniPath -Raw
 foreach ($sectionName in @('MeterUKHourGrid','MeterJPHourGrid')) {
@@ -41,5 +52,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Graph window / retention validation passed.' -ForegroundColor Green
-Write-Host 'Visible: 8h | raw learning retention: 48h | cycle retention: 90d | live stale guard: 5m' -ForegroundColor DarkGreen
+Write-Host 'Visible: 8h | black graph | lime stock | cobalt restock | pumpkin sellout | raw learning retention: 48h' -ForegroundColor DarkGreen
 exit 0

@@ -12,8 +12,8 @@ $required = @(
     '@Resources\Includes\OpportunityRows.inc',
     '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\ProjectCollectedState.ps1','@Resources\Scripts\MaintainObservationHistory.ps1','@Resources\Scripts\TravelContext.ps1',
     '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1',
-    '@Resources\Scripts\StateReader.lua','@Resources\Scripts\RenderInlineGraph.ps1',
-    '@Resources\Images\Flags\LICENSE-FlagKit.txt',
+    '@Resources\Scripts\StateReader.lua','@Resources\Scripts\RenderInlineGraph.ps1','@Resources\Scripts\EnsureItemImages.ps1',
+    '@Resources\Images\Flags\LICENSE-FlagKit.txt','@Resources\Images\UI\flag-mask-both.png','@Resources\Images\UI\flag-mask-top.png','@Resources\Images\UI\flag-mask-bottom.png',
     'tests\Validate-RainmeterSkin.ps1','tests\Run-OpportunityStateTests.ps1'
 )
 foreach ($relative in $required) {
@@ -73,7 +73,7 @@ foreach($file in $parsePaths) {
 $iniPath=Join-Path $ProjectRoot 'TravelAssistant.ini'
 if (Test-Path -LiteralPath $iniPath) {
     $ini=Get-Content -LiteralPath $iniPath -Raw
-    foreach($token in @('@IncludeRows=#@#Includes\OpportunityRows.inc','[MeasureInlineGraph]','[MeterSortUpcoming]','[MeterSortGross]','[MeterSortProfitHour]')) {
+    foreach($token in @('@IncludeRows=#@#Includes\OpportunityRows.inc','[MeasureInlineGraph]','[MeasureItemImages]','VisibleItemImageIds=','[MeterSortUpcoming]','[MeterSortGross]','[MeterSortProfitHour]')) {
         if (-not $ini.Contains($token)) { Fail "Rainmeter skin missing '$token'." }
     }
     if ($ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'Opportunity rows must not be included before MeterBackground.' }
@@ -145,16 +145,24 @@ if (Test-Path -LiteralPath $opportunityPath) {
 $readerPath=Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 if (Test-Path -LiteralPath $readerPath) {
     $reader=Get-Content -LiteralPath $readerPath -Raw
-    foreach($token in @('flagCodes','@3x.png','collapseInlineGraph','MeasureInlineGraph','effectiveSortMode','OpportunitySortEffectiveMode','safeLeaveText',"return 'WAIT DATA'","return 'NO HIT'")) {
+    foreach($token in @('flagCodes','@3x.png','flagMaskImagePath','flag-mask-both.png','flag-mask-top.png','flag-mask-bottom.png','applyItemImageForRow','requestItemImages','MeasureItemImages','VisibleItemImageIds','collapseInlineGraph','MeasureInlineGraph','effectiveSortMode','OpportunitySortEffectiveMode','safeLeaveText',"return 'WAIT DATA'","return 'NO HIT'")) {
         if (-not $reader.Contains($token)) { Fail "StateReader missing '$token'." }
     }
     foreach($retired in @('OpenViewer','ViewerMarketKey','MeasureItemViewer')) { if($reader.Contains($retired)){ Fail "StateReader retains retired Viewer token '$retired'." } }
 }
 
+$itemImagePath=Join-Path $ProjectRoot '@Resources\Scripts\EnsureItemImages.ps1'
+if (Test-Path -LiteralPath $itemImagePath) {
+    $itemImages=Get-Content -LiteralPath $itemImagePath -Raw
+    foreach($token in @('https://www.torn.com/images/items/{0}/large.png','System.Net.Http.HttpClient','@Resources\Generated','Items')){
+        if(-not$itemImages.Contains($token)){Fail "Item-image cache helper missing '$token'."}
+    }
+}
+
 $rendererPath=Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 if (Test-Path -LiteralPath $rendererPath) {
     $renderer=Get-Content -LiteralPath $rendererPath -Raw
-    foreach($token in @('RuntimeObservationFile','$historySource = ''runtime_observations''','Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot','UnknownBeforeTimestamp','Add-Type -AssemblyName System.Drawing','stableImagePath')) {
+    foreach($token in @('RuntimeObservationFile','$historySource = ''runtime_observations''','Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot','UnknownBeforeTimestamp','Add-Type -AssemblyName System.Drawing','stableImagePath','$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))','FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1')) {
         if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
     }
     if ($renderer.Contains('display_carry')) { Fail 'Inline renderer must not paint current state backward through unknown history.' }

@@ -172,13 +172,13 @@ $bitmap = New-Object System.Drawing.Bitmap($width,$height)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
 $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
-$graphics.Clear([System.Drawing.Color]::FromArgb(20,23,27))
+$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))
 
 $gridMajor = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(72,78,88),1)
 $gridMinor = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(48,53,61),1)
-$stockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(82,174,255),2)
-$restockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(86,190,116),1)
-$selloutPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(224,90,90),1)
+$stockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(126,190,73),2)
+$restockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(0,71,171),1)
+$selloutPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255,117,24),1)
 $labelBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(170,178,190))
 $labelFont = New-Object System.Drawing.Font('Segoe UI',7,[System.Drawing.FontStyle]::Regular,[System.Drawing.GraphicsUnit]::Point)
 

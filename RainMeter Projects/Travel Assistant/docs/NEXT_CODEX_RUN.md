@@ -274,15 +274,16 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 5. Cards show `Item | unit cost | exact full-load cost` on the left and a large signed total Net on the right; there are no Take/Make labels or variable-price cash buffer.
 6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active Torn-lime fills are inset so the card border/T separators remain visible.
 7. Expanded economics are two equal 9pt unlabeled halves: per-item MV/Tax/Net and total MV/Tax/Net.
-8. Flags fill the card interior at a one-pixel inset and retain rounded transparent corners; the window/guidance line sits close to the card's bottom border. The Updated footer remains close beneath the final card.
+8. Flags act as left end caps: collapsed cards round both flag corners, graph-expanded cards square the flag's bottom-left corner, and the card border is visibly redrawn over the flag. Transparent Torn item art appears immediately to the right of the flag after its local cache fills.
+10. Inline graphs are black with a lime stock line, cobalt in-stock/restock markers, and pumpkin out-of-stock/sellout markers. The window/guidance line sits close to the card's bottom border and the Updated footer remains close beneath the final card.
 9. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
-10. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
-11. Global country All/None and each band All/None work.
-12. Category chips and category All/None work.
-13. Item search filters the local list while preserving each item's staged checked state.
-14. Item All/None works.
-15. Cancel makes no preference change.
-16. Save closes only the filter panel, launches one normal refresh, and the skin remains responsive.
+11. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
+12. Global country All/None and each band All/None work.
+13. Category chips and category All/None work.
+14. Item search filters the local list while preserving each item's staged checked state.
+15. Item All/None works.
+16. Cancel makes no preference change.
+17. Save closes only the filter panel, launches one normal refresh, and the skin remains responsive.
 17. Reopen the panel and confirm saved country/category/item selections round-trip.
 18. Reset + Save restores every country/category/item and all three country bands.
 19. Gear image opens Opportunity Settings without expanding the main skin.

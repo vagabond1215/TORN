@@ -128,7 +128,25 @@ foreach ($relative in @(
     'config\travel-perks.json',
     'data\seed\metadata.json',
     'data\seed\observations.jsonl',
-    'data\seed\cycles.jsonl'
+    'data\seed\cycles.jsonl',
+    '@Resources\Includes\OpportunityRows.inc',
+    '@Resources\Images\Flags\AE@3x.png',
+    '@Resources\Images\Flags\AR@3x.png',
+    '@Resources\Images\Flags\CA@3x.png',
+    '@Resources\Images\Flags\CH@3x.png',
+    '@Resources\Images\Flags\CN@3x.png',
+    '@Resources\Images\Flags\GB@3x.png',
+    '@Resources\Images\Flags\JP@3x.png',
+    '@Resources\Images\Flags\KY@3x.png',
+    '@Resources\Images\Flags\MX@3x.png',
+    '@Resources\Images\Flags\US@3x.png',
+    '@Resources\Images\Flags\ZA@3x.png',
+    '@Resources\Images\Flags\LICENSE-FlagKit.txt',
+    '@Resources\Images\UI\filter.png',
+    '@Resources\Images\UI\settings.png',
+    '@Resources\Images\UI\flag-mask-both.png',
+    '@Resources\Images\UI\flag-mask-top.png',
+    '@Resources\Images\UI\flag-mask-bottom.png'
 )) {
     Copy-RequiredFile -RelativePath $relative
 }
