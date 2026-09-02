@@ -410,7 +410,7 @@ local function multiCycleChanceAction(state,statePrefix,flightSeconds,now)
         'Multi-cycle arrival forecast',
         'Modeled Chance to Hit: '..chancePercent(probability),
         'Time to Arrival: '..formatDuration(horizon),
-        'Mean Full Cycle: '..formatDuration(meanPeriod)..' (restock to restock)',
+        'Mean Full Cycle: '..formatDuration(meanPeriod)..' (OOS + in-stock)',
         'Arrival / Cycle Ratio: '..string.format('%.1fx',ratio)..' (~'..tostring(fullCycles)..' complete cycle(s))'
     }
     if periodStd>0 then table.insert(lines,'Cycle Timing SD: '..formatDuration(periodStd)) end
