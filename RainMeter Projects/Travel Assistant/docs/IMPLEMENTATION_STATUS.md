@@ -18,11 +18,14 @@ is the authoritative next-run handoff.
   left-censored partial starts, and durable right-censored active cycles;
 - `StochasticForecast.ps1` performs deterministic, recency-weighted empirical
   joint-cycle resampling through multiple future cycles;
-- the default 128 scenarios evaluate a 15-minute grid over a 12-hour departure
-  search and publish only ignored `data/runtime/stochastic-forecast.json`;
+- the default 128 scoring scenarios begin from a 15-minute base grid over a
+  12-hour departure search; short-duration markets use bounded coarse-to-fine
+  refinement chosen by independent discovery worlds and publish only ignored
+  `data/runtime/stochastic-forecast.json`;
 - the stochastic stage runs after immutable legacy UI publication and fails soft;
 - `tools/Invoke-StochasticReplay.ps1` provides chronological no-future-leakage
-  scoring scaffolding for stochastic-v1 and five deterministic baselines.
+  scoring scaffolding for stochastic-v1 and five simple empirical/deterministic
+  comparators.
 
 No stochastic state, probability, sort, tooltip, or layout is user-facing. Existing
 Safe/Best behavior remains the production baseline.
@@ -54,6 +57,15 @@ Phase-1/2 edge cases before any promotion work:
 These connector changes are statically reviewed only in this environment. The
 Windows PowerShell 5.1 focused suite and production shadow runtime must be rerun on
 the target host before treating the post-review branch as runtime-accepted.
+
+The connector continuation also implemented bounded adaptive arrival search.
+When lower-quartile empirical stock duration is shorter than the base grid step,
+a separately seeded 16-32-scenario discovery pass ranks coarse cells by hidden
+stock support. At most four cells are refined, with at most 192 additional
+candidates plus restock-quantile anchoring inside that same cap. The configured
+full scenario count then scores those candidates independently; discovery worlds
+do not supply the reported probabilities. This remains shadow-only and requires
+target-host performance/calibration evidence before promotion.
 
 ## Accepted target-host baseline before this redesign
 
