@@ -35,10 +35,15 @@ if($errors.Count -eq 0){
         }
 
         $detail=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailToggle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($detail -notmatch '(?im)^Text=\+\s*$'){Fail "Row $i detail toggle must default to +."}
+        if($detail -notmatch '(?im)^Text=\$\s*$'){Fail "Row $i detail toggle must default to the money button."}
+        if($detail -notmatch '(?im)^FontColor=#Muted#\s*$' -or $detail -notmatch '(?im)^SolidColor=#Card#\s*$'){Fail "Row $i money button must use the inactive card styling."}
         if($detail -notmatch ('ToggleCardDetails\('+[string]$i+'\)')){Fail "Row $i detail toggle must call ToggleCardDetails($i)."}
 
         $graph=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        if($graph -notmatch '(?im)^Meter=Shape\s*$' -or $graph -notmatch '(?im)^GraphExpanded=0\s*$'){Fail "Row $i graph button must be a collapsed Shape icon by default."}
+        foreach($token in @('Shape2=Line 4,13,4,5','Shape3=Line 4,13,14,13','Shape4=Line 5,11,8,8','Shape5=Line 8,8,10,10','Shape6=Line 10,10,14,6')){
+            if(-not$graph.Contains($token)){Fail "Row $i chart icon missing '$token'."}
+        }
         if($graph -notmatch ('ToggleInlineGraph\('+[string]$i+'\)')){Fail "Row $i graph toggle must call ToggleInlineGraph($i)."}
 
         $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -71,6 +76,11 @@ if($errors.Count -eq 0){
         'local footerExtra = 28',
         "local expandedDetailKey = ''",
         'local expandedDetailRow = 0',
+        'local function setGraphButtonState(name, expanded)',
+        'local function setDetailButtonState(name, expanded)',
+        "'GraphExpanded', expanded and '1' or '0'",
+        "SKIN:Bang('!SetOption', name, 'Text', '$')",
+        "'218,178,69,255'",
         'local function collapseCardDetails()',
         'local function syncExpandedRows(data, count)',
         'function ToggleCardDetails(index)',
@@ -132,6 +142,20 @@ if($errors.Count -eq 0){
         if(-not$updated.Contains($token)){Fail "MeterUpdated footer missing '$token'."}
     }
     if($ini -notmatch '(?m)^PanelHeight=160\s*$'){Fail 'Initial PanelHeight must reserve the footer.'}
+
+    $title=[regex]::Match($ini,'(?ms)^\[MeterTitle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    foreach($token in @('Y=25','StringAlign=LeftCenter','FontSize=16','FontFace=Nirmala UI Semilight')){
+        if(-not$title.Contains($token)){Fail "MeterTitle centered typography missing '$token'."}
+    }
+
+    foreach($section in @('MeterSortNameButton','MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')){
+        $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        if($body -notmatch '(?im)^Meter=Shape\s*$' -or $body -notmatch '(?im)^Shape=Rectangle .*?,4 \| Fill Color #Card# \| StrokeWidth 1 \| Stroke Color #Border#\s*$'){
+            Fail "$section must be a rounded card-style button surface."
+        }
+    }
+    $sortLine=[regex]::Match($ini,'(?ms)^\[MeterSortBottomLine\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    if($sortLine -notmatch '(?im)^Hidden=1\s*$'){Fail 'The separator line between sort buttons and cards must remain hidden.'}
     if($rows -match '(?im)^FontFace=Segoe UI' -or $ini -match '(?im)^FontFace=Segoe UI'){
         Fail 'Main Rainmeter typography must not fall back to Segoe UI.'
     }
