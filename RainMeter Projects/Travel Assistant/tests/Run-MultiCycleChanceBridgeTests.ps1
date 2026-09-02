@@ -87,6 +87,10 @@ Assert-Near ([double]$short.timing.arrivalCycleRatio) 1.5 0.000001 'Ineligible s
 $sparse=Get-MCMultiCycleChance -MarketKey 'test_country:1' -Cycles @($cycles[0],$cycles[1]) -Observations @() -Market $oosMarket -Destination $oosDestination -Travel $travel -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 750 -MinimumRatio 2.0 -MinimumSamples 3 -RandomSeed 19
 Assert-True (-not [bool]$sparse.eligible) 'Fewer than three completed usable cycles must not fabricate a displayed percentage.'
 
+$unanchored=Get-MCMultiCycleChance -MarketKey 'test_country:1' -Cycles $cycles -Observations @() -Market $oosMarket -Destination ([pscustomobject]@{}) -Travel $travel -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 750 -MinimumRatio 2.0 -MinimumSamples 3 -RandomSeed 19
+Assert-True (-not [bool]$unanchored.eligible) 'Current OOS market with no sellout/positive-stock phase anchor must stay unknown instead of becoming a fabricated 0% chance.'
+Assert-True ([string]$unanchored.reason -like '*phase*anchor*') 'Unknown-phase rejection should expose an explicit diagnostic reason.'
+
 $returning=Get-MCArrivalCandidate -TravelState returning -MarketCountry test_country -TravelDestinationCountry '' -TravelTimeLeft 300 -OneWaySeconds 750 -NowEpoch $now
 Assert-Equal ([long]$returning.arrivalHorizonSeconds) 1050L 'Returning bridge horizon must include remaining return time plus the outbound flight.'
 Assert-Equal ([long]$returning.candidates[0].departureAt) 1300L 'Returning player must not receive an impossible departure before reaching Torn.'
