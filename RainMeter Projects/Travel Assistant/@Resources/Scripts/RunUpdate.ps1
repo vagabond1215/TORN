@@ -517,10 +517,6 @@ try {
         # Shadow forecast only: measure recent direction/correlation and score the
         # next-cycle prediction. It does not alter WindowPlan or current card timing.
         Invoke-FailSoftScript -Path $TrendForecast -ErrorPath $TrendForecastErrorFile
-        # The stochastic challenger consumes only retained local evidence and runs
-        # after immutable legacy UI publication. Its artifact/failure can therefore
-        # never block or partially replace a valid Safe/Best generation.
-        Invoke-FailSoftScript -Path $StochasticForecast -ErrorPath $StochasticForecastErrorFile
     }
 
     if ($Action -eq 'Update' -and (Test-Path -LiteralPath $ResaleQueue)) {
@@ -540,6 +536,14 @@ try {
                 } catch { }
             } else { Clear-CompactFailure -Path $ResaleQueueErrorFile }
         } catch { Write-CompactFailure -Path $ResaleQueueErrorFile -Message $_.Exception.ToString() }
+    }
+
+    if ($Action -eq 'Update') {
+        # The stochastic challenger is strictly lower priority than the production
+        # resale/MV queue. Run it last so its ~tens-of-seconds shadow workload cannot
+        # postpone the bounded cache-refresh request needed by future UI generations.
+        # It still executes after immutable UI publication and remains fail-soft.
+        Invoke-FailSoftScript -Path $StochasticForecast -ErrorPath $StochasticForecastErrorFile
     }
 
     if (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue) { Clear-TravelAssistantLatestError -Component 'run-update' }
