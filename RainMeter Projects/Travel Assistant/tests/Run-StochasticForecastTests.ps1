@@ -97,6 +97,10 @@ $elsewhereForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $
 Assert-True (-not [bool]$elsewhere.feasible) 'Traveling elsewhere must make a new Torn departure physically infeasible.'
 Assert-Equal ([string]$elsewhereForecast.decision.state) 'NO_ACTIONABLE_TRIP' 'Traveling elsewhere must not emit impossible departure guidance.'
 
+$lossTravel=[pscustomobject]@{feasible=$true;mode='home';reason='test';candidates=@([pscustomobject]@{departureAt=$now;arrivalAt=1150L})}
+$lossForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $shortCurrent -Market $oosMarket -Destination $oosDestination -Travel $lossTravel -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 10 -MarketFeePercent 0 -OneWaySeconds 150 -RandomSeed 19
+Assert-Equal ([string]$lossForecast.decision.state) 'NO_ACTIONABLE_TRIP' 'A grid with no positive expected-profit arrival is not a WAIT recommendation; WAIT remains reserved for a modeled delay/information decision.'
+
 $tax3=Get-SFEconomics -Quantity 10 -MarketValue 100 -ForeignPrice 50 -MarketFeePercent 3 -OneWaySeconds 3600
 $tax0=Get-SFEconomics -Quantity 10 -MarketValue 100 -ForeignPrice 50 -MarketFeePercent 0 -OneWaySeconds 3600
 Assert-Equal ([long]$tax3.tax) 30 'Stochastic economics must honor a non-5% itemMarketFeePercent.'
