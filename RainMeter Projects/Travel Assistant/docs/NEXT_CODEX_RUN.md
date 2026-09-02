@@ -10,19 +10,19 @@ Immediately before the unified-filter redesign, target-host testing at commit `f
 - `!SetOption: Skin "0" does not exist` was eliminated by collapsing the `string.gsub()` multi-return in `StateReader.safeText`.
 - the intended compact opportunity cards were restored;
 - FlagKit flags rendered;
-- Item/Category/Country/Settings/Viewer popup paths were working;
+- Item/Category/Country/Settings popup paths were working;
 - the card presentation shown in the target screenshot is the protected visual baseline for this redesign.
 
 Do **not** regress that card layout while accepting the new filter/header surface.
 
 ## Current main-view target
 
-The main skin now deliberately has only title chrome, update status, sorting, Viewer, and the existing opportunity cards:
+The main skin now deliberately has title chrome, update status, three selectable sorts, and the opportunity cards:
 
 ```text
 Travel                                           [filter] [gear]
 Updated ...
-NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
+[UPCOMING] [GROSS PROFIT] [PROFIT/HR]
 
 [FLAG]  <item>       <foreign cost>  MV:<market value> | <profit/ea>     v
         <SAFE/BEST guidance>   <info/confidence>                Take: <$cash>
@@ -128,7 +128,7 @@ The accepted compact card presentation remains authoritative:
 - header economics remain the accepted foreign-cost / MV / per-item-profit presentation;
 - lower line remains actionable Safe/Best state plus confidence/info and `Take:`;
 - far-right control remains the compact `v` / `^` chevron;
-- inline history expands in-card and never routes through the standalone Viewer;
+- inline history expands in-card through the dedicated local renderer;
 - `CardPresenter.lua` remains presentation-only;
 - `StateReader.lua` remains authoritative for projected-row identity, local sort/filter state, flag identity, row visibility, and inline graph expansion.
 
@@ -161,9 +161,7 @@ Inline graph remains:
 - one expanded row at a time;
 - stable `country:itemId` identity;
 - 8-hour visible history;
-- no Viewer popup routing from the row chevron.
-
-`VIEWER >` remains the separate standalone market browser.
+- no popup routing from the row chart button.
 
 ## State / updater architecture
 
@@ -195,7 +193,6 @@ Updater rules remain:
 - Unified filter panel is local-only while browsing/editing.
 - Settings gear opens Opportunity Settings.
 - Ignore List and Profile/API remain nested Settings actions.
-- Viewer remains separate.
 
 Runtime log:
 
@@ -209,7 +206,6 @@ Rainmeter log should also remain free of repeating Lua / `!SetOption` errors.
 
 Target acceptance caught two follow-up issues after the unified-filter pull:
 
-- `Validate-ItemViewer.ps1` still expected the retired `Start-Process` launcher even though the production Viewer launcher intentionally uses the reusable hidden `.NET ProcessStartInfo` contract. The validator now checks the current contract and explicitly rejects `Start-Process` / `exit 0`.
 - the short RunCommand launcher's `FinishAction` redrew after `StateReader -> HeaderLayout -> CardPresenter -> CardTweaks` but before `FreshnessGuard -> TravelStateWindowTweaks -> WindowTooltipTweaks -> FinalCardPolish`. On a stale provider snapshot this exposed a sub-second intermediate render: header text could flash `UPDATE STALE` before `FORECAST ONLY`, and card meters could flash the intermediate styling.
 
 All explicit redraw paths now complete the entire presentation chain before `!Redraw`. `StateReader` also centralizes immediate sort/trip/graph redraws through that same chain. Hard-stale no-row mode uses the compact 132 px base panel height rather than the retired 164 px header footprint.
@@ -273,7 +269,7 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 1. Header is one compact line: `Travel`, filter image, gear image.
 2. `SETTINGS >` text is gone.
 3. ITEM/TRIP/CAT/RESET main band is gone.
-4. NAME / UPCOMING / GROSS PROFIT / PROFIT/HR / VIEWER remain directly below update status.
+4. UPCOMING / GROSS PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only.
 5. Cards are visually identical to the accepted pre-redesign reference except the whole stack begins ~32 px higher.
 6. Flags remain present and card title/economics/Safe-Best/Take geometry is unchanged.
 7. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
@@ -289,8 +285,7 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 17. Gear image opens Opportunity Settings without expanding the main skin.
 18. Ignore List opens from Settings without closing Settings.
 19. Profile/API opens from Settings without closing Settings.
-20. Viewer remains separate and functional.
-21. Sorting still works and an expanded graph still works.
+20. Sorting still works and an expanded inline graph still works.
 22. Rainmeter log has zero repeating `publishedState`, `Skin "0"`, Lua nil-index, or malformed SetOption errors.
 23. Rainmeter remains running through at least two normal 60-second polling intervals.
 
