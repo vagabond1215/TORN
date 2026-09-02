@@ -716,10 +716,12 @@ $currentModelVersion=''
 if ($null -ne $artifact) { $currentModelVersion=([string](Get-SCProperty $artifact 'modelVersion')).Trim() }
 if ([string]::IsNullOrWhiteSpace($currentModelVersion)) {
     $knownVersions=@(
-        $state.pending | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() }
-        $state.recentScores | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() }
-        $state.aggregates | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() }
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        @(
+            $state.pending | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() }
+            $state.recentScores | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() }
+            $state.aggregates | ForEach-Object { ([string](Get-SCProperty $_ 'modelVersion')).Trim() }
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
     if ($knownVersions.Count -gt 0) { $currentModelVersion=[string]$knownVersions[-1] }
 }
 
