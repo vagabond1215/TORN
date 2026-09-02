@@ -33,6 +33,13 @@ Polling evidence is interval-censored: transition bounds are retained instead of
 treating the later poll timestamp as exact. Stock declines to a positive value are
 observed depletion; declines ending at zero are demand-censored lower bounds.
 
+For future cycles, retained intermediate positive-stock observations are normalized
+into a monotone piecewise depletion shape and resampled with the same historical
+cycle as restock delay, duration, restock quantity, and foreign price. Shapes are
+used only when transition-censor width is at most half of the observed cycle span;
+otherwise quantity falls back explicitly to linear depletion. The artifact exposes
+both requested-load `expectedQty` and uncapped `expectedAvailableQty`.
+
 ## Main view
 
 ```text
