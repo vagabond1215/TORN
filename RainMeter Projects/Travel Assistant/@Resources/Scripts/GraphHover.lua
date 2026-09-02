@@ -51,7 +51,7 @@ end
 
 local function expandedRow()
     for i=1,8 do
-        if meterOption('MeterOpportunity'..i..'Graph','Text')=='^' then return i end
+        if meterOption('MeterOpportunity'..i..'Graph','GraphExpanded')=='1' then return i end
     end
     return 0
 end
