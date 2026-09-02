@@ -131,7 +131,7 @@ if (Test-Path -LiteralPath $updatePath) {
         "Write-TravelAssistantLog -Level WARN -Component 'performance'",
         "-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
         "'publish-ui'","'publish-heartbeat'","'generation-cleanup'",
-        'StochasticCalibration.ps1','stochastic-calibration-error.txt'
+        'StochasticCalibration.ps1','stochastic-calibration-error.txt','MultiCycleChanceBridge.ps1','multi-cycle-chance-bridge-error.txt'
     )) {
         if (-not $text.Contains($token)) {
             Fail "RunUpdate.ps1 missing centralized diagnostic/performance token '$token'."
@@ -149,6 +149,13 @@ if (Test-Path -LiteralPath $updatePath) {
     }
     if (-not $text.Contains('$stageParts.ToArray()')) {
         Fail 'RunUpdate.ps1 must join a concrete stage string array without generic-list coercion.'
+    }
+
+    $windowPlanIndex=$text.IndexOf('Invoke-FailSoftScript -Path $WindowPlan')
+    $multiCycleBridgeIndex=$text.IndexOf('Invoke-FailSoftScript -Path $MultiCycleChanceBridge')
+    $priceVariationIndex=$text.IndexOf('Invoke-FailSoftScript -Path $PriceVariationRefiner')
+    if ($windowPlanIndex -lt 0 -or $multiCycleBridgeIndex -le $windowPlanIndex -or $priceVariationIndex -le $multiCycleBridgeIndex) {
+        Fail 'Multi-cycle chance bridge must run after WindowPlan and before price/filter publication.'
     }
 
     $stochasticForecastIndex=$text.IndexOf('Invoke-FailSoftScript -Path $StochasticForecast')
