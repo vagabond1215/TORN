@@ -317,7 +317,8 @@ local function currentCycleStatus(plan,now)
 end
 
 local function syncPanelHeight()
-    local bottom=164
+    local footerExtra=28
+    local bottom=132
     for i=1,8 do
         local prefix='MeterOpportunity'..i
         if meterOption(prefix..'Name','Text')~='' then
@@ -326,7 +327,7 @@ local function syncPanelHeight()
             if y>0 and h>0 then bottom=math.max(bottom,y+h+8) end
         end
     end
-    SKIN:Bang('!SetVariable','PanelHeight',tostring(math.floor(bottom)))
+    SKIN:Bang('!SetVariable','PanelHeight',tostring(math.max(160,math.floor(bottom+footerExtra))))
 end
 
 local function updateRow(index,state,lookup,now)
