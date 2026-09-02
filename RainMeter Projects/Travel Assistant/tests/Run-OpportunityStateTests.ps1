@@ -174,6 +174,7 @@ $rows = @(
 )
 Write-OpportunityProjection -State $state -Rows $rows -SortMode 'gross' -Message ''
 Assert-Equal $state['OpportunitySortMode'] 'gross' 'Projection should preserve selected sort mode.'
+Assert-Equal $state['OpportunitySortEffectiveMode'] 'gross' 'Projection should publish the active non-fallback sort mode.'
 Assert-Equal $state['OpportunityBestKey'] '' 'Retired optimal/best key must stay cleared.'
 Assert-Equal $state['Opportunity1RankText'] '' 'Visible place numbers are retired from compact cards.'
 Assert-Equal $state['Opportunity1OptimalText'] '' 'Retired optimal badge must stay cleared.'
@@ -188,6 +189,11 @@ Assert-Near ([double]$state['Opportunity2ProfitHourValue']) 2400.0 0.001 'Raw pr
 Assert-Equal ([long]$state['Opportunity2WindowStartAt']) 100200L 'Raw window timestamp must be available for immediate Lua sorting.'
 Assert-Near ([double]$state['Opportunity2ProbabilityValue']) .8 0.0001 'Raw probability must remain available as an independent sort tiebreaker.'
 Assert-Equal ([long]$state['Opportunity2ElapsedSeconds']) 1800L 'Raw elapsed seconds must be available for local sorting and the flag travel-time tooltip.'
+
+$fallbackSortState=@{}
+Write-OpportunityProjection -State $fallbackSortState -Rows @() -SortMode 'upcoming' -Message 'no data'
+Assert-Equal $fallbackSortState['OpportunitySortMode'] 'upcoming' 'Requested sort remains Upcoming even when no data exists.'
+Assert-Equal $fallbackSortState['OpportunitySortEffectiveMode'] 'name' 'Name ordering is published only as the no-data fallback.'
 
 $economicsState=@{}
 $economicsRows=@([pscustomobject]@{
