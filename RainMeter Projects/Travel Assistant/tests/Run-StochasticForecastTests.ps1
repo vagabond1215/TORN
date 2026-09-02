@@ -64,6 +64,10 @@ $longEvidence=@(Select-SFJointCycleEvidence -Cycles $longGridCycles -AsOf $now)
 $longPlan=Get-SFAdaptiveGridPlan -Evidence $longEvidence -Travel $burstTravel -CoarseStepSeconds 900 -Enabled $true
 Assert-True (-not [bool]$longPlan.enabled) 'Stock durations longer than the coarse grid should not pay for adaptive refinement.'
 
+$fullLoadPlan=Get-SFAdaptiveGridPlan -Evidence $longEvidence -Travel $burstTravel -TargetQuantity 20 -CoarseStepSeconds 900 -Enabled $true
+Assert-True ([bool]$fullLoadPlan.enabled) 'A long-lived market should still refine when the full-load quantity window is much shorter than the coarse step.'
+Assert-True ([long]$fullLoadPlan.referenceUsefulQuantityWindowSeconds -lt 900L) 'Required-quantity window diagnostic should expose the narrow full-load interval.'
+
 # Retained intermediate stock observations should preserve an empirical depletion
 # trajectory jointly with the sampled cycle. The linear model remains an explicit
 # fallback when no informative intermediate observations exist.
@@ -100,6 +104,14 @@ $shapeEvidence=@(Select-SFJointCycleEvidence -Cycles $shapeCycles.ToArray() -AsO
 Assert-Equal $shapeEvidence.Count 3 'All shape fixtures should remain usable joint-cycle evidence.'
 Assert-True (@($shapeEvidence | Where-Object {$null -ne $_.depletionShape}).Count -eq 3) 'Each shape fixture should retain an empirical depletion trajectory.'
 Assert-True ([int]$shapeEvidence[0].depletionShape.pointCount -ge 4) 'Empirical trajectory should include structural endpoints plus informative intermediate stock points.'
+
+Assert-Near ([double]$shapeEvidence[0].depletionShape.boundaryUncertaintyRatio) 0.0 0.000001 'Exact fixture boundaries should preserve a zero censor-width ratio.'
+
+$wideCycle=($shapeCycles[0] | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+$wideCycle.restockLowerBoundAt=[long]$wideCycle.restockUpperBoundAt-30L
+$wideCycle.soldOutLowerBoundAt=[long]$wideCycle.soldOutUpperBoundAt-30L
+$wideShape=Get-SFCycleDepletionShape -Cycle $wideCycle -Observations $shapeObservations.ToArray()
+Assert-True ($null -eq $wideShape) 'Depletion shape must fail back to linear when transition-censor width dominates the cycle.'
 
 $shapeInterval=New-SFStockInterval -StartAt 1000L -EndAt 1100L -Quantity 100L -ForeignPrice 50L -Ordinal 1 -DepletionShape $shapeEvidence[0].depletionShape
 $linearInterval=New-SFStockInterval -StartAt 1000L -EndAt 1100L -Quantity 100L -ForeignPrice 50L -Ordinal 1
