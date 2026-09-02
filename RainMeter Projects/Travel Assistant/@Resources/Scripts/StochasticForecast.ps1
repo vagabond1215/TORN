@@ -197,6 +197,18 @@ function Get-SFCycleDepletionShape {
     $restockQuantity=[long](Get-SFProperty $Cycle 'restockQuantity')
     if ($startAt -le 0 -or $endAt -le $startAt -or $restockQuantity -le 0) { return $null }
 
+    $restockLower=[long](Get-SFProperty $Cycle 'restockLowerBoundAt')
+    if ($restockLower -le 0) { $restockLower=$startAt }
+    $selloutLower=[long](Get-SFProperty $Cycle 'soldOutLowerBoundAt')
+    if ($selloutLower -le 0) { $selloutLower=$endAt }
+    $span=[Math]::Max(1L,$endAt-$startAt)
+    $boundaryUncertainty=[Math]::Max(0L,$startAt-$restockLower)+[Math]::Max(0L,$endAt-$selloutLower)
+    $boundaryUncertaintyRatio=[double]$boundaryUncertainty/[double]$span
+    # Intermediate stock points are useful only if phase-boundary censoring does
+    # not dominate the cycle itself. Wide brackets keep the cycle for duration
+    # learning but fall back to linear quantity rather than fabricating phase.
+    if ($boundaryUncertaintyRatio -gt 0.5) { return $null }
+
     $rows=@($Observations | Where-Object {
         $at=Get-SFObservationAt $_
         $at -ge $startAt -and $at -le $endAt
@@ -238,6 +250,7 @@ function Get-SFCycleDepletionShape {
         pointCount=$points.Count
         observedStartAt=$startAt
         observedEndAt=$endAt
+        boundaryUncertaintyRatio=[Math]::Round($boundaryUncertaintyRatio,6)
         points=$points.ToArray()
     }
 }
@@ -484,10 +497,31 @@ function Get-SFDecision {
     return [pscustomobject]@{ state='LEAVE_IN'; reason='a later feasible departure has the highest expected profit' }
 }
 
+function Get-SFTargetQuantityEndAt {
+    param([object]$Interval,[int]$TargetQuantity)
+    if ($null -eq $Interval) { return 0L }
+    $start=[long](Get-SFProperty $Interval 'startAt')
+    $end=[long](Get-SFProperty $Interval 'endAt')
+    if ($end -le $start) { return 0L }
+    $target=[Math]::Max(1,$TargetQuantity)
+    if ((Get-SFIntervalQuantity -Interval $Interval -ArrivalAt $start) -lt $target) { return 0L }
+    if ($target -le 1) { return $end }
+
+    $low=$start
+    $high=$end
+    while (($high-$low) -gt 1) {
+        $mid=[long][Math]::Floor(([double]$low+[double]$high)/2.0)
+        if ((Get-SFIntervalQuantity -Interval $Interval -ArrivalAt $mid) -ge $target) { $low=$mid }
+        else { $high=$mid }
+    }
+    return [long]$high
+}
+
 function Get-SFAdaptiveGridPlan {
     param(
         [object[]]$Evidence,
         [object]$Travel,
+        [int]$TargetQuantity=1,
         [int]$CoarseStepSeconds=900,
         [bool]$Enabled=$true
     )
@@ -498,6 +532,7 @@ function Get-SFAdaptiveGridPlan {
         enabled=$false
         reason='adaptive grid disabled'
         referenceAvailabilitySeconds=0L
+        referenceUsefulQuantityWindowSeconds=0L
         desiredFineStepSeconds=0
         discoveryScenarioCount=0
         refinedCellCount=0
@@ -515,13 +550,21 @@ function Get-SFAdaptiveGridPlan {
     }
 
     $durations=New-Object System.Collections.Generic.List[long]
+    $usefulWindows=New-Object System.Collections.Generic.List[long]
     foreach ($row in @($Evidence)) {
         $minimum=[long](Get-SFProperty $row 'availabilityMinimum')
         $maximum=[long](Get-SFProperty $row 'availabilityMaximum')
         if ($minimum -le 0 -and $maximum -le 0) { continue }
         if ($minimum -le 0) { $minimum=$maximum }
         if ($maximum -lt $minimum) { $maximum=$minimum }
-        $durations.Add([long][Math]::Max(1L,[Math]::Round(([double]$minimum+[double]$maximum)/2.0)))
+        $duration=[long][Math]::Max(1L,[Math]::Round(([double]$minimum+[double]$maximum)/2.0))
+        $durations.Add($duration)
+
+        $quantity=[Math]::Max(1L,[long](Get-SFProperty $row 'quantity'))
+        $probe=New-SFStockInterval -StartAt 0L -EndAt $duration -Quantity $quantity -ForeignPrice 0L -Ordinal 0 -DepletionShape (Get-SFProperty $row 'depletionShape')
+        $targetEnd=Get-SFTargetQuantityEndAt -Interval $probe -TargetQuantity $TargetQuantity
+        $useful=if($targetEnd -gt 0){[long]$targetEnd}else{[long][Math]::Max(1L,[Math]::Ceiling($duration/2.0))}
+        $usefulWindows.Add([Math]::Min($duration,$useful))
     }
     if ($durations.Count -lt 3) {
         $disabled.reason='fewer than three usable availability durations'
@@ -529,21 +572,27 @@ function Get-SFAdaptiveGridPlan {
     }
 
     $sorted=[long[]]@($durations.ToArray() | Sort-Object)
+    $sortedUseful=[long[]]@($usefulWindows.ToArray() | Sort-Object)
     $index=[int][Math]::Floor(($sorted.Count-1)*0.25)
+    $usefulIndex=[int][Math]::Floor(($sortedUseful.Count-1)*0.25)
     $reference=[long]$sorted[$index]
+    $referenceUseful=[long]$sortedUseful[$usefulIndex]
     $disabled.referenceAvailabilitySeconds=$reference
-    if ($reference -ge $coarse) {
-        $disabled.reason='lower-quartile stock duration is at least the coarse grid step'
+    $disabled.referenceUsefulQuantityWindowSeconds=$referenceUseful
+    if ($reference -ge $coarse -and $referenceUseful -ge $coarse) {
+        $disabled.reason='stock and required-quantity windows are at least the coarse grid step'
         return $disabled
     }
 
-    $fine=[int][Math]::Round($reference/2.0)
+    $resolutionReference=[Math]::Min($reference,$referenceUseful)
+    $fine=[int][Math]::Round($resolutionReference/2.0)
     $fine=[Math]::Max(5,[Math]::Min(300,$fine))
     $fine=[Math]::Min($fine,[Math]::Max(5,[int][Math]::Floor($coarse/2.0)))
     return [pscustomobject]@{
         enabled=$true
-        reason='short stock duration requires bounded sub-grid search'
+        reason='stock or required-quantity window requires bounded sub-grid search'
         referenceAvailabilitySeconds=$reference
+        referenceUsefulQuantityWindowSeconds=$referenceUseful
         desiredFineStepSeconds=$fine
         discoveryScenarioCount=0
         refinedCellCount=0
@@ -557,6 +606,7 @@ function Get-SFAdaptiveTravelCandidates {
         [object[]]$CoarseCandidates,
         [object[]]$DiscoveryWorlds,
         [int]$FineStepSeconds,
+        [int]$TargetQuantity=1,
         [int]$MaximumCells=4,
         [int]$MaximumAdditionalPoints=192
     )
@@ -579,14 +629,20 @@ function Get-SFAdaptiveTravelCandidates {
             $start=[long]$interval.startAt
             $end=[long]$interval.endAt
             if ($end -le $start) { continue }
+
+            $targetEnd=Get-SFTargetQuantityEndAt -Interval $interval -TargetQuantity $TargetQuantity
+            $focusEnd=if($targetEnd -gt $start){[long]$targetEnd}else{[long]($start+[Math]::Max(1L,[Math]::Ceiling(($end-$start)/2.0)))}
+            $focusEnd=[Math]::Min($end,$focusEnd)
+            if ($focusEnd -le $start) { continue }
+
             for ($i=0; $i -lt $cellCount; $i++) {
                 $left=[long]$coarse[$i].arrivalAt
                 $right=[long]$coarse[$i+1].arrivalAt
-                if ($end -le $left -or $start -ge $right) { continue }
+                if ($focusEnd -le $left -or $start -ge $right) { continue }
                 $seenSupport[$i]=$true
                 if ($start -gt $left -and $start -lt $right) { $starts[$i].Add($start) }
-                $leftHit=($left -ge $start -and $left -lt $end)
-                $rightHit=($right -ge $start -and $right -lt $end)
+                $leftHit=($left -ge $start -and $left -lt $focusEnd)
+                $rightHit=($right -ge $start -and $right -lt $focusEnd)
                 if (-not $leftHit -and -not $rightHit) { $seenHidden[$i]=$true }
             }
         }
@@ -719,7 +775,7 @@ function Invoke-SFMarketForecast {
         return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality='usable'; arrivals=@(); decision=$decision; maximumCycleOrdinal=0; adaptiveGrid=$adaptiveGrid; depletionModel=$depletionModel; depletionShapeEvidenceCount=$shapeEvidenceCount }
     }
 
-    $adaptiveGrid=Get-SFAdaptiveGridPlan -Evidence $evidence -Travel $Travel -CoarseStepSeconds $CoarseGridSeconds -Enabled $EnableAdaptiveGrid
+    $adaptiveGrid=Get-SFAdaptiveGridPlan -Evidence $evidence -Travel $Travel -TargetQuantity $TargetQuantity -CoarseStepSeconds $CoarseGridSeconds -Enabled $EnableAdaptiveGrid
     if ([bool]$adaptiveGrid.enabled) {
         $coarseHorizon=[long](@($candidates | Measure-Object arrivalAt -Maximum).Maximum)+1L
         $discoveryCount=[Math]::Min(32,[Math]::Max(16,[int][Math]::Ceiling($ScenarioCount/4.0)))
@@ -731,7 +787,7 @@ function Invoke-SFMarketForecast {
             $world=@(New-SFMarketWorld -Evidence $evidence -Market $Market -Destination $Destination -NowEpoch $NowEpoch -HorizonAt $coarseHorizon -Random $discoveryRandom)
             $discoveryWorlds.Add([pscustomobject]@{ intervals=$world })
         }
-        $refined=Get-SFAdaptiveTravelCandidates -CoarseCandidates $candidates -DiscoveryWorlds $discoveryWorlds.ToArray() -FineStepSeconds ([int]$adaptiveGrid.desiredFineStepSeconds)
+        $refined=Get-SFAdaptiveTravelCandidates -CoarseCandidates $candidates -DiscoveryWorlds $discoveryWorlds.ToArray() -FineStepSeconds ([int]$adaptiveGrid.desiredFineStepSeconds) -TargetQuantity $TargetQuantity
         $candidates=@($refined.candidates)
         $adaptiveGrid.discoveryScenarioCount=$discoveryCount
         $adaptiveGrid.refinedCellCount=[int]$refined.refinedCellCount
