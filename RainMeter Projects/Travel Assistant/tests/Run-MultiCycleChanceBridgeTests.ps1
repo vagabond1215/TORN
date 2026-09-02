@@ -104,7 +104,7 @@ foreach($token in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','System.N
 }
 Assert-True ($bridgeText.Contains('. $StochasticScript -SkipMain')) 'Bridge must reuse stochastic-v1.1 functions rather than implement a second cycle simulator.'
 Assert-True ($bridgeText.Contains('-EnableAdaptiveGrid $false')) 'Single-arrival production fallback must not pay for a departure-grid adaptive search.'
-Assert-True ($bridgeText.Contains("[double]$MinimumFlightCycleRatio = 2.0")) 'Production eligibility threshold should remain explicit at two mean cycles.'
+Assert-True ($bridgeText.Contains('[double]$MinimumFlightCycleRatio = 2.0')) 'Production eligibility threshold should remain explicit at two mean cycles.'
 
 $runUpdate=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1')
 $windowIndex=$runUpdate.IndexOf('Invoke-FailSoftScript -Path $WindowPlan')
