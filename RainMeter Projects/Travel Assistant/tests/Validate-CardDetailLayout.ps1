@@ -82,7 +82,7 @@ if($errors.Count -eq 0){
         $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $leaveBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Leave\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($takeBody -notmatch '(?im)^X=123\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$'){
-            Fail "Row $i retired Take surface must remain inert; full-load cost belongs in the Price text run."
+            Fail "Row $i retired Take surface must remain inert; purchase prices belong in the expanded economics strip."
         }
         $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=142\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=14\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$'){
