@@ -2,7 +2,7 @@
 
 **Checkpoint:** 2026-09-02
 
-**Active run:** stochastic-v1.1 live shadow scoring/calibration, while 0.6.0 compact
+**Active run:** stochastic-v1.1 live shadow scoring/calibration plus a restricted production multi-cycle hit-chance fallback, while 0.6.0 compact
 opportunity surface target-Windows acceptance remains open. `docs/NEXT_CODEX_RUN.md`
 is the authoritative next-run handoff.
 
@@ -27,8 +27,7 @@ is the authoritative next-run handoff.
   scoring scaffolding for stochastic-v1.1 and five simple empirical/deterministic
   comparators.
 
-No stochastic state, probability, sort, tooltip, or layout is user-facing. Existing
-Safe/Best behavior remains the production baseline.
+The full stochastic decision/search remains shadow-only. A restricted production bridge now exposes only earliest-arrival `pAnyStock` for markets whose arrival horizon spans at least two weighted mean cycles and whose stronger legacy current-cycle/Safe/Best path cannot act. Existing actionable Safe/Best/current-stock behavior remains the production baseline and retains precedence.
 
 ### Post-Codex connector review
 
@@ -91,6 +90,8 @@ target-failure/zero-quantity outcomes. New freezes stop at 24 unresolved rows pe
 model/market or 4,096 globally, without dropping pending evidence. Brier uses raw
 probabilities while log loss alone is clipped for numerical stability. No
 calibration transform is user-facing.
+
+`MultiCycleChanceBridge.ps1` now reuses stochastic-v1.1 for one earliest-feasible arrival at 256 scenarios with adaptive departure search disabled. Eligibility requires >=3 usable completed cycles and arrival-horizon / weighted mean cycle >=2.0. It publishes per-opportunity chance, full-load chance, occupancy baseline, cycle ratio, timing SD, approximate accumulated phase SD, evidence count, and maximum simulated ordinal into the build state before UI publication. `CardPresenter.lua` shows `Chance to hit: NN%` only when legacy guidance would otherwise be Collecting/WAIT/closed-unusable. The stage is network-free/fail-soft and has its own runtime error channel.
 
 ## Accepted target-host baseline before this redesign
 
