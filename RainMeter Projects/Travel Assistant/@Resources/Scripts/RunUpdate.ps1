@@ -24,6 +24,7 @@ $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
 $TrendForecast = Join-Path $PSScriptRoot 'TrendForecast.ps1'
 $StochasticForecast = Join-Path $PSScriptRoot 'StochasticForecast.ps1'
+$StochasticCalibration = Join-Path $PSScriptRoot 'StochasticCalibration.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
@@ -49,6 +50,7 @@ $FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
 $CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
 $TrendForecastErrorFile = Join-Path $RuntimeDir 'trend-forecast-error.txt'
 $StochasticForecastErrorFile = Join-Path $RuntimeDir 'stochastic-forecast-error.txt'
+$StochasticCalibrationErrorFile = Join-Path $RuntimeDir 'stochastic-calibration-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
@@ -544,6 +546,12 @@ try {
         # postpone the bounded cache-refresh request needed by future UI generations.
         # It still executes after immutable UI publication and remains fail-soft.
         Invoke-FailSoftScript -Path $StochasticForecast -ErrorPath $StochasticForecastErrorFile
+
+        # Freeze one prospective best-arrival forecast per market/model/hour and
+        # resolve only outcomes made unambiguous by later retained evidence. This
+        # remains shadow-only. If the forecast stage failed, the scorer can still
+        # resolve older pending rows but rejects stale artifacts for new freezes.
+        Invoke-FailSoftScript -Path $StochasticCalibration -ErrorPath $StochasticCalibrationErrorFile
     }
 
     if (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue) { Clear-TravelAssistantLatestError -Component 'run-update' }
