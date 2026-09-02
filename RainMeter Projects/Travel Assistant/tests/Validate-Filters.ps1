@@ -35,7 +35,7 @@ if(Test-Path -LiteralPath $files.Preferences){
  foreach($token in @(
   'schemaVersion = 8','selectedItemIds','selectedTripBands','displayTripBands','selectedCountryIds','selectedCategories',
   'showProfitableOnly','ignoredItemIds','use95PercentMarketValue','itemMarketFeePercent','Normalize-ItemMarketFeePercent','energyWastePolicy','nerveWastePolicy',
-  "sortMode = 'upcoming'",'Normalize-SortMode',"@('name','upcoming','gross','profit_per_hour')",'SetSortMode',
+  "sortMode = 'upcoming'",'Normalize-SortMode',"@('upcoming','gross','profit_per_hour')",'SetSortMode',
   'Set-FilterStateKvValuesAtomic','UISelectedTripBands','UITripShortOn','UITripMediumOn','UITripLongOn',
   '$countries.Count -eq 0','Write-FilterJsonAtomic -Path $PreferenceFile -Value $normalized','Start-FilterProjectionRefresh','LaunchUpdate.ps1','$Action -eq ''ResetFilters'''
  )){if(-not$text.Contains($token)){Fail "FilterPreferences.ps1 missing '$token'."}}
@@ -99,6 +99,7 @@ if(Test-Path -LiteralPath $files.Launcher){
 if(Test-Path -LiteralPath $files.PopupHost){
  $text=Get-Content -LiteralPath $files.PopupHost -Raw
  foreach($token in @("'Filters'",'OpenUnifiedFilterPopup.ps1',"if (`$Filter -eq 'Ignore')",'OpenFilterPopup.ps1')){if(-not$text.Contains($token)){Fail "PopupHost unified routing missing '$token'."}}
+ foreach($retired in @("'ItemViewer'",'OpenItemViewer.ps1','MarketKey','[ValidateRange(0,8)]')){if($text.Contains($retired)){Fail "PopupHost retains retired Viewer token '$retired'."}}
 }
 
 if(Test-Path -LiteralPath $files.Settings){
@@ -130,7 +131,7 @@ if(Test-Path -LiteralPath $files.Opportunities){
  foreach($token in @(
   'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Get-OpportunityNextRecurringWindow','Get-OpportunityEconomics','grossProfit','profitPerHour','elapsedSeconds','probabilityKnown',
   'itemMarketFeePercent','MarketFeePercent','GrossSaleValue','MarketTaxValue','MakeValue','PurchaseCostValue','TakeValue',
-  "'LEARNING'",'$availableQuantity = $stock',"sortMode -eq 'name'","sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",
+  "'LEARNING'",'$availableQuantity = $stock','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",
   '$maxProjectedRows = 256',"'TripBand'",'tripBand=$tripBand','OpportunityCount'
  )){if(-not$text.Contains($token)){Fail "OpportunityState.ps1 missing '$token'."}}
  foreach($retired in @('expectedGross=','optimalScore=')){if($text.Contains($retired)){Fail "OpportunityState.ps1 retains retired hidden-ranking token '$retired'."}}
@@ -141,22 +142,22 @@ if(Test-Path -LiteralPath $files.StateReader){
  foreach($token in @(
   'function OpenFilter(filterName)','function ToggleTripBand(band)','function ResetFilters()','function SetSortMode(mode)',
   'currentOpportunityRows','sortOpportunityRows','locallyFilteredSortedProjection','pendingTripBands','activeTripBands','projectedTripBands',
-  'maxCandidateRows = 256','TripBand','collapseInlineGraph','MeasureInlineGraph','MeasureItemViewer','safeLeaveText','UIOldestMarketSourceTimestamp',
+  'maxCandidateRows = 256','TripBand','collapseInlineGraph','MeasureInlineGraph','effectiveSortMode','OpportunitySortEffectiveMode','safeLeaveText','UIOldestMarketSourceTimestamp',
   'resolvedItemName',"name:match('^Item%s+%d+$')","combinedPrice = 'BUY ' .. price .. '/ea'","combinedPrice = combinedPrice .. ' | '","return name .. ' - ' .. country"
  )){if(-not$text.Contains($token)){Fail "StateReader.lua missing '$token'."}}
- if($text.Contains("runViewerMeasure('inline_'")){Fail 'Sort/filter UI must not route inline history through the popup Viewer.'}
+ foreach($retired in @('OpenViewer','ViewerMarketKey','MeasureItemViewer')){if($text.Contains($retired)){Fail "StateReader retains retired Viewer token '$retired'."}}
 }
 
 if(Test-Path -LiteralPath $files.Ini){
  $ini=Get-Content -LiteralPath $files.Ini -Raw
- foreach($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeasureHeaderLayout','MeterFilterIcon','MeterSettingsIcon','MeterSortNameButton','MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton','MeterSortName','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')){if($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){Fail "TravelAssistant.ini missing [$section]."}}
- foreach($retired in @('MeterItemFilter','MeterTripLabel','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine','MeterSettings','MeterSortOptimal','MeterSortTime','MeterSortLabel')){if($ini -match ('(?m)^\['+[regex]::Escape($retired)+'\]\s*$')){Fail "Retired main-UI meter [$retired] returned."}}
+ foreach($section in @('MeasureFilterPopup','MeasurePreferenceAction','MeasureHeaderLayout','MeterFilterIcon','MeterSettingsIcon','MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')){if($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){Fail "TravelAssistant.ini missing [$section]."}}
+ foreach($retired in @('MeterItemFilter','MeterTripLabel','MeterTripShort','MeterTripMedium','MeterTripLong','MeterTripExpand','MeterCategoryFilter','MeterFilterReset','MeterFilterBottomLine','MeterSettings','MeterSortNameButton','MeterSortName','MeterViewer','MeasureItemViewer','MeterSortOptimal','MeterSortTime','MeterSortLabel')){if($ini -match ('(?m)^\['+[regex]::Escape($retired)+'\]\s*$')){Fail "Retired main-UI meter [$retired] returned."}}
  foreach($token in @('FilterRequest=Filters',"OpenFilter('Filters')",'ScriptFile=#@#Scripts\HeaderLayout.lua','PanelHeight=160','Y=58','ImageName=#@#Images\UI\filter.png','ImageName=#@#Images\UI\settings.png')){if(-not$ini.Contains($token)){Fail "TravelAssistant.ini compact-header token missing '$token'."}}
  foreach($section in @('MeterFilterIcon','MeterSettingsIcon')) {
   $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
   if($body -notmatch '(?im)^Meter=Image\s*$' -or $body -notmatch '(?im)^W=24\s*$' -or $body -notmatch '(?im)^H=24\s*$'){Fail "$section must remain a compact 24x24 image meter."}
  }
- foreach($section in @('MeterSortNameButton','MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')) {
+ foreach($section in @('MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')) {
   $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
   if($body -notmatch '(?im)^Meter=Shape\s*$' -or $body -notmatch '(?im)^Shape=Rectangle .*?,4 \| Fill Color #Card# \| StrokeWidth 1 \| Stroke Color #Border#\s*$'){Fail "$section must remain a rounded sort button surface."}
  }
