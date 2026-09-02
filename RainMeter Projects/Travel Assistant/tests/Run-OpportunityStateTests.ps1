@@ -189,10 +189,10 @@ Assert-True (-not $state.ContainsKey('Opportunity2OptimalText')) 'Retired optima
 Assert-Equal $state['Opportunity2Key'] 'united_kingdom:2' 'Stable market identity must be projected for graph targeting.'
 Assert-Equal $state['Opportunity2TripBand'] 'medium' 'Trip band must remain projected for instant local filtering.'
 Assert-Equal $state['Opportunity2QuantityText'] 'x12' 'Trip quantity remains projected for tooltip/economic inspection even though it is no longer printed beside gross.'
-Assert-Equal $state['Opportunity2ProfitHourText'] '$2,400/hr' 'Profit-per-hour projection should use raw trip gross over elapsed hours.'
+Assert-Equal $state['Opportunity2ProfitHourText'] '$2,400/hr' 'Profit-per-hour projection should preserve the row's round-trip flight profit rate.'
 Assert-Equal $state['Opportunity2MarketValueText'] '$24 STALE' 'Stale MV must be explicit on the compact card projection.'
 Assert-Equal ([long]$state['Opportunity2GrossValue']) 1200L 'Raw gross value must be available for immediate Lua sorting.'
-Assert-Near ([double]$state['Opportunity2ProfitHourValue']) 2400.0 0.001 'Raw profit/hour must be available for immediate Lua sorting.'
+Assert-Near ([double]$state['Opportunity2ProfitHourValue']) 2400.0 0.001 'Round-trip flight profit/hour must be available for immediate Lua sorting.'
 Assert-Equal ([long]$state['Opportunity2WindowStartAt']) 100200L 'Raw window timestamp must be available for immediate Lua sorting.'
 Assert-Near ([double]$state['Opportunity2ProbabilityValue']) .8 0.0001 'Raw probability must remain available as an independent sort tiebreaker.'
 Assert-Equal ([long]$state['Opportunity2ElapsedSeconds']) 1800L 'Raw elapsed seconds must be available for local sorting and the flag travel-time tooltip.'
@@ -219,7 +219,7 @@ Assert-Equal ([long]$economicsState['Opportunity1MakeValue']) 425L 'Projected Ma
 Assert-Equal ([long]$economicsState['Opportunity1ProfitEachValue']) 43L 'Projected Each value is net profit per item.'
 Assert-Equal ([int]$economicsState['Opportunity1MarketFeePercent']) 5 'Projected market fee percentage is explicit.'
 Assert-Equal ([long]$economicsState['Opportunity1GrossValue']) 500L 'Gross sort value remains pre-tax gross profit.'
-Assert-Near ([double]$economicsState['Opportunity1ProfitHourValue']) 425.0 0.001 'Profit/hour sort value is after-tax net profit per hour.'
+Assert-Near ([double]$economicsState['Opportunity1ProfitHourValue']) 425.0 0.001 'Profit/hour sort value is the projected after-tax round-trip flight rate.'
 Assert-Equal ([long]$economicsState['Opportunity1TotalCostValue']) 1000L 'Full-load total cost is exact purchase cost with no variable-price buffer.'
 Assert-True (-not $economicsState.ContainsKey('Opportunity1TakeValue')) 'Retired TakeValue is not republished.'
 Assert-True (-not $economicsState.ContainsKey('Opportunity1TakeBufferPercent')) 'Retired automatic Take buffer state is not republished.'
@@ -271,9 +271,11 @@ Assert-Equal $sleepState['Opportunity1PriceText'] '$100' 'Sleeping OOS rows must
 Assert-Equal ([long]$sleepState['Opportunity1RestockEstimateAt']) 140000L 'Absolute cheap restock estimate must be projected for live countdown rendering.'
 Assert-Equal ([int]$sleepState['Opportunity1RestockSampleCount']) 3 'Verified restock sample count must be projected for tooltip context.'
 
-$profitHourA = 1000.0/1.0
-$profitHourB = 1200.0/0.5
-Assert-True ($profitHourB -gt $profitHourA) 'PROFIT/HR should rank raw trip gross per elapsed hour.'
+$profitHourA = Get-OpportunityRoundTripProfitPerHour -Profit 1000L -OneWaySeconds 1800L
+$profitHourB = Get-OpportunityRoundTripProfitPerHour -Profit 1200L -OneWaySeconds 3600L
+Assert-Near ([double]$profitHourA) 1000.0 0.001 'A 30-minute one-way flight produces a one-hour round-trip denominator.'
+Assert-Near ([double]$profitHourB) 600.0 0.001 'A one-hour one-way flight produces a two-hour round-trip denominator.'
+Assert-True ($profitHourA -gt $profitHourB) 'PROFIT/HR should rank by after-tax profit divided by round-trip flight time only.'
 Assert-Near .8 .8 0.0001 'Hit likelihood remains independent of PROFIT/HR ranking.'
 
 if ($failures.Count -gt 0) {
@@ -460,10 +462,10 @@ Assert-True (-not $state.ContainsKey('Opportunity2OptimalText')) 'Retired optima
 Assert-Equal $state['Opportunity2Key'] 'united_kingdom:2' 'Stable market identity must be projected for graph targeting.'
 Assert-Equal $state['Opportunity2TripBand'] 'medium' 'Trip band must remain projected for instant local filtering.'
 Assert-Equal $state['Opportunity2QuantityText'] 'x12' 'Trip quantity remains projected for tooltip/economic inspection even though it is no longer printed beside gross.'
-Assert-Equal $state['Opportunity2ProfitHourText'] '$2,400/hr' 'Profit-per-hour projection should use raw trip gross over elapsed hours.'
+Assert-Equal $state['Opportunity2ProfitHourText'] '$2,400/hr' 'Profit-per-hour projection should preserve the row's round-trip flight profit rate.'
 Assert-Equal $state['Opportunity2MarketValueText'] '$24 STALE' 'Stale MV must be explicit on the compact card projection.'
 Assert-Equal ([long]$state['Opportunity2GrossValue']) 1200L 'Raw gross value must be available for immediate Lua sorting.'
-Assert-Near ([double]$state['Opportunity2ProfitHourValue']) 2400.0 0.001 'Raw profit/hour must be available for immediate Lua sorting.'
+Assert-Near ([double]$state['Opportunity2ProfitHourValue']) 2400.0 0.001 'Round-trip flight profit/hour must be available for immediate Lua sorting.'
 Assert-Equal ([long]$state['Opportunity2WindowStartAt']) 100200L 'Raw window timestamp must be available for immediate Lua sorting.'
 Assert-Near ([double]$state['Opportunity2ProbabilityValue']) .8 0.0001 'Raw probability must remain available as an independent sort tiebreaker.'
 Assert-Equal ([long]$state['Opportunity2ElapsedSeconds']) 1800L 'Raw elapsed seconds must be available for local sorting and the flag travel-time tooltip.'
@@ -490,7 +492,7 @@ Assert-Equal ([long]$economicsState['Opportunity1MakeValue']) 425L 'Projected Ma
 Assert-Equal ([long]$economicsState['Opportunity1ProfitEachValue']) 43L 'Projected Each value is net profit per item.'
 Assert-Equal ([int]$economicsState['Opportunity1MarketFeePercent']) 5 'Projected market fee percentage is explicit.'
 Assert-Equal ([long]$economicsState['Opportunity1GrossValue']) 500L 'Gross sort value remains pre-tax gross profit.'
-Assert-Near ([double]$economicsState['Opportunity1ProfitHourValue']) 425.0 0.001 'Profit/hour sort value is after-tax net profit per hour.'
+Assert-Near ([double]$economicsState['Opportunity1ProfitHourValue']) 425.0 0.001 'Profit/hour sort value is the projected after-tax round-trip flight rate.'
 Assert-Equal ([long]$economicsState['Opportunity1TotalCostValue']) 1000L 'Full-load total cost is exact purchase cost with no variable-price buffer.'
 Assert-True (-not $economicsState.ContainsKey('Opportunity1TakeValue')) 'Retired TakeValue is not republished.'
 Assert-True (-not $economicsState.ContainsKey('Opportunity1TakeBufferPercent')) 'Retired automatic Take buffer state is not republished.'
@@ -542,9 +544,11 @@ Assert-Equal $sleepState['Opportunity1PriceText'] '$100' 'Sleeping OOS rows must
 Assert-Equal ([long]$sleepState['Opportunity1RestockEstimateAt']) 140000L 'Absolute cheap restock estimate must be projected for live countdown rendering.'
 Assert-Equal ([int]$sleepState['Opportunity1RestockSampleCount']) 3 'Verified restock sample count must be projected for tooltip context.'
 
-$profitHourA = 1000.0/1.0
-$profitHourB = 1200.0/0.5
-Assert-True ($profitHourB -gt $profitHourA) 'PROFIT/HR should rank raw trip gross per elapsed hour.'
+$profitHourA = Get-OpportunityRoundTripProfitPerHour -Profit 1000L -OneWaySeconds 1800L
+$profitHourB = Get-OpportunityRoundTripProfitPerHour -Profit 1200L -OneWaySeconds 3600L
+Assert-Near ([double]$profitHourA) 1000.0 0.001 'A 30-minute one-way flight produces a one-hour round-trip denominator.'
+Assert-Near ([double]$profitHourB) 600.0 0.001 'A one-hour one-way flight produces a two-hour round-trip denominator.'
+Assert-True ($profitHourA -gt $profitHourB) 'PROFIT/HR should rank by after-tax profit divided by round-trip flight time only.'
 Assert-Near .8 .8 0.0001 'Hit likelihood remains independent of PROFIT/HR ranking.'
 
 if ($failures.Count -gt 0) {
