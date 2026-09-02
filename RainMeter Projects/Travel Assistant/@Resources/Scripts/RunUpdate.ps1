@@ -19,6 +19,7 @@ $CurrentCapacityRefresh = Join-Path $PSScriptRoot 'CurrentCapacityRefresh.ps1'
 $CycleAnchorReconciler = Join-Path $PSScriptRoot 'CycleAnchorReconciler.ps1'
 $OpportunityState = Join-Path $PSScriptRoot 'OpportunityState.ps1'
 $WindowPlan = Join-Path $PSScriptRoot 'WindowPlan.ps1'
+$MultiCycleChanceBridge = Join-Path $PSScriptRoot 'MultiCycleChanceBridge.ps1'
 $PriceVariationRefiner = Join-Path $PSScriptRoot 'PriceVariationRefiner.ps1'
 $FilterState = Join-Path $PSScriptRoot 'FilterState.ps1'
 $CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
@@ -45,6 +46,7 @@ $CurrentCapacityRefreshErrorFile = Join-Path $RuntimeDir 'current-capacity-refre
 $CycleAnchorReconcilerErrorFile = Join-Path $RuntimeDir 'cycle-anchor-reconciler-error.txt'
 $OpportunityStateErrorFile = Join-Path $RuntimeDir 'opportunity-state-error.txt'
 $WindowPlanErrorFile = Join-Path $RuntimeDir 'window-plan-error.txt'
+$MultiCycleChanceBridgeErrorFile = Join-Path $RuntimeDir 'multi-cycle-chance-bridge-error.txt'
 $PriceVariationRefinerErrorFile = Join-Path $RuntimeDir 'price-variation-refiner-error.txt'
 $FilterStateErrorFile = Join-Path $RuntimeDir 'filter-state-error.txt'
 $CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
@@ -458,6 +460,11 @@ try {
     # times so Rainmeter can update leave/countdown guidance every second.
     Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
 
+    # Restricted production fallback for long-flight / short-cycle markets. It
+    # reuses stochastic-v1.1 at one earliest-feasible arrival only; legacy
+    # current-cycle/Safe/Best guidance retains presentation precedence.
+    Invoke-FailSoftScript -Path $MultiCycleChanceBridge -ErrorPath $MultiCycleChanceBridgeErrorFile
+
     # Classify price variability from recent recurring evidence rather than one old
     # anomaly. This controls card cost coloring and whether Take gets a 5% buffer.
     Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
@@ -472,6 +479,7 @@ try {
             throw 'OpportunityState refresh failed; refusing to publish pre-refresh opportunities.'
         }
         Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
+        Invoke-FailSoftScript -Path $MultiCycleChanceBridge -ErrorPath $MultiCycleChanceBridgeErrorFile
         Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
     }
 
