@@ -745,7 +745,16 @@ if ($changed) {
     Write-TravelAssistantAtomicJson -Path $StateFile -Value $state -Depth 18
 }
 
-if ($changed -or -not (Test-Path -LiteralPath $SummaryFile)) {
+$existingSummary=Read-SCJson $SummaryFile
+$summaryGeneratedAt=[long](Get-SCProperty $existingSummary 'generatedAt')
+$summaryModelVersion=([string](Get-SCProperty $existingSummary 'currentModelVersion')).Trim()
+$summaryNeedsWrite=(
+    $changed -or
+    $null -eq $existingSummary -or
+    $summaryGeneratedAt -lt [long]$state.updatedAt -or
+    $summaryModelVersion -ne $currentModelVersion
+)
+if ($summaryNeedsWrite) {
     $summary=New-SCCalibrationSummary -State $state -NowEpoch $Now -CurrentModelVersion $currentModelVersion -FreezeSeconds $FreezeIntervalSeconds -GraceSeconds $OutcomeGraceSeconds -MaximumWaitSeconds $MaximumOutcomeWaitSeconds -PendingPerMarketLimit $MaximumPendingPerMarket -PendingTotalLimit $MaximumPendingTotal
     Write-TravelAssistantAtomicJson -Path $SummaryFile -Value $summary -Depth 18
 }
