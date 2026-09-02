@@ -292,7 +292,11 @@ function Get-SCFreezeRows {
     foreach ($market in @((Get-SCProperty $Artifact 'markets'))) {
         $marketKey=([string](Get-SCProperty $market 'marketKey')).Trim().ToLowerInvariant()
         $arrivalAt=[long](Get-SCProperty $market 'bestArrivalAt')
-        if ([string]::IsNullOrWhiteSpace($marketKey) -or $arrivalAt -le 0 -or $arrivalAt -lt $generatedAt) { continue }
+        # Prospective calibration must not score a state that was already
+        # observable when the artifact was generated. In particular, abroad-at-
+        # target "BUY_NOW" rows can have arrivalAt == generatedAt and may be based
+        # on the same provider snapshot that would otherwise become the outcome.
+        if ([string]::IsNullOrWhiteSpace($marketKey) -or $arrivalAt -le $generatedAt) { continue }
 
         $last=Get-SCLastFrozen -State $State -ModelVersion $modelVersion -MarketKey $marketKey
         if ($last.Count -gt 0 -and [long](Get-SCProperty $last[0] 'bucket') -eq $bucket) { continue }
@@ -596,8 +600,8 @@ function New-SCCalibrationSummary {
         maximumOutcomeWaitSeconds=$MaximumWaitSeconds
         methodology=[pscustomobject]@{
             forecastSelection='one best-expected-profit arrival per market/model/hour bucket'
-            freezeRule='artifact must be <=5 minutes old when frozen'
-            anyStockOutcome='exact provider snapshot, confirmed completed-cycle in-stock interval, or confirmed between-cycle OOS interval'
+            freezeRule='artifact must be <=5 minutes old and selected arrival must be strictly after artifact generation'
+            anyStockOutcome='exact provider snapshot, confirmed completed-cycle in-stock interval, or continuity-linked confirmed between-cycle OOS interval'
             targetQuantityOutcome='exact provider snapshot only'
             availableQuantityOutcome='exact non-conflicting provider snapshot only'
             unscorablePolicy='retain pending until maximum wait, then expire without affecting calibration metrics'
