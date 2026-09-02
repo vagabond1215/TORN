@@ -52,7 +52,7 @@ ResalePriority / ResaleQueue
 
 Completed cycle rows remain retained for audit and long-horizon analysis. Route, window, and shadow-trend forecasts apply a market-specific cadence filter: markets normally completing at least eight cycles per day reject apparent cycles over 24 hours, other multi-cycle/day markets reject periods over 48 hours, and once-daily or slower markets retain a wider cadence-relative window. Transition boundaries also carry lower/upper observation bounds. The safe gap for each phase is the larger of three poll intervals or half its robust historical variance; the hard gap is bounded by the normal phase/cycle duration. Short gaps produce conservative availability/restock values, uncertain gaps are excluded from trend fitting, and hard gaps invalidate the current phase anchor instead of fabricating a cycle. The shadow trend pass is keyed to the completed-cycle file signature and skips its all-market recalculation/state rewrite when no cycle evidence changed. Fresh positive stock uses its observed restock quantity and live depletion rate for the active sellout estimate; restock timing begins only after observed stock reaches zero and uses the cleaned median out-of-stock delay.
 
-Inline graph rendering and the standalone Viewer are local side paths. They make no provider/Torn request.
+Inline graph rendering is a local side path. It makes no provider/Torn request.
 
 ## Market identity / validity
 
@@ -85,7 +85,7 @@ Transition JSONL appends use shared-access handles with bounded backoff. If a On
 
 `ProjectCollectedState.ps1` projects legacy build-state stock/travel fields locally from the ShadowCollector engine state, avoiding a second provider request and a second history writer.
 
-Filters, Ignore List, sort order, graph expansion, and Viewer selection never narrow shared provider collection.
+Filters, Ignore List, sort order, and graph expansion never narrow shared provider collection.
 
 ## State publication ownership
 
@@ -118,11 +118,9 @@ At the 48-hour boundary, `MaintainObservationHistory.ps1` may carry the final **
 
 Migration-era rows named `history_bootstrap` and `history_repair_baseline` are removed. They previously projected current market state backward through periods with no retained evidence and could create false flat stock histories. Missing historical intervals now remain unknown.
 
-## Graph surfaces
+## Graph surface
 
-### Inline card graph
-
-The row chevron uses a dedicated local `MeasureInlineGraph` and `RenderInlineGraph.ps1`. It never routes through the standalone Viewer launcher.
+The per-row chart button uses dedicated local `MeasureInlineGraph` and `RenderInlineGraph.ps1` plumbing.
 
 The renderer:
 
@@ -136,13 +134,13 @@ The renderer:
 - draws seven internal vertical separators for eight one-hour segments;
 - shows sparse numeric Y labels plus `-8h` / `now` X labels.
 
+`GraphHover.lua` and `BuildGraphHoverData.ps1` add local hover telemetry over the same generated graph.
+
 If the first real retained sample occurs inside the 8-hour window, the earlier portion is deliberately left without a fabricated stock line.
 
-Changing sort order collapses the open inline graph. At most one row is expanded.
+Changing sort order collapses the open inline graph. At most one graph is expanded.
 
-### Standalone Viewer
-
-`VIEWER >` remains a detached WinForms market browser with its own market dropdown and richer diagnostics. It reads the same retained local observation file. History maintenance purges synthetic migration rows before it renders, so both graph surfaces converge on the same observed evidence.
+The standalone WinForms Viewer, its launcher, and its Rainmeter measure are retired.
 
 ## Card presentation
 
