@@ -36,6 +36,9 @@ Assert-Equal ([long]$xanaxTaxed.make) 869585L 'Xanax Make is positive after one 
 Assert-Equal ([long]$xanaxTaxed.profitEach) 31057L 'Xanax Each is rounded after-tax net profit per item.'
 Assert-Near ([double]$xanaxTaxed.makePerHour) 869585.0 0.001 'Profit per hour uses after-tax net profit.'
 
+$fullLoadCostExample=Get-OpportunityEconomics -MarketValue 845308L -ForeignPrice 775013L -Quantity 28 -MarketFeePercent 0 -ElapsedSeconds 3600L
+Assert-Equal ([long]$fullLoadCostExample.purchaseCost) 21700364L '775,013 each x 28 is displayed as exact full-load cost 21,700,364 with no buffer.'
+
 $cycles = @(
     [pscustomobject]@{ restockDelaySeconds=600L; availabilitySeconds=300L },
     [pscustomobject]@{ restockDelaySeconds=660L; availabilitySeconds=300L },
