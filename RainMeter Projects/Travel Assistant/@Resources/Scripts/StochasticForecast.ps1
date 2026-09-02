@@ -208,15 +208,39 @@ function New-SFMarketWorld {
         if ($null -eq $sample) { return @() }
         $active=Get-SFProperty $Destination 'activeCycle'
         $restockAt=Get-SFEventAt -Object $active -Representative 'restockAt' -Lower 'restockLowerBoundAt' -Upper 'restockUpperBoundAt' -Random $Random
-        $duration=Get-SFUniformLong -Random $Random -Minimum ([long]$sample.availabilityMinimum) -Maximum ([long]$sample.availabilityMaximum)
-        $selloutAt=0L
-        if ($restockAt -gt 0) { $selloutAt=$restockAt+$duration }
-        else { $selloutAt=$NowEpoch+(Get-SFUniformLong -Random $Random -Minimum 1L -Maximum ([Math]::Max(1L,$duration))) }
-        # Condition the sampled residual life on the fresh factual observation:
-        # current stock cannot already have sold out at the forecast origin.
-        $selloutAt=[Math]::Max($NowEpoch+1L,$selloutAt)
-        $intervals.Add((New-SFStockInterval -StartAt $NowEpoch -EndAt $selloutAt -Quantity $currentStock -ForeignPrice $currentPrice -Ordinal 0))
-        $anchor=[Math]::Max($NowEpoch,$selloutAt)
+        $observationAt=$sourceAt
+
+        if ($restockAt -gt 0 -and $restockAt -le $observationAt) {
+            # Condition empirical duration on the fact that inventory was still
+            # positive at the provider timestamp. This is survival conditioning,
+            # not permission to assume the same stock is still present at Now.
+            $observedAge=[Math]::Max(0L,$observationAt-$restockAt)
+            $survivalEvidence=@($Evidence | Where-Object { [long]$_.availabilityMaximum -gt $observedAge })
+            if ($survivalEvidence.Count -gt 0) {
+                $sample=Get-SFWeightedEvidenceRow -Evidence $survivalEvidence -Random $Random
+                $durationMinimum=[Math]::Max([long]$sample.availabilityMinimum,$observedAge+1L)
+                $durationMaximum=[long]$sample.availabilityMaximum
+                $duration=Get-SFUniformLong -Random $Random -Minimum $durationMinimum -Maximum $durationMaximum
+                $selloutAt=$restockAt+$duration
+            } else {
+                # The observed cycle has already outlived every usable historical
+                # duration. Preserve the factual positive observation but do not
+                # invent a long residual tail from incompatible history.
+                $selloutAt=$observationAt+1L
+            }
+        } else {
+            # Left-censored restock: only the positive observation time is known.
+            # Use empirical lifetime as a residual-life approximation until richer
+            # within-cycle depletion evidence is wired into stochastic-v2.
+            $duration=Get-SFUniformLong -Random $Random -Minimum ([long]$sample.availabilityMinimum) -Maximum ([long]$sample.availabilityMaximum)
+            $selloutAt=$observationAt+[Math]::Max(1L,$duration)
+        }
+
+        $intervals.Add((New-SFStockInterval -StartAt $observationAt -EndAt $selloutAt -Quantity $currentStock -ForeignPrice $currentPrice -Ordinal 0))
+        # If the last positive snapshot is old enough that this sampled cycle sold
+        # out before Now, continue simulating later restocks from that sellout. This
+        # lets current market state become genuinely latent between provider polls.
+        $anchor=$selloutAt
         $ordinal=1
     } else {
         $anchor=Get-SFEventAt -Object $Destination -Representative 'lastSellOutAt' -Lower 'lastSellOutLowerBoundAt' -Upper 'lastSellOutUpperBoundAt' -Random $Random
