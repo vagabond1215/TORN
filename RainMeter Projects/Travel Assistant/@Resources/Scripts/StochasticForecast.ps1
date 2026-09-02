@@ -930,7 +930,7 @@ for ($i=1; $i -le $count; $i++) {
         if ($lastGood.Count -gt 0) { $lastGoodDepartureAt=[long]$lastGood[0].departureAt }
     }
     $markets.Add([pscustomobject]@{
-        marketKey=$key; countryId=$country; itemId=$itemId; generatedAt=$Now; modelVersion='stochastic-v1'
+        marketKey=$key; countryId=$country; itemId=$itemId; generatedAt=$Now; modelVersion='stochastic-v1.1'
         sampleCount=[int]$forecast.sampleCount; effectiveSampleSize=[double]$forecast.effectiveSampleSize; evidenceQuality=[string]$forecast.evidenceQuality
         targetQuantity=$targetQuantity; targetQuantityDefinition='projected trip quantity'; simulationCount=$SimulationCount; gridSeconds=$GridSeconds
         adaptiveGrid=$(Get-SFProperty $forecast 'adaptiveGrid')
@@ -964,7 +964,7 @@ for ($i=1; $i -le $count; $i++) {
 $stopwatch.Stop()
 $artifact=[pscustomobject]@{
     schemaVersion=1
-    modelVersion='stochastic-v1'
+    modelVersion='stochastic-v1.1'
     mode='shadow'
     generatedAt=$Now
     simulationCount=$SimulationCount
