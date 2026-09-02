@@ -75,7 +75,7 @@ if (Test-Path -LiteralPath $settingsPath) {
 
 if (Test-Path -LiteralPath $preferencesPath) {
     $text=Get-Content -LiteralPath $preferencesPath -Raw
-    foreach ($token in @('schemaVersion = 8','displayTripBands','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'","@('upcoming','gross','profit_per_hour')")) {
+    foreach ($token in @('schemaVersion = 8','displayTripBands','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'","@('upcoming','gross','profit_per_hour')")) {
         if (-not $text.Contains($token)) { Fail "Preference schema missing '$token'." }
     }
 }
@@ -102,7 +102,6 @@ if (Test-Path -LiteralPath $baseSettingsPath) {
     if ([double]$settings.profitability.minimumProfitPerItem -ne 0 -or [double]$settings.profitability.minimumMarginPercent -ne 0 -or [double]$settings.profitability.minimumTotalTripProfit -ne 0) { Fail 'Default legacy profit gates must all be zero.' }
     if ([int]$settings.profitability.resaleStaleAfterSeconds -ne 21600) { Fail 'Fresh resale MV window must remain six hours.' }
     if ([int]$settings.profitability.resaleFallbackMaxAgeSeconds -ne 604800) { Fail 'Opportunity display stale-MV fallback must be bounded to seven days.' }
-    if ([int]$settings.optimizer.marketValueBasisPercent -ne 100) { Fail 'Optimizer default MV basis must be 100%.' }
     if ($settings.optimizer.allowNegativeValueCandidates -ne $true) { Fail 'Negative-value candidates must remain allowed by default.' }
 }
 

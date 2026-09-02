@@ -35,7 +35,6 @@
   },
   "optimizer": {
     "enabled": true,
-    "marketValueBasisPercent": 100,
     "minimumAvailabilitySamples": 3,
     "purchaseBufferSeconds": 60,
     "maxPlanItems": 8,

@@ -48,15 +48,12 @@ function Get-ComboPolicy($Combo) {
 $profitable=New-Object System.Windows.Forms.CheckBox
 $profitable.Text='Show profitable items only'; $profitable.Location=New-Object System.Drawing.Point(18,18); $profitable.Size=New-Object System.Drawing.Size(190,24); $profitable.Checked=[bool]$prefs.showProfitableOnly; $form.Controls.Add($profitable)
 
-$mv95=New-Object System.Windows.Forms.CheckBox
-$mv95.Text='Use 95% MV profit calculation'; $mv95.Location=New-Object System.Drawing.Point(250,18); $mv95.Size=New-Object System.Drawing.Size(220,24); $mv95.Checked=[bool]$prefs.use95PercentMarketValue; $form.Controls.Add($mv95)
-
-Add-Label 'Market tax' 250 50 82 | Out-Null
+Add-Label 'Tax / trader rate' 250 50 110 | Out-Null
 $marketTax=New-Object System.Windows.Forms.ComboBox
-$marketTax.DropDownStyle='DropDownList'; $marketTax.Location=New-Object System.Drawing.Point(338,46); $marketTax.Size=New-Object System.Drawing.Size(132,26)
+$marketTax.DropDownStyle='DropDownList'; $marketTax.Location=New-Object System.Drawing.Point(366,46); $marketTax.Size=New-Object System.Drawing.Size(104,26)
 $marketTax.BackColor=[System.Drawing.Color]::FromArgb(20,23,27); $marketTax.ForeColor=[System.Drawing.Color]::FromArgb(232,235,240)
-[void]$marketTax.Items.Add('0%'); [void]$marketTax.Items.Add('5%')
-$marketTax.SelectedIndex=if ([int]$prefs.itemMarketFeePercent -eq 5) { 1 } else { 0 }
+foreach($rate in 0..5){[void]$marketTax.Items.Add(([string]$rate+'%'))}
+$marketTax.SelectedIndex=[Math]::Max(0,[Math]::Min(5,[int]$prefs.itemMarketFeePercent))
 $form.Controls.Add($marketTax)
 
 Add-Label 'Energy Waste' 18 90 130 | Out-Null
@@ -113,8 +110,7 @@ $save.Add_Click({
     try {
         $current=Read-UiPreferences
         Set-FilterProperty $current 'showProfitableOnly' ([bool]$profitable.Checked)
-        Set-FilterProperty $current 'use95PercentMarketValue' ([bool]$mv95.Checked)
-        $marketTaxPercent=if ($marketTax.SelectedIndex -eq 1) { 5 } else { 0 }
+        $marketTaxPercent=[Math]::Max(0,[Math]::Min(5,[int]$marketTax.SelectedIndex))
         Set-FilterProperty $current 'itemMarketFeePercent' $marketTaxPercent
         Set-FilterProperty $current 'energyWastePolicy' (Get-ComboPolicy $energyPolicy)
         Set-FilterProperty $current 'maxEnergyLoss' ([int]$energyMax.Value)

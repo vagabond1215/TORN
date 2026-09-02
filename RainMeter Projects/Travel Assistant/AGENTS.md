@@ -71,15 +71,15 @@ Card rules:
 - `Take:` is exact purchase cash for invariant foreign prices and adds a 5% reserve only after retained evidence demonstrates real price variance.
 - `Make:` is after-tax profit using actual purchase cost; the unused Take reserve is not an expense.
 - The top-right `$` button expands the economics strip and uses a gold active highlight.
-- The lower-right chart Shape button expands the 8-hour local stock graph and uses an active border/fill highlight.
+- The lower-right chart Shape button expands the 8-hour local stock graph. It shares the card's right-edge end cap with the `$` control; the card itself draws the T separator and the chart icon has no separate border.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity.
-- Expanded economics show `MV`, `Each`, `Gross`, `Per Hour`, and `Tax` on one line. Labels are white; MV value is gold-yellow; Each/Gross/Per Hour values are white; Tax value is muted gray at zero and light red when nonzero.
+- Expanded economics show `MV`, `Each`, `Gross`, `Per Hour`, and `<rate>% Tax` on one vertically centered line. MV is the declared/list market value and never changes with tax. Each and Per Hour are after-tax net profit; Gross is gross sale proceeds. Tax is muted gray at zero and light red when nonzero.
 
 Ordering is selectable and persistent only for:
 
 - `UPCOMING`: soonest current/modeled stock window first.
 - `GROSS PROFIT`: highest total trip gross first.
-- `PROFIT/HR`: gross trip profit divided by total elapsed hours.
+- `PROFIT/HR`: after-tax net trip profit divided by total elapsed hours.
 - Alphabetical Name ordering is internal fallback only when the visible rows have neither usable timing nor usable profit inputs.
 - Hit likelihood is a separate displayed metric; do not fold it into a hidden sort score.
 - There is no user-facing `NAME`, `OPTIMAL`, Chance, or shortest-Time sort.
@@ -88,11 +88,11 @@ Ordering is selectable and persistent only for:
 Economic semantics:
 
 ```text
-gross sale = selected sale basis × quantity
+gross sale = declared/list MV × quantity
 gross profit = gross sale - purchase cost
-market tax = gross sale × 0% or 5%
-make = gross profit - market tax
-profit/hr = gross profit / total elapsed hours
+tax = floor(gross sale × selected rate), where rate is 0%..5%
+make = gross profit - tax
+profit/hr = make / total elapsed hours
 ```
 
 Gross intentionally does not subtract travel cost. Total elapsed includes required wait, outbound travel, return travel, and purchase buffer; if returning to Torn, remaining return time precedes the next outbound opportunity.
@@ -156,7 +156,6 @@ categoryFilterAll
 selectedCategories
 showProfitableOnly
 ignoredItemIds
-use95PercentMarketValue
 energyWastePolicy
 maxEnergyLoss
 nerveWastePolicy
@@ -196,27 +195,17 @@ Never use these labels as travel-time/economics authority.
 
 Profitability is presentation/ranking context, not permission to learn and not a timing-window gate.
 
-Default value basis:
+Value and tax basis:
 
 ```text
-sell basis = 100% Torn MV (itemmarket.item.average_price)
-Item Market fee deduction = 0
+sale price = declared/list Torn MV (itemmarket.item.average_price)
+selected tax / trader rate = integer 0%..5%
+tax applies once to gross sale proceeds
 minimum profit gate = 0
 minimum margin gate = 0
 ```
 
-Optional preference:
-
-```text
-Use 95% MV profit calculation = OFF by default
-```
-
-Economic color:
-
-```text
-foreign price <= selected MV basis  -> green
-foreign price >  selected MV basis  -> red
-```
+Economic color is based on after-tax net item profitability when MV is fresh; stale MV remains muted.
 
 Negative-value items remain legal candidates unless `Show profitable items only` is explicitly enabled. Legacy `FinalizeState.ps1` economics are informational only and must not rewrite timing status/history.
 

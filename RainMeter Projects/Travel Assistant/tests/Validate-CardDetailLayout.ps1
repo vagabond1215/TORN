@@ -34,15 +34,22 @@ if($errors.Count -eq 0){
             }
         }
 
+        $card=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Card\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        foreach($token in @('Shape2=Line 510,0,510,50 | StrokeWidth 1 | Stroke Color #Border#','Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#')){
+            if(-not$card.Contains($token)){Fail "Row $i card end-cap separator missing '$token'."}
+        }
+
         $detail=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailToggle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($detail -notmatch '(?im)^Text=\$\s*$'){Fail "Row $i detail toggle must default to the money button."}
-        if($detail -notmatch '(?im)^FontColor=#Muted#\s*$' -or $detail -notmatch '(?im)^SolidColor=#Card#\s*$'){Fail "Row $i money button must use the inactive card styling."}
+        foreach($token in @('X=531','W=26','H=25','StringAlign=CenterCenter','FontColor=#Muted#','SolidColor=0,0,0,1')){
+            if(-not$detail.Contains($token)){Fail "Row $i money end-cap button missing '$token'."}
+        }
         if($detail -notmatch ('ToggleCardDetails\('+[string]$i+'\)')){Fail "Row $i detail toggle must call ToggleCardDetails($i)."}
 
         $graph=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($graph -notmatch '(?im)^Meter=Shape\s*$' -or $graph -notmatch '(?im)^GraphExpanded=0\s*$'){Fail "Row $i graph button must be a collapsed Shape icon by default."}
-        foreach($token in @('Shape2=Line 4,13,4,5','Shape3=Line 4,13,14,13','Shape4=Line 5,11,8,8','Shape5=Line 8,8,10,10','Shape6=Line 10,10,14,6')){
-            if(-not$graph.Contains($token)){Fail "Row $i chart icon missing '$token'."}
+        foreach($token in @('X=518','W=26','H=25','Shape=Rectangle 0,0,26,25 | Fill Color 0,0,0,1 | StrokeWidth 0','Shape2=Line 8,17,8,8','Shape3=Line 8,17,18,17','Shape4=Line 9,15,12,12','Shape5=Line 12,12,14,14','Shape6=Line 14,14,18,9')){
+            if(-not$graph.Contains($token)){Fail "Row $i chart end-cap button missing '$token'."}
         }
         if($graph -notmatch ('ToggleInlineGraph\('+[string]$i+'\)')){Fail "Row $i graph toggle must call ToggleInlineGraph($i)."}
 
@@ -68,7 +75,7 @@ if($errors.Count -eq 0){
         }
 
         $strip=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        foreach($token in @('W=500','H=14','FontSize=7','Hidden=1')){
+        foreach($token in @('W=500','H=18','FontSize=9','StringAlign=LeftCenter','Hidden=1')){
             if(-not$strip.Contains($token)){Fail "Row $i detail strip missing '$token'."}
         }
 
@@ -87,6 +94,7 @@ if($errors.Count -eq 0){
         'local function setGraphButtonState(name, expanded)',
         'local function setDetailButtonState(name, expanded)',
         "'GraphExpanded', expanded and '1' or '0'",
+        "'Rectangle 0,0,26,25 | Fill Color '..fill..' | StrokeWidth 0'",
         "SKIN:Bang('!SetOption', name, 'Text', '$')",
         "'218,178,69,255'",
         'local function collapseCardDetails()',
@@ -96,6 +104,11 @@ if($errors.Count -eq 0){
         "if expandedRow > 0 and i > expandedRow then extraBefore = extraBefore + graphExtra end",
         'local bodyOffset = detailExpanded and detailExtra or 0',
         'local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)',
+        "'Shape2', 'Line 510,' .. bodyOffset .. ',510,' .. (bodyOffset+50)",
+        "'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25)",
+        "'Gross', 'Y', tostring(y+9)",
+        "'DetailToggle', 'Y', tostring(y+12+bodyOffset)",
+        "'Graph', 'Y', tostring(y+25+bodyOffset)",
         "panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra",
         "if i == expandedDetailRow then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end",
         "SKIN:Bang('!HideMeter', p .. 'Name')",
@@ -120,8 +133,8 @@ if($errors.Count -eq 0){
         "'MV:'..formatMoney(mv)",
         "'  Each:'..formatMoney(each)",
         "'  Gross:'..formatMoney(grossSale)",
-        "'  Per Hour:'..formatMoney(grossProfitHour)",
-        "'  Tax:'..formatMoney(marketTax)",
+        "'  Per Hour:'..formatMoney(profitHour)",
+        "'  '..tostring(marketTaxRate)..'% Tax: '..formatMoney(marketTax)",
         "setOption(prefix..'Gross','FontColor','255,255,255,255')",
         "setOption(prefix..'Gross','InlinePattern','(?<=MV:)-?\\$[0-9,]+')",
         "setOption(prefix..'Gross','InlineSetting','Color | 218,178,69,255')",
@@ -131,8 +144,9 @@ if($errors.Count -eq 0){
         "setOption(prefix..'Gross','InlineSetting3','Color | 255,255,255,255')",
         "setOption(prefix..'Gross','InlinePattern4','(?<=Per Hour:)-?\\$[0-9,]+')",
         "setOption(prefix..'Gross','InlineSetting4','Color | 255,255,255,255')",
-        "taxColor=marketTax>0 and '244,138,138,255' or '145,152,164,255'",
-        "setOption(prefix..'Gross','InlinePattern5','(?<=Tax:)-?\\$[0-9,]+')",
+        "taxColor=marketTax>0 and '244,138,138,255' or '150,150,150,255'",
+        "marketTaxRate=math.max(0,math.min(5,math.floor(number(state[projectedPrefix..'MarketFeePercent'])+0.5)))",
+        "setOption(prefix..'Gross','InlinePattern5','(?<=Tax: )-?\\$[0-9,]+')",
         "setOption(prefix..'Gross','InlineSetting5','Color | '..taxColor)",
         "setOption(prefix..'Window','Text','')",
         "setOption(prefix..'Chance','Text','')",
@@ -162,12 +176,20 @@ if($errors.Count -eq 0){
 
     foreach($section in @('MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')){
         $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($body -notmatch '(?im)^Meter=Shape\s*$' -or $body -notmatch '(?im)^Shape=Rectangle .*?,4 \| Fill Color #Card# \| StrokeWidth 1 \| Stroke Color #Border#\s*$'){
-            Fail "$section must be a rounded card-style button surface."
+        foreach($token in @('W=92','H=23','Shape=Rectangle 0,0,92,23,4 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#')){
+            if(-not$body.Contains($token)){Fail "$section must use the standard 92x23 sort-button surface."}
         }
     }
-    $sortLine=[regex]::Match($ini,'(?ms)^\[MeterSortBottomLine\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortLine -notmatch '(?im)^Hidden=1\s*$'){Fail 'The separator line between sort buttons and cards must remain hidden.'}
+    $sortCenters=@{MeterSortUpcoming='X=56';MeterSortGross='X=154';MeterSortProfitHour='X=252'}
+    foreach($section in @($sortCenters.Keys)){
+        $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        foreach($token in @($sortCenters[$section],'Y=67','W=92','H=23','StringAlign=CenterCenter')){
+            if(-not$body.Contains($token)){Fail "$section must center its text inside the standard sort button."}
+        }
+    }
+    foreach($retiredSeparator in @('MeterHeaderBottomLine','MeterSortBottomLine')){
+        if($ini -match ('(?m)^\['+[regex]::Escape($retiredSeparator)+'\]\s*$')){Fail "Separator [$retiredSeparator] must remain removed."}
+    }
     foreach($retiredSection in @('MeterSortNameButton','MeterSortName','MeterViewer','MeasureItemViewer')){
         if($ini -match ('(?m)^\['+[regex]::Escape($retiredSection)+'\]\s*$')){Fail "Retired UI section [$retiredSection] returned."}
     }
@@ -202,8 +224,12 @@ if($errors.Count -eq 0){
     if($sortGross -notmatch '(?im)^ToolTipText=Highest total trip gross profit first\s*$'){Fail 'Gross sort tooltip must describe pre-tax gross profit.'}
 
     $sortHour=[regex]::Match($ini,'(?ms)^\[MeterSortProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($sortHour -notmatch '(?im)^ToolTipText=Gross profit divided by total elapsed hours; likelihood stays separate\s*$'){
-        Fail 'PROFIT/HR sort tooltip must describe gross profit per hour.'
+    if($sortHour -notmatch '(?im)^ToolTipText=Net profit after tax divided by total elapsed hours; likelihood stays separate\s*$'){
+        Fail 'PROFIT/HR sort tooltip must describe after-tax net profit per hour.'
+    }
+
+    foreach($paletteToken in @('Panel=17,17,17,248','Card=32,32,32,248','Border=64,64,64,255','Muted=150,150,150,255')){
+        if(-not$ini.Contains($paletteToken)){Fail "Neutral main-skin palette missing '$paletteToken'."}
     }
 }
 

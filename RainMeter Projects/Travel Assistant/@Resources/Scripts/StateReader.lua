@@ -291,7 +291,7 @@ end
 
 local function applyTripColors(bands)
     local active = '82,174,255,255'
-    local inactive = '145,152,164,255'
+    local inactive = '150,150,150,255'
     setVariable('TripShortColor', bands.short and active or inactive)
     setVariable('TripMediumColor', bands.medium and active or inactive)
     setVariable('TripLongColor', bands.long and active or inactive)
@@ -305,7 +305,7 @@ end
 
 local function applySortColors(mode)
     local active = '82,174,255,255'
-    local inactive = '145,152,164,255'
+    local inactive = '150,150,150,255'
     setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
     setVariable('SortGrossColor', mode == 'gross' and active or inactive)
     setVariable('SortProfitHourColor', mode == 'profit_per_hour' and active or inactive)
@@ -549,21 +549,20 @@ local function readGraphSpec(key)
 end
 
 local function setGraphButtonState(name, expanded)
-    local border=expanded and '82,174,255,255' or '145,152,164,255'
-    local fill=expanded and '34,52,66,255' or '31,35,40,248'
+    local fill=expanded and '44,44,44,255' or '0,0,0,1'
     SKIN:Bang('!SetOption', name, 'GraphExpanded', expanded and '1' or '0')
-    SKIN:Bang('!SetOption', name, 'Shape', 'Rectangle 0,0,18,18,3 | Fill Color '..fill..' | StrokeWidth 1 | Stroke Color '..border)
-    SKIN:Bang('!SetOption', name, 'Shape2', 'Line 4,13,4,5 | StrokeWidth 1 | Stroke Color 145,152,164,255')
-    SKIN:Bang('!SetOption', name, 'Shape3', 'Line 4,13,14,13 | StrokeWidth 1 | Stroke Color 145,152,164,255')
-    SKIN:Bang('!SetOption', name, 'Shape4', 'Line 5,11,8,8 | StrokeWidth 1 | Stroke Color 82,174,255,255')
-    SKIN:Bang('!SetOption', name, 'Shape5', 'Line 8,8,10,10 | StrokeWidth 1 | Stroke Color 82,174,255,255')
-    SKIN:Bang('!SetOption', name, 'Shape6', 'Line 10,10,14,6 | StrokeWidth 1 | Stroke Color 82,174,255,255')
+    SKIN:Bang('!SetOption', name, 'Shape', 'Rectangle 0,0,26,25 | Fill Color '..fill..' | StrokeWidth 0')
+    SKIN:Bang('!SetOption', name, 'Shape2', 'Line 8,17,8,8 | StrokeWidth 1 | Stroke Color 150,150,150,255')
+    SKIN:Bang('!SetOption', name, 'Shape3', 'Line 8,17,18,17 | StrokeWidth 1 | Stroke Color 150,150,150,255')
+    SKIN:Bang('!SetOption', name, 'Shape4', 'Line 9,15,12,12 | StrokeWidth 1 | Stroke Color 82,174,255,255')
+    SKIN:Bang('!SetOption', name, 'Shape5', 'Line 12,12,14,14 | StrokeWidth 1 | Stroke Color 82,174,255,255')
+    SKIN:Bang('!SetOption', name, 'Shape6', 'Line 14,14,18,9 | StrokeWidth 1 | Stroke Color 82,174,255,255')
 end
 
 local function setDetailButtonState(name, expanded)
     SKIN:Bang('!SetOption', name, 'Text', '$')
-    SKIN:Bang('!SetOption', name, 'FontColor', expanded and '218,178,69,255' or '145,152,164,255')
-    SKIN:Bang('!SetOption', name, 'SolidColor', expanded and '74,62,28,255' or '31,35,40,248')
+    SKIN:Bang('!SetOption', name, 'FontColor', expanded and '218,178,69,255' or '150,150,150,255')
+    SKIN:Bang('!SetOption', name, 'SolidColor', expanded and '74,62,28,255' or '0,0,0,1')
 end
 
 local function collapseInlineGraph()
@@ -645,8 +644,10 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Card', 'Y', tostring(y))
         SKIN:Bang('!SetOption', p .. 'Card', 'H', tostring(cardHeight))
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape', 'Rectangle 0,0,536,' .. cardHeight .. ',5 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#')
+        SKIN:Bang('!SetOption', p .. 'Card', 'Shape2', 'Line 510,' .. bodyOffset .. ',510,' .. (bodyOffset+50) .. ' | StrokeWidth 1 | Stroke Color #Border#')
+        SKIN:Bang('!SetOption', p .. 'Card', 'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25) .. ' | StrokeWidth 1 | Stroke Color #Border#')
 
-        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+2))
+        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+9))
         if detailExpanded then SKIN:Bang('!ShowMeter', p .. 'Gross') else SKIN:Bang('!HideMeter', p .. 'Gross') end
 
         SKIN:Bang('!SetOption', p .. 'Flag', 'Y', tostring(y+3+bodyOffset))
@@ -654,7 +655,7 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Price', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Take', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Make', 'Y', tostring(y+6+bodyOffset))
-        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'Y', tostring(y+3+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'DetailToggle', 'Y', tostring(y+12+bodyOffset))
         setDetailButtonState(p .. 'DetailToggle', detailExpanded)
         SKIN:Bang('!SetOption', p .. 'DetailToggle', 'ToolTipText', detailExpanded and 'Hide card economics' or 'Show card economics')
 
@@ -664,7 +665,7 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Chance', 'Y', tostring(y+27+bodyOffset))
         SKIN:Bang('!HideMeter', p .. 'Chance')
 
-        SKIN:Bang('!SetOption', p .. 'Graph', 'Y', tostring(y+24+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'Graph', 'Y', tostring(y+25+bodyOffset))
         setGraphButtonState(p .. 'Graph', graphExpanded)
         SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y', tostring(y+53+bodyOffset))
         if not graphExpanded then SKIN:Bang('!HideMeter', p .. 'InlineGraph') end
@@ -746,7 +747,7 @@ local function updateOpportunities(data)
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'Text', cardTitle(data, prefix, key))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Name', 'ToolTipText', tooltip)
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'Text', gross)
-            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '145,152,164,255'))
+            SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'FontColor', safeText(data[prefix .. 'PriceColor'], '150,150,150,255'))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Gross', 'ToolTipText', tooltip)
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Window', 'Text', safeText(data[prefix .. 'WindowText'], ''))
             SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'Leave', 'Text', safeLeaveText(data, prefix))

@@ -29,7 +29,6 @@ Assert-Equal 'Default countries include all 11 destinations' @($defaults.selecte
 Assert-True 'Default category filter is All' ([bool]$defaults.categoryFilterAll)
 Assert-True 'Default profitable-only is off' (-not [bool]$defaults.showProfitableOnly)
 Assert-Equal 'Default ignore list is empty' @($defaults.ignoredItemIds).Count 0
-Assert-True 'Default MV basis remains 100 percent' (-not [bool]$defaults.use95PercentMarketValue)
 Assert-Equal 'Default market tax is zero percent' ([int]$defaults.itemMarketFeePercent) 0
 Assert-Equal 'Default Energy waste policy is Allowed' ([string]$defaults.energyWastePolicy) 'allowed'
 Assert-Equal 'Default Nerve waste policy is Allowed' ([string]$defaults.nerveWastePolicy) 'allowed'
@@ -50,7 +49,6 @@ $custom = [pscustomobject]@{
     selectedCategories = @('Plushie')
     showProfitableOnly = $true
     ignoredItemIds = @(277)
-    use95PercentMarketValue = $true
     itemMarketFeePercent = 5
     energyWastePolicy = 'LIMITED'
     maxEnergyLoss = 25
@@ -64,8 +62,12 @@ Assert-True 'Retired pin is removed during preference normalization' ($null -eq 
 Assert-Equal 'Empty country selection defaults to all countries' @($normalized.selectedCountryIds).Count 11
 Assert-True 'Profitable-only survives normalization' ([bool]$normalized.showProfitableOnly)
 Assert-Sequence 'Ignore list survives normalization' @($normalized.ignoredItemIds) @('277')
-Assert-True '95 percent MV basis survives normalization' ([bool]$normalized.use95PercentMarketValue)
+Assert-True 'Retired 95 percent MV property is removed during normalization' ($null -eq $normalized.PSObject.Properties['use95PercentMarketValue'])
 Assert-Equal 'Five percent market tax survives normalization' ([int]$normalized.itemMarketFeePercent) 5
+foreach($rate in 0..5){
+    $ratePrefs=Normalize-UiPreferences -Preferences ([pscustomobject]@{itemMarketFeePercent=$rate})
+    Assert-Equal ("Tax rate {0}% survives normalization" -f $rate) ([int]$ratePrefs.itemMarketFeePercent) $rate
+}
 Assert-Equal 'Energy policy normalizes case' ([string]$normalized.energyWastePolicy) 'limited'
 Assert-Equal 'Energy loss limit survives' ([int]$normalized.maxEnergyLoss) 25
 Assert-Equal 'Nerve policy survives' ([string]$normalized.nerveWastePolicy) 'forbidden'
@@ -80,7 +82,6 @@ Assert-Sequence 'Trip band can be re-enabled independently' @($toggled.displayTr
 Assert-Sequence 'Trip-band toggle preserves Ignore List' @($toggled.ignoredItemIds) @('277')
 Assert-Equal 'Trip-band toggle preserves Energy policy' ([string]$toggled.energyWastePolicy) 'limited'
 Assert-Equal 'Trip-band toggle preserves Nerve policy' ([string]$toggled.nerveWastePolicy) 'forbidden'
-Assert-True 'Trip-band toggle preserves 95 percent MV preference' ([bool]$toggled.use95PercentMarketValue)
 Assert-Equal 'Trip-band toggle preserves market tax' ([int]$toggled.itemMarketFeePercent) 5
 Assert-Equal 'Trip-band toggle preserves sort mode' ([string]$toggled.sortMode) 'gross'
 
@@ -96,7 +97,6 @@ Assert-Equal 'Reset preserves Energy policy' ([string]$reset.energyWastePolicy) 
 Assert-Equal 'Reset preserves Energy limit' ([int]$reset.maxEnergyLoss) 25
 Assert-Equal 'Reset preserves Nerve policy' ([string]$reset.nerveWastePolicy) 'forbidden'
 Assert-Equal 'Reset preserves Nerve limit' ([int]$reset.maxNerveLoss) 7
-Assert-True 'Reset preserves 95 percent MV basis' ([bool]$reset.use95PercentMarketValue)
 Assert-Equal 'Reset preserves market tax' ([int]$reset.itemMarketFeePercent) 5
 Assert-Equal 'Reset preserves selected ordering' ([string]$reset.sortMode) 'gross'
 
@@ -111,6 +111,7 @@ $bad = [pscustomobject]@{
     maxEnergyLoss=5000
     maxNerveLoss=-10
     itemMarketFeePercent=3
+    use95PercentMarketValue=$true
     sortMode='chance'
 }
 $fixed = Normalize-UiPreferences -Preferences $bad
@@ -124,7 +125,8 @@ Assert-Equal 'Invalid Energy policy falls back to Allowed' ([string]$fixed.energ
 Assert-Equal 'Invalid Nerve policy falls back to Allowed' ([string]$fixed.nerveWastePolicy) 'allowed'
 Assert-Equal 'Energy limit clamps to maximum' ([int]$fixed.maxEnergyLoss) 1000
 Assert-Equal 'Nerve limit clamps to zero' ([int]$fixed.maxNerveLoss) 0
-Assert-Equal 'Unsupported market tax normalizes to zero' ([int]$fixed.itemMarketFeePercent) 0
+Assert-Equal 'Three-percent trader tax survives normalization' ([int]$fixed.itemMarketFeePercent) 3
+Assert-True 'Retired 95 percent MV property is stripped from legacy preferences' ($null -eq $fixed.PSObject.Properties['use95PercentMarketValue'])
 Assert-Equal 'No separate chance sort is exposed' ([string]$fixed.sortMode) 'upcoming'
 
 $legacyNameSort = Normalize-UiPreferences -Preferences ([pscustomobject]@{ sortMode='name' })

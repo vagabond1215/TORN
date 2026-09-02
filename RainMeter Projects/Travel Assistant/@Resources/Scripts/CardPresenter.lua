@@ -537,8 +537,9 @@ local function updateRow(index,state,now)
     if mv<=0 then mv=parseMoney(state[projectedPrefix..'MarketValueText']) end
     local each=number(state[projectedPrefix..'ProfitEachValue'])
     local grossSale=number(state[projectedPrefix..'GrossSaleValue'])
-    local grossProfitHour=number(state[projectedPrefix..'GrossProfitHourValue'])
+    local profitHour=number(state[projectedPrefix..'ProfitHourValue'])
     local marketTax=number(state[projectedPrefix..'MarketTaxValue'])
+    local marketTaxRate=math.max(0,math.min(5,math.floor(number(state[projectedPrefix..'MarketFeePercent'])+0.5)))
 
     setOption(prefix..'Name','Text',itemName)
     setOption(prefix..'Name','ToolTipText','Item name')
@@ -569,11 +570,11 @@ local function updateRow(index,state,now)
     local detail='MV:'..formatMoney(mv)..
         '  Each:'..formatMoney(each)..
         '  Gross:'..formatMoney(grossSale)..
-        '  Per Hour:'..formatMoney(grossProfitHour)..
-        '  Tax:'..formatMoney(marketTax)
+        '  Per Hour:'..formatMoney(profitHour)..
+        '  '..tostring(marketTaxRate)..'% Tax: '..formatMoney(marketTax)
     setOption(prefix..'Gross','Text',detail)
     setOption(prefix..'Gross','FontColor','255,255,255,255')
-    setOption(prefix..'Gross','ToolTipText','Market value | net profit per item | Gross Sale | pre-tax gross profit per hour | market tax')
+    setOption(prefix..'Gross','ToolTipText','Declared market value | net profit per item | gross sale | net profit per hour | selected sale tax')
     setOption(prefix..'Gross','InlinePattern','(?<=MV:)-?\\$[0-9,]+')
     setOption(prefix..'Gross','InlineSetting','Color | 218,178,69,255')
     setOption(prefix..'Gross','InlinePattern2','(?<=Each:)-?\\$[0-9,]+')
@@ -582,8 +583,8 @@ local function updateRow(index,state,now)
     setOption(prefix..'Gross','InlineSetting3','Color | 255,255,255,255')
     setOption(prefix..'Gross','InlinePattern4','(?<=Per Hour:)-?\\$[0-9,]+')
     setOption(prefix..'Gross','InlineSetting4','Color | 255,255,255,255')
-    local taxColor=marketTax>0 and '244,138,138,255' or '145,152,164,255'
-    setOption(prefix..'Gross','InlinePattern5','(?<=Tax:)-?\\$[0-9,]+')
+    local taxColor=marketTax>0 and '244,138,138,255' or '150,150,150,255'
+    setOption(prefix..'Gross','InlinePattern5','(?<=Tax: )-?\\$[0-9,]+')
     setOption(prefix..'Gross','InlineSetting5','Color | '..taxColor)
 
     setOption(prefix..'Window','Text','')

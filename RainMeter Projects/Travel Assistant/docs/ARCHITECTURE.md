@@ -154,7 +154,7 @@ Each compact row is:
 - The visible first line uses fixed Item/Cost, Take, and Make columns.
 - Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license.
 - Hovering the flag exposes country + configured one-way travel time.
-- The `$` button expands the one-line MV/Each/Gross/Per Hour/Tax strip.
+- The `$` button expands the vertically centered one-line MV/Each/Gross/Per Hour/<rate>% Tax strip. `$` and chart are the two halves of one T-divided right-edge end cap.
 - The chart button expands the local 8-hour graph.
 - A known 0% arrival case displays `NO HIT` rather than `LEAVE NOW`; unknown likelihood displays `WAIT DATA`.
 
@@ -174,27 +174,29 @@ Catalog network maintenance stays outside the one-second Rainmeter loop. `LocalC
 
 A successful item-market response with neither listings nor a positive average remains unresolved. It retains the normal one-hour retry backoff even when optimizer-prioritized, so one legitimately empty market cannot monopolize the single-request queue.
 
-Default value basis:
+Value/tax basis:
 
 ```text
-100% Torn MV
-0 Item Market fee deduction
+sale price = declared/list Torn MV
+selected tax / trader rate = 0%..5%
+tax is applied once to gross sale proceeds
 0 minimum profit gate
 0 minimum margin gate
 ```
-
-Optional preference changes the sell basis to 95% MV.
 
 ## Capacity / economics
 
 General capacity derives from travel-mode base plus synced profile effects. Opportunity quantity is bounded by both configured capacity and modeled/current available quantity.
 
 ```text
-gross = quantity × (selected MV basis - foreign price)
-profit/hr = gross / total elapsed hours
+gross sale = quantity × declared MV
+gross profit = gross sale - purchase cost
+tax = floor(gross sale × selected rate)
+net profit = gross profit - tax
+profit/hr = net profit / total elapsed hours
 ```
 
-Gross intentionally excludes travel cost. Hit probability is displayed separately and is not multiplied into `PROFIT/HR`.
+Gross profit intentionally excludes travel cost; tax is a separate deduction into net profit. Hit probability is displayed separately and is not multiplied into `PROFIT/HR`.
 
 ## Travel + bars
 

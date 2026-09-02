@@ -34,7 +34,7 @@ if(Test-Path -LiteralPath $files.Preferences){
  $text=Get-Content -LiteralPath $files.Preferences -Raw
  foreach($token in @(
   'schemaVersion = 8','selectedItemIds','selectedTripBands','displayTripBands','selectedCountryIds','selectedCategories',
-  'showProfitableOnly','ignoredItemIds','use95PercentMarketValue','itemMarketFeePercent','Normalize-ItemMarketFeePercent','energyWastePolicy','nerveWastePolicy',
+  'showProfitableOnly','ignoredItemIds','itemMarketFeePercent','Normalize-ItemMarketFeePercent','energyWastePolicy','nerveWastePolicy',
   "sortMode = 'upcoming'",'Normalize-SortMode',"@('upcoming','gross','profit_per_hour')",'SetSortMode',
   'Set-FilterStateKvValuesAtomic','UISelectedTripBands','UITripShortOn','UITripMediumOn','UITripLongOn',
   '$countries.Count -eq 0','Write-FilterJsonAtomic -Path $PreferenceFile -Value $normalized','Start-FilterProjectionRefresh','LaunchUpdate.ps1','$Action -eq ''ResetFilters'''
@@ -105,7 +105,8 @@ if(Test-Path -LiteralPath $files.PopupHost){
 if(Test-Path -LiteralPath $files.Settings){
  $text=Get-Content -LiteralPath $files.Settings -Raw
  foreach($token in @('LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1','& $UpdateLauncher -Action Update',"& `$FilterLauncher -Filter 'Ignore'")){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
- foreach($token in @('Use 95% MV profit calculation','use95PercentMarketValue','Market tax','itemMarketFeePercent',"`$marketTax.Items.Add('0%')","`$marketTax.Items.Add('5%')")){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ foreach($token in @('Tax / trader rate','itemMarketFeePercent','foreach($rate in 0..5)','marketTax.SelectedIndex')){if(-not$text.Contains($token)){Fail "OpenOptimizerSettings.ps1 missing '$token'."}}
+ foreach($retired in @('Use 95% MV profit calculation','use95PercentMarketValue')){if($text.Contains($retired)){Fail "OpenOptimizerSettings.ps1 retains retired MV-basis token '$retired'."}}
  foreach($retiredText in @('OPPORTUNITY SETTINGS','Main sort choices are UPCOMING')){if($text.Contains($retiredText)){Fail "OpenOptimizerSettings.ps1 retains unnecessary settings copy '$retiredText'."}}
  if($text.Contains("Join-Path `$PSScriptRoot 'RunUpdate.ps1'")){Fail 'Optimizer Settings must not bypass LaunchUpdate.ps1.'}
 }
@@ -130,7 +131,7 @@ if(Test-Path -LiteralPath $files.Opportunities){
  $text=Get-Content -LiteralPath $files.Opportunities -Raw
  foreach($token in @(
   'Get-OpportunityNextWindow','Get-OpportunityProbabilityAtAge','Get-OpportunityNextRecurringWindow','Get-OpportunityEconomics','grossProfit','profitPerHour','elapsedSeconds','probabilityKnown',
-  'itemMarketFeePercent','MarketFeePercent','GrossSaleValue','MarketTaxValue','MakeValue','PurchaseCostValue','TakeValue',
+  'itemMarketFeePercent','MarketFeePercent','GrossSaleValue','MarketTaxValue','MakeValue','PurchaseCostValue','TakeValue','makePerHour',
   "'LEARNING'",'$availableQuantity = $stock','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",
   '$maxProjectedRows = 256',"'TripBand'",'tripBand=$tripBand','OpportunityCount'
  )){if(-not$text.Contains($token)){Fail "OpportunityState.ps1 missing '$token'."}}
@@ -159,10 +160,9 @@ if(Test-Path -LiteralPath $files.Ini){
  }
  foreach($section in @('MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')) {
   $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-  if($body -notmatch '(?im)^Meter=Shape\s*$' -or $body -notmatch '(?im)^Shape=Rectangle .*?,4 \| Fill Color #Card# \| StrokeWidth 1 \| Stroke Color #Border#\s*$'){Fail "$section must remain a rounded sort button surface."}
+  foreach($token in @('W=92','H=23','Shape=Rectangle 0,0,92,23,4 | Fill Color #Card# | StrokeWidth 1 | Stroke Color #Border#')){if(-not$body.Contains($token)){Fail "$section must remain a standard 92x23 rounded sort button surface."}}
  }
- $sortLine=[regex]::Match($ini,'(?ms)^\[MeterSortBottomLine\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
- if($sortLine -notmatch '(?im)^Hidden=1\s*$'){Fail 'Sort/card separator line must remain hidden.'}
+ foreach($retiredSeparator in @('MeterHeaderBottomLine','MeterSortBottomLine')){if($ini -match ('(?m)^\['+[regex]::Escape($retiredSeparator)+'\]\s*$')){Fail "Retired separator [$retiredSeparator] returned."}}
  if($ini.Contains('Text=SETTINGS  >')){Fail 'Main header must use the settings gear image, not SETTINGS > text.'}
 }
 

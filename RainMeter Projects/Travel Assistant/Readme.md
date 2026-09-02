@@ -30,13 +30,13 @@ Up to eight opportunities may be shown.
 - `Take` is exact purchase cash for fixed-price markets and adds a 5% reserve only for demonstrated variable-price markets.
 - `Make` is after-tax profit and never subtracts the unused Take reserve.
 - The top-right **$** button expands/collapses the one-line economics strip and highlights while open.
-- The lower-right chart button expands/collapses the local 8-hour stock graph and highlights while open.
+- The lower-right chart button expands/collapses the local 8-hour stock graph and highlights while open. `$` and chart occupy the two halves of one T-divided right-edge end cap.
 - Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering.
 
 Expanded economics are:
 
 ```text
-MV:$...  Each:$...  Gross:$...  Per Hour:$...  Tax:$...
+MV:$...  Each:$...  Gross:$...  Per Hour:$...  <rate>% Tax:$...
 ```
 
 Labels are white. MV value is gold-yellow; Each/Gross/Per Hour values are white; Tax value is muted gray at zero and light red when nonzero.
@@ -47,7 +47,7 @@ Selectable sorts are:
 
 - **UPCOMING** — earliest current/modeled stock window first.
 - **GROSS PROFIT** — highest total trip gross first.
-- **PROFIT/HR** — gross trip profit divided by total elapsed hours.
+- **PROFIT/HR** — after-tax net trip profit divided by total elapsed hours.
 
 Alphabetical **Name** ordering is not selectable. It is used only as an internal fallback when the visible rows have neither usable timing nor usable profit inputs.
 
@@ -68,20 +68,20 @@ Sold-out/future windows remain evidence-gated and require completed sellout/rest
 ## Economics
 
 ```text
-sale basis = 100% MV or floor(MV × 0.95)
-gross sale = sale basis × quantity
+sale price = declared/list MV
+gross sale = MV × quantity
 purchase cost = foreign price × quantity
 gross profit = gross sale - purchase cost
-market tax = gross sale × 0% or 5%
-make = gross profit - market tax
-profit/hr = gross profit / total elapsed hours
+tax = floor(gross sale × selected 0%..5% rate)
+make = gross profit - tax
+profit/hr = make / total elapsed hours
 ```
 
 `Take` is the purchase-cash requirement: exact purchase cost for fixed-price markets, or `ceil(purchase cost × 1.05)` when retained evidence shows variable pricing. The 5% reserve is cash-on-hand only and never reduces `Make`.
 
 Gross profit intentionally excludes travel cost. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
 
-Settings independently control the 95% MV sale basis, 0%/5% market tax, and profitable-only filtering.
+Settings control a 0%, 1%, 2%, 3%, 4%, or 5% sale-tax / trader rate plus profitable-only filtering. The declared MV itself is never discounted by this rate.
 
 ## Graphs
 

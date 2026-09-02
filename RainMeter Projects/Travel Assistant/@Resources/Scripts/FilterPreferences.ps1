@@ -103,7 +103,6 @@ function New-DefaultUiPreferences {
         selectedCategories = [string[]]@(Get-FilterVisibleCategories)
         showProfitableOnly = $false
         ignoredItemIds = [int[]]@()
-        use95PercentMarketValue = $false
         itemMarketFeePercent = 0
         energyWastePolicy = 'allowed'
         maxEnergyLoss = 0
@@ -117,8 +116,9 @@ function Normalize-ItemMarketFeePercent {
     param([object]$Value)
     $percent=0.0
     if (-not [double]::TryParse([string]$Value,[ref]$percent)) { return 0 }
-    if ([Math]::Abs($percent-5.0) -lt 0.001) { return 5 }
-    return 0
+    $rounded=[int][Math]::Round($percent)
+    if ([Math]::Abs($percent-$rounded) -gt 0.001 -or $rounded -lt 0 -or $rounded -gt 5) { return 0 }
+    return $rounded
 }
 
 function Normalize-WastePolicy {
@@ -167,10 +167,12 @@ function Normalize-UiPreferences {
         if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
     Set-FilterProperty $Preferences 'schemaVersion' 8
-    # Card pinning was retired with the old independent-card surface. Strip the
-    # legacy property in memory so the next normal preference save removes it.
-    if ($null -ne $Preferences.PSObject.Properties['pinnedMarket']) {
-        [void]$Preferences.PSObject.Properties.Remove('pinnedMarket')
+    # Strip retired preference fields in memory so the next normal preference save
+    # removes old card-pinning / 95%-basis state instead of carrying dead options.
+    foreach ($retiredProperty in @('pinnedMarket','use95PercentMarketValue')) {
+        if ($null -ne $Preferences.PSObject.Properties[$retiredProperty]) {
+            [void]$Preferences.PSObject.Properties.Remove($retiredProperty)
+        }
     }
 
     $mode = [string]$Preferences.travelMode
@@ -223,7 +225,6 @@ function Normalize-UiPreferences {
     Set-FilterProperty $Preferences 'itemFilterAll' ([bool]$Preferences.itemFilterAll)
     Set-FilterProperty $Preferences 'categoryFilterAll' ([bool]$Preferences.categoryFilterAll)
     Set-FilterProperty $Preferences 'showProfitableOnly' ([bool]$Preferences.showProfitableOnly)
-    Set-FilterProperty $Preferences 'use95PercentMarketValue' ([bool]$Preferences.use95PercentMarketValue)
     Set-FilterProperty $Preferences 'itemMarketFeePercent' (Normalize-ItemMarketFeePercent $Preferences.itemMarketFeePercent)
     Set-FilterProperty $Preferences 'energyWastePolicy' (Normalize-WastePolicy $Preferences.energyWastePolicy)
     Set-FilterProperty $Preferences 'nerveWastePolicy' (Normalize-WastePolicy $Preferences.nerveWastePolicy)

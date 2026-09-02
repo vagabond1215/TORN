@@ -9,36 +9,32 @@ function Assert-True([bool]$Condition,[string]$Message) { if (-not $Condition) {
 function Assert-Equal($Actual,$Expected,[string]$Message) { if ($Actual -ne $Expected) { $script:failures.Add("$Message Expected=$Expected Actual=$Actual") } }
 function Assert-Near([double]$Actual,[double]$Expected,[double]$Tolerance,[string]$Message) { if ([Math]::Abs($Actual-$Expected) -gt $Tolerance) { $script:failures.Add("$Message Expected=$Expected Actual=$Actual") } }
 
-$grossEconomics=Get-OpportunityEconomics -MarketValue 150L -ForeignPrice 100L -Quantity 10 -BasisPercent 100 -MarketFeePercent 0 -ElapsedSeconds 3600L
-Assert-Equal ([long]$grossEconomics.saleEach) 150L '100% MV basis keeps the full per-item market value.'
+$grossEconomics=Get-OpportunityEconomics -MarketValue 150L -ForeignPrice 100L -Quantity 10 -MarketFeePercent 0 -ElapsedSeconds 3600L
+Assert-Equal ([long]$grossEconomics.saleEach) 150L 'Declared MV is always the per-item sale value.'
 Assert-Equal ([long]$grossEconomics.purchaseCost) 1000L 'Purchase cost is foreign unit cost times quantity.'
-Assert-Equal ([long]$grossEconomics.grossSale) 1500L 'Gross Sale is sale basis times quantity.'
+Assert-Equal ([long]$grossEconomics.grossSale) 1500L 'Gross Sale is declared MV times quantity.'
 Assert-Equal ([long]$grossEconomics.grossProfit) 500L 'Gross profit is Gross Sale minus actual purchase cost before tax.'
-Assert-Equal ([long]$grossEconomics.marketTax) 0L 'Zero-percent market tax leaves Gross Sale untaxed.'
-Assert-Equal ([long]$grossEconomics.make) 500L 'Make is gross profit after market tax.'
-Assert-Near ([double]$grossEconomics.grossProfitPerHour) 500.0 0.001 'Gross profit per hour uses pre-tax gross profit.'
+Assert-Equal ([long]$grossEconomics.marketTax) 0L 'Zero-percent tax leaves gross proceeds untaxed.'
+Assert-Equal ([long]$grossEconomics.make) 500L 'Make is after-tax net profit.'
 Assert-Near ([double]$grossEconomics.makePerHour) 500.0 0.001 'Net profit per hour tracks Make.'
 
-$taxedEconomics=Get-OpportunityEconomics -MarketValue 150L -ForeignPrice 100L -Quantity 10 -BasisPercent 95 -MarketFeePercent 5 -ElapsedSeconds 3600L
-Assert-Equal ([long]$taxedEconomics.saleEach) 142L '95% MV basis floors the selected sale basis per item.'
-Assert-Equal ([long]$taxedEconomics.grossSale) 1420L 'Gross Sale uses the selected 95% MV basis.'
-Assert-Equal ([long]$taxedEconomics.grossProfit) 420L 'Gross profit remains sale proceeds minus actual purchase cost before tax.'
-Assert-Equal ([long]$taxedEconomics.marketTax) 71L 'Five-percent market tax applies to total Gross Sale.'
-Assert-Equal ([long]$taxedEconomics.make) 349L 'Make subtracts market tax but never a Take cash buffer.'
-Assert-Equal ([long]$taxedEconomics.profitEach) 35L 'Displayed net profit per item derives from Make divided by quantity.'
+foreach($rate in 1..5){
+    $rateEconomics=Get-OpportunityEconomics -MarketValue 150L -ForeignPrice 100L -Quantity 10 -MarketFeePercent $rate -ElapsedSeconds 3600L
+    Assert-Equal ([long]$rateEconomics.saleEach) 150L ("Tax rate {0}% must not alter declared MV." -f $rate)
+    Assert-Equal ([long]$rateEconomics.grossSale) 1500L ("Tax rate {0}% must not alter gross sale." -f $rate)
+    Assert-Equal ([long]$rateEconomics.marketTax) ([long][Math]::Floor(1500.0*($rate/100.0))) ("Tax rate {0}% applies exactly once to gross sale." -f $rate)
+}
 
-# Regression for the accepted Xanax card math. With 95% MV basis enabled, the
-# displayed full MV is not the sale basis: 845,308 -> floor(95%) = 803,042.
-# Applying a further 5% Item Market tax makes this trip a small net loss.
-$xanax95Taxed=Get-OpportunityEconomics -MarketValue 845308L -ForeignPrice 771986L -Quantity 28 -BasisPercent 95 -MarketFeePercent 5 -ElapsedSeconds 3600L
-Assert-Equal ([long]$xanax95Taxed.saleEach) 803042L '95% basis matches the Xanax card sale price per item.'
-Assert-Equal ([long]$xanax95Taxed.purchaseCost) 21615608L 'Xanax actual purchase cost is foreign price times 28.'
-Assert-Equal ([long]$xanax95Taxed.grossSale) 22485176L 'Xanax Gross matches the 95% sale basis times 28.'
-Assert-Equal ([long]$xanax95Taxed.marketTax) 1124258L 'Xanax tax is floor(5% of Gross Sale).'
-Assert-Equal ([long]$xanax95Taxed.make) (-254690L) 'Xanax Make is a net loss when both 95% basis and 5% tax are enabled.'
-Assert-Equal ([long]$xanax95Taxed.profitEach) (-9096L) 'Xanax Each is the rounded after-tax loss per item.'
-$xanaxFullMvTaxed=Get-OpportunityEconomics -MarketValue 845308L -ForeignPrice 771986L -Quantity 28 -BasisPercent 100 -MarketFeePercent 5 -ElapsedSeconds 3600L
-Assert-Equal ([long]$xanaxFullMvTaxed.make) 869585L 'At full MV with only 5% tax, the same Xanax purchase remains profitable.'
+# Regression for the reported Xanax card. Full declared MV is the gross sale basis;
+# the selected 5% tax is subtracted once from gross proceeds.
+$xanaxTaxed=Get-OpportunityEconomics -MarketValue 845308L -ForeignPrice 771986L -Quantity 28 -MarketFeePercent 5 -ElapsedSeconds 3600L
+Assert-Equal ([long]$xanaxTaxed.saleEach) 845308L 'Xanax declared MV remains the sale value.'
+Assert-Equal ([long]$xanaxTaxed.purchaseCost) 21615608L 'Xanax actual purchase cost is foreign price times 28.'
+Assert-Equal ([long]$xanaxTaxed.grossSale) 23668624L 'Xanax Gross is declared MV times 28.'
+Assert-Equal ([long]$xanaxTaxed.marketTax) 1183431L 'Xanax 5% tax is floor(5% of Gross Sale).'
+Assert-Equal ([long]$xanaxTaxed.make) 869585L 'Xanax Make is positive after one 5% tax application.'
+Assert-Equal ([long]$xanaxTaxed.profitEach) 31057L 'Xanax Each is rounded after-tax net profit per item.'
+Assert-Near ([double]$xanaxTaxed.makePerHour) 869585.0 0.001 'Profit per hour uses after-tax net profit.'
 
 $cycles = @(
     [pscustomobject]@{ restockDelaySeconds=600L; availabilitySeconds=300L },
@@ -201,18 +197,17 @@ $economicsRows=@([pscustomobject]@{
     key='canada:99'; name='Economics'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=.75; probabilityKnown=$true;
     elapsedSeconds=3600L; grossProfit=420L; quantity=10; profitPerHour=420.0; windowStartAt=100000L; foreignPrice=100L; marketValue=150L;
     marketValueFresh=$true; priceColor='86,190,116,255'; windowText='WINDOW'; leaveText='LEAVE'; tooltip='economics';
-    saleBasis=142L; purchaseCost=1000L; grossSale=1420L; grossProfitBeforeTax=420L; marketTax=71L; make=349L; profitEach=35L;
-    grossProfitPerHour=420.0; marketFeePercent=5; basisPercent=95
+    purchaseCost=1000L; grossSale=1500L; grossProfitBeforeTax=500L; marketTax=75L; make=425L; profitEach=43L;
+    marketFeePercent=5
 })
 Write-OpportunityProjection -State $economicsState -Rows $economicsRows -SortMode 'gross' -Message ''
 Assert-Equal ([long]$economicsState['Opportunity1PurchaseCostValue']) 1000L 'Projected purchase cost is explicit and machine-readable.'
-Assert-Equal ([long]$economicsState['Opportunity1GrossSaleValue']) 1420L 'Projected Gross Sale is explicit and distinct from profit.'
-Assert-Equal ([long]$economicsState['Opportunity1GrossProfitValue']) 420L 'Projected pre-tax gross profit remains available for detail display.'
-Assert-Equal ([long]$economicsState['Opportunity1MarketTaxValue']) 71L 'Projected market tax is explicit.'
-Assert-Equal ([long]$economicsState['Opportunity1MakeValue']) 349L 'Projected Make is after-tax net profit.'
-Assert-Equal ([long]$economicsState['Opportunity1ProfitEachValue']) 35L 'Projected Each value is net profit per item.'
+Assert-Equal ([long]$economicsState['Opportunity1GrossSaleValue']) 1500L 'Projected Gross Sale is declared MV times quantity.'
+Assert-Equal ([long]$economicsState['Opportunity1GrossProfitValue']) 500L 'Projected pre-tax gross profit remains available for gross sorting.'
+Assert-Equal ([long]$economicsState['Opportunity1MarketTaxValue']) 75L 'Projected market tax is explicit.'
+Assert-Equal ([long]$economicsState['Opportunity1MakeValue']) 425L 'Projected Make is after-tax net profit.'
+Assert-Equal ([long]$economicsState['Opportunity1ProfitEachValue']) 43L 'Projected Each value is net profit per item.'
 Assert-Equal ([int]$economicsState['Opportunity1MarketFeePercent']) 5 'Projected market fee percentage is explicit.'
-Assert-Equal ([int]$economicsState['Opportunity1MvBasisPercent']) 95 'Projected MV basis percentage follows the setting.'
 Assert-Equal ([long]$economicsState['Opportunity1TakeValue']) 1000L 'Take starts at actual purchase cost before price-variation refinement.'
 Assert-Equal (Get-OpportunityCountryCode 'united_kingdom') 'UK' 'United Kingdom display code remains available internally.'
 

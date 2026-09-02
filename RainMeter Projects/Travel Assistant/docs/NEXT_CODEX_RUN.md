@@ -222,6 +222,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 Rank the next optimization target by `AvgCpuMs` and `P95CpuMs`, not wall time alone.
 
+## Current economics/settings checkpoint
+
+- Declared/list MV is always the sale price used for gross sale; the old 95% MV basis option is retired.
+- Tax/trader rate options are 0%, 1%, 2%, 3%, 4%, and 5%.
+- Tax is calculated exactly once as `floor(gross sale × rate)` and is subtracted only for net profit.
+- `PROFIT/HR` and expanded `Per Hour` use after-tax net profit.
+- Expanded tax text includes the selected rate, e.g. `5% Tax:$1,183,431`.
+
 ## Target-Windows acceptance for the new redesign
 
 First pull and verify the requested commit:
@@ -263,7 +271,7 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 2. `SETTINGS >` text is gone.
 3. ITEM/TRIP/CAT/RESET main band is gone.
 4. UPCOMING / GROSS PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only.
-5. Cards match the current compact contract: Item/Cost, independent Take and Make columns, $ economics toggle, and chart Shape button.
+5. Cards match the current compact contract: Item/Cost, independent Take and Make columns, a two-part T-divided right end cap with centered `$` and chart controls, and no separate chart-button border.
 6. Flags remain present; expansion reflow keeps the Updated footer clear.
 7. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
 8. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
@@ -278,7 +286,7 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 17. Gear image opens Opportunity Settings without expanding the main skin.
 18. Ignore List opens from Settings without closing Settings.
 19. Profile/API opens from Settings without closing Settings.
-20. Sorting still works and an expanded inline graph still works.
+20. Sorting still works; all three sort buttons are equal width with centered labels, and an expanded inline graph still works.
 22. Rainmeter log has zero repeating `publishedState`, `Skin "0"`, Lua nil-index, or malformed SetOption errors.
 23. Rainmeter remains running through at least two normal 60-second polling intervals.
 
