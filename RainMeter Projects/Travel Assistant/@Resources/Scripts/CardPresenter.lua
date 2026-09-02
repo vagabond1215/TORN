@@ -132,6 +132,10 @@ end
 
 local function statusText(windowText,leaveText)
     local window=trim(windowText); local leave=trim(leaveText); if isDurationOnly(window) then window='' end
+    -- Collection state is mutually exclusive with departure guidance. If the
+    -- authoritative window stage cannot yet justify an action, do not append a
+    -- stale OpportunityState LEAVE/EN ROUTE fallback to the collecting message.
+    if window:lower():find('collecting data',1,true)~=nil then return window end
     if window=='' then return leave end; if leave=='' or leave==window then return window end; return window..' / '..leave
 end
 
