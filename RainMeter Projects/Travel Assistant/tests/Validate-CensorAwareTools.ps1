@@ -53,7 +53,7 @@ foreach($token in @(
 )){
     Assert-Contains $import $token ("Import-SeedHistory.ps1 missing schema-v2 contract token '"+$token+"'.")
 }
-Assert-NotContains $import "if ([int]$Row.schemaVersion -ne 1) { throw 'Unsupported cycle schemaVersion.' }" 'Seed importer must not reject censor-aware schema-v2 cycles.'
+Assert-NotContains $import "if ([int]`$Row.schemaVersion -ne 1) { throw 'Unsupported cycle schemaVersion.' }" 'Seed importer must not reject censor-aware schema-v2 cycles.'
 
 Write-Host 'Censor-aware offline history tooling contract passed.' -ForegroundColor Green
 exit 0
