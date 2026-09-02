@@ -386,6 +386,43 @@ local function formatCollectingTooltip(reason)
         'Stale/frozen intervals are excluded from forecast timing.'..nl..
         'See Weav3r for the current travel-stock snapshot.'
 end
+local function multiCycleChanceAction(state,statePrefix,flightSeconds,now)
+    if statePrefix=='' or number(state[statePrefix..'MultiCycleChanceEligible'])<1 then return nil,nil,nil end
+    local probability=number(state[statePrefix..'MultiCycleChanceProbability'])
+    if probability<0 or probability>1 then return nil,nil,nil end
+
+    local targetProbability=number(state[statePrefix..'MultiCycleTargetProbability'])
+    local duty=number(state[statePrefix..'MultiCycleDutyCycleProbability'])
+    local meanPeriod=number(state[statePrefix..'MultiCycleMeanPeriodSeconds'])
+    local periodStd=number(state[statePrefix..'MultiCyclePeriodStdDevSeconds'])
+    local ratio=number(state[statePrefix..'MultiCycleArrivalCycleRatio'])
+    local fullCycles=math.floor(number(state[statePrefix..'MultiCycleExpectedFullCycles']))
+    local phaseStd=number(state[statePrefix..'MultiCyclePhaseStdDevSeconds'])
+    local samples=math.floor(number(state[statePrefix..'MultiCycleSampleCount']))
+    local effective=number(state[statePrefix..'MultiCycleEffectiveSampleSize'])
+    local simulations=math.floor(number(state[statePrefix..'MultiCycleSimulationCount']))
+    local arrivalAt=number(state[statePrefix..'MultiCycleArrivalAt'])
+    local maximumOrdinal=math.floor(number(state[statePrefix..'MultiCycleMaximumOrdinal']))
+    local horizon=(arrivalAt>now) and (arrivalAt-now) or flightSeconds
+
+    local nl='#CRLF#'
+    local lines={
+        'Multi-cycle arrival forecast',
+        'Modeled Chance to Hit: '..chancePercent(probability),
+        'Time to Arrival: '..formatDuration(horizon),
+        'Mean Full Cycle: '..formatDuration(meanPeriod)..' (restock to restock)',
+        'Arrival / Cycle Ratio: '..string.format('%.1fx',ratio)..' (~'..tostring(fullCycles)..' complete cycle(s))'
+    }
+    if periodStd>0 then table.insert(lines,'Cycle Timing SD: '..formatDuration(periodStd)) end
+    if phaseStd>0 then table.insert(lines,'Approx. Accumulated Phase SD: '..formatDuration(phaseStd)) end
+    if duty>=0 and duty<=1 then table.insert(lines,'Long-run In-Stock Share: '..chancePercent(duty)) end
+    if targetProbability>=0 and targetProbability<=1 then table.insert(lines,'Full-load Chance: '..chancePercent(targetProbability)) end
+    table.insert(lines,'Evidence: '..tostring(samples)..' cycle(s), effective '..string.format('%.1f',effective))
+    table.insert(lines,'Simulation: '..tostring(simulations)..' scenarios; reached cycle ordinal '..tostring(maximumOrdinal))
+    table.insert(lines,'Basis: stochastic-v1.1 repeated joint-cycle simulation at the earliest feasible arrival.')
+    table.insert(lines,'This is a modeled arrival probability, not a Safe/Best departure-window guarantee.')
+    return 'Chance to hit:',chancePercent(probability),table.concat(lines,nl)
+end
 local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,now)
     if plan==nil or #plan.groups==0 then
         return 'Collecting Data: See Weav3r','',formatCollectingTooltip('verified current/next-cycle evidence could not produce a usable next-restock window')
@@ -462,6 +499,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         end
 
         if dataQuality=='collecting' then
+            local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
+            if multiAction~=nil then return multiAction,multiChance,multiTooltip end
             return 'Collecting Data: See Weav3r','',formatCollectingTooltip(dataQualityReason)
         end
 
@@ -472,22 +511,41 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         end
 
         -- Current stock cannot beat the live sellout estimate (or is out of stock).
-        -- Evaluate exactly one next-restock group and stop there.
-        return homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,now)
+        -- Evaluate exactly one next-restock group first. Only if that legacy
+        -- one-cycle geometry cannot give an actionable departure do we fall back
+        -- to the multi-cycle arrival probability.
+        local legacyAction,legacyChance,legacyTooltip=homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,now)
+        local lowerLegacy=trim(legacyAction):lower()
+        if lowerLegacy:find('collecting data',1,true)~=nil or lowerLegacy=='next cycle unavailable' or lowerLegacy=='window closed.' then
+            local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
+            if multiAction~=nil then return multiAction,multiChance,multiTooltip end
+        end
+        return legacyAction,legacyChance,legacyTooltip
     end
 
-    if plan==nil or #plan.groups==0 then return nil,nil,nil end
+    if plan==nil or #plan.groups==0 then
+        local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
+        if multiAction~=nil then return multiAction,multiChance,multiTooltip end
+        return nil,nil,nil
+    end
 
     local effectiveFlightSeconds=flightSeconds
     if travelState=='traveling' and destinationId==countryId then local remaining=liveTravelRemainingSeconds(state,now); if remaining>0 then effectiveFlightSeconds=remaining end end
     local availableAt=now; if travelState=='returning' then availableAt=now+liveTravelRemainingSeconds(state,now) end
-    local group,mode=findPreferredGroup(plan,effectiveFlightSeconds,availableAt,now); if group==nil then return 'WAIT DATA','',nil end
+    local group,mode=findPreferredGroup(plan,effectiveFlightSeconds,availableAt,now)
+    if group==nil then
+        local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,effectiveFlightSeconds,now)
+        if multiAction~=nil then return multiAction,multiChance,multiTooltip end
+        return 'WAIT DATA','',nil
+    end
     local tooltip=formatWindowTooltip(group,now)
 
     if travelState=='traveling' and destinationId==countryId then
         local arrivalAt=number(state.TravelArrivalAt); if arrivalAt<=now then arrivalAt=now+effectiveFlightSeconds end; local p=probabilityAt(plan,arrivalAt)
         if mode=='safe' and arrivalAt>=group.safeStart and arrivalAt<group.safeEnd then return 'SAFE AT ARRIVAL','',tooltip end
         if mode=='best' then return 'BEST AT ARRIVAL',string.format('%.0f%%',p*100),tooltip end
+        local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,effectiveFlightSeconds,now)
+        if multiAction~=nil then return multiAction,multiChance,multiTooltip end
         return 'MARKET DATA PENDING','',tooltip
     end
     if travelState=='abroad' and destinationId==countryId then return 'MARKET DATA PENDING','',tooltip end
@@ -496,6 +554,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     if mode=='safe' then
         if now<openAt then return 'SAFE - LEAVE IN '..formatCountdown(openAt-now),'',tooltip end
         if now<closeAt then return 'SAFE - LEAVE BEFORE '..formatCountdown(closeAt-now),'',tooltip end
+        local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
+        if multiAction~=nil then return multiAction,multiChance,multiTooltip end
         return 'WAIT DATA','',tooltip
     end
 
@@ -520,6 +580,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
             elseif nextMode=='best' and nTarget>now then return 'BEST - LEAVE IN '..formatBestCountdown(nTarget-now),string.format('%.0f%%',nextGroup.bestProbability*100),formatWindowTooltip(nextGroup,now) end
         end
     end
+    local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
+    if multiAction~=nil then return multiAction,multiChance,multiTooltip end
     return 'WAIT DATA','',tooltip
 end
 
