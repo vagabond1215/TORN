@@ -1,5 +1,5 @@
 ; Opportunity card meters. StateReader.lua owns all dynamic Y/height geometry.
-; Each/Total label blocks plus MV/alternate metric/price/tax meters form the fixed two-line economics bar.
+; Each/Total label blocks plus split left-label/right-value metric cells form the fixed two-line economics bar; subtle internal separators are dynamic Card shapes.
 ; Inline graphs remain in a separate group so showing a card never resurrects a collapsed graph.
 ; Card-body surfaces toggle both expansions; the $ and chart end-cap meters retain independent actions.
 
