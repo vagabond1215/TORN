@@ -60,7 +60,7 @@ $custom = [pscustomobject]@{
 }
 $normalized = Normalize-UiPreferences -Preferences $custom
 Assert-Equal 'Preference schema upgrades to eight' ([int]$normalized.schemaVersion) 8
-Assert-Equal 'Legacy pin remains preserved as harmless local preference' ([string]$normalized.pinnedMarket) 'united_kingdom:266'
+Assert-True 'Retired pin is removed during preference normalization' ($null -eq $normalized.PSObject.Properties['pinnedMarket'])
 Assert-Equal 'Empty country selection defaults to all countries' @($normalized.selectedCountryIds).Count 11
 Assert-True 'Profitable-only survives normalization' ([bool]$normalized.showProfitableOnly)
 Assert-Sequence 'Ignore list survives normalization' @($normalized.ignoredItemIds) @('277')
@@ -115,7 +115,7 @@ $bad = [pscustomobject]@{
 }
 $fixed = Normalize-UiPreferences -Preferences $bad
 Assert-Equal 'Invalid travel mode falls back safely' ([string]$fixed.travelMode) 'airstrip'
-Assert-Equal 'Invalid legacy pin is cleared' ([string]$fixed.pinnedMarket) ''
+Assert-True 'Retired pin is removed even from invalid legacy preferences' ($null -eq $fixed.PSObject.Properties['pinnedMarket'])
 Assert-Sequence 'Candidate trip bands normalize to all three' @($fixed.selectedTripBands) @('short','medium','long')
 Assert-Sequence 'Legacy display trip bands are migrated' @($fixed.displayTripBands) @('short')
 Assert-Sequence 'Unknown countries are removed' @($fixed.selectedCountryIds) @('united_kingdom')

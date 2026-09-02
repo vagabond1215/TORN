@@ -22,10 +22,14 @@ foreach ($path in @($optimizerPath,$opportunityPath,$settingsPath,$preferencesPa
 
 if (Test-Path -LiteralPath $optimizerPath) {
     $text=Get-Content -LiteralPath $optimizerPath -Raw
-    foreach ($fn in @('Get-OptimalBarWaste','Test-OptimalWastePolicy','Get-OptimalArrivalForecast','Get-OptimalResaleSnapshot','Get-OptimalCountryPlan','Write-OptimalProjection')) {
+    foreach ($fn in @('Get-OptimalBarWaste','Test-OptimalWastePolicy','Get-OptimalArrivalForecast','Get-OptimalResaleSnapshot','Get-OptimalCountryPlan')) {
         if ($text -notmatch ('(?m)^function\s+'+[regex]::Escape($fn)+'\s*\{')) { Fail "OptimalRoute.ps1 missing $fn." }
     }
     if ($text -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'OptimalRoute.ps1 must remain local-only.' }
+    if ($text -match '(?m)^function\s+Write-OptimalProjection\s*\{' -or $text.Contains("`$State['OptimalVisible']") -or $text.Contains('OptimalItemCount')) {
+        Fail 'OptimalRoute.ps1 must not retain the retired standalone OPTIMAL UI projection.'
+    }
+    if ($text.Contains('$state = Read-OptimalStateKv $StateKvFile')) { Fail 'OptimalRoute.ps1 must not retain a standalone state-writing main path.' }
     foreach ($token in @(
         "PSObject.Properties['average']",'marketValue = $marketValue','use95PercentMarketValue','-EnergyStackBypass',
         'energyWastePolicy','nerveWastePolicy','showProfitableOnly','catalogActive','legacy_removed','availabilitySeconds',
@@ -72,7 +76,7 @@ if (Test-Path -LiteralPath $settingsPath) {
 
 if (Test-Path -LiteralPath $preferencesPath) {
     $text=Get-Content -LiteralPath $preferencesPath -Raw
-    foreach ($token in @('schemaVersion = 7','displayTripBands','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'","@('name','upcoming','gross','profit_per_hour')")) {
+    foreach ($token in @('schemaVersion = 8','displayTripBands','use95PercentMarketValue','energyWastePolicy','maxEnergyLoss','nerveWastePolicy','maxNerveLoss',"sortMode = 'upcoming'","@('upcoming','gross','profit_per_hour')")) {
         if (-not $text.Contains($token)) { Fail "Preference schema missing '$token'." }
     }
 }
@@ -126,5 +130,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 Write-Host 'Retired standalone route stage, shared opportunity economics, and resale-priority projection validation passed.' -ForegroundColor Green
-Write-Host 'Visible ordering is NAME, UPCOMING, GROSS PROFIT, or PROFIT/HR; stale MV is bounded/explicit and hit likelihood remains separate.'
+Write-Host 'Visible ordering is UPCOMING, GROSS PROFIT, or PROFIT/HR; Name is fallback-only, stale MV is bounded/explicit, and hit likelihood remains separate.'
 exit 0

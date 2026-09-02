@@ -15,7 +15,7 @@ At commit `f5a4f0b`, target testing confirmed:
 - the existing popup paths opened;
 - the card screenshot supplied by the user is the protected visual baseline.
 
-The current redesign must preserve that card presentation.
+The current main branch has since advanced beyond that pre-redesign card snapshot. Current card ownership and geometry are defined by `AGENTS.md`, `ARCHITECTURE.md`, `CardPresenter.lua`, `StateReader.lua`, and `Validate-CardDetailLayout.ps1`.
 
 ## Unified main header — IMPLEMENTED, TARGET ACCEPTANCE PENDING
 
@@ -100,7 +100,7 @@ Accepted presentation remains:
 - no rank number;
 - no separate country label.
 
-Safe/Best model, travel-state behavior, sort semantics and graph transport are unchanged by the filter/header redesign.
+Safe/Best model, travel-state behavior and graph transport remain current. The standalone OPTIMAL route UI, independent visible-item cards, card pinning, standalone Viewer, and selectable Name sort are retired; `OptimalRoute.ps1` remains only as a shared local helper library.
 
 ## State and updater architecture
 
@@ -130,7 +130,6 @@ FinalizeState
 TravelContext
 CurrentCapacityRefresh
 CycleAnchorReconciler
-OptimalRoute
 OpportunityState
 WindowPlan
 PriceVariationRefiner

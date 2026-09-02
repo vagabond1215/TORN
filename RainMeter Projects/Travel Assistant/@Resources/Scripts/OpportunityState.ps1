@@ -453,11 +453,19 @@ function Write-OpportunityProjection {
     $State['OpportunitySortText'] = $SortMode.ToUpperInvariant()
     $State['OpportunityMessage'] = $Message
     $State['OpportunityCount'] = $projectCount
-    $State['OpportunityBestKey'] = ''
+
+    # Purge fields left by the retired ranked / OPTIMAL card surfaces instead of
+    # continuing to publish blank compatibility values on every projection.
+    [void]$State.Remove('OpportunityBestKey')
+    foreach ($legacyKey in @($State.Keys)) {
+        if ([string]$legacyKey -match '^Opportunity[0-9]+(RankText|OptimalText)$') {
+            [void]$State.Remove([string]$legacyKey)
+        }
+    }
 
     foreach ($index in 1..$clearCount) {
         foreach ($suffix in @(
-            'Key','RankText','OptimalText','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
+            'Key','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
             'GrossText','QuantityText','ProfitHourText','PriceText','MarketValueText','PriceColor','AccentColor','Tooltip',
             'GrossValue','ProfitHourValue','WindowStartAt','ProbabilityValue','ElapsedSeconds',
             'MarketValueValue','SaleBasisValue','PurchaseCostValue','GrossSaleValue','GrossProfitValue','MarketTaxValue','MakeValue','ProfitEachValue','GrossProfitHourValue','MarketFeePercent','MvBasisPercent','TakeValue','TakeBufferPercent',
@@ -483,7 +491,6 @@ function Write-OpportunityProjection {
         if ($row.PSObject.Properties['marketValueFresh'] -and -not [bool]$row.marketValueFresh) { $marketValueText += ' STALE' }
 
         $State['Opportunity'+$n+'Key'] = [string]$row.key
-        $State['Opportunity'+$n+'RankText'] = ''
         $State['Opportunity'+$n+'Name'] = $rowName
         $State['Opportunity'+$n+'Country'] = [string]$row.countryName
         $State['Opportunity'+$n+'CountryCode'] = [string]$row.countryCode

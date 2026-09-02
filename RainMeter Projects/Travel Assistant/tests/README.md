@@ -18,7 +18,7 @@ The aggregate runner currently includes static/config validation plus determinis
 - offline item metadata/catalog;
 - broad resale queue;
 - independent visible item cards;
-- persistent filters / pin / Ignore List contracts;
+- persistent filters / Ignore List contracts;
 - travel-context normalization;
 - historical pipeline and seed importer;
 - recommendation model;
@@ -29,9 +29,9 @@ The aggregate runner currently includes static/config validation plus determinis
 
 No deterministic test should require a live web provider.
 
-## Current 0.4.0 focused tests
+## Current 0.6.0 focused tests
 
-### Filter/pin/settings static contract
+### Filter/settings static contract
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-Filters.ps1
@@ -43,12 +43,11 @@ Checks:
 - detached Item/Country/Category/Ignore popup infrastructure;
 - full-catalog Ignore List source;
 - local-only filter projection;
-- pin stored directly in local preferences rather than stale `state.kv` projection;
 - Ignore List broad-resale suppression policy;
 - profitable-only Settings control;
 - Settings merge behavior;
 - Short/Medium/Long country taxonomy;
-- 0.4.0 filter-bar meters/actions.
+- compact unified filter/header meters/actions.
 
 ### Filter preference behavior
 
@@ -56,7 +55,7 @@ Checks:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-FilterPreferenceTests.ps1
 ```
 
-Checks defaults, persistence normalization, explicit empty country selection, independent trip-band toggles, reset semantics, pin/ignore preservation, and invalid-value cleanup without touching the real runtime preference file.
+Checks defaults, persistence normalization, explicit empty country selection, independent trip-band toggles, reset semantics, Ignore List preservation, retired-pin cleanup, and invalid-value cleanup without touching the real runtime preference file.
 
 ### Travel context
 
@@ -67,15 +66,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-TravelContex
 
 Checks bounded Authorization-header transport plus deterministic normalization for outbound, abroad, returning, known aliases, and unknown destinations.
 
-### Independent visible cards
+### Compact opportunity cards
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-VisibleItems.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Run-VisibleItemsTests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-CardPresenter.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-CardDetailLayout.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-Checks independent card identity, item-specific secondary graphs, smaller/muted market values, expansion cap, pin/filter hooks, and the production runtime ordering.
+Checks fixed Item/Cost, Take and Make columns, the $ economics strip, inline chart control, footer-safe reflow, fallback-only Name ordering, and the current Rainmeter card contract.
 
 ## Other important focused suites
 
@@ -117,7 +116,6 @@ Static/deterministic tests do not establish:
 
 - actual Rainmeter layout/reflow/click behavior;
 - detached WinForms popup behavior on the target desktop;
-- right-click pin persistence through real Rainmeter updates;
 - live Torn travel-context response compatibility;
 - live provider/resale transport;
 - `System.Drawing` behavior on the target PowerShell runtime;

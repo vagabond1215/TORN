@@ -35,9 +35,7 @@ TravelContext
         ↓
 CycleForecastFilter (cadence-aware forecast eligibility; history retained)
         ↓
-OptimalRoute compatibility model
-        ↓
-OpportunityState
+OpportunityState (dot-sources shared local helpers from OptimalRoute.ps1)
         ↓
 WindowPlan / price refinement / FilterState
         ↓
@@ -52,7 +50,7 @@ ResalePriority / ResaleQueue
 
 Completed cycle rows remain retained for audit and long-horizon analysis. Route, window, and shadow-trend forecasts apply a market-specific cadence filter: markets normally completing at least eight cycles per day reject apparent cycles over 24 hours, other multi-cycle/day markets reject periods over 48 hours, and once-daily or slower markets retain a wider cadence-relative window. Transition boundaries also carry lower/upper observation bounds. The safe gap for each phase is the larger of three poll intervals or half its robust historical variance; the hard gap is bounded by the normal phase/cycle duration. Short gaps produce conservative availability/restock values, uncertain gaps are excluded from trend fitting, and hard gaps invalidate the current phase anchor instead of fabricating a cycle. The shadow trend pass is keyed to the completed-cycle file signature and skips its all-market recalculation/state rewrite when no cycle evidence changed. Fresh positive stock uses its observed restock quantity and live depletion rate for the active sellout estimate; restock timing begins only after observed stock reaches zero and uses the cleaned median out-of-stock delay.
 
-Inline graph rendering is a local side path. It makes no provider/Torn request.
+`OptimalRoute.ps1` no longer has a standalone projection/main path; it is a shared local helper library for opportunity evidence, forecasting, waste-policy, resale, and capacity calculations. Inline graph rendering is a local side path. It makes no provider/Torn request.
 
 ## Market identity / validity
 

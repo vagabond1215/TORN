@@ -27,6 +27,19 @@ Assert-Equal ([long]$taxedEconomics.marketTax) 71L 'Five-percent market tax appl
 Assert-Equal ([long]$taxedEconomics.make) 349L 'Make subtracts market tax but never a Take cash buffer.'
 Assert-Equal ([long]$taxedEconomics.profitEach) 35L 'Displayed net profit per item derives from Make divided by quantity.'
 
+# Regression for the accepted Xanax card math. With 95% MV basis enabled, the
+# displayed full MV is not the sale basis: 845,308 -> floor(95%) = 803,042.
+# Applying a further 5% Item Market tax makes this trip a small net loss.
+$xanax95Taxed=Get-OpportunityEconomics -MarketValue 845308L -ForeignPrice 771986L -Quantity 28 -BasisPercent 95 -MarketFeePercent 5 -ElapsedSeconds 3600L
+Assert-Equal ([long]$xanax95Taxed.saleEach) 803042L '95% basis matches the Xanax card sale price per item.'
+Assert-Equal ([long]$xanax95Taxed.purchaseCost) 21615608L 'Xanax actual purchase cost is foreign price times 28.'
+Assert-Equal ([long]$xanax95Taxed.grossSale) 22485176L 'Xanax Gross matches the 95% sale basis times 28.'
+Assert-Equal ([long]$xanax95Taxed.marketTax) 1124258L 'Xanax tax is floor(5% of Gross Sale).'
+Assert-Equal ([long]$xanax95Taxed.make) (-254690L) 'Xanax Make is a net loss when both 95% basis and 5% tax are enabled.'
+Assert-Equal ([long]$xanax95Taxed.profitEach) (-9096L) 'Xanax Each is the rounded after-tax loss per item.'
+$xanaxFullMvTaxed=Get-OpportunityEconomics -MarketValue 845308L -ForeignPrice 771986L -Quantity 28 -BasisPercent 100 -MarketFeePercent 5 -ElapsedSeconds 3600L
+Assert-Equal ([long]$xanaxFullMvTaxed.make) 869585L 'At full MV with only 5% tax, the same Xanax purchase remains profitable.'
+
 $cycles = @(
     [pscustomobject]@{ restockDelaySeconds=600L; availabilitySeconds=300L },
     [pscustomobject]@{ restockDelaySeconds=660L; availabilitySeconds=300L },
@@ -163,10 +176,10 @@ $rows = @(
 Write-OpportunityProjection -State $state -Rows $rows -SortMode 'gross' -Message ''
 Assert-Equal $state['OpportunitySortMode'] 'gross' 'Projection should preserve selected sort mode.'
 Assert-Equal $state['OpportunitySortEffectiveMode'] 'gross' 'Projection should publish the active non-fallback sort mode.'
-Assert-Equal $state['OpportunityBestKey'] '' 'Retired optimal/best key must stay cleared.'
-Assert-Equal $state['Opportunity1RankText'] '' 'Visible place numbers are retired from compact cards.'
-Assert-Equal $state['Opportunity1OptimalText'] '' 'Retired optimal badge must stay cleared.'
-Assert-Equal $state['Opportunity2OptimalText'] '' 'Retired optimal badge must stay cleared on every row.'
+Assert-True (-not $state.ContainsKey('OpportunityBestKey')) 'Retired optimal/best key must not be published.'
+Assert-True (-not $state.ContainsKey('Opportunity1RankText')) 'Retired rank text must not be published.'
+Assert-True (-not $state.ContainsKey('Opportunity1OptimalText')) 'Retired optimal badge must not be published.'
+Assert-True (-not $state.ContainsKey('Opportunity2OptimalText')) 'Retired optimal badge must stay absent on every row.'
 Assert-Equal $state['Opportunity2Key'] 'united_kingdom:2' 'Stable market identity must be projected for graph targeting.'
 Assert-Equal $state['Opportunity2TripBand'] 'medium' 'Trip band must remain projected for instant local filtering.'
 Assert-Equal $state['Opportunity2QuantityText'] 'x12' 'Trip quantity remains projected for tooltip/economic inspection even though it is no longer printed beside gross.'

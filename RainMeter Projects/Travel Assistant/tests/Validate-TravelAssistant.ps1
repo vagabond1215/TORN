@@ -20,6 +20,17 @@ foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $relative))) { Fail "Missing required file: $relative" }
 }
 
+# These belonged to retired independent-card / pin surfaces and should not be
+# shipped or reintroduced by packaging.
+foreach ($relative in @(
+    '@Resources\Scripts\CardPreference.ps1',
+    '@Resources\Scripts\VisibleItems.ps1',
+    'tests\Run-VisibleItemsTests.ps1',
+    'tests\Validate-VisibleItems.ps1'
+)) {
+    if (Test-Path -LiteralPath (Join-Path $ProjectRoot $relative)) { Fail "Retired file returned: $relative" }
+}
+
 foreach ($relative in @('config\countries.json','config\travel-modes.json','config\travel-perks.json','config\settings.example.json','config\settings.local.example.json','data\seed\metadata.json')) {
     $path=Join-Path $ProjectRoot $relative
     if (-not (Test-Path -LiteralPath $path)) { continue }

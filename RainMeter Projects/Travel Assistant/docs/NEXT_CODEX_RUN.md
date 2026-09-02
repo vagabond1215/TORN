@@ -21,11 +21,12 @@ The main skin now deliberately has title chrome, update status, three selectable
 
 ```text
 Travel                                           [filter] [gear]
-Updated ...
 [UPCOMING] [GROSS PROFIT] [PROFIT/HR]
 
-[FLAG]  <item>       <foreign cost>  MV:<market value> | <profit/ea>     v
-        <SAFE/BEST guidance>   <info/confidence>                Take: <$cash>
+[FLAG]  <item> | <foreign cost>   Take:<cash>   Make:<profit>   [$]
+        <SAFE/BEST / window guidance>                         [chart]
+
+Updated ...
 ```
 
 The retired main filter band must **not** return:
@@ -44,26 +45,17 @@ Header rules:
 - The sort row moves upward into the space vacated by the retired filter band.
 - The opportunity card stack moves upward by the same 32 px as a unit.
 
-### Protected card boundary
+### Current card ownership
 
-The header/filter redesign must not alter card internals. In particular, do not modify these files as part of this redesign:
+The old pre-redesign "protected card" boundary is superseded by the accepted compact-card implementation:
 
-```text
-@Resources/Includes/OpportunityRows.inc
-@Resources/Scripts/CardPresenter.lua
-@Resources/Scripts/CardTweaks.lua
-```
+- `StateReader.lua` owns projected-row identity, immediate sorting/filtering, expansion identity, and row/card Y/H reflow.
+- `CardPresenter.lua` owns visible first-line content and Safe/Best/window presentation.
+- `OpportunityRows.inc` declares the fixed Item/Cost, Take, Make, money-button, chart-button, and inline-graph meters.
+- `HeaderLayout.lua` performs only the 32 px header compaction and includes Take/Make in that shift.
+- `CardTweaks.lua` and `FinalCardPolish.lua` remain non-destructive compatibility points.
 
-`HeaderLayout.lua` is the only new card-adjacent presentation layer. Its contract is intentionally narrow:
-
-- detect a freshly laid-out stack at the historical `Y=120` origin;
-- shift the existing card meters upward exactly 32 px;
-- reduce `PanelHeight` by exactly 32 px;
-- mutate `Y` only;
-- never mutate card X/W/H/text/colors/economics/flag identity or graph content;
-- never launch a command, update, provider request, or popup.
-
-This avoids rewriting the large `StateReader.lua` layout path during a UX-only change.
+Retired independent-card pinning, standalone Viewer, selectable Name sort, standalone independent visible-item cards, and standalone OPTIMAL route UI must not return.
 
 ## Unified `TRIP & FILTERS` panel
 
@@ -170,13 +162,13 @@ Current production publication is the direct finalized-state architecture:
 
 ```text
 private mutable build: @Resources/Generated/state.kv
-final UI snapshot:     @Resources/Generated/ui-state.kv
-heartbeat:             @Resources/Generated/last-update.txt
+immutable UI snapshot: @Resources/Generated/ui-state-<epoch>-<id>.kv
+manifest/heartbeat:     @Resources/Generated/last-update.txt
 ```
 
-`RunUpdate.ps1` finalizes/filter-projects first, then atomically replaces `ui-state.kv`, then advances the numeric heartbeat. Production Lua readers read finalized `ui-state.kv` directly.
+`RunUpdate.ps1` finalizes/filter-projects first, writes one immutable generation, then atomically advances the small manifest. Production Lua readers resolve the complete generation named by `last-update.txt`; `ui-state.kv` is only a legacy numeric-heartbeat fallback.
 
-`PublishedState.lua` exists only as a compatibility shim for transitional/stale loaded Lua and must not become the production publication architecture again without new target evidence.
+`PublishedState.lua` remains a compatibility helper only and is not loaded by production measures.
 
 Updater rules remain:
 
@@ -271,8 +263,8 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 2. `SETTINGS >` text is gone.
 3. ITEM/TRIP/CAT/RESET main band is gone.
 4. UPCOMING / GROSS PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only.
-5. Cards are visually identical to the accepted pre-redesign reference except the whole stack begins ~32 px higher.
-6. Flags remain present and card title/economics/Safe-Best/Take geometry is unchanged.
+5. Cards match the current compact contract: Item/Cost, independent Take and Make columns, $ economics toggle, and chart Shape button.
+6. Flags remain present; expansion reflow keeps the Updated footer clear.
 7. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
 8. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
 9. Global country All/None and each band All/None work.

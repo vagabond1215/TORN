@@ -46,6 +46,6 @@ The active **0.6.0 candidate** is now a compact opportunity-card surface:
 - each row has a highlighted chart button for a one-at-a-time **inline 8-hour graph**;
 - the inline graph is local-only and uses retained observation truth;
 - 48h raw / 90d completed-cycle retention remains independent of the 8h display;
-- background `OptimalRoute.ps1` remains compatibility/MV-priority infrastructure only.
+- `OptimalRoute.ps1` is helper-only local infrastructure used by `OpportunityState.ps1` and deterministic model tests; the standalone OPTIMAL route projection is retired.
 
 This candidate is pending target-Windows/Rainmeter acceptance. See `NEXT_CODEX_RUN.md` for the focused acceptance commands and current visual checklist.

@@ -145,8 +145,7 @@ ShadowCollector
 LocalCatalog
 FinalizeState
 TravelContext
-OptimalRoute        # background compatibility / MV priority
-OpportunityState    # primary opportunity projection
+OpportunityState    # primary opportunity projection (uses local helpers from OptimalRoute.ps1)
 FilterState
 visible heartbeat
 ResalePriority

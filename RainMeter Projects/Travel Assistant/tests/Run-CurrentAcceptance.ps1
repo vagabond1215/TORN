@@ -9,6 +9,7 @@ $tests = @(
     'Validate-UpdaterMutex.ps1',
     'Validate-StatePublicationArchitecture.ps1',
     'Validate-CardPresenter.ps1',
+    'Validate-CardDetailLayout.ps1',
     'Validate-CurrentTweaks.ps1',
     'Validate-RainmeterBangSafety.ps1',
     'Validate-GraphHover.ps1',

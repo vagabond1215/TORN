@@ -147,7 +147,6 @@ Current schema includes:
 
 ```text
 travelMode
-pinnedMarket                 # legacy/migration compatibility; no active card UI
 itemFilterAll
 selectedItemIds
 selectedTripBands            # always all candidate bands in schema 7
@@ -353,15 +352,13 @@ Current production order:
 MaintainObservationHistory -Phase PreUpdate
 ShadowCollector
 ProjectCollectedState
-MaintainObservationHistory -Phase PostUpdate
 LocalCatalog
 EnsureEngineStateSchema
 FinalizeState
 TravelContext
 CurrentCapacityRefresh
 CycleAnchorReconciler
-OptimalRoute            # background compatibility / MV priority
-OpportunityState        # primary opportunity projection
+OpportunityState        # primary opportunity projection; dot-sources OptimalRoute helpers
 WindowPlan
 PriceVariationRefiner
 FilterState
@@ -372,7 +369,7 @@ ResalePriority
 ResaleQueue              # <= 1 market request
 ```
 
-`VisibleItems.ps1` is not part of the production heartbeat. Inline graph rendering is handled separately by `RenderInlineGraph.ps1`.
+`OptimalRoute.ps1` is helper-only local infrastructure for opportunity forecasting/economics tests; its standalone OPTIMAL route/UI stage is retired. The old independent-card `VisibleItems.ps1` and card-pinning path are removed. Inline graph rendering is handled separately by `RenderInlineGraph.ps1`.
 
 ## Projection / interaction stability
 

@@ -94,7 +94,6 @@ function New-DefaultUiPreferences {
     return [pscustomobject]@{
         schemaVersion = 8
         travelMode = 'airstrip'
-        pinnedMarket = ''
         itemFilterAll = $true
         selectedItemIds = [int[]]@(Get-FilterVisibleItemIds)
         selectedTripBands = [string[]]@('short','medium','long')
@@ -168,12 +167,14 @@ function Normalize-UiPreferences {
         if (-not $Preferences.PSObject.Properties[$property.Name]) { $Preferences | Add-Member NoteProperty ([string]$property.Name) $property.Value }
     }
     Set-FilterProperty $Preferences 'schemaVersion' 8
+    # Card pinning was retired with the old independent-card surface. Strip the
+    # legacy property in memory so the next normal preference save removes it.
+    if ($null -ne $Preferences.PSObject.Properties['pinnedMarket']) {
+        [void]$Preferences.PSObject.Properties.Remove('pinnedMarket')
+    }
 
     $mode = [string]$Preferences.travelMode
     if ($mode -notin @('standard','airstrip','wlt','business')) { Set-FilterProperty $Preferences 'travelMode' 'airstrip' }
-    $pin = [string]$Preferences.pinnedMarket
-    if (-not [string]::IsNullOrWhiteSpace($pin) -and $pin -notmatch '^[a-z0-9_]+:[1-9][0-9]*$') { Set-FilterProperty $Preferences 'pinnedMarket' '' }
-
     $itemIds = @()
     foreach ($id in @($Preferences.selectedItemIds)) {
         $n = 0
