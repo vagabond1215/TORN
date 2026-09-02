@@ -56,7 +56,8 @@ data/runtime/stochastic-calibration.json
 ```
 
 The summary reports Brier score, log loss and reliability buckets overall, by
-evidence quality and by market. Required-quantity and available-quantity scoring
+evidence quality, by market, and by forecast horizon (≤30m, 30m–2h, 2h–6h,
+>6h). Required-quantity and available-quantity scoring
 use exact provider snapshots only. To bound local state, new freezes pause when a
 model/market already has 24 unresolved forecasts or the global pending backlog
 reaches 4,096; existing pending evidence is never dropped or relabeled for
