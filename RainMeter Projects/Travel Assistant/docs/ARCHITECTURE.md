@@ -495,7 +495,7 @@ The ignored, atomically replaced `data/runtime/stochastic-forecast.json` artifac
 uses schema 1/model `stochastic-v1.1`. Per market it contains arrival points with
 `pAnyStock`, `pTargetQty`, expected quantity, expected after-tax profit, and expected
 after-tax profit/hour; evidence/sample diagnostics; best/last departure summaries;
-and one mutually exclusive shadow decision. V1 defines target quantity as the
+and one mutually exclusive shadow decision. V1.1 defines target quantity as the
 already projected trip quantity and utility as expected profit. The configured
 `itemMarketFeePercent` and existing round-trip flight hours remain authoritative.
 
@@ -508,3 +508,35 @@ compares stochastic-v1.1 with simple mean/median and empirical overlap proxies;
 of production WindowPlan Safe/Best decisions. Promotion requires frozen live
 scoring, calibration, one accepted authoritative stochastic decision object, and
 only then a separate visible UI migration.
+
+### Prospective stochastic calibration
+
+`StochasticCalibration.ps1` runs after `StochasticForecast.ps1` and remains
+strictly shadow-only/fail-soft. It maintains two ignored atomic artifacts:
+
+```text
+data/runtime/stochastic-calibration-state.json
+data/runtime/stochastic-calibration.json
+```
+
+The state freezes at most one selected best-expected-profit arrival for each
+`modelVersion × marketKey × hour bucket`. The source stochastic artifact must be
+no more than five minutes old and the selected arrival must be strictly after the
+artifact generation timestamp. This excludes `BUY_NOW` / already-observable
+zero-horizon states from prospective calibration.
+
+After the frozen arrival passes, later retained evidence may resolve it. An exact
+provider snapshot at the arrival can score stock, required quantity and uncapped
+quantity. A completed cycle can score stock success only inside the confirmed
+`restockUpperBoundAt <= arrival < soldOutLowerBoundAt` interval. Between-cycle
+stock failure is accepted only when the later cycle durably preserves
+`previousSoldOutUpperBoundAt` plus a forecast-usable
+`previousSellOutBoundaryQuality` linking it to the earlier sellout; adjacency of
+two retained cycle rows alone is never treated as proof of continuous OOS.
+
+Unresolved predictions remain pending for at most seven days and then become
+`expired_unscorable`; they never enter calibration aggregates. Scored records
+increment model-wide, evidence-quality and market-specific Brier/log-loss,
+reliability buckets, and exact-snapshot quantity MAE/RMSE. Recent scored/expired
+records are bounded for audit while aggregate statistics are retained. No
+calibration mapping is applied back to forecast probabilities yet.
