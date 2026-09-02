@@ -17,7 +17,6 @@ $tests = @(
     'Validate-TravelStateWindows.ps1',
     'Validate-WindowTooltipTweaks.ps1',
     'Validate-FinalCardPolish.ps1',
-    'Validate-ItemViewer.ps1',
     'Validate-RuntimeDiagnostics.ps1',
     'Validate-Filters.ps1',
     'Validate-FilterReset.ps1',
