@@ -51,7 +51,7 @@ foreach($retired in @('MeasureItemViewer','MeterViewer','ViewerMarketKey','Launc
 }
 
 foreach ($i in 1..8) {
-    foreach ($suffix in @('Card','Flag','FlagMask','CardBorder','ItemImage','Name','DetailEachLabel','Gross','DetailEachNet','DetailEachTax','DetailTotalLabel','DetailTotal','DetailTotalNet','DetailTotalTax','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph')) {
+    foreach ($suffix in @('Card','Flag','FlagMask','CardBorder','ItemImage','Name','DetailEachLabel','Gross','DetailEachNet','DetailEachTax','DetailEachProfitHour','DetailTotalLabel','DetailTotal','DetailTotalNet','DetailTotalTax','DetailTotalProfitHour','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph')) {
         $section='MeterOpportunity'+$i+$suffix
         if ($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "OpportunityRows.inc missing [$section]." }
     }
@@ -70,10 +70,12 @@ foreach ($i in 1..8) {
     $grossBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailEachNetBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachNet\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailEachTaxBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachTax\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailEachProfitHourBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalLabelBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalLabel\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotal\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalNetBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalNet\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalTaxBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalTax\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailTotalProfitHourBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphButtonBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     if ($cardBody -notmatch ('ToggleCardExpanded\('+[string]$i+'\)')) { Fail "Opportunity $i card body must toggle both economics and graph expansion." }
@@ -93,11 +95,13 @@ foreach ($i in 1..8) {
     if ($grossBody -notmatch '(?im)^X=54\s*$' -or $grossBody -notmatch '(?im)^W=112\s*$' -or $grossBody -notmatch '(?im)^H=16\s*$' -or $grossBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each MV must be left-aligned on the top row." }
     if ($detailEachNetBody -notmatch '(?im)^X=270\s*$' -or $detailEachNetBody -notmatch '(?im)^W=98\s*$' -or $detailEachNetBody -notmatch '(?im)^H=16\s*$' -or $detailEachNetBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each Net must be right-aligned on the top row." }
     if ($detailEachTaxBody -notmatch '(?im)^X=54\s*$' -or $detailEachTaxBody -notmatch '(?im)^W=210\s*$' -or $detailEachTaxBody -notmatch '(?im)^H=16\s*$' -or $detailEachTaxBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each Tax must be left-aligned on the second row." }
+    if ($detailEachProfitHourBody -notmatch '(?im)^X=270\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^W=98\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^H=16\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^FontSize=8\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each $/hr must occupy the lower-right cell." }
     if ($detailTotalLabelBody -notmatch '(?im)^X=297\s*$' -or $detailTotalLabelBody -notmatch '(?im)^W=40\s*$' -or $detailTotalLabelBody -notmatch '(?im)^H=32\s*$' -or $detailTotalLabelBody -notmatch '(?im)^StringAlign=CenterCenter\s*$' -or $detailTotalLabelBody -notmatch '(?im)^SolidColor=#Border#\s*$' -or $detailTotalLabelBody -notmatch '(?im)^Text=Total\s*$') { Fail "Opportunity $i Total label must be a vertically centered border-colored block." }
     if ($detailTotalBody -notmatch '(?im)^X=322\s*$' -or $detailTotalBody -notmatch '(?im)^W=112\s*$' -or $detailTotalBody -notmatch '(?im)^H=16\s*$' -or $detailTotalBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total MV must be left-aligned on the top row." }
     if ($detailTotalNetBody -notmatch '(?im)^X=538\s*$' -or $detailTotalNetBody -notmatch '(?im)^W=98\s*$' -or $detailTotalNetBody -notmatch '(?im)^H=16\s*$' -or $detailTotalNetBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Total Net must be right-aligned on the top row." }
     if ($detailTotalTaxBody -notmatch '(?im)^X=322\s*$' -or $detailTotalTaxBody -notmatch '(?im)^W=210\s*$' -or $detailTotalTaxBody -notmatch '(?im)^H=16\s*$' -or $detailTotalTaxBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total Tax must be left-aligned on the second row." }
-    foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody,$detailEachLabelBody,$grossBody,$detailEachNetBody,$detailEachTaxBody,$detailTotalLabelBody,$detailTotalBody,$detailTotalNetBody,$detailTotalTaxBody,$detailBody)){if($fontBody -match '(?im)^FontFace=' -and $fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Opportunity $i card string meters must use Nirmala UI Semilight."}}
+    if ($detailTotalProfitHourBody -notmatch '(?im)^X=538\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^W=98\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^H=16\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^FontSize=8\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Total $/hr must occupy the lower-right cell." }
+    foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody,$detailEachLabelBody,$grossBody,$detailEachNetBody,$detailEachTaxBody,$detailEachProfitHourBody,$detailTotalLabelBody,$detailTotalBody,$detailTotalNetBody,$detailTotalTaxBody,$detailTotalProfitHourBody,$detailBody)){if($fontBody -match '(?im)^FontFace=' -and $fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Opportunity $i card string meters must use Nirmala UI Semilight."}}
     if ($graphBody -notmatch '(?im)^Meter=Image\s*$' -or $graphBody -notmatch '(?im)^W=528\s*$' -or $graphBody -notmatch '(?im)^H=125\s*$') { Fail "Opportunity $i inline graph must be the 528x125 native Image surface." }
     if ($graphBody -notmatch ('ToggleCardExpanded\('+[string]$i+'\)')) { Fail "Opportunity $i expanded graph surface must retain the whole-card toggle action." }
     if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
@@ -128,22 +132,22 @@ foreach ($token in @(
     "'GraphExpanded', expanded and '1' or '0'","SKIN:Bang('!SetOption', name, 'Text', '$')","'126,190,73,255'","'38,38,38,255'","'190,190,190,255'",
     "'Rectangle 0,0,24,23 | Fill Color '..fill..' | StrokeWidth 0'",
     'local function collapseInlineGraph()','local function collapseCardDetails()','function ToggleCardExpanded(index)','function ToggleCardDetails(index)',
-    'local detailExtraWithTax = 34','local detailExtraNoTax = 18','local function detailTaxRate(data, index)','local function detailExtraForRow(data, index)','local graphExtra = 133','local footerExtra = 16','expandedDetailKey','expandedDetailRow',
+    'local detailExtra = 34','local function detailTaxRate(data, index)','local function detailExtraForRow(data, index)','local graphExtra = 133','local footerExtra = 16','expandedDetailKey','expandedDetailRow',
     "local activeDetailExtra = detailExtraForRow(data, expandedDetailRow)","local activeDetailHasTax = expandedDetailRow > 0 and detailTaxRate(data, expandedDetailRow) > 0",
     "if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + activeDetailExtra end",
     "local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)",
     'local detailLabelCenterY = y + (detailExpanded and math.floor(bodyOffset/2) or 9)',
     "'DetailEachLabel', 'Y', tostring(detailLabelCenterY)","'DetailEachLabel', 'H', tostring(detailLabelHeight)",
-    "'Gross', 'Y', tostring(y+8)","'DetailEachNet', 'Y', tostring(y+8)","'DetailEachTax', 'Y', tostring(y+25)",
+    "'Gross', 'Y', tostring(y+8)","'DetailEachNet', 'Y', tostring(y+8)","'DetailEachTax', 'Y', tostring(y+25)","'DetailEachProfitHour', 'Y', tostring(y+25)",
     "'DetailTotalLabel', 'Y', tostring(detailLabelCenterY)","'DetailTotalLabel', 'H', tostring(detailLabelHeight)",
-    "'DetailTotal', 'Y', tostring(y+8)","'DetailTotalNet', 'Y', tostring(y+8)","'DetailTotalTax', 'Y', tostring(y+25)",
+    "'DetailTotal', 'Y', tostring(y+8)","'DetailTotalNet', 'Y', tostring(y+8)","'DetailTotalTax', 'Y', tostring(y+25)","'DetailTotalProfitHour', 'Y', tostring(y+25)",
     "'Flag', 'Y', tostring(y+bodyOffset)","'FlagMask', 'Y', tostring(y+bodyOffset)","'Flag', 'W', '67'","'Flag', 'H', '50'","'ItemImage', 'Y', tostring(y+3+bodyOffset)","'ItemImage', 'W', '44'","'ItemImage', 'H', '44'","'Window', 'Y', tostring(y+34+bodyOffset)","'Graph', 'Y', tostring(y+26+bodyOffset)",
     "SKIN:Bang('!ShowMeter', p .. 'DetailEachLabel')","SKIN:Bang('!ShowMeter', p .. 'Gross')","SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')",
-    "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end",
+    "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end","SKIN:Bang('!ShowMeter', p .. 'DetailEachProfitHour')",
     "SKIN:Bang('!ShowMeter', p .. 'DetailTotalLabel')","SKIN:Bang('!ShowMeter', p .. 'DetailTotal')","SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')",
-    "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax') else SKIN:Bang('!HideMeter', p .. 'DetailTotalTax') end",
-    "SKIN:Bang('!HideMeter', p .. 'DetailEachLabel')","SKIN:Bang('!HideMeter', p .. 'Gross')","SKIN:Bang('!HideMeter', p .. 'DetailEachNet')","SKIN:Bang('!HideMeter', p .. 'DetailEachTax')",
-    "SKIN:Bang('!HideMeter', p .. 'DetailTotalLabel')","SKIN:Bang('!HideMeter', p .. 'DetailTotal')","SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')","SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')",
+    "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax') else SKIN:Bang('!HideMeter', p .. 'DetailTotalTax') end","SKIN:Bang('!ShowMeter', p .. 'DetailTotalProfitHour')",
+    "SKIN:Bang('!HideMeter', p .. 'DetailEachLabel')","SKIN:Bang('!HideMeter', p .. 'Gross')","SKIN:Bang('!HideMeter', p .. 'DetailEachNet')","SKIN:Bang('!HideMeter', p .. 'DetailEachTax')","SKIN:Bang('!HideMeter', p .. 'DetailEachProfitHour')",
+    "SKIN:Bang('!HideMeter', p .. 'DetailTotalLabel')","SKIN:Bang('!HideMeter', p .. 'DetailTotal')","SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')","SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')","SKIN:Bang('!HideMeter', p .. 'DetailTotalProfitHour')",
     "SKIN:Bang('!HideMeter', p .. 'Name')","SKIN:Bang('!HideMeter', p .. 'Window')","SKIN:Bang('!HideMeter', p .. 'Chance')",
     'if lastSortMode ~= mode then collapseInlineGraph() end',
     "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
