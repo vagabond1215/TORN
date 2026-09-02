@@ -27,7 +27,7 @@ if($errors.Count -eq 0){
     $ini=Get-Content -LiteralPath $iniPath -Raw
 
     foreach($i in 1..8){
-        foreach($suffix in @('Card','Flag','FlagMask','CardBorder','ItemImage','Name','DetailEachLabel','Gross','DetailEachNet','DetailEachTax','DetailEachProfitHour','DetailTotalLabel','DetailTotal','DetailTotalNet','DetailTotalTax','DetailTotalProfitHour','Price','Take','Make','Leave','DetailToggle','Graph','InlineGraph')){
+        foreach($suffix in @('Card','Flag','FlagMask','CardBorder','ItemImage','Name','DetailEachLabel','Gross','DetailEachGrossValue','DetailEachNet','DetailEachNetValue','DetailEachTax','DetailEachTaxValue','DetailEachProfitHour','DetailEachPriceValue','DetailTotalLabel','DetailTotal','DetailTotalGrossValue','DetailTotalNet','DetailTotalNetValue','DetailTotalTax','DetailTotalTaxValue','DetailTotalProfitHour','DetailTotalPriceValue','Price','Take','Make','Leave','DetailToggle','Graph','InlineGraph')){
             $section='MeterOpportunity'+$i+$suffix
             if($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){
                 Fail "OpportunityRows.inc missing [$section]."
@@ -95,53 +95,66 @@ if($errors.Count -eq 0){
 
         $stripEachLabel=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachLabel\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $strip=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $stripEachGrossValue=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachGrossValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $stripEachNet=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachNet\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $stripEachNetValue=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachNetValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $stripEachTax=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachTax\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $stripEachTaxValue=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachTaxValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $stripEachProfitHour=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $stripEachPriceValue=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachPriceValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $stripTotalLabel=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalLabel\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $stripTotal=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotal\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $stripTotalGrossValue=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalGrossValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $stripTotalNet=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalNet\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $stripTotalNetValue=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalNetValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $stripTotalTax=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalTax\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $stripTotalTaxValue=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalTaxValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $stripTotalProfitHour=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        foreach($token in @('X=29','W=40','H=32','FontSize=8','StringAlign=CenterCenter','SolidColor=#Border#','Text=Each','Hidden=1')){
+        $stripTotalPriceValue=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalPriceValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        foreach($token in @('X=29','W=40','H=32','FontSize=9','StringAlign=CenterCenter','SolidColor=#Border#','Text=Each','Hidden=1')){
             if(-not$stripEachLabel.Contains($token)){Fail "Row $i Each label block missing '$token'."}
         }
-        foreach($token in @('X=54','W=104','H=16','FontSize=8','StringAlign=LeftCenter','Hidden=1')){
-            if(-not$strip.Contains($token)){Fail "Row $i per-item MV meter missing '$token'."}
+        foreach($check in @(
+            @($strip,'X=54','W=42','StringAlign=LeftCenter','Each MV label'),
+            @($stripEachGrossValue,'X=154','W=92','StringAlign=RightCenter','Each MV value'),
+            @($stripEachNet,'X=162','W=48','StringAlign=LeftCenter','Each alternate label'),
+            @($stripEachNetValue,'X=270','W=96','StringAlign=RightCenter','Each alternate value'),
+            @($stripEachTax,'X=162','W=54','StringAlign=LeftCenter','Each Tax label'),
+            @($stripEachTaxValue,'X=270','W=96','StringAlign=RightCenter','Each Tax value'),
+            @($stripEachProfitHour,'X=54','W=42','StringAlign=LeftCenter','Each Price label'),
+            @($stripEachPriceValue,'X=154','W=92','StringAlign=RightCenter','Each Price value'),
+            @($stripTotal,'X=322','W=42','StringAlign=LeftCenter','Total MV label'),
+            @($stripTotalGrossValue,'X=422','W=92','StringAlign=RightCenter','Total MV value'),
+            @($stripTotalNet,'X=430','W=48','StringAlign=LeftCenter','Total alternate label'),
+            @($stripTotalNetValue,'X=538','W=96','StringAlign=RightCenter','Total alternate value'),
+            @($stripTotalTax,'X=430','W=54','StringAlign=LeftCenter','Total Tax label'),
+            @($stripTotalTaxValue,'X=538','W=96','StringAlign=RightCenter','Total Tax value'),
+            @($stripTotalProfitHour,'X=322','W=42','StringAlign=LeftCenter','Total Price label'),
+            @($stripTotalPriceValue,'X=422','W=92','StringAlign=RightCenter','Total Price value')
+        )){
+            $body=[string]$check[0]
+            foreach($token in @([string]$check[1],[string]$check[2],'H=16','FontSize=9',[string]$check[3],'Hidden=1')){
+                if(-not$body.Contains($token)){Fail "Row $i $($check[4]) missing '$token'."}
+            }
         }
-        foreach($token in @('X=270','W=108','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
-            if(-not$stripEachNet.Contains($token)){Fail "Row $i per-item alternate Profit / $/hr meter missing '$token'."}
-        }
-        foreach($token in @('X=270','W=112','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
-            if(-not$stripEachTax.Contains($token)){Fail "Row $i per-item bottom-right Tax meter missing '$token'."}
-        }
-        foreach($token in @('X=54','W=100','H=16','FontSize=8','StringAlign=LeftCenter','Hidden=1')){
-            if(-not$stripEachProfitHour.Contains($token)){Fail "Row $i per-item bottom-left Price meter missing '$token'."}
-        }
-        foreach($token in @('X=297','W=40','H=32','FontSize=8','StringAlign=CenterCenter','SolidColor=#Border#','Text=Total','Hidden=1')){
+        foreach($token in @('X=297','W=40','H=32','FontSize=9','StringAlign=CenterCenter','SolidColor=#Border#','Text=Total','Hidden=1')){
             if(-not$stripTotalLabel.Contains($token)){Fail "Row $i Total label block missing '$token'."}
-        }
-        foreach($token in @('X=322','W=104','H=16','FontSize=8','StringAlign=LeftCenter','Hidden=1')){
-            if(-not$stripTotal.Contains($token)){Fail "Row $i total MV meter missing '$token'."}
-        }
-        foreach($token in @('X=538','W=108','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
-            if(-not$stripTotalNet.Contains($token)){Fail "Row $i total alternate Profit / $/hr meter missing '$token'."}
-        }
-        foreach($token in @('X=538','W=112','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
-            if(-not$stripTotalTax.Contains($token)){Fail "Row $i total bottom-right Tax meter missing '$token'."}
-        }
-        foreach($token in @('X=322','W=100','H=16','FontSize=8','StringAlign=LeftCenter','Hidden=1')){
-            if(-not$stripTotalProfitHour.Contains($token)){Fail "Row $i total bottom-left Price meter missing '$token'."}
         }
         if($cardY -lt 0){Fail "Row $i card Y could not be parsed for economics baseline validation."}
         else {
             foreach($pair in @(
-                @($strip,($cardY+8),'Each MV'),@($stripEachNet,($cardY+8),'Each alternate metric'),@($stripEachTax,($cardY+25),'Each Tax'),@($stripEachProfitHour,($cardY+25),'Each Price'),
-                @($stripTotal,($cardY+8),'Total MV'),@($stripTotalNet,($cardY+8),'Total alternate metric'),@($stripTotalTax,($cardY+25),'Total Tax'),@($stripTotalProfitHour,($cardY+25),'Total Price')
+                @($strip,($cardY+8),'Each MV label'),@($stripEachGrossValue,($cardY+8),'Each MV value'),
+                @($stripEachNet,($cardY+8),'Each alternate label'),@($stripEachNetValue,($cardY+8),'Each alternate value'),
+                @($stripEachTax,($cardY+25),'Each Tax label'),@($stripEachTaxValue,($cardY+25),'Each Tax value'),
+                @($stripEachProfitHour,($cardY+25),'Each Price label'),@($stripEachPriceValue,($cardY+25),'Each Price value'),
+                @($stripTotal,($cardY+8),'Total MV label'),@($stripTotalGrossValue,($cardY+8),'Total MV value'),
+                @($stripTotalNet,($cardY+8),'Total alternate label'),@($stripTotalNetValue,($cardY+8),'Total alternate value'),
+                @($stripTotalTax,($cardY+25),'Total Tax label'),@($stripTotalTaxValue,($cardY+25),'Total Tax value'),
+                @($stripTotalProfitHour,($cardY+25),'Total Price label'),@($stripTotalPriceValue,($cardY+25),'Total Price value')
             )){
                 $bodyText=[string]$pair[0]
                 $expectedY=[int]$pair[1]
-                if($bodyText -notmatch ('(?im)^Y='+[string]$expectedY+'\s*$')){Fail "Row $i $($pair[2]) baseline must be 1px above the prior position."}
+                if($bodyText -notmatch ('(?im)^Y='+[string]$expectedY+'\s*$')){Fail "Row $i $($pair[2]) baseline is incorrect."}
             }
         }
 
@@ -176,11 +189,12 @@ if($errors.Count -eq 0){
         'local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)',
         "'Shape2', 'Line 510,' .. bodyOffset .. ',510,' .. (bodyOffset+50)","'Shape4', 'Line 268,0,268,' .. bodyOffset","'Shape5', 'Line 0,' .. bodyOffset .. ',536,' .. bodyOffset",
         "'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25)",
+        "'Shape6', 'Line 150,1,150,'","'Shape7', 'Line 418,1,418,'","Stroke Color 64,64,64,150",
         'local detailLabelCenterY = y + (detailExpanded and math.floor(bodyOffset/2) or 9)',
         "'DetailEachLabel', 'Y', tostring(detailLabelCenterY)","'DetailEachLabel', 'H', tostring(detailLabelHeight)",
-        "'Gross', 'Y', tostring(y+8)","'DetailEachNet', 'Y', tostring(y+8)","'DetailEachTax', 'Y', tostring(y+25)","'DetailEachProfitHour', 'Y', tostring(y+25)",
+        "'Gross', 'Y', tostring(y+8)","'DetailEachGrossValue', 'Y', tostring(y+8)","'DetailEachNet', 'Y', tostring(y+8)","'DetailEachNetValue', 'Y', tostring(y+8)","'DetailEachTax', 'Y', tostring(y+25)","'DetailEachTaxValue', 'Y', tostring(y+25)","'DetailEachProfitHour', 'Y', tostring(y+25)","'DetailEachPriceValue', 'Y', tostring(y+25)",
         "'DetailTotalLabel', 'Y', tostring(detailLabelCenterY)","'DetailTotalLabel', 'H', tostring(detailLabelHeight)",
-        "'DetailTotal', 'Y', tostring(y+8)","'DetailTotalNet', 'Y', tostring(y+8)","'DetailTotalTax', 'Y', tostring(y+25)","'DetailTotalProfitHour', 'Y', tostring(y+25)",
+        "'DetailTotal', 'Y', tostring(y+8)","'DetailTotalGrossValue', 'Y', tostring(y+8)","'DetailTotalNet', 'Y', tostring(y+8)","'DetailTotalNetValue', 'Y', tostring(y+8)","'DetailTotalTax', 'Y', tostring(y+25)","'DetailTotalTaxValue', 'Y', tostring(y+25)","'DetailTotalProfitHour', 'Y', tostring(y+25)","'DetailTotalPriceValue', 'Y', tostring(y+25)",
         "'DetailToggle', 'Y', tostring(y+13+bodyOffset)",
         "'Flag', 'Y', tostring(y+bodyOffset)","'Flag', 'W', '67'","'Flag', 'H', '50'",
         "'FlagMask', 'Y', tostring(y+bodyOffset)","'ItemImage', 'Y', tostring(y+3+bodyOffset)","'ItemImage', 'W', '44'","'ItemImage', 'H', '44'",
@@ -189,9 +203,9 @@ if($errors.Count -eq 0){
         "'Make', 'Y', tostring(y+25+bodyOffset)","'Graph', 'Y', tostring(y+26+bodyOffset)",
         "panelHeight = 120 + (count * rowStride) + activeDetailExtra + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra",
         "SKIN:Bang('!ShowMeter', p .. 'DetailEachLabel')","SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')",
-        "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end","SKIN:Bang('!ShowMeter', p .. 'DetailEachProfitHour')",
+        "SKIN:Bang('!ShowMeter', p .. 'DetailEachTaxValue')","SKIN:Bang('!HideMeter', p .. 'DetailEachTaxValue')","SKIN:Bang('!ShowMeter', p .. 'DetailEachProfitHour')","SKIN:Bang('!ShowMeter', p .. 'DetailEachPriceValue')",
         "SKIN:Bang('!ShowMeter', p .. 'DetailTotalLabel')","SKIN:Bang('!ShowMeter', p .. 'DetailTotal')","SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')",
-        "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax') else SKIN:Bang('!HideMeter', p .. 'DetailTotalTax') end","SKIN:Bang('!ShowMeter', p .. 'DetailTotalProfitHour')",
+        "SKIN:Bang('!ShowMeter', p .. 'DetailTotalTaxValue')","SKIN:Bang('!HideMeter', p .. 'DetailTotalTaxValue')","SKIN:Bang('!ShowMeter', p .. 'DetailTotalProfitHour')","SKIN:Bang('!ShowMeter', p .. 'DetailTotalPriceValue')",
         "SKIN:Bang('!HideMeter', p .. 'DetailEachLabel')","SKIN:Bang('!HideMeter', p .. 'DetailEachNet')","SKIN:Bang('!HideMeter', p .. 'DetailEachTax')","SKIN:Bang('!HideMeter', p .. 'DetailEachProfitHour')",
         "SKIN:Bang('!HideMeter', p .. 'DetailTotalLabel')","SKIN:Bang('!HideMeter', p .. 'DetailTotal')","SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')","SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')","SKIN:Bang('!HideMeter', p .. 'DetailTotalProfitHour')",
         "SKIN:Bang('!HideMeter', p .. 'Name')",
@@ -224,19 +238,19 @@ if($errors.Count -eq 0){
         "setOption(prefix..'Make','FontColor',primaryMetricKnown and profitColor(primaryMetric) or '#Muted#')",
         "SKIN:GetVariable('OpportunityRenderMode',trim(state.OpportunitySortMode))",
         "setOption(prefix..'DetailEachLabel','Text','Each')","setOption(prefix..'DetailEachLabel','SolidColor','#Border#')",
-        "setOption(prefix..'Gross','Text','MV:'..formatMoney(mv))",
-        "setOption(prefix..'DetailEachNet','Text',alternateKnown and ((primaryUsesHour and 'Net:' or '$/hr:')..formatSignedMoney(eachAlternate)) or '$/hr:?')",
-        "setOption(prefix..'DetailEachTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax:'..formatMoney(taxEach)) or '')",
+        "setOption(prefix..'Gross','Text','MV')","setOption(prefix..'DetailEachGrossValue','Text',formatMoney(mv))",
+        "setOption(prefix..'DetailEachNet','Text',primaryUsesHour and 'Net' or '$/hr')","setOption(prefix..'DetailEachNetValue','Text',alternateKnown and formatSignedMoney(eachAlternate) or '?')",
+        "setOption(prefix..'DetailEachTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax') or '')","setOption(prefix..'DetailEachTaxValue','Text',marketTaxRate>0 and formatMoney(taxEach) or '')",
         "local roundTripHours=(flightSeconds>0) and ((flightSeconds*2)/3600.0) or 0",
-        "setOption(prefix..'DetailEachProfitHour','Text','Price:'..unitCostText)",
+        "setOption(prefix..'DetailEachProfitHour','Text','Price')","setOption(prefix..'DetailEachPriceValue','Text',unitCostText)",
         "setOption(prefix..'DetailTotalLabel','Text','Total')","setOption(prefix..'DetailTotalLabel','SolidColor','#Border#')",
-        "setOption(prefix..'DetailTotal','Text','MV:'..formatMoney(grossSale))",
-        "setOption(prefix..'DetailTotalNet','Text',alternateKnown and ((primaryUsesHour and 'Net:' or '$/hr:')..formatSignedMoney(totalAlternate)) or '$/hr:?')",
-        "setOption(prefix..'DetailTotalTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax:'..formatMoney(marketTax)) or '')",
-        "setOption(prefix..'DetailTotalProfitHour','Text','Price:'..totalCostText)",
-        "setOption(prefix..'DetailEachNet','StringAlign','RightCenter')","setOption(prefix..'DetailTotalNet','StringAlign','RightCenter')",
+        "setOption(prefix..'DetailTotal','Text','MV')","setOption(prefix..'DetailTotalGrossValue','Text',formatMoney(grossSale))",
+        "setOption(prefix..'DetailTotalNet','Text',primaryUsesHour and 'Net' or '$/hr')","setOption(prefix..'DetailTotalNetValue','Text',alternateKnown and formatSignedMoney(totalAlternate) or '?')",
+        "setOption(prefix..'DetailTotalTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax') or '')","setOption(prefix..'DetailTotalTaxValue','Text',marketTaxRate>0 and formatMoney(marketTax) or '')",
+        "setOption(prefix..'DetailTotalProfitHour','Text','Price')","setOption(prefix..'DetailTotalPriceValue','Text',totalCostText)",
+        "setOption(prefix..'DetailEachNet','StringAlign','LeftCenter')","setOption(prefix..'DetailTotalNet','StringAlign','LeftCenter')","setOption(prefix..'DetailEachNetValue','StringAlign','RightCenter')","setOption(prefix..'DetailTotalNetValue','StringAlign','RightCenter')",
         "setOption(prefix..'DetailEachProfitHour','StringAlign','LeftCenter')","setOption(prefix..'DetailTotalProfitHour','StringAlign','LeftCenter')",
-        "setOption(prefix..'DetailEachTax','StringAlign','RightCenter')","setOption(prefix..'DetailTotalTax','StringAlign','RightCenter')",
+        "setOption(prefix..'DetailEachTax','StringAlign','LeftCenter')","setOption(prefix..'DetailTotalTax','StringAlign','LeftCenter')","setOption(prefix..'DetailEachTaxValue','StringAlign','RightCenter')","setOption(prefix..'DetailTotalTaxValue','StringAlign','RightCenter')",
         "local detailLabelHeight=32",
         "setOption(prefix..'Window','Text','')",
         "setOption(prefix..'Chance','Text','')",
@@ -246,7 +260,10 @@ if($errors.Count -eq 0){
         if(-not$presenter.Contains($token)){Fail "CardPresenter.lua missing compact-card presentation contract '$token'."}
     }
 
-    if(-not$header.Contains("'Card','Flag','FlagMask','CardBorder','ItemImage','Name','DetailEachLabel','Gross','DetailEachNet','DetailEachTax','DetailEachProfitHour','DetailTotalLabel','DetailTotal','DetailTotalNet','DetailTotalTax','DetailTotalProfitHour','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph'")){
+    foreach($token in @("'DetailEachGrossValue'","'DetailEachNetValue'","'DetailEachTaxValue'","'DetailEachPriceValue'","'DetailTotalGrossValue'","'DetailTotalNetValue'","'DetailTotalTaxValue'","'DetailTotalPriceValue'")){
+        if(-not$header.Contains($token)){Fail "HeaderLayout.lua must shift split economics meter $token with the compact row."}
+    }
+    if(-not$header.Contains("'Card','Flag','FlagMask','CardBorder','ItemImage','Name'")){
         Fail 'HeaderLayout.lua must shift DetailToggle with every compact card row.'
     }
     if(-not$header.Contains('math.max(160,math.floor(panel-compactOffset))')){
@@ -266,14 +283,14 @@ if($errors.Count -eq 0){
 
     foreach($section in @('MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')){
         $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        foreach($token in @('W=92','H=23','Shape=Rectangle 0,0,92,23,4 | Fill Color #Control# | StrokeWidth 1 | Stroke Color #Border#')){
+        foreach($token in @('W=104','H=23','Shape=Rectangle 0,0,104,23,4 | Fill Color #Control# | StrokeWidth 1 | Stroke Color #Border#')){
             if(-not$body.Contains($token)){Fail "$section must use the standard 92x23 sort-button surface."}
         }
     }
-    $sortCenters=@{MeterSortUpcoming='X=56';MeterSortGross='X=154';MeterSortProfitHour='X=252'}
+    $sortCenters=@{MeterSortUpcoming='X=62';MeterSortGross='X=172';MeterSortProfitHour='X=282'}
     foreach($section in @($sortCenters.Keys)){
         $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        foreach($token in @($sortCenters[$section],'Y=67','W=92','H=23','StringAlign=CenterCenter')){
+        foreach($token in @($sortCenters[$section],'Y=67','W=104','H=23','StringAlign=CenterCenter','FontSize=11','StringStyle=Bold')){
             if(-not$body.Contains($token)){Fail "$section must center its text inside the standard sort button."}
         }
     }
@@ -294,7 +311,8 @@ if($errors.Count -eq 0){
     }
     $fontLines=@([regex]::Matches($rows,'(?im)^FontFace=(.+)$')) + @([regex]::Matches($ini,'(?im)^FontFace=(.+)$'))
     foreach($fontLine in $fontLines){
-        if($fontLine.Groups[1].Value.Trim() -ne 'Nirmala UI Semilight'){Fail "Unexpected main-skin font face '$($fontLine.Groups[1].Value.Trim())'."}
+        $fontFace=$fontLine.Groups[1].Value.Trim()
+        if($fontFace -notin @('Nirmala UI Semilight','Nirmala UI')){Fail "Unexpected main-skin font face '$fontFace'."}
     }
 
     foreach($forbiddenExpanded in @("Each | MV:","Total | MV:")){
