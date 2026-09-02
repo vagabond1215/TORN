@@ -68,22 +68,20 @@ Sold-out/future windows remain evidence-gated and require completed sellout/rest
 ## Economics
 
 ```text
-gross = (selected MV basis - foreign price) × purchasable quantity
-profit/hr = gross / total elapsed hours
+sale basis = 100% MV or floor(MV × 0.95)
+gross sale = sale basis × quantity
+purchase cost = foreign price × quantity
+gross profit = gross sale - purchase cost
+market tax = gross sale × 0% or 5%
+make = gross profit - market tax
+profit/hr = gross profit / total elapsed hours
 ```
 
-Gross intentionally excludes travel cost. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
+`Take` is the purchase-cash requirement: exact purchase cost for fixed-price markets, or `ceil(purchase cost × 1.05)` when retained evidence shows variable pricing. The 5% reserve is cash-on-hand only and never reduces `Make`.
 
-Default value basis:
+Gross profit intentionally excludes travel cost. Total elapsed time includes waiting, outbound travel, return travel and purchase buffer.
 
-```text
-100% Torn MV
-no Item Market fee deduction
-no minimum-profit or minimum-margin timing gate
-negative-value candidates allowed
-```
-
-Settings can switch to 95% MV or explicitly show profitable items only.
+Settings independently control the 95% MV sale basis, 0%/5% market tax, and profitable-only filtering.
 
 ## Graphs
 
