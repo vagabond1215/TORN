@@ -381,11 +381,20 @@ function Get-SCFreezeRows {
     return $rows.ToArray()
 }
 
+function Get-SCHorizonScope {
+    param([long]$HorizonSeconds)
+    $h=[Math]::Max(0L,$HorizonSeconds)
+    if ($h -le 1800L) { return 'le_30m' }
+    if ($h -le 7200L) { return '30m_to_2h' }
+    if ($h -le 21600L) { return '2h_to_6h' }
+    return 'gt_6h'
+}
+
 function New-SCAggregate {
     param([string]$ModelVersion,[string]$ScopeType,[string]$ScopeValue)
     $scopeType=([string]$ScopeType).Trim().ToLowerInvariant()
     $scopeValue=([string]$ScopeValue).Trim().ToLowerInvariant()
-    if ($scopeType -notin @('all','evidence_quality','market')) { $scopeType='all' }
+    if ($scopeType -notin @('all','evidence_quality','market','horizon')) { $scopeType='all' }
     if ([string]::IsNullOrWhiteSpace($scopeValue)) { $scopeValue='all' }
 
     $buckets=New-Object System.Collections.Generic.List[object]
@@ -418,7 +427,7 @@ function Get-SCAggregate {
     param([object]$State,[string]$ModelVersion,[string]$ScopeType,[string]$ScopeValue)
     $scopeType=([string]$ScopeType).Trim().ToLowerInvariant()
     $scopeValue=([string]$ScopeValue).Trim().ToLowerInvariant()
-    if ($scopeType -notin @('all','evidence_quality','market')) { $scopeType='all' }
+    if ($scopeType -notin @('all','evidence_quality','market','horizon')) { $scopeType='all' }
     if ([string]::IsNullOrWhiteSpace($scopeValue)) { $scopeValue='all' }
 
     foreach ($aggregate in @($State.aggregates)) {
@@ -482,9 +491,11 @@ function Add-SCScoreToAggregate {
     if ([string]::IsNullOrWhiteSpace($quality)) { $quality='unknown' }
 
     $marketKey=([string](Get-SCProperty $Score 'marketKey')).Trim().ToLowerInvariant()
+    $horizonScope=Get-SCHorizonScope -HorizonSeconds ([long](Get-SCProperty $Score 'horizonSeconds'))
     $scopes=@(
         [pscustomobject]@{type='all';value='all'},
-        [pscustomobject]@{type='evidence_quality';value=$quality}
+        [pscustomobject]@{type='evidence_quality';value=$quality},
+        [pscustomobject]@{type='horizon';value=$horizonScope}
     )
     if (-not [string]::IsNullOrWhiteSpace($marketKey)) {
         $scopes+=@([pscustomobject]@{type='market';value=$marketKey})
@@ -686,7 +697,8 @@ function New-SCCalibrationSummary {
             availableQuantityOutcome='exact non-conflicting provider snapshot only'
             unscorablePolicy='retain pending until maximum wait, then expire without affecting calibration metrics'
             calibrationStatus='diagnostic only; no probability transformation is applied'
-            aggregateScopes='overall, evidence_quality, and market'
+            aggregateScopes='overall, evidence_quality, market, and horizon'
+            horizonBuckets='<=30m, >30m-2h, >2h-6h, >6h'
             backlogPolicy='skip new freezes when pending per-market or total limits are reached; never relabel or drop pending outcomes for capacity'
         }
         models=$models.ToArray()
