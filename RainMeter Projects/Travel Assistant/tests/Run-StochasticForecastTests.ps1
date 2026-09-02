@@ -55,6 +55,8 @@ $burstAdaptive=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $burs
 Assert-True ([bool]$burstAdaptive.adaptiveGrid.enabled) 'Short-duration evidence should enable bounded adaptive search.'
 Assert-Equal ([long]$burstAdaptive.adaptiveGrid.referenceAvailabilitySeconds) 60L 'Adaptive planning should preserve the short empirical availability reference.'
 Assert-True ([int]$burstAdaptive.adaptiveGrid.additionalCandidateCount -gt 0) 'Hidden support should add sub-grid arrival candidates.'
+Assert-True ([int]$burstAdaptive.adaptiveGrid.additionalCandidateCount -le 192) 'Adaptive refinement must remain inside the hard per-market additional-candidate budget.'
+Assert-True ([int]$burstAdaptive.adaptiveGrid.discoveryScenarioCount -le 32) 'Adaptive discovery must remain inside its bounded scenario cap.'
 Assert-True (@($burstAdaptive.arrivals).Count -gt @($burstCoarse.arrivals).Count) 'Adaptive forecast should retain coarse arrivals and add bounded fine arrivals.'
 Assert-True ([double](@($burstAdaptive.arrivals | Measure-Object pAnyStock -Maximum).Maximum) -gt 0.90) 'Adaptive search should recover the deterministic short stock burst missed by the coarse grid.'
 Assert-True (@($burstAdaptive.arrivals | Where-Object {[bool]$_.adaptivePoint}).Count -gt 0) 'Refined arrival rows should identify adaptive candidate provenance.'
@@ -252,6 +254,8 @@ $modelText=Get-Content -Raw -LiteralPath $modelPath
 Assert-True (-not $modelText.Contains('Floor($Now/60.0)')) 'Runtime stochastic seed must not rotate every minute and inject Monte Carlo noise into unchanged evidence.'
 Assert-True ($modelText.Contains('Read-SFObservationsForKeys')) 'Stochastic runtime must load retained observations for empirical depletion shapes.'
 Assert-True ($modelText.Contains('Get-SFIntervalQuantity')) 'All stochastic quantity scoring should route through the shared shape-aware interval quantity helper.'
+Assert-True ($modelText.Contains("modelVersion='stochastic-v1.1'")) 'Runtime artifact must preserve stochastic-v1.1 version isolation for calibration.'
+Assert-True ($modelText.Contains('MaximumAdditionalPoints=192')) 'Adaptive runtime must keep an explicit bounded per-market candidate budget.'
 foreach($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','System.Net.WebClient')){
     Assert-True (-not $modelText.Contains($networkToken)) ("StochasticForecast must remain network-free; found "+$networkToken)
 }
