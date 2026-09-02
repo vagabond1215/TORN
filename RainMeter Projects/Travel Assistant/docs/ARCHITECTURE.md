@@ -159,7 +159,168 @@ Each compact row is:
 - Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license. The flag/mask surface is `67x50` starting at the card origin so color extends beneath the border instead of leaving 1px bands. Three tiny alpha-mask assets (`both`, `top`, `bottom`) tint to `#Panel#` and clip the flag's left corners according to expansion state; a border-only `CardBorder` meter redraws the rounded card outline over the flag.
 - The item-art cell spans exactly 48px from the flag edge to the text origin, matching the 48px card interior height. A transparent `44x44` item image sits inside with a 2px inset. `EnsureItemImages.ps1` caches Torn's direct `images/items/<id>/large.png` asset in `@Resources/Generated/Items`; missing/failed decorative art never blocks card rendering.
 - Hovering the flag exposes country + configured one-way travel time.
-- The `$` button expands a responsive economics bar. Each half begins with a 40px `#Border#`-filled vertical label block (`Each` / `Total`). MV is left-aligned and Net right-aligned on the top row; Tax is left-aligned on row two, with both value baselines shifted 1 px upward for optical centering. For rates above 0% the bar is 34px tall. At 0% the Tax row is hidden and the bar contracts to 18px; the label blocks resize to the single-row height. Pipe separators are not part of this surface.
+- The `# Travel Assistant Architecture
+
+## Purpose
+
+Travel Assistant is a lightweight Rainmeter-facing Torn foreign-market decision system. Collection, market validity, valuation, opportunity eligibility, ordering, and presentation remain separate concerns.
+
+```text
+COLLECTED provider rows
+        !=
+ACTIVE market relationships
+        !=
+ELIGIBLE opportunity candidates
+        !=
+VISIBLE opportunities
+```
+
+The current 0.6 product is a compact opportunity browser with selectable `UPCOMING`, `PROFIT`, and `PROFIT/HR` ordering; alphabetical Name order is fallback-only when timing/profit inputs are unavailable.
+
+## Runtime layering
+
+```text
+Prometheus / YATA foreign stock
+        ↓
+ShadowCollector (single live-stock owner)
+        ↓
+observedMarkets + transition-only observations/cycles
+        ↓
+ProjectCollectedState (local compatibility projection)
+        ↓
+local catalog + engine schema
+        ↓
+FinalizeState
+        ↓
+TravelContext
+        ↓
+CycleForecastFilter (cadence-aware forecast eligibility; history retained)
+        ↓
+OpportunityState (dot-sources shared local helpers from OptimalRoute.ps1)
+        ↓
+WindowPlan / price refinement / FilterState
+        ↓
+private build state.kv
+        ↓ exactly one final publication
+finalized ui-state.kv
+        ↓
+visible heartbeat
+        ↓
+ResalePriority / ResaleQueue
+```
+
+Completed cycle rows remain retained for audit and long-horizon analysis. Route, window, and shadow-trend forecasts apply a market-specific cadence filter: markets normally completing at least eight cycles per day reject apparent cycles over 24 hours, other multi-cycle/day markets reject periods over 48 hours, and once-daily or slower markets retain a wider cadence-relative window. Transition boundaries also carry lower/upper observation bounds. The safe gap for each phase is the larger of three poll intervals or half its robust historical variance; the hard gap is bounded by the normal phase/cycle duration. Short gaps produce conservative availability/restock values, uncertain gaps are excluded from trend fitting, and hard gaps invalidate the current phase anchor instead of fabricating a cycle. The shadow trend pass is keyed to the completed-cycle file signature and skips its all-market recalculation/state rewrite when no cycle evidence changed. Fresh positive stock uses its observed restock quantity and live depletion rate for the active sellout estimate; restock timing begins only after observed stock reaches zero and uses the cleaned median out-of-stock delay.
+
+`OptimalRoute.ps1` no longer has a standalone projection/main path; it is a shared local helper library for opportunity evidence, forecasting, waste-policy, resale, and capacity calculations. Inline graph rendering is a local side path. It makes no provider/Torn request.
+
+## Market identity / validity
+
+Identity is:
+
+```text
+country + itemId
+```
+
+Verified overrides in `config/foreign-market-overrides.json` supersede provider presence for new history/resale/opportunity work while preserving provenance.
+
+Observed stock truth is limited to actual provider samples:
+
+```text
+0 -> positive = observed restock
+positive -> 0 = observed sellout
+```
+
+Predictions never become history.
+
+## Collection ownership
+
+`ShadowCollector.ps1` is the normal heartbeat's sole live foreign-stock request path. It observes all 11 configured countries and all active provider market rows.
+
+For every active market it updates current `engine-state.json` market metadata, including stock, foreign price, provider, and source timestamp. The retained observation database is stock-transition evidence: a new row is written when stock changes, not merely because provider timestamp or foreign price changed.
+
+Transition JSONL appends use shared-access handles with bounded backoff. If a OneDrive/Rainmeter reader still holds the canonical history file, the collector writes the transition to a local pending journal, continues updating every market, and retries the merge on later heartbeats. Anchor reconciliation reads both canonical and pending observations, so a temporary file lock cannot roll current phase state backward.
+
+`UpdateTracker.ps1` is retained only for explicit legacy compatibility actions such as `CycleTravelMode`; it is not called during a normal `Action=Update` heartbeat.
+
+`ProjectCollectedState.ps1` projects legacy build-state stock/travel fields locally from the ShadowCollector engine state, avoiding a second provider request and a second history writer.
+
+Filters, Ignore List, sort order, and graph expansion never narrow shared provider collection.
+
+## State publication ownership
+
+Generated state has two explicit roles:
+
+```text
+@Resources/Generated/state.kv     build/intermediate state
+@Resources/Generated/ui-state-<epoch>-<id>.kv  immutable finalized Rainmeter state
+@Resources/Generated/last-update.txt           generation manifest
+```
+
+Intermediate PowerShell stages mutate only the build artifact during the normal update chain. Each production Lua measure resolves the complete immutable generation named by `last-update.txt` directly; `ui-state.kv` remains a transition fallback for older numeric heartbeats. Keeping resolution inside each measure avoids a secondary `dofile` dependency during Rainmeter initialization.
+
+After `FilterState.ps1` completes, `RunUpdate.ps1` validates the build projection, writes a new immutable snapshot, then atomically advances the small manifest. A failed write or manifest switch leaves readers on the previous complete generation.
+
+`RefreshFilters` is the explicit filter-save path. It does not perform another foreign-stock collection. The first OpportunityState pass identifies currently eligible items whose resale MV is missing/stale; the resale queue is then restricted to those item IDs for a bounded save-time pricing pass (maximum 40), after which OpportunityState/WindowPlan/price refinement run again before FilterState and final publication. Normal minute polling retains the one-request broad resale queue after heartbeat publication.
+
+This avoids replacing the large file that six one-second Rainmeter readers have open. The shared atomic writer retains bounded retry/backoff for the small manifest; old disposable generations are pruned only after a grace period.
+
+## Retention and historical truth
+
+Retention remains:
+
+```text
+high-resolution observations: ~48h
+completed cycles:             ~90d
+stale live-provider guard:     5m
+visible graph window:          8h
+```
+
+At the 48-hour boundary, `MaintainObservationHistory.ps1` may carry the final **actual observation** before the cutoff to the cutoff as `retention_baseline`. This is a safe state carry because it is derived from observed evidence.
+
+Migration-era rows named `history_bootstrap` and `history_repair_baseline` are removed. They previously projected current market state backward through periods with no retained evidence and could create false flat stock histories. Missing historical intervals now remain unknown.
+
+## Graph surface
+
+The per-row chart button uses dedicated local `MeasureInlineGraph` and `RenderInlineGraph.ps1` plumbing.
+
+The renderer:
+
+- reads `data/runtime/observations.jsonl` first;
+- uses committed seed evidence only when the market has no runtime evidence;
+- ignores migration-era synthetic rows defensively;
+- compresses consecutive identical stock levels;
+- carries a state to the left edge only when a real predecessor observation exists;
+- appends the current `observedMarkets` stock snapshot at the right edge;
+- renders a generated PNG consumed by a native Rainmeter Image meter;
+- draws seven internal vertical separators for eight one-hour segments;
+- shows sparse numeric Y labels plus `-8h` / `now` X labels.
+
+Graph-hover tooltip telemetry has been retired. The generated graph is display-only; window evidence remains on the card's window/guidance tooltip.
+
+If the first real retained sample occurs inside the 8-hour window, the earlier portion is deliberately left without a fabricated stock line.
+
+Changing sort order collapses the open inline graph. At most one graph is expanded.
+
+The standalone WinForms Viewer, its launcher, and its Rainmeter measure are retired.
+
+## Card presentation
+
+Each compact row is:
+
+```text
+[FlagKit flag]  Item | foreign cost | full-load cost   signed total net   [$]
+                window / leave guidance                              [chart]
+```
+
+- No rank/place number.
+- No country name/code in the card body.
+- The left first-line content is Item / foreign unit cost / exact full-load cost; no variable-price reserve is applied.
+- Signed total net profit is larger, right-aligned, and vertically centered over the two card text lines.
+- Card fill is pure black to match the inline graph background; the existing gray card border, internal half divider, and right end-cap separators remain unchanged.
+- Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license. The flag/mask surface is `67x50` starting at the card origin so color extends beneath the border instead of leaving 1px bands. Three tiny alpha-mask assets (`both`, `top`, `bottom`) tint to `#Panel#` and clip the flag's left corners according to expansion state; a border-only `CardBorder` meter redraws the rounded card outline over the flag.
+- The item-art cell spans exactly 48px from the flag edge to the text origin, matching the 48px card interior height. A transparent `44x44` item image sits inside with a 2px inset. `EnsureItemImages.ps1` caches Torn's direct `images/items/<id>/large.png` asset in `@Resources/Generated/Items`; missing/failed decorative art never blocks card rendering.
+- Hovering the flag exposes country + configured one-way travel time.
+ button expands a fixed 34px, two-row economics bar. Each half begins with a 40px `#Border#`-filled vertical label block (`Each` / `Total`). MV is left-aligned and Net right-aligned on the top row. Row two shows Tax on the left only when the saved rate is nonzero and always shows round-trip flight `$/hr` on the right. The flight rate uses after-tax Each/Total net divided by `2 x` configured one-way flight seconds and intentionally excludes waiting/window time. Both value baselines are shifted 1 px upward for optical centering. At 0% only Tax text is hidden; the second row remains for `$/hr`. Pipe separators are not part of this surface.
 - `$` and chart are centered in the two halves of one T-divided right-edge end cap; active cells use Torn-lime fill and dark-gray icons. Active sort text plus the top filter/settings icons use the same Torn-lime UI accent. Their fills are inset one pixel so the card border and separators remain unobscured.
 - Clicking the card body toggles both economics and inline graph expansion for that stable row key; the two end-cap controls continue to toggle their sections independently.
 - Window/leave guidance is positioned low in the card body to minimize padding above the bottom border.
