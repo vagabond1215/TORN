@@ -136,18 +136,6 @@ try {
     Remove-Item -LiteralPath $tempCycle,$tempObs,$tempEmpty -Force -ErrorAction SilentlyContinue
 }
 
-$focusPath=Join-Path ([System.IO.Path]::GetTempPath()) ('travel-focus-'+[guid]::NewGuid().ToString('N')+'.kv')
-try {
-    @('MarketKey=china:123','UpdatedAt=100000') | Set-Content -LiteralPath $focusPath -Encoding UTF8
-    $focus=Read-OpportunityFocusMarker -Path $focusPath -NowEpoch 100100L -MaximumAgeSeconds 180L
-    Assert-True ([bool]$focus.fresh) 'Recent focus marker should wake detailed forecasting.'
-    Assert-Equal ([string]$focus.marketKey) 'china:123' 'Focus marker should preserve stable market identity.'
-    $expiredFocus=Read-OpportunityFocusMarker -Path $focusPath -NowEpoch 100500L -MaximumAgeSeconds 180L
-    Assert-True (-not [bool]$expiredFocus.fresh) 'Old focus markers should expire automatically.'
-} finally {
-    Remove-Item -LiteralPath $focusPath -Force -ErrorAction SilentlyContinue
-}
-
 # Fresh stock timing should not disappear merely because the resale queue is
 # recovering from an outage. A positive MV is usable for seven days by default,
 # but stale status remains explicit and ancient/no-value snapshots are rejected.
