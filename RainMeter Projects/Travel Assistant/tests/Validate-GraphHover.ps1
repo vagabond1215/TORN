@@ -41,6 +41,7 @@ if ($errors.Count -eq 0) {
     $lua=Get-Content -LiteralPath $luaPath -Raw
     foreach ($token in @(
         'local bandCount=48',
+        "meterOption('MeterOpportunity'..i..'Graph','GraphExpanded')=='1'",
         "SKIN:GetVariable('InlineGraphMarketKey'",
         "'MeasureGraphHoverData'",
         'local plotX=graphX+34',
