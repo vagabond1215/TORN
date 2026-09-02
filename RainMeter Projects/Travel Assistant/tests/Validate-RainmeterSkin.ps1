@@ -20,6 +20,13 @@ if ($errors.Count -gt 0) { foreach($e in $errors){Write-Host "FAIL: $e" -Foregro
 $ini = Get-Content -LiteralPath $iniPath -Raw
 $rows = Get-Content -LiteralPath $rowIncludePath -Raw
 $reader = Get-Content -LiteralPath $stateReaderPath -Raw
+foreach($token in @(
+    "'MultiCycleChanceEligible'","'MultiCycleChanceProbability'","'MultiCycleTargetProbability'",
+    "'MultiCycleDutyCycleProbability'","'MultiCycleArrivalCycleRatio'","'MultiCycleArrivalAt'",
+    "'MultiCycleModelVersion'","'MultiCycleReason'"
+)){
+    if(-not $reader.Contains($token)){Fail "StateReader local sort projection must preserve bridge field $token."}
+}
 $renderer = Get-Content -LiteralPath $rendererPath -Raw
 
 if ($ini -notmatch '(?m)^Version=0\.6\.0\s*$') { Fail 'Skin must report version 0.6.0.' }
