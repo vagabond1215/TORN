@@ -192,6 +192,25 @@ Text=
 ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
+[MeterOpportunity1DetailEachProfitHour]
+Meter=String
+Group=OpportunityRow1
+X=270
+Y=145
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
+
 [MeterOpportunity1DetailTotalNet]
 Meter=String
 Group=OpportunityRow1
@@ -224,6 +243,25 @@ FontFace=Nirmala UI Semilight
 FontSize=9
 FontColor=#Muted#
 StringAlign=LeftCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
+
+[MeterOpportunity1DetailTotalProfitHour]
+Meter=String
+Group=OpportunityRow1
+X=538
+Y=145
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
 AntiAlias=1
 ClipString=1
 Text=
@@ -576,6 +614,25 @@ Text=
 ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
+[MeterOpportunity2DetailEachProfitHour]
+Meter=String
+Group=OpportunityRow2
+X=270
+Y=199
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
+
 [MeterOpportunity2DetailTotalNet]
 Meter=String
 Group=OpportunityRow2
@@ -608,6 +665,25 @@ FontFace=Nirmala UI Semilight
 FontSize=9
 FontColor=#Muted#
 StringAlign=LeftCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
+
+[MeterOpportunity2DetailTotalProfitHour]
+Meter=String
+Group=OpportunityRow2
+X=538
+Y=199
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
 AntiAlias=1
 ClipString=1
 Text=
@@ -960,6 +1036,25 @@ Text=
 ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
+[MeterOpportunity3DetailEachProfitHour]
+Meter=String
+Group=OpportunityRow3
+X=270
+Y=253
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
+
 [MeterOpportunity3DetailTotalNet]
 Meter=String
 Group=OpportunityRow3
@@ -992,6 +1087,25 @@ FontFace=Nirmala UI Semilight
 FontSize=9
 FontColor=#Muted#
 StringAlign=LeftCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
+
+[MeterOpportunity3DetailTotalProfitHour]
+Meter=String
+Group=OpportunityRow3
+X=538
+Y=253
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
 AntiAlias=1
 ClipString=1
 Text=
@@ -1344,6 +1458,25 @@ Text=
 ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
+[MeterOpportunity4DetailEachProfitHour]
+Meter=String
+Group=OpportunityRow4
+X=270
+Y=307
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
+
 [MeterOpportunity4DetailTotalNet]
 Meter=String
 Group=OpportunityRow4
@@ -1376,6 +1509,25 @@ FontFace=Nirmala UI Semilight
 FontSize=9
 FontColor=#Muted#
 StringAlign=LeftCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
+
+[MeterOpportunity4DetailTotalProfitHour]
+Meter=String
+Group=OpportunityRow4
+X=538
+Y=307
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
 AntiAlias=1
 ClipString=1
 Text=
@@ -1728,6 +1880,25 @@ Text=
 ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
+[MeterOpportunity5DetailEachProfitHour]
+Meter=String
+Group=OpportunityRow5
+X=270
+Y=361
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
+
 [MeterOpportunity5DetailTotalNet]
 Meter=String
 Group=OpportunityRow5
@@ -1760,6 +1931,25 @@ FontFace=Nirmala UI Semilight
 FontSize=9
 FontColor=#Muted#
 StringAlign=LeftCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
+
+[MeterOpportunity5DetailTotalProfitHour]
+Meter=String
+Group=OpportunityRow5
+X=538
+Y=361
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
 AntiAlias=1
 ClipString=1
 Text=
@@ -2112,6 +2302,25 @@ Text=
 ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
+[MeterOpportunity6DetailEachProfitHour]
+Meter=String
+Group=OpportunityRow6
+X=270
+Y=415
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
+
 [MeterOpportunity6DetailTotalNet]
 Meter=String
 Group=OpportunityRow6
@@ -2144,6 +2353,25 @@ FontFace=Nirmala UI Semilight
 FontSize=9
 FontColor=#Muted#
 StringAlign=LeftCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
+
+[MeterOpportunity6DetailTotalProfitHour]
+Meter=String
+Group=OpportunityRow6
+X=538
+Y=415
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
 AntiAlias=1
 ClipString=1
 Text=
@@ -2496,6 +2724,25 @@ Text=
 ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
+[MeterOpportunity7DetailEachProfitHour]
+Meter=String
+Group=OpportunityRow7
+X=270
+Y=469
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
+
 [MeterOpportunity7DetailTotalNet]
 Meter=String
 Group=OpportunityRow7
@@ -2528,6 +2775,25 @@ FontFace=Nirmala UI Semilight
 FontSize=9
 FontColor=#Muted#
 StringAlign=LeftCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
+
+[MeterOpportunity7DetailTotalProfitHour]
+Meter=String
+Group=OpportunityRow7
+X=538
+Y=469
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
 AntiAlias=1
 ClipString=1
 Text=
@@ -2880,6 +3146,25 @@ Text=
 ToolTipText=
 LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
+[MeterOpportunity8DetailEachProfitHour]
+Meter=String
+Group=OpportunityRow8
+X=270
+Y=523
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
+
 [MeterOpportunity8DetailTotalNet]
 Meter=String
 Group=OpportunityRow8
@@ -2912,6 +3197,25 @@ FontFace=Nirmala UI Semilight
 FontSize=9
 FontColor=#Muted#
 StringAlign=LeftCenter
+AntiAlias=1
+ClipString=1
+Text=
+ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
+
+[MeterOpportunity8DetailTotalProfitHour]
+Meter=String
+Group=OpportunityRow8
+X=538
+Y=523
+W=98
+H=16
+Hidden=1
+DynamicVariables=1
+FontFace=Nirmala UI Semilight
+FontSize=8
+FontColor=#Text#
+StringAlign=RightCenter
 AntiAlias=1
 ClipString=1
 Text=
