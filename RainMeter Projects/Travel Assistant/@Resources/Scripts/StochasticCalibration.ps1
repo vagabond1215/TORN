@@ -9,7 +9,11 @@ param(
     [ValidateRange(3600,1209600)]
     [int]$MaximumOutcomeWaitSeconds = 604800,
     [ValidateRange(100,10000)]
-    [int]$RecentScoreLimit = 2000
+    [int]$RecentScoreLimit = 2000,
+    [ValidateRange(1,168)]
+    [int]$MaximumPendingPerMarket = 24,
+    [ValidateRange(100,10000)]
+    [int]$MaximumPendingTotal = 4096
 )
 
 $ErrorActionPreference='Stop'
@@ -285,7 +289,9 @@ function Get-SCFreezeRows {
         [object]$State,
         [long]$NowEpoch,
         [int]$IntervalSeconds=3600,
-        [int]$MaximumArtifactAgeSeconds=300
+        [int]$MaximumArtifactAgeSeconds=300,
+        [int]$MaximumPendingPerMarket=24,
+        [int]$MaximumPendingTotal=4096
     )
     $rows=New-Object System.Collections.Generic.List[object]
     if ($null -eq $Artifact) { return $rows.ToArray() }
@@ -296,7 +302,19 @@ function Get-SCFreezeRows {
     if ($generatedAt -gt $NowEpoch -or ($NowEpoch-$generatedAt) -gt $MaximumArtifactAgeSeconds) { return $rows.ToArray() }
 
     $bucket=[long][Math]::Floor($generatedAt/[double][Math]::Max(300,$IntervalSeconds))
+    $pendingTotal=@($State.pending).Count
+    $pendingByMarket=@{}
+    foreach ($pending in @($State.pending)) {
+        $pendingVersion=([string](Get-SCProperty $pending 'modelVersion')).Trim()
+        $pendingKey=([string](Get-SCProperty $pending 'marketKey')).Trim().ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($pendingVersion) -or [string]::IsNullOrWhiteSpace($pendingKey)) { continue }
+        $pendingIdentity=$pendingVersion+'|'+$pendingKey
+        if (-not $pendingByMarket.ContainsKey($pendingIdentity)) { $pendingByMarket[$pendingIdentity]=0 }
+        $pendingByMarket[$pendingIdentity]=[int]$pendingByMarket[$pendingIdentity]+1
+    }
+
     foreach ($market in @((Get-SCProperty $Artifact 'markets'))) {
+        if ($pendingTotal -ge [Math]::Max(1,$MaximumPendingTotal)) { break }
         $marketKey=([string](Get-SCProperty $market 'marketKey')).Trim().ToLowerInvariant()
         $arrivalAt=[long](Get-SCProperty $market 'bestArrivalAt')
         # Prospective calibration must not score a state that was already
@@ -304,6 +322,10 @@ function Get-SCFreezeRows {
         # target "BUY_NOW" rows can have arrivalAt == generatedAt and may be based
         # on the same provider snapshot that would otherwise become the outcome.
         if ([string]::IsNullOrWhiteSpace($marketKey) -or $arrivalAt -le $generatedAt) { continue }
+
+        $pendingIdentity=$modelVersion+'|'+$marketKey
+        $marketPending=if($pendingByMarket.ContainsKey($pendingIdentity)){[int]$pendingByMarket[$pendingIdentity]}else{0}
+        if ($marketPending -ge [Math]::Max(1,$MaximumPendingPerMarket)) { continue }
 
         $last=Get-SCLastFrozen -State $State -ModelVersion $modelVersion -MarketKey $marketKey
         if ($last.Count -gt 0 -and [long](Get-SCProperty $last[0] 'bucket') -ge $bucket) { continue }
@@ -352,6 +374,8 @@ function Get-SCFreezeRows {
             depletionModel=[string](Get-SCProperty $market 'depletionModel')
         }
         $rows.Add($row)
+        $pendingTotal++
+        $pendingByMarket[$pendingIdentity]=$marketPending+1
         Set-SCLastFrozen -State $State -ModelVersion $modelVersion -MarketKey $marketKey -Bucket $bucket
     }
     return $rows.ToArray()
@@ -628,7 +652,16 @@ function Invoke-SCResolvePending {
 }
 
 function New-SCCalibrationSummary {
-    param([object]$State,[long]$NowEpoch,[string]$CurrentModelVersion,[int]$FreezeSeconds,[int]$GraceSeconds,[int]$MaximumWaitSeconds)
+    param(
+        [object]$State,
+        [long]$NowEpoch,
+        [string]$CurrentModelVersion,
+        [int]$FreezeSeconds,
+        [int]$GraceSeconds,
+        [int]$MaximumWaitSeconds,
+        [int]$PendingPerMarketLimit=24,
+        [int]$PendingTotalLimit=4096
+    )
     $models=New-Object System.Collections.Generic.List[object]
     foreach ($aggregate in @($State.aggregates)) {
         $models.Add((ConvertTo-SCAggregateSummary -Aggregate $aggregate))
@@ -643,6 +676,8 @@ function New-SCCalibrationSummary {
         freezeIntervalSeconds=$FreezeSeconds
         outcomeGraceSeconds=$GraceSeconds
         maximumOutcomeWaitSeconds=$MaximumWaitSeconds
+        maximumPendingPerMarket=$PendingPerMarketLimit
+        maximumPendingTotal=$PendingTotalLimit
         methodology=[pscustomobject]@{
             forecastSelection='one best-expected-profit arrival per market/model/hour bucket'
             freezeRule='artifact must be <=5 minutes old and selected arrival must be strictly after artifact generation'
@@ -652,6 +687,7 @@ function New-SCCalibrationSummary {
             unscorablePolicy='retain pending until maximum wait, then expire without affecting calibration metrics'
             calibrationStatus='diagnostic only; no probability transformation is applied'
             aggregateScopes='overall, evidence_quality, and market'
+            backlogPolicy='skip new freezes when pending per-market or total limits are reached; never relabel or drop pending outcomes for capacity'
         }
         models=$models.ToArray()
     }
@@ -685,7 +721,7 @@ $observations=Read-SCEvidenceMap -Path $ObservationFile -Wanted $wanted -Kind ob
 $cycles=Read-SCEvidenceMap -Path $CycleFile -Wanted $wanted -Kind cycle -AsOf $Now
 $resolved=@(Invoke-SCResolvePending -State $state -ObservationMap $observations -CycleMap $cycles -NowEpoch $Now -GraceSeconds $OutcomeGraceSeconds -MaximumWaitSeconds $MaximumOutcomeWaitSeconds -ScoreLimit $RecentScoreLimit)
 
-$frozen=@(Get-SCFreezeRows -Artifact $artifact -State $state -NowEpoch $Now -IntervalSeconds $FreezeIntervalSeconds)
+$frozen=@(Get-SCFreezeRows -Artifact $artifact -State $state -NowEpoch $Now -IntervalSeconds $FreezeIntervalSeconds -MaximumPendingPerMarket $MaximumPendingPerMarket -MaximumPendingTotal $MaximumPendingTotal)
 if ($frozen.Count -gt 0) { $state.pending=@($state.pending)+@($frozen) }
 
 $changed=($resolved.Count -gt 0 -or $frozen.Count -gt 0 -or -not (Test-Path -LiteralPath $StateFile))
@@ -696,6 +732,6 @@ if ($changed) {
 }
 
 if ($changed -or -not (Test-Path -LiteralPath $SummaryFile)) {
-    $summary=New-SCCalibrationSummary -State $state -NowEpoch $Now -CurrentModelVersion $currentModelVersion -FreezeSeconds $FreezeIntervalSeconds -GraceSeconds $OutcomeGraceSeconds -MaximumWaitSeconds $MaximumOutcomeWaitSeconds
+    $summary=New-SCCalibrationSummary -State $state -NowEpoch $Now -CurrentModelVersion $currentModelVersion -FreezeSeconds $FreezeIntervalSeconds -GraceSeconds $OutcomeGraceSeconds -MaximumWaitSeconds $MaximumOutcomeWaitSeconds -PendingPerMarketLimit $MaximumPendingPerMarket -PendingTotalLimit $MaximumPendingTotal
     Write-TravelAssistantAtomicJson -Path $SummaryFile -Value $summary -Depth 18
 }
