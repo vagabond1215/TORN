@@ -81,7 +81,7 @@ unit spread × quantity = trip gross
 `PROFIT/HR` must mean:
 
 ```text
-gross trip profit / total elapsed hours
+after-tax trip net / configured round-trip flight hours
 ```
 
 Hit likelihood must not be multiplied into that value.
@@ -226,7 +226,7 @@ unit spread × quantity = trip gross
 `PROFIT/HR` must mean:
 
 ```text
-gross trip profit / total elapsed hours
+after-tax trip net / configured round-trip flight hours
 ```
 
 Hit likelihood must not be multiplied into that value.
@@ -288,7 +288,7 @@ Confirm:
 - opening another chart collapses the prior one;
 - graph rendering and hover telemetry perform no provider/Torn request.
 
- button and verify the fixed two-row economics strip appears above the card body. Each/Total show MV and signed Net on row one; row two shows Tax at left only for a nonzero saved rate and `$/hr` at right. The `$/hr` values must equal after-tax Each/Total net divided by round-trip flight time (`2 x` one-way configured flight seconds). Set Tax / trader rate to 0%, Save, and confirm the next published generation removes Tax text while Net and both `$/hr` values recompute.
+ button and verify the fixed two-row economics strip appears above the card body. MV is top-left; top-right shows `$/hr` under UPCOMING/PROFIT and Net under PROFIT/HR. Unit/total Price is bottom-left and Tax is bottom-right when nonzero. The large primary metric must swap in the opposite direction. Set Tax / trader rate to 0%, Save, and confirm Tax disappears without collapsing the second row.
 
 The historical retention invariant is:
 
