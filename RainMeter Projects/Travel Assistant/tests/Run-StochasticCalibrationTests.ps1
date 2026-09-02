@@ -12,6 +12,20 @@ function Assert-Near([double]$Actual,[double]$Expected,[double]$Tolerance,[strin
     if ([Math]::Abs($Actual-$Expected) -gt $Tolerance) { $script:failures.Add("$Message Expected=$Expected Actual=$Actual") }
 }
 
+# Calibration state is durable evidence. A malformed state must fail closed rather
+# than be replaced by an empty state, while a malformed replaceable forecast
+# artifact may be ignored so older pending outcomes can still resolve.
+$tempJson=[System.IO.Path]::GetTempFileName()
+try {
+    [System.IO.File]::WriteAllText($tempJson,'{not-json',[System.Text.UTF8Encoding]::new($false))
+    $strictThrew=$false
+    try { [void](Read-SCJson -Path $tempJson -Strict) } catch { $strictThrew=$true }
+    Assert-True $strictThrew 'Malformed calibration state JSON must fail closed under -Strict.'
+    Assert-True ($null -eq (Read-SCJson -Path $tempJson)) 'Malformed replaceable forecast JSON may be ignored in non-strict mode.'
+} finally {
+    Remove-Item -LiteralPath $tempJson -Force -ErrorAction SilentlyContinue
+}
+
 function New-CalCycle {
     param(
         [long]$RestockLower,
@@ -201,6 +215,7 @@ foreach($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','S
 Assert-True ($scriptText.Contains("forecastSelection='one best-expected-profit arrival per market/model/hour bucket'")) 'Calibration methodology must make the freeze sampling rule explicit.'
 Assert-True ($scriptText.Contains('selected arrival must be strictly after artifact generation')) 'Prospective calibration must explicitly exclude already-observable zero-horizon states.'
 Assert-True ($scriptText.Contains("calibrationStatus='diagnostic only; no probability transformation is applied'")) 'Prospective scorer must not silently recalibrate user-facing probabilities.'
+Assert-True ($scriptText.Contains('Read-SCJson $StateFile -Strict')) 'Durable calibration state must be read strictly so malformed JSON cannot reset accumulated evidence.'
 Assert-True ($scriptText.Contains("aggregateScopes='overall, evidence_quality, and market'")) 'Prospective scorer must expose overall, evidence-quality, and market calibration scopes.'
 
 $runUpdate=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1')
