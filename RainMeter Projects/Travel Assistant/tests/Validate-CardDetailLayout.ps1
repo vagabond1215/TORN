@@ -63,8 +63,8 @@ if($errors.Count -eq 0){
             Fail "Row $i item/unit-cost column must start at x=78 with a fixed 198px width."
         }
         $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($takeBody -notmatch '(?im)^X=280\s*$' -or $takeBody -notmatch '(?im)^W=108\s*$' -or $takeBody -notmatch '(?im)^FontSize=11\s*$' -or $takeBody -notmatch '(?im)^FontColor=#ToggleIdle#\s*
-            Fail "Row $i full-load cost column must be independently anchored at x=280 and remain muted."
+        if($takeBody -notmatch '(?im)^X=280\s*$' -or $takeBody -notmatch '(?im)^W=108\s*$' -or $takeBody -notmatch '(?im)^FontSize=11\s*$' -or $takeBody -notmatch '(?im)^FontColor=#ToggleIdle#\s*$'){
+            Fail "Row $i full-load cost column must be independently anchored at x=280 and remain light gray."
         }
         $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=15\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$'){
@@ -314,7 +314,7 @@ exit 0
         "setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')",
         "setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
         "setOption(prefix..'Take','Text','| '..totalCostText)",
-        "setOption(prefix..'Take','FontColor','#Muted#')",
+        "setOption(prefix..'Take','FontColor','#ToggleIdle#')",
         "setOption(prefix..'Make','Text',formatSignedMoney(make))",
         "setOption(prefix..'Make','FontColor',profitColor(make))",
         "local eachDetail='Each | Gross:'..formatMoney(grossEach)",
