@@ -88,6 +88,7 @@ if ($errors.Count -eq 0) {
         "if certainty~='' then actionText=actionText..' '..certainty end",
         "totalCost=(fallbackPrice>0 and quantity>0) and (fallbackPrice*quantity) or 0",
         'statusText(fallbackWindow,fallbackLeave)',
+        "window:lower():find('collecting data',1,true)~=nil then return window",
         'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds','NextCycleOrdinal','formatCurrentCycleTooltip','opportunityStatePrefix',
         'homeNextCycleAction','groupByOrdinal','bestNextRestockArrival','highest-overlap interval',
         "math.floor((number(group.bestStart)+number(group.bestEnd))/2)",'group.lateSellout','Window opens:',
