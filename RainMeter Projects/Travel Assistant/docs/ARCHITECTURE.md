@@ -532,7 +532,10 @@ quantity. A completed cycle can score stock success only inside the confirmed
 stock failure is accepted only when the later cycle durably preserves
 `previousSoldOutUpperBoundAt` plus a forecast-usable
 `previousSellOutBoundaryQuality` linking it to the earlier sellout; adjacency of
-two retained cycle rows alone is never treated as proof of continuous OOS.
+two retained cycle rows alone is never treated as proof of continuous OOS. Such a
+continuity-proven OOS interval also determines target-quantity failure and exact
+available quantity zero, so those two metrics do not require a coincident provider
+snapshot for OOS outcomes.
 
 Unresolved predictions remain pending for at most seven days and then become
 `expired_unscorable`; they never enter calibration aggregates. Backpressure also
