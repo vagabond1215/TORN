@@ -2,7 +2,7 @@
 
 **Checkpoint:** 2026-09-02
 
-**Active run:** stochastic-v1 live shadow scoring/calibration, while 0.6.0 compact
+**Active run:** stochastic-v1.1 live shadow scoring/calibration, while 0.6.0 compact
 opportunity surface target-Windows acceptance remains open. `docs/NEXT_CODEX_RUN.md`
 is the authoritative next-run handoff.
 
@@ -24,7 +24,7 @@ is the authoritative next-run handoff.
   `data/runtime/stochastic-forecast.json`;
 - the stochastic stage runs after immutable legacy UI publication and fails soft;
 - `tools/Invoke-StochasticReplay.ps1` provides chronological no-future-leakage
-  scoring scaffolding for stochastic-v1 and five simple empirical/deterministic
+  scoring scaffolding for stochastic-v1.1 and five simple empirical/deterministic
   comparators.
 
 No stochastic state, probability, sort, tooltip, or layout is user-facing. Existing
