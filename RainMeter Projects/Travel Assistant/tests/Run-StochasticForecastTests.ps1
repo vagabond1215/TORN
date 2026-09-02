@@ -234,6 +234,14 @@ foreach($row in @($replay.rows)){
 }
 Assert-True ($replay.PSObject.Properties['forecastMetrics'] -ne $null) 'Replay scaffold must expose forecast metrics.'
 Assert-True ($replay.PSObject.Properties['decisionMetrics'] -ne $null) 'Replay scaffold must expose decision metrics.'
+$perfectReplayRows=@(
+    [pscustomobject]@{scorable=$true;label=0;predictions=[pscustomobject]@{perfect=0.0}},
+    [pscustomobject]@{scorable=$true;label=1;predictions=[pscustomobject]@{perfect=1.0}}
+)
+$perfectReplayMetrics=Get-SFReplayMetrics -Rows $perfectReplayRows -PredictionName perfect
+Assert-Near ([double]$perfectReplayMetrics.brierScore) 0.0 0.000000001 'Replay Brier score must use raw 0%/100% probabilities rather than epsilon-clipped values.'
+Assert-True ([double]$perfectReplayMetrics.logLoss -gt 0.0) 'Replay log loss must remain finite through epsilon clipping.'
+
 Assert-Equal ([string]$replay.modelVersion) 'stochastic-v1.1' 'Replay output must version the materially changed stochastic challenger.'
 Assert-True ($replay.forecastMetrics.PSObject.Properties['stochastic_v1_1'] -ne $null) 'Replay metrics must isolate stochastic-v1.1 from earlier challenger versions.'
 Assert-True (@($replay.rows | Where-Object {[int]$_.depletionShapeEvidenceCount -gt 0}).Count -gt 0) 'Replay should feed only historically available intermediate observations into empirical depletion shapes.'
