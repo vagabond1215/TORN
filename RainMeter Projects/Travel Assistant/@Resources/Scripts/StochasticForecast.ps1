@@ -376,6 +376,197 @@ function Get-SFDecision {
     return [pscustomobject]@{ state='LEAVE_IN'; reason='a later feasible departure has the highest expected profit' }
 }
 
+function Get-SFAdaptiveGridPlan {
+    param(
+        [object[]]$Evidence,
+        [object]$Travel,
+        [int]$CoarseStepSeconds=900,
+        [bool]$Enabled=$true
+    )
+    $coarse=[Math]::Max(60,$CoarseStepSeconds)
+    $mode=([string](Get-SFProperty $Travel 'mode')).Trim().ToLowerInvariant()
+    $candidates=@(Get-SFProperty $Travel 'candidates')
+    $disabled=[pscustomobject]@{
+        enabled=$false
+        reason='adaptive grid disabled'
+        referenceAvailabilitySeconds=0L
+        desiredFineStepSeconds=0
+        discoveryScenarioCount=0
+        refinedCellCount=0
+        additionalCandidateCount=0
+        totalCandidateCount=$candidates.Count
+    }
+    if (-not $Enabled) { return $disabled }
+    if ($mode -notin @('home','returning')) {
+        $disabled.reason='travel state has a fixed arrival rather than a departure search'
+        return $disabled
+    }
+    if ($candidates.Count -lt 2) {
+        $disabled.reason='fewer than two coarse departure candidates'
+        return $disabled
+    }
+
+    $durations=New-Object System.Collections.Generic.List[long]
+    foreach ($row in @($Evidence)) {
+        $minimum=[long](Get-SFProperty $row 'availabilityMinimum')
+        $maximum=[long](Get-SFProperty $row 'availabilityMaximum')
+        if ($minimum -le 0 -and $maximum -le 0) { continue }
+        if ($minimum -le 0) { $minimum=$maximum }
+        if ($maximum -lt $minimum) { $maximum=$minimum }
+        $durations.Add([long][Math]::Max(1L,[Math]::Round(([double]$minimum+[double]$maximum)/2.0)))
+    }
+    if ($durations.Count -lt 3) {
+        $disabled.reason='fewer than three usable availability durations'
+        return $disabled
+    }
+
+    $sorted=[long[]]@($durations.ToArray() | Sort-Object)
+    $index=[int][Math]::Floor(($sorted.Count-1)*0.25)
+    $reference=[long]$sorted[$index]
+    $disabled.referenceAvailabilitySeconds=$reference
+    if ($reference -ge $coarse) {
+        $disabled.reason='lower-quartile stock duration is at least the coarse grid step'
+        return $disabled
+    }
+
+    $fine=[int][Math]::Round($reference/2.0)
+    $fine=[Math]::Max(5,[Math]::Min(300,$fine))
+    $fine=[Math]::Min($fine,[Math]::Max(5,[int][Math]::Floor($coarse/2.0)))
+    return [pscustomobject]@{
+        enabled=$true
+        reason='short stock duration requires bounded sub-grid search'
+        referenceAvailabilitySeconds=$reference
+        desiredFineStepSeconds=$fine
+        discoveryScenarioCount=0
+        refinedCellCount=0
+        additionalCandidateCount=0
+        totalCandidateCount=$candidates.Count
+    }
+}
+
+function Get-SFAdaptiveTravelCandidates {
+    param(
+        [object[]]$CoarseCandidates,
+        [object[]]$DiscoveryWorlds,
+        [int]$FineStepSeconds,
+        [int]$MaximumCells=4,
+        [int]$MaximumAdditionalPoints=192
+    )
+    $coarse=@($CoarseCandidates | Sort-Object arrivalAt)
+    if ($coarse.Count -lt 2 -or @($DiscoveryWorlds).Count -eq 0) {
+        return [pscustomobject]@{ candidates=$coarse; refinedCellCount=0; additionalCandidateCount=0; maximumHiddenSupport=0 }
+    }
+
+    $cellCount=$coarse.Count-1
+    $support=New-Object 'int[]' $cellCount
+    $hidden=New-Object 'int[]' $cellCount
+    $starts=@{}
+    for ($i=0; $i -lt $cellCount; $i++) { $starts[$i]=New-Object System.Collections.Generic.List[long] }
+
+    foreach ($worldRecord in @($DiscoveryWorlds)) {
+        $world=@(Get-SFProperty $worldRecord 'intervals')
+        $seenSupport=@{}
+        $seenHidden=@{}
+        foreach ($interval in $world) {
+            $start=[long]$interval.startAt
+            $end=[long]$interval.endAt
+            if ($end -le $start) { continue }
+            for ($i=0; $i -lt $cellCount; $i++) {
+                $left=[long]$coarse[$i].arrivalAt
+                $right=[long]$coarse[$i+1].arrivalAt
+                if ($end -le $left -or $start -ge $right) { continue }
+                $seenSupport[$i]=$true
+                if ($start -gt $left -and $start -lt $right) { $starts[$i].Add($start) }
+                $leftHit=($left -ge $start -and $left -lt $end)
+                $rightHit=($right -ge $start -and $right -lt $end)
+                if (-not $leftHit -and -not $rightHit) { $seenHidden[$i]=$true }
+            }
+        }
+        foreach ($key in @($seenSupport.Keys)) { $support[[int]$key]++ }
+        foreach ($key in @($seenHidden.Keys)) { $hidden[[int]$key]++ }
+    }
+
+    $ranked=New-Object System.Collections.Generic.List[object]
+    for ($i=0; $i -lt $cellCount; $i++) {
+        if ($support[$i] -le 0) { continue }
+        $ranked.Add([pscustomobject]@{
+            index=$i
+            hidden=[int]$hidden[$i]
+            support=[int]$support[$i]
+            score=([int]$hidden[$i]*2)+[int]$support[$i]
+        })
+    }
+    $selected=@($ranked.ToArray() | Sort-Object @{Expression='hidden';Descending=$true},@{Expression='support';Descending=$true},index | Select-Object -First ([Math]::Max(1,$MaximumCells)))
+    if ($selected.Count -eq 0) {
+        return [pscustomobject]@{ candidates=$coarse; refinedCellCount=0; additionalCandidateCount=0; maximumHiddenSupport=0 }
+    }
+
+    $candidateMap=@{}
+    foreach ($candidate in $coarse) { $candidateMap[[string][long]$candidate.arrivalAt]=$candidate }
+    $perCellBudget=[Math]::Max(1,[int][Math]::Floor([Math]::Max(1,$MaximumAdditionalPoints)/[double]$selected.Count))
+    $added=0
+
+    foreach ($cell in $selected) {
+        $i=[int]$cell.index
+        $leftArrival=[long]$coarse[$i].arrivalAt
+        $rightArrival=[long]$coarse[$i+1].arrivalAt
+        $leftDeparture=[long]$coarse[$i].departureAt
+        $travelOffset=$leftArrival-$leftDeparture
+        $width=[Math]::Max(1L,$rightArrival-$leftArrival)
+        $step=[Math]::Max(1,$FineStepSeconds)
+        $budgetStep=[int][Math]::Ceiling($width/[double]($perCellBudget+1))
+        if ($budgetStep -gt $step) { $step=$budgetStep }
+
+        for ($arrival=$leftArrival+$step; $arrival -lt $rightArrival -and $added -lt $MaximumAdditionalPoints; $arrival+=$step) {
+            $key=[string][long]$arrival
+            if ($candidateMap.ContainsKey($key)) { continue }
+            $candidate=[pscustomobject]@{
+                departureAt=[long]($arrival-$travelOffset)
+                arrivalAt=[long]$arrival
+                adaptive=$true
+                adaptiveSource='uniform_refinement'
+            }
+            $candidateMap[$key]=$candidate
+            $added++
+        }
+
+        # Also add a few distributional restock anchors from the independent
+        # discovery worlds. These anchors make sub-minute bursts discoverable even
+        # when the bounded uniform budget cannot make the entire 15-minute cell
+        # second-scale. They are scored only on the independent full scenario set.
+        $cellStarts=[long[]]@($starts[$i].ToArray() | Sort-Object)
+        if ($cellStarts.Count -gt 0 -and $added -lt $MaximumAdditionalPoints) {
+            $quantiles=@(0.0,0.25,0.5,0.75,1.0)
+            foreach ($q in $quantiles) {
+                $qIndex=[int][Math]::Round(($cellStarts.Count-1)*$q)
+                $arrival=[long]$cellStarts[$qIndex]
+                if ($arrival -le $leftArrival -or $arrival -ge $rightArrival) { continue }
+                $key=[string]$arrival
+                if ($candidateMap.ContainsKey($key)) { continue }
+                $candidateMap[$key]=[pscustomobject]@{
+                    departureAt=[long]($arrival-$travelOffset)
+                    arrivalAt=[long]$arrival
+                    adaptive=$true
+                    adaptiveSource='discovery_restock_quantile'
+                }
+                $added++
+                if ($added -ge $MaximumAdditionalPoints) { break }
+            }
+        }
+        if ($added -ge $MaximumAdditionalPoints) { break }
+    }
+
+    $all=@($candidateMap.Values | Sort-Object arrivalAt)
+    $maxHidden=0
+    if ($selected.Count -gt 0) { $maxHidden=[int](@($selected.hidden | Measure-Object -Maximum).Maximum) }
+    return [pscustomobject]@{
+        candidates=$all
+        refinedCellCount=$selected.Count
+        additionalCandidateCount=[Math]::Max(0,$all.Count-$coarse.Count)
+        maximumHiddenSupport=$maxHidden
+    }
+}
+
 function Invoke-SFMarketForecast {
     param(
         [string]$MarketKey,
@@ -390,12 +581,18 @@ function Invoke-SFMarketForecast {
         [int]$MarketFeePercent=0,
         [long]$OneWaySeconds=0L,
         [int]$RandomSeed=1,
-        [long]$HalfLifeSeconds=1209600L
+        [long]$HalfLifeSeconds=1209600L,
+        [bool]$EnableAdaptiveGrid=$true,
+        [int]$CoarseGridSeconds=900
     )
     $evidence=@(Select-SFJointCycleEvidence -Cycles $Cycles -AsOf $NowEpoch -HalfLifeSeconds $HalfLifeSeconds)
     $candidates=@(Get-SFProperty $Travel 'candidates')
     $sampleCount=$evidence.Count
     $effective=Get-SFEffectiveSampleSize -Evidence $evidence
+    $adaptiveGrid=[pscustomobject]@{
+        enabled=$false; reason='not evaluated'; referenceAvailabilitySeconds=0L; desiredFineStepSeconds=0
+        discoveryScenarioCount=0; refinedCellCount=0; additionalCandidateCount=0; totalCandidateCount=$candidates.Count; maximumHiddenSupport=0
+    }
 
     if ($sampleCount -lt 3) {
         $direct=@()
@@ -404,11 +601,35 @@ function Invoke-SFMarketForecast {
             if ($null -ne $observed) { $direct=@($observed) }
         }
         $decision=Get-SFDecision -Travel $Travel -Arrivals $direct -SampleCount $(if($direct.Count -gt 0){3}else{$sampleCount}) -NowEpoch $NowEpoch
-        return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality=$(if($direct.Count -gt 0){'bounded_fresh'}else{'insufficient'}); arrivals=$direct; decision=$decision; maximumCycleOrdinal=0 }
+        return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality=$(if($direct.Count -gt 0){'bounded_fresh'}else{'insufficient'}); arrivals=$direct; decision=$decision; maximumCycleOrdinal=0; adaptiveGrid=$adaptiveGrid }
     }
     if (-not [bool](Get-SFProperty $Travel 'feasible') -or $candidates.Count -eq 0) {
         $decision=Get-SFDecision -Travel $Travel -Arrivals @() -SampleCount $sampleCount -NowEpoch $NowEpoch
-        return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality='usable'; arrivals=@(); decision=$decision; maximumCycleOrdinal=0 }
+        return [pscustomobject]@{ sampleCount=$sampleCount; effectiveSampleSize=[Math]::Round($effective,3); evidenceQuality='usable'; arrivals=@(); decision=$decision; maximumCycleOrdinal=0; adaptiveGrid=$adaptiveGrid }
+    }
+
+    $adaptiveGrid=Get-SFAdaptiveGridPlan -Evidence $evidence -Travel $Travel -CoarseStepSeconds $CoarseGridSeconds -Enabled $EnableAdaptiveGrid
+    if ([bool]$adaptiveGrid.enabled) {
+        $coarseHorizon=[long](@($candidates | Measure-Object arrivalAt -Maximum).Maximum)+1L
+        $discoveryCount=[Math]::Min(32,[Math]::Max(16,[int][Math]::Ceiling($ScenarioCount/4.0)))
+        $discoverySeed=($RandomSeed -bxor 1597463007) -band 0x7fffffff
+        if ($discoverySeed -eq 0) { $discoverySeed=1 }
+        $discoveryRandom=New-Object System.Random($discoverySeed)
+        $discoveryWorlds=New-Object System.Collections.Generic.List[object]
+        for ($scenario=0; $scenario -lt $discoveryCount; $scenario++) {
+            $world=@(New-SFMarketWorld -Evidence $evidence -Market $Market -Destination $Destination -NowEpoch $NowEpoch -HorizonAt $coarseHorizon -Random $discoveryRandom)
+            $discoveryWorlds.Add([pscustomobject]@{ intervals=$world })
+        }
+        $refined=Get-SFAdaptiveTravelCandidates -CoarseCandidates $candidates -DiscoveryWorlds $discoveryWorlds.ToArray() -FineStepSeconds ([int]$adaptiveGrid.desiredFineStepSeconds)
+        $candidates=@($refined.candidates)
+        $adaptiveGrid.discoveryScenarioCount=$discoveryCount
+        $adaptiveGrid.refinedCellCount=[int]$refined.refinedCellCount
+        $adaptiveGrid.additionalCandidateCount=[int]$refined.additionalCandidateCount
+        $adaptiveGrid.totalCandidateCount=$candidates.Count
+        $adaptiveGrid | Add-Member -NotePropertyName maximumHiddenSupport -NotePropertyValue ([int]$refined.maximumHiddenSupport) -Force
+        if ([int]$refined.additionalCandidateCount -le 0) {
+            $adaptiveGrid.reason='short-duration evidence found, but discovery worlds exposed no refinable support'
+        }
     }
 
     $n=$candidates.Count
@@ -463,6 +684,8 @@ function Invoke-SFMarketForecast {
             expectedProfit=[Math]::Round($expectedProfit,2)
             expectedProfitPerHour=[Math]::Round($(if($hours -gt 0){$expectedProfit/$hours}else{0.0}),2)
             maximumCycleOrdinal=[int]$maxOrdinal[$j]
+            adaptivePoint=$(if($candidates[$j].PSObject.Properties['adaptive']){[bool]$candidates[$j].adaptive}else{$false})
+            adaptiveSource=$(if($candidates[$j].PSObject.Properties['adaptiveSource']){[string]$candidates[$j].adaptiveSource}else{'coarse'})
         })
     }
     $arrivalArray=$arrivals.ToArray()
@@ -475,6 +698,7 @@ function Invoke-SFMarketForecast {
         arrivals=$arrivalArray
         decision=$decision
         maximumCycleOrdinal=$(if($maxOrdinal.Count -gt 0){[int](@($maxOrdinal | Measure-Object -Maximum).Maximum)}else{0})
+        adaptiveGrid=$adaptiveGrid
     }
 }
 
@@ -561,7 +785,7 @@ for ($i=1; $i -le $count; $i++) {
     [void][long]::TryParse([string]$state[$prefix+'MarketValueValue'],[ref]$marketValue)
     [void][int]::TryParse([string]$state[$prefix+'MarketFeePercent'],[ref]$fee)
     $marketSeed=Get-SFStableSeed -MarketKey $key -BaseSeed $Seed
-    $forecast=Invoke-SFMarketForecast -MarketKey $key -Cycles $cycles -Market $market -Destination $destination -Travel $travel -NowEpoch $Now -ScenarioCount $SimulationCount -TargetQuantity $targetQuantity -MarketValue $marketValue -MarketFeePercent $fee -OneWaySeconds $oneWay -RandomSeed $marketSeed
+    $forecast=Invoke-SFMarketForecast -MarketKey $key -Cycles $cycles -Market $market -Destination $destination -Travel $travel -NowEpoch $Now -ScenarioCount $SimulationCount -TargetQuantity $targetQuantity -MarketValue $marketValue -MarketFeePercent $fee -OneWaySeconds $oneWay -RandomSeed $marketSeed -CoarseGridSeconds $GridSeconds
     $best=$null
     if (@($forecast.arrivals).Count -gt 0) { $best=@($forecast.arrivals | Sort-Object @{Expression='expectedProfit';Descending=$true},@{Expression='pTargetQty';Descending=$true},arrivalAt | Select-Object -First 1)[0] }
     $lastGoodDepartureAt=0L
@@ -573,6 +797,7 @@ for ($i=1; $i -le $count; $i++) {
         marketKey=$key; countryId=$country; itemId=$itemId; generatedAt=$Now; modelVersion='stochastic-v1'
         sampleCount=[int]$forecast.sampleCount; effectiveSampleSize=[double]$forecast.effectiveSampleSize; evidenceQuality=[string]$forecast.evidenceQuality
         targetQuantity=$targetQuantity; targetQuantityDefinition='projected trip quantity'; simulationCount=$SimulationCount; gridSeconds=$GridSeconds
+        adaptiveGrid=$(Get-SFProperty $forecast 'adaptiveGrid')
         arrivals=@($forecast.arrivals)
         bestArrivalAt=$(if($null -ne $best){[long]$best.arrivalAt}else{0L})
         bestDepartureAt=$(if($null -ne $best){[long]$best.departureAt}else{0L})
@@ -610,7 +835,8 @@ $artifact=[pscustomobject]@{
     runtimeMilliseconds=[Math]::Round($stopwatch.Elapsed.TotalMilliseconds,2)
     marketCount=$markets.Count
     decisionStates=@('INSUFFICIENT_DATA','NO_ACTIONABLE_TRIP','WAIT','LEAVE_IN','LEAVE_NOW','LEAVE_BEFORE','COMMITTED','BUY_NOW','MISSED_TARGET')
-    limitations=@('uncalibrated probabilities','linear within-cycle depletion','empirical cycles only','no value-of-information solver','expectedProfit utility')
+    adaptiveGridMode='bounded coarse-to-fine hidden-support refinement'
+    limitations=@('uncalibrated probabilities','linear within-cycle depletion','empirical cycles only','bounded adaptive candidate budget','no value-of-information solver','expectedProfit utility')
     markets=$markets.ToArray()
 }
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
