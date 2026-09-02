@@ -471,10 +471,10 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     local countryId=countryIdsByName[country] or ''; local travelState=trim(state.TravelState):lower(); local destinationId=trim(state.TravelDestinationCountryId):lower()
     local flightSeconds=countryTravelSeconds(state,country,defaultTravel); if flightSeconds<=0 then return nil,nil,nil end
 
+    local displayedName=removeCountrySuffix(meterOption('MeterOpportunity'..tostring(index)..'Name','Text'),country)
+    local statePrefix=opportunityStatePrefix(state,country,displayedName)
     local atHome=(travelState~='traveling' and travelState~='returning' and travelState~='abroad' and travelState~='foreign')
     if atHome then
-        local displayedName=removeCountrySuffix(meterOption('MeterOpportunity'..tostring(index)..'Name','Text'),country)
-        local statePrefix=opportunityStatePrefix(state,country,displayedName)
         local currentStock=statePrefix~='' and number(state[statePrefix..'CurrentStock']) or 0
         local reachable=statePrefix~='' and number(state[statePrefix..'CurrentCycleReachable'])>0
         local selloutAt=statePrefix~='' and number(state[statePrefix..'ActiveSelloutEstimateAt']) or 0
