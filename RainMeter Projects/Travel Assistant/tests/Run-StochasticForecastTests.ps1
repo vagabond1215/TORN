@@ -42,6 +42,28 @@ $singleTravel=[pscustomobject]@{feasible=$true;mode='home';reason='test';candida
 $broadForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $broad -Market $oosMarket -Destination $oosDestination -Travel $singleTravel -NowEpoch $now -ScenarioCount 512 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 300 -RandomSeed 22
 Assert-True ([double]$broadForecast.arrivals[0].pAnyStock -lt 0.20) 'Broad timing uncertainty with short availability should have low maximum success, not a fake Safe window.'
 
+# A short deterministic burst can live entirely between two 15-minute coarse
+# arrival points. The adaptive pass must discover that hidden support without
+# changing the configured coarse horizon or scoring on its discovery worlds.
+$burstCycles=New-TestCycles -DelayMin 450 -DelayMax 450 -AvailableMin 60 -AvailableMax 60 -Quantity 20
+$burstTravel=Get-SFTravelCandidates -TravelState home -MarketCountry test_country -TravelDestinationCountry '' -TravelTimeLeft 0 -OneWaySeconds 100 -NowEpoch $now -StepSeconds 900 -SearchSeconds 900
+$burstCoarse=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $burstCycles -Market $oosMarket -Destination $oosDestination -Travel $burstTravel -NowEpoch $now -ScenarioCount 128 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 77 -EnableAdaptiveGrid $false -CoarseGridSeconds 900
+Assert-Equal @($burstCoarse.arrivals).Count 2 'Disabled adaptive search should retain only the two coarse test arrivals.'
+Assert-Near ([double](@($burstCoarse.arrivals | Measure-Object pAnyStock -Maximum).Maximum)) 0.0 0.000001 'The coarse 15-minute grid should miss the synthetic 60-second burst entirely.'
+
+$burstAdaptive=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $burstCycles -Market $oosMarket -Destination $oosDestination -Travel $burstTravel -NowEpoch $now -ScenarioCount 128 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 77 -EnableAdaptiveGrid $true -CoarseGridSeconds 900
+Assert-True ([bool]$burstAdaptive.adaptiveGrid.enabled) 'Short-duration evidence should enable bounded adaptive search.'
+Assert-Equal ([long]$burstAdaptive.adaptiveGrid.referenceAvailabilitySeconds) 60L 'Adaptive planning should preserve the short empirical availability reference.'
+Assert-True ([int]$burstAdaptive.adaptiveGrid.additionalCandidateCount -gt 0) 'Hidden support should add sub-grid arrival candidates.'
+Assert-True (@($burstAdaptive.arrivals).Count -gt @($burstCoarse.arrivals).Count) 'Adaptive forecast should retain coarse arrivals and add bounded fine arrivals.'
+Assert-True ([double](@($burstAdaptive.arrivals | Measure-Object pAnyStock -Maximum).Maximum) -gt 0.90) 'Adaptive search should recover the deterministic short stock burst missed by the coarse grid.'
+Assert-True (@($burstAdaptive.arrivals | Where-Object {[bool]$_.adaptivePoint}).Count -gt 0) 'Refined arrival rows should identify adaptive candidate provenance.'
+
+$longGridCycles=New-TestCycles -DelayMin 450 -DelayMax 450 -AvailableMin 1800 -AvailableMax 1800 -Quantity 20
+$longEvidence=@(Select-SFJointCycleEvidence -Cycles $longGridCycles -AsOf $now)
+$longPlan=Get-SFAdaptiveGridPlan -Evidence $longEvidence -Travel $burstTravel -CoarseStepSeconds 900 -Enabled $true
+Assert-True (-not [bool]$longPlan.enabled) 'Stock durations longer than the coarse grid should not pay for adaptive refinement.'
+
 # Fresh current stock that cannot survive the flight still permits a later cycle.
 $shortCurrent=New-TestCycles -DelayMin 100 -DelayMax 100 -AvailableMin 100 -AvailableMax 100
 $currentMarket=[pscustomobject]@{lastStock=10;lastForeignPrice=50;sourceTimestamp=$now}
@@ -150,8 +172,10 @@ foreach($networkToken in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','S
 $runUpdate=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1')
 $publishIndex=$runUpdate.IndexOf('try { Publish-UpdateUiState }')
 $stochasticIndex=$runUpdate.IndexOf('Invoke-FailSoftScript -Path $StochasticForecast')
+$resaleIndex=$runUpdate.IndexOf('& $ResaleQueue')
 Assert-True ($publishIndex -ge 0 -and $stochasticIndex -gt $publishIndex) 'Shadow stochastic failure must occur only after valid legacy UI publication.'
+Assert-True ($resaleIndex -ge 0 -and $stochasticIndex -gt $resaleIndex) 'Shadow stochastic work must remain lower priority than the production resale/MV queue.'
 
 if($failures.Count -gt 0){foreach($failure in $failures){Write-Host "FAIL: $failure" -ForegroundColor Red};Write-Host "Stochastic tests failed with $($failures.Count) error(s)." -ForegroundColor Red;exit 1}
-Write-Host 'Stochastic-v1 multi-cycle, travel, economics, determinism, replay, and fail-soft tests passed.' -ForegroundColor Green
+Write-Host 'Stochastic-v1 adaptive-grid, multi-cycle, travel, economics, determinism, replay, and fail-soft tests passed.' -ForegroundColor Green
 exit 0
