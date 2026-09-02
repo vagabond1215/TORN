@@ -475,7 +475,8 @@ function Get-SFDirectObservedArrival {
     $economics=Get-SFEconomics -Quantity $qty -MarketValue $MarketValue -ForeignPrice ([long](Get-SFProperty $Market 'lastForeignPrice')) -MarketFeePercent $MarketFeePercent -OneWaySeconds $OneWaySeconds
     return [pscustomobject]@{
         arrivalAt=$ArrivalAt; departureAt=0L; pAnyStock=1.0; pTargetQty=$(if($stock -ge $TargetQuantity){1.0}else{0.0})
-        expectedQty=[double]$qty; expectedProfit=[double]$economics.profit; expectedProfitPerHour=[double]$economics.profitPerHour
+        expectedQty=[double]$qty; expectedAvailableQty=[double]$stock
+        expectedProfit=[double]$economics.profit; expectedProfitPerHour=[double]$economics.profitPerHour
         maximumCycleOrdinal=0
     }
 }
@@ -803,6 +804,7 @@ function Invoke-SFMarketForecast {
     $any=New-Object 'double[]' $n
     $target=New-Object 'double[]' $n
     $quantity=New-Object 'double[]' $n
+    $availableQuantity=New-Object 'double[]' $n
     $profit=New-Object 'double[]' $n
     $maxOrdinal=New-Object 'int[]' $n
     for ($j=0; $j -lt $n; $j++) { $maxOrdinal[$j]=-1 }
@@ -829,6 +831,7 @@ function Invoke-SFMarketForecast {
             if ($available -ge $TargetQuantity) { $target[$j]++ }
             $purchasable=[Math]::Min([Math]::Max(1,$TargetQuantity),[int]$available)
             $quantity[$j]+=$purchasable
+            $availableQuantity[$j]+=$available
             $price=if ([long]$stock.foreignPrice -gt 0) { [long]$stock.foreignPrice } else { [long](Get-SFProperty $Market 'lastForeignPrice') }
             $economics=Get-SFEconomics -Quantity $purchasable -MarketValue $MarketValue -ForeignPrice $price -MarketFeePercent $MarketFeePercent -OneWaySeconds $OneWaySeconds
             $profit[$j]+=[double]$economics.profit
@@ -846,6 +849,7 @@ function Invoke-SFMarketForecast {
             pAnyStock=[Math]::Round($any[$j]/$ScenarioCount,6)
             pTargetQty=[Math]::Round($target[$j]/$ScenarioCount,6)
             expectedQty=[Math]::Round($quantity[$j]/$ScenarioCount,3)
+            expectedAvailableQty=[Math]::Round($availableQuantity[$j]/$ScenarioCount,3)
             expectedProfit=[Math]::Round($expectedProfit,2)
             expectedProfitPerHour=[Math]::Round($(if($hours -gt 0){$expectedProfit/$hours}else{0.0}),2)
             maximumCycleOrdinal=[int]$maxOrdinal[$j]
@@ -1003,6 +1007,7 @@ for ($i=1; $i -le $count; $i++) {
             successProbability=$(if($null -ne $best){[double]$best.pAnyStock}else{0.0})
             targetQuantityProbability=$(if($null -ne $best){[double]$best.pTargetQty}else{0.0})
             expectedQuantity=$(if($null -ne $best){[double]$best.expectedQty}else{0.0})
+            expectedAvailableQuantity=$(if($null -ne $best -and $best.PSObject.Properties['expectedAvailableQty']){[double]$best.expectedAvailableQty}else{0.0})
             expectedProfit=$(if($null -ne $best){[double]$best.expectedProfit}else{0.0})
             expectedProfitPerHour=$(if($null -ne $best){[double]$best.expectedProfitPerHour}else{0.0})
             bestDepartureAt=$(if($null -ne $best){[long]$best.departureAt}else{0L})
