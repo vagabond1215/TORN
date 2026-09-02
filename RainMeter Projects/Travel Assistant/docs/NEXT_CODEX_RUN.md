@@ -273,7 +273,7 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 4. UPCOMING / PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only. PROFIT sorts by the displayed signed after-tax total Net, so every positive row ranks above every negative row.
 5. Cards show `Item | unit cost | exact full-load cost` on the left and a large signed total Net on the right; there are no Take/Make labels or variable-price cash buffer.
 6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active Torn-lime fills are inset so the card border/T separators remain visible.
-7. Expanded economics use a 34px two-line bar: `Each | MV` / `Total | MV` on the top row, Net at each lower-left, and Tax at each lower-right.
+7. Expanded economics use gray vertical `Each` / `Total` label blocks. MV is top-row left, Net is top-row right, and Tax is second-row left. With tax >0 the bar is 34px; at 0% Tax the second row disappears and the bar contracts to 18px. No `|` characters appear in the expanded strip.
 8. Flags act as left end caps. The 48px square immediately to the right contains 44px Torn item art with a 2px inset; item text begins after that square. Card fill is pure black while gray borders/separators remain visible.
 10. Inline graphs are black with a lime stock line, cobalt in-stock/restock markers, and pumpkin out-of-stock/sellout markers. The window/guidance line sits close to the card's bottom border and the Updated footer remains close beneath the final card.
 9. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.

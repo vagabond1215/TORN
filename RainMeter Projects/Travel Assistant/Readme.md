@@ -40,11 +40,11 @@ Up to eight opportunities may be shown.
 Expanded economics are:
 
 ```text
-Each | MV:$...                 || Total | MV:$...
-Net:+$...          5% Tax:$... || Net:+$...          5% Tax:$...
+[Each]  MV:$...          Net:+$...   || [Total]  MV:$...          Net:+$...
+        5% Tax:$...                    5% Tax:$...
 ```
 
-The expanded bar is 34px tall and split into equal 9pt per-item and total halves. Each/Total + MV occupy the top-left corners; signed Net occupies each lower-left corner; Tax is right-aligned in each lower-right corner. Tax is muted at zero/light red when nonzero, and Net follows green/red profit coloring.
+`Each` and `Total` are separate vertical label blocks filled with the card-border gray and centered vertically. MV is left-aligned on the top row, Net is right-aligned on that same row, and Tax is left-aligned on the second row. With a nonzero rate the expansion is 34px tall. At **0% tax**, the Tax fields and second row disappear entirely and the expansion contracts to a single 18px row; the label blocks contract to match. There are no pipe characters inside the expanded economics strip.
 
 ## Sort modes
 

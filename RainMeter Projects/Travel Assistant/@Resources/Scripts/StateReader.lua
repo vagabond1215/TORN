@@ -28,7 +28,8 @@ local lastItemImageRequestAt = 0
 
 local collapsedCardHeight = 50
 local rowStride = 54
-local detailExtra = 34
+local detailExtraWithTax = 34
+local detailExtraNoTax = 18
 local graphExtra = 133
 local footerExtra = 16
 local maxCandidateRows = 256
@@ -652,14 +653,26 @@ local function collapseInlineGraph()
     end
 end
 
+local function detailTaxRate(data, index)
+    if index == nil or index <= 0 then return 0 end
+    return math.max(0, math.min(5, math.floor(number(data['Opportunity' .. index .. 'MarketFeePercent']) + 0.5)))
+end
+
+local function detailExtraForRow(data, index)
+    if index == nil or index <= 0 then return 0 end
+    return (detailTaxRate(data, index) > 0) and detailExtraWithTax or detailExtraNoTax
+end
+
 local function collapseCardDetails()
     expandedDetailKey = ''
     expandedDetailRow = 0
     lastLayoutSignature = ''
     for i = 1, 8 do
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailEachLabel')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Gross')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailEachNet')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailEachTax')
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalLabel')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotal')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalNet')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalTax')
@@ -693,22 +706,29 @@ end
 local function layoutRows(data, count)
     syncExpandedRows(data, count)
 
+    local activeDetailExtra = detailExtraForRow(data, expandedDetailRow)
+    local activeDetailHasTax = expandedDetailRow > 0 and detailTaxRate(data, expandedDetailRow) > 0
+
     -- ShowMeterGroup runs before layout and can resurrect hidden child meters.
     -- Reassert the compact-card visibility contract on every pass even when Y/H
     -- geometry is unchanged.
     for i = 1, 8 do
         local p = 'MeterOpportunity' .. i
         if i == expandedDetailRow then
+            SKIN:Bang('!ShowMeter', p .. 'DetailEachLabel')
             SKIN:Bang('!ShowMeter', p .. 'Gross')
             SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')
-            SKIN:Bang('!ShowMeter', p .. 'DetailEachTax')
+            if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotalLabel')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotal')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')
-            SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax')
+            if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax') else SKIN:Bang('!HideMeter', p .. 'DetailTotalTax') end
         else
+            SKIN:Bang('!HideMeter', p .. 'DetailEachLabel')
             SKIN:Bang('!HideMeter', p .. 'Gross')
             SKIN:Bang('!HideMeter', p .. 'DetailEachNet')
             SKIN:Bang('!HideMeter', p .. 'DetailEachTax')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotalLabel')
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')
@@ -727,20 +747,20 @@ local function layoutRows(data, count)
         SKIN:Bang('!HideMeter', p .. 'Chance')
     end
 
-    local signature = tostring(count) .. ':' .. tostring(expandedRow) .. ':' .. tostring(expandedDetailRow)
+    local signature = tostring(count) .. ':' .. tostring(expandedRow) .. ':' .. tostring(expandedDetailRow) .. ':' .. tostring(activeDetailExtra)
     if signature == lastLayoutSignature then return end
     lastLayoutSignature = signature
 
     for i = 1, 8 do
         local p = 'MeterOpportunity' .. i
         local extraBefore = 0
-        if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + detailExtra end
+        if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + activeDetailExtra end
         if expandedRow > 0 and i > expandedRow then extraBefore = extraBefore + graphExtra end
 
         local y = 120 + ((i-1) * rowStride) + extraBefore
         local detailExpanded = (i == expandedDetailRow)
         local graphExpanded = (i == expandedRow)
-        local bodyOffset = detailExpanded and detailExtra or 0
+        local bodyOffset = detailExpanded and activeDetailExtra or 0
         local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)
 
         SKIN:Bang('!SetOption', p .. 'Card', 'Y', tostring(y))
@@ -752,30 +772,40 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape2', 'Line 510,' .. bodyOffset .. ',510,' .. (bodyOffset+50) .. ' | StrokeWidth 1 | Stroke Color #Border#')
         SKIN:Bang('!SetOption', p .. 'Card', 'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25) .. ' | StrokeWidth 1 | Stroke Color #Border#')
         if detailExpanded then
-            SKIN:Bang('!SetOption', p .. 'Card', 'Shape4', 'Line 268,0,268,' .. detailExtra .. ' | StrokeWidth 1 | Stroke Color #Border#')
-            SKIN:Bang('!SetOption', p .. 'Card', 'Shape5', 'Line 0,' .. detailExtra .. ',536,' .. detailExtra .. ' | StrokeWidth 1 | Stroke Color #Border#')
+            SKIN:Bang('!SetOption', p .. 'Card', 'Shape4', 'Line 268,0,268,' .. bodyOffset .. ' | StrokeWidth 1 | Stroke Color #Border#')
+            SKIN:Bang('!SetOption', p .. 'Card', 'Shape5', 'Line 0,' .. bodyOffset .. ',536,' .. bodyOffset .. ' | StrokeWidth 1 | Stroke Color #Border#')
         else
             SKIN:Bang('!SetOption', p .. 'Card', 'Shape4', 'Line 0,0,0,0 | StrokeWidth 0')
             SKIN:Bang('!SetOption', p .. 'Card', 'Shape5', 'Line 0,0,0,0 | StrokeWidth 0')
         end
 
-        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+4))
-        SKIN:Bang('!SetOption', p .. 'DetailEachNet', 'Y', tostring(y+20))
-        SKIN:Bang('!SetOption', p .. 'DetailEachTax', 'Y', tostring(y+20))
-        SKIN:Bang('!SetOption', p .. 'DetailTotal', 'Y', tostring(y+4))
-        SKIN:Bang('!SetOption', p .. 'DetailTotalNet', 'Y', tostring(y+20))
-        SKIN:Bang('!SetOption', p .. 'DetailTotalTax', 'Y', tostring(y+20))
+        local detailLabelHeight = detailExpanded and math.max(16, bodyOffset-2) or 16
+        local detailLabelCenterY = y + (detailExpanded and math.floor(bodyOffset/2) or 9)
+        SKIN:Bang('!SetOption', p .. 'DetailEachLabel', 'Y', tostring(detailLabelCenterY))
+        SKIN:Bang('!SetOption', p .. 'DetailEachLabel', 'H', tostring(detailLabelHeight))
+        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+9))
+        SKIN:Bang('!SetOption', p .. 'DetailEachNet', 'Y', tostring(y+9))
+        SKIN:Bang('!SetOption', p .. 'DetailEachTax', 'Y', tostring(y+26))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalLabel', 'Y', tostring(detailLabelCenterY))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalLabel', 'H', tostring(detailLabelHeight))
+        SKIN:Bang('!SetOption', p .. 'DetailTotal', 'Y', tostring(y+9))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalNet', 'Y', tostring(y+9))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalTax', 'Y', tostring(y+26))
         if detailExpanded then
+            SKIN:Bang('!ShowMeter', p .. 'DetailEachLabel')
             SKIN:Bang('!ShowMeter', p .. 'Gross')
             SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')
-            SKIN:Bang('!ShowMeter', p .. 'DetailEachTax')
+            if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotalLabel')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotal')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')
-            SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax')
+            if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax') else SKIN:Bang('!HideMeter', p .. 'DetailTotalTax') end
         else
+            SKIN:Bang('!HideMeter', p .. 'DetailEachLabel')
             SKIN:Bang('!HideMeter', p .. 'Gross')
             SKIN:Bang('!HideMeter', p .. 'DetailEachNet')
             SKIN:Bang('!HideMeter', p .. 'DetailEachTax')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotalLabel')
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')
             SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')
@@ -815,7 +845,7 @@ local function layoutRows(data, count)
 
     local panelHeight = 192
     if count > 0 then
-        panelHeight = 120 + (count * rowStride) + ((expandedDetailRow > 0) and detailExtra or 0) + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra
+        panelHeight = 120 + (count * rowStride) + activeDetailExtra + ((expandedRow > 0) and graphExtra or 0) + 8 + footerExtra
     end
     setVariable('PanelHeight', panelHeight)
 end
