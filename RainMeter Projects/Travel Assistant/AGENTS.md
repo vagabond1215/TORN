@@ -51,49 +51,48 @@ The rejected single `OPTIMAL` route card and later user-facing `OPTIMAL` composi
 Main Rainmeter UI concept:
 
 ```text
-Travel                                      SETTINGS >
+In Torn                                      [filter] [settings]
+
+[UPCOMING] [GROSS PROFIT] [PROFIT/HR]
+
+[FLAG]  <item> | <foreign cost>   Take:<cash>   Make:<profit>   [$]
+        <window / leave guidance>                              [chart]
+
 Updated ...
-
-ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
-NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
-
-[FLAG]  <item>             <$net/ea> x<qty> = <$total net>   v
-        <flight/remaining> <safe/best leave guidance> <certainty/info> Take: <$required cash>
 ```
 
 Card rules:
 
 - No visible row/place numbers (`#1`, `#2`, etc.).
-- Left side is a recognizable FlagKit destination flag with no separate tile/background strip.
-- Country name is visible only in the flag tooltip; that tooltip also includes configured one-way travel time.
-- Card title is item name only.
-- Top-line economics show net profit per item × planned quantity = total net profit.
-- Monetary values retain the row economics color while `$` symbols and `/ea xN =` connective text render white.
-- Lower-left timing is muted gray: configured one-way flight duration at home, or a live landing countdown during recognized outbound travel.
-- Lower-middle is the actionable Safe/Best leave state; do not repeat flight duration there.
-- Safe rows suppress confidence and expose the `ⓘ` fallback tooltip anchor; Best rows show live confidence.
-- Lower-right `Take:` is exact purchase cash for invariant retained foreign prices and adds the 5% buffer only after retained evidence demonstrates real price variance.
-- The far-right row control is a compact chevron/chart affordance (`v` collapsed, `^` expanded), not the word `GRAPH`.
-- Clicking the row control expands that market's 8-hour graph **inside the list/card**.
-- At most one inline card graph is expanded at a time; opening another collapses the previous graph.
-- Expansion identity is stable `country:itemId`, so sorting may move the expanded market without retargeting it.
-- `VIEWER >` remains a separate standalone broader market browser. Do not replace it with inline expansion.
+- Left side is a recognizable FlagKit destination flag.
+- The hidden canonical Name meter remains item-name-only for downstream row lookup.
+- The visible first line is three fixed columns: `Item | foreign cost`, `Take:`, and `Make:`.
+- The `|` separator is muted gray; foreign cost keeps its fixed/variable price color.
+- `Take:` is exact purchase cash for invariant foreign prices and adds a 5% reserve only after retained evidence demonstrates real price variance.
+- `Make:` is after-tax profit using actual purchase cost; the unused Take reserve is not an expense.
+- The top-right `$` button expands the economics strip and uses a gold active highlight.
+- The lower-right chart Shape button expands the 8-hour local stock graph and uses an active border/fill highlight.
+- At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity.
+- Expanded economics show `MV`, `Each`, `Gross`, `Per Hour`, and `Tax` on one line. Labels are white; MV value is gold-yellow; Each/Gross/Per Hour values are white; Tax value is muted gray at zero and light red when nonzero.
 
-Ordering is selectable and persistent:
+Ordering is selectable and persistent only for:
 
-- `NAME`: alphabetical item name, then destination.
 - `UPCOMING`: soonest current/modeled stock window first.
 - `GROSS PROFIT`: highest total trip gross first.
 - `PROFIT/HR`: gross trip profit divided by total elapsed hours.
+- Alphabetical Name ordering is internal fallback only when the visible rows have neither usable timing nor usable profit inputs.
 - Hit likelihood is a separate displayed metric; do not fold it into a hidden sort score.
-- There is no user-facing `OPTIMAL`, Chance, or shortest-Time sort.
+- There is no user-facing `NAME`, `OPTIMAL`, Chance, or shortest-Time sort.
 - Sort controls reorder already-projected rows immediately in Lua; persistence is a tiny local write and must not wait on a full opportunity recompute.
 
 Economic semantics:
 
 ```text
-gross = (selected MV basis - foreign price) × modeled/current purchasable quantity
-profit/hr = gross / total elapsed hours
+gross sale = selected sale basis × quantity
+gross profit = gross sale - purchase cost
+market tax = gross sale × 0% or 5%
+make = gross profit - market tax
+profit/hr = gross profit / total elapsed hours
 ```
 
 Gross intentionally does not subtract travel cost. Total elapsed includes required wait, outbound travel, return travel, and purchase buffer; if returning to Torn, remaining return time precedes the next outbound opportunity.
@@ -118,31 +117,23 @@ This distinction is deliberate: current observed stock is a fact; future surviva
 
 ## Graphs and history
 
-There are two graph surfaces:
+There is one graph surface: the inline card graph.
 
-### Inline card graph
-
-- Opened with the row chevron.
+- Opened with the per-row chart Shape button.
 - Rendered inside the Rainmeter card/list.
 - One expanded market at a time.
-- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering and generated local Shape-path data.
-- It must never route through the standalone Viewer popup launcher. `LaunchItemViewer.ps1` retains only legacy `inline_` compatibility; the live Rainmeter inline path does not use it.
+- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering plus `GraphHover.lua` / `BuildGraphHoverData.ps1` for local hover telemetry.
 - Refreshing an open graph is local-only and may occur at approximately one-minute cadence.
+- The standalone WinForms Viewer and its launcher are retired; do not restore them.
 
-### Standalone Viewer
+The inline graph:
 
-- `VIEWER >` opens the general browser.
-- It remains a detached hidden-host WinForms surface.
-- It can browse all active markets independently of inline expansion.
-
-Both graph surfaces:
-
-- display an 8-hour history window;
-- use retained observations only plus truthful carried-baseline continuity;
-- never poll Prometheus/YATA/Torn;
-- never turn a forecast into observed history;
-- never invent a restock or sellout transition;
-- preserve learning retention independently (48h high-resolution observations / 90d completed cycles).
+- displays an 8-hour history window;
+- uses retained observations only plus truthful carried-baseline continuity;
+- never polls Prometheus/YATA/Torn;
+- never turns a forecast into observed history;
+- never invents a restock or sellout transition;
+- preserves learning retention independently (48h high-resolution observations / 90d completed cycles).
 
 Change-only history must carry the last predecessor across the display/retention cutoff. A previous bootstrap-only migration hole may be repaired to a carried baseline using recorded `firstSeenAt` and unchanged current state; this is continuity metadata, not a fabricated transition.
 
@@ -171,7 +162,7 @@ energyWastePolicy
 maxEnergyLoss
 nerveWastePolicy
 maxNerveLoss
-sortMode                     # name | upcoming | gross | profit_per_hour
+sortMode                     # upcoming | gross | profit_per_hour
 ```
 
 Legacy sort migration:
@@ -180,6 +171,7 @@ Legacy sort migration:
 optimal -> profit_per_hour
 profit  -> gross
 time    -> upcoming
+name    -> upcoming
 ```
 
 Item and Category popups use the active local catalog, not only old proof-card seeds. The Country popup follows `displayTripBands`; `selectedTripBands` remains the broad candidate scope.
@@ -380,7 +372,7 @@ ResalePriority
 ResaleQueue              # <= 1 market request
 ```
 
-`VisibleItems.ps1` is not part of the production heartbeat. Inline graph rendering is handled separately by `RenderInlineGraph.ps1`; standalone graph browsing is `OpenItemViewer.ps1`.
+`VisibleItems.ps1` is not part of the production heartbeat. Inline graph rendering is handled separately by `RenderInlineGraph.ps1`.
 
 ## Projection / interaction stability
 
@@ -390,7 +382,7 @@ ResaleQueue              # <= 1 market request
 - Never flash an already-populated surface to `Learning opportunities...` because a child stage is still running.
 - A transient learning-only zero pass is not authoritative over a previously valid nonzero projection.
 - Sorts are immediate local Lua reorderings.
-- Text/chevron controls need stable rectangular hitboxes.
+- Text/button controls need stable rectangular hitboxes.
 - Inline expansion should reflow the skin immediately without a provider/Torn call.
 
 ## Runtime diagnostics / popup contract
@@ -419,7 +411,6 @@ ResaleQueue              # <= 1 market request
 - shadow collection: no more often than ~120s unless revalidated;
 - travel/bars: one bounded request per normal update;
 - broad MV queue: at most one lower-priority request after heartbeat;
-- standalone Viewer: local/on demand;
 - no permanent background PowerShell/browser process.
 
 ## Browser notifications
@@ -432,6 +423,6 @@ Browser/Chrome notifications remain a future optional companion. They must consu
 
 ## Current validation boundary
 
-The 0.6 compact opportunity implementation is **pending target-Windows/Rainmeter acceptance**. The Item filter popup has target-host evidence from the 2026-08-26 Codex pass; the other popup/nested Settings paths still require target-host interaction acceptance. Do not call 0.6 accepted until focused parser/deterministic tests, one production update, visible current-stock rows, flag rails, exclusive inline expansion, separate Viewer, sort/filter controls and screenshots pass on the target host.
+The 0.6 compact opportunity implementation is **pending target-Windows/Rainmeter acceptance**. The Item filter popup has target-host evidence from the 2026-08-26 Codex pass; the other popup/nested Settings paths still require target-host interaction acceptance. Do not call 0.6 accepted until focused parser/deterministic tests, one production update, visible current-stock rows, flag rails, economics/graph expansion, sort/filter controls and screenshots pass on the target host.
 
 See `docs/NEXT_CODEX_RUN.md` for the current exact acceptance commands.
