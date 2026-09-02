@@ -49,7 +49,7 @@ and one production shadow update. The pre-review 25.3-second / ~1 MB artifact
 measurement is no longer the authoritative performance baseline because sampling
 and current-stock conditioning changed.
 
-Known stochastic-v1 research gaps remain deliberately open:
+Known stochastic-v1.1 research gaps remain deliberately open:
 
 - the fixed-grid structural miss is now mitigated by bounded independent
   coarse-to-fine discovery/refinement, but the candidate cap can still omit
