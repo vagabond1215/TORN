@@ -42,6 +42,8 @@ if ($errors.Count -eq 0) {
         "travelState=='abroad' or travelState=='foreign'",
         "'Market estimate'",
         'syncPanelHeight()',
+        'local footerExtra=28',
+        "math.max(160,math.floor(bottom+footerExtra))",
         "SKIN:Bang('!SetVariable','PanelHeight'"
     )) {
         if (-not $lua.Contains($token)) { Fail ("TravelStateWindowTweaks.lua missing contract token '{0}'." -f $token) }
@@ -116,7 +118,7 @@ if ($errors.Count -eq 0) {
 
     $ini = Get-Content -LiteralPath $iniPath -Raw
     $titleSection=[regex]::Match($ini,'(?ms)^\[MeterTitle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    foreach ($token in @('W=474','ClipString=1','LeftMouseUpAction=["https://www.torn.com/page.php?sid=travel"]')) {
+    foreach ($token in @('Y=25','StringAlign=LeftCenter','FontSize=16','FontFace=Nirmala UI Semilight','W=474','ClipString=1','LeftMouseUpAction=["https://www.torn.com/page.php?sid=travel"]')) {
         if (-not $titleSection.Contains($token)) { Fail ("MeterTitle missing dynamic travel-header layout token '{0}'." -f $token) }
     }
 
