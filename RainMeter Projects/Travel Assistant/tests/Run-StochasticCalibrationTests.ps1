@@ -112,6 +112,25 @@ Assert-Equal ([long]$firstFreeze[0].arrivalAt) 1500L 'Frozen forecast must prese
 $repeatFreeze=@(Get-SCFreezeRows -Artifact $artifact -State $state -NowEpoch 1020L -IntervalSeconds 3600)
 Assert-Equal $repeatFreeze.Count 0 'Same model/market/hour must not overwrite its first prospective forecast.'
 
+$monotonicState=New-SCCalibrationState
+$newerArtifact=($artifact | ConvertTo-Json -Depth 12 | ConvertFrom-Json)
+$newerArtifact.generatedAt=4000L
+$newerArtifact.markets[0].bestDepartureAt=4200L
+$newerArtifact.markets[0].bestArrivalAt=4500L
+$newerArtifact.markets[0].arrivals[0].departureAt=4200L
+$newerArtifact.markets[0].arrivals[0].arrivalAt=4500L
+$newerFreeze=@(Get-SCFreezeRows -Artifact $newerArtifact -State $monotonicState -NowEpoch 4010L -IntervalSeconds 3600)
+Assert-Equal $newerFreeze.Count 1 'A later hour bucket should freeze normally.'
+
+$olderArtifact=($artifact | ConvertTo-Json -Depth 12 | ConvertFrom-Json)
+$olderArtifact.generatedAt=3500L
+$olderArtifact.markets[0].bestDepartureAt=3700L
+$olderArtifact.markets[0].bestArrivalAt=3900L
+$olderArtifact.markets[0].arrivals[0].departureAt=3700L
+$olderArtifact.markets[0].arrivals[0].arrivalAt=3900L
+$olderFreeze=@(Get-SCFreezeRows -Artifact $olderArtifact -State $monotonicState -NowEpoch 3510L -IntervalSeconds 3600)
+Assert-Equal $olderFreeze.Count 0 'An older artifact bucket must not be frozen after a newer bucket was already recorded.'
+
 $staleFreeze=@(Get-SCFreezeRows -Artifact $artifact -State (New-SCCalibrationState) -NowEpoch 1401L -IntervalSeconds 3600)
 Assert-Equal $staleFreeze.Count 0 'Artifact older than five minutes must not be frozen as a new prospective prediction.'
 
