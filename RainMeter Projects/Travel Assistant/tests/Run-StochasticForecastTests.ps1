@@ -77,6 +77,11 @@ $abroadForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles @() 
 Assert-Equal ([string]$abroadForecast.decision.state) 'BUY_NOW' 'Abroad at target should use immediate fresh stock evidence.'
 Assert-Near ([double]$abroadForecast.arrivals[0].pAnyStock) 1.0 0.000001 'Immediate observed stock has certain current availability, not a forecast claim.'
 
+$agedAbroadMarket=[pscustomobject]@{lastStock=8;lastForeignPrice=50;sourceTimestamp=($now-60)}
+$agedAbroadForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles @() -Market $agedAbroadMarket -Destination ([pscustomobject]@{}) -Travel $abroad -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 3
+Assert-Equal ([string]$agedAbroadForecast.decision.state) 'INSUFFICIENT_DATA' 'An aged positive snapshot must not become a fabricated 100% current-stock claim without survival evidence.'
+Assert-Equal @($agedAbroadForecast.arrivals).Count 0 'Aged direct stock with insufficient cycles should remain probabilistically unknown.'
+
 $elsewhere=Get-SFTravelCandidates -TravelState traveling -MarketCountry test_country -TravelDestinationCountry other_country -TravelTimeLeft 400 -OneWaySeconds 100 -NowEpoch $now
 $elsewhereForecast=Invoke-SFMarketForecast -MarketKey 'test_country:1' -Cycles $cycles -Market $oosMarket -Destination $oosDestination -Travel $elsewhere -NowEpoch $now -ScenarioCount 64 -TargetQuantity 5 -MarketValue 100 -MarketFeePercent 0 -OneWaySeconds 100 -RandomSeed 2
 Assert-True (-not [bool]$elsewhere.feasible) 'Traveling elsewhere must make a new Torn departure physically infeasible.'
