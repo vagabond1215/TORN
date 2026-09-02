@@ -84,8 +84,9 @@ and resolves outcomes only from later unambiguous retained evidence. Completed
 cycle rows now persist `previousSellOutBoundaryQuality`, allowing between-cycle
 OOS outcomes only when continuity is explicitly proven. Unresolved rows expire
 without affecting metrics. Calibration summaries maintain overall,
-evidence-quality and market-specific Brier/log-loss/reliability statistics, plus
-exact-snapshot target/quantity metrics. New freezes stop at 24 unresolved rows per
+evidence-quality, market-specific, and forecast-horizon
+Brier/log-loss/reliability statistics, plus exact-snapshot target/quantity metrics.
+New freezes stop at 24 unresolved rows per
 model/market or 4,096 globally, without dropping pending evidence. Brier uses raw
 probabilities while log loss alone is clipped for numerical stability. No
 calibration transform is user-facing.
