@@ -7,40 +7,51 @@ The current committed **0.6.0 candidate** presents a compact list of current/fut
 ## Main view
 
 ```text
-Travel                                      SETTINGS >
+In Torn                                      [filter] [settings]
+
+[UPCOMING] [GROSS PROFIT] [PROFIT/HR]
+
+[FLAG]  Xanax | $771,397   Take: $22,679,072   Make: $2,069,508   [$]
+        Restocks in ~47m                                      [chart]
+
+[FLAG]  Ecstasy | $30,529  Take: $897,553      Make: $188,748     [$]
+        Collecting Data: See Weav3r                           [chart]
+
 Updated ...
-
-ITEM All v   TRIP SHORT MED LONG v   CAT All v   RESET
-NAME   UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
-
-[FLAG]  Xanax                                 $777,870   v
-[55m ]  IN STOCK   LEAVE NOW   67%   $804,358 ($847,573)
-
-[FLAG]  Plushie                                $79,614   v
-[47m ]  IN STOCK   LEAVE NOW   LEARNING   $400 ($4,823)
 ```
 
 Up to eight opportunities may be shown.
 
 ### Card layout
 
-- No visible `#1/#2/...` ranks.
+- No visible row/place numbers.
 - Destination is represented by a flag on the left.
-- A white strip under the flag carries the existing elapsed/travel-time value.
-- Country code/name and duplicate time are omitted from the card body.
-- Gross is shown as a bare dollar amount; `gross x18` is not printed.
-- Quantity remains available in the tooltip/internal projection so gross arithmetic can still be inspected.
-- The right-side `v` expands an 8-hour graph inside that card; it becomes `^` while open.
-- Only one inline graph can be open at once.
+- The visible first line uses fixed columns: **Item | foreign cost**, **Take**, and **Make**.
+- `Take` is exact purchase cash for fixed-price markets and adds a 5% reserve only for demonstrated variable-price markets.
+- `Make` is after-tax profit and never subtracts the unused Take reserve.
+- The top-right **$** button expands/collapses the one-line economics strip and highlights while open.
+- The lower-right chart button expands/collapses the local 8-hour stock graph and highlights while open.
+- Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering.
+
+Expanded economics are:
+
+```text
+MV:$...  Each:$...  Gross:$...  Per Hour:$...  Tax:$...
+```
+
+Labels are white. MV value is gold-yellow; Each/Gross/Per Hour values are white; Tax value is muted gray at zero and light red when nonzero.
 
 ## Sort modes
 
-- **NAME** — alphabetical item name, then destination.
+Selectable sorts are:
+
 - **UPCOMING** — earliest current/modeled stock window first.
 - **GROSS PROFIT** — highest total trip gross first.
 - **PROFIT/HR** — gross trip profit divided by total elapsed hours.
 
-Hit likelihood is shown separately and is not multiplied into any hidden presentation score. Sort changes are applied immediately to the current rows in Lua rather than waiting for a PowerShell/network update.
+Alphabetical **Name** ordering is not selectable. It is used only as an internal fallback when the visible rows have neither usable timing nor usable profit inputs.
+
+Hit likelihood remains separate from the sort score. Sort changes are applied immediately to current rows in Lua rather than waiting for a PowerShell/network update.
 
 ## Fresh stock and likelihood learning
 
@@ -76,34 +87,20 @@ Settings can switch to 95% MV or explicitly show profitable items only.
 
 ## Graphs
 
-Travel Assistant now has two graph surfaces.
+Each card has one local inline graph surface.
 
-### Inline card graph
-
-Click a row's `v` control:
+Click the chart button:
 
 - the card expands inside the list;
 - an 8-hour stock history is drawn locally;
 - later cards move down;
-- opening another card collapses the first;
-- clicking the open card again collapses it;
+- opening another graph collapses the first;
+- clicking the active chart button collapses it;
 - the graph follows stable `country:itemId` identity through sorting.
 
-Inline graph rendering reads local retained observations only. It makes no Prometheus/YATA/Torn request.
+Inline graph rendering reads retained local observations only. It makes no Prometheus/YATA/Torn request. The standalone WinForms Viewer has been removed.
 
-### Standalone Viewer
-
-`VIEWER >` still opens the separate full market browser with:
-
-- market dropdown;
-- richer graph diagnostics;
-- hourly labels;
-- observed restock/sellout markers;
-- stable market-key targeting.
-
-Inline expansion does not replace the standalone Viewer.
-
-Both graph surfaces use an 8-hour display while learning retention remains approximately 48h raw observations / 90d completed cycles. Change-only history carries its prior state across the window boundary. Sold-out-only history stays flat at zero rather than showing an artificial `0..1` axis.
+The graph uses an 8-hour display while learning retention remains approximately 48h raw observations / 90d completed cycles. Change-only history carries its prior state across the window boundary. Sold-out-only history stays flat at zero rather than showing an artificial `0..1` axis.
 
 ## Filters / Ignore List
 
@@ -206,7 +203,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Run-CurrentAcceptance.ps1
 ```
 
-Then run one production update and verify collapsed flag cards, one expanded inline graph, immediate sorting, Settings/filters and the separate standalone Viewer. See `docs/NEXT_CODEX_RUN.md` for the current exact checklist.
+Then run one production update and verify collapsed flag cards, the $ economics strip, one expanded inline graph, immediate sorting, and Settings/filters. See `docs/NEXT_CODEX_RUN.md` for the current exact checklist.
 
 ## Future notifications
 
