@@ -46,17 +46,21 @@ The review established/fixed:
 
 Before adding model complexity, rerun the target Windows PowerShell focused suite
 and one production shadow update. The pre-review 25.3-second / ~1 MB artifact
-measurement is no longer the authoritative performance baseline because sampling
-and current-stock conditioning changed.
+measurement is no longer the authoritative performance baseline because sampling,
+adaptive refinement, observation-shape extraction, and current-stock conditioning
+changed.
 
 Known stochastic-v1.1 research gaps remain deliberately open:
 
 - the fixed-grid structural miss is now mitigated by bounded independent
   coarse-to-fine discovery/refinement, but the candidate cap can still omit
   low-support peaks and needs target-host performance/calibration evidence;
-- within-cycle quantity remains linear rather than using empirical depletion shapes;
+- empirical piecewise depletion is now used when intermediate observations and
+  sufficiently narrow censor bounds exist, but many cycles will still use the
+  linear fallback and shape coverage/calibration must be measured;
 - Torn resale MV is held fixed during each simulated horizon;
-- replay interval/quantity/profit/regret metrics are still scaffold extensions;
+- replay now reports exact-snapshot quantity MAE/RMSE where scorable, while
+  restock/sellout interval coverage, profit and regret remain scaffold extensions;
 - no calibrated probabilities, change-point model, risk preference, or
   value-of-information solver exists.
 
