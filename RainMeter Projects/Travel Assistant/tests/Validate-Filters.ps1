@@ -164,7 +164,7 @@ if(Test-Path -LiteralPath $files.Ini){
  }
  foreach($section in @('MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')) {
   $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-  foreach($token in @('W=92','H=23','Shape=Rectangle 0,0,92,23,4 | Fill Color #Control# | StrokeWidth 1 | Stroke Color #Border#')){if(-not$body.Contains($token)){Fail "$section must remain a standard 92x23 rounded sort button surface."}}
+  foreach($token in @('W=104','H=23','Shape=Rectangle 0,0,104,23,4 | Fill Color #Control# | StrokeWidth 1 | Stroke Color #Border#')){if(-not$body.Contains($token)){Fail "$section must remain the accepted 104x23 rounded sort button surface."}}
  }
  foreach($retiredSeparator in @('MeterHeaderBottomLine','MeterSortBottomLine')){if($ini -match ('(?m)^\['+[regex]::Escape($retiredSeparator)+'\]\s*$')){Fail "Retired separator [$retiredSeparator] returned."}}
  if($ini.Contains('Text=SETTINGS  >')){Fail 'Main header must use the settings gear image, not SETTINGS > text.'}
