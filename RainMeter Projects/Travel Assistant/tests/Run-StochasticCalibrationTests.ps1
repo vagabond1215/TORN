@@ -163,6 +163,23 @@ $zeroHorizonArtifact.markets[0].arrivals[0].departureAt=0L
 $zeroHorizonFreeze=@(Get-SCFreezeRows -Artifact $zeroHorizonArtifact -State (New-SCCalibrationState) -NowEpoch 1010L -IntervalSeconds 3600)
 Assert-Equal $zeroHorizonFreeze.Count 0 'Current-state / BUY_NOW style zero-horizon evaluations must not enter prospective calibration.'
 
+$perMarketBacklog=New-SCCalibrationState
+$existingPending=($firstFreeze[0] | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+$existingPending.freezeBucket=-1L
+$perMarketBacklog.pending=@($existingPending)
+$perMarketBacklog.lastFrozen=@()
+$blockedPerMarket=@(Get-SCFreezeRows -Artifact $artifact -State $perMarketBacklog -NowEpoch 1010L -IntervalSeconds 3600 -MaximumPendingPerMarket 1 -MaximumPendingTotal 100)
+Assert-Equal $blockedPerMarket.Count 0 'Per-market pending cap must pause new freezes without deleting the unresolved forecast.'
+Assert-Equal @($perMarketBacklog.pending).Count 1 'Per-market backpressure must preserve existing pending evidence.'
+
+$globalBacklog=New-SCCalibrationState
+$otherPending=($existingPending | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+$otherPending.marketKey='other_country:2'
+$globalBacklog.pending=@($otherPending)
+$blockedGlobal=@(Get-SCFreezeRows -Artifact $artifact -State $globalBacklog -NowEpoch 1010L -IntervalSeconds 3600 -MaximumPendingPerMarket 24 -MaximumPendingTotal 1)
+Assert-Equal $blockedGlobal.Count 0 'Global pending cap must pause all new freezes when backlog reaches the configured limit.'
+Assert-Equal @($globalBacklog.pending).Count 1 'Global backpressure must not drop unresolved forecasts for capacity.'
+
 
 # Resolve a genuinely frozen prediction and verify incremental reliability metrics.
 $scoreState=New-SCCalibrationState
@@ -199,6 +216,8 @@ $summaryOverall=@($summary.models | Where-Object {$_.modelVersion -eq 'stochasti
 Assert-Equal $summaryOverall.Count 1 'Calibration summary must expose the model-level aggregate.'
 Assert-Near ([double]$summaryOverall[0].anyStock.brierScore) 0.09 0.00001 'Calibration summary must report mean Brier score.'
 Assert-Near ([double]$summaryOverall[0].anyStock.observedRate) 1.0 0.000001 'Calibration summary must report empirical observed rate.'
+Assert-Equal ([int]$summary.maximumPendingPerMarket) 24 'Calibration summary must expose the default per-market pending cap.'
+Assert-Equal ([int]$summary.maximumPendingTotal) 4096 'Calibration summary must expose the default global pending cap.'
 
 $summaryMarket=@($summary.models | Where-Object {$_.modelVersion -eq 'stochastic-v1.1' -and $_.scopeType -eq 'market' -and $_.scopeValue -eq 'test_country:1'})
 Assert-Equal $summaryMarket.Count 1 'Calibration summary must expose market-specific reliability metrics.'
@@ -223,6 +242,7 @@ Assert-True ($scriptText.Contains('selected arrival must be strictly after artif
 Assert-True ($scriptText.Contains("calibrationStatus='diagnostic only; no probability transformation is applied'")) 'Prospective scorer must not silently recalibrate user-facing probabilities.'
 Assert-True ($scriptText.Contains('Read-SCJson $StateFile -Strict')) 'Durable calibration state must be read strictly so malformed JSON cannot reset accumulated evidence.'
 Assert-True ($scriptText.Contains("aggregateScopes='overall, evidence_quality, and market'")) 'Prospective scorer must expose overall, evidence-quality, and market calibration scopes.'
+Assert-True ($scriptText.Contains("backlogPolicy='skip new freezes when pending per-market or total limits are reached; never relabel or drop pending outcomes for capacity'")) 'Calibration backlog policy must be explicit and non-destructive.'
 
 $runUpdate=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1')
 $forecastIndex=$runUpdate.IndexOf('Invoke-FailSoftScript -Path $StochasticForecast')
