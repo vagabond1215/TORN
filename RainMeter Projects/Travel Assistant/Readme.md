@@ -21,8 +21,13 @@ data/runtime/stochastic-forecast.json
 The schema includes arrival curves (`pAnyStock`, `pTargetQty`, expected quantity,
 expected profit, and expected profit/hour), evidence diagnostics, and one mutually
 exclusive shadow decision per market. Defaults are 128 deterministic seeded
-scenarios, a 15-minute grid, a 12-hour departure search, and a 14-day recency
-half-life. These probabilities are not calibrated or user-facing.
+scoring scenarios, a 15-minute **base** grid, a 12-hour departure search, and a
+14-day recency half-life. For markets whose lower-quartile observed stock duration
+is shorter than the base step, a small independently seeded discovery simulation
+finds coarse cells containing hidden stock support; only the strongest cells are
+refined, with a hard additional-candidate budget and restock-quantile anchors for
+sub-minute bursts. Discovery worlds choose where to look but are not used to score
+the published probability. These probabilities are not calibrated or user-facing.
 
 Polling evidence is interval-censored: transition bounds are retained instead of
 treating the later poll timestamp as exact. Stock declines to a positive value are
