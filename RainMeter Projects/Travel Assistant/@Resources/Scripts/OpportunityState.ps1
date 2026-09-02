@@ -67,6 +67,13 @@ function Get-OpportunityEconomics {
         makePerHour=([double]$make/$hours)
     }
 }
+function Get-OpportunityRoundTripProfitPerHour {
+    param([long]$Profit,[long]$OneWaySeconds)
+    if ($OneWaySeconds -le 0) { return 0.0 }
+    $hours=(2.0*[double]$OneWaySeconds)/3600.0
+    if ($hours -le 0) { return 0.0 }
+    return ([double]$Profit/$hours)
+}
 
 function Add-OpportunityDelta {
     param([hashtable]$Map,[long]$At,[int]$Delta)
@@ -721,7 +728,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                     $elapsedSeconds=[Math]::Max(1L,$remaining+$returnSeconds+$purchaseBuffer)
                     $tripEconomics=Get-OpportunityEconomics -MarketValue ([long]$resaleUse.marketValue) -ForeignPrice $foreignPrice -Quantity $quantity -MarketFeePercent $marketFeePercent -ElapsedSeconds $elapsedSeconds
                     $grossProfit=[long]$tripEconomics.grossProfit
-                    $profitPerHour=[double]$tripEconomics.makePerHour
+                    $profitPerHour=Get-OpportunityRoundTripProfitPerHour -Profit ([long]$tripEconomics.make) -OneWaySeconds $oneWaySeconds
                     $profitPerItem=[long]$tripEconomics.profitEach
                     if ([bool]$preferences.showProfitableOnly -and $profitPerItem -le 0) { continue }
                     $priceColor=if (-not $marketValueFresh) { '150,150,150,255' } elseif ($profitPerItem -gt 0) { '86,190,116,255' } else { '224,90,90,255' }
@@ -893,7 +900,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
 
         $tripEconomics=Get-OpportunityEconomics -MarketValue ([long]$resaleUse.marketValue) -ForeignPrice $foreignPrice -Quantity $quantity -MarketFeePercent $marketFeePercent -ElapsedSeconds $elapsedSeconds
         $grossProfit = [long]$tripEconomics.grossProfit
-        $profitPerHour = [double]$tripEconomics.makePerHour
+        $profitPerHour = Get-OpportunityRoundTripProfitPerHour -Profit ([long]$tripEconomics.make) -OneWaySeconds $oneWaySeconds
         $profitPerItem = [long]$tripEconomics.profitEach
         if ([bool]$preferences.showProfitableOnly -and $profitPerItem -le 0) { continue }
         $priceColor = if (-not $marketValueFresh) { '150,150,150,255' } elseif ($profitPerItem -gt 0) { '86,190,116,255' } else { '224,90,90,255' }
@@ -904,7 +911,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $chanceText = if ($probabilityKnown) { ('{0:N0}% modeled hit' -f (100.0*$probability)) } else { 'hit likelihood learning' }
         $mvStateText = if ($marketValueFresh) { 'MV fresh' } else { 'MV STALE '+(Format-OpportunityDuration ([long]$resaleUse.ageSeconds))+' old; refresh queued' }
         $stockStateText = if ($useForecastOnly) { 'stock forecast only' } else { 'stock live' }
-        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | net each {5} x {6} = {7} make | gross sale {8} at declared MV | tax {9} ({10}%) | {11}/hr net | {12} | foreign {13}, MV {14} ({15}); {16}' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney ([long]$tripEconomics.make)),(Format-OpportunityMoney ([long]$tripEconomics.grossSale)),(Format-OpportunityMoney ([long]$tripEconomics.marketTax)),$marketFeePercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resaleUse.marketValue)),$mvStateText,$stockStateText)
+        $tooltip = ('{0} - {1} | {2} | {3} | {4} total elapsed | net each {5} x {6} = {7} make | gross sale {8} at declared MV | tax {9} ({10}%) | {11}/hr round-trip flight net | {12} | foreign {13}, MV {14} ({15}); {16}' -f [string]$metadata.name,[string]$country.name,$windowText,$chanceText,(Format-OpportunityDuration $elapsedSeconds),(Format-OpportunityMoney $profitPerItem),$quantity,(Format-OpportunityMoney ([long]$tripEconomics.make)),(Format-OpportunityMoney ([long]$tripEconomics.grossSale)),(Format-OpportunityMoney ([long]$tripEconomics.marketTax)),$marketFeePercent,(Format-OpportunityMoney ([long][Math]::Round($profitPerHour))),$wasteText,(Format-OpportunityMoney $foreignPrice),(Format-OpportunityMoney ([long]$resaleUse.marketValue)),$mvStateText,$stockStateText)
 
         $rows.Add([pscustomobject]@{
             key=$marketKey
