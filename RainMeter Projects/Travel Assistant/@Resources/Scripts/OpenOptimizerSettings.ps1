@@ -7,7 +7,6 @@ Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot 'RuntimeLog.ps1')
 
 $ProjectRoot=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$UpdateLauncher=Join-Path $PSScriptRoot 'LaunchUpdate.ps1'
 $FilterLauncher=Join-Path $PSScriptRoot 'LaunchFilterPopup.ps1'
 $ProfileLauncher=Join-Path $PSScriptRoot 'LaunchSettings.ps1'
 $prefs=Read-UiPreferences
@@ -117,10 +116,10 @@ $save.Add_Click({
         Set-FilterProperty $current 'nerveWastePolicy' (Get-ComboPolicy $nervePolicy)
         Set-FilterProperty $current 'maxNerveLoss' ([int]$nerveMax.Value)
         [void](Save-UiPreferences $current)
-        if (-not (Test-Path -LiteralPath $UpdateLauncher)) { throw 'LaunchUpdate.ps1 is missing.' }
-        # Queue this committed settings refresh behind any active poll so the
-        # selected tax rate always reaches the published opportunity state.
-        & $UpdateLauncher -Action Update -MutexWaitSeconds 120
+        # Settings are projection inputs just like filters. Recompute from retained
+        # market state so the saved tax/waste choices reach the next UI generation
+        # without issuing another foreign-stock collection request.
+        Start-FilterProjectionRefresh -Action RefreshFilters
         Clear-TravelAssistantLatestError -Component $logComponent
         $form.Close()
     } catch {
