@@ -98,6 +98,10 @@ $cycleB=New-CalCycle -RestockLower 300L -RestockUpper 310L -SelloutLower 390L -S
 $oos=Get-SCConfirmedOutcome -ArrivalAt 250L -TargetQuantity 20 -Observations @() -Cycles @($cycleA,$cycleB) -AsOf 400L
 Assert-True ([bool]$oos.anyScorable) 'Continuity-linked between-cycle OOS interval must be scorable.'
 Assert-Equal ([int]$oos.anyStock) 0 'Continuity-linked between-cycle OOS interval must label failure.'
+Assert-True ([bool]$oos.targetScorable) 'Confirmed OOS must also score target-quantity failure.'
+Assert-Equal ([int]$oos.targetSuccess) 0 'Confirmed OOS cannot satisfy a positive target quantity.'
+Assert-True ([bool]$oos.quantityScorable) 'Confirmed OOS determines available quantity exactly.'
+Assert-Equal ([long]$oos.actualQuantity) 0L 'Confirmed OOS must score available quantity as zero.'
 
 $unlinkedB=New-CalCycle -RestockLower 300L -RestockUpper 310L -SelloutLower 390L -SelloutUpper 400L -PreviousSelloutUpper 0L -PreviousQuality unknown_gap
 $unlinked=Get-SCConfirmedOutcome -ArrivalAt 250L -TargetQuantity 20 -Observations @() -Cycles @($cycleA,$unlinkedB) -AsOf 400L
@@ -255,6 +259,8 @@ Assert-True ($scriptText.Contains("calibrationStatus='diagnostic only; no probab
 Assert-True ($scriptText.Contains('Read-SCJson $StateFile -Strict')) 'Durable calibration state must be read strictly so malformed JSON cannot reset accumulated evidence.'
 Assert-True ($scriptText.Contains("aggregateScopes='overall, evidence_quality, market, and horizon'")) 'Prospective scorer must expose overall, evidence-quality, market, and horizon calibration scopes.'
 Assert-True ($scriptText.Contains("horizonBuckets='<=30m, >30m-2h, >2h-6h, >6h'")) 'Calibration horizon buckets must remain explicit and stable for longitudinal metrics.'
+Assert-True ($scriptText.Contains("targetQuantityOutcome='exact provider snapshot or continuity-linked confirmed OOS failure'")) 'Target-quantity methodology must retain deterministic confirmed-OOS failures.'
+Assert-True ($scriptText.Contains("availableQuantityOutcome='exact non-conflicting provider snapshot or continuity-linked confirmed OOS quantity zero'")) 'Available-quantity methodology must retain deterministic zero-quantity OOS labels.'
 Assert-True ($scriptText.Contains("backlogPolicy='skip new freezes when pending per-market or total limits are reached; never relabel or drop pending outcomes for capacity'")) 'Calibration backlog policy must be explicit and non-destructive.'
 
 $runUpdate=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1')
