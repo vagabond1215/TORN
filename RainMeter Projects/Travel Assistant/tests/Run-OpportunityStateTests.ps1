@@ -195,7 +195,7 @@ Write-OpportunityProjection -State $fallbackSortState -Rows @() -SortMode 'upcom
 Assert-Equal $fallbackSortState['OpportunitySortMode'] 'upcoming' 'Requested sort remains Upcoming even when no data exists.'
 Assert-Equal $fallbackSortState['OpportunitySortEffectiveMode'] 'name' 'Name ordering is published only as the no-data fallback.'
 
-$economicsState=@{}
+$economicsState=@{'Opportunity1TakeValue'='1050';'Opportunity1TakeBufferPercent'='5'}
 $economicsRows=@([pscustomobject]@{
     key='canada:99'; name='Economics'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=.75; probabilityKnown=$true;
     elapsedSeconds=3600L; grossProfit=500L; quantity=10; profitPerHour=425.0; windowStartAt=100000L; foreignPrice=100L; marketValue=150L;
