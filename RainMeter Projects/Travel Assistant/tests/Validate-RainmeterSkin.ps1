@@ -51,7 +51,7 @@ foreach($retired in @('MeasureItemViewer','MeterViewer','ViewerMarketKey','Launc
 }
 
 foreach ($i in 1..8) {
-    foreach ($suffix in @('Card','Flag','FlagMask','CardBorder','ItemImage','Name','DetailEachLabel','Gross','DetailEachNet','DetailEachTax','DetailEachProfitHour','DetailTotalLabel','DetailTotal','DetailTotalNet','DetailTotalTax','DetailTotalProfitHour','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph')) {
+    foreach ($suffix in @('Card','Flag','FlagMask','CardBorder','ItemImage','Name','DetailEachLabel','Gross','DetailEachGrossValue','DetailEachNet','DetailEachNetValue','DetailEachTax','DetailEachTaxValue','DetailEachProfitHour','DetailEachPriceValue','DetailTotalLabel','DetailTotal','DetailTotalGrossValue','DetailTotalNet','DetailTotalNetValue','DetailTotalTax','DetailTotalTaxValue','DetailTotalProfitHour','DetailTotalPriceValue','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph')) {
         $section='MeterOpportunity'+$i+$suffix
         if ($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "OpportunityRows.inc missing [$section]." }
     }
@@ -68,14 +68,22 @@ foreach ($i in 1..8) {
     $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailEachLabelBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachLabel\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $grossBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailEachGrossValueBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachGrossValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailEachNetBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachNet\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailEachNetValueBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachNetValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailEachTaxBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachTax\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailEachTaxValueBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachTaxValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailEachProfitHourBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailEachPriceValueBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailEachPriceValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalLabelBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalLabel\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotal\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailTotalGrossValueBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalGrossValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalNetBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalNet\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailTotalNetValueBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalNetValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalTaxBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalTax\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailTotalTaxValueBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalTaxValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $detailTotalProfitHourBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalProfitHour\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $detailTotalPriceValueBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalPriceValue\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphButtonBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     if ($cardBody -notmatch ('ToggleCardExpanded\('+[string]$i+'\)')) { Fail "Opportunity $i card body must toggle both economics and graph expansion." }
@@ -91,17 +99,25 @@ foreach ($i in 1..8) {
     if ($takeBody -notmatch '(?im)^X=123\s*$' -or $takeBody -notmatch '(?im)^W=1\s*$' -or $takeBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i retired Take surface must remain inert." }
     if ($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=142\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=14\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i selected primary Profit / PROFIT/HR metric must span both text lines and align right-center at x=504." }
     if ($leaveBody -notmatch '(?im)^FontSize=9\s*$') { Fail "Opportunity $i visible window/guidance line must use 9pt typography." }
-    if ($detailEachLabelBody -notmatch '(?im)^X=29\s*$' -or $detailEachLabelBody -notmatch '(?im)^W=40\s*$' -or $detailEachLabelBody -notmatch '(?im)^H=32\s*$' -or $detailEachLabelBody -notmatch '(?im)^StringAlign=CenterCenter\s*$' -or $detailEachLabelBody -notmatch '(?im)^SolidColor=#Border#\s*$' -or $detailEachLabelBody -notmatch '(?im)^Text=Each\s*$') { Fail "Opportunity $i Each label must be a vertically centered border-colored block." }
-    if ($grossBody -notmatch '(?im)^X=54\s*$' -or $grossBody -notmatch '(?im)^W=104\s*$' -or $grossBody -notmatch '(?im)^H=16\s*$' -or $grossBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each MV must be left-aligned on the top row." }
-    if ($detailEachNetBody -notmatch '(?im)^X=270\s*$' -or $detailEachNetBody -notmatch '(?im)^W=108\s*$' -or $detailEachNetBody -notmatch '(?im)^H=16\s*$' -or $detailEachNetBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each alternate Profit / $/hr metric must be right-aligned on the top row." }
-    if ($detailEachTaxBody -notmatch '(?im)^X=270\s*$' -or $detailEachTaxBody -notmatch '(?im)^W=112\s*$' -or $detailEachTaxBody -notmatch '(?im)^H=16\s*$' -or $detailEachTaxBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each Tax must be right-aligned on the second row." }
-    if ($detailEachProfitHourBody -notmatch '(?im)^X=54\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^W=100\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^H=16\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^FontSize=8\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each Price must occupy the lower-left cell." }
-    if ($detailTotalLabelBody -notmatch '(?im)^X=297\s*$' -or $detailTotalLabelBody -notmatch '(?im)^W=40\s*$' -or $detailTotalLabelBody -notmatch '(?im)^H=32\s*$' -or $detailTotalLabelBody -notmatch '(?im)^StringAlign=CenterCenter\s*$' -or $detailTotalLabelBody -notmatch '(?im)^SolidColor=#Border#\s*$' -or $detailTotalLabelBody -notmatch '(?im)^Text=Total\s*$') { Fail "Opportunity $i Total label must be a vertically centered border-colored block." }
-    if ($detailTotalBody -notmatch '(?im)^X=322\s*$' -or $detailTotalBody -notmatch '(?im)^W=104\s*$' -or $detailTotalBody -notmatch '(?im)^H=16\s*$' -or $detailTotalBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total MV must be left-aligned on the top row." }
-    if ($detailTotalNetBody -notmatch '(?im)^X=538\s*$' -or $detailTotalNetBody -notmatch '(?im)^W=108\s*$' -or $detailTotalNetBody -notmatch '(?im)^H=16\s*$' -or $detailTotalNetBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Total alternate Profit / $/hr metric must be right-aligned on the top row." }
-    if ($detailTotalTaxBody -notmatch '(?im)^X=538\s*$' -or $detailTotalTaxBody -notmatch '(?im)^W=112\s*$' -or $detailTotalTaxBody -notmatch '(?im)^H=16\s*$' -or $detailTotalTaxBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Total Tax must be right-aligned on the second row." }
-    if ($detailTotalProfitHourBody -notmatch '(?im)^X=322\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^W=100\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^H=16\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^FontSize=8\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total Price must occupy the lower-left cell." }
-    foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody,$detailEachLabelBody,$grossBody,$detailEachNetBody,$detailEachTaxBody,$detailEachProfitHourBody,$detailTotalLabelBody,$detailTotalBody,$detailTotalNetBody,$detailTotalTaxBody,$detailTotalProfitHourBody,$detailBody)){if($fontBody -match '(?im)^FontFace=' -and $fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Opportunity $i card string meters must use Nirmala UI Semilight."}}
+    if ($detailEachLabelBody -notmatch '(?im)^X=29\s*$' -or $detailEachLabelBody -notmatch '(?im)^W=40\s*$' -or $detailEachLabelBody -notmatch '(?im)^H=32\s*$' -or $detailEachLabelBody -notmatch '(?im)^FontSize=9\s*$' -or $detailEachLabelBody -notmatch '(?im)^StringAlign=CenterCenter\s*$' -or $detailEachLabelBody -notmatch '(?im)^SolidColor=#Border#\s*$' -or $detailEachLabelBody -notmatch '(?im)^Text=Each\s*$') { Fail "Opportunity $i Each label must be a 9pt vertically centered border-colored block." }
+    if ($grossBody -notmatch '(?im)^X=54\s*$' -or $grossBody -notmatch '(?im)^W=42\s*$' -or $grossBody -notmatch '(?im)^FontSize=9\s*$' -or $grossBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each MV label must align left." }
+    if ($detailEachGrossValueBody -notmatch '(?im)^X=154\s*$' -or $detailEachGrossValueBody -notmatch '(?im)^FontSize=9\s*$' -or $detailEachGrossValueBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each MV value must align right." }
+    if ($detailEachNetBody -notmatch '(?im)^X=162\s*$' -or $detailEachNetBody -notmatch '(?im)^FontSize=9\s*$' -or $detailEachNetBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each alternate label must align left." }
+    if ($detailEachNetValueBody -notmatch '(?im)^X=270\s*$' -or $detailEachNetValueBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each alternate value must align right." }
+    if ($detailEachTaxBody -notmatch '(?im)^X=162\s*$' -or $detailEachTaxBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each Tax label must align left." }
+    if ($detailEachTaxValueBody -notmatch '(?im)^X=270\s*$' -or $detailEachTaxValueBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each Tax value must align right." }
+    if ($detailEachProfitHourBody -notmatch '(?im)^X=54\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^FontSize=9\s*$' -or $detailEachProfitHourBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Each Price label must align left." }
+    if ($detailEachPriceValueBody -notmatch '(?im)^X=154\s*$' -or $detailEachPriceValueBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Each Price value must align right." }
+    if ($detailTotalLabelBody -notmatch '(?im)^X=297\s*$' -or $detailTotalLabelBody -notmatch '(?im)^W=40\s*$' -or $detailTotalLabelBody -notmatch '(?im)^H=32\s*$' -or $detailTotalLabelBody -notmatch '(?im)^FontSize=9\s*$' -or $detailTotalLabelBody -notmatch '(?im)^StringAlign=CenterCenter\s*$' -or $detailTotalLabelBody -notmatch '(?im)^SolidColor=#Border#\s*$' -or $detailTotalLabelBody -notmatch '(?im)^Text=Total\s*$') { Fail "Opportunity $i Total label must be a 9pt vertically centered border-colored block." }
+    if ($detailTotalBody -notmatch '(?im)^X=322\s*$' -or $detailTotalBody -notmatch '(?im)^FontSize=9\s*$' -or $detailTotalBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total MV label must align left." }
+    if ($detailTotalGrossValueBody -notmatch '(?im)^X=422\s*$' -or $detailTotalGrossValueBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Total MV value must align right." }
+    if ($detailTotalNetBody -notmatch '(?im)^X=430\s*$' -or $detailTotalNetBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total alternate label must align left." }
+    if ($detailTotalNetValueBody -notmatch '(?im)^X=538\s*$' -or $detailTotalNetValueBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Total alternate value must align right." }
+    if ($detailTotalTaxBody -notmatch '(?im)^X=430\s*$' -or $detailTotalTaxBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total Tax label must align left." }
+    if ($detailTotalTaxValueBody -notmatch '(?im)^X=538\s*$' -or $detailTotalTaxValueBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Total Tax value must align right." }
+    if ($detailTotalProfitHourBody -notmatch '(?im)^X=322\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^FontSize=9\s*$' -or $detailTotalProfitHourBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total Price label must align left." }
+    if ($detailTotalPriceValueBody -notmatch '(?im)^X=422\s*$' -or $detailTotalPriceValueBody -notmatch '(?im)^StringAlign=RightCenter\s*$') { Fail "Opportunity $i Total Price value must align right." }
+    foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody,$detailEachLabelBody,$grossBody,$detailEachGrossValueBody,$detailEachNetBody,$detailEachNetValueBody,$detailEachTaxBody,$detailEachTaxValueBody,$detailEachProfitHourBody,$detailEachPriceValueBody,$detailTotalLabelBody,$detailTotalBody,$detailTotalGrossValueBody,$detailTotalNetBody,$detailTotalNetValueBody,$detailTotalTaxBody,$detailTotalTaxValueBody,$detailTotalProfitHourBody,$detailTotalPriceValueBody,$detailBody)){if($fontBody -match '(?im)^FontFace=' -and $fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Opportunity $i card string meters must use Nirmala UI Semilight."}}
     if ($graphBody -notmatch '(?im)^Meter=Image\s*$' -or $graphBody -notmatch '(?im)^W=528\s*$' -or $graphBody -notmatch '(?im)^H=125\s*$') { Fail "Opportunity $i inline graph must be the 528x125 native Image surface." }
     if ($graphBody -notmatch ('ToggleCardExpanded\('+[string]$i+'\)')) { Fail "Opportunity $i expanded graph surface must retain the whole-card toggle action." }
     if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
@@ -137,6 +153,9 @@ foreach ($token in @(
     "local activeDetailExtra = detailExtraForRow(data, expandedDetailRow)","local activeDetailHasTax = expandedDetailRow > 0 and detailTaxRate(data, expandedDetailRow) > 0",
     "if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + activeDetailExtra end",
     "local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)",
+    "'DetailEachGrossValue', 'Y', tostring(y+8)","'DetailEachNetValue', 'Y', tostring(y+8)","'DetailEachTaxValue', 'Y', tostring(y+25)","'DetailEachPriceValue', 'Y', tostring(y+25)",
+    "'DetailTotalGrossValue', 'Y', tostring(y+8)","'DetailTotalNetValue', 'Y', tostring(y+8)","'DetailTotalTaxValue', 'Y', tostring(y+25)","'DetailTotalPriceValue', 'Y', tostring(y+25)",
+    "'Shape6', 'Line 150,1,150,'","'Shape7', 'Line 418,1,418,'","Stroke Color 64,64,64,150",
     'local detailLabelCenterY = y + (detailExpanded and math.floor(bodyOffset/2) or 9)',
     "'DetailEachLabel', 'Y', tostring(detailLabelCenterY)","'DetailEachLabel', 'H', tostring(detailLabelHeight)",
     "'Gross', 'Y', tostring(y+8)","'DetailEachNet', 'Y', tostring(y+8)","'DetailEachTax', 'Y', tostring(y+25)","'DetailEachProfitHour', 'Y', tostring(y+25)",
@@ -144,9 +163,9 @@ foreach ($token in @(
     "'DetailTotal', 'Y', tostring(y+8)","'DetailTotalNet', 'Y', tostring(y+8)","'DetailTotalTax', 'Y', tostring(y+25)","'DetailTotalProfitHour', 'Y', tostring(y+25)",
     "'Flag', 'Y', tostring(y+bodyOffset)","'FlagMask', 'Y', tostring(y+bodyOffset)","'Flag', 'W', '67'","'Flag', 'H', '50'","'ItemImage', 'Y', tostring(y+3+bodyOffset)","'ItemImage', 'W', '44'","'ItemImage', 'H', '44'","'Window', 'Y', tostring(y+34+bodyOffset)","'Graph', 'Y', tostring(y+26+bodyOffset)",
     "SKIN:Bang('!ShowMeter', p .. 'DetailEachLabel')","SKIN:Bang('!ShowMeter', p .. 'Gross')","SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')",
-    "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end","SKIN:Bang('!ShowMeter', p .. 'DetailEachProfitHour')",
+    "SKIN:Bang('!ShowMeter', p .. 'DetailEachTaxValue')","SKIN:Bang('!HideMeter', p .. 'DetailEachTaxValue')","SKIN:Bang('!ShowMeter', p .. 'DetailEachProfitHour')","SKIN:Bang('!ShowMeter', p .. 'DetailEachPriceValue')",
     "SKIN:Bang('!ShowMeter', p .. 'DetailTotalLabel')","SKIN:Bang('!ShowMeter', p .. 'DetailTotal')","SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')",
-    "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax') else SKIN:Bang('!HideMeter', p .. 'DetailTotalTax') end","SKIN:Bang('!ShowMeter', p .. 'DetailTotalProfitHour')",
+    "SKIN:Bang('!ShowMeter', p .. 'DetailTotalTaxValue')","SKIN:Bang('!HideMeter', p .. 'DetailTotalTaxValue')","SKIN:Bang('!ShowMeter', p .. 'DetailTotalProfitHour')","SKIN:Bang('!ShowMeter', p .. 'DetailTotalPriceValue')",
     "SKIN:Bang('!HideMeter', p .. 'DetailEachLabel')","SKIN:Bang('!HideMeter', p .. 'Gross')","SKIN:Bang('!HideMeter', p .. 'DetailEachNet')","SKIN:Bang('!HideMeter', p .. 'DetailEachTax')","SKIN:Bang('!HideMeter', p .. 'DetailEachProfitHour')",
     "SKIN:Bang('!HideMeter', p .. 'DetailTotalLabel')","SKIN:Bang('!HideMeter', p .. 'DetailTotal')","SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')","SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')","SKIN:Bang('!HideMeter', p .. 'DetailTotalProfitHour')",
     "SKIN:Bang('!HideMeter', p .. 'Name')","SKIN:Bang('!HideMeter', p .. 'Window')","SKIN:Bang('!HideMeter', p .. 'Chance')",
@@ -183,7 +202,153 @@ foreach($iconName in @('MeterFilterIcon','MeterSettingsIcon')){
 }
 if($ini -notmatch '(?m)^Control=32,32,32,248\s*$'){Fail 'Sort-control background must remain neutral gray.'}
 $sortProfit=[regex]::Match($ini,'(?ms)^\[MeterSortGross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-if($sortProfit -notmatch '(?im)^Text=PROFIT\s*$'){Fail 'Displayed-profit sort must be labeled PROFIT.'}
+if($sortProfit -notmatch '(?im)^Text=PROFIT\s*
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+){Fail 'Displayed-profit sort must be labeled PROFIT.'}
+foreach($name in @('Upcoming','Gross','ProfitHour')){
+    $textBody=[regex]::Match($ini,'(?ms)^\[MeterSort'+$name+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $buttonBody=[regex]::Match($ini,'(?ms)^\[MeterSort'+$name+'Button\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    if($textBody -notmatch '(?im)^FontSize=11\s*
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $textBody -notmatch '(?im)^StringStyle=Bold\s*
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $textBody -notmatch '(?im)^W=104\s*
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+){Fail "Sort/filter text $name must be bold 11pt inside the widened 104px control."}
+    if($buttonBody -notmatch '(?im)^W=104\s*
+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $buttonBody -notmatch '(?im)^Shape=Rectangle 0,0,104,23,4 \|'){Fail "Sort/filter button $name must use the equal 104px width."}
+}
 
 $tokens=$null; $parseErrors=$null
 [void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
