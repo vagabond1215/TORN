@@ -51,7 +51,9 @@ and current-stock conditioning changed.
 
 Known stochastic-v1 research gaps remain deliberately open:
 
-- fixed 15-minute runtime grid can miss ultra-short probability peaks;
+- the fixed-grid structural miss is now mitigated by bounded independent
+  coarse-to-fine discovery/refinement, but the candidate cap can still omit
+  low-support peaks and needs target-host performance/calibration evidence;
 - within-cycle quantity remains linear rather than using empirical depletion shapes;
 - Torn resale MV is held fixed during each simulated horizon;
 - replay interval/quantity/profit/regret metrics are still scaffold extensions;
