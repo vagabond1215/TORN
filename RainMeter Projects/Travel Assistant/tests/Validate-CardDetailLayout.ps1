@@ -76,8 +76,8 @@ if($errors.Count -eq 0){
         }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=123\s*$' -or $priceBody -notmatch '(?im)^W=265\s*$' -or $priceBody -notmatch '(?im)^FontSize=12\s*$'){
-            Fail "Row $i combined item/unit/full-load-cost line must start after the 48px item-art cell at x=123 with a 265px width."
+        if($priceBody -notmatch '(?im)^X=123\s*$' -or $priceBody -notmatch '(?im)^W=230\s*$' -or $priceBody -notmatch '(?im)^FontSize=12\s*$'){
+            Fail "Row $i primary item-name line must start after the 48px item-art cell at x=123 with a 230px width."
         }
         $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         $leaveBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Leave\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -85,8 +85,8 @@ if($errors.Count -eq 0){
             Fail "Row $i retired Take surface must remain inert; full-load cost belongs in the Price text run."
         }
         $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=108\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=16\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$'){
-            Fail "Row $i total net must be 16pt, vertically centered, and right-aligned at x=504."
+        if($makeBody -notmatch '(?im)^X=504\s*$' -or $makeBody -notmatch '(?im)^W=142\s*$' -or $makeBody -notmatch '(?im)^H=50\s*$' -or $makeBody -notmatch '(?im)^FontSize=14\s*$' -or $makeBody -notmatch '(?im)^StringAlign=RightCenter\s*$'){
+            Fail "Row $i selected primary Profit / PROFIT/HR metric must be 14pt, vertically centered, and right-aligned at x=504."
         }
         if($leaveBody -notmatch '(?im)^FontSize=9\s*$'){Fail "Row $i window/guidance line must use 9pt typography."}
         foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody)){
@@ -106,38 +106,38 @@ if($errors.Count -eq 0){
         foreach($token in @('X=29','W=40','H=32','FontSize=8','StringAlign=CenterCenter','SolidColor=#Border#','Text=Each','Hidden=1')){
             if(-not$stripEachLabel.Contains($token)){Fail "Row $i Each label block missing '$token'."}
         }
-        foreach($token in @('X=54','W=112','H=16','FontSize=9','StringAlign=LeftCenter','Hidden=1')){
+        foreach($token in @('X=54','W=104','H=16','FontSize=8','StringAlign=LeftCenter','Hidden=1')){
             if(-not$strip.Contains($token)){Fail "Row $i per-item MV meter missing '$token'."}
         }
-        foreach($token in @('X=270','W=98','H=16','StringAlign=RightCenter','Hidden=1')){
-            if(-not$stripEachNet.Contains($token)){Fail "Row $i per-item Net meter missing '$token'."}
+        foreach($token in @('X=270','W=108','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
+            if(-not$stripEachNet.Contains($token)){Fail "Row $i per-item alternate Profit / $/hr meter missing '$token'."}
         }
-        foreach($token in @('X=54','W=210','H=16','StringAlign=LeftCenter','Hidden=1')){
-            if(-not$stripEachTax.Contains($token)){Fail "Row $i per-item Tax meter missing '$token'."}
+        foreach($token in @('X=270','W=112','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
+            if(-not$stripEachTax.Contains($token)){Fail "Row $i per-item bottom-right Tax meter missing '$token'."}
         }
-        foreach($token in @('X=270','W=98','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
-            if(-not$stripEachProfitHour.Contains($token)){Fail "Row $i per-item round-trip flight $/hr meter missing '$token'."}
+        foreach($token in @('X=54','W=100','H=16','FontSize=8','StringAlign=LeftCenter','Hidden=1')){
+            if(-not$stripEachProfitHour.Contains($token)){Fail "Row $i per-item bottom-left Price meter missing '$token'."}
         }
         foreach($token in @('X=297','W=40','H=32','FontSize=8','StringAlign=CenterCenter','SolidColor=#Border#','Text=Total','Hidden=1')){
             if(-not$stripTotalLabel.Contains($token)){Fail "Row $i Total label block missing '$token'."}
         }
-        foreach($token in @('X=322','W=112','H=16','FontSize=9','StringAlign=LeftCenter','Hidden=1')){
+        foreach($token in @('X=322','W=104','H=16','FontSize=8','StringAlign=LeftCenter','Hidden=1')){
             if(-not$stripTotal.Contains($token)){Fail "Row $i total MV meter missing '$token'."}
         }
-        foreach($token in @('X=538','W=98','H=16','StringAlign=RightCenter','Hidden=1')){
-            if(-not$stripTotalNet.Contains($token)){Fail "Row $i total Net meter missing '$token'."}
+        foreach($token in @('X=538','W=108','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
+            if(-not$stripTotalNet.Contains($token)){Fail "Row $i total alternate Profit / $/hr meter missing '$token'."}
         }
-        foreach($token in @('X=322','W=210','H=16','StringAlign=LeftCenter','Hidden=1')){
-            if(-not$stripTotalTax.Contains($token)){Fail "Row $i total Tax meter missing '$token'."}
+        foreach($token in @('X=538','W=112','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
+            if(-not$stripTotalTax.Contains($token)){Fail "Row $i total bottom-right Tax meter missing '$token'."}
         }
-        foreach($token in @('X=538','W=98','H=16','FontSize=8','StringAlign=RightCenter','Hidden=1')){
-            if(-not$stripTotalProfitHour.Contains($token)){Fail "Row $i total round-trip flight $/hr meter missing '$token'."}
+        foreach($token in @('X=322','W=100','H=16','FontSize=8','StringAlign=LeftCenter','Hidden=1')){
+            if(-not$stripTotalProfitHour.Contains($token)){Fail "Row $i total bottom-left Price meter missing '$token'."}
         }
         if($cardY -lt 0){Fail "Row $i card Y could not be parsed for economics baseline validation."}
         else {
             foreach($pair in @(
-                @($strip,($cardY+8),'Each MV'),@($stripEachNet,($cardY+8),'Each Net'),@($stripEachTax,($cardY+25),'Each Tax'),@($stripEachProfitHour,($cardY+25),'Each $/hr'),
-                @($stripTotal,($cardY+8),'Total MV'),@($stripTotalNet,($cardY+8),'Total Net'),@($stripTotalTax,($cardY+25),'Total Tax'),@($stripTotalProfitHour,($cardY+25),'Total $/hr')
+                @($strip,($cardY+8),'Each MV'),@($stripEachNet,($cardY+8),'Each alternate metric'),@($stripEachTax,($cardY+25),'Each Tax'),@($stripEachProfitHour,($cardY+25),'Each Price'),
+                @($stripTotal,($cardY+8),'Total MV'),@($stripTotalNet,($cardY+8),'Total alternate metric'),@($stripTotalTax,($cardY+25),'Total Tax'),@($stripTotalProfitHour,($cardY+25),'Total Price')
             )){
                 $bodyText=[string]$pair[0]
                 $expectedY=[int]$pair[1]
@@ -212,33 +212,31 @@ if($errors.Count -eq 0){
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
         "totalCost=number(state[projectedPrefix..'TotalCostValue'])",
         "totalCost=(fallbackPrice>0 and quantity>0) and (fallbackPrice*quantity) or 0",
-        "setOption(prefix..'Price','X',123)","setOption(prefix..'Price','W',265)",
+        "setOption(prefix..'Price','X',123)","setOption(prefix..'Price','W',230)",
         "setOption(prefix..'Leave','X',123)","setOption(prefix..'Leave','W',263)",
-        "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)",
-        "setOption(prefix..'Price','InlinePattern','\\|')",
-        "setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
-        "setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')",
-        "setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
-        "setOption(prefix..'Price','InlinePattern3','-?\\$[0-9,]+$')",
-        "setOption(prefix..'Price','InlineSetting3','Color | #ToggleIdle#')",
+        "setOption(prefix..'Price','Text',itemName)",
+        "setOption(prefix..'Price','InlinePattern','')",
+        "setOption(prefix..'Price','InlinePattern2','')",
+        "setOption(prefix..'Price','InlinePattern3','')",
         "setOption(prefix..'Take','Text','')",
         "setOption(prefix..'Take','FontColor','0,0,0,0')",
-        "setOption(prefix..'Make','Text',formatSignedMoney(make))",
-        "setOption(prefix..'Make','FontColor',profitColor(make))",
+        "setOption(prefix..'Make','Text',primaryMetricKnown and (formatSignedMoney(primaryMetric)..(primaryUsesHour and '/hr' or '')) or '?/hr')",
+        "setOption(prefix..'Make','FontColor',primaryMetricKnown and profitColor(primaryMetric) or '#Muted#')",
+        "SKIN:GetVariable('OpportunityRenderMode',trim(state.OpportunitySortMode))",
         "setOption(prefix..'DetailEachLabel','Text','Each')","setOption(prefix..'DetailEachLabel','SolidColor','#Border#')",
         "setOption(prefix..'Gross','Text','MV:'..formatMoney(mv))",
-        "setOption(prefix..'DetailEachNet','Text','Net:'..formatSignedMoney(each))",
+        "setOption(prefix..'DetailEachNet','Text',alternateKnown and ((primaryUsesHour and 'Net:' or '$/hr:')..formatSignedMoney(eachAlternate)) or '$/hr:?')",
         "setOption(prefix..'DetailEachTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax:'..formatMoney(taxEach)) or '')",
         "local roundTripHours=(flightSeconds>0) and ((flightSeconds*2)/3600.0) or 0",
-        "setOption(prefix..'DetailEachProfitHour','Text',flightRateKnown and ('$/hr:'..formatSignedMoney(eachFlightProfitHour)) or '$/hr:?')",
+        "setOption(prefix..'DetailEachProfitHour','Text','Price:'..unitCostText)",
         "setOption(prefix..'DetailTotalLabel','Text','Total')","setOption(prefix..'DetailTotalLabel','SolidColor','#Border#')",
         "setOption(prefix..'DetailTotal','Text','MV:'..formatMoney(grossSale))",
-        "setOption(prefix..'DetailTotalNet','Text','Net:'..formatSignedMoney(make))",
+        "setOption(prefix..'DetailTotalNet','Text',alternateKnown and ((primaryUsesHour and 'Net:' or '$/hr:')..formatSignedMoney(totalAlternate)) or '$/hr:?')",
         "setOption(prefix..'DetailTotalTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax:'..formatMoney(marketTax)) or '')",
-        "setOption(prefix..'DetailTotalProfitHour','Text',flightRateKnown and ('$/hr:'..formatSignedMoney(totalFlightProfitHour)) or '$/hr:?')",
+        "setOption(prefix..'DetailTotalProfitHour','Text','Price:'..totalCostText)",
         "setOption(prefix..'DetailEachNet','StringAlign','RightCenter')","setOption(prefix..'DetailTotalNet','StringAlign','RightCenter')",
-        "setOption(prefix..'DetailEachProfitHour','StringAlign','RightCenter')","setOption(prefix..'DetailTotalProfitHour','StringAlign','RightCenter')",
-        "setOption(prefix..'DetailEachTax','StringAlign','LeftCenter')","setOption(prefix..'DetailTotalTax','StringAlign','LeftCenter')",
+        "setOption(prefix..'DetailEachProfitHour','StringAlign','LeftCenter')","setOption(prefix..'DetailTotalProfitHour','StringAlign','LeftCenter')",
+        "setOption(prefix..'DetailEachTax','StringAlign','RightCenter')","setOption(prefix..'DetailTotalTax','StringAlign','RightCenter')",
         "local detailLabelHeight=32",
         "setOption(prefix..'Window','Text','')",
         "setOption(prefix..'Chance','Text','')",
@@ -342,5 +340,5 @@ if($errors.Count -gt 0){
 }
 
 Write-Host 'Compact card detail-layout validation passed.' -ForegroundColor Green
-Write-Host 'Base card, fixed two-row Each/Total economics strip with round-trip flight $/hr, exact full-load cost, large signed net, centered lime toggles, inline graph expansion, compact footer, and single-owner geometry are enforced.'
+Write-Host 'Base card, selected primary Profit / PROFIT/HR metric, fixed two-row Each/Total economics strip with alternate metric, Price, and Tax placement, centered lime toggles, inline graph expansion, compact footer, and single-owner geometry are enforced.'
 exit 0
