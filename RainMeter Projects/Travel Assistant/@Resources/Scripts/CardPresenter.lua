@@ -523,19 +523,19 @@ local function applyCompactLayout(index)
     local prefix='MeterOpportunity'..index
     local face='Nirmala UI Semilight'
     setOption(prefix..'DetailEachLabel','X',29); setOption(prefix..'DetailEachLabel','W',40); setOption(prefix..'DetailEachLabel','H',32); setOption(prefix..'DetailEachLabel','FontFace',face); setOption(prefix..'DetailEachLabel','FontSize',8); setOption(prefix..'DetailEachLabel','StringAlign','CenterCenter'); setOption(prefix..'DetailEachLabel','SolidColor','#Border#'); setOption(prefix..'DetailEachLabel','ClipString',1)
-    setOption(prefix..'Gross','X',54); setOption(prefix..'Gross','W',112); setOption(prefix..'Gross','H',16); setOption(prefix..'Gross','FontFace',face); setOption(prefix..'Gross','FontSize',9); setOption(prefix..'Gross','StringAlign','LeftCenter'); setOption(prefix..'Gross','ClipString',1)
-    setOption(prefix..'DetailEachNet','X',270); setOption(prefix..'DetailEachNet','W',98); setOption(prefix..'DetailEachNet','H',16); setOption(prefix..'DetailEachNet','FontFace',face); setOption(prefix..'DetailEachNet','FontSize',9); setOption(prefix..'DetailEachNet','StringAlign','RightCenter'); setOption(prefix..'DetailEachNet','ClipString',1)
-    setOption(prefix..'DetailEachTax','X',54); setOption(prefix..'DetailEachTax','W',210); setOption(prefix..'DetailEachTax','H',16); setOption(prefix..'DetailEachTax','FontFace',face); setOption(prefix..'DetailEachTax','FontSize',9); setOption(prefix..'DetailEachTax','StringAlign','LeftCenter'); setOption(prefix..'DetailEachTax','ClipString',1)
-    setOption(prefix..'DetailEachProfitHour','X',270); setOption(prefix..'DetailEachProfitHour','W',98); setOption(prefix..'DetailEachProfitHour','H',16); setOption(prefix..'DetailEachProfitHour','FontFace',face); setOption(prefix..'DetailEachProfitHour','FontSize',8); setOption(prefix..'DetailEachProfitHour','StringAlign','RightCenter'); setOption(prefix..'DetailEachProfitHour','ClipString',1)
+    setOption(prefix..'Gross','X',54); setOption(prefix..'Gross','W',104); setOption(prefix..'Gross','H',16); setOption(prefix..'Gross','FontFace',face); setOption(prefix..'Gross','FontSize',8); setOption(prefix..'Gross','StringAlign','LeftCenter'); setOption(prefix..'Gross','ClipString',1)
+    setOption(prefix..'DetailEachNet','X',270); setOption(prefix..'DetailEachNet','W',108); setOption(prefix..'DetailEachNet','H',16); setOption(prefix..'DetailEachNet','FontFace',face); setOption(prefix..'DetailEachNet','FontSize',8); setOption(prefix..'DetailEachNet','StringAlign','RightCenter'); setOption(prefix..'DetailEachNet','ClipString',1)
+    setOption(prefix..'DetailEachTax','X',270); setOption(prefix..'DetailEachTax','W',112); setOption(prefix..'DetailEachTax','H',16); setOption(prefix..'DetailEachTax','FontFace',face); setOption(prefix..'DetailEachTax','FontSize',8); setOption(prefix..'DetailEachTax','StringAlign','RightCenter'); setOption(prefix..'DetailEachTax','ClipString',1)
+    setOption(prefix..'DetailEachProfitHour','X',54); setOption(prefix..'DetailEachProfitHour','W',100); setOption(prefix..'DetailEachProfitHour','H',16); setOption(prefix..'DetailEachProfitHour','FontFace',face); setOption(prefix..'DetailEachProfitHour','FontSize',8); setOption(prefix..'DetailEachProfitHour','StringAlign','LeftCenter'); setOption(prefix..'DetailEachProfitHour','ClipString',1)
     setOption(prefix..'DetailTotalLabel','X',297); setOption(prefix..'DetailTotalLabel','W',40); setOption(prefix..'DetailTotalLabel','H',32); setOption(prefix..'DetailTotalLabel','FontFace',face); setOption(prefix..'DetailTotalLabel','FontSize',8); setOption(prefix..'DetailTotalLabel','StringAlign','CenterCenter'); setOption(prefix..'DetailTotalLabel','SolidColor','#Border#'); setOption(prefix..'DetailTotalLabel','ClipString',1)
-    setOption(prefix..'DetailTotal','X',322); setOption(prefix..'DetailTotal','W',112); setOption(prefix..'DetailTotal','H',16); setOption(prefix..'DetailTotal','FontFace',face); setOption(prefix..'DetailTotal','FontSize',9); setOption(prefix..'DetailTotal','StringAlign','LeftCenter'); setOption(prefix..'DetailTotal','ClipString',1)
-    setOption(prefix..'DetailTotalNet','X',538); setOption(prefix..'DetailTotalNet','W',98); setOption(prefix..'DetailTotalNet','H',16); setOption(prefix..'DetailTotalNet','FontFace',face); setOption(prefix..'DetailTotalNet','FontSize',9); setOption(prefix..'DetailTotalNet','StringAlign','RightCenter'); setOption(prefix..'DetailTotalNet','ClipString',1)
-    setOption(prefix..'DetailTotalTax','X',322); setOption(prefix..'DetailTotalTax','W',210); setOption(prefix..'DetailTotalTax','H',16); setOption(prefix..'DetailTotalTax','FontFace',face); setOption(prefix..'DetailTotalTax','FontSize',9); setOption(prefix..'DetailTotalTax','StringAlign','LeftCenter'); setOption(prefix..'DetailTotalTax','ClipString',1)
-    setOption(prefix..'DetailTotalProfitHour','X',538); setOption(prefix..'DetailTotalProfitHour','W',98); setOption(prefix..'DetailTotalProfitHour','H',16); setOption(prefix..'DetailTotalProfitHour','FontFace',face); setOption(prefix..'DetailTotalProfitHour','FontSize',8); setOption(prefix..'DetailTotalProfitHour','StringAlign','RightCenter'); setOption(prefix..'DetailTotalProfitHour','ClipString',1)
+    setOption(prefix..'DetailTotal','X',322); setOption(prefix..'DetailTotal','W',104); setOption(prefix..'DetailTotal','H',16); setOption(prefix..'DetailTotal','FontFace',face); setOption(prefix..'DetailTotal','FontSize',8); setOption(prefix..'DetailTotal','StringAlign','LeftCenter'); setOption(prefix..'DetailTotal','ClipString',1)
+    setOption(prefix..'DetailTotalNet','X',538); setOption(prefix..'DetailTotalNet','W',108); setOption(prefix..'DetailTotalNet','H',16); setOption(prefix..'DetailTotalNet','FontFace',face); setOption(prefix..'DetailTotalNet','FontSize',8); setOption(prefix..'DetailTotalNet','StringAlign','RightCenter'); setOption(prefix..'DetailTotalNet','ClipString',1)
+    setOption(prefix..'DetailTotalTax','X',538); setOption(prefix..'DetailTotalTax','W',112); setOption(prefix..'DetailTotalTax','H',16); setOption(prefix..'DetailTotalTax','FontFace',face); setOption(prefix..'DetailTotalTax','FontSize',8); setOption(prefix..'DetailTotalTax','StringAlign','RightCenter'); setOption(prefix..'DetailTotalTax','ClipString',1)
+    setOption(prefix..'DetailTotalProfitHour','X',322); setOption(prefix..'DetailTotalProfitHour','W',100); setOption(prefix..'DetailTotalProfitHour','H',16); setOption(prefix..'DetailTotalProfitHour','FontFace',face); setOption(prefix..'DetailTotalProfitHour','FontSize',8); setOption(prefix..'DetailTotalProfitHour','StringAlign','LeftCenter'); setOption(prefix..'DetailTotalProfitHour','ClipString',1)
     setOption(prefix..'Name','X',123); setOption(prefix..'Name','W',1); setOption(prefix..'Name','FontFace',face); setOption(prefix..'Name','FontSize',12); setOption(prefix..'Name','FontColor','0,0,0,0'); setOption(prefix..'Name','ClipString',1)
-    setOption(prefix..'Price','X',123); setOption(prefix..'Price','W',265); setOption(prefix..'Price','FontFace',face); setOption(prefix..'Price','FontSize',12); setOption(prefix..'Price','ClipString',1)
+    setOption(prefix..'Price','X',123); setOption(prefix..'Price','W',230); setOption(prefix..'Price','FontFace',face); setOption(prefix..'Price','FontSize',12); setOption(prefix..'Price','ClipString',1)
     setOption(prefix..'Take','X',123); setOption(prefix..'Take','W',1); setOption(prefix..'Take','FontFace',face); setOption(prefix..'Take','FontSize',12); setOption(prefix..'Take','FontColor','0,0,0,0'); setOption(prefix..'Take','ClipString',1)
-    setOption(prefix..'Make','X',504); setOption(prefix..'Make','W',108); setOption(prefix..'Make','H',50); setOption(prefix..'Make','FontFace',face); setOption(prefix..'Make','FontSize',16); setOption(prefix..'Make','StringAlign','RightCenter'); setOption(prefix..'Make','ClipString',1)
+    setOption(prefix..'Make','X',504); setOption(prefix..'Make','W',142); setOption(prefix..'Make','H',50); setOption(prefix..'Make','FontFace',face); setOption(prefix..'Make','FontSize',14); setOption(prefix..'Make','StringAlign','RightCenter'); setOption(prefix..'Make','ClipString',1)
     setOption(prefix..'Window','X',123); setOption(prefix..'Window','W',1)
     setOption(prefix..'Leave','X',123); setOption(prefix..'Leave','W',263); setOption(prefix..'Leave','FontFace',face); setOption(prefix..'Leave','FontSize',9); setOption(prefix..'Leave','ClipString',1)
     setOption(prefix..'Chance','X',123); setOption(prefix..'Chance','W',1)
@@ -594,6 +594,11 @@ local function updateRow(index,state,now)
     local eachFlightProfitHour=(roundTripHours>0) and (each/roundTripHours) or 0
     local totalFlightProfitHour=(roundTripHours>0) and (make/roundTripHours) or 0
     local flightRateKnown=roundTripHours>0
+    local renderMode=trim(SKIN:GetVariable('OpportunityRenderMode',trim(state.OpportunitySortMode))):lower()
+    if renderMode~='upcoming' and renderMode~='gross' and renderMode~='profit_per_hour' then renderMode='upcoming' end
+    local primaryUsesHour=(renderMode=='profit_per_hour')
+    local primaryMetric=primaryUsesHour and totalFlightProfitHour or make
+    local primaryMetricKnown=(not primaryUsesHour) or flightRateKnown
 
     setOption(prefix..'Name','Text',itemName)
     setOption(prefix..'Name','ToolTipText','')
@@ -601,27 +606,27 @@ local function updateRow(index,state,now)
 
     local totalCostText=totalCost>0 and formatMoney(totalCost) or '?'
     local unitCostText=unitCost>0 and formatMoney(unitCost) or '?'
-    setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)
-    setOption(prefix..'Price','FontColor','#Text#')
-    setOption(prefix..'Price','InlinePattern','\\|')
-    setOption(prefix..'Price','InlineSetting','Color | #Muted#')
     local priceColor=trim(state[projectedPrefix..'PriceColor'])
     if priceColor=='' then priceColor='#Text#' end
-    setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')
-    setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)
-    setOption(prefix..'Price','InlinePattern3','-?\\$[0-9,]+$')
-    setOption(prefix..'Price','InlineSetting3','Color | #ToggleIdle#')
+    setOption(prefix..'Price','Text',itemName)
+    setOption(prefix..'Price','FontColor','#Text#')
+    setOption(prefix..'Price','InlinePattern','')
+    setOption(prefix..'Price','InlinePattern2','')
+    setOption(prefix..'Price','InlinePattern3','')
     setOption(prefix..'Take','Text','')
     setOption(prefix..'Take','FontColor','0,0,0,0')
-    setOption(prefix..'Make','Text',formatSignedMoney(make))
-    setOption(prefix..'Make','FontColor',profitColor(make))
+    setOption(prefix..'Make','Text',primaryMetricKnown and (formatSignedMoney(primaryMetric)..(primaryUsesHour and '/hr' or '')) or '?/hr')
+    setOption(prefix..'Make','FontColor',primaryMetricKnown and profitColor(primaryMetric) or '#Muted#')
     setOption(prefix..'Take','ToolTipText','')
     setOption(prefix..'Price','ToolTipText','')
     setOption(prefix..'Make','ToolTipText','')
 
     local taxColor=marketTax>0 and '244,138,138,255' or '150,150,150,255'
-    local eachNetColor=profitColor(each)
-    local totalNetColor=profitColor(make)
+    local eachAlternate=primaryUsesHour and each or eachFlightProfitHour
+    local totalAlternate=primaryUsesHour and make or totalFlightProfitHour
+    local alternateKnown=primaryUsesHour or flightRateKnown
+    local eachAlternateColor=alternateKnown and profitColor(eachAlternate) or '#Muted#'
+    local totalAlternateColor=alternateKnown and profitColor(totalAlternate) or '#Muted#'
 
     local detailLabelHeight=32
     setOption(prefix..'DetailEachLabel','Text','Each')
@@ -641,14 +646,14 @@ local function updateRow(index,state,now)
     setOption(prefix..'Gross','InlinePattern','(?<=MV:)\\$[0-9,]+')
     setOption(prefix..'Gross','InlineSetting','Color | 225,225,225,255')
 
-    setOption(prefix..'DetailEachNet','Text','Net:'..formatSignedMoney(each))
-    setOption(prefix..'DetailEachNet','FontColor',eachNetColor)
+    setOption(prefix..'DetailEachNet','Text',alternateKnown and ((primaryUsesHour and 'Net:' or '$/hr:')..formatSignedMoney(eachAlternate)) or '$/hr:?')
+    setOption(prefix..'DetailEachNet','FontColor',eachAlternateColor)
     setOption(prefix..'DetailEachNet','ToolTipText','')
     setOption(prefix..'DetailEachTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax:'..formatMoney(taxEach)) or '')
     setOption(prefix..'DetailEachTax','FontColor',taxColor)
     setOption(prefix..'DetailEachTax','ToolTipText','')
-    setOption(prefix..'DetailEachProfitHour','Text',flightRateKnown and ('$/hr:'..formatSignedMoney(eachFlightProfitHour)) or '$/hr:?')
-    setOption(prefix..'DetailEachProfitHour','FontColor',flightRateKnown and profitColor(eachFlightProfitHour) or '#Muted#')
+    setOption(prefix..'DetailEachProfitHour','Text','Price:'..unitCostText)
+    setOption(prefix..'DetailEachProfitHour','FontColor',priceColor)
     setOption(prefix..'DetailEachProfitHour','ToolTipText','')
 
     setOption(prefix..'DetailTotal','Text','MV:'..formatMoney(grossSale))
@@ -657,14 +662,14 @@ local function updateRow(index,state,now)
     setOption(prefix..'DetailTotal','InlinePattern','(?<=MV:)\\$[0-9,]+')
     setOption(prefix..'DetailTotal','InlineSetting','Color | 225,225,225,255')
 
-    setOption(prefix..'DetailTotalNet','Text','Net:'..formatSignedMoney(make))
-    setOption(prefix..'DetailTotalNet','FontColor',totalNetColor)
+    setOption(prefix..'DetailTotalNet','Text',alternateKnown and ((primaryUsesHour and 'Net:' or '$/hr:')..formatSignedMoney(totalAlternate)) or '$/hr:?')
+    setOption(prefix..'DetailTotalNet','FontColor',totalAlternateColor)
     setOption(prefix..'DetailTotalNet','ToolTipText','')
     setOption(prefix..'DetailTotalTax','Text',marketTaxRate>0 and (tostring(marketTaxRate)..'% Tax:'..formatMoney(marketTax)) or '')
     setOption(prefix..'DetailTotalTax','FontColor',taxColor)
     setOption(prefix..'DetailTotalTax','ToolTipText','')
-    setOption(prefix..'DetailTotalProfitHour','Text',flightRateKnown and ('$/hr:'..formatSignedMoney(totalFlightProfitHour)) or '$/hr:?')
-    setOption(prefix..'DetailTotalProfitHour','FontColor',flightRateKnown and profitColor(totalFlightProfitHour) or '#Muted#')
+    setOption(prefix..'DetailTotalProfitHour','Text','Price:'..totalCostText)
+    setOption(prefix..'DetailTotalProfitHour','FontColor','#ToggleIdle#')
     setOption(prefix..'DetailTotalProfitHour','ToolTipText','')
 
     setOption(prefix..'Window','Text','')
