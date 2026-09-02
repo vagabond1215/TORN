@@ -27,7 +27,7 @@ if($errors.Count -eq 0){
     $ini=Get-Content -LiteralPath $iniPath -Raw
 
     foreach($i in 1..8){
-        foreach($suffix in @('Card','Flag','Name','Gross','Price','Leave','DetailToggle','Graph','InlineGraph')){
+        foreach($suffix in @('Card','Flag','Name','Gross','Price','Take','Make','Leave','DetailToggle','Graph','InlineGraph')){
             $section='MeterOpportunity'+$i+$suffix
             if($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')){
                 Fail "OpportunityRows.inc missing [$section]."
@@ -52,11 +52,19 @@ if($errors.Count -eq 0){
         }
 
         $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-        if($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=440\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
-            Fail "Row $i visible first-line meter must span Name | Cost | Take | Make at 11pt."
+        if($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=180\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$'){
+            Fail "Row $i item/cost column must start at x=78 with a fixed 180px width."
         }
-        if($nameBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$' -or $priceBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){
-            Fail "Row $i first-line typography must use Nirmala UI Semilight."
+        $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        if($takeBody -notmatch '(?im)^X=260\s*$' -or $takeBody -notmatch '(?im)^W=134\s*$' -or $takeBody -notmatch '(?im)^FontSize=11\s*$'){
+            Fail "Row $i Take column must be independently anchored at x=260."
+        }
+        $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        if($makeBody -notmatch '(?im)^X=396\s*$' -or $makeBody -notmatch '(?im)^W=122\s*$' -or $makeBody -notmatch '(?im)^FontSize=11\s*$'){
+            Fail "Row $i Make column must be independently anchored at x=396."
+        }
+        foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody)){
+            if($fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Row $i first-line typography must use Nirmala UI Semilight."}
         }
 
         $strip=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -102,26 +110,30 @@ if($errors.Count -eq 0){
         "setOption(prefix..'Name','Text',itemName)",
         "setOption(prefix..'Name','FontColor','0,0,0,0')",
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
-        "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..'  Take: '..takeText..'  Make: '..formatMoney(make))",
+        "setOption(prefix..'Price','Text',itemName..' | '..unitCostText)",
         "setOption(prefix..'Price','InlinePattern','\\|')",
         "setOption(prefix..'Price','InlineSetting','Color | #Muted#')",
         "setOption(prefix..'Price','InlinePattern2','(?<=\\| )-?\\$[0-9,]+')",
         "setOption(prefix..'Price','InlineSetting2','Color | '..priceColor)",
+        "setOption(prefix..'Take','Text','Take: '..takeText)",
+        "setOption(prefix..'Make','Text','Make: '..formatMoney(make))",
         "'MV:'..formatMoney(mv)",
         "'  Each:'..formatMoney(each)",
         "'  Gross:'..formatMoney(grossSale)",
         "'  Per Hour:'..formatMoney(grossProfitHour)",
         "'  Tax:'..formatMoney(marketTax)",
-        "setOption(prefix..'Gross','InlinePattern','MV:')",
+        "setOption(prefix..'Gross','FontColor','255,255,255,255')",
+        "setOption(prefix..'Gross','InlinePattern','(?<=MV:)-?\\$[0-9,]+')",
         "setOption(prefix..'Gross','InlineSetting','Color | 218,178,69,255')",
-        "setOption(prefix..'Gross','InlinePattern2','Each:')",
+        "setOption(prefix..'Gross','InlinePattern2','(?<=Each:)-?\\$[0-9,]+')",
         "setOption(prefix..'Gross','InlineSetting2','Color | 255,255,255,255')",
-        "setOption(prefix..'Gross','InlinePattern3','Gross:')",
+        "setOption(prefix..'Gross','InlinePattern3','(?<=Gross:)-?\\$[0-9,]+')",
         "setOption(prefix..'Gross','InlineSetting3','Color | 255,255,255,255')",
-        "setOption(prefix..'Gross','InlinePattern4','Per Hour:')",
+        "setOption(prefix..'Gross','InlinePattern4','(?<=Per Hour:)-?\\$[0-9,]+')",
         "setOption(prefix..'Gross','InlineSetting4','Color | 255,255,255,255')",
-        "setOption(prefix..'Gross','InlinePattern5','Tax:')",
-        "setOption(prefix..'Gross','InlineSetting5','Color | 232,104,70,255')",
+        "taxColor=marketTax>0 and '244,138,138,255' or '145,152,164,255'",
+        "setOption(prefix..'Gross','InlinePattern5','(?<=Tax:)-?\\$[0-9,]+')",
+        "setOption(prefix..'Gross','InlineSetting5','Color | '..taxColor)",
         "setOption(prefix..'Window','Text','')",
         "setOption(prefix..'Chance','Text','')",
         "if certainty~='' then actionText=actionText..' '..certainty end",
@@ -130,7 +142,7 @@ if($errors.Count -eq 0){
         if(-not$presenter.Contains($token)){Fail "CardPresenter.lua missing compact-card presentation contract '$token'."}
     }
 
-    if(-not$header.Contains("'Card','Flag','Name','Gross','Window','Leave','Chance','Price','DetailToggle','Graph','InlineGraph'")){
+    if(-not$header.Contains("'Card','Flag','Name','Gross','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph'")){
         Fail 'HeaderLayout.lua must shift DetailToggle with every compact card row.'
     }
     if(-not$header.Contains('math.max(160,math.floor(panel-compactOffset))')){
@@ -148,7 +160,7 @@ if($errors.Count -eq 0){
         if(-not$title.Contains($token)){Fail "MeterTitle centered typography missing '$token'."}
     }
 
-    foreach($section in @('MeterSortNameButton','MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')){
+    foreach($section in @('MeterSortUpcomingButton','MeterSortGrossButton','MeterSortProfitHourButton')){
         $body=[regex]::Match($ini,'(?ms)^\['+[regex]::Escape($section)+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($body -notmatch '(?im)^Meter=Shape\s*$' -or $body -notmatch '(?im)^Shape=Rectangle .*?,4 \| Fill Color #Card# \| StrokeWidth 1 \| Stroke Color #Border#\s*$'){
             Fail "$section must be a rounded card-style button surface."
@@ -156,6 +168,15 @@ if($errors.Count -eq 0){
     }
     $sortLine=[regex]::Match($ini,'(?ms)^\[MeterSortBottomLine\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     if($sortLine -notmatch '(?im)^Hidden=1\s*$'){Fail 'The separator line between sort buttons and cards must remain hidden.'}
+    foreach($retiredSection in @('MeterSortNameButton','MeterSortName','MeterViewer','MeasureItemViewer')){
+        if($ini -match ('(?m)^\['+[regex]::Escape($retiredSection)+'\]\s*$')){Fail "Retired UI section [$retiredSection] returned."}
+    }
+    foreach($retiredToken in @('ViewerMarketKey=','OpenViewer(','LaunchItemViewer.ps1','OpenItemViewer.ps1')){
+        if($ini.Contains($retiredToken) -or $reader.Contains($retiredToken)){Fail "Retired Viewer token '$retiredToken' returned."}
+    }
+    foreach($token in @('local function effectiveSortMode(rows, requestedMode)','if row.timeKnown or row.profitKnown then return requestedMode end',"return 'name'","out.OpportunitySortEffectiveMode = effectiveMode")){
+        if(-not$reader.Contains($token)){Fail "StateReader missing Name-only fallback sort contract '$token'."}
+    }
     if($rows -match '(?im)^FontFace=Segoe UI' -or $ini -match '(?im)^FontFace=Segoe UI'){
         Fail 'Main Rainmeter typography must not fall back to Segoe UI.'
     }
