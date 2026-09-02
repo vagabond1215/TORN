@@ -457,10 +457,20 @@ restock delay, availability, restock quantity, foreign price, and censor bounds
 keep their observed relationship. Event and duration values are sampled inside the
 stored bounds.
 
-Each of 128 deterministic seeded scenarios is represented as stock intervals, not
-second-by-second rows. Simulation continues through as many future cycles as needed
-to pass the latest evaluated arrival. The default grid is 15 minutes over a 12-hour
-departure search. Current stock is anchored to the provider observation timestamp.
+Each of 128 deterministic seeded **scoring** scenarios is represented as stock
+intervals, not second-by-second rows. Simulation continues through as many future
+cycles as needed to pass the latest evaluated arrival. The default search starts
+with a 15-minute base grid over 12 hours. If lower-quartile empirical availability
+is shorter than that base step, an independently seeded 16-32 scenario discovery
+pass identifies coarse cells containing simulated stock support that could be
+missed between endpoints. At most four cells are refined with a bounded additional
+candidate budget; uniform sub-grid points are supplemented by a few discovery
+restock quantiles so very short bursts are not structurally invisible. The full
+configured scoring scenarios are then regenerated independently and score the final
+candidate set. This separation limits Monte Carlo optimizer bias from using the
+same worlds both to discover and validate a peak.
+
+Current stock is anchored to the provider observation timestamp.
 Only an observation describing the exact forecast origin is treated as certain
 current stock. Older-but-fresh positive evidence is propagated forward through the
 learned survival distribution, so it may sell out before `Now`; later cycles remain
@@ -480,8 +490,9 @@ already projected trip quantity and utility as expected profit. The configured
 `itemMarketFeePercent` and existing round-trip flight hours remain authoritative.
 
 These probabilities are uncalibrated shadow diagnostics. Limitations include
-linear within-cycle depletion, no value-of-information solver, no online
-change-point model, and no risk-preference surface. The offline replay currently
+linear within-cycle depletion, a bounded adaptive search that can still omit
+low-support cells, no value-of-information solver, no online change-point model,
+and no risk-preference surface. The offline replay currently
 compares stochastic-v1 with simple mean/median and empirical overlap proxies;
 `empirical_all_overlap` / `empirical_overlap` are not an exact historical replay
 of production WindowPlan Safe/Best decisions. Promotion requires frozen live
