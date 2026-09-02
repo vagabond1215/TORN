@@ -16,6 +16,7 @@ $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
+$ChanceHistoryFile = Join-Path $RuntimeDir 'chance-history.jsonl'
 $FocusMarketFile = Join-Path $RuntimeDir 'focus-market.kv'
 $SettingsFile = Join-Path $ConfigDir 'settings.example.json'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
@@ -90,6 +91,34 @@ function Read-MarketHistory {
     return $rows
 }
 
+function Read-MarketChanceHistory {
+    param([string]$Path,[string]$Key,[long]$Cutoff,[long]$MaximumTimestamp)
+    $rows=@()
+    if (-not (Test-Path -LiteralPath $Path)) { return $rows }
+    $needle='"marketKey":"'+$Key+'"'
+    $reader=$null
+    try {
+        $reader=Open-TravelAssistantSharedTextReader -Path $Path
+        while (($line=$reader.ReadLine()) -ne $null) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            if ($line.IndexOf($needle,[System.StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+            try { $row=$line | ConvertFrom-Json } catch { continue }
+            $timestamp=[long](Get-InlineProperty $row 'timestamp')
+            $probability=[double](Get-InlineProperty $row 'probability')
+            if ($timestamp -lt $Cutoff -or $timestamp -gt $MaximumTimestamp) { continue }
+            if ($probability -lt 0.0 -or $probability -gt 1.0) { continue }
+            $rows += [pscustomobject]@{
+                timestamp=$timestamp
+                probability=$probability
+                source=[string](Get-InlineProperty $row 'source')
+            }
+        }
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
+    }
+    return @($rows | Sort-Object timestamp)
+}
+
 function Compress-StockHistory {
     param([object[]]$Rows)
     $compressed = @()
@@ -149,6 +178,11 @@ if ($currentTimestamp -le 0 -or $currentTimestamp -lt $cutoff -or $currentTimest
 $rows += [pscustomobject]@{ timestamp=$currentTimestamp; stock=$currentStock; source='current_snapshot' }
 $rows = @(Compress-StockHistory -Rows $rows)
 
+# Chance history is forecast-only and intentionally separate from retained stock
+# observations. It is sampled by the normal updater and rendered on an independent
+# fixed 0..100% scale.
+$chanceRows=@(Read-MarketChanceHistory -Path $ChanceHistoryFile -Key $MarketKey -Cutoff $cutoff -MaximumTimestamp ($now+60L))
+
 $maxStock = 0L
 if ($rows.Count -gt 0) {
     $measure = $rows | Measure-Object stock -Maximum
@@ -177,6 +211,7 @@ $graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))
 $gridMajor = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(72,78,88),1)
 $gridMinor = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(48,53,61),1)
 $stockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(126,190,73),2)
+$chancePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(105,200,235),1.5)
 $restockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(0,71,171),1)
 $selloutPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255,117,24),1)
 $labelBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(170,178,190))
@@ -202,6 +237,10 @@ function Get-InlineY([long]$Stock) {
     if ($maxStock -le 0) { return [single]$plotBottom }
     return [single]($plotBottom - (($Stock / $scaleMax) * $plotHeight))
 }
+function Get-ChanceY([double]$Probability) {
+    $p=[Math]::Max(0.0,[Math]::Min(1.0,$Probability))
+    return [single]($plotBottom - ($p * $plotHeight))
+}
 
 $previous = $null
 foreach ($row in $rows) {
@@ -223,6 +262,24 @@ if ($null -ne $previous -and [single]$previous.x -lt [single]$plotRight) {
     $graphics.DrawLine($stockPen,[single]$previous.x,[single]$previous.y,[single]$plotRight,[single]$previous.y)
 }
 
+# Draw live hit probability independently of stock scale: 0% sits on the stock
+# X-axis and 100% sits at the plot top. Do not bridge missing forecast intervals.
+$previousChance=$null
+foreach ($row in $chanceRows) {
+    $x=Get-InlineX ([long]$row.timestamp)
+    $y=Get-ChanceY ([double]$row.probability)
+    if ($null -ne $previousChance) {
+        $gap=[long]$row.timestamp-[long]$previousChance.timestamp
+        if ($gap -gt 0 -and $gap -le 300L) {
+            $graphics.DrawLine($chancePen,[single]$previousChance.x,[single]$previousChance.y,$x,$y)
+        }
+    }
+    $previousChance=[pscustomobject]@{x=$x;y=$y;timestamp=[long]$row.timestamp;probability=[double]$row.probability}
+}
+if ($null -ne $previousChance -and ($now-[long]$previousChance.timestamp) -le 180L -and [single]$previousChance.x -lt [single]$plotRight) {
+    $graphics.DrawLine($chancePen,[single]$previousChance.x,[single]$previousChance.y,[single]$plotRight,[single]$previousChance.y)
+}
+
 $maxLabel = if ($maxStock -gt 0) { ('{0:N0}' -f $maxStock) } else { '0' }
 $graphics.DrawString($maxLabel,$labelFont,$labelBrush,0,0)
 $graphics.DrawString('0',$labelFont,$labelBrush,18,88)
@@ -237,7 +294,7 @@ $tmpImage = $imagePath + '.tmp'
 $bitmap.Save($tmpImage,[System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()
-$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $restockPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
+$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $restockPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
 Move-Item -LiteralPath $tmpImage -Destination $imagePath -Force
 Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force
 
@@ -258,6 +315,8 @@ Write-InlineKvAtomic -Path $specPath -Values @{
     HistorySource = $historySource
     MaxStock = $maxStock
     CurrentStock = $currentStock
+    ChancePointCount = $chanceRows.Count
+    CurrentChancePercent = $(if($chanceRows.Count -gt 0){[Math]::Round(100.0*[double]$chanceRows[$chanceRows.Count-1].probability,1)}else{-1})
     PointCount = $rows.Count
     ChangeCount = $changes
     EarliestTimestamp = $earliestTimestamp
