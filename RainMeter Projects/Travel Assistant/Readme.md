@@ -4,8 +4,8 @@ Rainmeter-based Torn foreign-market opportunity assistant.
 
 The current committed **0.6.0 candidate** presents a compact list of current/future foreign-market opportunities with transparent ordering, local historical graphs and profile-aware economics.
 
-The next-generation stochastic forecast currently runs in **shadow mode only**.
-It does not change cards, sorts, tooltips, filters, or Safe/Best guidance.
+The general next-generation stochastic decision/search still runs in **shadow mode**.
+One narrow primitive is production-visible: when legacy current-cycle/Safe/Best logic cannot guide a market and the earliest feasible arrival spans at least two empirical mean cycles, `MultiCycleChanceBridge.ps1` reuses stochastic-v1.1 at that single arrival and may show `Chance to hit: NN%`. It does not replace actionable legacy windows, sorting, filters, or economics.
 
 ## Stochastic shadow artifact
 
@@ -27,7 +27,7 @@ is shorter than the base step, a small independently seeded discovery simulation
 finds coarse cells containing hidden stock support; only the strongest cells are
 refined, with a hard additional-candidate budget and restock-quantile anchors for
 sub-minute bursts. Discovery worlds choose where to look but are not used to score
-the published probability. These probabilities are not calibrated or user-facing.
+the published probability. The general departure-search probabilities remain shadow diagnostics; the restricted multi-cycle bridge may expose only `pAnyStock` at one earliest-feasible arrival when its production eligibility gate is met.
 
 Polling evidence is interval-censored: transition bounds are retained instead of
 treating the later poll timestamp as exact. Stock declines to a positive value are
@@ -39,6 +39,27 @@ cycle as restock delay, duration, restock quantity, and foreign price. Shapes ar
 used only when transition-censor width is at most half of the observed cycle span;
 otherwise quantity falls back explicitly to linear depletion. The artifact exposes
 both requested-load `expectedQty` and uncapped `expectedAvailableQty`.
+
+
+### Multi-cycle chance fallback
+
+`MultiCycleChanceBridge.ps1` runs after legacy `WindowPlan` and before immutable UI publication. It reads the same retained cycles/observations and calls the same stochastic-v1.1 joint-cycle simulator, but evaluates exactly one earliest-feasible arrival with 256 scenarios and adaptive departure search disabled.
+
+Eligibility requires at least three usable completed cycles and:
+
+```text
+time to evaluated arrival / weighted mean full-cycle duration >= 2.0
+```
+
+For eligible markets, the bridge records modeled `pAnyStock`, `pTargetQty`, weighted mean cycle and in-stock duration, cycle timing standard deviation, long-run occupancy `E[in-stock] / E[full cycle]`, expected full cycles crossed, and an approximate `sqrt(N)` phase-dispersion diagnostic. The card uses this only when stronger current-cycle/Safe/Best guidance would otherwise collapse to Collecting/WAIT/closed-unusable state.
+
+The visible fallback is intentionally simple:
+
+```text
+Chance to hit: 42%
+```
+
+The tooltip explains time to arrival, mean cycle, cycle count, timing variation, long-run in-stock share, full-load chance, evidence count, and simulation count. It is never labeled Safe or Guaranteed. Time-of-day and current-price-conditioned reweighting remain future backtest-driven extensions; joint resampling already preserves correlations present inside historical cycle rows.
 
 ### Prospective shadow calibration
 
