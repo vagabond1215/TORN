@@ -142,7 +142,7 @@ Sorting remains:
 
 - `UPCOMING` — earliest actionable/projected opportunity;
 - `GROSS PROFIT` — highest total trip profit;
-- `PROFIT/HR` — trip profit divided by elapsed hours.
+- `PROFIT/HR` — after-tax trip Net divided by configured round-trip flight hours.
 
 Alphabetical Name ordering is fallback-only when no usable timing or profit inputs exist; it is not a selectable control.
 
@@ -228,7 +228,7 @@ Rank the next optimization target by `AvgCpuMs` and `P95CpuMs`, not wall time al
 - Tax/trader rate options are 0%, 1%, 2%, 3%, 4%, and 5%.
 - Tax is calculated exactly once as `floor(gross sale × rate)` and is subtracted only for net profit.
 - `PROFIT/HR` uses after-tax net profit.
-- Expanded economics use the current Each/Total label-block layout: MV + Net on the first row; the fixed second row shows conditional Tax on the left and round-trip flight `$/hr` on the right. The displayed tax rate and all Net calculations must come from saved `itemMarketFeePercent`; the new `$/hr` values use after-tax Each/Total net divided by `2 x` configured one-way flight time, excluding window/wait time. Settings saves use the same 120-second mutex-waiting `RefreshFilters` path as filter saves so the new rate is republished without another stock collection pass.
+- Expanded economics use the current Each/Total label-block layout. MV is top-left; top-right shows the metric not used by the primary card (`$/hr` under UPCOMING/PROFIT, Net under PROFIT/HR). Bottom-left shows per-item foreign Price / exact total purchase Price, and bottom-right shows conditional Tax. `$/hr` uses after-tax Each/Total net divided by `2 x` configured one-way flight time, excluding window/wait time.
 
 ## Target-Windows acceptance for the new redesign
 
@@ -277,9 +277,9 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 2. `SETTINGS >` text is gone.
 3. ITEM/TRIP/CAT/RESET main band is gone.
 4. UPCOMING / PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only. PROFIT sorts by the displayed signed after-tax total Net, so every positive row ranks above every negative row.
-5. Cards show `Item | unit cost | exact full-load cost` on the left and a large signed total Net on the right; there are no Take/Make labels or variable-price cash buffer.
+5. Cards show item name only on the left. The large right-side value is total Net under UPCOMING/PROFIT and total round-trip-flight `$/hr` under PROFIT/HR. Unit and exact full-load prices are moved into the expanded strip.
 6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active Torn-lime fills are inset so the card border/T separators remain visible.
-7. Expanded economics use gray vertical `Each` / `Total` label blocks. MV is top-row left and Net is top-row right. The second row is always present: Tax appears on the left only when the saved rate is nonzero, while `$/hr` appears on the right for both Each and Total using after-tax net divided by round-trip flight time (`2 x` one-way flight seconds). The bar remains 34px at 0% Tax, and no `|` characters appear in the expanded strip.
+7. Expanded economics use gray vertical `Each` / `Total` label blocks. MV is top-left. Top-right is the non-primary profitability metric: `$/hr` under UPCOMING/PROFIT, Net under PROFIT/HR. Bottom-left is Price (unit / total), bottom-right is conditional Tax. The bar remains 34px at 0% Tax, and no `|` characters appear in the expanded strip.
 8. Flags act as left end caps. The 48px square immediately to the right contains 44px Torn item art with a 2px inset; item text begins after that square. Card fill is pure black while gray borders/separators remain visible.
 9. Inline graphs are black with a lime stock line, cobalt in-stock/restock markers, and pumpkin out-of-stock/sellout markers. Main sort/filter/settings accents are Torn lime. Card item/cost text is 12 pt, total profit is 16 pt, and the window/guidance line is 9 pt and sits close to the card's bottom border; the Updated footer remains close beneath the final card.
 10. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
