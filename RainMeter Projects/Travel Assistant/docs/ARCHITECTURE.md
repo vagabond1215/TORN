@@ -14,7 +14,7 @@ ELIGIBLE opportunity candidates
 VISIBLE opportunities
 ```
 
-The current 0.6 product is a compact opportunity browser with explicit `NAME`, `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR` ordering.
+The current 0.6 product is a compact opportunity browser with selectable `UPCOMING`, `GROSS PROFIT`, and `PROFIT/HR` ordering; alphabetical Name order is fallback-only when timing/profit inputs are unavailable.
 
 ## Runtime layering
 
@@ -147,16 +147,17 @@ The standalone WinForms Viewer, its launcher, and its Rainmeter measure are reti
 Each compact row is:
 
 ```text
-[FlagKit flag]  Item name                         $gross   v
-                window   leave   chance       foreign (MV)
+[FlagKit flag]  Item | foreign cost   Take:cash   Make:profit   [$]
+                window / leave guidance                        [chart]
 ```
 
 - No rank/place number.
 - No country name/code in the card body.
-- No duplicate travel/elapsed-time text in the body.
+- The visible first line uses fixed Item/Cost, Take, and Make columns.
 - Destination uses bundled FlagKit `@3x` PNG assets under the upstream MIT license.
 - Hovering the flag exposes country + configured one-way travel time.
-- Gross is a bare dollar amount; projected quantity remains available to economics/tooltips.
+- The `$` button expands the one-line MV/Each/Gross/Per Hour/Tax strip.
+- The chart button expands the local 8-hour graph.
 - A known 0% arrival case displays `NO HIT` rather than `LEAVE NOW`; unknown likelihood displays `WAIT DATA`.
 
 `OpportunityRows.inc` is included after the full-panel background so cards render above, not beneath, the panel layer.
