@@ -21,6 +21,8 @@ $EngineStateFile=Join-Path $RuntimeDir 'engine-state.json'
 $StateKvFile=Join-Path $GeneratedDir 'state.kv'
 $RuntimeCycleFile=Join-Path $RuntimeDir 'cycles.jsonl'
 $SeedCycleFile=Join-Path $ProjectRoot 'data\seed\cycles.jsonl'
+$RuntimeObservationFile=Join-Path $RuntimeDir 'observations.jsonl'
+$SeedObservationFile=Join-Path $ProjectRoot 'data\seed\observations.jsonl'
 $ArtifactFile=Join-Path $RuntimeDir 'stochastic-forecast.json'
 $AtomicFileScript=Join-Path $PSScriptRoot 'AtomicFile.ps1'
 $CycleFilterScript=Join-Path $PSScriptRoot 'CycleForecastFilter.ps1'
@@ -101,6 +103,7 @@ function Select-SFJointCycleEvidence {
     param(
         [object[]]$Cycles,
         [long]$AsOf,
+        [object[]]$Observations=@(),
         [long]$HalfLifeSeconds=1209600L,
         [int]$MaximumSamples=96
     )
@@ -118,6 +121,7 @@ function Select-SFJointCycleEvidence {
         $qualityWeight=Get-SFEvidenceQualityWeight -Cycle $cycle
         $weight=$recency*$qualityWeight
         if ($weight -le 0) { continue }
+        $shape=Get-SFCycleDepletionShape -Cycle $cycle -Observations $Observations
         $rows.Add([pscustomobject]@{
             cycle=$cycle
             availableAt=$availableAt
@@ -129,6 +133,8 @@ function Select-SFJointCycleEvidence {
             availabilityMaximum=[long]$available.maximum
             quantity=[Math]::Max(1L,[long](Get-SFProperty $cycle 'restockQuantity'))
             foreignPrice=[Math]::Max(0L,[long](Get-SFProperty $cycle 'foreignPrice'))
+            depletionShape=$shape
+            depletionShapePointCount=$(if($null -ne $shape){[int](Get-SFProperty $shape 'pointCount')}else{0})
         })
     }
     $selected=@($rows.ToArray() | Sort-Object availableAt -Descending)
@@ -173,14 +179,119 @@ function Get-SFEventAt {
     return $value
 }
 
+function Get-SFObservationAt {
+    param([object]$Observation)
+    $at=[long](Get-SFProperty $Observation 'sourceTimestamp')
+    if ($at -le 0) { $at=[long](Get-SFProperty $Observation 'timestamp') }
+    return $at
+}
+
+function Get-SFCycleDepletionShape {
+    param([object]$Cycle,[object[]]$Observations)
+    if ($null -eq $Cycle -or @($Observations).Count -eq 0) { return $null }
+
+    $startAt=[long](Get-SFProperty $Cycle 'restockUpperBoundAt')
+    if ($startAt -le 0) { $startAt=[long](Get-SFProperty $Cycle 'restockAt') }
+    $endAt=[long](Get-SFProperty $Cycle 'soldOutUpperBoundAt')
+    if ($endAt -le 0) { $endAt=[long](Get-SFProperty $Cycle 'soldOutAt') }
+    $restockQuantity=[long](Get-SFProperty $Cycle 'restockQuantity')
+    if ($startAt -le 0 -or $endAt -le $startAt -or $restockQuantity -le 0) { return $null }
+
+    $rows=@($Observations | Where-Object {
+        $at=Get-SFObservationAt $_
+        $at -ge $startAt -and $at -le $endAt
+    } | Sort-Object @{Expression={Get-SFObservationAt $_}})
+    if ($rows.Count -lt 2) { return $null }
+
+    $points=New-Object System.Collections.Generic.List[object]
+    $points.Add([pscustomobject]@{ x=0.0; y=1.0 })
+    $lastX=0.0
+    $lastY=1.0
+    $informative=0
+
+    foreach ($row in $rows) {
+        $at=Get-SFObservationAt $row
+        $stock=[long](Get-SFProperty $row 'stock')
+        if ($at -le $startAt -or $at -ge $endAt -or $stock -le 0) { continue }
+
+        $x=([double]($at-$startAt))/([double]($endAt-$startAt))
+        if ($x -le $lastX -or $x -ge 1.0) { continue }
+        $y=[Math]::Max(0.0,[Math]::Min(1.0,([double]$stock/[double]$restockQuantity)))
+
+        # Treat within-cycle quantity as a lost-sales path. Price-only updates or
+        # provider corrections can otherwise look like replenishment. Preserve a
+        # monotone non-increasing envelope rather than inventing positive inflow.
+        $y=[Math]::Min($lastY,$y)
+        if ($y -ge ($lastY-0.000001)) { continue }
+
+        $points.Add([pscustomobject]@{ x=[Math]::Round($x,6); y=[Math]::Round($y,6) })
+        $lastX=$x
+        $lastY=$y
+        $informative++
+    }
+
+    if ($informative -lt 1) { return $null }
+    $points.Add([pscustomobject]@{ x=1.0; y=0.0 })
+
+    return [pscustomobject]@{
+        source='retained_observation_shape'
+        pointCount=$points.Count
+        observedStartAt=$startAt
+        observedEndAt=$endAt
+        points=$points.ToArray()
+    }
+}
+
+function Get-SFDepletionFraction {
+    param([object]$Shape,[double]$Progress)
+    $p=[Math]::Max(0.0,[Math]::Min(1.0,$Progress))
+    if ($null -eq $Shape) { return [Math]::Max(0.0,1.0-$p) }
+    $points=@(Get-SFProperty $Shape 'points')
+    if ($points.Count -lt 2) { return [Math]::Max(0.0,1.0-$p) }
+
+    if ($p -le [double]$points[0].x) {
+        return [Math]::Max(0.0,[Math]::Min(1.0,[double]$points[0].y))
+    }
+
+    for ($i=0; $i -lt ($points.Count-1); $i++) {
+        $left=$points[$i]
+        $right=$points[$i+1]
+        $x0=[double]$left.x
+        $x1=[double]$right.x
+        if ($p -gt $x1 -and $i -lt ($points.Count-2)) { continue }
+        if ($x1 -le $x0) {
+            return [Math]::Max(0.0,[Math]::Min(1.0,[double]$right.y))
+        }
+        $fraction=($p-$x0)/($x1-$x0)
+        $y=[double]$left.y+($fraction*([double]$right.y-[double]$left.y))
+        return [Math]::Max(0.0,[Math]::Min(1.0,$y))
+    }
+    return 0.0
+}
+
+function Get-SFIntervalQuantity {
+    param([object]$Interval,[long]$ArrivalAt)
+    if ($null -eq $Interval) { return 0L }
+    $start=[long](Get-SFProperty $Interval 'startAt')
+    $end=[long](Get-SFProperty $Interval 'endAt')
+    $quantity=[long](Get-SFProperty $Interval 'quantity')
+    if ($quantity -le 0 -or $ArrivalAt -lt $start -or $ArrivalAt -ge $end) { return 0L }
+
+    $duration=[Math]::Max(1L,$end-$start)
+    $progress=([double]($ArrivalAt-$start))/([double]$duration)
+    $remainingFraction=Get-SFDepletionFraction -Shape (Get-SFProperty $Interval 'depletionShape') -Progress $progress
+    return [long][Math]::Max(0L,[Math]::Ceiling([double]$quantity*$remainingFraction))
+}
+
 function New-SFStockInterval {
-    param([long]$StartAt,[long]$EndAt,[long]$Quantity,[long]$ForeignPrice,[int]$Ordinal)
+    param([long]$StartAt,[long]$EndAt,[long]$Quantity,[long]$ForeignPrice,[int]$Ordinal,[object]$DepletionShape=$null)
     return [pscustomobject]@{
         startAt=[long]$StartAt
         endAt=[long]$EndAt
         quantity=[long][Math]::Max(1L,$Quantity)
         foreignPrice=[long][Math]::Max(0L,$ForeignPrice)
         cycleOrdinal=[int]$Ordinal
+        depletionShape=$DepletionShape
     }
 }
 
@@ -256,7 +367,7 @@ function New-SFMarketWorld {
         $restockAt=$anchor+$delay
         $selloutAt=$restockAt+$available
         if ($selloutAt -gt $NowEpoch -and $restockAt -le $HorizonAt) {
-            $intervals.Add((New-SFStockInterval -StartAt $restockAt -EndAt $selloutAt -Quantity ([long]$sample.quantity) -ForeignPrice ([long]$sample.foreignPrice) -Ordinal $ordinal))
+            $intervals.Add((New-SFStockInterval -StartAt $restockAt -EndAt $selloutAt -Quantity ([long]$sample.quantity) -ForeignPrice ([long]$sample.foreignPrice) -Ordinal $ordinal -DepletionShape (Get-SFProperty $sample 'depletionShape')))
         }
         $anchor=$selloutAt
         $ordinal++
@@ -268,12 +379,9 @@ function New-SFMarketWorld {
 function Get-SFQuantityAt {
     param([object[]]$Intervals,[long]$ArrivalAt)
     foreach ($interval in @($Intervals)) {
-        $start=[long]$interval.startAt; $end=[long]$interval.endAt
-        if ($ArrivalAt -lt $start -or $ArrivalAt -ge $end) { continue }
-        $duration=[Math]::Max(1L,$end-$start)
-        $remaining=[Math]::Max(0L,$end-$ArrivalAt)
-        $quantity=[long][Math]::Ceiling(([double][long]$interval.quantity*$remaining)/$duration)
-        return [pscustomobject]@{ quantity=[Math]::Max(0L,$quantity); foreignPrice=[long]$interval.foreignPrice; cycleOrdinal=[int]$interval.cycleOrdinal }
+        $quantity=Get-SFIntervalQuantity -Interval $interval -ArrivalAt $ArrivalAt
+        if ($quantity -le 0) { continue }
+        return [pscustomobject]@{ quantity=[long]$quantity; foreignPrice=[long]$interval.foreignPrice; cycleOrdinal=[int]$interval.cycleOrdinal }
     }
     return [pscustomobject]@{ quantity=0L; foreignPrice=0L; cycleOrdinal=-1 }
 }
