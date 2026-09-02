@@ -56,10 +56,10 @@ At minimum, `OpportunityCount`, `OpportunityMessage`, and `OpportunitySortMode` 
 Refresh the skin and verify the visible sort row is exactly:
 
 ```text
-SORT  UPCOMING   GROSS PROFIT   PROFIT/HR          VIEWER >
+[UPCOMING] [GROSS PROFIT] [PROFIT/HR]
 ```
 
-There must be no visible `OPTIMAL` badge/mode, Chance sort, or shortest-Time sort.
+There must be no visible `NAME`, `OPTIMAL`, Chance, or shortest-Time sort.
 
 For visible opportunity rows verify:
 
@@ -128,18 +128,22 @@ Settings must retain:
 
 The explanatory text should state that the main sorts are UPCOMING, GROSS PROFIT, and PROFIT/HR and that hit likelihood remains separate.
 
-## Viewer / graph validation
+## Inline graph validation
 
-Open `VIEWER >` and one row `GRAPH`.
+Open one row's chart button.
 
 Confirm:
 
-- Viewer is populated;
-- row GRAPH focuses the exact `country:itemId` market;
+- the chart button visibly highlights while expanded;
+- the graph is embedded in that exact card and the lower rows reflow;
+- graph identity follows the exact `country:itemId` market through local sorting;
 - graph spans 8 hours with 60-minute markers;
-- unchanged stock carries across the left edge rather than producing a lone current dot when a retained baseline exists;
+- unchanged stock carries across the left edge when a retained predecessor exists;
 - observed restock/sellout transitions are drawn when present;
-- Viewer performs no provider/Torn request.
+- opening another chart collapses the prior one;
+- graph rendering and hover telemetry perform no provider/Torn request.
+
+Also open the `$` button and verify the one-line economics strip appears above the card body with white labels; MV value is gold-yellow, Each/Gross/Per Hour values are white, and Tax value is gray at zero or light red when nonzero.
 
 The historical retention invariant is:
 
@@ -151,7 +155,7 @@ The historical retention invariant is:
 
 ## Popup / process behavior
 
-Settings, filters, Ignore List, Profile/API and Viewer should display only their WinForms window. The launcher console must remain hidden and close immediately after handing off to the hidden STA popup host.
+Settings, filters, Ignore List, and Profile/API should display only their WinForms window. The launcher console must remain hidden and close immediately after handing off to the hidden STA popup host.
 
 While all popups are closed and the updater is idle:
 
@@ -192,9 +196,9 @@ Do not paste API keys or full local settings.
 - one production update writes a valid opportunity projection;
 - the three sorts work and persist;
 - the list remains visible through ordinary polling;
-- Settings/filters/Viewer/GRAPH actions work without visible console windows;
+- Settings/filters actions work without visible console windows; inline graph expansion remains local inside Rainmeter;
 - gross quantity arithmetic is clear;
-- 8-hour graph behavior is correct;
+- 8-hour inline graph behavior is correct;
 - current runtime log is clean after successful operations;
 - a final Rainmeter screenshot passes layout review.
 
