@@ -130,7 +130,8 @@ if (Test-Path -LiteralPath $updatePath) {
         '[System.IO.File]::AppendAllText(','Performance telemetry record was not created:',
         "Write-TravelAssistantLog -Level WARN -Component 'performance'",
         "-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
-        "'publish-ui'","'publish-heartbeat'","'generation-cleanup'"
+        "'publish-ui'","'publish-heartbeat'","'generation-cleanup'",
+        'StochasticCalibration.ps1','stochastic-calibration-error.txt'
     )) {
         if (-not $text.Contains($token)) {
             Fail "RunUpdate.ps1 missing centralized diagnostic/performance token '$token'."
@@ -148,6 +149,12 @@ if (Test-Path -LiteralPath $updatePath) {
     }
     if (-not $text.Contains('$stageParts.ToArray()')) {
         Fail 'RunUpdate.ps1 must join a concrete stage string array without generic-list coercion.'
+    }
+
+    $stochasticForecastIndex=$text.IndexOf('Invoke-FailSoftScript -Path $StochasticForecast')
+    $stochasticCalibrationIndex=$text.IndexOf('Invoke-FailSoftScript -Path $StochasticCalibration')
+    if ($stochasticForecastIndex -lt 0 -or $stochasticCalibrationIndex -le $stochasticForecastIndex) {
+        Fail 'Prospective stochastic calibration must run after the stochastic forecast artifact is produced.'
     }
 
 
