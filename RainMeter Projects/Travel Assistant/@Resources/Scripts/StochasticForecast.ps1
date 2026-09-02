@@ -59,12 +59,15 @@ function Read-SFStateKv {
 }
 
 function Get-SFStableSeed {
-    param([string]$MarketKey,[long]$TimeBucket,[int]$BaseSeed=0)
+    param([string]$MarketKey,[int]$BaseSeed=0)
     [long]$hash=2166136261L
     foreach ($character in ([string]$MarketKey).ToCharArray()) {
         $hash=(($hash -bxor [int][char]$character) * 16777619L) -band 0x7fffffff
     }
-    $hash=($hash -bxor ($TimeBucket -band 0x7fffffff) -bxor $BaseSeed) -band 0x7fffffff
+    # Keep common random numbers across minute-to-minute runs. If retained
+    # evidence is unchanged, forecast movement should come from the advancing
+    # arrival horizon / posterior conditioning rather than a brand-new RNG draw.
+    $hash=($hash -bxor $BaseSeed) -band 0x7fffffff
     if ($hash -eq 0) { $hash=1 }
     return [int]$hash
 }
@@ -283,6 +286,10 @@ function Get-SFTravelCandidates {
         }
         $candidates.Add([pscustomobject]@{ departureAt=0L; arrivalAt=$NowEpoch })
         return [pscustomobject]@{ feasible=$true; mode='at_target'; reason='already at target market'; candidates=$candidates.ToArray() }
+    }
+
+    if ($OneWaySeconds -le 0) {
+        return [pscustomobject]@{ feasible=$false; mode='missing_travel_time'; reason='configured one-way travel time is unavailable'; candidates=@() }
     }
 
     $earliestDeparture=$NowEpoch
@@ -525,7 +532,7 @@ for ($i=1; $i -le $count; $i++) {
     $marketValue=0L; $fee=0
     [void][long]::TryParse([string]$state[$prefix+'MarketValueValue'],[ref]$marketValue)
     [void][int]::TryParse([string]$state[$prefix+'MarketFeePercent'],[ref]$fee)
-    $marketSeed=Get-SFStableSeed -MarketKey $key -TimeBucket ([long][Math]::Floor($Now/60.0)) -BaseSeed $Seed
+    $marketSeed=Get-SFStableSeed -MarketKey $key -BaseSeed $Seed
     $forecast=Invoke-SFMarketForecast -MarketKey $key -Cycles $cycles -Market $market -Destination $destination -Travel $travel -NowEpoch $Now -ScenarioCount $SimulationCount -TargetQuantity $targetQuantity -MarketValue $marketValue -MarketFeePercent $fee -OneWaySeconds $oneWay -RandomSeed $marketSeed
     $best=$null
     if (@($forecast.arrivals).Count -gt 0) { $best=@($forecast.arrivals | Sort-Object @{Expression='expectedProfit';Descending=$true},@{Expression='pTargetQty';Descending=$true},arrivalAt | Select-Object -First 1)[0] }
