@@ -77,6 +77,16 @@ timestamp is at or before the historical decision time, and quantity error is
 scored only when an exact retained provider snapshot exists at the historical
 arrival.
 
+Prospective live shadow scoring is now implemented in
+`StochasticCalibration.ps1`. It freezes one genuinely future best-arrival
+prediction per model/market/hour, rejects stale artifacts and zero-horizon states,
+and resolves outcomes only from later unambiguous retained evidence. Completed
+cycle rows now persist `previousSellOutBoundaryQuality`, allowing between-cycle
+OOS outcomes only when continuity is explicitly proven. Unresolved rows expire
+without affecting metrics. Calibration summaries maintain overall,
+evidence-quality and market-specific Brier/log-loss/reliability statistics, plus
+exact-snapshot target/quantity metrics. No calibration transform is user-facing.
+
 ## Accepted target-host baseline before this redesign
 
 At commit `f5a4f0b`, target testing confirmed:
