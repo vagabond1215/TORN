@@ -74,7 +74,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-CardDet
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-RainmeterSkin.ps1
 ```
 
-Checks Item/unit/full-load cost layout, large signed total Net, 9pt per-item/total MV-tax-net economics, inset lime end-cap controls, full-bleed dynamically rounded flag end caps, transparent cached Torn item art, black/lime graph palette with cobalt/pumpkin event ticks below the X axis, flag/window-only tooltip ownership, future-only actionable departure tooltip times, low window guidance, compact footer reflow, fallback-only Name ordering, and the current Rainmeter card contract.
+Checks the 48px square item-art cell with 44px transparent art, large signed total Net, two-line Each/Total MV-Net-Tax economics, signed displayed-profit sorting, black card fill with gray borders/separators, inset lime end-cap controls, full-bleed dynamically rounded flag end caps, black/lime graph palette with cobalt/pumpkin event ticks below the X axis, flag/window-only tooltip ownership, future-only actionable departure tooltip times, low window guidance, compact footer reflow, fallback-only Name ordering, and the current Rainmeter card contract.
 
 ## Other important focused suites
 

@@ -9,6 +9,11 @@ function Assert-True([bool]$Condition,[string]$Message) { if (-not $Condition) {
 function Assert-Equal($Actual,$Expected,[string]$Message) { if ($Actual -ne $Expected) { $script:failures.Add("$Message Expected=$Expected Actual=$Actual") } }
 function Assert-Near([double]$Actual,[double]$Expected,[double]$Tolerance,[string]$Message) { if ([Math]::Abs($Actual-$Expected) -gt $Tolerance) { $script:failures.Add("$Message Expected=$Expected Actual=$Actual") } }
 
+$scriptText = Get-Content -LiteralPath $scriptPath -Raw
+Assert-True ($scriptText.Contains("PSObject.Properties['make']")) 'Displayed-profit sort must use the projected after-tax Make value.'
+Assert-True ($scriptText.Contains("Descending=$true")) 'Displayed-profit sort must remain signed descending so every positive value ranks above negatives.'
+Assert-True (-not ($scriptText -match "Sort-Object[^\r\n]*Math\]::Abs")) 'Profit sorting must never use absolute magnitude.'
+
 $grossEconomics=Get-OpportunityEconomics -MarketValue 150L -ForeignPrice 100L -Quantity 10 -MarketFeePercent 0 -ElapsedSeconds 3600L
 Assert-Equal ([long]$grossEconomics.saleEach) 150L 'Declared MV is always the per-item sale value.'
 Assert-Equal ([long]$grossEconomics.purchaseCost) 1000L 'Purchase cost is foreign unit cost times quantity.'

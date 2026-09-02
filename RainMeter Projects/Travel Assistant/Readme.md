@@ -27,11 +27,11 @@ Up to eight opportunities may be shown.
 - No visible row/place numbers.
 - Destination is represented by a flag on the left.
 - The visible left line is one continuous **Item | foreign unit cost | full-load total cost** text run, so the total cost follows the unit cost directly instead of starting in a distant fixed column. The total cost is exact and muted; no variable-price reserve is added.
-- The right side is the signed, after-tax **total net profit**, rendered larger and centered vertically across the two text lines.
+- The right side is the signed, after-tax **total net profit**, rendered larger and centered vertically across the two text lines. Cards use a pure black background while retaining the existing gray outer border and separators.
 - The top-right **$** button and lower-right chart button are centered in the two halves of one T-divided right-edge end cap. Active fills are inset so they do not paint over the border or T separators.
 - Inactive icons are light gray; toggled controls use Torn-lime fill with dark-gray icon/text.
 - The destination flag behaves as the card's left end cap and now extends behind the top/bottom border, removing the former 1px bands. Its visible left corners are alpha-masked to the card radius, with the bottom-left flag corner becoming square when the graph expands below it. A border-only overlay keeps the actual card edge visible above the flag.
-- Torn's transparent item art is displayed immediately to the right of the flag. The assistant caches `https://www.torn.com/images/items/<itemId>/large.png` locally on demand rather than depending on a live image URL every Rainmeter redraw.
+- The space between the flag and item text is a 48×48 square matching the card's interior height. Torn's transparent item art is enlarged to 44×44 with a 2px inset in that square and cached from `https://www.torn.com/images/items/<itemId>/large.png` on demand.
 - The window/guidance text is lowered close to the bottom border.
 - Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering.
 - Inline graphs use a black background with a Torn-lime stock line. Cobalt-blue in-stock/restock and pumpkin-orange out-of-stock/sellout transitions are short ticks below the X axis so they do not cover the stock trace.
@@ -40,17 +40,18 @@ Up to eight opportunities may be shown.
 Expanded economics are:
 
 ```text
-MV:$...  <rate>% Tax:$...  Net:+$...   ||   MV:$...  <rate>% Tax:$...  Net:+$...
+Each | MV:$...                 || Total | MV:$...
+Net:+$...          5% Tax:$... || Net:+$...          5% Tax:$...
 ```
 
-The expanded row is split into equal 9pt per-item and total halves. The left MV is per item; the right MV is full-load MV. Tax is muted at zero/light red when nonzero, and Net follows green/red profit coloring with an explicit sign.
+The expanded bar is 34px tall and split into equal 9pt per-item and total halves. Each/Total + MV occupy the top-left corners; signed Net occupies each lower-left corner; Tax is right-aligned in each lower-right corner. Tax is muted at zero/light red when nonzero, and Net follows green/red profit coloring.
 
 ## Sort modes
 
 Selectable sorts are:
 
 - **UPCOMING** — earliest current/modeled stock window first.
-- **GROSS PROFIT** — highest total trip gross first.
+- **PROFIT** — highest displayed after-tax total Net first. Positive profits always rank above negatives; negative values are compared as signed numbers rather than by magnitude.
 - **PROFIT/HR** — after-tax net trip profit divided by total elapsed hours.
 
 Alphabetical **Name** ordering is not selectable. It is used only as an internal fallback when the visible rows have neither usable timing nor usable profit inputs.

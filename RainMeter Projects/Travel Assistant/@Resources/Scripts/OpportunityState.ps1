@@ -445,7 +445,7 @@ function Write-OpportunityProjection {
     }
     $State['OpportunitySortMode'] = $SortMode
     $State['OpportunitySortEffectiveMode'] = $EffectiveSortMode
-    $State['OpportunitySortText'] = $SortMode.ToUpperInvariant()
+    $State['OpportunitySortText'] = if ($SortMode -eq 'gross') { 'PROFIT' } else { $SortMode.ToUpperInvariant() }
     $State['OpportunityMessage'] = $Message
     $State['OpportunityCount'] = $projectCount
 
@@ -955,9 +955,9 @@ $sorted = @()
 if ($effectiveSortMode -eq 'name') {
     $sorted = @($allRows | Sort-Object name,countryName,key)
 } elseif ($effectiveSortMode -eq 'gross') {
-    $sorted = @($allRows | Sort-Object @{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},elapsedSeconds,name)
+    $sorted = @($allRows | Sort-Object @{Expression={ if ($_.PSObject.Properties['make']) { [double]$_.make } else { [double]$_.grossProfit } };Descending=$true},@{Expression='probability';Descending=$true},elapsedSeconds,name)
 } elseif ($effectiveSortMode -eq 'profit_per_hour') {
-    $sorted = @($allRows | Sort-Object @{Expression='profitPerHour';Descending=$true},@{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},name)
+    $sorted = @($allRows | Sort-Object @{Expression='profitPerHour';Descending=$true},@{Expression={ if ($_.PSObject.Properties['make']) { [double]$_.make } else { [double]$_.grossProfit } };Descending=$true},@{Expression='probability';Descending=$true},name)
 } else {
     $sorted = @($allRows | Sort-Object @{Expression='windowStartAt';Ascending=$true},@{Expression='probability';Descending=$true},@{Expression='grossProfit';Descending=$true},name)
 }
@@ -1494,9 +1494,9 @@ $sorted = @()
 if ($effectiveSortMode -eq 'name') {
     $sorted = @($allRows | Sort-Object name,countryName,key)
 } elseif ($effectiveSortMode -eq 'gross') {
-    $sorted = @($allRows | Sort-Object @{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},elapsedSeconds,name)
+    $sorted = @($allRows | Sort-Object @{Expression={ if ($_.PSObject.Properties['make']) { [double]$_.make } else { [double]$_.grossProfit } };Descending=$true},@{Expression='probability';Descending=$true},elapsedSeconds,name)
 } elseif ($effectiveSortMode -eq 'profit_per_hour') {
-    $sorted = @($allRows | Sort-Object @{Expression='profitPerHour';Descending=$true},@{Expression='grossProfit';Descending=$true},@{Expression='probability';Descending=$true},name)
+    $sorted = @($allRows | Sort-Object @{Expression='profitPerHour';Descending=$true},@{Expression={ if ($_.PSObject.Properties['make']) { [double]$_.make } else { [double]$_.grossProfit } };Descending=$true},@{Expression='probability';Descending=$true},name)
 } else {
     $sorted = @($allRows | Sort-Object @{Expression='windowStartAt';Ascending=$true},@{Expression='probability';Descending=$true},@{Expression='grossProfit';Descending=$true},name)
 }

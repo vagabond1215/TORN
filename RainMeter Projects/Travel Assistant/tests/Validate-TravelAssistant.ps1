@@ -143,7 +143,7 @@ if (Test-Path -LiteralPath $historyPath) {
 $opportunityPath=Join-Path $ProjectRoot '@Resources\Scripts\OpportunityState.ps1'
 if (Test-Path -LiteralPath $opportunityPath) {
     $opportunity=Get-Content -LiteralPath $opportunityPath -Raw
-    foreach($token in @('grossProfit','profitPerHour','Get-OpportunityNextWindow','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'probabilityKnown',"'LEARNING'",'$availableQuantity = $stock')) {
+    foreach($token in @('grossProfit','make','profitPerHour','Get-OpportunityNextWindow','hasKnownSortData','effectiveSortMode',"sortMode -eq 'gross'","sortMode -eq 'profit_per_hour'",'probabilityKnown',"'LEARNING'",'$availableQuantity = $stock',"PSObject.Properties['make']","Descending=$true")) {
         if (-not $opportunity.Contains($token)) { Fail "Opportunity model missing '$token'." }
     }
     if ($opportunity -match '(?i)https?://|curl\.exe|Invoke-RestMethod|Invoke-WebRequest') { Fail 'Opportunity projection must remain local-only.' }
@@ -152,7 +152,7 @@ if (Test-Path -LiteralPath $opportunityPath) {
 $readerPath=Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 if (Test-Path -LiteralPath $readerPath) {
     $reader=Get-Content -LiteralPath $readerPath -Raw
-    foreach($token in @('flagCodes','@3x.png','flagMaskImagePath','flag-mask-both.png','flag-mask-top.png','flag-mask-bottom.png','applyItemImageForRow','requestItemImages','MeasureItemImages','VisibleItemImageIds','collapseInlineGraph','MeasureInlineGraph','effectiveSortMode','OpportunitySortEffectiveMode','safeLeaveText',"return 'WAIT DATA'","return 'NO HIT'")) {
+    foreach($token in @('flagCodes','@3x.png','flagMaskImagePath','flag-mask-both.png','flag-mask-top.png','flag-mask-bottom.png','applyItemImageForRow','requestItemImages','MeasureItemImages','VisibleItemImageIds','collapseInlineGraph','MeasureInlineGraph','effectiveSortMode','OpportunitySortEffectiveMode','displayProfit = number(data[prefix .. ''MakeValue''])','if a.displayProfit ~= b.displayProfit then return a.displayProfit > b.displayProfit end','safeLeaveText',"return 'WAIT DATA'","return 'NO HIT'")) {
         if (-not $reader.Contains($token)) { Fail "StateReader missing '$token'." }
     }
     foreach($retired in @('OpenViewer','ViewerMarketKey','MeasureItemViewer')) { if($reader.Contains($retired)){ Fail "StateReader retains retired Viewer token '$retired'." } }

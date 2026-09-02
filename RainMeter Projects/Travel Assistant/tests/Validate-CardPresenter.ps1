@@ -47,8 +47,8 @@ if ($errors.Count -eq 0) {
         "state[projectedPrefix..'MarketValueValue']","state[projectedPrefix..'ProfitEachValue']",
         "state[projectedPrefix..'GrossSaleValue']","state[projectedPrefix..'MarketTaxValue']","state[projectedPrefix..'MarketFeePercent']",
         "local face='Nirmala UI Semilight'",
-        "setOption(prefix..'Name','X',108)","setOption(prefix..'Price','X',108)","setOption(prefix..'Price','W',280)",
-        "setOption(prefix..'Leave','X',108)","setOption(prefix..'Leave','W',278)",
+        "setOption(prefix..'Name','X',123)","setOption(prefix..'Price','X',123)","setOption(prefix..'Price','W',265)",
+        "setOption(prefix..'Leave','X',123)","setOption(prefix..'Leave','W',263)",
         "setOption(prefix..'Name','Text',itemName)","setOption(prefix..'Name','ToolTipText','')","setOption(prefix..'Name','FontColor','0,0,0,0')",
         "unitCostText=unitCost>0 and formatMoney(unitCost) or '?'",
         "setOption(prefix..'Price','Text',itemName..' | '..unitCostText..' | '..totalCostText)",
@@ -59,14 +59,16 @@ if ($errors.Count -eq 0) {
         "setOption(prefix..'Price','ToolTipText','')","setOption(prefix..'Take','ToolTipText','')","setOption(prefix..'Make','ToolTipText','')",
         "setOption(prefix..'Make','Text',formatSignedMoney(make))","setOption(prefix..'Make','FontColor',profitColor(make))",
         "formatSignedMoney","profitColor",
-        "local eachDetail='MV:'..formatMoney(mv)","'% Tax:'..formatMoney(taxEach)","' Net:'..formatSignedMoney(each)",
-        "local totalDetail='MV:'..formatMoney(grossSale)","'% Tax:'..formatMoney(marketTax)","' Net:'..formatSignedMoney(make)",
-        "setOption(prefix..'Gross','FontSize',9)","setOption(prefix..'DetailTotal','FontSize',9)",
-        "setOption(prefix..'Gross','ToolTipText','')","setOption(prefix..'DetailTotal','ToolTipText','')",
+        "setOption(prefix..'Gross','Text','Each | MV:'..formatMoney(mv))",
+        "setOption(prefix..'DetailEachNet','Text','Net:'..formatSignedMoney(each))",
+        "setOption(prefix..'DetailEachTax','Text',tostring(marketTaxRate)..'% Tax:'..formatMoney(taxEach))",
+        "setOption(prefix..'DetailTotal','Text','Total | MV:'..formatMoney(grossSale))",
+        "setOption(prefix..'DetailTotalNet','Text','Net:'..formatSignedMoney(make))",
+        "setOption(prefix..'DetailTotalTax','Text',tostring(marketTaxRate)..'% Tax:'..formatMoney(marketTax))",
+        "setOption(prefix..'DetailEachNet','FontColor',eachNetColor)","setOption(prefix..'DetailTotalNet','FontColor',totalNetColor)",
+        "setOption(prefix..'DetailEachTax','FontColor',taxColor)","setOption(prefix..'DetailTotalTax','FontColor',taxColor)",
         "setOption(prefix..'DetailToggle','W',24)","setOption(prefix..'DetailToggle','H',23)",
         "setOption(prefix..'Graph','X',519)","setOption(prefix..'Graph','W',24)","setOption(prefix..'Graph','H',23)",
-        "setOption(prefix..'Gross','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')",
-        "setOption(prefix..'DetailTotal','InlinePattern3','(?<=Net:)[+-]?\\$[0-9,]+')",
         "setOption(prefix..'Window','Text','')","setOption(prefix..'Chance','Text','')",
         "if certainty~='' then actionText=actionText..' '..certainty end",
         "totalCost=(fallbackPrice>0 and quantity>0) and (fallbackPrice*quantity) or 0",
@@ -170,3 +172,4 @@ if ($errors.Count -gt 0) {
 Write-Host 'Compact trade-card current/next-cycle and collecting-data validation passed.' -ForegroundColor Green
 Write-Host 'In Torn, current stock uses a 5% sellout safety deadline; otherwise only the immediate next restock exposes Window Open/Best/Closes or Safe Hit state.'
 exit 0
+

@@ -53,7 +53,7 @@ Main Rainmeter UI concept:
 ```text
 In Torn                                      [filter] [settings]
 
-[UPCOMING] [GROSS PROFIT] [PROFIT/HR]
+[UPCOMING] [PROFIT] [PROFIT/HR]
 
 [FLAG]  <item> | <foreign cost> | <full-load cost>      <signed total net>   [$]
         <window / leave guidance>                                      [chart]
@@ -73,9 +73,9 @@ Card rules:
 - Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity.
 - Inline graph rendering uses a black background and Torn-lime stock trace. Cobalt-blue restock/in-stock and pumpkin-orange sellout/out-of-stock transitions render as short ticks in a dedicated gutter below the X axis, not across the active plot.
-- Expanded economics use two equal unlabeled halves: per-item `MV / <rate>% Tax / Net` on the left and full-load `MV / <rate>% Tax / Net` on the right. Both halves are 9 pt and vertically centered; a divider separates the halves.
+- Expanded economics use a 34px two-line bar split into equal halves. The top-left of each half reads `Each | MV:$...` or `Total | MV:$...`; the second row puts signed `Net:` at the lower-left and `<rate>% Tax:` at the lower-right. A gray divider separates the halves and the normal card border remains gray.
 - The FlagKit image is the visual left end cap. It extends underneath the card's top/bottom border (`67x50` beginning at the card origin), eliminating the former 1px bands. A panel-tinted alpha mask clips the flag to the rounded left corners and a border-only overlay redraws the card edge above it. Collapsed cards round both left corners; graph-expanded cards keep only the top-left flag corner rounded; economics-expanded cards keep only the bottom-left flag corner rounded; if both expansions are open the flag edge is square because neither flag corner coincides with the card corner.
-- Decorative Torn item art is shown immediately to the right of the flag on a transparent `28x28` surface. The art is cached locally from Torn's direct item PNG path (`https://www.torn.com/images/items/<id>/large.png`) and is never required for economics or opportunity logic.
+- The region between the flag's right edge and the item-name text is a true `48x48` square, matching the card's interior height. Decorative Torn item art is rendered `44x44` with a 2px inset inside that square and cached locally from Torn's direct item PNG path (`https://www.torn.com/images/items/<id>/large.png`).
 - The window/guidance line sits low in the card with minimal bottom padding.
 - Tooltip policy is strict: only the destination flag and the visible window/guidance text may expose tooltips. Header controls, sort buttons, item art/text, economics, profit, end-cap buttons, and graph hover do not.
 - Active-window tooltips never present already-passed departure timestamps as actionable times. Once the departure window has opened they say `OPEN NOW`; expired Safe windows say `closed`, and only future departure/close timestamps remain.
@@ -83,7 +83,7 @@ Card rules:
 Ordering is selectable and persistent only for:
 
 - `UPCOMING`: soonest current/modeled stock window first.
-- `GROSS PROFIT`: highest total trip gross first.
+- `PROFIT`: highest displayed after-tax total Net first. Sorting is signed descending: all positive profits rank above all negative profits, and negatives are ordered normally (`-$100` above `-$1,000`), never by absolute magnitude.
 - `PROFIT/HR`: after-tax net trip profit divided by total elapsed hours.
 - Alphabetical Name ordering is internal fallback only when the visible rows have neither usable timing nor usable profit inputs.
 - Hit likelihood is a separate displayed metric; do not fold it into a hidden sort score.

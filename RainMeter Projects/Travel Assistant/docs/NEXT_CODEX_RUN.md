@@ -270,11 +270,11 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 1. Header is one compact line: `Travel`, filter image, gear image.
 2. `SETTINGS >` text is gone.
 3. ITEM/TRIP/CAT/RESET main band is gone.
-4. UPCOMING / GROSS PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only.
+4. UPCOMING / PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only. PROFIT sorts by the displayed signed after-tax total Net, so every positive row ranks above every negative row.
 5. Cards show `Item | unit cost | exact full-load cost` on the left and a large signed total Net on the right; there are no Take/Make labels or variable-price cash buffer.
 6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active Torn-lime fills are inset so the card border/T separators remain visible.
-7. Expanded economics are two equal 9pt unlabeled halves: per-item MV/Tax/Net and total MV/Tax/Net.
-8. Flags act as left end caps: collapsed cards round both flag corners, graph-expanded cards square the flag's bottom-left corner, and the card border is visibly redrawn over the flag. Transparent Torn item art appears immediately to the right of the flag after its local cache fills.
+7. Expanded economics use a 34px two-line bar: `Each | MV` / `Total | MV` on the top row, Net at each lower-left, and Tax at each lower-right.
+8. Flags act as left end caps. The 48px square immediately to the right contains 44px Torn item art with a 2px inset; item text begins after that square. Card fill is pure black while gray borders/separators remain visible.
 10. Inline graphs are black with a lime stock line, cobalt in-stock/restock markers, and pumpkin out-of-stock/sellout markers. The window/guidance line sits close to the card's bottom border and the Updated footer remains close beneath the final card.
 9. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
 11. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.

@@ -28,7 +28,7 @@ local lastItemImageRequestAt = 0
 
 local collapsedCardHeight = 50
 local rowStride = 54
-local detailExtra = 18
+local detailExtra = 34
 local graphExtra = 133
 local footerExtra = 16
 local maxCandidateRows = 256
@@ -357,6 +357,7 @@ local function currentOpportunityRows(data)
                 country = safeText(data[prefix .. 'Country'], countryId),
                 tripBand = band,
                 gross = number(data[prefix .. 'GrossValue']),
+                displayProfit = number(data[prefix .. 'MakeValue']),
                 profitHour = number(data[prefix .. 'ProfitHourValue']),
                 windowStart = number(data[prefix .. 'WindowStartAt']),
                 timeKnown = number(data[prefix .. 'WindowStartAt']) > 0,
@@ -397,7 +398,7 @@ local function sortOpportunityRows(rows, mode)
             if ac ~= bc then return ac < bc end
             return a.key < b.key
         elseif mode == 'gross' then
-            if a.gross ~= b.gross then return a.gross > b.gross end
+            if a.displayProfit ~= b.displayProfit then return a.displayProfit > b.displayProfit end
             if actionRank(a.probability) ~= actionRank(b.probability) then return actionRank(a.probability) < actionRank(b.probability) end
             if a.elapsed ~= b.elapsed then return a.elapsed < b.elapsed end
             return string.lower(a.name) < string.lower(b.name)
@@ -657,7 +658,11 @@ local function collapseCardDetails()
     lastLayoutSignature = ''
     for i = 1, 8 do
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'Gross')
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailEachNet')
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailEachTax')
         SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotal')
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalNet')
+        SKIN:Bang('!HideMeter', 'MeterOpportunity' .. i .. 'DetailTotalTax')
         setDetailButtonState('MeterOpportunity' .. i .. 'DetailToggle', false)
         SKIN:Bang('!SetOption', 'MeterOpportunity' .. i .. 'DetailToggle', 'ToolTipText', '')
     end
@@ -695,10 +700,18 @@ local function layoutRows(data, count)
         local p = 'MeterOpportunity' .. i
         if i == expandedDetailRow then
             SKIN:Bang('!ShowMeter', p .. 'Gross')
+            SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')
+            SKIN:Bang('!ShowMeter', p .. 'DetailEachTax')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotal')
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax')
         else
             SKIN:Bang('!HideMeter', p .. 'Gross')
+            SKIN:Bang('!HideMeter', p .. 'DetailEachNet')
+            SKIN:Bang('!HideMeter', p .. 'DetailEachTax')
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')
         end
         local maskImage = ''
         if i <= count then maskImage = flagMaskImagePath(i == expandedDetailRow, i == expandedRow) end
@@ -746,14 +759,26 @@ local function layoutRows(data, count)
             SKIN:Bang('!SetOption', p .. 'Card', 'Shape5', 'Line 0,0,0,0 | StrokeWidth 0')
         end
 
-        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+9))
-        SKIN:Bang('!SetOption', p .. 'DetailTotal', 'Y', tostring(y+9))
+        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+4))
+        SKIN:Bang('!SetOption', p .. 'DetailEachNet', 'Y', tostring(y+20))
+        SKIN:Bang('!SetOption', p .. 'DetailEachTax', 'Y', tostring(y+20))
+        SKIN:Bang('!SetOption', p .. 'DetailTotal', 'Y', tostring(y+4))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalNet', 'Y', tostring(y+20))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalTax', 'Y', tostring(y+20))
         if detailExpanded then
             SKIN:Bang('!ShowMeter', p .. 'Gross')
+            SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')
+            SKIN:Bang('!ShowMeter', p .. 'DetailEachTax')
             SKIN:Bang('!ShowMeter', p .. 'DetailTotal')
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotalNet')
+            SKIN:Bang('!ShowMeter', p .. 'DetailTotalTax')
         else
             SKIN:Bang('!HideMeter', p .. 'Gross')
+            SKIN:Bang('!HideMeter', p .. 'DetailEachNet')
+            SKIN:Bang('!HideMeter', p .. 'DetailEachTax')
             SKIN:Bang('!HideMeter', p .. 'DetailTotal')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotalNet')
+            SKIN:Bang('!HideMeter', p .. 'DetailTotalTax')
         end
 
         SKIN:Bang('!SetOption', p .. 'Flag', 'X', '8')
@@ -765,9 +790,9 @@ local function layoutRows(data, count)
         SKIN:Bang('!SetOption', p .. 'FlagMask', 'W', '67')
         SKIN:Bang('!SetOption', p .. 'FlagMask', 'H', '50')
         SKIN:Bang('!SetOption', p .. 'ItemImage', 'X', '77')
-        SKIN:Bang('!SetOption', p .. 'ItemImage', 'Y', tostring(y+11+bodyOffset))
-        SKIN:Bang('!SetOption', p .. 'ItemImage', 'W', '28')
-        SKIN:Bang('!SetOption', p .. 'ItemImage', 'H', '28')
+        SKIN:Bang('!SetOption', p .. 'ItemImage', 'Y', tostring(y+3+bodyOffset))
+        SKIN:Bang('!SetOption', p .. 'ItemImage', 'W', '44')
+        SKIN:Bang('!SetOption', p .. 'ItemImage', 'H', '44')
         SKIN:Bang('!SetOption', p .. 'Name', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Price', 'Y', tostring(y+6+bodyOffset))
         SKIN:Bang('!SetOption', p .. 'Take', 'Y', tostring(y+6+bodyOffset))
