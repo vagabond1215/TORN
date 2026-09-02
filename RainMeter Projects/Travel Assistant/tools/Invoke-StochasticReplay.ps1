@@ -133,7 +133,7 @@ function Invoke-SFReplay {
                 empirical_all_overlap=[double]$baselines.empirical_all_overlap; empirical_overlap=[double]$baselines.empirical_overlap
                 mean_cycle=[double]$baselines.mean_cycle; median_cycle=[double]$baselines.median_cycle
                 expected_restock_minus_flight=[double]$baselines.expected_restock_minus_flight
-                stochastic_v1=[double]$forecast.arrivals[0].pAnyStock
+                stochastic_v1_1=[double]$forecast.arrivals[0].pAnyStock
             }
             $rows.Add([pscustomobject]@{
                 marketKey=$key; decisionAt=$decisionAt; arrivalAt=$arrivalAt
@@ -145,13 +145,13 @@ function Invoke-SFReplay {
         }
     }
     $rowArray=$rows.ToArray()
-    $metricNames=@('empirical_all_overlap','empirical_overlap','mean_cycle','median_cycle','expected_restock_minus_flight','stochastic_v1')
+    $metricNames=@('empirical_all_overlap','empirical_overlap','mean_cycle','median_cycle','expected_restock_minus_flight','stochastic_v1_1')
     $metrics=[ordered]@{}
     foreach ($name in $metricNames) { $metrics[$name]=Get-SFReplayMetrics -Rows $rowArray -PredictionName $name }
     $scorable=@($rowArray | Where-Object {$_.scorable})
     $uncertain=@($rowArray | Where-Object {-not $_.scorable})
     return [pscustomobject]@{
-        schemaVersion=1; modelVersion='stochastic-v1'; noFutureLeakagePolicy='cycle availableAt <= decisionAt'
+        schemaVersion=1; modelVersion='stochastic-v1.1'; noFutureLeakagePolicy='cycle availableAt <= decisionAt'
         forecastMetrics=[pscustomobject]$metrics
         intervalMetrics=[pscustomobject]@{ restockCoverageScorable=0; selloutCoverageScorable=0; quantityErrorScorable=0; note='extension points require frozen interval/quantity forecasts' }
         decisionMetrics=[pscustomobject]@{ scorableDecisions=$scorable.Count; censoredOrUnscorable=$uncertain.Count; arrivalSuccess=@($scorable | Where-Object {$_.label -eq 1}).Count; earlyArrival=0; lateArrival=0; profitScorable=0; regretScorable=0 }
