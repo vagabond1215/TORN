@@ -149,11 +149,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tools\Invoke-StochasticReplay.ps1 `
   -ArrivalOffsetSeconds 7200 `
   -SimulationCount 256
+
+# Optional explicit observation history; defaults to runtime observations.jsonl.
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Invoke-StochasticReplay.ps1 `
+  -CyclesPath .\data\runtime\cycles.jsonl `
+  -ObservationsPath .\data\runtime\observations.jsonl
 ```
 
 Output defaults to ignored `data/runtime/stochastic-replay.json` and includes Brier
-score, log loss, calibration buckets, decision counters, and explicit extension
-points for frozen interval, quantity, profit/hour, and regret scoring.
+score, log loss, calibration buckets, decision counters, no-future-leakage
+observation diagnostics, and exact-snapshot available-quantity MAE/RMSE when the
+arrival timestamp coincides with a retained provider observation. It does not
+interpolate quantity ground truth across unobserved intervals; restock/sellout
+coverage, profit/hour, and regret remain extension points.
 
 ## Tests
 
