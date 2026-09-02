@@ -39,7 +39,7 @@ if ($errors.Count -eq 0) {
         'Display-only fence',
         'local data=readKv(statePath)',
         'local heartbeat=readEpoch(heartbeatPath)',
-        "setVariable('PanelHeight',132)"
+        "setVariable('PanelHeight',160)"
     )) {
         if (-not $guard.Contains($token)) { Fail "FreshnessGuard.lua missing '$token'." }
     }
