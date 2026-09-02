@@ -309,6 +309,7 @@ end
 local function applySortColors(mode)
     local active = '126,190,73,255'
     local inactive = '150,150,150,255'
+    setVariable('OpportunityRenderMode', mode)
     setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
     setVariable('SortGrossColor', mode == 'gross' and active or inactive)
     setVariable('SortProfitHourColor', mode == 'profit_per_hour' and active or inactive)
