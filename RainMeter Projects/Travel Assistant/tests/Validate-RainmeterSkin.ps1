@@ -55,6 +55,7 @@ foreach ($i in 1..8) {
         $section='MeterOpportunity'+$i+$suffix
         if ($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "OpportunityRows.inc missing [$section]." }
     }
+    $cardBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Card\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $flagBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Flag\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $flagMaskBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'FlagMask\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $cardBorderBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'CardBorder\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -75,6 +76,7 @@ foreach ($i in 1..8) {
     $detailTotalTaxBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailTotalTax\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphButtonBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    if ($cardBody -notmatch ('ToggleCardExpanded\('+[string]$i+'\)')) { Fail "Opportunity $i card body must toggle both economics and graph expansion." }
     if ($flagBody -notmatch '(?im)^Meter=Image\s*$' -or $flagBody -notmatch '(?im)^X=8\s*$' -or $flagBody -notmatch '(?im)^W=67\s*$' -or $flagBody -notmatch '(?im)^H=50\s*$' -or $flagBody -notmatch '(?im)^PreserveAspectRatio=1\s*$') { Fail "Opportunity $i flag must extend under the rounded border with no top/bottom gap." }
     if ($flagMaskBody -notmatch '(?im)^X=8\s*$' -or $flagMaskBody -notmatch '(?im)^W=67\s*$' -or $flagMaskBody -notmatch '(?im)^H=50\s*$' -or $flagMaskBody -notmatch '(?im)^ImageTint=#Panel#\s*$') { Fail "Opportunity $i flag mask must match the full-height flag and tint to the panel." }
     if ($cardBorderBody -notmatch '(?im)^Shape=Rectangle 0,0,536,50,5 \| Fill Color 0,0,0,0 \| StrokeWidth 1 \| Stroke Color #Border#\s*$') { Fail "Opportunity $i must redraw the rounded card border over the flag edge." }
@@ -97,6 +99,7 @@ foreach ($i in 1..8) {
     if ($detailTotalTaxBody -notmatch '(?im)^X=322\s*$' -or $detailTotalTaxBody -notmatch '(?im)^W=210\s*$' -or $detailTotalTaxBody -notmatch '(?im)^H=16\s*$' -or $detailTotalTaxBody -notmatch '(?im)^StringAlign=LeftCenter\s*$') { Fail "Opportunity $i Total Tax must be left-aligned on the second row." }
     foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody,$detailEachLabelBody,$grossBody,$detailEachNetBody,$detailEachTaxBody,$detailTotalLabelBody,$detailTotalBody,$detailTotalNetBody,$detailTotalTaxBody,$detailBody)){if($fontBody -match '(?im)^FontFace=' -and $fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Opportunity $i card string meters must use Nirmala UI Semilight."}}
     if ($graphBody -notmatch '(?im)^Meter=Image\s*$' -or $graphBody -notmatch '(?im)^W=528\s*$' -or $graphBody -notmatch '(?im)^H=125\s*$') { Fail "Opportunity $i inline graph must be the 528x125 native Image surface." }
+    if ($graphBody -notmatch ('ToggleCardExpanded\('+[string]$i+'\)')) { Fail "Opportunity $i expanded graph surface must retain the whole-card toggle action." }
     if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
     if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
     if ($rows -match ('(?ms)^\[MeterOpportunity'+$i+'Rank\]')) { Fail "Opportunity $i must not restore visible place/rank meters." }
@@ -124,16 +127,16 @@ foreach ($token in @(
     'local function setGraphButtonState(name, expanded)','local function setDetailButtonState(name, expanded)',
     "'GraphExpanded', expanded and '1' or '0'","SKIN:Bang('!SetOption', name, 'Text', '$')","'126,190,73,255'","'38,38,38,255'","'190,190,190,255'",
     "'Rectangle 0,0,24,23 | Fill Color '..fill..' | StrokeWidth 0'",
-    'local function collapseInlineGraph()','local function collapseCardDetails()','function ToggleCardDetails(index)',
+    'local function collapseInlineGraph()','local function collapseCardDetails()','function ToggleCardExpanded(index)','function ToggleCardDetails(index)',
     'local detailExtraWithTax = 34','local detailExtraNoTax = 18','local function detailTaxRate(data, index)','local function detailExtraForRow(data, index)','local graphExtra = 133','local footerExtra = 16','expandedDetailKey','expandedDetailRow',
     "local activeDetailExtra = detailExtraForRow(data, expandedDetailRow)","local activeDetailHasTax = expandedDetailRow > 0 and detailTaxRate(data, expandedDetailRow) > 0",
     "if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + activeDetailExtra end",
     "local cardHeight = collapsedCardHeight + bodyOffset + (graphExpanded and graphExtra or 0)",
     'local detailLabelCenterY = y + (detailExpanded and math.floor(bodyOffset/2) or 9)',
     "'DetailEachLabel', 'Y', tostring(detailLabelCenterY)","'DetailEachLabel', 'H', tostring(detailLabelHeight)",
-    "'Gross', 'Y', tostring(y+9)","'DetailEachNet', 'Y', tostring(y+9)","'DetailEachTax', 'Y', tostring(y+26)",
+    "'Gross', 'Y', tostring(y+8)","'DetailEachNet', 'Y', tostring(y+8)","'DetailEachTax', 'Y', tostring(y+25)",
     "'DetailTotalLabel', 'Y', tostring(detailLabelCenterY)","'DetailTotalLabel', 'H', tostring(detailLabelHeight)",
-    "'DetailTotal', 'Y', tostring(y+9)","'DetailTotalNet', 'Y', tostring(y+9)","'DetailTotalTax', 'Y', tostring(y+26)",
+    "'DetailTotal', 'Y', tostring(y+8)","'DetailTotalNet', 'Y', tostring(y+8)","'DetailTotalTax', 'Y', tostring(y+25)",
     "'Flag', 'Y', tostring(y+bodyOffset)","'FlagMask', 'Y', tostring(y+bodyOffset)","'Flag', 'W', '67'","'Flag', 'H', '50'","'ItemImage', 'Y', tostring(y+3+bodyOffset)","'ItemImage', 'W', '44'","'ItemImage', 'H', '44'","'Window', 'Y', tostring(y+34+bodyOffset)","'Graph', 'Y', tostring(y+26+bodyOffset)",
     "SKIN:Bang('!ShowMeter', p .. 'DetailEachLabel')","SKIN:Bang('!ShowMeter', p .. 'Gross')","SKIN:Bang('!ShowMeter', p .. 'DetailEachNet')",
     "if activeDetailHasTax then SKIN:Bang('!ShowMeter', p .. 'DetailEachTax') else SKIN:Bang('!HideMeter', p .. 'DetailEachTax') end",

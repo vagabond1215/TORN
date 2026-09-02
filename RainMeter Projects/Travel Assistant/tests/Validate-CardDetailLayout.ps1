@@ -35,9 +35,12 @@ if($errors.Count -eq 0){
         }
 
         $card=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Card\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+        $cardYMatch=[regex]::Match($card,'(?im)^Y=(\d+)\s*$')
+        $cardY=if($cardYMatch.Success){[int]$cardYMatch.Groups[1].Value}else{-1}
         foreach($token in @('Shape2=Line 510,0,510,50 | StrokeWidth 1 | Stroke Color #Border#','Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#')){
             if(-not$card.Contains($token)){Fail "Row $i card end-cap separator missing '$token'."}
         }
+        if($card -notmatch ('ToggleCardExpanded\('+[string]$i+'\)')){Fail "Row $i card body must toggle both expansion sections."}
 
         $detail=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailToggle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         if($detail -notmatch '(?im)^Text=\$\s*$'){Fail "Row $i detail toggle must default to the money button."}
@@ -122,6 +125,17 @@ if($errors.Count -eq 0){
         foreach($token in @('X=322','W=210','H=16','StringAlign=LeftCenter','Hidden=1')){
             if(-not$stripTotalTax.Contains($token)){Fail "Row $i total Tax meter missing '$token'."}
         }
+        if($cardY -lt 0){Fail "Row $i card Y could not be parsed for economics baseline validation."}
+        else {
+            foreach($pair in @(
+                @($strip,($cardY+8),'Each MV'),@($stripEachNet,($cardY+8),'Each Net'),@($stripEachTax,($cardY+25),'Each Tax'),
+                @($stripTotal,($cardY+8),'Total MV'),@($stripTotalNet,($cardY+8),'Total Net'),@($stripTotalTax,($cardY+25),'Total Tax')
+            )){
+                $bodyText=[string]$pair[0]
+                $expectedY=[int]$pair[1]
+                if($bodyText -notmatch ('(?im)^Y='+[string]$expectedY+'\s*$')){Fail "Row $i $($pair[2]) baseline must be 1px above the prior position."}
+            }
+        }
 
         $inline=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
         foreach($token in @('W=528','H=125',('Group=OpportunityInlineGraph'+$i))){
@@ -146,7 +160,7 @@ if($errors.Count -eq 0){
         "'126,190,73,255'","local active = '126,190,73,255'","'38,38,38,255'","'190,190,190,255'",
         'local function collapseCardDetails()',
         'local function syncExpandedRows(data, count)',
-        'function ToggleCardDetails(index)',
+        'function ToggleCardExpanded(index)','function ToggleCardDetails(index)','local bothExpanded = (expandedDetailKey == key and expandedKey == key)',
         "local activeDetailExtra = detailExtraForRow(data, expandedDetailRow)",
         "local activeDetailHasTax = expandedDetailRow > 0 and detailTaxRate(data, expandedDetailRow) > 0",
         "if expandedDetailRow > 0 and i > expandedDetailRow then extraBefore = extraBefore + activeDetailExtra end",
@@ -157,9 +171,9 @@ if($errors.Count -eq 0){
         "'Shape3', 'Line 510,' .. (bodyOffset+25) .. ',536,' .. (bodyOffset+25)",
         'local detailLabelCenterY = y + (detailExpanded and math.floor(bodyOffset/2) or 9)',
         "'DetailEachLabel', 'Y', tostring(detailLabelCenterY)","'DetailEachLabel', 'H', tostring(detailLabelHeight)",
-        "'Gross', 'Y', tostring(y+9)","'DetailEachNet', 'Y', tostring(y+9)","'DetailEachTax', 'Y', tostring(y+26)",
+        "'Gross', 'Y', tostring(y+8)","'DetailEachNet', 'Y', tostring(y+8)","'DetailEachTax', 'Y', tostring(y+25)",
         "'DetailTotalLabel', 'Y', tostring(detailLabelCenterY)","'DetailTotalLabel', 'H', tostring(detailLabelHeight)",
-        "'DetailTotal', 'Y', tostring(y+9)","'DetailTotalNet', 'Y', tostring(y+9)","'DetailTotalTax', 'Y', tostring(y+26)",
+        "'DetailTotal', 'Y', tostring(y+8)","'DetailTotalNet', 'Y', tostring(y+8)","'DetailTotalTax', 'Y', tostring(y+25)",
         "'DetailToggle', 'Y', tostring(y+13+bodyOffset)",
         "'Flag', 'Y', tostring(y+bodyOffset)","'Flag', 'W', '67'","'Flag', 'H', '50'",
         "'FlagMask', 'Y', tostring(y+bodyOffset)","'ItemImage', 'Y', tostring(y+3+bodyOffset)","'ItemImage', 'W', '44'","'ItemImage', 'H', '44'",

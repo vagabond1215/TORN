@@ -33,7 +33,7 @@ Up to eight opportunities may be shown.
 - The destination flag behaves as the card's left end cap and now extends behind the top/bottom border, removing the former 1px bands. Its visible left corners are alpha-masked to the card radius, with the bottom-left flag corner becoming square when the graph expands below it. A border-only overlay keeps the actual card edge visible above the flag.
 - The space between the flag and item text is a 48×48 square matching the card's interior height. Torn's transparent item art is enlarged to 44×44 with a 2px inset in that square and cached from `https://www.torn.com/images/items/<itemId>/large.png` on demand.
 - The window/guidance text is lowered close to the bottom border.
-- Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering.
+- Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering. Clicking the card body toggles both sections together, while the `$` and chart buttons still toggle their individual section.
 - Inline graphs use a black background with a Torn-lime stock line. Cobalt-blue in-stock/restock and pumpkin-orange out-of-stock/sellout transitions are short ticks below the X axis so they do not cover the stock trace.
 - Only the flag and the visible window/guidance line have tooltips. When a departure window is already open, its tooltip uses `OPEN NOW` instead of listing past departure timestamps; expired Safe windows are labeled `closed`.
 
@@ -44,7 +44,7 @@ Expanded economics are:
         5% Tax:$...                    5% Tax:$...
 ```
 
-`Each` and `Total` are separate vertical label blocks filled with the card-border gray and centered vertically. MV is left-aligned on the top row, Net is right-aligned on that same row, and Tax is left-aligned on the second row. With a nonzero rate the expansion is 34px tall. At **0% tax**, the Tax fields and second row disappear entirely and the expansion contracts to a single 18px row; the label blocks contract to match. There are no pipe characters inside the expanded economics strip.
+`Each` and `Total` are separate vertical label blocks filled with the card-border gray and centered vertically. MV is left-aligned on the top row, Net is right-aligned on that same row, and Tax is left-aligned on the second row; the value text baselines are shifted 1 px upward for optical centering. With a nonzero rate the expansion is 34px tall. At **0% tax**, the Tax fields and second row disappear entirely and the expansion contracts to a single 18px row; the label blocks contract to match. There are no pipe characters inside the expanded economics strip.
 
 ## Sort modes
 
@@ -57,6 +57,8 @@ Selectable sorts are:
 Alphabetical **Name** ordering is not selectable. It is used only as an internal fallback when the visible rows have neither usable timing nor usable profit inputs.
 
 Hit likelihood remains separate from the sort score. Sort changes are applied immediately to current rows in Lua rather than waiting for a PowerShell/network update.
+
+Saving trip/category/item/Ignore filters starts a dedicated `RefreshFilters` pass. It reuses the already-collected foreign-stock snapshot, refreshes only newly eligible missing/stale resale prices (up to 40 items on the explicit save), reruns opportunity calculations, and publishes after that recompute so items that were previously filtered out do not have to wait for later minute polls.
 
 ## Fresh stock and likelihood learning
 

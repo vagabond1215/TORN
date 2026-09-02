@@ -783,14 +783,14 @@ local function layoutRows(data, count)
         local detailLabelCenterY = y + (detailExpanded and math.floor(bodyOffset/2) or 9)
         SKIN:Bang('!SetOption', p .. 'DetailEachLabel', 'Y', tostring(detailLabelCenterY))
         SKIN:Bang('!SetOption', p .. 'DetailEachLabel', 'H', tostring(detailLabelHeight))
-        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+9))
-        SKIN:Bang('!SetOption', p .. 'DetailEachNet', 'Y', tostring(y+9))
-        SKIN:Bang('!SetOption', p .. 'DetailEachTax', 'Y', tostring(y+26))
+        SKIN:Bang('!SetOption', p .. 'Gross', 'Y', tostring(y+8))
+        SKIN:Bang('!SetOption', p .. 'DetailEachNet', 'Y', tostring(y+8))
+        SKIN:Bang('!SetOption', p .. 'DetailEachTax', 'Y', tostring(y+25))
         SKIN:Bang('!SetOption', p .. 'DetailTotalLabel', 'Y', tostring(detailLabelCenterY))
         SKIN:Bang('!SetOption', p .. 'DetailTotalLabel', 'H', tostring(detailLabelHeight))
-        SKIN:Bang('!SetOption', p .. 'DetailTotal', 'Y', tostring(y+9))
-        SKIN:Bang('!SetOption', p .. 'DetailTotalNet', 'Y', tostring(y+9))
-        SKIN:Bang('!SetOption', p .. 'DetailTotalTax', 'Y', tostring(y+26))
+        SKIN:Bang('!SetOption', p .. 'DetailTotal', 'Y', tostring(y+8))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalNet', 'Y', tostring(y+8))
+        SKIN:Bang('!SetOption', p .. 'DetailTotalTax', 'Y', tostring(y+25))
         if detailExpanded then
             SKIN:Bang('!ShowMeter', p .. 'DetailEachLabel')
             SKIN:Bang('!ShowMeter', p .. 'Gross')
@@ -1046,6 +1046,30 @@ function SetSortMode(mode)
     setVariable('PreferenceValue', mode)
     SKIN:Bang('!UpdateMeasure', 'MeasurePreferenceAction')
     SKIN:Bang('!CommandMeasure', 'MeasurePreferenceAction', 'Run')
+    refreshPresentation()
+end
+
+function ToggleCardExpanded(index)
+    if lastDisplayedData == nil then return end
+    local row = math.floor(number(index))
+    if row < 1 or row > 8 then return end
+    local key = safeText(lastDisplayedData['Opportunity' .. row .. 'Key'], '')
+    if key == '' then return end
+
+    local bothExpanded = (expandedDetailKey == key and expandedKey == key)
+    if bothExpanded then
+        collapseCardDetails()
+        collapseInlineGraph()
+    else
+        collapseCardDetails()
+        collapseInlineGraph()
+        expandedDetailKey = key
+        expandedDetailRow = row
+        expandedKey = key
+        expandedRow = row
+        requestInlineGraph(key)
+    end
+    updateOpportunities(lastDisplayedData)
     refreshPresentation()
 end
 

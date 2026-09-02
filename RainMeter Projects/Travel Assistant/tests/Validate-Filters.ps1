@@ -37,7 +37,7 @@ if(Test-Path -LiteralPath $files.Preferences){
   'showProfitableOnly','ignoredItemIds','itemMarketFeePercent','Normalize-ItemMarketFeePercent','energyWastePolicy','nerveWastePolicy',
   "sortMode = 'upcoming'",'Normalize-SortMode',"@('upcoming','gross','profit_per_hour')",'SetSortMode',
   'Set-FilterStateKvValuesAtomic','UISelectedTripBands','UITripShortOn','UITripMediumOn','UITripLongOn',
-  '$countries.Count -eq 0','Write-FilterJsonAtomic -Path $PreferenceFile -Value $normalized','Start-FilterProjectionRefresh','LaunchUpdate.ps1','$Action -eq ''ResetFilters'''
+  '$countries.Count -eq 0','Write-FilterJsonAtomic -Path $PreferenceFile -Value $normalized','Start-FilterProjectionRefresh','LaunchUpdate.ps1','RefreshFilters','Start-FilterProjectionRefresh -Action RefreshFilters'
  )){if(-not$text.Contains($token)){Fail "FilterPreferences.ps1 missing '$token'."}}
  if($text -notmatch '(?s)if \(\$Action -eq ''ToggleTripBand''\).*?Save-UiPreferences.*?Set-FilterStateKvValuesAtomic') { Fail 'Legacy trip-band persistence must remain a tiny preference/state write for compatibility.' }
 
@@ -69,7 +69,7 @@ if(Test-Path -LiteralPath $files.UnifiedPopup){
   'Get-CountryFlagImage','@Resources\Images\Flags','CheckedListBox','TextChanged','Set-BandSelection','Set-AllCountries','Set-AllCategories',
   'Get-ScopedCatalogRows','Test-ItemInCurrentScope','countryIds',"New-ActionLink 'ON'","New-ActionLink 'OFF'",
   "Set-FilterProperty `$current 'displayTripBands'","Set-FilterProperty `$current 'selectedCountryIds'","Set-FilterProperty `$current 'selectedCategories'","Set-FilterProperty `$current 'selectedItemIds'",
-  'Start-FilterProjectionRefresh','RuntimeLog.ps1','Read-OptionalPopupJson','$engine=Read-OptionalPopupJson $EngineStateFile','$script:resetProfitable=$true'
+  'Start-FilterProjectionRefresh -Action RefreshFilters','RuntimeLog.ps1','Read-OptionalPopupJson','$engine=Read-OptionalPopupJson $EngineStateFile','$script:resetProfitable=$true'
  )){if(-not$text.Contains($token)){Fail "Unified filter popup missing '$token'."}}
  if($text.Contains("`$title.Text='TRIP & FILTERS'")){Fail 'Unified filter popup must not render the retired title.'}
  if($text -match '(?i)https?://|Invoke-RestMethod|Invoke-WebRequest'){Fail 'Unified filter popup must remain local-only.'}

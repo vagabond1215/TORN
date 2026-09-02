@@ -273,25 +273,26 @@ Then fully restart Rainmeter so no pre-pull Lua chunk remains loaded, and verify
 4. UPCOMING / PROFIT / PROFIT/HR remain directly below the title as rounded buttons; Name is fallback-only. PROFIT sorts by the displayed signed after-tax total Net, so every positive row ranks above every negative row.
 5. Cards show `Item | unit cost | exact full-load cost` on the left and a large signed total Net on the right; there are no Take/Make labels or variable-price cash buffer.
 6. The `$` and chart controls are centered in the T-divided end cap; inactive icons are light gray and active Torn-lime fills are inset so the card border/T separators remain visible.
-7. Expanded economics use gray vertical `Each` / `Total` label blocks. MV is top-row left, Net is top-row right, and Tax is second-row left. With tax >0 the bar is 34px; at 0% Tax the second row disappears and the bar contracts to 18px. No `|` characters appear in the expanded strip.
+7. Expanded economics use gray vertical `Each` / `Total` label blocks. MV is top-row left, Net is top-row right, and Tax is second-row left, with both text baselines moved 1 px upward. With tax >0 the bar is 34px; at 0% Tax the second row disappears and the bar contracts to 18px. No `|` characters appear in the expanded strip.
 8. Flags act as left end caps. The 48px square immediately to the right contains 44px Torn item art with a 2px inset; item text begins after that square. Card fill is pure black while gray borders/separators remain visible.
-10. Inline graphs are black with a lime stock line, cobalt in-stock/restock markers, and pumpkin out-of-stock/sellout markers. Main sort/filter/settings accents are Torn lime. Card item/cost text is 12 pt, total profit is 16 pt, and the window/guidance line is 9 pt and sits close to the card's bottom border; the Updated footer remains close beneath the final card.
-9. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
+9. Inline graphs are black with a lime stock line, cobalt in-stock/restock markers, and pumpkin out-of-stock/sellout markers. Main sort/filter/settings accents are Torn lime. Card item/cost text is 12 pt, total profit is 16 pt, and the window/guidance line is 9 pt and sits close to the card's bottom border; the Updated footer remains close beneath the final card.
+10. Filter image opens exactly one `TRIP & FILTERS` panel without a visible console.
 11. Countries are grouped SHORT / MEDIUM / LONG and show FlagKit-backed toggles.
 12. Global country All/None and each band All/None work.
 13. Category chips and category All/None work.
 14. Item search filters the local list while preserving each item's staged checked state.
 15. Item All/None works.
 16. Cancel makes no preference change.
-17. Save closes only the filter panel, launches one normal refresh, and the skin remains responsive.
-17. Reopen the panel and confirm saved country/category/item selections round-trip.
-18. Reset + Save restores every country/category/item and all three country bands.
-19. Gear image opens Opportunity Settings without expanding the main skin.
-20. Ignore List opens from Settings without closing Settings.
-21. Profile/API opens from Settings without closing Settings.
-22. Sorting still works; all three sort buttons are equal width with centered labels, and an expanded inline graph still works.
-23. Rainmeter log has zero repeating `publishedState`, `Skin "0"`, Lua nil-index, or malformed SetOption errors.
-24. Rainmeter remains running through at least two normal 60-second polling intervals.
+17. Save closes only the filter panel, launches the dedicated `RefreshFilters` recompute, and the skin remains responsive. Newly enabled category/item rows with retained stock should be calculated in that save-time pass; missing/stale MV targets are priced before publication rather than deferred to later polls.
+18. Reopen the panel and confirm saved country/category/item selections round-trip.
+19. Reset + Save restores every country/category/item and all three country bands and performs the same refresh/recompute.
+20. Clicking a card body opens both its economics strip and inline graph; clicking it again when both are open closes both. `$` and chart retain independent behavior.
+21. Gear image opens Opportunity Settings without expanding the main skin.
+22. Ignore List opens from Settings without closing Settings.
+23. Profile/API opens from Settings without closing Settings.
+24. Sorting still works; all three sort buttons are equal width with centered labels, and an expanded inline graph still works.
+25. Rainmeter log has zero repeating `publishedState`, `Skin "0"`, Lua nil-index, or malformed SetOption errors.
+26. Rainmeter remains running through at least two normal 60-second polling intervals.
 
 If any popup fails, inspect:
 

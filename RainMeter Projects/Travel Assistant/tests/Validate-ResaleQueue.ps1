@@ -23,7 +23,7 @@ if (-not (Test-Path -LiteralPath $queuePath)) {
     if ($text -notmatch '(?m)^\s*\[int\]\$CacheFreshSeconds\s*=\s*21600') { Fail 'Broad resale cache default freshness must be six hours.' }
     if ($text -notmatch '(?m)^\s*\[int\]\$FailureBackoffSeconds\s*=\s*3600') { Fail 'General failed items must retain one-hour backoff.' }
     if ($text -notmatch '(?m)^\s*\[int\]\$RequestTimeoutSeconds\s*=\s*6') { Fail 'Broad resale request timeout must be six seconds.' }
-    foreach ($token in @('catalogActive','legacy_removed','resaleCache','resaleQueue','attempts','torn_itemmarket','IDLE_FRESH_OR_BACKOFF','PriorityItemIds','pricingPriorityItemIds','average_price')) {
+    foreach ($token in @('catalogActive','legacy_removed','resaleCache','resaleQueue','attempts','torn_itemmarket','IDLE_FRESH_OR_BACKOFF','PriorityItemIds','pricingPriorityItemIds','average_price','CandidateItemIds','$candidatePool','NO_MATCHING_CANDIDATES')) {
         if (-not $text.Contains($token)) { Fail "Resale queue contract missing '$token'." }
     }
     if (-not $text.Contains('Get-VisibleResalePriorityIds -ItemsConfig $itemsConfig -EngineState $engineState')) { Fail 'Resale queue must merge optimizer MV needs into its priority set.' }
@@ -56,7 +56,7 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     Fail 'Missing RunUpdate.ps1.'
 } else {
     $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
-    foreach ($token in @('ResalePriority.ps1','ResaleQueue.ps1','Write-UpdateHeartbeat')) {
+    foreach ($token in @('ResalePriority.ps1','ResaleQueue.ps1','Write-UpdateHeartbeat','RefreshFilters','Get-FilterRefreshPricingItemIds','Invoke-FilterRefreshPricing','-CandidateItemIds $itemIds')) {
         if (-not $wrapper.Contains($token)) { Fail "RunUpdate.ps1 missing $token." }
     }
     $tokens=$null; $parseErrors=$null
@@ -85,16 +85,27 @@ if (-not (Test-Path -LiteralPath $wrapperPath)) {
     })
 
     if ($heartbeatCalls.Count -ne 1) { Fail "Expected one heartbeat; found $($heartbeatCalls.Count)." }
-    if ($priorityCalls.Count -ne 1) { Fail "Expected one local ResalePriority call; found $($priorityCalls.Count)." }
-    if ($queueCalls.Count -ne 1) { Fail "Expected one ResaleQueue call; found $($queueCalls.Count)." }
+    if ($priorityCalls.Count -ne 2) { Fail "Expected one filter-refresh and one normal ResalePriority call; found $($priorityCalls.Count)." }
+    if ($queueCalls.Count -ne 2) { Fail "Expected one targeted filter-refresh and one normal ResaleQueue call; found $($queueCalls.Count)." }
     if (-not $wrapper.Contains('if (Test-Path -LiteralPath $ResalePriority)')) {
         Fail 'ResalePriority must remain guarded by its local script existence check.'
     }
-    if ($heartbeatCalls.Count -eq 1 -and $priorityCalls.Count -eq 1 -and $queueCalls.Count -eq 1 -and -not (
-        $heartbeatCalls[0].Extent.StartOffset -lt $priorityCalls[0].Extent.StartOffset -and
-        $priorityCalls[0].Extent.StartOffset -lt $queueCalls[0].Extent.StartOffset
-    )) {
-        Fail 'Runtime must remain heartbeat -> local ResalePriority -> single ResaleQueue request path.'
+
+    $targetedQueueCalls=@($queueCalls | Where-Object { $_.Extent.Text -match '-CandidateItemIds\s+\$itemIds' })
+    $normalQueueCalls=@($queueCalls | Where-Object { $_.Extent.Text -notmatch '-CandidateItemIds\s+\$itemIds' })
+    if ($targetedQueueCalls.Count -ne 1 -or $targetedQueueCalls[0].Extent.Text -notmatch '-Force') {
+        Fail 'Filter refresh must use exactly one targeted queue call site with -Force and -CandidateItemIds.'
+    }
+    if ($normalQueueCalls.Count -ne 1) { Fail 'Normal polling must retain exactly one broad ResaleQueue call site.' }
+
+    if ($heartbeatCalls.Count -eq 1 -and $normalQueueCalls.Count -eq 1) {
+        $normalPriorityCalls=@($priorityCalls | Where-Object { $_.Extent.StartOffset -gt $heartbeatCalls[0].Extent.StartOffset })
+        if ($normalPriorityCalls.Count -ne 1 -or -not (
+            $heartbeatCalls[0].Extent.StartOffset -lt $normalPriorityCalls[0].Extent.StartOffset -and
+            $normalPriorityCalls[0].Extent.StartOffset -lt $normalQueueCalls[0].Extent.StartOffset
+        )) {
+            Fail 'Normal runtime must remain heartbeat -> local ResalePriority -> single broad ResaleQueue call.'
+        }
     }
 }
 
@@ -105,5 +116,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Resale queue configuration validation passed.' -ForegroundColor Green
-Write-Host 'Optimizer MV blockers are prioritized inside the same one-request-per-update queue; ignored items remain parked.'
+Write-Host 'Normal polling retains one resale request; explicit filter saves may run a bounded targeted pricing pass before republishing newly eligible items.'
 exit 0

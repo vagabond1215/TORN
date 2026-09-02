@@ -1,6 +1,7 @@
 ; Opportunity card meters. StateReader.lua owns all dynamic Y/height geometry.
 ; Each/Total label blocks plus MV/Net/Tax meters form the optional one- or two-line economics bar.
 ; Inline graphs remain in a separate group so showing a card never resurrects a collapsed graph.
+; Card-body surfaces toggle both expansions; the $ and chart end-cap meters retain independent actions.
 
 [MeterOpportunity1Card]
 Meter=Shape
@@ -17,6 +18,7 @@ Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#
 Shape4=Line 0,0,0,0 | StrokeWidth 0
 Shape5=Line 0,0,0,0 | StrokeWidth 0
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1Flag]
 Meter=Image
@@ -30,6 +32,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1FlagMask]
 Meter=Image
@@ -44,6 +47,7 @@ DynamicVariables=1
 ImageName=
 ImageTint=#Panel#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1ItemImage]
 Meter=Image
@@ -57,6 +61,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1CardBorder]
 Meter=Shape
@@ -69,6 +74,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 
 [MeterOpportunity1DetailEachLabel]
@@ -89,6 +95,7 @@ ClipString=1
 SolidColor=#Border#
 Text=Each
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1DetailTotalLabel]
 Meter=String
@@ -108,11 +115,12 @@ ClipString=1
 SolidColor=#Border#
 Text=Total
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 [MeterOpportunity1Gross]
 Meter=String
 Group=OpportunityRow1
 X=54
-Y=129
+Y=128
 W=112
 H=16
 Hidden=1
@@ -125,12 +133,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1DetailTotal]
 Meter=String
 Group=OpportunityRow1
 X=322
-Y=129
+Y=128
 W=112
 H=16
 Hidden=1
@@ -143,12 +152,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1DetailEachNet]
 Meter=String
 Group=OpportunityRow1
 X=270
-Y=129
+Y=128
 W=98
 H=16
 Hidden=1
@@ -161,12 +171,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1DetailEachTax]
 Meter=String
 Group=OpportunityRow1
 X=54
-Y=146
+Y=145
 W=210
 H=16
 Hidden=1
@@ -179,12 +190,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1DetailTotalNet]
 Meter=String
 Group=OpportunityRow1
 X=538
-Y=129
+Y=128
 W=98
 H=16
 Hidden=1
@@ -197,12 +209,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1DetailTotalTax]
 Meter=String
 Group=OpportunityRow1
 X=322
-Y=146
+Y=145
 W=210
 H=16
 Hidden=1
@@ -215,6 +228,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1Name]
 Meter=String
@@ -247,6 +261,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1Take]
 Meter=String
@@ -279,6 +294,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 H=50
 StringAlign=RightCenter
 
@@ -327,6 +343,7 @@ ClipString=1
 SolidColor=0,0,0,1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity1Chance]
 Meter=String
@@ -368,6 +385,7 @@ PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
 ImageName=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(1)"]
 
 [MeterOpportunity2Card]
 Meter=Shape
@@ -384,6 +402,7 @@ Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#
 Shape4=Line 0,0,0,0 | StrokeWidth 0
 Shape5=Line 0,0,0,0 | StrokeWidth 0
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2Flag]
 Meter=Image
@@ -397,6 +416,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2FlagMask]
 Meter=Image
@@ -411,6 +431,7 @@ DynamicVariables=1
 ImageName=
 ImageTint=#Panel#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2ItemImage]
 Meter=Image
@@ -424,6 +445,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2CardBorder]
 Meter=Shape
@@ -436,6 +458,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 
 [MeterOpportunity2DetailEachLabel]
@@ -456,6 +479,7 @@ ClipString=1
 SolidColor=#Border#
 Text=Each
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2DetailTotalLabel]
 Meter=String
@@ -475,11 +499,12 @@ ClipString=1
 SolidColor=#Border#
 Text=Total
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 [MeterOpportunity2Gross]
 Meter=String
 Group=OpportunityRow2
 X=54
-Y=183
+Y=182
 W=112
 H=16
 Hidden=1
@@ -492,12 +517,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2DetailTotal]
 Meter=String
 Group=OpportunityRow2
 X=322
-Y=183
+Y=182
 W=112
 H=16
 Hidden=1
@@ -510,12 +536,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2DetailEachNet]
 Meter=String
 Group=OpportunityRow2
 X=270
-Y=183
+Y=182
 W=98
 H=16
 Hidden=1
@@ -528,12 +555,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2DetailEachTax]
 Meter=String
 Group=OpportunityRow2
 X=54
-Y=200
+Y=199
 W=210
 H=16
 Hidden=1
@@ -546,12 +574,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2DetailTotalNet]
 Meter=String
 Group=OpportunityRow2
 X=538
-Y=183
+Y=182
 W=98
 H=16
 Hidden=1
@@ -564,12 +593,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2DetailTotalTax]
 Meter=String
 Group=OpportunityRow2
 X=322
-Y=200
+Y=199
 W=210
 H=16
 Hidden=1
@@ -582,6 +612,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2Name]
 Meter=String
@@ -614,6 +645,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2Take]
 Meter=String
@@ -646,6 +678,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 H=50
 StringAlign=RightCenter
 
@@ -694,6 +727,7 @@ ClipString=1
 SolidColor=0,0,0,1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity2Chance]
 Meter=String
@@ -735,6 +769,7 @@ PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
 ImageName=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(2)"]
 
 [MeterOpportunity3Card]
 Meter=Shape
@@ -751,6 +786,7 @@ Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#
 Shape4=Line 0,0,0,0 | StrokeWidth 0
 Shape5=Line 0,0,0,0 | StrokeWidth 0
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3Flag]
 Meter=Image
@@ -764,6 +800,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3FlagMask]
 Meter=Image
@@ -778,6 +815,7 @@ DynamicVariables=1
 ImageName=
 ImageTint=#Panel#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3ItemImage]
 Meter=Image
@@ -791,6 +829,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3CardBorder]
 Meter=Shape
@@ -803,6 +842,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 
 [MeterOpportunity3DetailEachLabel]
@@ -823,6 +863,7 @@ ClipString=1
 SolidColor=#Border#
 Text=Each
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3DetailTotalLabel]
 Meter=String
@@ -842,11 +883,12 @@ ClipString=1
 SolidColor=#Border#
 Text=Total
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 [MeterOpportunity3Gross]
 Meter=String
 Group=OpportunityRow3
 X=54
-Y=237
+Y=236
 W=112
 H=16
 Hidden=1
@@ -859,12 +901,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3DetailTotal]
 Meter=String
 Group=OpportunityRow3
 X=322
-Y=237
+Y=236
 W=112
 H=16
 Hidden=1
@@ -877,12 +920,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3DetailEachNet]
 Meter=String
 Group=OpportunityRow3
 X=270
-Y=237
+Y=236
 W=98
 H=16
 Hidden=1
@@ -895,12 +939,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3DetailEachTax]
 Meter=String
 Group=OpportunityRow3
 X=54
-Y=254
+Y=253
 W=210
 H=16
 Hidden=1
@@ -913,12 +958,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3DetailTotalNet]
 Meter=String
 Group=OpportunityRow3
 X=538
-Y=237
+Y=236
 W=98
 H=16
 Hidden=1
@@ -931,12 +977,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3DetailTotalTax]
 Meter=String
 Group=OpportunityRow3
 X=322
-Y=254
+Y=253
 W=210
 H=16
 Hidden=1
@@ -949,6 +996,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3Name]
 Meter=String
@@ -981,6 +1029,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3Take]
 Meter=String
@@ -1013,6 +1062,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 H=50
 StringAlign=RightCenter
 
@@ -1061,6 +1111,7 @@ ClipString=1
 SolidColor=0,0,0,1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity3Chance]
 Meter=String
@@ -1102,6 +1153,7 @@ PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
 ImageName=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(3)"]
 
 [MeterOpportunity4Card]
 Meter=Shape
@@ -1118,6 +1170,7 @@ Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#
 Shape4=Line 0,0,0,0 | StrokeWidth 0
 Shape5=Line 0,0,0,0 | StrokeWidth 0
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4Flag]
 Meter=Image
@@ -1131,6 +1184,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4FlagMask]
 Meter=Image
@@ -1145,6 +1199,7 @@ DynamicVariables=1
 ImageName=
 ImageTint=#Panel#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4ItemImage]
 Meter=Image
@@ -1158,6 +1213,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4CardBorder]
 Meter=Shape
@@ -1170,6 +1226,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 
 [MeterOpportunity4DetailEachLabel]
@@ -1190,6 +1247,7 @@ ClipString=1
 SolidColor=#Border#
 Text=Each
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4DetailTotalLabel]
 Meter=String
@@ -1209,11 +1267,12 @@ ClipString=1
 SolidColor=#Border#
 Text=Total
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 [MeterOpportunity4Gross]
 Meter=String
 Group=OpportunityRow4
 X=54
-Y=291
+Y=290
 W=112
 H=16
 Hidden=1
@@ -1226,12 +1285,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4DetailTotal]
 Meter=String
 Group=OpportunityRow4
 X=322
-Y=291
+Y=290
 W=112
 H=16
 Hidden=1
@@ -1244,12 +1304,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4DetailEachNet]
 Meter=String
 Group=OpportunityRow4
 X=270
-Y=291
+Y=290
 W=98
 H=16
 Hidden=1
@@ -1262,12 +1323,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4DetailEachTax]
 Meter=String
 Group=OpportunityRow4
 X=54
-Y=308
+Y=307
 W=210
 H=16
 Hidden=1
@@ -1280,12 +1342,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4DetailTotalNet]
 Meter=String
 Group=OpportunityRow4
 X=538
-Y=291
+Y=290
 W=98
 H=16
 Hidden=1
@@ -1298,12 +1361,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4DetailTotalTax]
 Meter=String
 Group=OpportunityRow4
 X=322
-Y=308
+Y=307
 W=210
 H=16
 Hidden=1
@@ -1316,6 +1380,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4Name]
 Meter=String
@@ -1348,6 +1413,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4Take]
 Meter=String
@@ -1380,6 +1446,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 H=50
 StringAlign=RightCenter
 
@@ -1428,6 +1495,7 @@ ClipString=1
 SolidColor=0,0,0,1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity4Chance]
 Meter=String
@@ -1469,6 +1537,7 @@ PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
 ImageName=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(4)"]
 
 [MeterOpportunity5Card]
 Meter=Shape
@@ -1485,6 +1554,7 @@ Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#
 Shape4=Line 0,0,0,0 | StrokeWidth 0
 Shape5=Line 0,0,0,0 | StrokeWidth 0
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5Flag]
 Meter=Image
@@ -1498,6 +1568,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5FlagMask]
 Meter=Image
@@ -1512,6 +1583,7 @@ DynamicVariables=1
 ImageName=
 ImageTint=#Panel#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5ItemImage]
 Meter=Image
@@ -1525,6 +1597,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5CardBorder]
 Meter=Shape
@@ -1537,6 +1610,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 
 [MeterOpportunity5DetailEachLabel]
@@ -1557,6 +1631,7 @@ ClipString=1
 SolidColor=#Border#
 Text=Each
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5DetailTotalLabel]
 Meter=String
@@ -1576,11 +1651,12 @@ ClipString=1
 SolidColor=#Border#
 Text=Total
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 [MeterOpportunity5Gross]
 Meter=String
 Group=OpportunityRow5
 X=54
-Y=345
+Y=344
 W=112
 H=16
 Hidden=1
@@ -1593,12 +1669,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5DetailTotal]
 Meter=String
 Group=OpportunityRow5
 X=322
-Y=345
+Y=344
 W=112
 H=16
 Hidden=1
@@ -1611,12 +1688,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5DetailEachNet]
 Meter=String
 Group=OpportunityRow5
 X=270
-Y=345
+Y=344
 W=98
 H=16
 Hidden=1
@@ -1629,12 +1707,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5DetailEachTax]
 Meter=String
 Group=OpportunityRow5
 X=54
-Y=362
+Y=361
 W=210
 H=16
 Hidden=1
@@ -1647,12 +1726,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5DetailTotalNet]
 Meter=String
 Group=OpportunityRow5
 X=538
-Y=345
+Y=344
 W=98
 H=16
 Hidden=1
@@ -1665,12 +1745,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5DetailTotalTax]
 Meter=String
 Group=OpportunityRow5
 X=322
-Y=362
+Y=361
 W=210
 H=16
 Hidden=1
@@ -1683,6 +1764,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5Name]
 Meter=String
@@ -1715,6 +1797,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5Take]
 Meter=String
@@ -1747,6 +1830,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 H=50
 StringAlign=RightCenter
 
@@ -1795,6 +1879,7 @@ ClipString=1
 SolidColor=0,0,0,1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity5Chance]
 Meter=String
@@ -1836,6 +1921,7 @@ PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
 ImageName=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(5)"]
 
 [MeterOpportunity6Card]
 Meter=Shape
@@ -1852,6 +1938,7 @@ Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#
 Shape4=Line 0,0,0,0 | StrokeWidth 0
 Shape5=Line 0,0,0,0 | StrokeWidth 0
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6Flag]
 Meter=Image
@@ -1865,6 +1952,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6FlagMask]
 Meter=Image
@@ -1879,6 +1967,7 @@ DynamicVariables=1
 ImageName=
 ImageTint=#Panel#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6ItemImage]
 Meter=Image
@@ -1892,6 +1981,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6CardBorder]
 Meter=Shape
@@ -1904,6 +1994,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 
 [MeterOpportunity6DetailEachLabel]
@@ -1924,6 +2015,7 @@ ClipString=1
 SolidColor=#Border#
 Text=Each
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6DetailTotalLabel]
 Meter=String
@@ -1943,11 +2035,12 @@ ClipString=1
 SolidColor=#Border#
 Text=Total
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 [MeterOpportunity6Gross]
 Meter=String
 Group=OpportunityRow6
 X=54
-Y=399
+Y=398
 W=112
 H=16
 Hidden=1
@@ -1960,12 +2053,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6DetailTotal]
 Meter=String
 Group=OpportunityRow6
 X=322
-Y=399
+Y=398
 W=112
 H=16
 Hidden=1
@@ -1978,12 +2072,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6DetailEachNet]
 Meter=String
 Group=OpportunityRow6
 X=270
-Y=399
+Y=398
 W=98
 H=16
 Hidden=1
@@ -1996,12 +2091,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6DetailEachTax]
 Meter=String
 Group=OpportunityRow6
 X=54
-Y=416
+Y=415
 W=210
 H=16
 Hidden=1
@@ -2014,12 +2110,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6DetailTotalNet]
 Meter=String
 Group=OpportunityRow6
 X=538
-Y=399
+Y=398
 W=98
 H=16
 Hidden=1
@@ -2032,12 +2129,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6DetailTotalTax]
 Meter=String
 Group=OpportunityRow6
 X=322
-Y=416
+Y=415
 W=210
 H=16
 Hidden=1
@@ -2050,6 +2148,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6Name]
 Meter=String
@@ -2082,6 +2181,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6Take]
 Meter=String
@@ -2114,6 +2214,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 H=50
 StringAlign=RightCenter
 
@@ -2162,6 +2263,7 @@ ClipString=1
 SolidColor=0,0,0,1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity6Chance]
 Meter=String
@@ -2203,6 +2305,7 @@ PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
 ImageName=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(6)"]
 
 [MeterOpportunity7Card]
 Meter=Shape
@@ -2219,6 +2322,7 @@ Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#
 Shape4=Line 0,0,0,0 | StrokeWidth 0
 Shape5=Line 0,0,0,0 | StrokeWidth 0
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7Flag]
 Meter=Image
@@ -2232,6 +2336,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7FlagMask]
 Meter=Image
@@ -2246,6 +2351,7 @@ DynamicVariables=1
 ImageName=
 ImageTint=#Panel#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7ItemImage]
 Meter=Image
@@ -2259,6 +2365,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7CardBorder]
 Meter=Shape
@@ -2271,6 +2378,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 
 [MeterOpportunity7DetailEachLabel]
@@ -2291,6 +2399,7 @@ ClipString=1
 SolidColor=#Border#
 Text=Each
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7DetailTotalLabel]
 Meter=String
@@ -2310,11 +2419,12 @@ ClipString=1
 SolidColor=#Border#
 Text=Total
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 [MeterOpportunity7Gross]
 Meter=String
 Group=OpportunityRow7
 X=54
-Y=453
+Y=452
 W=112
 H=16
 Hidden=1
@@ -2327,12 +2437,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7DetailTotal]
 Meter=String
 Group=OpportunityRow7
 X=322
-Y=453
+Y=452
 W=112
 H=16
 Hidden=1
@@ -2345,12 +2456,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7DetailEachNet]
 Meter=String
 Group=OpportunityRow7
 X=270
-Y=453
+Y=452
 W=98
 H=16
 Hidden=1
@@ -2363,12 +2475,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7DetailEachTax]
 Meter=String
 Group=OpportunityRow7
 X=54
-Y=470
+Y=469
 W=210
 H=16
 Hidden=1
@@ -2381,12 +2494,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7DetailTotalNet]
 Meter=String
 Group=OpportunityRow7
 X=538
-Y=453
+Y=452
 W=98
 H=16
 Hidden=1
@@ -2399,12 +2513,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7DetailTotalTax]
 Meter=String
 Group=OpportunityRow7
 X=322
-Y=470
+Y=469
 W=210
 H=16
 Hidden=1
@@ -2417,6 +2532,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7Name]
 Meter=String
@@ -2449,6 +2565,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7Take]
 Meter=String
@@ -2481,6 +2598,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 H=50
 StringAlign=RightCenter
 
@@ -2529,6 +2647,7 @@ ClipString=1
 SolidColor=0,0,0,1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity7Chance]
 Meter=String
@@ -2570,6 +2689,7 @@ PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
 ImageName=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(7)"]
 
 [MeterOpportunity8Card]
 Meter=Shape
@@ -2586,6 +2706,7 @@ Shape3=Line 510,25,536,25 | StrokeWidth 1 | Stroke Color #Border#
 Shape4=Line 0,0,0,0 | StrokeWidth 0
 Shape5=Line 0,0,0,0 | StrokeWidth 0
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8Flag]
 Meter=Image
@@ -2599,6 +2720,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8FlagMask]
 Meter=Image
@@ -2613,6 +2735,7 @@ DynamicVariables=1
 ImageName=
 ImageTint=#Panel#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8ItemImage]
 Meter=Image
@@ -2626,6 +2749,7 @@ Hidden=1
 DynamicVariables=1
 ImageName=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8CardBorder]
 Meter=Shape
@@ -2638,6 +2762,7 @@ Hidden=1
 DynamicVariables=1
 Shape=Rectangle 0,0,536,50,5 | Fill Color 0,0,0,0 | StrokeWidth 1 | Stroke Color #Border#
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 
 [MeterOpportunity8DetailEachLabel]
@@ -2658,6 +2783,7 @@ ClipString=1
 SolidColor=#Border#
 Text=Each
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8DetailTotalLabel]
 Meter=String
@@ -2677,11 +2803,12 @@ ClipString=1
 SolidColor=#Border#
 Text=Total
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 [MeterOpportunity8Gross]
 Meter=String
 Group=OpportunityRow8
 X=54
-Y=507
+Y=506
 W=112
 H=16
 Hidden=1
@@ -2694,12 +2821,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8DetailTotal]
 Meter=String
 Group=OpportunityRow8
 X=322
-Y=507
+Y=506
 W=112
 H=16
 Hidden=1
@@ -2712,12 +2840,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8DetailEachNet]
 Meter=String
 Group=OpportunityRow8
 X=270
-Y=507
+Y=506
 W=98
 H=16
 Hidden=1
@@ -2730,12 +2859,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8DetailEachTax]
 Meter=String
 Group=OpportunityRow8
 X=54
-Y=524
+Y=523
 W=210
 H=16
 Hidden=1
@@ -2748,12 +2878,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8DetailTotalNet]
 Meter=String
 Group=OpportunityRow8
 X=538
-Y=507
+Y=506
 W=98
 H=16
 Hidden=1
@@ -2766,12 +2897,13 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8DetailTotalTax]
 Meter=String
 Group=OpportunityRow8
 X=322
-Y=524
+Y=523
 W=210
 H=16
 Hidden=1
@@ -2784,6 +2916,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8Name]
 Meter=String
@@ -2816,6 +2949,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8Take]
 Meter=String
@@ -2848,6 +2982,7 @@ AntiAlias=1
 ClipString=1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 H=50
 StringAlign=RightCenter
 
@@ -2896,6 +3031,7 @@ ClipString=1
 SolidColor=0,0,0,1
 Text=
 ToolTipText=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]
 
 [MeterOpportunity8Chance]
 Meter=String
@@ -2937,3 +3073,4 @@ PreserveAspectRatio=1
 Hidden=1
 DynamicVariables=1
 ImageName=
+LeftMouseUpAction=[!CommandMeasure MeasureState "ToggleCardExpanded(8)"]

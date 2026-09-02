@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Update', 'CycleTravelMode')]
+    [ValidateSet('Update', 'RefreshFilters', 'CycleTravelMode')]
     [string]$Action = 'Update',
     [ValidateRange(0,300)]
     [int]$MutexWaitSeconds = 0
@@ -30,6 +30,7 @@ $RuntimeLogScript = Join-Path $PSScriptRoot 'RuntimeLog.ps1'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $RuntimeDir = Join-Path $ProjectRoot 'data\runtime'
+$EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $UpdatePerformanceFile = Join-Path $RuntimeDir 'update-performance.log'
 $UpdatePerformanceErrorFile = Join-Path $RuntimeDir 'update-performance-error.txt'
 $HistoryErrorFile = Join-Path $RuntimeDir 'history-maintenance-error.txt'
@@ -321,6 +322,52 @@ function Invoke-HistoryMaintenance {
     } finally { Complete-UpdateStageTimer -Timer $timer }
 }
 
+function Get-FilterRefreshPricingItemIds {
+    $ids = New-Object 'System.Collections.Generic.HashSet[int]'
+    if (-not (Test-Path -LiteralPath $StateKvFile)) { return [int[]]@() }
+    try {
+        foreach ($line in Get-Content -LiteralPath $StateKvFile -ErrorAction Stop) {
+            $prefix = 'ResalePricingPriorityItemIds='
+            if (-not $line.StartsWith($prefix,[System.StringComparison]::Ordinal)) { continue }
+            $payload = $line.Substring($prefix.Length)
+            foreach ($part in $payload.Split(',')) {
+                $itemId = 0
+                if ([int]::TryParse($part.Trim(), [ref]$itemId) -and $itemId -gt 0) { [void]$ids.Add($itemId) }
+            }
+            break
+        }
+    } catch { return [int[]]@() }
+    return [int[]]@($ids | Sort-Object)
+}
+
+function Invoke-FilterRefreshPricing {
+    if (-not (Test-Path -LiteralPath $ResaleQueue)) { return }
+    $itemIds = [int[]]@(Get-FilterRefreshPricingItemIds)
+    if ($itemIds.Count -eq 0) { return }
+
+    if (Test-Path -LiteralPath $ResalePriority) {
+        $priorityTimer = New-UpdateStageTimer -Name 'filter-resale-priority'
+        try { & $ResalePriority }
+        finally { Complete-UpdateStageTimer -Timer $priorityTimer }
+    }
+
+    # Explicit filter saves may expose several items that were never priced while
+    # hidden. Refresh only the currently missing/stale projected IDs, bounded to
+    # the current 40-item foreign-trade catalog. Normal polling remains one request.
+    $attemptLimit = [Math]::Min(40, $itemIds.Count)
+    for ($attemptIndex = 0; $attemptIndex -lt $attemptLimit; $attemptIndex++) {
+        $queueTimer = New-UpdateStageTimer -Name 'filter-resale-queue'
+        try { & $ResaleQueue -Force -CandidateItemIds $itemIds }
+        finally { Complete-UpdateStageTimer -Timer $queueTimer }
+
+        try {
+            $queueState = Get-Content -LiteralPath $EngineStateFile -Raw -ErrorAction Stop | ConvertFrom-Json
+            $status = if ($queueState.PSObject.Properties['resaleQueue'] -and $null -ne $queueState.resaleQueue) { [string]$queueState.resaleQueue.status } else { '' }
+            if ($status -in @('IDLE_FRESH_OR_BACKOFF','NO_API_KEY','NO_ACTIVE_ITEMS','NO_MATCHING_CANDIDATES')) { break }
+        } catch { break }
+    }
+}
+
 try {
     $mutexWaitMilliseconds = [int]([Math]::Min(300000,[Math]::Max(0,$MutexWaitSeconds * 1000)))
     try {
@@ -352,6 +399,9 @@ try {
         # but they are projected locally from the collector state. Do not issue a
         # second provider request or a second history write through UpdateTracker.
         Invoke-FailSoftScript -Path $CollectedState -ErrorPath $CollectedStateErrorFile
+    } elseif ($Action -eq 'RefreshFilters') {
+        # A filter save is a projection/pricing refresh, not another foreign-stock
+        # collection pass. Reuse retained market data and focus on newly eligible items.
     } else {
         # Retain the explicit legacy action only for callers that still cycle its
         # travel-mode preference. It is not part of the normal one-minute heartbeat.
@@ -404,6 +454,16 @@ try {
     # Classify price variability from recent recurring evidence rather than one old
     # anomaly. This controls card cost coloring and whether Take gets a 5% buffer.
     Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
+
+    if ($Action -eq 'RefreshFilters') {
+        Invoke-FilterRefreshPricing
+
+        # Recompute after the targeted MV refresh so newly enabled items can enter
+        # this same published generation instead of waiting for the next minute poll.
+        Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
+        Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
+        Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
+    }
 
     # OpportunityState must always leave an explicit projection, even when the
     # correct result is zero rows. Detect silent early-return states immediately.

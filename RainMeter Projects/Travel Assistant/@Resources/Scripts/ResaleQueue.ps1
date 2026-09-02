@@ -3,7 +3,8 @@ param(
     [int]$CacheFreshSeconds = 21600,
     [int]$FailureBackoffSeconds = 3600,
     [int]$RequestTimeoutSeconds = 6,
-    [switch]$Force
+    [switch]$Force,
+    [int[]]$CandidateItemIds = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -245,17 +246,34 @@ if (-not $Force -and [long]$queue.lastRunAt -gt 0 -and ($now-[long]$queue.lastRu
 $queue.lastRunAt=$now
 
 $active=Get-ActiveObservedItems -ObservedMarkets $engineState.observedMarkets
-$itemIds=[int[]]@($active.itemIds); $queue.activeMarkets=[int]$active.activeMarkets; $queue.activeItems=$itemIds.Count
+$itemIds=[int[]]@($active.itemIds)
+$queue.activeMarkets=[int]$active.activeMarkets
+$queue.activeItems=$itemIds.Count
 $metrics=Get-ResaleQueueMetrics -EngineState $engineState -ItemIds $itemIds -Now $now -FreshSeconds $CacheFreshSeconds
 $queue.pricedItems=[int]$metrics.pricedItems; $queue.freshItems=[int]$metrics.freshItems; $queue.staleItems=[int]$metrics.staleItems
 if ($itemIds.Count -eq 0) { $queue.status='NO_ACTIVE_ITEMS'; $queue.lastError=''; Write-JsonAtomic -Path $EngineStateFile -Value $engineState; return }
+
+$candidatePool=[int[]]@($itemIds)
+if (@($CandidateItemIds).Count -gt 0) {
+    $requested = New-Object 'System.Collections.Generic.HashSet[int]'
+    foreach($candidateId in @($CandidateItemIds)) {
+        if([int]$candidateId -gt 0) { [void]$requested.Add([int]$candidateId) }
+    }
+    $candidatePool=[int[]]@($itemIds | Where-Object { $requested.Contains([int]$_) })
+    if($candidatePool.Count -eq 0) {
+        $queue.status='NO_MATCHING_CANDIDATES'
+        $queue.lastError=''
+        Write-JsonAtomic -Path $EngineStateFile -Value $engineState
+        return
+    }
+}
 
 $apiKey=Get-LocalApiKey
 if ([string]::IsNullOrWhiteSpace($apiKey)) { $queue.status='NO_API_KEY'; $queue.lastError=''; Write-JsonAtomic -Path $EngineStateFile -Value $engineState; return }
 $itemsConfig=Read-JsonFile (Join-Path $ConfigDir 'items.json')
 $priorityItemIds=[int[]]@(Get-VisibleResalePriorityIds -ItemsConfig $itemsConfig -EngineState $engineState)
 $queue.priorityItems=$priorityItemIds.Count
-$candidate=Get-ResaleQueueCandidate -EngineState $engineState -QueueState $queue -ItemIds $itemIds -PriorityItemIds $priorityItemIds -Now $now -FreshSeconds $CacheFreshSeconds -BackoffSeconds $FailureBackoffSeconds
+$candidate=Get-ResaleQueueCandidate -EngineState $engineState -QueueState $queue -ItemIds $candidatePool -PriorityItemIds $priorityItemIds -Now $now -FreshSeconds $CacheFreshSeconds -BackoffSeconds $FailureBackoffSeconds
 if ($null -eq $candidate) { $queue.status='IDLE_FRESH_OR_BACKOFF'; $queue.lastError=''; Write-JsonAtomic -Path $EngineStateFile -Value $engineState; return }
 
 $itemId=[int]$candidate.itemId

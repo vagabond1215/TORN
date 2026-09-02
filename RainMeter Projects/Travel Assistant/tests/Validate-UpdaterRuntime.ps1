@@ -83,7 +83,7 @@ if (-not (Test-Path -LiteralPath $launcherPath)) {
     [void][System.Management.Automation.Language.Parser]::ParseFile($launcherPath,[ref]$tokens,[ref]$parseErrors)
     foreach ($parseError in @($parseErrors)) { Fail ('LaunchUpdate.ps1 parse error: ' + $parseError.Message) }
     $launcher = Get-Content -LiteralPath $launcherPath -Raw
-    foreach ($token in @('RunUpdate.ps1','Get-Command pwsh.exe','System.Diagnostics.ProcessStartInfo','[System.Diagnostics.Process]::Start($psi)','UseShellExecute = $false','CreateNoWindow = $true','[ValidateRange(0,300)]','[int]$MutexWaitSeconds = 0','-Action {1} -MutexWaitSeconds {2}','return')) {
+    foreach ($token in @('RunUpdate.ps1','Get-Command pwsh.exe','System.Diagnostics.ProcessStartInfo','[System.Diagnostics.Process]::Start($psi)','UseShellExecute = $false','CreateNoWindow = $true','[ValidateRange(0,300)]','[int]$MutexWaitSeconds = 0','-Action {1} -MutexWaitSeconds {2}',"[ValidateSet('Update','RefreshFilters','CycleTravelMode')]",'return')) {
         if (-not $launcher.Contains($token)) { Fail "LaunchUpdate.ps1 missing '$token'." }
     }
     if ($launcher.Contains('exit 0')) {
@@ -111,8 +111,10 @@ if (-not (Test-Path -LiteralPath $filterPreferencesPath)) {
     Fail 'Missing FilterPreferences.ps1.'
 } else {
     $filterPreferences = Get-Content -LiteralPath $filterPreferencesPath -Raw
-    if (-not $filterPreferences.Contains('-Action Update -MutexWaitSeconds 120')) {
-        Fail 'Preference-triggered projection refreshes must queue behind an active updater rather than silently losing the refresh.'
+    foreach ($token in @('RefreshFilters','-Action {1} -MutexWaitSeconds 120','Start-FilterProjectionRefresh -Action RefreshFilters')) {
+        if (-not $filterPreferences.Contains($token)) {
+            Fail "Preference-triggered filter refresh contract missing '$token'."
+        }
     }
 }
 
@@ -125,5 +127,5 @@ if ($errors.Count -gt 0) {
 }
 
 Write-Host 'Rainmeter updater runtime contract passed.' -ForegroundColor Green
-Write-Host 'MeasureUpdate uses a reusable spawn-only PS7 launcher; settings/filter saves queue a 120-second mutex-waiting refresh so committed preference changes cannot be stranded behind an active poll.' -ForegroundColor Green
+Write-Host 'MeasureUpdate uses a reusable spawn-only PS7 launcher; Settings queues normal refreshes and filters queue RefreshFilters behind an active poll so committed preference changes cannot be stranded.' -ForegroundColor Green
 exit 0

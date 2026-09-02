@@ -599,7 +599,7 @@ $save.Add_Click({
         if($script:resetProfitable) { Set-FilterProperty $current 'showProfitableOnly' $false }
 
         [void](Save-UiPreferences $current)
-        Start-FilterProjectionRefresh
+        Start-FilterProjectionRefresh -Action RefreshFilters
         Clear-TravelAssistantLatestError -Component $logComponent
         $form.Close()
     } catch {

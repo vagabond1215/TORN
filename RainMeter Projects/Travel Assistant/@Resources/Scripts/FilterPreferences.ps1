@@ -249,11 +249,15 @@ function Save-UiPreferences {
 }
 
 function Start-FilterProjectionRefresh {
+    param(
+        [ValidateSet('Update','RefreshFilters')]
+        [string]$Action = 'RefreshFilters'
+    )
     $launcher = Join-Path $PSScriptRoot 'LaunchUpdate.ps1'
     if (-not (Test-Path -LiteralPath $launcher)) { throw 'LaunchUpdate.ps1 is required to republish filter changes.' }
     $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
     if ($null -eq $pwsh) { throw 'pwsh.exe is required to republish filter changes.' }
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Update -MutexWaitSeconds 120' -f $launcher
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action {1} -MutexWaitSeconds 120' -f $launcher,$Action
     Start-Process -FilePath $pwsh.Source -ArgumentList $arguments -WindowStyle Hidden | Out-Null
 }
 
@@ -332,11 +336,11 @@ if ($Action -eq 'ToggleTripBand') {
     $changed = $true
 }
 
-if ($changed -and $Action -eq 'ResetFilters') {
-    try { Start-FilterProjectionRefresh }
+if ($changed -and $Action -in @('ResetFilters','ToggleTripBand')) {
+    try { Start-FilterProjectionRefresh -Action RefreshFilters }
     catch {
         if (Get-Command Write-TravelAssistantLog -ErrorAction SilentlyContinue) {
-            Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('Republish reset filters: ' + $_.Exception.ToString())
+            Write-TravelAssistantLog -Level ERROR -Component 'preference-action' -Message ('Republish filter change: ' + $_.Exception.ToString())
         }
     }
 }

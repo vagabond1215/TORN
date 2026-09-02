@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Update','CycleTravelMode')]
+    [ValidateSet('Update','RefreshFilters','CycleTravelMode')]
     [string]$Action = 'Update',
     [ValidateRange(0,300)]
     [int]$MutexWaitSeconds = 0
