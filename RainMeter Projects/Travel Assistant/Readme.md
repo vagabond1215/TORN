@@ -57,8 +57,9 @@ data/runtime/stochastic-calibration.json
 
 The summary reports Brier score, log loss and reliability buckets overall, by
 evidence quality, by market, and by forecast horizon (≤30m, 30m–2h, 2h–6h,
->6h). Required-quantity and available-quantity scoring
-use exact provider snapshots only. To bound local state, new freezes pause when a
+>6h). Required-quantity and available-quantity scoring uses exact provider snapshots
+when quantity is observed; continuity-proven OOS intervals also provide an exact
+target failure and zero available quantity. To bound local state, new freezes pause when a
 model/market already has 24 unresolved forecasts or the global pending backlog
 reaches 4,096; existing pending evidence is never dropped or relabeled for
 capacity. These metrics are diagnostic: no probability recalibration is applied
