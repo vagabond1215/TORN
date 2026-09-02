@@ -29,7 +29,7 @@ if ($includeAt -lt 0) { Fail 'TravelAssistant.ini must include OpportunityRows.i
 elseif ($includeAt -lt $backgroundAt -or $includeAt -lt $messageAt) { Fail 'OpportunityRows.inc must be included after the panel/background meters so cards render above the background.' }
 if ($ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'Retired early OpportunityRows include would darken the cards beneath MeterBackground.' }
 
-foreach ($section in @('MeasureUpdate','MeasureSettings','MeasureFilterPopup','MeasureItemViewer','MeasureInlineGraph','MeasurePreferenceAction','MeasureState','MeterSortName','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour','MeterViewer')) {
+foreach ($section in @('MeasureUpdate','MeasureSettings','MeasureFilterPopup','MeasureInlineGraph','MeasurePreferenceAction','MeasureState','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')) {
     if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing [$section]." }
 }
 
@@ -42,14 +42,14 @@ else {
     if ($updateTimeout -gt 120000) { Fail "MeasureUpdate timeout $updateTimeout ms exceeds the bounded 120s runtime ceiling." }
 }
 
-$viewerBody=[regex]::Match($ini,'(?ms)^\[MeasureItemViewer\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 $inlineBody=[regex]::Match($ini,'(?ms)^\[MeasureInlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-if ($viewerBody -notmatch 'LaunchItemViewer\.ps1' -or $viewerBody -notmatch '#ViewerMarketKey#') { Fail 'Standalone Viewer must use LaunchItemViewer.ps1 and ViewerMarketKey.' }
-if ($inlineBody -notmatch 'RenderInlineGraph\.ps1' -or $inlineBody -notmatch '#InlineGraphMarketKey#') { Fail 'Inline chevron must use its own local RenderInlineGraph.ps1 measure.' }
-if ($inlineBody -match 'LaunchItemViewer|PopupHost|ViewerMarketKey') { Fail 'Inline history measure must not route through the popup Viewer.' }
+if ($inlineBody -notmatch 'RenderInlineGraph\.ps1' -or $inlineBody -notmatch '#InlineGraphMarketKey#') { Fail 'Inline chart button must use its dedicated local RenderInlineGraph.ps1 measure.' }
+foreach($retired in @('MeasureItemViewer','MeterViewer','ViewerMarketKey','LaunchItemViewer','OpenItemViewer')){
+    if($ini.Contains($retired) -or $reader.Contains($retired)){Fail "Standalone Viewer token '$retired' must remain removed."}
+}
 
 foreach ($i in 1..8) {
-    foreach ($suffix in @('Card','Flag','Name','Gross','Window','Leave','Chance','Price','DetailToggle','Graph','InlineGraph')) {
+    foreach ($suffix in @('Card','Flag','Name','Gross','Window','Leave','Chance','Price','Take','Make','DetailToggle','Graph','InlineGraph')) {
         $section='MeterOpportunity'+$i+$suffix
         if ($rows -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "OpportunityRows.inc missing [$section]." }
     }
@@ -57,6 +57,8 @@ foreach ($i in 1..8) {
     $detailBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'DetailToggle\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $nameBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Name\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $priceBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Price\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $takeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Take\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $makeBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Make\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $grossBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Gross\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphButtonBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'Graph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $graphBody=[regex]::Match($rows,'(?ms)^\[MeterOpportunity'+$i+'InlineGraph\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
@@ -65,9 +67,11 @@ foreach ($i in 1..8) {
     if ($graphButtonBody -notmatch '(?im)^Meter=Shape\s*$' -or $graphButtonBody -notmatch '(?im)^GraphExpanded=0\s*$') { Fail "Opportunity $i graph control must be a chart Shape button." }
     foreach($token in @('Shape2=Line 4,13,4,5','Shape3=Line 4,13,14,13','Shape4=Line 5,11,8,8','Shape5=Line 8,8,10,10','Shape6=Line 10,10,14,6')){if(-not$graphButtonBody.Contains($token)){Fail "Opportunity $i chart button missing '$token'."}}
     if ($nameBody -notmatch '(?im)^W=1\s*$' -or $nameBody -notmatch '(?im)^FontSize=11\s*$' -or $nameBody -notmatch '(?im)^FontColor=0,0,0,0\s*$') { Fail "Opportunity $i canonical Name meter must stay hidden behind the combined first line." }
-    if ($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=440\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$') { Fail "Opportunity $i visible first line must use the full 440px card width at 11pt." }
+    if ($priceBody -notmatch '(?im)^X=78\s*$' -or $priceBody -notmatch '(?im)^W=180\s*$' -or $priceBody -notmatch '(?im)^FontSize=11\s*$') { Fail "Opportunity $i item/cost column must be fixed at x=78, width 180." }
+    if ($takeBody -notmatch '(?im)^X=260\s*$' -or $takeBody -notmatch '(?im)^W=134\s*$' -or $takeBody -notmatch '(?im)^FontSize=11\s*$') { Fail "Opportunity $i Take column must be fixed at x=260." }
+    if ($makeBody -notmatch '(?im)^X=396\s*$' -or $makeBody -notmatch '(?im)^W=122\s*$' -or $makeBody -notmatch '(?im)^FontSize=11\s*$') { Fail "Opportunity $i Make column must be fixed at x=396." }
     if ($grossBody -notmatch '(?im)^W=500\s*$' -or $grossBody -notmatch '(?im)^FontSize=7\s*$') { Fail "Opportunity $i Gross meter must be the one-line economics detail strip." }
-    foreach($fontBody in @($nameBody,$priceBody,$grossBody,$detailBody)){if($fontBody -match '(?im)^FontFace=' -and $fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Opportunity $i card string meters must use Nirmala UI Semilight."}}
+    foreach($fontBody in @($nameBody,$priceBody,$takeBody,$makeBody,$grossBody,$detailBody)){if($fontBody -match '(?im)^FontFace=' -and $fontBody -notmatch '(?im)^FontFace=Nirmala UI Semilight\s*$'){Fail "Opportunity $i card string meters must use Nirmala UI Semilight."}}
     if ($graphBody -notmatch '(?im)^Meter=Image\s*$' -or $graphBody -notmatch '(?im)^W=528\s*$' -or $graphBody -notmatch '(?im)^H=125\s*$') { Fail "Opportunity $i inline graph must be the 528x125 native Image surface." }
     if ($graphBody -notmatch ('(?im)^Group=OpportunityInlineGraph'+$i+'\s*$')) { Fail "Opportunity $i inline graph must use its isolated visibility group." }
     if ($graphBody -match ('(?im)^Group=OpportunityRow'+$i+'\s*$')) { Fail "Opportunity $i inline graph must not be re-shown by the row visibility group." }
@@ -94,13 +98,12 @@ foreach ($token in @(
     "SKIN:Bang('!HideMeter', p .. 'Name')","SKIN:Bang('!HideMeter', p .. 'Window')","SKIN:Bang('!HideMeter', p .. 'Chance')",
     'if lastSortMode ~= mode then collapseInlineGraph() end',
     "setVariable('InlineGraphMarketKey', key)","SKIN:Bang('!CommandMeasure', 'MeasureInlineGraph', 'Run')",
-    "setVariable('ViewerMarketKey', marketKey or '')","SKIN:Bang('!CommandMeasure', 'MeasureItemViewer', 'Run')",
+    'local function effectiveSortMode(rows, requestedMode)',"out.OpportunitySortEffectiveMode = effectiveMode",
     'local function safeLeaveText(data, prefix)',"return 'WAIT DATA'","return 'NO HIT'",
     "SKIN:Bang('!SetOption', p .. 'InlineGraph', 'Y'",'graphImagePath(expandedKey)'
 )) {
     if (-not $reader.Contains($token)) { Fail "StateReader.lua missing '$token'." }
 }
-if ($reader.Contains("runViewerMeasure('inline_'")) { Fail 'Inline graph must never execute through the standalone Viewer transport.' }
 
 $tokens=$null; $parseErrors=$null
 [void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
