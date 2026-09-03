@@ -21,6 +21,7 @@ $ResolvedArrivalHistoryFile = Join-Path $RuntimeDir 'resolved-arrival-history.js
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $FocusMarketFile = Join-Path $RuntimeDir 'focus-market.kv'
 $SettingsFile = Join-Path $ConfigDir 'settings.example.json'
+$LocalSettingsFile = Join-Path $ConfigDir 'settings.local.json'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared graph history reads.' }
 . $AtomicFileScript
@@ -235,78 +236,40 @@ function Format-InlineRelativeTime {
     return ('in '+(Format-InlineDuration -Seconds (-$delta)))
 }
 
-function Get-ChanceThresholdCrossing {
-    param([object]$Left,[object]$Right,[double]$Threshold)
-    $leftAt=[long]$Left.timestamp
-    $rightAt=[long]$Right.timestamp
-    $leftP=[double]$Left.probability
-    $rightP=[double]$Right.probability
-    if($rightAt -le $leftAt -or [Math]::Abs($rightP-$leftP) -lt 0.0000001){return $rightAt}
-    $fraction=($Threshold-$leftP)/($rightP-$leftP)
-    $fraction=[Math]::Max(0.0,[Math]::Min(1.0,$fraction))
-    return [long][Math]::Round($leftAt+(($rightAt-$leftAt)*$fraction))
+function Get-InlineSettingBool {
+    param([object]$Base,[object]$Local,[string]$Name,[bool]$Default=$true)
+    $value=$Default
+    $baseVisuals=Get-InlineProperty $Base 'graphVisuals'
+    if($null -ne $baseVisuals -and $null -ne $baseVisuals.PSObject.Properties[$Name]){
+        $value=[bool]$baseVisuals.PSObject.Properties[$Name].Value
+    }
+    $localVisuals=Get-InlineProperty $Local 'graphVisuals'
+    if($null -ne $localVisuals -and $null -ne $localVisuals.PSObject.Properties[$Name]){
+        $value=[bool]$localVisuals.PSObject.Properties[$Name].Value
+    }
+    return [bool]$value
 }
 
-function Get-ChanceWindows {
-    param(
-        [object[]]$Rows,
-        [double]$Threshold,
-        [long]$Cutoff,
-        [long]$NowEpoch,
-        [long]$MaximumGapSeconds=300L,
-        [long]$FreshTailSeconds=180L
-    )
+function Get-RealizedDepartureWindows {
+    param([object[]]$Rows,[long]$RealizedThrough,[long]$Cutoff)
     $ordered=@($Rows|Sort-Object timestamp)
     $windows=New-Object System.Collections.Generic.List[object]
-    $previous=$null
     $activeStart=0L
-
     foreach($row in $ordered){
         $at=[long]$row.timestamp
-        $p=[double]$row.probability
-        if($at -lt $Cutoff -or $at -gt ($NowEpoch+60L)){continue}
-
-        if($null -eq $previous){
-            if($p -ge $Threshold){$activeStart=[Math]::Max($Cutoff,$at)}
-            $previous=$row
-            continue
-        }
-
-        $gap=$at-[long]$previous.timestamp
-        if($gap -le 0){$previous=$row;continue}
-        if($gap -gt $MaximumGapSeconds){
-            if($activeStart -gt 0){
-                $end=[long]$previous.timestamp
-                if($end -gt $activeStart){
-                    $windows.Add([pscustomobject]@{startAt=$activeStart;endAt=$end;openEnded=$false;endedByGap=$true})
-                }
-            }
-            $activeStart=if($p -ge $Threshold){$at}else{0L}
-            $previous=$row
-            continue
-        }
-
-        $previousP=[double]$previous.probability
-        if($previousP -lt $Threshold -and $p -ge $Threshold){
-            $activeStart=Get-ChanceThresholdCrossing -Left $previous -Right $row -Threshold $Threshold
-        }elseif($previousP -ge $Threshold -and $p -lt $Threshold){
-            $end=Get-ChanceThresholdCrossing -Left $previous -Right $row -Threshold $Threshold
-            if($activeStart -le 0){$activeStart=[long]$previous.timestamp}
-            if($end -gt $activeStart){
-                $windows.Add([pscustomobject]@{startAt=$activeStart;endAt=$end;openEnded=$false;endedByGap=$false})
+        if($at -lt $Cutoff -or $at -gt $RealizedThrough){continue}
+        $actual=[int]$row.actualAnyStock
+        if($actual -eq 1 -and $activeStart -le 0){
+            $activeStart=$at
+        }elseif($actual -eq 0 -and $activeStart -gt 0){
+            if($at -gt $activeStart){
+                $windows.Add([pscustomobject]@{startAt=$activeStart;endAt=$at})
             }
             $activeStart=0L
         }
-        $previous=$row
     }
-
-    if($activeStart -gt 0 -and $null -ne $previous){
-        $lastAt=[long]$previous.timestamp
-        $fresh=(($NowEpoch-$lastAt) -le $FreshTailSeconds)
-        $end=if($fresh){$NowEpoch}else{$lastAt}
-        if($end -gt $activeStart){
-            $windows.Add([pscustomobject]@{startAt=$activeStart;endAt=$end;openEnded=[bool]$fresh;endedByGap=$false})
-        }
+    if($activeStart -gt 0 -and $RealizedThrough -gt $activeStart){
+        $windows.Add([pscustomobject]@{startAt=$activeStart;endAt=$RealizedThrough})
     }
     return $windows.ToArray()
 }
@@ -326,6 +289,7 @@ function Compress-StockHistory {
 }
 
 $settings = Read-InlineJson $SettingsFile
+$localSettings = Read-InlineJson $LocalSettingsFile
 $state = Read-InlineKv $StateKvFile
 $engine = Read-InlineJson $EngineStateFile
 if ($null -eq $engine -or -not $engine.PSObject.Properties['observedMarkets']) { throw 'No observed market state is available.' }
@@ -333,6 +297,13 @@ if ($null -eq $engine -or -not $engine.PSObject.Properties['observedMarkets']) {
 $windowHours = 8
 if ($null -ne $settings -and $settings.PSObject.Properties['graphWindowHours']) { $windowHours = [int]$settings.graphWindowHours }
 $windowHours = [Math]::Max(1,[Math]::Min(24,$windowHours))
+
+$showGrid=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showGrid' -Default $true
+$showTransitions=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showTransitions' -Default $true
+$showChance=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showChance' -Default $true
+$showHindsightWindows=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showHindsightWindows' -Default $true
+$showAccuracyMarkers=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showAccuracyMarkers' -Default $true
+$showTooltips=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showTooltips' -Default $true
 
 $parts = $MarketKey.Split(':')
 $country = [string]$parts[0]
@@ -378,8 +349,8 @@ $chanceRows=@(Read-MarketChanceHistory -Path $ChanceHistoryFile -Key $MarketKey 
 $resolvedRows=@(Read-MarketResolvedArrivalHistory -Path $ResolvedArrivalHistoryFile -Key $MarketKey -Cutoff $cutoff -MaximumForecastAt $now)
 $flightSeconds=Get-InlineTravelSeconds -State $state -Country $country
 $realizedRows=@(Get-FlightShiftedRealizedHistory -StockRows $allRows -FlightSeconds $flightSeconds -Cutoff $cutoff -NowEpoch $now)
-$chanceBandThreshold=0.50
-$chanceWindows=@(Get-ChanceWindows -Rows $chanceRows -Threshold $chanceBandThreshold -Cutoff $cutoff -NowEpoch $now)
+$realizedThrough=$now-$flightSeconds
+$realizedWindows=@(Get-RealizedDepartureWindows -Rows $realizedRows -RealizedThrough $realizedThrough -Cutoff $cutoff)
 $hoverRegions=New-Object System.Collections.Generic.List[object]
 $transitionHoverRegions=New-Object System.Collections.Generic.List[object]
 $maximumHoverRegions=48
@@ -413,10 +384,8 @@ $gridMajor = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(72,7
 $gridMinor = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(48,53,61),1)
 $stockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(126,190,73),2)
 $chancePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(105,200,235),1.5)
-$chanceBandBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(28,165,165,235))
-$chanceBoundaryPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(150,165,165,235),1)
-$realizedPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(90,205,205,205),1)
-$realizedPen.DashStyle=[System.Drawing.Drawing2D.DashStyle]::Dot
+$hindsightBandBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(32,165,165,235))
+$hindsightBoundaryPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(155,165,165,235),1)
 $errorPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(85,225,225,225),1)
 $hitBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(115,190,230,95))
 $missBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(140,255,117,24))
@@ -426,15 +395,17 @@ $labelBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromA
 $labelFont = New-Object System.Drawing.Font('Segoe UI',7,[System.Drawing.FontStyle]::Regular,[System.Drawing.GraphicsUnit]::Point)
 
 # Eight one-hour segments: seven internal vertical separators plus both boundaries.
-for ($i=0; $i -le 8; $i++) {
-    $x = [single]($plotLeft + ($plotWidth * $i / 8.0))
-    $pen = if ($i -eq 0 -or $i -eq 8) { $gridMajor } else { $gridMinor }
-    $graphics.DrawLine($pen,$x,[single]$plotTop,$x,[single]$plotBottom)
-}
-for ($i=0; $i -le 3; $i++) {
-    $y = [single]($plotTop + ($plotHeight * $i / 3.0))
-    $pen = if ($i -eq 0 -or $i -eq 3) { $gridMajor } else { $gridMinor }
-    $graphics.DrawLine($pen,[single]$plotLeft,$y,[single]$plotRight,$y)
+if($showGrid){
+    for ($i=0; $i -le 8; $i++) {
+        $x = [single]($plotLeft + ($plotWidth * $i / 8.0))
+        $pen = if ($i -eq 0 -or $i -eq 8) { $gridMajor } else { $gridMinor }
+        $graphics.DrawLine($pen,$x,[single]$plotTop,$x,[single]$plotBottom)
+    }
+    for ($i=0; $i -le 3; $i++) {
+        $y = [single]($plotTop + ($plotHeight * $i / 3.0))
+        $pen = if ($i -eq 0 -or $i -eq 3) { $gridMajor } else { $gridMinor }
+        $graphics.DrawLine($pen,[single]$plotLeft,$y,[single]$plotRight,$y)
+    }
 }
 
 function Get-InlineX([long]$Timestamp) {
@@ -450,39 +421,40 @@ function Get-ChanceY([double]$Probability) {
     return [single]($plotBottom - ($p * $plotHeight))
 }
 
-# Shade modeled chance windows only. This is deliberately independent of the
-# green stock trace / raw in-stock intervals. A chance window is a contiguous
-# recorded probability run at or above the explicit 50% action threshold.
-foreach($window in $chanceWindows){
-    $startX=Get-InlineX ([long]$window.startAt)
-    $endX=Get-InlineX ([long]$window.endAt)
-    $bandWidth=[single][Math]::Max(1.0,$endX-$startX)
-    $graphics.FillRectangle($chanceBandBrush,$startX,[single]$plotTop,$bandWidth,[single]$plotHeight)
+# Periwinkle is hindsight truth, not another forecast encoding. Shift actual
+# observed stock backward by the configured one-way flight duration and fill only
+# historical departure intervals that are now known to have landed in stock.
+if($showHindsightWindows){
+    foreach($window in $realizedWindows){
+        $startX=Get-InlineX ([long]$window.startAt)
+        $endX=Get-InlineX ([long]$window.endAt)
+        $bandWidth=[single][Math]::Max(1.0,$endX-$startX)
+        $graphics.FillRectangle($hindsightBandBrush,$startX,[single]$plotTop,$bandWidth,[single]$plotHeight)
+        $graphics.DrawLine($hindsightBoundaryPen,$startX,[single]$plotTop,$startX,[single]$plotBottom)
+        $graphics.DrawLine($hindsightBoundaryPen,$endX,[single]$plotTop,$endX,[single]$plotBottom)
 
-    $opened=(Format-InlineRelativeTime -Timestamp ([long]$window.startAt) -NowEpoch $now)
-    $closed=if([bool]$window.openEnded){'still open'}else{Format-InlineRelativeTime -Timestamp ([long]$window.endAt) -NowEpoch $now}
-    $hoverRegions.Add([pscustomobject]@{
-        x=[double]$startX;y=[double]$plotTop;w=[double]$bandWidth;h=[double]$plotHeight
-        text=('Chance >=50% window: '+$opened+' to '+$closed)
-        kind='chance_band'
-        timestamp=[long]$window.startAt
-    })
-    $hoverRegions.Add([pscustomobject]@{
-        x=[double]([Math]::Max($plotLeft,$startX-3));y=[double]$plotTop;w=7.0;h=[double]$plotHeight
-        text=('Chance window opened: '+$opened)
-        kind='chance_open'
-        timestamp=[long]$window.startAt
-    })
-    if(-not[bool]$window.openEnded){
-        $hoverRegions.Add([pscustomobject]@{
-            x=[double]([Math]::Max($plotLeft,$endX-3));y=[double]$plotTop;w=7.0;h=[double]$plotHeight
-            text=('Chance window closed: '+(Format-InlineRelativeTime -Timestamp ([long]$window.endAt) -NowEpoch $now))
-            kind='chance_close'
-            timestamp=[long]$window.endAt
-        })
+        if($showTooltips){
+            $opened=Format-InlineRelativeTime -Timestamp ([long]$window.startAt) -NowEpoch $now
+            $closed=Format-InlineRelativeTime -Timestamp ([long]$window.endAt) -NowEpoch $now
+            $duration=Format-InlineDuration -Seconds ([long]$window.endAt-[long]$window.startAt)
+            $hoverRegions.Add([pscustomobject]@{
+                x=[double]$startX;y=[double]$plotTop;w=[double]$bandWidth;h=[double]$plotHeight
+                text=('Hindsight departure window: '+$opened+' to '+$closed+' | duration '+$duration)
+                kind='hindsight_window';timestamp=[long]$window.startAt
+            })
+            $hoverRegions.Add([pscustomobject]@{
+                x=[double]([Math]::Max($plotLeft,$startX-3));y=[double]$plotTop;w=7.0;h=[double]$plotHeight
+                text=('Actual hindsight window opened: '+$opened)
+                kind='hindsight_open';timestamp=[long]$window.startAt
+            })
+            $hoverRegions.Add([pscustomobject]@{
+                x=[double]([Math]::Max($plotLeft,$endX-3));y=[double]$plotTop;w=7.0;h=[double]$plotHeight
+                text=('Actual hindsight window closed: '+$closed)
+                kind='hindsight_close';timestamp=[long]$window.endAt
+            })
+        }
     }
 }
-
 
 $previous = $null
 foreach ($row in $rows) {
@@ -495,21 +467,25 @@ foreach ($row in $rows) {
         # them in the gutter below the X axis so they never obscure the stock trace.
         $markerTop=[single]($plotBottom+2)
         $markerBottom=[single]($plotBottom+8)
-        if ([long]$previous.stock -eq 0 -and [long]$row.stock -gt 0) {
+        if ($showTransitions -and [long]$previous.stock -eq 0 -and [long]$row.stock -gt 0) {
             $graphics.DrawLine($restockPen,$x,$markerTop,$x,$markerBottom)
-            $transitionHoverRegions.Add([pscustomobject]@{
-                x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
-                text=('Restocked: '+(Format-InlineRelativeTime -Timestamp ([long]$row.timestamp) -NowEpoch $now))
-                kind='restock';timestamp=[long]$row.timestamp
-            })
+            if($showTooltips){
+                $transitionHoverRegions.Add([pscustomobject]@{
+                    x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
+                    text=('Restocked: '+(Format-InlineRelativeTime -Timestamp ([long]$row.timestamp) -NowEpoch $now))
+                    kind='restock';timestamp=[long]$row.timestamp
+                })
+            }
         }
-        if ([long]$previous.stock -gt 0 -and [long]$row.stock -eq 0) {
+        if ($showTransitions -and [long]$previous.stock -gt 0 -and [long]$row.stock -eq 0) {
             $graphics.DrawLine($selloutPen,$x,$markerTop,$x,$markerBottom)
-            $transitionHoverRegions.Add([pscustomobject]@{
-                x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
-                text=('OoS: '+(Format-InlineRelativeTime -Timestamp ([long]$row.timestamp) -NowEpoch $now))
-                kind='oos';timestamp=[long]$row.timestamp
-            })
+            if($showTooltips){
+                $transitionHoverRegions.Add([pscustomobject]@{
+                    x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
+                    text=('OoS: '+(Format-InlineRelativeTime -Timestamp ([long]$row.timestamp) -NowEpoch $now))
+                    kind='oos';timestamp=[long]$row.timestamp
+                })
+            }
         }
     }
     $previous = [pscustomobject]@{ x=$x; y=$y; stock=[long]$row.stock }
@@ -518,71 +494,53 @@ if ($null -ne $previous -and [single]$previous.x -lt [single]$plotRight) {
     $graphics.DrawLine($stockPen,[single]$previous.x,[single]$previous.y,[single]$plotRight,[single]$previous.y)
 }
 
-# Hindsight truth uses the same implicit 0..100% scale but is not a forecast.
-# Shift the retained stock waveform left by one configured flight duration:
-# a top segment means a departure at that X-time actually would have hit stock;
-# a bottom segment means it would have missed. Polling uncertainty remains the
-# same as in the source stock graph, so this is a realized observation proxy.
-$previousRealized=$null
-foreach($row in $realizedRows){
-    $x=Get-InlineX ([long]$row.timestamp)
-    $y=Get-ChanceY ([double][int]$row.actualAnyStock)
-    if($null -ne $previousRealized){
-        $graphics.DrawLine($realizedPen,[single]$previousRealized.x,[single]$previousRealized.y,$x,[single]$previousRealized.y)
-        $graphics.DrawLine($realizedPen,$x,[single]$previousRealized.y,$x,$y)
-    }
-    $previousRealized=[pscustomobject]@{x=$x;y=$y;actual=[int]$row.actualAnyStock;timestamp=[long]$row.timestamp}
-}
-$realizedThrough=$now-$flightSeconds
-if($null -ne $previousRealized -and $realizedThrough -ge $cutoff){
-    $endX=Get-InlineX ([Math]::Min($now,$realizedThrough))
-    if($endX -gt [single]$previousRealized.x){
-        $graphics.DrawLine($realizedPen,[single]$previousRealized.x,[single]$previousRealized.y,$endX,[single]$previousRealized.y)
-    }
-}
-
-# Strictly resolved forecasts use confirmed calibration truth. Draw a faint error
-# whisker from the frozen probability to the binary outcome and a small endpoint.
-foreach($row in $resolvedRows){
-    $x=Get-InlineX ([long]$row.forecastAt)
-    $predictedY=Get-ChanceY ([double]$row.predictedProbability)
-    $actualY=Get-ChanceY ([double][int]$row.actualAnyStock)
-    $graphics.DrawLine($errorPen,$x,$predictedY,$x,$actualY)
-    $brush=if([int]$row.actualAnyStock -eq 1){$hitBrush}else{$missBrush}
-    $graphics.FillEllipse($brush,[single]($x-1.75),[single]($actualY-1.75),[single]3.5,[single]3.5)
-}
-
-# Draw live hit probability independently of stock scale: 0% sits on the stock
-# X-axis and 100% sits at the plot top. Do not bridge missing forecast intervals.
-$previousChance=$null
-foreach ($row in $chanceRows) {
-    $x=Get-InlineX ([long]$row.timestamp)
-    $y=Get-ChanceY ([double]$row.probability)
-    if ($null -ne $previousChance) {
-        $gap=[long]$row.timestamp-[long]$previousChance.timestamp
-        if ($gap -gt 0 -and $gap -le 300L) {
-            $graphics.DrawLine($chancePen,[single]$previousChance.x,[single]$previousChance.y,$x,$y)
+# Strictly resolved forecasts use confirmed calibration truth. Keep this as
+# validation metadata rather than another full curve.
+if($showAccuracyMarkers){
+    foreach($row in $resolvedRows){
+        $x=Get-InlineX ([long]$row.forecastAt)
+        $predicted=[double]$row.predictedProbability
+        $actual=[int]$row.actualAnyStock
+        $predictedY=Get-ChanceY $predicted
+        $actualY=Get-ChanceY ([double]$actual)
+        $graphics.DrawLine($errorPen,$x,$predictedY,$x,$actualY)
+        $brush=if($actual -eq 1){$hitBrush}else{$missBrush}
+        $graphics.FillEllipse($brush,[single]($x-1.75),[single]($actualY-1.75),[single]3.5,[single]3.5)
+        if($showTooltips){
+            $actualText=if($actual -eq 1){'HIT'}else{'MISS'}
+            $hoverRegions.Add([pscustomobject]@{
+                x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotTop;w=9.0;h=[double]$plotHeight
+                text=('Forecast '+([Math]::Round(100.0*$predicted,1))+'% | Actual '+$actualText+' | Brier '+([Math]::Round([double]$row.brier,3)))
+                kind='resolved_forecast';timestamp=[long]$row.forecastAt
+            })
         }
     }
-    $previousChance=[pscustomobject]@{x=$x;y=$y;timestamp=[long]$row.timestamp;probability=[double]$row.probability}
-}
-if ($null -ne $previousChance -and ($now-[long]$previousChance.timestamp) -le 180L -and [single]$previousChance.x -lt [single]$plotRight) {
-    $graphics.DrawLine($chancePen,[single]$previousChance.x,[single]$previousChance.y,[single]$plotRight,[single]$previousChance.y)
 }
 
-# Re-draw chance boundaries after stock / probability traces so exact edges stay
-# visible while the translucent band carries the interval visually.
-foreach($window in $chanceWindows){
-    $startX=Get-InlineX ([long]$window.startAt)
-    $endX=Get-InlineX ([long]$window.endAt)
-    $graphics.DrawLine($chanceBoundaryPen,$startX,[single]$plotTop,$startX,[single]$plotBottom)
-    if(-not[bool]$window.openEnded){
-        $graphics.DrawLine($chanceBoundaryPen,$endX,[single]$plotTop,$endX,[single]$plotBottom)
+# Draw the prospective probability continuously wherever it was actually recorded.
+# No 50% display suppression is permitted; missing evidence remains a gap.
+if($showChance){
+    $previousChance=$null
+    foreach ($row in $chanceRows) {
+        $x=Get-InlineX ([long]$row.timestamp)
+        $y=Get-ChanceY ([double]$row.probability)
+        if ($null -ne $previousChance) {
+            $gap=[long]$row.timestamp-[long]$previousChance.timestamp
+            if ($gap -gt 0 -and $gap -le 300L) {
+                $graphics.DrawLine($chancePen,[single]$previousChance.x,[single]$previousChance.y,$x,$y)
+            }
+        }
+        $previousChance=[pscustomobject]@{x=$x;y=$y;timestamp=[long]$row.timestamp;probability=[double]$row.probability}
     }
+    if ($null -ne $previousChance -and ($now-[long]$previousChance.timestamp) -le 180L -and [single]$previousChance.x -lt [single]$plotRight) {
+        $graphics.DrawLine($chancePen,[single]$previousChance.x,[single]$previousChance.y,[single]$plotRight,[single]$previousChance.y)
+    }
+    
+    
 }
 
-# Chance-window hover regions have first priority. Use remaining capacity for the
-# most recent restock/OoS ticks so dense rapid-cycle graphs remain bounded.
+# Hindsight/accuracy regions take priority. Use remaining capacity for the most
+# recent actual Restock/OoS ticks so dense rapid-cycle graphs remain bounded.
 $remaining=[Math]::Max(0,$maximumHoverRegions-$hoverRegions.Count)
 if($remaining -gt 0){
     foreach($region in @($transitionHoverRegions.ToArray()|Sort-Object timestamp -Descending|Select-Object -First $remaining)){
@@ -604,7 +562,7 @@ $tmpImage = $imagePath + '.tmp'
 $bitmap.Save($tmpImage,[System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()
-$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $chanceBandBrush.Dispose(); $chanceBoundaryPen.Dispose(); $realizedPen.Dispose(); $errorPen.Dispose(); $hitBrush.Dispose(); $missBrush.Dispose(); $restockPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
+$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $hindsightBandBrush.Dispose(); $hindsightBoundaryPen.Dispose(); $errorPen.Dispose(); $hitBrush.Dispose(); $missBrush.Dispose(); $restockPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
 Move-Item -LiteralPath $tmpImage -Destination $imagePath -Force
 Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force
 
@@ -652,8 +610,13 @@ $specValues=@{
     LatestTimestamp = $latestTimestamp
     UnknownBeforeTimestamp = $unknownBefore
     WindowStartTimestamp = $cutoff
-    ChanceWindowThreshold = $chanceBandThreshold
-    ChanceWindowCount = $chanceWindows.Count
+    HindsightWindowCount = $realizedWindows.Count
+    ShowGrid = $(if($showGrid){1}else{0})
+    ShowTransitions = $(if($showTransitions){1}else{0})
+    ShowChance = $(if($showChance){1}else{0})
+    ShowHindsightWindows = $(if($showHindsightWindows){1}else{0})
+    ShowAccuracyMarkers = $(if($showAccuracyMarkers){1}else{0})
+    ShowTooltips = $(if($showTooltips){1}else{0})
     HoverCount = $hoverCount
 }
 foreach($hoverKey in $hoverValues.Keys){$specValues[$hoverKey]=$hoverValues[$hoverKey]}
