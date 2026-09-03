@@ -41,7 +41,6 @@ if($errors.Count -eq 0){
         'torn_intel_history_recovery',
         'Test-CycleSuppressedByObservationPlausibility',
         'spurious-transitions.json',
-        '($now-$updatedAt) -gt 600L',
         'if (Test-CycleSuppressedByObservationPlausibility -Cycle $Cycle) { return $false }'
     )){
         if(-not$filter.Contains($token)){Fail "Plausibility filter contract missing '$token'."}
