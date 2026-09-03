@@ -160,8 +160,8 @@ if ($errors.Count -eq 0) {
         "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
         'MaximumOrdinal = 1','immediately next cycle',
         'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock',
-        "'LastObservedOosAt'","$candidateOosAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')",
-        "$candidateOosQuality=[string](Get-WindowProperty $destinationState 'lastSellOutBoundaryQuality')",
+        "'LastObservedOosAt'","`$candidateOosAt=[long](Get-WindowProperty `$destinationState 'lastSellOutAt')",
+        "`$candidateOosQuality=[string](Get-WindowProperty `$destinationState 'lastSellOutBoundaryQuality')",
         'Test-WindowBoundaryQuality -Quality $candidateOosQuality',
         "'WP2:'","'PV1#'","'PV0#'"
     )) {
