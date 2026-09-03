@@ -146,7 +146,13 @@ $missedCurrent=Get-CurrentCycleDeparturePlan -CurrentStock 600L -ActiveSelloutEs
 Assert-True (-not [bool]$missedCurrent.reachable) 'Current cycle must fall back to a later recurring window once travel plus buffer cannot beat projected sellout.'
 
 $currentProbability=Get-StableCurrentCycleArrivalProbability -Cycles $projectionCycles -ActiveRestockAt 10000L -ArrivalAt 11250L
-Assert-Near ([double]$currentProbability) (2.0/3.0) 0.0001 'Current-cycle arrival confidence should use completed-cycle availability durations at the live restock anchor.'
+Assert-Near ([double]$currentProbability) (2.0/3.0) 0.0001 'Current-cycle arrival confidence at cycle start should retain the completed-cycle survival fraction.'
+
+$conditionedProbability=Get-StableCurrentCycleArrivalProbability -Cycles $projectionCycles -ActiveRestockAt 10000L -ObservationAt 11250L -ArrivalAt 11350L
+Assert-Near ([double]$conditionedProbability) 0.5 0.0001 'Current-cycle survival must condition on the fact that stock is still positive at the latest observation.'
+
+$outlivedHistoryProbability=Get-StableCurrentCycleArrivalProbability -Cycles $projectionCycles -ActiveRestockAt 10000L -ObservationAt 11500L -ArrivalAt 11600L
+Assert-Near ([double]$outlivedHistoryProbability) -1.0 0.0001 'A live cycle that outlives every historical duration is unknown from historical survival, not a fabricated 0%.'
 
 
 # A left-censored current restock can still be obviously safe from direct depletion.
@@ -157,6 +163,11 @@ $slowObservations=@(
     [pscustomobject]@{timestamp=9300L;sourceTimestamp=9300L;stock=604L;depletionEvidence='observed_nonzero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=2L;transitionGapSeconds=300L},
     [pscustomobject]@{timestamp=9600L;sourceTimestamp=9600L;stock=602L;depletionEvidence='observed_nonzero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=2L;transitionGapSeconds=300L}
 )
+$slowLiveProbability=Get-LiveDepletionArrivalProbability -CurrentStock 600L -SourceTimestamp 10000L -Observations $slowObservations -ArrivalAt 17200L -NowEpoch 10000L
+Assert-True ([bool]$slowLiveProbability.eligible) 'Three clean current-run depletion samples should support a live current-cycle arrival probability.'
+Assert-Near ([double]$slowLiveProbability.probability) 1.0 0.0001 'When every observed current depletion rate leaves more runway than the flight horizon, live Chance to Hit should be 100%, not historical 0%.'
+Assert-True ([long]$slowLiveProbability.medianRunwaySeconds -gt 7200L) 'Live probability diagnostics should expose a median runway longer than the evaluated arrival horizon.'
+
 $slowSafety=Get-CurrentStockSafetyProjection -CurrentStock 600L -SourceTimestamp 10000L -Observations $slowObservations -EarliestArrivalAt 17200L -NowEpoch 10000L
 Assert-True ([bool]$slowSafety.eligible) 'Slow uncensored depletion should allow the current-stock Safe Window Open fallback even when the restock boundary is unknown.'
 Assert-Equal ([int]$slowSafety.sampleCount) 3 'Safety fallback must require the configured three observed depletion samples.'
