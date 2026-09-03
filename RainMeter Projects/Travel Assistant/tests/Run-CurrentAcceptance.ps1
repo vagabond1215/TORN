@@ -66,5 +66,5 @@ foreach ($name in $tests) {
 
 Write-Host ''
 Write-Host 'Focused Travel Assistant 0.6 compact opportunity candidate validations passed.' -ForegroundColor Green
-Write-Host 'Next: run one production update and refresh Rainmeter. Verify final UI publication stays error-free, only flag/window text expose tooltips, active-window tooltips do not advertise past departures, graph transition ticks sit below the X axis, flags fill behind the rounded border, abroad rows avoid departure language, returning respects home availability, and fixed-price items remain white.' -ForegroundColor Yellow
+Write-Host 'Next: run one production update and refresh Rainmeter. Verify final UI publication stays error-free, flag/window tooltips remain correct, enabled graph semantic hitboxes show only hindsight/accuracy/restock/OoS context, cyan chance is continuous without 50% suppression, periwinkle appears only as flight-shifted historical departure windows, graph transition ticks sit below the X axis, flags fill behind the rounded border, abroad rows avoid departure language, returning respects home availability, and fixed-price items remain white.' -ForegroundColor Yellow
 exit 0
