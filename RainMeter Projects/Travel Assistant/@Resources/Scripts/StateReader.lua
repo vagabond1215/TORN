@@ -661,8 +661,7 @@ local function updateGraphInfoRegion(spec, graphMeterName)
     local y = baseY + number(spec.InfoY)
     local w = math.max(1, number(spec.InfoW))
     local h = math.max(1, number(spec.InfoH))
-    local tooltip = table.concat(lines, '
-')
+    local tooltip = table.concat(lines, '\n')
     local signature = table.concat({tostring(x), tostring(y), tostring(w), tostring(h), tooltip}, '|')
     if graphInfoSignature ~= signature then
         SKIN:Bang('!SetOption', 'MeterInlineGraphInfo', 'X', tostring(x))
