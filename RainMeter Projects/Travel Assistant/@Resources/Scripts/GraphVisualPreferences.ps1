@@ -68,10 +68,10 @@ function Write-GraphVisualState {
     param([object]$Base,[object]$Local)
     New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
     $values=[ordered]@{
-        GraphHindsightOn=if(Get-GraphVisualEffectiveValue -Base $Base -Local $Local -Name 'showHindsightWindows'){'1'}else{'0'}
-        GraphChanceOn=if(Get-GraphVisualEffectiveValue -Base $Base -Local $Local -Name 'showChance'){'1'}else{'0'}
-        GraphWindowOn=if(Get-GraphVisualEffectiveValue -Base $Base -Local $Local -Name 'showRestockWindowBounds'){'1'}else{'0'}
-        GraphStockOn=if(Get-GraphVisualEffectiveValue -Base $Base -Local $Local -Name 'showTransitions'){'1'}else{'0'}
+        GraphHindsightOn=$(if(Get-GraphVisualEffectiveValue -Base $Base -Local $Local -Name 'showHindsightWindows'){'1'}else{'0'})
+        GraphChanceOn=$(if(Get-GraphVisualEffectiveValue -Base $Base -Local $Local -Name 'showChance'){'1'}else{'0'})
+        GraphWindowOn=$(if(Get-GraphVisualEffectiveValue -Base $Base -Local $Local -Name 'showRestockWindowBounds'){'1'}else{'0'})
+        GraphStockOn=$(if(Get-GraphVisualEffectiveValue -Base $Base -Local $Local -Name 'showTransitions'){'1'}else{'0'})
         UpdatedAt=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     }
     $lines=@()
