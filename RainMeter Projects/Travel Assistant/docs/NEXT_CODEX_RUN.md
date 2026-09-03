@@ -69,7 +69,7 @@ Also inspect the new graph/replay telemetry after normal minute updates:
 - `resolved-arrival-history.jsonl` should begin filling only after recorded arrivals pass and truth becomes unambiguous;
 - `chance-accuracy.json` should expose overall/per-market Brier, log loss, classification accuracy, observed hit rate, predicted rate, and calibration gap;
 - `chance-history-error.txt` and `resolve-chance-history-error.txt` should be absent;
-- an expanded graph should show the cyan 0..100% chance trace without a second Y-axis, plus the faint flight-shifted realized hit/miss waveform. Strict error markers will appear only as predictions actually recorded after this implementation mature.
+- an expanded graph should show the cyan 0..100% chance trace without a second Y-axis, faint periwinkle shading only between modeled >=50% chance-window crossings, plus the faint flight-shifted realized hit/miss waveform. Hover the periwinkle window/edges and blue/orange event ticks to confirm simple Chance window / Restocked / OoS relative-time tooltips. Strict error markers will appear only as predictions actually recorded after this implementation mature.
 
 The flight-shifted realized waveform can populate immediately from retained observations and is intentionally hindsight-only. Do not use it to rebuild an “as known then” forecast. Time/price/phase features may be proposed from it, but promotion requires walk-forward/prospective improvement.
 
