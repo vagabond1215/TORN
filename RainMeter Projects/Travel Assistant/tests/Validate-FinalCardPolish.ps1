@@ -15,20 +15,31 @@ if ($errors.Count -eq 0) {
     $includeText = Get-Content -LiteralPath $includePath -Raw
 
     foreach ($token in @(
-        'CardPresenter emits the final card contract',
-        'StateReader owns all geometry',
-        'non-destructive compatibility point',
+        'CardPresenter / travel-state presentation own the action and Chance meters',
+        'enforces one cross-field invariant only',
+        'hasAuthoritativeChance',
+        'isNonInformativeAction',
+        "value=='wait data'",
+        "value=='market data pending'",
+        "value=='next cycle unavailable'",
+        "value=='window closed.'",
+        "value:find('collecting data',1,true)",
+        "meterText(prefix..'Chance')",
+        "meterText(prefix..'Leave')",
+        "setText(prefix..'Leave','Chance to hit:')",
         'function Update()',
         'return 0'
     )) {
-        if (-not $scriptText.Contains($token)) { Fail "FinalCardPolish.lua missing non-destructive contract '$token'." }
+        if (-not $scriptText.Contains($token)) { Fail "FinalCardPolish.lua missing chance/action consistency contract '$token'." }
     }
 
     foreach ($retired in @(
-        'polishHeader','polishWindowStatus','!SetOption','!ShowMeter','!HideMeter',
-        "prefix..'Gross'","prefix..'Chance'","prefix..'Name'"
+        'polishHeader','polishWindowStatus','!ShowMeter','!HideMeter',
+        "prefix..'Gross'","prefix..'Name'",
+        "setText(prefix..'Chance'",
+        "setOption(prefix..'Chance'"
     )) {
-        if ($scriptText.Contains($retired)) { Fail "FinalCardPolish.lua must not mutate compact-card presentation; found '$retired'." }
+        if ($scriptText.Contains($retired)) { Fail "FinalCardPolish.lua exceeds its narrow action-consistency role; found '$retired'." }
     }
 
     foreach ($token in @('[MeasureFinalCardPolish]','FinalCardPolish.lua')) {
@@ -36,7 +47,7 @@ if ($errors.Count -eq 0) {
     }
     $travelAt = $includeText.IndexOf('[MeasureTravelStateWindowTweaks]',[System.StringComparison]::Ordinal)
     $polishAt = $includeText.IndexOf('[MeasureFinalCardPolish]',[System.StringComparison]::Ordinal)
-    if ($travelAt -lt 0 -or $polishAt -le $travelAt) { Fail 'Final compatibility pass must remain after the travel-state window pass.' }
+    if ($travelAt -lt 0 -or $polishAt -le $travelAt) { Fail 'Final consistency pass must remain after the travel-state window pass.' }
     if ($includeText.Contains('[MeasureWindowTooltipTweaks]')) { Fail 'Retired WindowTooltipTweaks measure returned.' }
 
     if ($scriptText -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand') { Fail 'FinalCardPolish.lua must remain presentation-only and local.' }
@@ -47,6 +58,6 @@ if ($errors.Count -gt 0) {
     Write-Host "Final card polish validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Final card compatibility validation passed.' -ForegroundColor Green
-Write-Host 'FinalCardPolish remains in the refresh chain but cannot override CardPresenter text or StateReader geometry.'
+Write-Host 'Final card chance/action consistency validation passed.' -ForegroundColor Green
+Write-Host 'FinalCardPolish changes only a contradictory non-informative action when a valid centered Chance percentage is already visible.'
 exit 0
