@@ -43,16 +43,16 @@ foreach($token in @(
     '$graphics.FillRectangle($hindsightBandBrush',
     'HindsightWindowCount',
     'HoverCount',
-    "text=('Restocked: '",
-    "text=('OoS: '",
-    "text=('Restock variance opens: '",
-    "text=('Restock variance closes: '",
-    "text=('Hindsight departure window: '",
-    "text=('Actual hindsight window opened: '",
-    "text=('Actual hindsight window closed: '",
     'Get-FlightShiftedRealizedHistory',
     '$realizedThrough=$now-$flightSeconds',
     'Read-MarketResolvedArrivalHistory',
+    'Get-InlineDisplayAccuracyMarkers',
+    '[int]$BucketSeconds=900',
+    '$displayAccuracyRows=@(Get-InlineDisplayAccuracyMarkers -Rows $resolvedRows -BucketSeconds 900)',
+    'DisplayedAccuracyMarkerCount',
+    '$sampleCount=[int]$row.sampleCount',
+    '$sampleText=if($sampleCount -gt 1)',
+    "text=('Forecast '+([Math]::Round(100.0*`$predicted,1))+'% avg | Actual '",
     'Read-InlineMarketCycles',
     'Get-InlineRestockWindowSummary',
     'Get-InlineRestockTransitions',
@@ -63,7 +63,6 @@ foreach($token in @(
     'if($openAt -ge $cutoff)',
     'if($closeAt -le $now)',
     '$graphics.DrawLine($errorPen,$x,$predictedY,$x,$actualY)',
-    "text=('Forecast '+([Math]::Round(100.0*`$predicted,1))+'% | Actual '",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showGrid'",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showTransitions'",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showRestockWindowBounds'",
@@ -99,6 +98,7 @@ foreach($token in @(
     'InfoEnabled',
     'InfoLineCount',
     'InfoTimelineCycleCount',
+    'chronological info tooltip owns event-history detail',
     '$graphics.DrawString((''-{0}h'' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)',
     '$graphics.DrawString(''now'',$labelFont,$labelBrush,[single]($plotRight-18),110)'
 )){
@@ -128,9 +128,19 @@ foreach($forbidden in @(
     '$graphics.DrawLine($selloutPen,$x,[single]$plotTop,$x,[single]$plotBottom)',
     '$openAt=[long]$oosAt+$earlyDelay',
     '$closeAt=[long]$oosAt+$lateDelay',
-    'Get-InlineOosTransitions'
+    'Get-InlineOosTransitions',
+    "text=('Restocked: '",
+    "text=('OoS: '",
+    "text=('Restock variance opens: '",
+    "text=('Restock variance closes: '",
+    "text=('Hindsight departure window: '",
+    "text=('Actual hindsight window opened: '",
+    "text=('Actual hindsight window closed: '",
+    '$transitionHoverRegions',
+    '$forecastHoverRegions',
+    'foreach($row in $resolvedRows){'
 )){
-    if($renderer.Contains($forbidden)){Fail "Transition markers must stay below the X axis; found retired full-plot marker '$forbidden'."}
+    if($renderer.Contains($forbidden)){Fail "Retired/deduplicated graph interaction primitive is still present: $forbidden"}
 }
 
 if(-not(Test-Path -LiteralPath $settingsWindowPath)){
@@ -225,5 +235,5 @@ if($failures.Count -gt 0){
 }
 
 Write-Host 'Graph window / retention / interaction validation passed.' -ForegroundColor Green
-Write-Host 'Visible: 8h | mandatory lime stock | continuous cyan forecast | periwinkle hindsight departure windows | optional validation/event overlays | raw learning retention: 48h' -ForegroundColor DarkGreen
+Write-Host 'Visible: 8h | mandatory lime stock | continuous cyan forecast | periwinkle hindsight departure windows | sparse accuracy markers | centralized event timeline tooltip | raw learning retention: 48h' -ForegroundColor DarkGreen
 exit 0
