@@ -25,7 +25,13 @@ local function hasAuthoritativeChance(text)
     return value~=nil and value>=0 and value<=100
 end
 
-local function sanitizeChance(name,text)
+local function suppressChance(prefix)
+    setText(prefix..'Chance','')
+    if SKIN:GetMeter(prefix..'Chance')~=nil then SKIN:Bang('!HideMeter',prefix..'Chance') end
+    if SKIN:GetMeter(prefix..'Leave')~=nil then SKIN:Bang('!SetOption',prefix..'Leave','W','263') end
+end
+
+local function sanitizeChance(prefix,text)
     local raw=trim(text)
     local value=numericPercent(raw)
     if value==nil then return raw end
@@ -34,12 +40,12 @@ local function sanitizeChance(name,text)
     -- violation, not a special confidence state. Do not turn it into a plausible
     -- looking value at presentation time; suppress it until the next valid update.
     if value<0 or value>100 then
-        setText(name,'')
+        suppressChance(prefix)
         return ''
     end
 
     local normalized=string.format('%.0f%%',value)
-    if normalized~=raw then setText(name,normalized) end
+    if normalized~=raw then setText(prefix..'Chance',normalized) end
     return normalized
 end
 
@@ -77,8 +83,7 @@ function Update()
     -- and never pair a valid probability with a non-informative WAIT DATA action.
     for i=1,8 do
         local prefix='MeterOpportunity'..tostring(i)
-        local chanceName=prefix..'Chance'
-        local chance=sanitizeChance(chanceName,meterText(chanceName))
+        local chance=sanitizeChance(prefix,meterText(prefix..'Chance'))
         local action=descriptiveAction(meterText(prefix..'Leave'))
         setText(prefix..'Leave',action)
 
