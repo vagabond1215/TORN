@@ -696,6 +696,7 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'ActiveRestockAt']='0'
     $state[$prefix+'ActiveSelloutEstimateAt']='0'
     $state[$prefix+'NextRestockEstimateAt']='0'
+    $state[$prefix+'LastObservedOosAt']='0'
     $state[$prefix+'MedianRestockDelaySeconds']='0'
     $state[$prefix+'LiveCycleProjectionMode']='none'
     $state[$prefix+'WindowDataQuality']='collecting'
@@ -757,6 +758,15 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'LiveCycleProjectionMode']=[string]$liveProjection.mode
     $state[$prefix+'WindowDataQuality']='ready'
     $state[$prefix+'WindowDataQualityReason']=''
+    $lastObservedOosAt=0L
+    if($null -ne $destinationState){
+        $candidateOosAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')
+        $candidateOosQuality=[string](Get-WindowProperty $destinationState 'lastSellOutBoundaryQuality')
+        if($candidateOosAt -gt 0 -and (Test-WindowBoundaryQuality -Quality $candidateOosQuality)){
+            $lastObservedOosAt=$candidateOosAt
+        }
+    }
+    $state[$prefix+'LastObservedOosAt']=$lastObservedOosAt
     $anchorAt=0L; $phase='sellout'
     if ($stock -gt 0) {
         $phase='restock'
