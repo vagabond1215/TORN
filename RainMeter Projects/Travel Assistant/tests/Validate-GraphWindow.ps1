@@ -17,11 +17,22 @@ if ([int]$settings.cycleRetentionDays -ne 90) { Fail 'Completed-cycle learning r
 if ([int]$settings.staleAfterSeconds -ne 300) { Fail 'Live-provider stale threshold should remain 300 seconds.' }
 
 $renderer = Get-Content -LiteralPath $rendererPath -Raw
+if(-not$renderer.Contains('return [single]($plotBottom - ($p * $plotHeight))')){Fail 'Chance and realized-hit overlays must use an independent fixed 0..100% vertical scale.'}
+if($renderer -match '(?i)Chance.*DrawString|DrawString.*Chance'){Fail 'Chance overlay must not add a second labeled Y axis.'}
 foreach($token in @(
     '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
     'FromArgb(126,190,73),2',
     'FromArgb(0,71,171),1',
     'FromArgb(255,117,24),1',
+    'FromArgb(105,200,235),1.5',
+    'Get-FlightShiftedRealizedHistory',
+    '$realizedPen.DashStyle=[System.Drawing.Drawing2D.DashStyle]::Dot',
+    'Read-MarketResolvedArrivalHistory',
+    '$graphics.DrawLine($errorPen,$x,$predictedY,$x,$actualY)',
+    'ChancePointCount',
+    'RealizedHitProxyPointCount',
+    'ResolvedForecastPointCount',
+    'ResolvedBrierScore',
     '$markerTop=[single]($plotBottom+2)',
     '$markerBottom=[single]($plotBottom+8)',
     '$graphics.DrawString((''-{0}h'' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)',
