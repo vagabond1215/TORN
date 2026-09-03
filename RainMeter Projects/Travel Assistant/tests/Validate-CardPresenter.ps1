@@ -220,7 +220,7 @@ if ($errors.Count -eq 0) {
 }
 
 if ($errors.Count -gt 0) {
-    foreach ($error in $errors) { Write-Host "FAIL: $error" -ForegroundColor Red }
+    foreach ($failureItem in $errors) { Write-Host "FAIL: $failureItem" -ForegroundColor Red }
     Write-Host "Compact trade-card validation failed with $($errors.Count) error(s)." -ForegroundColor Red
     exit 1
 }
