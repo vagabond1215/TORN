@@ -29,6 +29,7 @@
   "graphVisuals": {
     "showGrid": true,
     "showTransitions": true,
+    "showRestockWindowBounds": true,
     "showChance": true,
     "showHindsightWindows": true,
     "showAccuracyMarkers": true,
