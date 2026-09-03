@@ -39,6 +39,15 @@ $realPositive=@($realClassified|Where-Object{[long]$_.timestamp -eq 220L})[0]
 Assert-True ([bool]$realZero.calculationEligible) 'A zero followed by a clear replenishment jump must remain a real sellout.'
 Assert-True ([bool]$realPositive.transitionCalculationEligible) 'A full replenishment jump must remain a real restock.'
 
+$longGap=@(
+    [pscustomobject]@{timestamp=100L;stock=1000L;source='prometheus'},
+    [pscustomobject]@{timestamp=1000L;stock=0L;source='prometheus'},
+    [pscustomobject]@{timestamp=1060L;stock=800L;source='prometheus'}
+)
+$longGapClassified=@(Resolve-StockObservationPlausibility -Rows $longGap -ExpectedPollIntervalSeconds 60)
+$longGapZero=@($longGapClassified|Where-Object{[long]$_.timestamp -eq 1000L})[0]
+Assert-True ([bool]$longGapZero.calculationEligible) 'A long predecessor gap is ambiguous and must not be heuristically suppressed as an isolated-zero dropout.'
+
 $tinyBlip=@(
     [pscustomobject]@{timestamp=100L;stock=0L;source='prometheus'},
     [pscustomobject]@{timestamp=160L;stock=5000L;source='prometheus'},
@@ -52,6 +61,19 @@ $tinyClassified=@(Resolve-StockObservationPlausibility -Rows $tinyBlip -Expected
 $tiny=@($tinyClassified|Where-Object{[long]$_.timestamp -eq 1360L})[0]
 Assert-Equal ([string]$tiny.transitionPlausibility) 'spurious_restock' 'Tiny one-poll positive blip inside an OoS plateau should be suppressed.'
 Assert-True (-not[bool]$tiny.calculationEligible) 'Spurious tiny restock must be excluded from calculations.'
+
+$realMicroCycle=@(
+    [pscustomobject]@{timestamp=100L;stock=0L;source='prometheus'},
+    [pscustomobject]@{timestamp=160L;stock=5000L;source='prometheus'},
+    [pscustomobject]@{timestamp=700L;stock=0L;source='prometheus'},
+    [pscustomobject]@{timestamp=760L;stock=5000L;source='prometheus'},
+    [pscustomobject]@{timestamp=1300L;stock=0L;source='prometheus'},
+    [pscustomobject]@{timestamp=1360L;stock=1500L;source='prometheus'},
+    [pscustomobject]@{timestamp=1420L;stock=0L;source='prometheus'}
+)
+$realMicroClassified=@(Resolve-StockObservationPlausibility -Rows $realMicroCycle -ExpectedPollIntervalSeconds 60)
+$realMicroPositive=@($realMicroClassified|Where-Object{[long]$_.timestamp -eq 1360L})[0]
+Assert-True ([bool]$realMicroPositive.calculationEligible) 'A short but substantial replenishment above 25% of normal restock quantity must remain eligible as a real micro-cycle.'
 
 $recoveredTiny=@(
     [pscustomobject]@{timestamp=100L;stock=0L;source='prometheus'},
