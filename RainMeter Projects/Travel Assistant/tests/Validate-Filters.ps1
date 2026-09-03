@@ -65,6 +65,23 @@ if(Test-Path -LiteralPath $files.UnifiedPopup){
  $text=Get-Content -LiteralPath $files.UnifiedPopup -Raw
  if(-not$text.Contains('$ColorAccent=[System.Drawing.Color]::FromArgb(126,190,73)')){Fail 'Unified filter popup accent must use Torn lime.'}
  foreach($token in @(
+  '$ColorPanel=[System.Drawing.Color]::FromArgb(17,17,17)',
+  '$ColorCard=[System.Drawing.Color]::FromArgb(32,32,32)',
+  '$ColorInput=[System.Drawing.Color]::FromArgb(0,0,0)',
+  '$ColorBorder=[System.Drawing.Color]::FromArgb(64,64,64)',
+  '$ColorText=[System.Drawing.Color]::FromArgb(225,225,225)',
+  '$ColorMuted=[System.Drawing.Color]::FromArgb(150,150,150)',
+  '$ColorHover=[System.Drawing.Color]::FromArgb(38,38,38)',
+  '$Chip.BackColor=$ColorAccent',
+  '$Chip.ForeColor=[System.Drawing.Color]::Black',
+  '$chip.FlatAppearance.BorderSize=$(if($ShowBorder){1}else{0})',
+  '-ShowBorder $false'
+ )){if(-not$text.Contains($token)){Fail "Unified filter popup main-UI palette/selection contract missing '$token'."}}
+ foreach($retiredColor in @(
+  'FromArgb(24,27,31)','FromArgb(31,35,40)','FromArgb(20,23,27)',
+  'FromArgb(58,64,73)','FromArgb(222,226,232)','FromArgb(145,152,164)','FromArgb(37,46,55)'
+ )){if($text.Contains($retiredColor)){Fail "Unified filter popup retains retired blue-gray color '$retiredColor'."}}
+ foreach($token in @(
   'COUNTRIES','CATEGORIES','ITEMS',"@('short','medium','long')","short='S';medium='M';long='L'",
   'Get-CountryFlagImage','@Resources\Images\Flags','CheckedListBox','TextChanged','Set-BandSelection','Set-AllCountries','Set-AllCategories',
   'Get-ScopedCatalogRows','Test-ItemInCurrentScope','countryIds',"New-ActionLink 'ON'","New-ActionLink 'OFF'",
