@@ -20,6 +20,170 @@ function Get-CycleForecastRobustSigma {
     return [long][Math]::Round([double]$mad * 1.4826)
 }
 
+$script:CycleSpuriousRegistryLoaded = $false
+$script:CycleSpuriousRegistry = $null
+$script:CycleSpuriousRegistryPath = Join-Path ((Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path) 'data\runtime\spurious-transitions.json'
+
+function Get-CycleFilterProperty {
+    param([object]$Object,[string]$Name)
+    if($null -eq $Object){return $null}
+    $property=$Object.PSObject.Properties[$Name]
+    if($null -eq $property){return $null}
+    return $property.Value
+}
+
+function Set-CycleFilterProperty {
+    param([object]$Object,[string]$Name,[object]$Value)
+    if($null -eq $Object){return}
+    $property=$Object.PSObject.Properties[$Name]
+    if($null -eq $property){$Object|Add-Member NoteProperty $Name $Value}
+    else{$property.Value=$Value}
+}
+
+function Get-StockObservationEvidenceAt {
+    param([object]$Row)
+    $at=[long](Get-CycleFilterProperty $Row 'sourceTimestamp')
+    if($at -le 0){$at=[long](Get-CycleFilterProperty $Row 'timestamp')}
+    return $at
+}
+
+function Test-RecoveredStockObservation {
+    param([object]$Row)
+    $source=([string](Get-CycleFilterProperty $Row 'source')).Trim().ToLowerInvariant()
+    $quality=([string](Get-CycleFilterProperty $Row 'transitionBoundaryQuality')).Trim().ToLowerInvariant()
+    return ($quality -eq 'recovered' -or $source -in @('torn_intel_history_recovery','history_recovery_live_bridge'))
+}
+
+function Resolve-StockObservationPlausibility {
+    param(
+        [object[]]$Rows,
+        [int]$ExpectedPollIntervalSeconds=60,
+        [double]$ContinuationToleranceFraction=0.05,
+        [double]$TinyRestockFraction=0.25,
+        [long]$AbsoluteTinyRestockUnits=10L
+    )
+
+    $poll=[Math]::Max(15,$ExpectedPollIntervalSeconds)
+    $maximumTransientSeconds=[long][Math]::Max(150,(2*$poll)+30)
+    $ordered=@($Rows|Where-Object{$null -ne $_}|Sort-Object @{Expression={Get-StockObservationEvidenceAt $_}})
+    if($ordered.Count -eq 0){return @()}
+
+    # Collapse duplicate timestamp/stock rows for plausibility classification only.
+    $deduped=New-Object System.Collections.Generic.List[object]
+    $seen=@{}
+    foreach($row in $ordered){
+        $at=Get-StockObservationEvidenceAt $row
+        $stock=[long](Get-CycleFilterProperty $row 'stock')
+        if($at -le 0 -or $stock -lt 0){continue}
+        $identity=([string]$at+':'+[string]$stock)
+        if($seen.ContainsKey($identity)){continue}
+        $seen[$identity]=$true
+        Set-CycleFilterProperty -Object $row -Name 'calculationEligible' -Value $true
+        Set-CycleFilterProperty -Object $row -Name 'transitionCalculationEligible' -Value $true
+        Set-CycleFilterProperty -Object $row -Name 'transitionPlausibility' -Value 'normal'
+        $deduped.Add($row)
+    }
+    $ordered=@($deduped.ToArray())
+    if($ordered.Count -lt 3){return $ordered}
+
+    # Estimate a normal restock quantity only from obvious zero -> positive jumps.
+    $candidateRestocks=New-Object System.Collections.Generic.List[long]
+    for($i=1;$i -lt $ordered.Count;$i++){
+        $prevStock=[long](Get-CycleFilterProperty $ordered[$i-1] 'stock')
+        $stock=[long](Get-CycleFilterProperty $ordered[$i] 'stock')
+        if($prevStock -eq 0 -and $stock -gt 0 -and -not(Test-RecoveredStockObservation $ordered[$i])){
+            $candidateRestocks.Add($stock)
+        }
+    }
+    $medianRestock=if($candidateRestocks.Count -ge 2){Get-CycleForecastMedian -Values ([long[]]$candidateRestocks.ToArray())}else{0L}
+    $tinyThreshold=if($medianRestock -gt 0){
+        [long][Math]::Max($AbsoluteTinyRestockUnits,[Math]::Floor($medianRestock*[Math]::Max(0.05,[Math]::Min(0.5,$TinyRestockFraction))))
+    }else{$AbsoluteTinyRestockUnits}
+
+    for($i=1;$i -lt ($ordered.Count-1);$i++){
+        $prev=$ordered[$i-1];$cur=$ordered[$i];$next=$ordered[$i+1]
+        $prevAt=Get-StockObservationEvidenceAt $prev
+        $curAt=Get-StockObservationEvidenceAt $cur
+        $nextAt=Get-StockObservationEvidenceAt $next
+        $prevStock=[long](Get-CycleFilterProperty $prev 'stock')
+        $curStock=[long](Get-CycleFilterProperty $cur 'stock')
+        $nextStock=[long](Get-CycleFilterProperty $next 'stock')
+        if($prevAt -le 0 -or $curAt -le $prevAt -or $nextAt -le $curAt){continue}
+        if(($nextAt-$curAt) -gt $maximumTransientSeconds){continue}
+        if((Test-RecoveredStockObservation $cur) -or (Test-RecoveredStockObservation $next)){continue}
+
+        # Positive -> isolated zero -> positive is a provider dropout when the
+        # returning positive quantity continues the old depletion trajectory rather
+        # than jumping upward like a real replenishment.
+        if($prevStock -gt 0 -and $curStock -eq 0 -and $nextStock -gt 0){
+            $tolerance=[long][Math]::Max(5,[Math]::Ceiling($prevStock*[Math]::Max(0.0,$ContinuationToleranceFraction)))
+            if($nextStock -le ($prevStock+$tolerance)){
+                Set-CycleFilterProperty -Object $cur -Name 'calculationEligible' -Value $false
+                Set-CycleFilterProperty -Object $cur -Name 'transitionCalculationEligible' -Value $false
+                Set-CycleFilterProperty -Object $cur -Name 'transitionPlausibility' -Value 'spurious_zero'
+                Set-CycleFilterProperty -Object $next -Name 'transitionCalculationEligible' -Value $false
+                Set-CycleFilterProperty -Object $next -Name 'transitionPlausibility' -Value 'spurious_zero_partner'
+                continue
+            }
+        }
+
+        # Zero -> tiny positive -> zero is not promoted to a real micro-cycle when
+        # the temporary quantity is far below the market's normal replenishment.
+        # With no normal-restock baseline, only an absolute <=10 unit blip qualifies.
+        if($prevStock -eq 0 -and $curStock -gt 0 -and $nextStock -eq 0 -and $curStock -le $tinyThreshold){
+            Set-CycleFilterProperty -Object $cur -Name 'calculationEligible' -Value $false
+            Set-CycleFilterProperty -Object $cur -Name 'transitionCalculationEligible' -Value $false
+            Set-CycleFilterProperty -Object $cur -Name 'transitionPlausibility' -Value 'spurious_restock'
+            Set-CycleFilterProperty -Object $next -Name 'transitionCalculationEligible' -Value $false
+            Set-CycleFilterProperty -Object $next -Name 'transitionPlausibility' -Value 'spurious_restock_partner'
+        }
+    }
+    return $ordered
+}
+
+function Get-PlausibilityFilteredStockObservations {
+    param([object[]]$Rows,[int]$ExpectedPollIntervalSeconds=60)
+    $classified=@(Resolve-StockObservationPlausibility -Rows $Rows -ExpectedPollIntervalSeconds $ExpectedPollIntervalSeconds)
+    return @($classified|Where-Object{[bool](Get-CycleFilterProperty $_ 'calculationEligible')})
+}
+
+function Get-CycleSpuriousTransitionRegistry {
+    if($script:CycleSpuriousRegistryLoaded){return $script:CycleSpuriousRegistry}
+    $script:CycleSpuriousRegistryLoaded=$true
+    if(-not(Test-Path -LiteralPath $script:CycleSpuriousRegistryPath)){return $null}
+    try{
+        $raw=[System.IO.File]::ReadAllText($script:CycleSpuriousRegistryPath)
+        if(-not[string]::IsNullOrWhiteSpace($raw)){$script:CycleSpuriousRegistry=$raw|ConvertFrom-Json}
+    }catch{$script:CycleSpuriousRegistry=$null}
+    return $script:CycleSpuriousRegistry
+}
+
+function Test-CycleSuppressedByObservationPlausibility {
+    param([object]$Cycle)
+    if($null -eq $Cycle){return $false}
+    $source=([string](Get-CycleFilterProperty $Cycle 'source')).Trim().ToLowerInvariant()
+    if($source -eq 'torn_intel_history_recovery'){return $false}
+    $country=([string](Get-CycleFilterProperty $Cycle 'country')).Trim().ToLowerInvariant()
+    $itemId=[int](Get-CycleFilterProperty $Cycle 'itemId')
+    if([string]::IsNullOrWhiteSpace($country) -or $itemId -le 0){return $false}
+    $registry=Get-CycleSpuriousTransitionRegistry
+    if($null -eq $registry -or -not$registry.PSObject.Properties['markets']){return $false}
+    $marketKey=$country+':'+[string]$itemId
+    $marketProperty=$registry.markets.PSObject.Properties[$marketKey]
+    if($null -eq $marketProperty -or $null -eq $marketProperty.Value){return $false}
+    $suppressed=@{}
+    foreach($at in @((Get-CycleFilterProperty $marketProperty.Value 'transitionTimestamps'))){
+        $value=[long]$at
+        if($value -gt 0){$suppressed[[string]$value]=$true}
+    }
+    if($suppressed.Count -eq 0){return $false}
+    foreach($name in @('restockAt','soldOutAt','previousSoldOutAt')){
+        $at=[long](Get-CycleFilterProperty $Cycle $name)
+        if($at -gt 0 -and $suppressed.ContainsKey([string]$at)){return $true}
+    }
+    return $false
+}
+
 function Get-CycleBoundaryPolicy {
     param([object[]]$Cycles,[int]$ExpectedPollIntervalSeconds = 60)
 
@@ -78,6 +242,7 @@ function Test-CycleForecastBoundaryEvidence {
         return $false
     }
 
+    if (Test-CycleSuppressedByObservationPlausibility -Cycle $Cycle) { return $false }
     if ($Cycle.PSObject.Properties['forecastEligible'] -and -not [bool]$Cycle.forecastEligible) { return $false }
     if ($Cycle.PSObject.Properties['availabilityEligible'] -and -not [bool]$Cycle.availabilityEligible) { return $false }
     if ($Cycle.PSObject.Properties['restockDelayEligible'] -and -not [bool]$Cycle.restockDelayEligible) { return $false }
