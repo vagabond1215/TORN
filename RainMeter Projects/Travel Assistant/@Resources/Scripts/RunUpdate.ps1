@@ -469,10 +469,6 @@ try {
     # current-cycle/Safe/Best guidance retains presentation precedence.
     Invoke-FailSoftScript -Path $MultiCycleChanceBridge -ErrorPath $MultiCycleChanceBridgeErrorFile
 
-    # Record the currently modeled hit probability independently from observed
-    # stock history. This forecast-only journal is retained for the 8-hour graph.
-    Invoke-FailSoftScript -Path $ChanceHistory -ErrorPath $ChanceHistoryErrorFile
-
     # Classify price variability from recent recurring evidence rather than one old
     # anomaly. This controls card cost coloring and whether Take gets a 5% buffer.
     Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
@@ -488,7 +484,6 @@ try {
         }
         Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
         Invoke-FailSoftScript -Path $MultiCycleChanceBridge -ErrorPath $MultiCycleChanceBridgeErrorFile
-        Invoke-FailSoftScript -Path $ChanceHistory -ErrorPath $ChanceHistoryErrorFile
         Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
     }
 
@@ -531,10 +526,12 @@ try {
     try { Remove-OldUiStateGenerations }
     finally { Complete-UpdateStageTimer -Timer $cleanupTimer }
 
-    # Resolve older flight-aligned probabilities only after the immutable UI and
-    # heartbeat are safely published. Accuracy bookkeeping is local/fail-soft and
-    # cannot hold the visible update hostage.
+    # Journal the finalized modeled hit probability and resolve older flight-
+    # aligned forecasts only after the immutable UI and heartbeat are safely
+    # published. Graph/accuracy bookkeeping is local/fail-soft and cannot hold the
+    # visible update hostage.
     if ($Action -eq 'Update') {
+        Invoke-FailSoftScript -Path $ChanceHistory -ErrorPath $ChanceHistoryErrorFile
         Invoke-FailSoftScript -Path $ResolveChanceHistory -ErrorPath $ResolveChanceHistoryErrorFile
     }
 
