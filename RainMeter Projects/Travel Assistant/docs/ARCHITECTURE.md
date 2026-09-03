@@ -528,6 +528,20 @@ The occupancy and phase-dispersion values are diagnostics/baselines only. The di
 
 Time-of-day conditioning and current-price-conditioned weighting are intentionally not part of this first production bridge. Historical foreign price remains joint with each resampled cycle, preserving observed price/duration association without asserting a causal or current-price effect. Those conditioning variables require walk-forward/prospective evidence before promotion.
 
+### Current-stock slow-depletion safety fallback
+
+The authoritative legacy window refiner has one deliberately narrow escape hatch for long-lived current stock whose restock boundary was missed. It uses only the current uninterrupted positive-stock run from retained observations. Sellout-censored intervals, zero states, positive jumps/restocks, and long source gaps reset or exclude depletion evidence.
+
+Eligibility requires fresh positive stock, a future physically feasible arrival, at least three uncensored `observed_nonzero` depletion samples spanning at least 600 seconds, and a conservative runway gate. The observed rate is the 90th percentile of current-run depletion, multiplied by 1.5 and floored at 60 units/hour. The resulting runway must be at least `max(2 * arrival_horizon, arrival_horizon + 1800s)`. When true, the state becomes `current_stock_safe` and the card says `Safe Window Open`. No probability is emitted (`ProbabilityValue=-1`), no completed cycle is created, and recurring Safe/Best evidence is unchanged.
+
+### Flight-aligned chance history and retrospective truth
+
+After visible UI/heartbeat publication, `ChanceHistory.ps1` journals the finalized modeled hit probability for each projected market at most once per minute. The ignored `chance-history.jsonl` retains eight hours and stores `forecastAt`, physically feasible `departureAt` / `arrivalAt`, configured one-way flight seconds, travel mode, model/source, target quantity, and the probability. Long-flight markets prefer the eligible multi-cycle `pAnyStock`; otherwise the legacy arrival probability is recorded when it represents a genuinely future travel arrival.
+
+`ResolveChanceHistory.ps1` runs afterward and never modifies the frozen forecast. Once an arrival has passed, it reuses `StochasticCalibration.ps1` confirmed-outcome semantics to label any-stock truth only from unambiguous later evidence. Resolved rows are retained for the same eight-hour departure window in `resolved-arrival-history.jsonl`; `chance-accuracy.json` reports Brier, root-Brier, log loss, mean absolute outcome error, classification accuracy at 0.5, mean predicted probability, observed hit rate, and calibration gap overall/per market/per source. This is strict prospective replay: future evidence labels the outcome only.
+
+The inline renderer adds a separate hindsight diagnostic that requires no model replay. It shifts the actual retained stock step-function left by the configured one-way flight duration, yielding a binary realized-hit waveform in departure-time coordinates. Top means a departure then would later have encountered stock; bottom means it would have missed. This trace shares the probability overlay's implicit 0..100% vertical scale, is visually dotted/faint, and carries the same polling uncertainty as the observed stock graph. It is an oracle/realized diagnostic only; it must never enter observations, cycles, forecast fitting, or retrospective “as-known-then” inputs.
+
 ### Prospective stochastic calibration
 
 `StochasticCalibration.ps1` runs after `StochasticForecast.ps1` and remains
