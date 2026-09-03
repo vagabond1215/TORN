@@ -4,6 +4,7 @@ local generatedDir = nil
 local flagDir = nil
 local flagMaskDir = nil
 local itemImageDir = nil
+local graphVisualPath = nil
 local pollInterval = 60
 local failureRetryInterval = 15
 local failureRetryArmed = false
@@ -15,6 +16,8 @@ local pendingSortMode = nil
 local lastSortMode = nil
 local pendingTripBands = nil
 local activeTripBands = { short=true, medium=true, long=true }
+local activeGraphVisuals = { hindsight=true, chance=true, window=true, stock=true }
+local lastGraphVisualUpdatedAt = ''
 local expandedKey = ''
 local expandedRow = 0
 local expandedDetailKey = ''
@@ -325,6 +328,31 @@ local function applySortColors(mode)
     setVariable('SortUpcomingColor', mode == 'upcoming' and active or inactive)
     setVariable('SortGrossColor', mode == 'gross' and active or inactive)
     setVariable('SortProfitHourColor', mode == 'profit_per_hour' and active or inactive)
+end
+
+local function applyGraphVisualColors()
+    local active = '126,190,73,255'
+    local inactive = '150,150,150,255'
+    setVariable('GraphHindsightColor', activeGraphVisuals.hindsight and active or inactive)
+    setVariable('GraphChanceColor', activeGraphVisuals.chance and active or inactive)
+    setVariable('GraphWindowColor', activeGraphVisuals.window and active or inactive)
+    setVariable('GraphStockColor', activeGraphVisuals.stock and active or inactive)
+end
+
+local function syncGraphVisualPreferences(force)
+    if graphVisualPath == nil or graphVisualPath == '' then
+        applyGraphVisualColors()
+        return
+    end
+    local values = readKv(graphVisualPath)
+    local updatedAt = safeText(values.UpdatedAt, '')
+    if not force and updatedAt ~= '' and updatedAt == lastGraphVisualUpdatedAt then return end
+    if values.GraphHindsightOn ~= nil then activeGraphVisuals.hindsight = number(values.GraphHindsightOn) == 1 end
+    if values.GraphChanceOn ~= nil then activeGraphVisuals.chance = number(values.GraphChanceOn) == 1 end
+    if values.GraphWindowOn ~= nil then activeGraphVisuals.window = number(values.GraphWindowOn) == 1 end
+    if values.GraphStockOn ~= nil then activeGraphVisuals.stock = number(values.GraphStockOn) == 1 end
+    if updatedAt ~= '' then lastGraphVisualUpdatedAt = updatedAt end
+    applyGraphVisualColors()
 end
 
 local function countryIdFromKey(key)
@@ -1199,11 +1227,13 @@ function Initialize()
     flagDir = SKIN:ReplaceVariables('#@#Images\\Flags\\')
     flagMaskDir = SKIN:ReplaceVariables('#@#Images\\UI\\')
     itemImageDir = generatedDir .. 'Items\\'
+    graphVisualPath = generatedDir .. 'graph-visuals.kv'
     pollInterval = math.floor(configuredPoll)
     failureRetryInterval = math.floor(configuredFailureRetry)
     nextPollAt = os.time() + pollInterval
 
     local initial = readState()
+    syncGraphVisualPreferences(true)
     activeTripBands = projectedTripBands(initial)
     if initial.OpportunityCount ~= nil then
         lastProjectionData = copyProjectionFields(initial)
@@ -1277,6 +1307,33 @@ function SetSortMode(mode)
     refreshPresentation()
 end
 
+function ToggleGraphVisual(name)
+    local value = safeText(name, '')
+    local key = ''
+    if value == 'Hindsight' then key = 'hindsight'
+    elseif value == 'Chance' then key = 'chance'
+    elseif value == 'Window' then key = 'window'
+    elseif value == 'Stock' then key = 'stock'
+    else return end
+
+    activeGraphVisuals[key] = not activeGraphVisuals[key]
+    applyGraphVisualColors()
+    deferPolling(2)
+
+    setVariable('GraphVisualAction', 'Toggle')
+    setVariable('GraphVisualValue', value)
+    SKIN:Bang('!UpdateMeasure', 'MeasureGraphVisualAction')
+    SKIN:Bang('!CommandMeasure', 'MeasureGraphVisualAction', 'Run')
+    refreshPresentation()
+end
+
+function GraphVisualPreferenceChanged()
+    syncGraphVisualPreferences(true)
+    setVariable('GraphVisualAction', 'Read')
+    if expandedKey ~= '' then requestInlineGraph(expandedKey) end
+    refreshPresentation()
+end
+
 function ToggleCardExpanded(index)
     if lastDisplayedData == nil then return end
     local row = math.floor(number(index))
@@ -1340,6 +1397,7 @@ end
 
 function Update()
     local now = os.time()
+    syncGraphVisualPreferences(false)
     local baseData = stabilizeProjection(readState())
     lastRenderData = baseData
 
@@ -1383,6 +1441,7 @@ function Update()
     updateHeartbeatText(data, now)
     updateFilters(data, activeTripBands)
     applySortColors(renderMode)
+    applyGraphVisualColors()
     updateOpportunities(data)
     return 0
 end
