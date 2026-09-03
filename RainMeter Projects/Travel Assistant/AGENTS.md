@@ -390,6 +390,7 @@ CycleAnalytics
 TrendForecast
 ResalePriority
 ResaleQueue              # <= 1 market request
+HistoryRecovery         # optional post-publication forensic repair; <=1 approved-key history request/min
 ```
 
 `OptimalRoute.ps1` is helper-only local infrastructure for opportunity forecasting/economics tests; its standalone OPTIMAL route/UI stage is retired. The old independent-card `VisibleItems.ps1` and card-pinning path are removed. Inline graph rendering is handled separately by `RenderInlineGraph.ps1`.
