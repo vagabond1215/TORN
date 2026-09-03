@@ -351,13 +351,13 @@ function Get-FilterRefreshPricingItemIds {
 }
 
 function Invoke-FilterRefreshPricing {
-    if (-not (Test-Path -LiteralPath $ResaleQueue)) { return }
+    if (-not (Test-Path -LiteralPath $ResaleQueue)) { return $false }
     $itemIds = [int[]]@(Get-FilterRefreshPricingItemIds)
-    if ($itemIds.Count -eq 0) { return }
+    if ($itemIds.Count -eq 0) { return $false }
 
     if (Test-Path -LiteralPath $ResalePriority) {
         $priorityTimer = New-UpdateStageTimer -Name 'filter-resale-priority'
-        try { & $ResalePriority }
+        try { & $ResalePriority | Out-Null }
         finally { Complete-UpdateStageTimer -Timer $priorityTimer }
     }
 
@@ -367,7 +367,7 @@ function Invoke-FilterRefreshPricing {
     $attemptLimit = [Math]::Min(40, $itemIds.Count)
     for ($attemptIndex = 0; $attemptIndex -lt $attemptLimit; $attemptIndex++) {
         $queueTimer = New-UpdateStageTimer -Name 'filter-resale-queue'
-        try { & $ResaleQueue -Force -CandidateItemIds $itemIds }
+        try { & $ResaleQueue -Force -CandidateItemIds $itemIds | Out-Null }
         finally { Complete-UpdateStageTimer -Timer $queueTimer }
 
         try {
@@ -376,6 +376,7 @@ function Invoke-FilterRefreshPricing {
             if ($status -in @('IDLE_FRESH_OR_BACKOFF','NO_API_KEY','NO_ACTIVE_ITEMS','NO_MATCHING_CANDIDATES')) { break }
         } catch { break }
     }
+    return $true
 }
 
 try {
@@ -474,17 +475,20 @@ try {
     Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
 
     if ($Action -eq 'RefreshFilters') {
-        Invoke-FilterRefreshPricing
+        $filterPricingAttempted=[bool](Invoke-FilterRefreshPricing)
 
-        # Recompute after the targeted MV refresh so newly enabled items can enter
-        # this same published generation instead of waiting for the next minute poll.
-        Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
-        if (Test-Path -LiteralPath $OpportunityStateErrorFile) {
-            throw 'OpportunityState refresh failed; refusing to publish pre-refresh opportunities.'
+        # Only a targeted resale-price pass can change the economics after the first
+        # projection. Warm-cache filter saves publish immediately from that first pass
+        # instead of repeating the full opportunity/window/refiner stack.
+        if($filterPricingAttempted){
+            Invoke-FailSoftScript -Path $OpportunityState -ErrorPath $OpportunityStateErrorFile
+            if (Test-Path -LiteralPath $OpportunityStateErrorFile) {
+                throw 'OpportunityState refresh failed; refusing to publish pre-refresh opportunities.'
+            }
+            Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
+            Invoke-FailSoftScript -Path $MultiCycleChanceBridge -ErrorPath $MultiCycleChanceBridgeErrorFile
+            Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
         }
-        Invoke-FailSoftScript -Path $WindowPlan -ErrorPath $WindowPlanErrorFile
-        Invoke-FailSoftScript -Path $MultiCycleChanceBridge -ErrorPath $MultiCycleChanceBridgeErrorFile
-        Invoke-FailSoftScript -Path $PriceVariationRefiner -ErrorPath $PriceVariationRefinerErrorFile
     }
 
     # OpportunityState must always leave an explicit projection, even when the
