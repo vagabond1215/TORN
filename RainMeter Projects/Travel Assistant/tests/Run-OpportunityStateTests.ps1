@@ -112,6 +112,26 @@ Assert-Equal ([long]$summary.averageDelaySeconds) 39600L 'Lightweight OOS estima
 Assert-Equal ([long]$summary.earliestDelaySeconds) 36000L 'Historical early restock should use the shortest recent verified delay.'
 Assert-Equal ([long]$summary.latestDelaySeconds) 43200L 'Historical late restock should use the longest recent verified delay.'
 
+
+# An OoS-derived estimate is valid only while that sellout remains the latest
+# observed phase. A later positive snapshot or active restock invalidates it even
+# after the stock source ages into forecast-only mode.
+$unresolvedDestination=[pscustomobject]@{
+    lastSellOutAt=1000L
+    lastSellOutBoundaryQuality='observed'
+    activeCycle=$null
+}
+Assert-True (Test-OpportunityUnresolvedOosPhase -DestinationState $unresolvedDestination -ObservedStock 0L -ObservedAt 1300L) 'Current zero stock after a verified OoS should keep the OoS phase unresolved.'
+Assert-True (Test-OpportunityUnresolvedOosPhase -DestinationState $unresolvedDestination -ObservedStock 50L -ObservedAt 900L) 'A positive snapshot older than the sellout must not invalidate the newer OoS phase.'
+Assert-True (-not (Test-OpportunityUnresolvedOosPhase -DestinationState $unresolvedDestination -ObservedStock 50L -ObservedAt 1300L)) 'A later positive stock observation must invalidate the preceding OoS estimate even if that snapshot later becomes stale.'
+
+$restockedDestination=[pscustomobject]@{
+    lastSellOutAt=1000L
+    lastSellOutBoundaryQuality='observed'
+    activeCycle=[pscustomobject]@{restockAt=1200L;restockQuantity=5000L}
+}
+Assert-True (-not (Test-OpportunityUnresolvedOosPhase -DestinationState $restockedDestination -ObservedStock 0L -ObservedAt 1300L)) 'A later reconciled restock must supersede the preceding OoS phase regardless of current forecast-only stock handling.'
+
 $oldRuntimeCycleFile=$RuntimeCycleFile
 $oldSeedCycleFile=$SeedCycleFile
 $oldRuntimeObservationFile=$RuntimeObservationFile
