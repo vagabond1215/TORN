@@ -94,7 +94,7 @@ if ($currentMode -notin @('standard','airstrip','wlt','business')) { $currentMod
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Travel Assistant Settings'
-$form.Size = New-Object System.Drawing.Size(560, 650)
+$form.Size = New-Object System.Drawing.Size(560, 760)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -118,6 +118,31 @@ function Style-Input {
     param([System.Windows.Forms.Control]$Control)
     $Control.BackColor = [System.Drawing.Color]::FromArgb(20,23,27)
     $Control.ForeColor = [System.Drawing.Color]::FromArgb(232,235,240)
+}
+function Get-GraphVisualValue {
+    param([string]$Name,[bool]$Default=$true)
+    $value=$Default
+    if($null -ne $base -and $base.PSObject.Properties['graphVisuals']){
+        $visuals=$base.graphVisuals
+        if($null -ne $visuals.PSObject.Properties[$Name]){$value=[bool]$visuals.PSObject.Properties[$Name].Value}
+    }
+    if($null -ne $local -and $local.PSObject.Properties['graphVisuals']){
+        $visuals=$local.graphVisuals
+        if($null -ne $visuals.PSObject.Properties[$Name]){$value=[bool]$visuals.PSObject.Properties[$Name].Value}
+    }
+    return [bool]$value
+}
+
+function New-GraphCheckBox {
+    param([string]$Text,[string]$SettingName,[int]$X,[int]$Y,[int]$W=245)
+    $control=New-Object System.Windows.Forms.CheckBox
+    $control.Text=$Text
+    $control.Location=New-Object System.Drawing.Point($X,$Y)
+    $control.Size=New-Object System.Drawing.Size($W,24)
+    $control.ForeColor=$form.ForeColor
+    $control.Checked=Get-GraphVisualValue -Name $SettingName -Default $true
+    $form.Controls.Add($control)
+    return $control
 }
 
 $title = New-Label -Text 'TRAVEL ASSISTANT' -X 16 -Y 14 -W 280 -H 28
@@ -234,6 +259,18 @@ $summary.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
 $form.Controls.Add($summary)
 $note = New-Label -Text 'Current capacity uses active perks only. Flower/Toy item-specific bonuses do not increase Xanax capacity.' -X 18 -Y 515 -W 515 -H 36
 $note.ForeColor = [System.Drawing.Color]::FromArgb(232,178,72)
+$chartTitle = New-Label -Text 'CHART VISUALS' -X 18 -Y 557 -W 220
+$chartTitle.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
+$chartNote = New-Label -Text 'Stock quantity is always shown. These options control additional graph overlays.' -X 150 -Y 557 -W 385 -H 22
+$chartNote.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+$chartNote.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
+
+$showGridCheck = New-GraphCheckBox -Text 'Grid' -SettingName 'showGrid' -X 18 -Y 582
+$showTransitionsCheck = New-GraphCheckBox -Text 'Restock / OoS markers' -SettingName 'showTransitions' -X 278 -Y 582
+$showChanceCheck = New-GraphCheckBox -Text 'Live Chance to Hit' -SettingName 'showChance' -X 18 -Y 608
+$showHindsightCheck = New-GraphCheckBox -Text 'Hindsight departure windows' -SettingName 'showHindsightWindows' -X 278 -Y 608
+$showAccuracyCheck = New-GraphCheckBox -Text 'Forecast accuracy markers' -SettingName 'showAccuracyMarkers' -X 18 -Y 634
+$showTooltipsCheck = New-GraphCheckBox -Text 'Graph tooltips' -SettingName 'showTooltips' -X 278 -Y 634
 
 $script:modeIds = @()
 $script:updatingUi = $false
@@ -444,14 +481,14 @@ $sync.Add_Click({
 
 $save = New-Object System.Windows.Forms.Button
 $save.Text = 'Save'
-$save.Location = New-Object System.Drawing.Point(354,565)
+$save.Location = New-Object System.Drawing.Point(354,680)
 $save.Size = New-Object System.Drawing.Size(82,30)
 $save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255)
 $save.ForeColor = [System.Drawing.Color]::Black
 $form.Controls.Add($save)
 $cancel = New-Object System.Windows.Forms.Button
 $cancel.Text = 'Cancel'
-$cancel.Location = New-Object System.Drawing.Point(446,565)
+$cancel.Location = New-Object System.Drawing.Point(446,680)
 $cancel.Size = New-Object System.Drawing.Size(82,30)
 $form.Controls.Add($cancel)
 $cancel.Add_Click({ $form.Close() })
@@ -464,6 +501,15 @@ $save.Add_Click({
         Set-ObjectProperty -Object $local -Name 'tornApiKey' -Value ([string]$keyBox.Text.Trim())
         Set-ObjectProperty -Object $local -Name 'travelMode' -Value $selectedMode
         Set-ObjectProperty -Object $local -Name 'travelProfile' -Value $preview
+        $graphVisuals=[pscustomobject]@{
+            showGrid=[bool]$showGridCheck.Checked
+            showTransitions=[bool]$showTransitionsCheck.Checked
+            showChance=[bool]$showChanceCheck.Checked
+            showHindsightWindows=[bool]$showHindsightCheck.Checked
+            showAccuracyMarkers=[bool]$showAccuracyCheck.Checked
+            showTooltips=[bool]$showTooltipsCheck.Checked
+        }
+        Set-ObjectProperty -Object $local -Name 'graphVisuals' -Value $graphVisuals
         Write-JsonAtomic -Path $LocalSettingsPath -Value $local
 
         # Re-read immediately so an Ignore List popup opened while Settings was
