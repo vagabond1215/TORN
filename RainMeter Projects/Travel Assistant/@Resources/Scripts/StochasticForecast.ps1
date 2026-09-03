@@ -751,6 +751,7 @@ function Invoke-SFMarketForecast {
         [bool]$EnableAdaptiveGrid=$true,
         [int]$CoarseGridSeconds=900
     )
+    $Observations=@(Get-PlausibilityFilteredStockObservations -Rows $Observations -ExpectedPollIntervalSeconds 60)
     $evidence=@(Select-SFJointCycleEvidence -Cycles $Cycles -AsOf $NowEpoch -Observations $Observations -HalfLifeSeconds $HalfLifeSeconds)
     $candidates=@(Get-SFProperty $Travel 'candidates')
     $sampleCount=$evidence.Count
