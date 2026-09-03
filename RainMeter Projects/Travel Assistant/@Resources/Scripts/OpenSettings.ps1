@@ -94,7 +94,7 @@ if ($currentMode -notin @('standard','airstrip','wlt','business')) { $currentMod
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Travel Assistant Settings'
-$form.Size = New-Object System.Drawing.Size(560, 800)
+$form.Size = New-Object System.Drawing.Size(560, 850)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -272,6 +272,26 @@ $showHindsightCheck = New-GraphCheckBox -Text 'Hindsight departure windows' -Set
 $showAccuracyCheck = New-GraphCheckBox -Text 'Forecast accuracy markers' -SettingName 'showAccuracyMarkers' -X 18 -Y 634
 $showTooltipsCheck = New-GraphCheckBox -Text 'Graph tooltips' -SettingName 'showTooltips' -X 278 -Y 634
 $showRestockBoundsCheck = New-GraphCheckBox -Text 'Restock window bounds' -SettingName 'showRestockWindowBounds' -X 18 -Y 660
+
+New-Label -Text 'Torn Intel recovery key' -X 18 -Y 695 | Out-Null
+$historyKeyBox = New-Object System.Windows.Forms.TextBox
+$historyKeyBox.Location = New-Object System.Drawing.Point(190,692)
+$historyKeyBox.Size = New-Object System.Drawing.Size(280,24)
+$historyKeyBox.UseSystemPasswordChar = $true
+if ($local.PSObject.Properties['tornIntelClientKey']) { $historyKeyBox.Text = [string]$local.tornIntelClientKey }
+Style-Input $historyKeyBox
+$form.Controls.Add($historyKeyBox)
+$showHistoryKey = New-Object System.Windows.Forms.CheckBox
+$showHistoryKey.Text = 'Show'
+$showHistoryKey.Location = New-Object System.Drawing.Point(478,694)
+$showHistoryKey.Size = New-Object System.Drawing.Size(60,22)
+$showHistoryKey.ForeColor = $form.ForeColor
+$showHistoryKey.Add_CheckedChanged({ $historyKeyBox.UseSystemPasswordChar = -not $showHistoryKey.Checked })
+$form.Controls.Add($showHistoryKey)
+$historyKeyNote = New-Label -Text 'Optional approved-client key; used only for missed-transition history recovery after a restock window closes.' -X 190 -Y 717 -W 345 -H 34
+$historyKeyNote.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+$historyKeyNote.ForeColor = [System.Drawing.Color]::FromArgb(145,152,164)
+
 
 $script:modeIds = @()
 $script:updatingUi = $false
@@ -482,14 +502,14 @@ $sync.Add_Click({
 
 $save = New-Object System.Windows.Forms.Button
 $save.Text = 'Save'
-$save.Location = New-Object System.Drawing.Point(354,720)
+$save.Location = New-Object System.Drawing.Point(354,780)
 $save.Size = New-Object System.Drawing.Size(82,30)
 $save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255)
 $save.ForeColor = [System.Drawing.Color]::Black
 $form.Controls.Add($save)
 $cancel = New-Object System.Windows.Forms.Button
 $cancel.Text = 'Cancel'
-$cancel.Location = New-Object System.Drawing.Point(446,720)
+$cancel.Location = New-Object System.Drawing.Point(446,780)
 $cancel.Size = New-Object System.Drawing.Size(82,30)
 $form.Controls.Add($cancel)
 $cancel.Add_Click({ $form.Close() })
@@ -500,6 +520,7 @@ $save.Add_Click({
         $preview = Get-PreviewProfile
         Set-ObjectProperty -Object $local -Name 'schemaVersion' -Value 1
         Set-ObjectProperty -Object $local -Name 'tornApiKey' -Value ([string]$keyBox.Text.Trim())
+        Set-ObjectProperty -Object $local -Name 'tornIntelClientKey' -Value ([string]$historyKeyBox.Text.Trim())
         Set-ObjectProperty -Object $local -Name 'travelMode' -Value $selectedMode
         Set-ObjectProperty -Object $local -Name 'travelProfile' -Value $preview
         $graphVisuals=[pscustomobject]@{
