@@ -109,7 +109,7 @@ function Resolve-StockObservationPlausibility {
         $curStock=[long](Get-CycleFilterProperty $cur 'stock')
         $nextStock=[long](Get-CycleFilterProperty $next 'stock')
         if($prevAt -le 0 -or $curAt -le $prevAt -or $nextAt -le $curAt){continue}
-        if(($nextAt-$curAt) -gt $maximumTransientSeconds){continue}
+        if(($curAt-$prevAt) -gt $maximumTransientSeconds -or ($nextAt-$curAt) -gt $maximumTransientSeconds){continue}
         if((Test-RecoveredStockObservation $cur) -or (Test-RecoveredStockObservation $next)){continue}
 
         # Positive -> isolated zero -> positive is a provider dropout when the
