@@ -389,6 +389,8 @@ end
 local function currentStockSafetyAction(state,statePrefix,now)
     if statePrefix=='' or number(state[statePrefix..'CurrentStockSafetyEligible'])<1 then return nil,nil,nil end
     local stock=number(state[statePrefix..'CurrentStock'])
+    local mode=trim(state[statePrefix..'CurrentStockSafetyMode']):lower()
+    local holdHorizon=number(state[statePrefix..'CurrentStockSafetyMinimumHoldHorizonSeconds'])
     local samples=math.floor(number(state[statePrefix..'CurrentStockSafetySampleCount']))
     local span=number(state[statePrefix..'CurrentStockSafetyEvidenceSpanSeconds'])
     local percentileRate=number(state[statePrefix..'CurrentStockSafetyPercentileUnitsPerHour'])
@@ -398,23 +400,32 @@ local function currentStockSafetyAction(state,statePrefix,now)
     local margin=number(state[statePrefix..'CurrentStockSafetyMarginSeconds'])
     local selloutAt=number(state[statePrefix..'CurrentStockSafetySelloutEstimateAt'])
     local reason=trim(state[statePrefix..'CurrentStockSafetyReason'])
+    local holding=(mode=='low-depletion-hold' or mode=='far-sellout')
 
     local nl='#CRLF#'
     local lines={
-        'Current-stock safety fallback',
+        holding and 'Verified-stock holding fallback' or 'Current-stock safety fallback',
         'Current Stock: '..tostring(math.floor(stock)),
-        'Time to Arrival: '..formatDuration(arrival),
-        'Conservative Runway: '..formatDuration(runway),
-        'Arrival Margin: '..formatDuration(margin),
-        'Observed Depletion Samples: '..tostring(samples)..' across '..formatDuration(span)
+        'Time to Arrival: '..formatDuration(arrival)
     }
-    if percentileRate>0 then table.insert(lines,'90th-percentile observed depletion: '..string.format('%.1f',percentileRate)..' units/hr') end
-    if guardedRate>0 then table.insert(lines,'Guarded depletion rate: '..string.format('%.1f',guardedRate)..' units/hr') end
-    if selloutAt>now then table.insert(lines,'Conservative Sellout Estimate: '..formatMoment(selloutAt,now)) end
+    if holdHorizon>0 then table.insert(lines,'Adaptive Hold Gate: '..formatDuration(holdHorizon)..' (max 6h / 2x arrival horizon)') end
+    if runway>0 then table.insert(lines,(holding and 'Stress/Projected Runway: ' or 'Conservative Runway: ')..formatDuration(runway)) end
+    if margin>0 then table.insert(lines,'Arrival Margin: '..formatDuration(margin)) end
+    if samples>0 then table.insert(lines,'Evidence Samples: '..tostring(samples)..' across '..formatDuration(span)) end
+    if percentileRate>0 then
+        local label=(mode=='low-depletion-hold') and 'Net observed depletion: ' or '90th-percentile observed depletion: '
+        table.insert(lines,label..string.format('%.1f',percentileRate)..' units/hr')
+    end
+    if guardedRate>0 then
+        local label=(mode=='low-depletion-hold') and 'Stress depletion rate: ' or 'Guarded depletion rate: '
+        table.insert(lines,label..string.format('%.1f',guardedRate)..' units/hr')
+    end
+    if selloutAt>now then table.insert(lines,'Projected Sellout: '..formatMoment(selloutAt,now)) end
     if reason~='' then table.insert(lines,'Basis: '..reason) end
-    table.insert(lines,'The current restock boundary is not required for this direct stock-runway check.')
-    table.insert(lines,'No hit percentage is fabricated; recurring Safe/Best evidence remains unchanged.')
-    return 'Safe Window Open','',table.concat(lines,nl)
+    if mode=='low-depletion-hold' then table.insert(lines,'A precise OoS point is intentionally not claimed because depletion is too low/flat for a stable regression.') end
+    table.insert(lines,'This fallback is used only when the primary window guidance is non-informative.')
+    table.insert(lines,'No hit percentage is fabricated; current-cycle, Safe/Best, and multi-cycle evidence retain priority.')
+    return holding and 'STOCK HOLDING' or 'Safe Window Open','',table.concat(lines,nl)
 end
 
 local function multiCycleChanceAction(state,statePrefix,flightSeconds,now)
@@ -579,6 +590,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         if dataQuality=='collecting' then
             local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
             if multiAction~=nil then return multiAction,multiChance,multiTooltip end
+            local stockAction,stockChance,stockTooltip=currentStockSafetyAction(state,statePrefix,now)
+            if stockAction~=nil then return stockAction,stockChance,stockTooltip end
             local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)
             if avgAction~=nil then return avgAction,avgChance,avgTooltip end
             return 'Collecting Data: See Weav3r','',formatCollectingTooltip(dataQualityReason)
@@ -596,9 +609,11 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         -- to the multi-cycle arrival probability.
         local legacyAction,legacyChance,legacyTooltip=homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,now)
         local lowerLegacy=trim(legacyAction):lower()
-        if lowerLegacy:find('collecting data',1,true)~=nil or lowerLegacy=='next cycle unavailable' or lowerLegacy=='window closed.' then
+        if lowerLegacy:find('collecting data',1,true)~=nil or lowerLegacy=='next cycle unavailable' or lowerLegacy=='window closed.' or lowerLegacy=='wait data' then
             local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
             if multiAction~=nil then return multiAction,multiChance,multiTooltip end
+            local stockAction,stockChance,stockTooltip=currentStockSafetyAction(state,statePrefix,now)
+            if stockAction~=nil then return stockAction,stockChance,stockTooltip end
             local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)
             if avgAction~=nil then return avgAction,avgChance,avgTooltip end
         end
