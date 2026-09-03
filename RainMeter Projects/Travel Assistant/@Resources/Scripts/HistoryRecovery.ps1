@@ -1,6 +1,7 @@
 param(
     [int]$MinimumAttemptIntervalSeconds = 60,
     [int]$FailureBackoffSeconds = 900,
+    [int]$NoEvidenceRetrySeconds = 900,
     [int]$MaximumHistoryHours = 12,
     [switch]$SkipMain
 )
@@ -179,6 +180,7 @@ New-Item -ItemType Directory -Force -Path $RuntimeDir|Out-Null
 $now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 if($MinimumAttemptIntervalSeconds -lt 60){$MinimumAttemptIntervalSeconds=60}
 if($FailureBackoffSeconds -lt 300){$FailureBackoffSeconds=300}
+if($NoEvidenceRetrySeconds -lt 300){$NoEvidenceRetrySeconds=300}
 if($MaximumHistoryHours -lt 1){$MaximumHistoryHours=1};if($MaximumHistoryHours -gt 48){$MaximumHistoryHours=48}
 $state=Ensure-RecoveryState
 $key=Get-RecoveryClientKey
@@ -206,6 +208,7 @@ foreach($marketProperty in @($engine.observedMarkets.PSObject.Properties)){
     if($null -eq $summary -or [int]$summary.sampleCount -lt 2){continue}
     $windowClose=$lastOos+[long]$summary.averageDelaySeconds+[long]$summary.varianceSeconds
     if($windowClose -le 0 -or $now -lt ($windowClose+60L)){continue}
+    if(($now-$lastOos) -gt ([long]$MaximumHistoryHours*3600L)){continue}
 
     # A currently positive market proves this expected restock was observed on our
     # live path. Recovery is for a restock that may have appeared and sold out
@@ -213,8 +216,11 @@ foreach($marketProperty in @($engine.observedMarkets.PSObject.Properties)){
     if([long](Get-RecoveryProperty $market 'lastStock') -gt 0){continue}
 
     $attempt=Get-RecoveryAttempt -State $state -MarketKey $marketKey -Create
-    if([long]$attempt.anchorAt -eq $lastOos -and [string]$attempt.status -in @('RECOVERED','NO_MISSED_TRANSITION')){continue}
-    if([long]$attempt.lastAttemptAt -gt 0 -and ($now-[long]$attempt.lastAttemptAt) -lt $FailureBackoffSeconds -and [string]$attempt.status -eq 'ERROR'){continue}
+    if([long]$attempt.anchorAt -eq $lastOos -and [string]$attempt.status -eq 'RECOVERED'){continue}
+    if([long]$attempt.anchorAt -eq $lastOos -and [long]$attempt.lastAttemptAt -gt 0){
+        $retryDelay=if([string]$attempt.status -eq 'NO_MISSED_TRANSITION'){$NoEvidenceRetrySeconds}else{$FailureBackoffSeconds}
+        if([string]$attempt.status -in @('NO_MISSED_TRANSITION','ERROR') -and ($now-[long]$attempt.lastAttemptAt) -lt $retryDelay){continue}
+    }
     $countryCode=Get-RecoveryCountryCode -Countries $countries -CountryId $countryId
     if([string]::IsNullOrWhiteSpace($countryCode)){continue}
     $candidates.Add([pscustomobject]@{
@@ -331,33 +337,34 @@ try{
             $delayMax=[Math]::Max(0L,$restockUpper-$anchorLower)
             $availabilityMin=[Math]::Max(0L,$selloutLower-$restockUpper)
             $availabilityMax=[Math]::Max(0L,$selloutUpper-$restockLower)
-            $eligible=($delayMax -gt 0 -and $availabilityMax -gt 0)
-            if($eligible){
-                $existing=@($cycleMap[[string]$candidate.marketKey].ToArray()|Where-Object{
-                    [long](Get-RecoveryProperty $_ 'restockAt') -eq $restockAt -and [long](Get-RecoveryProperty $_ 'soldOutAt') -eq $soldOutAt
-                })
-                if($existing.Count -eq 0){
-                    $price=[long]$restockPoint.cost
-                    $recoveredCycle=[pscustomobject]@{
-                        schemaVersion=2;country=[string]$candidate.country;itemId=[int]$candidate.itemId
-                        foreignPrice=$price;minimumForeignPrice=$price;maximumForeignPrice=$price
-                        restockAt=$restockAt;restockLowerBoundAt=$restockLower;restockUpperBoundAt=$restockUpper;restockBoundaryQuality='recovered'
-                        restockQuantity=[long]$restockPoint.quantity
-                        soldOutAt=$soldOutAt;soldOutLowerBoundAt=$selloutLower;soldOutUpperBoundAt=$selloutUpper;soldOutBoundaryQuality='recovered'
-                        availabilitySeconds=[Math]::Max(0L,$soldOutAt-$restockAt)
-                        availabilityMinimumSeconds=$availabilityMin;availabilityMaximumSeconds=$availabilityMax;availabilityEligible=($availabilityMax -gt 0)
-                        previousSoldOutAt=[long]$candidate.anchorAt;previousSoldOutLowerBoundAt=$anchorLower;previousSoldOutUpperBoundAt=$anchorUpper
-                        previousSellOutBoundaryQuality=[string]$candidate.anchorQuality
-                        restockDelaySeconds=[Math]::Max(0L,$restockAt-[long]$candidate.anchorAt)
-                        restockDelayMinimumSeconds=$delayMin;restockDelayMaximumSeconds=$delayMax;restockDelayEligible=($delayMax -gt 0)
-                        trendEligible=$eligible;forecastEligible=$eligible;evidenceQuality='bounded_fresh';isRightCensored=$false
-                        selloutDepletionEvidence='sellout_censored'
-                        selloutDemandLowerBoundUnits=$(if($null -ne $beforeSellout){[Math]::Max(0L,[long]$beforeSellout.quantity)}else{0L})
-                        source='torn_intel_history_recovery';recoveredAt=$now;recoveryWindowCloseAt=[long]$candidate.windowCloseAt
-                    }
-                    Append-RecoveryCycle -Cycle $recoveredCycle
-                    $cycleMap[[string]$candidate.marketKey].Add($recoveredCycle)
+            $availabilityEligible=($availabilityMin -gt 0)
+            $restockDelayEligible=($delayMax -gt 0)
+            $forecastEligible=($availabilityEligible -and $restockDelayEligible)
+            $existing=@($cycleMap[[string]$candidate.marketKey].ToArray()|Where-Object{
+                [long](Get-RecoveryProperty $_ 'restockAt') -eq $restockAt -and [long](Get-RecoveryProperty $_ 'soldOutAt') -eq $soldOutAt
+            })
+            if($existing.Count -eq 0){
+                $price=[long]$restockPoint.cost
+                $recoveredCycle=[pscustomobject]@{
+                    schemaVersion=2;country=[string]$candidate.country;itemId=[int]$candidate.itemId
+                    foreignPrice=$price;minimumForeignPrice=$price;maximumForeignPrice=$price
+                    restockAt=$restockAt;restockLowerBoundAt=$restockLower;restockUpperBoundAt=$restockUpper;restockBoundaryQuality='recovered'
+                    restockQuantity=[long]$restockPoint.quantity
+                    soldOutAt=$soldOutAt;soldOutLowerBoundAt=$selloutLower;soldOutUpperBoundAt=$selloutUpper;soldOutBoundaryQuality='recovered'
+                    availabilitySeconds=[Math]::Max(0L,$soldOutAt-$restockAt)
+                    availabilityMinimumSeconds=$availabilityMin;availabilityMaximumSeconds=$availabilityMax;availabilityEligible=$availabilityEligible
+                    previousSoldOutAt=[long]$candidate.anchorAt;previousSoldOutLowerBoundAt=$anchorLower;previousSoldOutUpperBoundAt=$anchorUpper
+                    previousSellOutBoundaryQuality=[string]$candidate.anchorQuality
+                    restockDelaySeconds=$(if($restockDelayEligible){[Math]::Max(0L,$restockAt-[long]$candidate.anchorAt)}else{0L})
+                    restockDelayMinimumSeconds=$delayMin;restockDelayMaximumSeconds=$delayMax;restockDelayEligible=$restockDelayEligible
+                    trendEligible=$forecastEligible;forecastEligible=$forecastEligible
+                    evidenceQuality=$(if($forecastEligible){'bounded_fresh'}else{'incomplete'});isRightCensored=$false
+                    selloutDepletionEvidence='sellout_censored'
+                    selloutDemandLowerBoundUnits=$(if($null -ne $beforeSellout){[Math]::Max(0L,[long]$beforeSellout.quantity)}else{0L})
+                    source='torn_intel_history_recovery';recoveredAt=$now;recoveryWindowCloseAt=[long]$candidate.windowCloseAt
                 }
+                Append-RecoveryCycle -Cycle $recoveredCycle
+                $cycleMap[[string]$candidate.marketKey].Add($recoveredCycle)
             }
         }
     }
