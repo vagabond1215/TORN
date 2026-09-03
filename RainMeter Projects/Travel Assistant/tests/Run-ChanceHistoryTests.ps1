@@ -21,10 +21,10 @@ $state=@{
     ARGENTINATravelSeconds='6660'
 }
 Assert-Equal (Get-CHTravelSeconds -State $state -Country 'argentina') 6660L 'Chance journal must use configured country one-way travel seconds.'
-$home=Get-CHArrivalPlan -State $state -Country 'argentina' -NowEpoch 10000L -OneWaySeconds 6660L
-Assert-True ([bool]$home.feasible) 'Home departure should be prospectively scorable.'
-Assert-Equal ([long]$home.departureAt) 10000L 'Home departure should align with forecast time.'
-Assert-Equal ([long]$home.arrivalAt) 16660L 'Home arrival should equal forecast time plus one-way flight.'
+$homePlan=Get-CHArrivalPlan -State $state -Country 'argentina' -NowEpoch 10000L -OneWaySeconds 6660L
+Assert-True ([bool]$homePlan.feasible) 'Home departure should be prospectively scorable.'
+Assert-Equal ([long]$homePlan.departureAt) 10000L 'Home departure should align with forecast time.'
+Assert-Equal ([long]$homePlan.arrivalAt) 16660L 'Home arrival should equal forecast time plus one-way flight.'
 
 $returnState=@{
     TravelState='returning'
