@@ -8,7 +8,7 @@ function Fail([string]$Message) { $script:errors.Add($Message) }
 
 $required = @(
     'RuntimeLog.ps1','PopupHost.ps1','LaunchOptimizerSettings.ps1','LaunchFilterPopup.ps1','LaunchSettings.ps1','LaunchUpdate.ps1',
-    'OpenOptimizerSettings.ps1','OpenFilterPopup.ps1','OpenSettings.ps1','FilterPreferences.ps1','OpportunityState.ps1','RunUpdate.ps1','EnsureEngineStateSchema.ps1'
+    'OpenOptimizerSettings.ps1','OpenFilterPopup.ps1','OpenSettings.ps1','FilterPreferences.ps1','OpportunityState.ps1','RunUpdate.ps1','EnsureEngineStateSchema.ps1','ChanceHistory.ps1','ResolveChanceHistory.ps1'
 )
 foreach ($name in $required) {
     $path = Join-Path $Scripts $name
@@ -131,7 +131,8 @@ if (Test-Path -LiteralPath $updatePath) {
         "Write-TravelAssistantLog -Level WARN -Component 'performance'",
         "-Component 'performance'",'total_cpu_ms=','total_wall_ms=','stages=',
         "'publish-ui'","'publish-heartbeat'","'generation-cleanup'",
-        'StochasticCalibration.ps1','stochastic-calibration-error.txt','MultiCycleChanceBridge.ps1','multi-cycle-chance-bridge-error.txt'
+        'StochasticCalibration.ps1','stochastic-calibration-error.txt','MultiCycleChanceBridge.ps1','multi-cycle-chance-bridge-error.txt',
+        'ChanceHistory.ps1','chance-history-error.txt','ResolveChanceHistory.ps1','resolve-chance-history-error.txt'
     )) {
         if (-not $text.Contains($token)) {
             Fail "RunUpdate.ps1 missing centralized diagnostic/performance token '$token'."
@@ -156,6 +157,13 @@ if (Test-Path -LiteralPath $updatePath) {
     $priceVariationIndex=$text.IndexOf('Invoke-FailSoftScript -Path $PriceVariationRefiner')
     if ($windowPlanIndex -lt 0 -or $multiCycleBridgeIndex -le $windowPlanIndex -or $priceVariationIndex -le $multiCycleBridgeIndex) {
         Fail 'Multi-cycle chance bridge must run after WindowPlan and before price/filter publication.'
+    }
+
+    $heartbeatPublishIndex=$text.IndexOf('try { Write-UpdateHeartbeat }')
+    $chanceHistoryIndex=$text.IndexOf('Invoke-FailSoftScript -Path $ChanceHistory')
+    $resolveChanceIndex=$text.IndexOf('Invoke-FailSoftScript -Path $ResolveChanceHistory')
+    if ($heartbeatPublishIndex -lt 0 -or $chanceHistoryIndex -le $heartbeatPublishIndex -or $resolveChanceIndex -le $chanceHistoryIndex) {
+        Fail 'Chance history and retrospective resolution must run after visible UI heartbeat publication, in journal-then-resolve order.'
     }
 
     $stochasticForecastIndex=$text.IndexOf('Invoke-FailSoftScript -Path $StochasticForecast')
