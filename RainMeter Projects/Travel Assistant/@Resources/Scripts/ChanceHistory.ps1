@@ -216,15 +216,16 @@ for ($i=1; $i -le $count; $i++) {
         $ratio=Get-CHDouble -State $state -Key ($prefix+'MultiCycleArrivalCycleRatio') -Default 0.0
         $sampleCount=[int](Get-CHLong -State $state -Key ($prefix+'MultiCycleSampleCount'))
     } else {
-        $legacyProbability=Get-CHDouble -State $state -Key ($prefix+'ProbabilityValue')
-        if ($legacyProbability -ge 0.0 -and $legacyProbability -le 1.0) {
+        # ProbabilityValue may describe a recommended future Safe/Best window.
+        # Replay needs the probability for the physically earliest arrival instead.
+        $legacyProbability=Get-CHDouble -State $state -Key ($prefix+'ImmediateArrivalProbabilityValue')
+        $legacyArrivalAt=Get-CHLong -State $state -Key ($prefix+'ImmediateArrivalAt')
+        if ($legacyProbability -ge 0.0 -and $legacyProbability -le 1.0 -and [bool]$arrivalPlan.feasible) {
             $probability=$legacyProbability
-            $source='legacy_arrival'
-            $modelVersion='window-plan'
-            if([bool]$arrivalPlan.feasible){
-                $departureAt=[long]$arrivalPlan.departureAt
-                $arrivalAt=[long]$arrivalPlan.arrivalAt
-            }
+            $source='legacy_immediate_arrival'
+            $modelVersion='window-plan-immediate'
+            $departureAt=[long]$arrivalPlan.departureAt
+            $arrivalAt=if($legacyArrivalAt -gt $Now){$legacyArrivalAt}else{[long]$arrivalPlan.arrivalAt}
         }
     }
     # Only journal genuinely prospective travel forecasts. A current-state value
