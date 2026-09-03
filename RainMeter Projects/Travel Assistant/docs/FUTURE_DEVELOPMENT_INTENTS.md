@@ -271,7 +271,7 @@ Future challengers can still test richer conditioning such as stock fraction, de
 
 ## Future graph forecast-domain overlay
 
-The current graph renders small restock-variance brackets centered on observed restock truth in the past-only 8-hour domain. Their half-width comes from recent forecast-eligible restock-delay variance; they are a hindsight calibration aid, not forward timestamps.
+The current graph renders small restock-window brackets from the observed preceding OoS anchor: `OoS + average restock delay +/- learned restock-delay variance`. The later observed restock tick is truth for calibration and may fall early, inside, or late relative to that forecast interval. Only boundaries that have entered the past-only 8-hour domain are drawn.
 
 A true future forecast-domain overlay remains deferred. It could add forward-looking early/late restock and sellout markers once the graph gains a legitimate future-time region or a separate forecast gutter capable of showing:
 
