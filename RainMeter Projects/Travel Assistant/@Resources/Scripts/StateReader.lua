@@ -22,6 +22,7 @@ local expandedDetailRow = 0
 local lastInlineRenderRequestAt = 0
 local lastLayoutSignature = ''
 local lastGraphSignature = ''
+local graphHoverSignatures = {}
 local lastFlagKeys = {}
 local lastItemImageRequestSignature = ''
 local lastItemImageRequestAt = 0
@@ -621,18 +622,26 @@ end
 
 local function hideGraphHoverRegions()
     for i = 1, maxGraphHoverRegions do
-        local name = 'MeterInlineGraphHitbox' .. i
-        SKIN:Bang('!HideMeter', name)
-        SKIN:Bang('!SetOption', name, 'ToolTipText', '')
-        SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', '')
+        if graphHoverSignatures[i] ~= nil then
+            local name = 'MeterInlineGraphHitbox' .. i
+            SKIN:Bang('!HideMeter', name)
+            SKIN:Bang('!SetOption', name, 'ToolTipText', '')
+            SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', '')
+        end
     end
+    graphHoverSignatures = {}
 end
 
 local function updateGraphHoverRegions(spec, graphMeterName, row)
-    hideGraphHoverRegions()
-    if spec == nil or graphMeterName == nil or graphMeterName == '' then return end
+    if spec == nil or graphMeterName == nil or graphMeterName == '' then
+        hideGraphHoverRegions()
+        return
+    end
     local graphMeter = SKIN:GetMeter(graphMeterName)
-    if graphMeter == nil then return end
+    if graphMeter == nil then
+        hideGraphHoverRegions()
+        return
+    end
 
     local baseX = number(graphMeter:GetX())
     local baseY = number(graphMeter:GetY())
@@ -644,16 +653,39 @@ local function updateGraphHoverRegions(spec, graphMeterName, row)
         local w = math.max(1, number(spec[prefix .. 'W']))
         local h = math.max(1, number(spec[prefix .. 'H']))
         local tooltip = safeText(spec[prefix .. 'Text'], '')
+        local name = 'MeterInlineGraphHitbox' .. i
         if tooltip ~= '' then
+            local absoluteX = baseX + x
+            local absoluteY = baseY + y
+            local action = '[!CommandMeasure MeasureState "ToggleCardExpanded(' .. tostring(row) .. ')"]'
+            local signature = table.concat({
+                tostring(absoluteX), tostring(absoluteY), tostring(w), tostring(h), tooltip, action
+            }, '|')
+            if graphHoverSignatures[i] ~= signature then
+                SKIN:Bang('!SetOption', name, 'X', tostring(absoluteX))
+                SKIN:Bang('!SetOption', name, 'Y', tostring(absoluteY))
+                SKIN:Bang('!SetOption', name, 'W', tostring(w))
+                SKIN:Bang('!SetOption', name, 'H', tostring(h))
+                SKIN:Bang('!SetOption', name, 'Shape', 'Rectangle 0,0,' .. tostring(w) .. ',' .. tostring(h) .. ' | Fill Color 0,0,0,1 | StrokeWidth 0')
+                SKIN:Bang('!SetOption', name, 'ToolTipText', tooltip)
+                SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', action)
+                SKIN:Bang('!ShowMeter', name)
+                graphHoverSignatures[i] = signature
+            end
+        elseif graphHoverSignatures[i] ~= nil then
+            SKIN:Bang('!HideMeter', name)
+            SKIN:Bang('!SetOption', name, 'ToolTipText', '')
+            SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', '')
+            graphHoverSignatures[i] = nil
+        end
+    end
+    for i = count + 1, maxGraphHoverRegions do
+        if graphHoverSignatures[i] ~= nil then
             local name = 'MeterInlineGraphHitbox' .. i
-            SKIN:Bang('!SetOption', name, 'X', tostring(baseX + x))
-            SKIN:Bang('!SetOption', name, 'Y', tostring(baseY + y))
-            SKIN:Bang('!SetOption', name, 'W', tostring(w))
-            SKIN:Bang('!SetOption', name, 'H', tostring(h))
-            SKIN:Bang('!SetOption', name, 'Shape', 'Rectangle 0,0,' .. tostring(w) .. ',' .. tostring(h) .. ' | Fill Color 0,0,0,1 | StrokeWidth 0')
-            SKIN:Bang('!SetOption', name, 'ToolTipText', tooltip)
-            SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', '[!CommandMeasure MeasureState "ToggleCardExpanded(' .. tostring(row) .. ')"]')
-            SKIN:Bang('!ShowMeter', name)
+            SKIN:Bang('!HideMeter', name)
+            SKIN:Bang('!SetOption', name, 'ToolTipText', '')
+            SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', '')
+            graphHoverSignatures[i] = nil
         end
     end
 end
