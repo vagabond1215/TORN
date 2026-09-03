@@ -120,6 +120,8 @@ foreach($token in @('Invoke-RestMethod','Invoke-WebRequest','curl.exe','System.N
 }
 Assert-True ($chanceText.Contains('[int]$RetentionHours = 8')) 'Chance journal default retention must remain eight hours.'
 Assert-True ($chanceText.Contains('[int]$SampleBucketSeconds = 60')) 'Chance journal must remain synchronized to one-minute graph sampling.'
+Assert-True ($chanceText.Contains("Get-CHDouble -State $state -Key ($prefix+'ImmediateArrivalProbabilityValue')")) 'Legacy chance journal must use the dedicated immediate-arrival probability, not a selected future Safe/Best probability.'
+Assert-True ($chanceText.Contains("source='legacy_immediate_arrival'")) 'Legacy replay source must explicitly identify immediate-arrival semantics.'
 Assert-True ($resolveText.Contains('. $CalibrationScript -SkipMain')) 'Strict replay must reuse prospective calibration truth semantics.'
 Assert-True ($resolveText.Contains("futureLeakage='future evidence is used only to label the later outcome, never to alter the frozen probability'")) 'Replay artifact must explicitly prohibit future leakage.'
 
