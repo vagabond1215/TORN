@@ -38,11 +38,11 @@ if ($errors.Count -eq 0) {
         'phaseSafePlan',
         "plan.anchorPhase=='S' and not rowHasUnresolvedOos(row)",
         "'Latest observed phase: restocked; current stock status is stale/unknown'",
-        "'UPCOMING - STOCK STATUS STALE'",
-        "'UPCOMING - STOCK STATUS UNKNOWN'",
+        "'Stock status stale'",
+        "'Stock status unknown'",
         "'Sellout in: '",
-        "'UPCOMING - SELLOUT IN '",
-        "'UPCOMING - RESTOCK IN '",
+        "'Sells out in '",
+        "'Restocks in '",
         'if rowHasUnresolvedOos(row) then',
         'A later observed restock supersedes the preceding OoS',
         "'Restock in: '",
@@ -58,7 +58,7 @@ if ($errors.Count -eq 0) {
     )) {
         if (-not $lua.Contains($token)) { Fail ("TravelStateWindowTweaks.lua missing contract token '{0}'." -f $token) }
     }
-    foreach ($retired in @('Safe formula:','Best formula:')) {
+    foreach ($retired in @('Safe formula:','Best formula:','UPCOMING - SELLOUT IN ','UPCOMING - RESTOCK IN ','UPCOMING - IN STOCK','UPCOMING - STOCK STATUS')) {
         if ($lua.Contains($retired)) { Fail ("Travel-state tooltip must not contain generic home-window detail '{0}'." -f $retired) }
     }
 
