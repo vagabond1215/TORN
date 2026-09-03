@@ -261,23 +261,17 @@ If used, Sites is best treated initially as a dashboard/control plane for:
 
 Do not make Sites the sole production market-processing authority until continuous ingestion, external connectivity, scheduled/background processing, storage durability, and operational limits have been validated against the project's runtime requirements.
 
-## Future current-cycle live-probability refinement
+## Future current-cycle probability refinement
 
-The current legacy current-cycle probability is deliberately conservative: `Get-StableCurrentCycleArrivalProbability` computes an empirical survival fraction from completed historical availability durations at `active-cycle age + flight time`. It can therefore step downward while current stock is still visibly healthy. This is not a graph-threshold artifact.
+Production current-cycle Chance to Hit now uses uncensored live current-run depletion rates when at least three clean samples span at least ten minutes. Each observed rate is converted into a remaining-stock runway and the arrival probability is the empirical fraction of those live rates whose runway exceeds the physical arrival horizon.
 
-A future challenger should test whether live depletion evidence improves this probability out of sample. Candidate approaches include conditioning the current-cycle survival distribution on:
+When that live evidence is not yet sufficient, `Get-StableCurrentCycleArrivalProbability` falls back to completed-cycle survival **conditioned on the fact that the current cycle is still in stock at the latest observation**. If the live cycle has already outlived every usable historical duration, historical survival returns unknown rather than a fabricated 0%.
 
-- observed current stock fraction;
-- guarded live depletion rate / depletion shape;
-- projected sellout margin relative to arrival;
-- current foreign price if prospective scoring demonstrates value;
-- recent-regime cycle behavior.
-
-Do not simply force 100% when live stock appears healthy. Compare the hybrid against the existing empirical-survival baseline using frozen forecast -> later truth Brier/log-loss/calibration before promotion.
+Future challengers can still test richer conditioning such as stock fraction, depletion shape, projected sellout margin, price/regime features, and calibrated shrinkage between live and historical evidence. Promotion should continue to be judged by frozen forecast -> later truth Brier/log-loss/calibration.
 
 ## Future graph forecast-domain overlay
 
-The current graph now renders small modeled restock-window open/close ticks only when those boundary timestamps have actually entered the past-only 8-hour domain. They are anchored to observed OoS events using the current recent-cycle early/late restock-delay envelope and are never collapsed onto `now`.
+The current graph renders small restock-variance brackets centered on observed restock truth in the past-only 8-hour domain. Their half-width comes from recent forecast-eligible restock-delay variance; they are a hindsight calibration aid, not forward timestamps.
 
 A true future forecast-domain overlay remains deferred. It could add forward-looking early/late restock and sellout markers once the graph gains a legitimate future-time region or a separate forecast gutter capable of showing:
 
