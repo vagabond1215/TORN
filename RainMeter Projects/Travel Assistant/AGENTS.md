@@ -168,6 +168,8 @@ Missed-transition recovery is evidence repair, not forecasting:
 - A forecast never becomes history. Only timestamped external history points are appended, with `transitionBoundaryQuality=recovered`. A current fresh zero snapshot may close a recovered positive interval as `history_recovery_live_bridge` because that zero is already observed fact.
 - A proven complete recovered micro-cycle may be appended as schema-v2 cycle evidence. Its restock/sellout boundaries remain `recovered`, interval eligibility follows the same conservative lower-bound rule as native cycles, and ambiguous recovered cycles remain stored but `forecastEligible=false`.
 - The normal `CycleAnchorReconciler` consumes recovered observations on the next heartbeat; history recovery must never delay the already-published UI generation.
+- Canonical and pending journals are one logical evidence store. If atomic append falls back to `observations.pending.jsonl` or `cycles.pending.jsonl`, current-card forecasting must consume that pending evidence immediately (with deduplication) rather than display Collecting Data solely because the canonical file is temporarily locked.
+- When `CycleAnchorReconciler` reconstructs a current active restock from retained observations, it must also restore the observed restock quantity. Live depletion projection depends on both the restock timestamp and quantity; rebuilding only the timestamp can leave an obviously declining current run stuck in `live-stock-learning`.
 
 ## Filters and local UI state
 
