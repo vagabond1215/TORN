@@ -170,6 +170,8 @@ Missed-transition recovery is evidence repair, not forecasting:
 - The normal `CycleAnchorReconciler` consumes recovered observations on the next heartbeat; history recovery must never delay the already-published UI generation.
 - Canonical and pending journals are one logical evidence store. If atomic append falls back to `observations.pending.jsonl` or `cycles.pending.jsonl`, current-card forecasting must consume that pending evidence immediately (with deduplication) rather than display Collecting Data solely because the canonical file is temporarily locked.
 - When `CycleAnchorReconciler` reconstructs a current active restock from retained observations, it must also restore the observed restock quantity. Live depletion projection depends on both the restock timestamp and quantity; rebuilding only the timestamp can leave an obviously declining current run stuck in `live-stock-learning`.
+- Raw provider observations are never deleted merely because a transition looks implausible. `CycleForecastFilter.ps1` classifies short contradictory phase blips for calculation purposes: an isolated `positive -> 0 -> positive` within about two polls is `spurious_zero` when the returning positive quantity continues the prior depletion trajectory, and a one-poll `0 -> tiny positive -> 0` is `spurious_restock` when the positive quantity is <=25% of the median observed restock quantity (absolute <=10 units when no restock baseline exists). The primary row and its paired fake boundary are excluded from anchors/cycles/windows/stochastic/calibration while raw observations remain intact.
+- Recovered history is stronger evidence than this heuristic. Rows/boundaries with `transitionBoundaryQuality=recovered` or Torn Intel recovery sources must bypass spurious suppression. `CycleAnchorReconciler` publishes `data/runtime/spurious-transitions.json` so completed cycles already written by the live collector can be excluded from future forecast/trend calculations without rewriting or deleting historical JSONL evidence. The registry is ignored if stale (>10 minutes).
 
 ## Filters and local UI state
 
@@ -245,7 +247,7 @@ Negative-value items remain legal candidates unless `Show profitable items only`
 ## Availability/evidence invariants
 
 1. Prefer unknown likelihood over invented confidence.
-2. `0 -> positive` is an observed restock; `positive -> 0` is an observed sellout.
+2. `0 -> positive` is an observed restock and `positive -> 0` is an observed sellout only after the phase-plausibility layer has not classified the short contradictory sequence as spurious; raw observations are still retained.
 3. Forecasts never become history.
 4. History is isolated by `country + itemId`.
 5. Foreign price is first-class evidence.
