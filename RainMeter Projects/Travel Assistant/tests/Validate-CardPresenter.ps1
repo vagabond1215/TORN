@@ -196,6 +196,11 @@ if ($errors.Count -eq 0) {
     $firstAvg=$presenter.IndexOf("local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)",[System.StringComparison]::Ordinal)
     if($firstMulti -lt 0 -or $firstAvg -le $firstMulti){Fail 'Average OoS fallback must remain below the multi-cycle forecast authority.'}
     foreach($token in @(
+        '$PendingCycleFile = Join-Path $RuntimeDir ''cycles.pending.jsonl''',
+        '$PendingObservationFile = Join-Path $RuntimeDir ''observations.pending.jsonl''',
+        'Read-WindowCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile,$PendingCycleFile)',
+        '$pendingObservationMap=Read-WindowObservationsForKeys -Path $PendingObservationFile',
+        'raw cycles {0}, eligible {1}',
         'Compute direct current-stock fallback telemetry for every fresh positive-stock',
         'Only an already-non-informative producer state may be replaced directly here.',
         '[string]$state[$prefix+''WindowDataQuality''] -eq ''collecting''',
