@@ -21,7 +21,7 @@ if ([int]$settings.staleAfterSeconds -ne 300) { Fail 'Live-provider stale thresh
 if($null -eq $settings.PSObject.Properties['graphVisuals']){
     Fail 'settings.example.json must define graphVisuals defaults.'
 }else{
-    foreach($name in @('showGrid','showTransitions','showChance','showHindsightWindows','showAccuracyMarkers','showTooltips')){
+    foreach($name in @('showGrid','showTransitions','showRestockWindowBounds','showChance','showHindsightWindows','showAccuracyMarkers','showTooltips')){
         if($null -eq $settings.graphVisuals.PSObject.Properties[$name]){Fail "Graph visual default missing '$name'."}
     }
 }
@@ -34,6 +34,7 @@ foreach($token in @(
     '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
     'FromArgb(126,190,73),2',
     'FromArgb(0,71,171),1',
+    'FromArgb(145,132,165,190),1',
     'FromArgb(255,117,24),1',
     'FromArgb(105,200,235),1.5',
     'FromArgb(32,165,165,235)',
@@ -44,16 +45,26 @@ foreach($token in @(
     'HoverCount',
     "text=('Restocked: '",
     "text=('OoS: '",
+    "text=('Restock window opens: '",
+    "text=('Restock window closes: '",
     "text=('Hindsight departure window: '",
     "text=('Actual hindsight window opened: '",
     "text=('Actual hindsight window closed: '",
     'Get-FlightShiftedRealizedHistory',
     '$realizedThrough=$now-$flightSeconds',
     'Read-MarketResolvedArrivalHistory',
+    'Read-InlineMarketCycles',
+    'Get-InlineRestockWindowSummary',
+    'Get-InlineOosTransitions',
+    '$openAt=[long]$oosAt+$earlyDelay',
+    '$closeAt=[long]$oosAt+$lateDelay',
+    'if($openAt -ge $cutoff -and $openAt -le $now)',
+    'if($closeAt -ge $cutoff -and $closeAt -le $now)',
     '$graphics.DrawLine($errorPen,$x,$predictedY,$x,$actualY)',
     "text=('Forecast '+([Math]::Round(100.0*`$predicted,1))+'% | Actual '",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showGrid'",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showTransitions'",
+    "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showRestockWindowBounds'",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showChance'",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showHindsightWindows'",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showAccuracyMarkers'",
@@ -64,6 +75,8 @@ foreach($token in @(
     'ResolvedBrierScore',
     '$markerTop=[single]($plotBottom+2)',
     '$markerBottom=[single]($plotBottom+8)',
+    '$forecastMarkerTop=[single]($plotBottom+3)',
+    '$forecastMarkerBottom=[single]($plotBottom+6)',
     '$graphics.DrawString((''-{0}h'' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)',
     '$graphics.DrawString(''now'',$labelFont,$labelBrush,[single]($plotRight-18),110)'
 )){
@@ -103,6 +116,7 @@ if(-not(Test-Path -LiteralPath $settingsWindowPath)){
         "'CHART VISUALS'",
         "'Grid' -SettingName 'showGrid'",
         "'Restock / OoS markers' -SettingName 'showTransitions'",
+        "'Restock window bounds' -SettingName 'showRestockWindowBounds'",
         "'Live Chance to Hit' -SettingName 'showChance'",
         "'Hindsight departure windows' -SettingName 'showHindsightWindows'",
         "'Forecast accuracy markers' -SettingName 'showAccuracyMarkers'",
@@ -150,8 +164,11 @@ if(-not(Test-Path -LiteralPath $stateReaderPath)){
     $reader=Get-Content -LiteralPath $stateReaderPath -Raw
     foreach($token in @(
         'local maxGraphHoverRegions = 48',
+        'local graphHoverSignatures = {}',
         'hideGraphHoverRegions',
         'updateGraphHoverRegions',
+        'if graphHoverSignatures[i] ~= signature then',
+        'for i = count + 1, maxGraphHoverRegions do',
         "'MeterInlineGraphHitbox' .. i",
         'graphMeter:GetX()',
         'graphMeter:GetY()',
@@ -159,6 +176,9 @@ if(-not(Test-Path -LiteralPath $stateReaderPath)){
         'spec.HoverCount'
     )){
         if(-not$reader.Contains($token)){Fail "StateReader graph hitbox contract missing '$token'."}
+    }
+    if($reader -match 'local function updateGraphHoverRegions\([^\)]*\)\s*\r?\n\s*hideGraphHoverRegions\(\)'){
+        Fail 'Graph tooltip refresh must not hide every hitbox before rebuilding; that causes hover blinking.'
     }
 }
 
