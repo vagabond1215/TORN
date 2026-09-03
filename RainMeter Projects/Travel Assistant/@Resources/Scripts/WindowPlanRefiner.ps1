@@ -884,9 +884,11 @@ for ($i=1; $i -le $count; $i++) {
         $restockAt=if ($null -ne $activeCycle) { [long](Get-WindowProperty $activeCycle 'restockAt') } else { 0L }
         $restockQuality=if ($null -ne $activeCycle) { [string](Get-WindowProperty $activeCycle 'restockBoundaryQuality') } else { '' }
         if ($restockAt -le 0 -or -not (Test-WindowBoundaryQuality -Quality $restockQuality)) {
-            $collectingReason='current restock boundary was not observed or recovered'
+            $qualityLabel=if([string]::IsNullOrWhiteSpace($restockQuality)){'missing'}else{$restockQuality}
+            $collectingReason=('current restock boundary was not observed or recovered (restock {0}, quality {1})' -f $restockAt,$qualityLabel)
         } elseif ([long]$liveProjection.activeSelloutEstimateAt -le 0) {
-            $collectingReason='current sellout cannot yet be estimated from verified evidence'
+            $restockQuantity=if($null -ne $activeCycle){[long](Get-WindowProperty $activeCycle 'restockQuantity')}else{0L}
+            $collectingReason=('current sellout cannot yet be estimated (mode {0}; restock qty {1}; raw cycles {2}, eligible {3})' -f [string]$liveProjection.mode,$restockQuantity,$cycles.Count,$forecastEligibleCycles.Count)
         }
     } else {
         $lastSellOutAt=if ($null -ne $destinationState) { [long](Get-WindowProperty $destinationState 'lastSellOutAt') } else { 0L }
