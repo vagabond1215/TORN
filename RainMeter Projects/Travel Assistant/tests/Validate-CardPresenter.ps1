@@ -142,6 +142,15 @@ if ($errors.Count -eq 0) {
         if ($presenter.Contains($forbidden)) { Fail "CardPresenter.lua retains obsolete/cluttered status token '$forbidden'." }
     }
     if ($presenter.Contains("setOption(name,'ToolTipHidden'")) { Fail 'CardPresenter.lua must not dynamically mutate ToolTipHidden; empty tooltip text owns visibility on the target host.' }
+    foreach($token in @(
+        "local sleepingOosValid=(",
+        "lastObservedOosAt>0",
+        "(activeRestockAt<=0 or activeRestockAt<=lastObservedOosAt)",
+        "A later observed restock permanently supersedes",
+        "if sleepingOosValid then"
+    )){
+        if(-not$presenter.Contains($token)){Fail "CardPresenter latest-phase OoS gate missing '$token'."}
+    }
     if ($presenter -match '(?i)https?://|Invoke-RestMethod|curl|RunCommand|LaunchItemViewer') { Fail 'CardPresenter.lua must remain presentation-only and local.' }
     if ($presenter.Contains("state[projectedPrefix..'ElapsedSeconds']") -and $presenter.Contains('FlightProfitHour')) { Fail 'Expanded flight $/hr must use round-trip flight duration, not opportunity elapsed/wait time.' }
     foreach ($token in @(
@@ -162,12 +171,12 @@ if ($errors.Count -eq 0) {
         '[long]$MinimumFarHorizonSeconds=21600L','[double]$FarHorizonArrivalMultiplier=2.0',
         '[long]$MinimumLowDepletionEvidenceSpanSeconds=900L',"'low-depletion-hold'","'far-sellout'",
         "'current_stock_safe'","'STOCK HOLDING'","'ProbabilityValue']='-1'",
-        "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
+        "'sleeping_oos'",'Get-WindowObservedPhase','phaseInfo.unresolvedOos',
+        'Sleeping OoS is only a performance hint','phase_invalidated',
         'MaximumOrdinal = 1','immediately next cycle',
         'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock',
-        "'LastObservedOosAt'","`$candidateOosAt=[long](Get-WindowProperty `$destinationState 'lastSellOutAt')",
-        "`$candidateOosQuality=[string](Get-WindowProperty `$destinationState 'lastSellOutBoundaryQuality')",
-        'Test-WindowBoundaryQuality -Quality $candidateOosQuality',
+        "'LastObservedOosAt'",'LastObservedOosAt means an unresolved current OoS phase',
+        'preceding OoS timing is suppressed',
         "'WP2:'","'PV1#'","'PV0#'"
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
@@ -263,7 +272,11 @@ if ($errors.Count -eq 0) {
         'displayTripBands',
         'showProfitableOnly',
         'Get-OpportunityRestockSummary',
+        'Test-OpportunityUnresolvedOosPhase',
+        '$unresolvedOos=Test-OpportunityUnresolvedOosPhase',
+        'A later observed restock supersedes the preceding OoS',
         "forecastMode='sleeping_oos'",
+        'Do not fall back to a preceding OoS anchor after any later restock',
         '$wakeAt=$earlyRestockAt-600L',
         "'LastObservedOosAt'"
     )) {
