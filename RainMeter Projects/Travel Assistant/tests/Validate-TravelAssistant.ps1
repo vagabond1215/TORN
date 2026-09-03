@@ -11,10 +11,10 @@ $required = @(
     'data\seed\metadata.json','data\seed\observations.jsonl','data\seed\cycles.jsonl',
     '@Resources\Includes\OpportunityRows.inc',
     '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\ProjectCollectedState.ps1','@Resources\Scripts\MaintainObservationHistory.ps1','@Resources\Scripts\TravelContext.ps1',
-    '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1','@Resources\Scripts\StochasticForecast.ps1','@Resources\Scripts\StochasticCalibration.ps1','@Resources\Scripts\MultiCycleChanceBridge.ps1',
+    '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1','@Resources\Scripts\StochasticForecast.ps1','@Resources\Scripts\StochasticCalibration.ps1','@Resources\Scripts\MultiCycleChanceBridge.ps1','@Resources\Scripts\ChanceHistory.ps1','@Resources\Scripts\ResolveChanceHistory.ps1',
     '@Resources\Scripts\StateReader.lua','@Resources\Scripts\RenderInlineGraph.ps1','@Resources\Scripts\EnsureItemImages.ps1',
     '@Resources\Images\Flags\LICENSE-FlagKit.txt','@Resources\Images\UI\flag-mask-both.png','@Resources\Images\UI\flag-mask-top.png','@Resources\Images\UI\flag-mask-bottom.png',
-    'tests\Validate-RainmeterSkin.ps1','tests\Run-OpportunityStateTests.ps1','tests\Run-StochasticForecastTests.ps1','tests\Run-StochasticCalibrationTests.ps1','tests\Run-MultiCycleChanceBridgeTests.ps1','tools\Invoke-StochasticReplay.ps1'
+    'tests\Validate-RainmeterSkin.ps1','tests\Run-OpportunityStateTests.ps1','tests\Run-StochasticForecastTests.ps1','tests\Run-StochasticCalibrationTests.ps1','tests\Run-MultiCycleChanceBridgeTests.ps1','tests\Run-ChanceHistoryTests.ps1','tools\Invoke-StochasticReplay.ps1'
 )
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $relative))) { Fail "Missing required file: $relative" }
@@ -170,7 +170,7 @@ if (Test-Path -LiteralPath $itemImagePath) {
 $rendererPath=Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 if (Test-Path -LiteralPath $rendererPath) {
     $renderer=Get-Content -LiteralPath $rendererPath -Raw
-    foreach($token in @('RuntimeObservationFile','$historySource = ''runtime_observations''','Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot','UnknownBeforeTimestamp','Add-Type -AssemblyName System.Drawing','stableImagePath','$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))','FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1')) {
+    foreach($token in @('RuntimeObservationFile','$historySource = ''runtime_observations''','Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot','ChanceHistoryFile','ResolvedArrivalHistoryFile','Get-FlightShiftedRealizedHistory','ResolvedBrierScore','UnknownBeforeTimestamp','Add-Type -AssemblyName System.Drawing','stableImagePath','$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))','FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1')) {
         if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
     }
     if ($renderer.Contains('display_carry')) { Fail 'Inline renderer must not paint current state backward through unknown history.' }
