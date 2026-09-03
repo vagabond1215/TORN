@@ -5,6 +5,8 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $settingsPath = Join-Path $ProjectRoot 'config\settings.example.json'
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $rendererPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
+$stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
+$hitboxPath = Join-Path $ProjectRoot '@Resources\Includes\InlineGraphHitboxes.inc'
 
 $failures = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:failures.Add($Message) }
@@ -25,6 +27,18 @@ foreach($token in @(
     'FromArgb(0,71,171),1',
     'FromArgb(255,117,24),1',
     'FromArgb(105,200,235),1.5',
+    'FromArgb(28,165,165,235)',
+    'FromArgb(150,165,165,235),1',
+    '$chanceBandThreshold=0.50',
+    'Get-ChanceWindows',
+    '$graphics.FillRectangle($chanceBandBrush',
+    'ChanceWindowThreshold',
+    'ChanceWindowCount',
+    'HoverCount',
+    "text=('Restocked: '",
+    "text=('OoS: '",
+    "text=('Chance window opened: '",
+    "text=('Chance window closed: '",
     'Get-FlightShiftedRealizedHistory',
     '$realizedPen.DashStyle=[System.Drawing.Drawing2D.DashStyle]::Dot',
     'Read-MarketResolvedArrivalHistory',
@@ -41,6 +55,9 @@ foreach($token in @(
     if(-not$renderer.Contains($token)){Fail "Inline graph palette missing '$token'."}
 }
 
+if($renderer.Contains('$graphics.FillRectangle($chanceBandBrush,$x')){Fail 'Chance shading must be driven by modeled chance-window geometry, not raw stock transition X coordinates.'}
+if(-not$renderer.Contains('# Shade modeled chance windows only. This is deliberately independent of the')){Fail 'Renderer must explicitly keep chance-window shading independent of stock/in-stock intervals.'}
+
 foreach($forbidden in @(
     '$graphics.DrawLine($restockPen,$x,[single]$plotTop,$x,[single]$plotBottom)',
     '$graphics.DrawLine($selloutPen,$x,[single]$plotTop,$x,[single]$plotBottom)'
@@ -49,12 +66,43 @@ foreach($forbidden in @(
 }
 
 $ini = Get-Content -LiteralPath $iniPath -Raw
-foreach ($token in @('[MeasureInlineGraph]','RenderInlineGraph.ps1','-MarketKey "#InlineGraphMarketKey#"')) {
+foreach ($token in @('[MeasureInlineGraph]','RenderInlineGraph.ps1','-MarketKey "#InlineGraphMarketKey#"','@IncludeGraphHitboxes=#@#Includes\InlineGraphHitboxes.inc')) {
     if (-not $ini.Contains($token)) { Fail "TravelAssistant.ini missing inline graph contract '$token'." }
 }
 $rowsPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityRows.inc'
 $rows = Get-Content -LiteralPath $rowsPath -Raw
 if (-not $rows.Contains('[MeterOpportunity1InlineGraph]')) { Fail 'Opportunity rows must expose the generated inline graph image meter.' }
+
+if (-not (Test-Path -LiteralPath $hitboxPath)) { Fail 'InlineGraphHitboxes.inc is required for marker/window tooltips.' }
+else {
+    $hitboxes=Get-Content -LiteralPath $hitboxPath -Raw
+    $count=[regex]::Matches($hitboxes,'(?m)^\[MeterInlineGraphHitbox\d+\]\s*
+if ($failures.Count -gt 0) {
+    foreach ($failure in $failures) { Write-Host "FAIL $failure" -ForegroundColor Red }
+    exit 1
+}
+
+Write-Host 'Graph window / retention validation passed.' -ForegroundColor Green
+Write-Host 'Visible: 8h | lime stock | cyan chance | periwinkle >=50% chance bands | semantic marker tooltips | raw learning retention: 48h' -ForegroundColor DarkGreen
+exit 0
+).Count
+    if($count -ne 48){Fail "Inline graph hover pool must remain bounded at 48 reusable hitboxes; found $count."}
+    foreach($token in @('[MeterInlineGraphHitbox1]','[MeterInlineGraphHitbox48]','Group=InlineGraphHitboxes','Fill Color 0,0,0,1','ToolTipWidth=280')){
+        if(-not$hitboxes.Contains($token)){Fail "Inline graph hitbox contract missing '$token'."}
+    }
+}
+
+if (-not (Test-Path -LiteralPath $stateReaderPath)) { Fail 'StateReader.lua is required for inline graph tooltip placement.' }
+else {
+    $reader=Get-Content -LiteralPath $stateReaderPath -Raw
+    foreach($token in @(
+        'local maxGraphHoverRegions = 48','hideGraphHoverRegions','updateGraphHoverRegions',
+        "'MeterInlineGraphHitbox' .. i","graphMeter:GetX()","graphMeter:GetY()",
+        "'ToolTipText', tooltip","spec.HoverCount"
+    )){
+        if(-not$reader.Contains($token)){Fail "StateReader graph hitbox contract missing '$token'."}
+    }
+}
 
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL $failure" -ForegroundColor Red }
