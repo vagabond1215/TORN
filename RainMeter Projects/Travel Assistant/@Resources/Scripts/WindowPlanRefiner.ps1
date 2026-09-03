@@ -270,6 +270,7 @@ function Get-CurrentStockSafetyProjection {
         [object[]]$Observations,
         [long]$EarliestArrivalAt,
         [long]$NowEpoch,
+        [long]$KnownSelloutEstimateAt=0L,
         [long]$LiveMaximumAgeSeconds=300L,
         [int]$MinimumDepletionSamples=3,
         [long]$MinimumEvidenceSpanSeconds=600L,
@@ -277,17 +278,51 @@ function Get-CurrentStockSafetyProjection {
         [double]$RateGuardMultiplier=1.5,
         [double]$MinimumGuardedUnitsPerHour=60.0,
         [double]$MinimumRunwayToArrivalRatio=2.0,
-        [long]$MinimumArrivalMarginSeconds=1800L
+        [long]$MinimumArrivalMarginSeconds=1800L,
+        [long]$MinimumFarHorizonSeconds=21600L,
+        [double]$FarHorizonArrivalMultiplier=2.0,
+        [int]$MinimumLowDepletionObservationSamples=3,
+        [long]$MinimumLowDepletionEvidenceSpanSeconds=900L,
+        [double]$LowDepletionNetRateMultiplier=2.0
     )
 
     $sourceAt=if($SourceTimestamp -gt 0){[Math]::Min($SourceTimestamp,$NowEpoch)}else{0L}
     $sourceFresh=($sourceAt -gt 0 -and ($NowEpoch-$sourceAt) -le $LiveMaximumAgeSeconds)
+    $arrivalHorizon=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt)
+    $adaptiveHoldHorizon=[long][Math]::Ceiling([Math]::Max(
+        [double][Math]::Max(0L,$MinimumFarHorizonSeconds),
+        [double]$arrivalHorizon*[Math]::Max(1.0,$FarHorizonArrivalMultiplier)
+    ))
+    $requiredRunway=[long][Math]::Ceiling([Math]::Max(
+        $arrivalHorizon*[Math]::Max(1.0,$MinimumRunwayToArrivalRatio),
+        $arrivalHorizon+[Math]::Max(0L,$MinimumArrivalMarginSeconds)
+    ))
+
     if (-not $sourceFresh -or $CurrentStock -le 0 -or $EarliestArrivalAt -le $sourceAt) {
         return [pscustomobject]@{
-            eligible=$false; reason='fresh positive stock and a future arrival are required'
+            eligible=$false; mode='none'; reason='fresh positive stock and a future arrival are required'
             sampleCount=0; evidenceSpanSeconds=0L; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
-            runwaySeconds=0L; arrivalHorizonSeconds=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt); arrivalMarginSeconds=0L
-            selloutEstimateAt=0L
+            runwaySeconds=0L; arrivalHorizonSeconds=$arrivalHorizon; arrivalMarginSeconds=0L
+            selloutEstimateAt=0L; minimumHoldHorizonSeconds=$adaptiveHoldHorizon
+        }
+    }
+
+    # If another verified live projection already places sellout far beyond both
+    # the flight and a six-hour floor, that alone is useful low-authority fallback
+    # evidence. It must never supersede a normal actionable forecast.
+    if(
+        $KnownSelloutEstimateAt -gt $sourceAt -and
+        ($KnownSelloutEstimateAt-$sourceAt) -ge $adaptiveHoldHorizon -and
+        $KnownSelloutEstimateAt -gt $EarliestArrivalAt
+    ){
+        $runway=[long]($KnownSelloutEstimateAt-$sourceAt)
+        return [pscustomobject]@{
+            eligible=$true; mode='far-sellout'
+            reason='verified current stock has a live sellout estimate beyond the adaptive hold horizon'
+            sampleCount=0; evidenceSpanSeconds=0L; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
+            runwaySeconds=$runway; arrivalHorizonSeconds=$arrivalHorizon
+            arrivalMarginSeconds=[long][Math]::Max(0L,$runway-$arrivalHorizon)
+            selloutEstimateAt=[long]$KnownSelloutEstimateAt; minimumHoldHorizonSeconds=$adaptiveHoldHorizon
         }
     }
 
@@ -297,6 +332,7 @@ function Get-CurrentStockSafetyProjection {
         $at
     })
     $rates=New-Object System.Collections.Generic.List[object]
+    $runSamples=New-Object System.Collections.Generic.List[object]
     $previousStock=$null
     foreach($row in $rows){
         $at=[long](Get-WindowProperty $row 'sourceTimestamp')
@@ -305,10 +341,21 @@ function Get-CurrentStockSafetyProjection {
         $stock=[long](Get-WindowProperty $row 'stock')
         $transitionGap=[long](Get-WindowProperty $row 'transitionGapSeconds')
 
-        # A zero state, an observed positive jump, or a long source gap can mark a
-        # different stock run. Never carry depletion rates across that boundary.
-        $reset=($stock -le 0 -or ($null -ne $previousStock -and $previousStock -gt 0 -and $stock -gt $previousStock) -or $transitionGap -gt $MaximumDepletionIntervalSeconds)
-        if($reset){$rates.Clear()}
+        # A zero state, observed replenishment, or a long provider gap begins a new
+        # run. Neither positive depletion nor flat-stock evidence may cross it.
+        $reset=(
+            $stock -le 0 -or
+            ($null -ne $previousStock -and $previousStock -gt 0 -and $stock -gt $previousStock) -or
+            $transitionGap -gt $MaximumDepletionIntervalSeconds
+        )
+        if($reset){
+            $rates.Clear()
+            $runSamples.Clear()
+        }
+
+        if($stock -gt 0){
+            $runSamples.Add([pscustomobject]@{at=$at;stock=$stock})
+        }
 
         $kind=([string](Get-WindowProperty $row 'depletionEvidence')).Trim().ToLowerInvariant()
         $censored=[bool](Get-WindowProperty $row 'depletionCensored')
@@ -327,68 +374,99 @@ function Get-CurrentStockSafetyProjection {
         $previousStock=$stock
     }
 
+    # First retain the existing strict path: three uncensored positive-depletion
+    # intervals spanning ten minutes, guarded by p90 * 1.5 and a 60 units/hour floor.
     $sampleCount=$rates.Count
-    if($sampleCount -lt $MinimumDepletionSamples){
-        return [pscustomobject]@{
-            eligible=$false; reason='too few uncensored positive-stock depletion samples'
-            sampleCount=$sampleCount; evidenceSpanSeconds=0L; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
-            runwaySeconds=0L; arrivalHorizonSeconds=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt); arrivalMarginSeconds=0L
-            selloutEstimateAt=0L
+    if($sampleCount -ge $MinimumDepletionSamples){
+        $ordered=@($rates.ToArray() | Sort-Object unitsPerSecond)
+        $firstAt=[long](@($rates.ToArray() | Sort-Object at | Select-Object -First 1)[0].at)
+        $lastAt=[long](@($rates.ToArray() | Sort-Object at | Select-Object -Last 1)[0].at)
+        $span=[Math]::Max(0L,$lastAt-$firstAt)
+        if($span -ge $MinimumEvidenceSpanSeconds){
+            $rank=[int][Math]::Ceiling(0.90*$ordered.Count)-1
+            $rank=[Math]::Max(0,[Math]::Min($ordered.Count-1,$rank))
+            $percentileRate=[double]$ordered[$rank].unitsPerSecond
+            $guardedRate=[Math]::Max($MinimumGuardedUnitsPerHour/3600.0,$percentileRate*[Math]::Max(1.0,$RateGuardMultiplier))
+            if($guardedRate -gt 0){
+                $runway=[long][Math]::Ceiling($CurrentStock/$guardedRate)
+                $eligible=($runway -ge $requiredRunway)
+                $selloutAt=$sourceAt+$runway
+                return [pscustomobject]@{
+                    eligible=[bool]$eligible; mode=$(if($eligible){'depletion-runway'}else{'none'})
+                    reason=$(if($eligible){'conservative current-stock runway comfortably exceeds time to arrival'}else{'conservative current-stock runway is not large enough for the safety gate'})
+                    sampleCount=$sampleCount; evidenceSpanSeconds=[long]$span
+                    percentileUnitsPerHour=[Math]::Round($percentileRate*3600.0,3)
+                    guardedUnitsPerHour=[Math]::Round($guardedRate*3600.0,3)
+                    runwaySeconds=[long]$runway; arrivalHorizonSeconds=[long]$arrivalHorizon
+                    arrivalMarginSeconds=[long][Math]::Max(0L,$runway-$arrivalHorizon)
+                    selloutEstimateAt=[long]$selloutAt; minimumHoldHorizonSeconds=$adaptiveHoldHorizon
+                }
+            }
         }
     }
 
-    $ordered=@($rates.ToArray() | Sort-Object unitsPerSecond)
-    $firstAt=[long](@($rates.ToArray() | Sort-Object at | Select-Object -First 1)[0].at)
-    $lastAt=[long](@($rates.ToArray() | Sort-Object at | Select-Object -Last 1)[0].at)
-    $span=[Math]::Max(0L,$lastAt-$firstAt)
-    if($span -lt $MinimumEvidenceSpanSeconds){
-        return [pscustomobject]@{
-            eligible=$false; reason='depletion evidence does not yet span enough time'
-            sampleCount=$sampleCount; evidenceSpanSeconds=$span; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
-            runwaySeconds=0L; arrivalHorizonSeconds=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt); arrivalMarginSeconds=0L
-            selloutEstimateAt=0L
+    # Low/flat depletion can make an exact OOS regression numerically meaningless.
+    # Treat a long uninterrupted positive-stock run as fallback evidence only after
+    # three observations span 15 minutes. Stress it with the worst of:
+    #   * 60 units/hour,
+    #   * 2x net run depletion,
+    #   * 1.5x the largest observed uncensored burst.
+    # This branch deliberately does not publish a precise sellout timestamp.
+    $runCount=$runSamples.Count
+    if($runCount -ge $MinimumLowDepletionObservationSamples){
+        $orderedRun=@($runSamples.ToArray() | Sort-Object at)
+        $runFirstAt=[long]$orderedRun[0].at
+        $runLastAt=[long]$orderedRun[$orderedRun.Count-1].at
+        $runSpan=[Math]::Max(0L,$runLastAt-$runFirstAt)
+        if($runSpan -ge $MinimumLowDepletionEvidenceSpanSeconds){
+            $firstStock=[long]$orderedRun[0].stock
+            $lastStock=[long]$orderedRun[$orderedRun.Count-1].stock
+            $netUnits=[Math]::Max(0L,$firstStock-$lastStock)
+            $netRatePerHour=if($runSpan -gt 0){($netUnits*3600.0)/$runSpan}else{0.0}
+            $burstRatePerHour=0.0
+            foreach($sample in $rates.ToArray()){
+                $candidate=[double]$sample.unitsPerSecond*3600.0
+                if($candidate -gt $burstRatePerHour){$burstRatePerHour=$candidate}
+            }
+            $stressRatePerHour=[Math]::Max(
+                $MinimumGuardedUnitsPerHour,
+                [Math]::Max(
+                    $netRatePerHour*[Math]::Max(1.0,$LowDepletionNetRateMultiplier),
+                    $burstRatePerHour*[Math]::Max(1.0,$RateGuardMultiplier)
+                )
+            )
+            if($stressRatePerHour -gt 0){
+                $stressRunway=[long][Math]::Ceiling(($CurrentStock*3600.0)/$stressRatePerHour)
+                $eligible=(
+                    $stressRunway -ge $requiredRunway -and
+                    $stressRunway -ge $adaptiveHoldHorizon
+                )
+                return [pscustomobject]@{
+                    eligible=[bool]$eligible; mode=$(if($eligible){'low-depletion-hold'}else{'none'})
+                    reason=$(if($eligible){'verified positive stock is holding under a stress-tested low-depletion envelope'}else{'low-depletion evidence exists but stress-tested runway is not long enough'})
+                    sampleCount=$runCount; evidenceSpanSeconds=[long]$runSpan
+                    percentileUnitsPerHour=[Math]::Round($netRatePerHour,3)
+                    guardedUnitsPerHour=[Math]::Round($stressRatePerHour,3)
+                    runwaySeconds=[long]$stressRunway; arrivalHorizonSeconds=[long]$arrivalHorizon
+                    arrivalMarginSeconds=[long][Math]::Max(0L,$stressRunway-$arrivalHorizon)
+                    selloutEstimateAt=0L; minimumHoldHorizonSeconds=$adaptiveHoldHorizon
+                }
+            }
         }
     }
 
-    # Use a high observed depletion quantile rather than the mean, then apply an
-    # additional multiplier and a hard one-unit-per-minute floor. This deliberately
-    # biases the runway shorter while avoiding one isolated burst becoming the sole
-    # definition of a many-hour slow-depletion market.
-    $rank=[int][Math]::Ceiling(0.90*$ordered.Count)-1
-    $rank=[Math]::Max(0,[Math]::Min($ordered.Count-1,$rank))
-    $percentileRate=[double]$ordered[$rank].unitsPerSecond
-    $guardedRate=[Math]::Max($MinimumGuardedUnitsPerHour/3600.0,$percentileRate*[Math]::Max(1.0,$RateGuardMultiplier))
-    if($guardedRate -le 0){
-        return [pscustomobject]@{
-            eligible=$false; reason='guarded depletion rate is unavailable'
-            sampleCount=$sampleCount; evidenceSpanSeconds=$span; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
-            runwaySeconds=0L; arrivalHorizonSeconds=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt); arrivalMarginSeconds=0L
-            selloutEstimateAt=0L
-        }
+    $reason=if($sampleCount -lt $MinimumDepletionSamples){
+        'too few uncensored depletion samples and insufficient low-depletion hold evidence'
+    }else{
+        'depletion evidence does not yet support a safe fallback'
     }
-
-    $runway=[long][Math]::Ceiling($CurrentStock/$guardedRate)
-    $arrivalHorizon=[Math]::Max(0L,$EarliestArrivalAt-$sourceAt)
-    $requiredRunway=[long][Math]::Ceiling([Math]::Max(
-        $arrivalHorizon*[Math]::Max(1.0,$MinimumRunwayToArrivalRatio),
-        $arrivalHorizon+[Math]::Max(0L,$MinimumArrivalMarginSeconds)
-    ))
-    $eligible=($runway -ge $requiredRunway)
-    $selloutAt=$sourceAt+$runway
     return [pscustomobject]@{
-        eligible=[bool]$eligible
-        reason=$(if($eligible){'conservative current-stock runway comfortably exceeds time to arrival'}else{'conservative current-stock runway is not large enough for the safety gate'})
-        sampleCount=$sampleCount
-        evidenceSpanSeconds=[long]$span
-        percentileUnitsPerHour=[Math]::Round($percentileRate*3600.0,3)
-        guardedUnitsPerHour=[Math]::Round($guardedRate*3600.0,3)
-        runwaySeconds=[long]$runway
-        arrivalHorizonSeconds=[long]$arrivalHorizon
-        arrivalMarginSeconds=[long][Math]::Max(0L,$runway-$arrivalHorizon)
-        selloutEstimateAt=[long]$selloutAt
+        eligible=$false; mode='none'; reason=$reason
+        sampleCount=$sampleCount; evidenceSpanSeconds=0L; guardedUnitsPerHour=0.0; percentileUnitsPerHour=0.0
+        runwaySeconds=0L; arrivalHorizonSeconds=$arrivalHorizon; arrivalMarginSeconds=0L
+        selloutEstimateAt=0L; minimumHoldHorizonSeconds=$adaptiveHoldHorizon
     }
 }
-
 function Get-LiveCycleProjection {
     param(
         [long]$CurrentStock,
