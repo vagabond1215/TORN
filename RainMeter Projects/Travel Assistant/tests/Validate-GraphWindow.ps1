@@ -8,6 +8,7 @@ $rendererPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1
 $stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 $hitboxPath = Join-Path $ProjectRoot '@Resources\Includes\InlineGraphHitboxes.inc'
 $settingsWindowPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenSettings.ps1'
+$graphVisualPreferencePath = Join-Path $ProjectRoot '@Resources\Scripts\GraphVisualPreferences.ps1'
 
 $failures = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:failures.Add($Message) }
@@ -156,7 +157,9 @@ if(-not(Test-Path -LiteralPath $settingsWindowPath)){
         "'Hindsight departure windows' -SettingName 'showHindsightWindows'",
         "'Forecast accuracy markers' -SettingName 'showAccuracyMarkers'",
         "'Graph tooltips' -SettingName 'showTooltips'",
-        'Set-ObjectProperty -Object $local -Name ''graphVisuals'''
+        'Set-ObjectProperty -Object $local -Name ''graphVisuals''',
+        "GraphVisualPreferences.ps1'",
+        '& $graphVisualPreferenceScript -Action Read -Value Hindsight'
     )){
         if(-not$settingsWindow.Contains($token)){Fail "Settings chart visual contract missing '$token'."}
     }
@@ -167,9 +170,45 @@ foreach($token in @(
     '[MeasureInlineGraph]',
     'RenderInlineGraph.ps1',
     '-MarketKey "#InlineGraphMarketKey#"',
+    '[MeasureGraphVisualAction]',
+    'GraphVisualPreferences.ps1',
+    'GraphVisualAction=Read',
+    'GraphVisualValue=Hindsight',
+    '[MeterGraphHindsightButton]',
+    '[MeterGraphChanceButton]',
+    '[MeterGraphWindowButton]',
+    '[MeterGraphStockButton]',
+    'ToggleGraphVisual(''Hindsight'')',
+    'ToggleGraphVisual(''Chance'')',
+    'ToggleGraphVisual(''Window'')',
+    'ToggleGraphVisual(''Stock'')',
+    'Text=H',
+    'Text=%',
+    'Text=W',
+    'Text=S',
     '@IncludeGraphHitboxes=#@#Includes\InlineGraphHitboxes.inc'
 )){
     if(-not$ini.Contains($token)){Fail "TravelAssistant.ini missing inline graph contract '$token'."}
+}
+
+if(-not(Test-Path -LiteralPath $graphVisualPreferencePath)){
+    Fail 'GraphVisualPreferences.ps1 is required for immediate persisted header graph toggles.'
+}else{
+    $graphVisualPreferences=Get-Content -LiteralPath $graphVisualPreferencePath -Raw
+    foreach($token in @(
+        "[ValidateSet('Read','Toggle')]",
+        "[ValidateSet('Hindsight','Chance','Window','Stock')]",
+        "'showHindsightWindows'",
+        "'showChance'",
+        "'showRestockWindowBounds'",
+        "'showTransitions'",
+        'settings.local.json',
+        'graph-visuals.kv',
+        'Write-TravelAssistantAtomicText -Path $LocalSettingsPath',
+        'Write-GraphVisualState -Base $base -Local $local'
+    )){
+        if(-not$graphVisualPreferences.Contains($token)){Fail "Graph visual preference contract missing '$token'."}
+    }
 }
 
 $rowsPath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityRows.inc'
@@ -219,7 +258,19 @@ if(-not(Test-Path -LiteralPath $stateReaderPath)){
         'spec.InfoLineCount',
         "table.concat(lines, '\n')",
         'updateGraphInfoRegion(spec, graphMeterName)',
-        'spec.HoverCount'
+        'spec.HoverCount',
+        'local activeGraphVisuals = { hindsight=true, chance=true, window=true, stock=true }',
+        'local function applyGraphVisualColors()',
+        'local function syncGraphVisualPreferences(force)',
+        "setVariable('GraphHindsightColor'",
+        "setVariable('GraphChanceColor'",
+        "setVariable('GraphWindowColor'",
+        "setVariable('GraphStockColor'",
+        'function ToggleGraphVisual(name)',
+        'function GraphVisualPreferenceChanged()',
+        "setVariable('GraphVisualAction', 'Toggle')",
+        "SKIN:Bang('!CommandMeasure', 'MeasureGraphVisualAction', 'Run')",
+        'if expandedKey ~= '''' then requestInlineGraph(expandedKey) end'
     )){
         if(-not$reader.Contains($token)){Fail "StateReader graph hitbox contract missing '$token'."}
     }
