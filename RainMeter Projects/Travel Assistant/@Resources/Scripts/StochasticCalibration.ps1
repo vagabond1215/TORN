@@ -27,8 +27,11 @@ $SummaryFile=Join-Path $RuntimeDir 'stochastic-calibration.json'
 $ObservationFile=Join-Path $RuntimeDir 'observations.jsonl'
 $CycleFile=Join-Path $RuntimeDir 'cycles.jsonl'
 $AtomicFileScript=Join-Path $PSScriptRoot 'AtomicFile.ps1'
+$CycleForecastFilterScript=Join-Path $PSScriptRoot 'CycleForecastFilter.ps1'
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for stochastic calibration state.' }
+if (-not (Test-Path -LiteralPath $CycleForecastFilterScript)) { throw 'CycleForecastFilter.ps1 is required for plausibility-filtered calibration truth.' }
 . $AtomicFileScript
+. $CycleForecastFilterScript
 
 function Get-SCProperty {
     param([object]$Object,[string]$Name)
@@ -179,6 +182,8 @@ function Get-SCConfirmedOutcome {
         [object[]]$Cycles,
         [long]$AsOf
     )
+    $Observations=@(Get-PlausibilityFilteredStockObservations -Rows $Observations -ExpectedPollIntervalSeconds 60)
+    $Cycles=@($Cycles|Where-Object{Test-CycleForecastBoundaryEvidence -Cycle $_ -Purpose Forecast})
     $exact=Get-SCExactObservationOutcome -Observations $Observations -ArrivalAt $ArrivalAt -TargetQuantity $TargetQuantity
     if ([bool]$exact.anyScorable) { return $exact }
 
