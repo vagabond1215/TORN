@@ -200,6 +200,19 @@ $selected=Select-StableWindowPlanGroup -Model $selectionModel -EarliestArrivalAt
 Assert-Equal ([string]$selected.mode) 'best' 'Near-term Best Hit must beat a much later Safe Window in another cycle.'
 Assert-Near ([double]$selected.probability) (2.0/3.0) 0.0001 'Chronological Best Hit selection should retain its empirical confidence.'
 
+
+$immediateModel=[pscustomobject]@{
+    sampleCount=4
+    groups=@([pscustomobject]@{lateSelloutAt=2000L})
+    segments=@(
+        [pscustomobject]@{startAt=1200L;endAt=1300L;probability=0.75},
+        [pscustomobject]@{startAt=1500L;endAt=1600L;probability=0.5}
+    )
+}
+Assert-Near (Get-StableRecurringProbabilityAt -Model $immediateModel -ArrivalAt 1250L) 0.75 0.000001 'Immediate-arrival journal probability should use the overlap segment containing the actual flight-aligned arrival.'
+Assert-Near (Get-StableRecurringProbabilityAt -Model $immediateModel -ArrivalAt 1400L) 0.0 0.000001 'Arrival between supported in-stock segments is a known legacy 0% within current/next-cycle support.'
+Assert-Near (Get-StableRecurringProbabilityAt -Model $immediateModel -ArrivalAt 2500L) -1.0 0.000001 'Arrival beyond immediate-next legacy support must remain unknown for the multi-cycle model rather than becoming a fake 0%.'
+
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" -ForegroundColor Red }
     Write-Host "Stable recurring-window tests failed with $($failures.Count) error(s)." -ForegroundColor Red
