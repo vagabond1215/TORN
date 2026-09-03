@@ -36,8 +36,10 @@ The aggregate runner currently includes static/config validation plus determinis
   scoring, prospective future-only freeze/deduplication, continuity-safe outcome
   resolution, overall/evidence-quality/market/horizon calibration aggregates,
   restricted production multi-cycle earliest-arrival chance fallback, weighted
-  occupancy/phase-dispersion diagnostics, honest proxy baseline labels, fail-soft
-  integration, and no-future-leakage cutoffs;
+  occupancy/phase-dispersion diagnostics, eight-hour flight-aligned chance journaling,
+  strict later-truth resolution/Brier-log-loss scoring, flight-shifted realized-hit
+  graph diagnostics, conservative slow-depletion Safe Window Open gating, honest
+  proxy baseline labels, fail-soft integration, and no-future-leakage cutoffs;
 - censor-aware offline history build/import compatibility for schema-v2 evidence.
 
 No deterministic test should require a live web provider.
@@ -53,6 +55,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Run-MultiCycleChanceBridgeTests.ps1
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Run-ChanceHistoryTests.ps1
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tests\Validate-LegacyWindowAuthority.ps1
