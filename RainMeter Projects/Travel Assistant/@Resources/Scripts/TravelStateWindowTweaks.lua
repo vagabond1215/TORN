@@ -15,6 +15,18 @@ local function number(value)
     return tonumber(value) or 0
 end
 
+local function optionalProbability(value)
+    local raw=trim(value)
+    if raw=='' then return nil end
+    local p=tonumber(raw)
+    if p==nil or p<0 or p>1 then return nil end
+    return p
+end
+
+local function chancePercent(value)
+    return string.format('%.0f%%',math.max(0,math.min(1,value))*100)
+end
+
 local function readKv(path)
     local manifest=io.open((path:match('^(.*[\\/])') or '')..'last-update.txt','r'); if manifest then local raw=manifest:read('*a') or ''; manifest:close(); local name=raw:match('^%d+|(ui%-state%-%d+%-%x+%.kv)'); if name then path=(path:match('^(.*[\\/])') or '')..name end end
     local out={}
@@ -150,7 +162,10 @@ local function buildLookup(state)
                 activeSelloutAt=number(state[prefix..'ActiveSelloutEstimateAt']),
                 nextRestockAt=number(state[prefix..'NextRestockEstimateAt']),
                 lastObservedOosAt=number(state[prefix..'LastObservedOosAt']),
-                forecastMode=trim(state[prefix..'ForecastMode']):lower()
+                forecastMode=trim(state[prefix..'ForecastMode']):lower(),
+                immediateArrivalProbability=optionalProbability(state[prefix..'ImmediateArrivalProbabilityValue']),
+                multiCycleChanceEligible=number(state[prefix..'MultiCycleChanceEligible'])>=1,
+                multiCycleArrivalProbability=optionalProbability(state[prefix..'MultiCycleChanceProbability'])
             }
         end
     end
@@ -239,6 +254,23 @@ local function phaseSafePlan(row)
     return plan
 end
 
+local function arrivalChanceText(row)
+    if row==nil then return '' end
+    if row.immediateArrivalProbability~=nil then
+        return chancePercent(row.immediateArrivalProbability)
+    end
+    if row.multiCycleChanceEligible and row.multiCycleArrivalProbability~=nil then
+        return chancePercent(row.multiCycleArrivalProbability)
+    end
+    return ''
+end
+
+local function withArrivalChance(text,row)
+    local chance=arrivalChanceText(row)
+    if chance=='' then return text end
+    return text..' '..chance
+end
+
 local function outboundTooltip(row,state,now)
     local remaining=liveTravelRemainingSeconds(state,now)
     local landingAt=now+remaining
@@ -302,30 +334,30 @@ local function outboundStatus(row,state,now)
     local plan=phaseSafePlan(row)
     if row~=nil and number(row.stockEvidenceAt)>0 then
         if number(row.currentStock)>0 then
-            if number(row.activeSelloutAt)>now then return 'Sells out in '..formatDuration(number(row.activeSelloutAt)-now) end
-            return 'In stock'
+            if number(row.activeSelloutAt)>now then return withArrivalChance('Sells out in '..formatDuration(number(row.activeSelloutAt)-now),row) end
+            return withArrivalChance('In stock',row)
         end
         if rowHasUnresolvedOos(row) then
-            if number(row.nextRestockAt)>now then return 'Restocks in '..formatDuration(number(row.nextRestockAt)-now) end
-            if number(row.nextRestockAt)>0 then return 'Restock estimate overdue' end
-            return 'Restock timing learning'
+            if number(row.nextRestockAt)>now then return withArrivalChance('Restocks in '..formatDuration(number(row.nextRestockAt)-now),row) end
+            if number(row.nextRestockAt)>0 then return withArrivalChance('Restock estimate overdue',row) end
+            return withArrivalChance('Restock timing learning',row)
         end
         -- A later observed restock supersedes the preceding OoS. If that positive
         -- source later goes stale, present uncertainty instead of resurrecting the
         -- old restock countdown.
-        if number(row.activeRestockAt)>0 then return 'Stock status stale' end
-        return 'Stock status unknown'
+        if number(row.activeRestockAt)>0 then return withArrivalChance('Stock status stale',row) end
+        return withArrivalChance('Stock status unknown',row)
     end
-    if plan==nil then return 'MARKET DATA PENDING' end
+    if plan==nil then return withArrivalChance('MARKET DATA PENDING',row) end
     local remaining=liveTravelRemainingSeconds(state,now)
     local landingAt=now+remaining
     local group=landingRelevantGroup(plan,landingAt)
-    if group==nil then return 'MARKET DATA PENDING' end
+    if group==nil then return withArrivalChance('MARKET DATA PENDING',row) end
     local restockAt=expectedRestockAt(plan,group)
     local selloutAt=expectedSelloutAt(plan,group,restockAt)
-    if restockAt>now then return 'Restocks in '..formatDuration(restockAt-now) end
-    if selloutAt>now then return 'Sells out in '..formatDuration(selloutAt-now) end
-    return 'MARKET DATA PENDING'
+    if restockAt>now then return withArrivalChance('Restocks in '..formatDuration(restockAt-now),row) end
+    if selloutAt>now then return withArrivalChance('Sells out in '..formatDuration(selloutAt-now),row) end
+    return withArrivalChance('MARKET DATA PENDING',row)
 end
 
 local function currentCycleStatus(row,now)
