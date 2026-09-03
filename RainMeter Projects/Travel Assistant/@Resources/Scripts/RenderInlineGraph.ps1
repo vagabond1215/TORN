@@ -550,9 +550,13 @@ if ($allRows.Count -eq 0) {
     $historySource = 'seed_fallback'
 }
 $allRows = @(Compress-StockHistory -Rows $allRows)
+# The lime stock trace remains raw provider truth for audit. Transition-dependent
+# overlays and hindsight calculations use the plausibility-filtered view so a
+# one-poll zero/dropout cannot manufacture OoS/restock boundaries.
+$calculationRows=@(Get-PlausibilityFilteredStockObservations -Rows $allRows -ExpectedPollIntervalSeconds 60)
 $cycleRows=@(Read-InlineMarketCycles -Paths @($RuntimeCycleFile,$SeedCycleFile) -Country $country -ItemId $itemId)
 $restockWindowSummary=Get-InlineRestockWindowSummary -Cycles $cycleRows
-$stockTransitions=@(Get-InlineStockTransitions -Rows $allRows)
+$stockTransitions=@(Get-InlineStockTransitions -Rows $calculationRows)
 $restockTransitions=@($stockTransitions|Where-Object{[string]$_.kind -eq 'restock'}|ForEach-Object{[long]$_.timestamp})
 $oosTransitions=@($stockTransitions|Where-Object{[string]$_.kind -eq 'oos'}|ForEach-Object{[long]$_.timestamp})
 
@@ -575,7 +579,7 @@ $chanceRows=@(Read-MarketChanceHistory -Path $ChanceHistoryFile -Key $MarketKey 
 $resolvedRows=@(Read-MarketResolvedArrivalHistory -Path $ResolvedArrivalHistoryFile -Key $MarketKey -Cutoff $cutoff -MaximumForecastAt $now)
 $displayAccuracyRows=@(Get-InlineDisplayAccuracyMarkers -Rows $resolvedRows -BucketSeconds 900)
 $flightSeconds=Get-InlineTravelSeconds -State $state -Country $country
-$realizedRows=@(Get-FlightShiftedRealizedHistory -StockRows $allRows -FlightSeconds $flightSeconds -Cutoff $cutoff -NowEpoch $now)
+$realizedRows=@(Get-FlightShiftedRealizedHistory -StockRows $calculationRows -FlightSeconds $flightSeconds -Cutoff $cutoff -NowEpoch $now)
 $realizedThrough=$now-$flightSeconds
 $realizedWindows=@(Get-RealizedDepartureWindows -Rows $realizedRows -RealizedThrough $realizedThrough -Cutoff $cutoff)
 
