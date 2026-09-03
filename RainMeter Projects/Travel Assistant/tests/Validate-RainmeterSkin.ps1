@@ -220,8 +220,373 @@ if($sortProfit -notmatch '(?im)^Text=PROFIT\s*$'){Fail 'Displayed-profit sort mu
 foreach($name in @('Upcoming','Gross','ProfitHour')){
     $textBody=[regex]::Match($ini,'(?ms)^\[MeterSort'+$name+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
     $buttonBody=[regex]::Match($ini,'(?ms)^\[MeterSort'+$name+'Button\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
-    if($textBody -notmatch '(?im)^FontSize=11\s*$' -or $textBody -notmatch '(?im)^StringStyle=Bold\s*$' -or $textBody -notmatch '(?im)^W=104\s*$'){Fail "Sort/filter text $name must be bold 11pt inside the widened 104px control."}
-    if($buttonBody -notmatch '(?im)^W=104\s*$' -or $buttonBody -notmatch '(?im)^Shape=Rectangle 0,0,104,23,4 \|'){Fail "Sort/filter button $name must use the equal 104px width."}
+    if($textBody -notmatch '(?im)^FontSize=11\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $textBody -notmatch '(?im)^StringStyle=Bold\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $textBody -notmatch '(?im)^W=104\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+){Fail "Sort/filter text $name must be bold 11pt inside the widened 104px control."}
+    if($buttonBody -notmatch '(?im)^W=104\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $buttonBody -notmatch '(?im)^Shape=Rectangle 0,0,104,23,4 \|'){Fail "Sort/filter button $name must use the equal 104px width."}
+}
+foreach($entry in @(
+    @{Name='Hindsight';Text='H';X=340;Color='GraphHindsightColor'},
+    @{Name='Chance';Text='%';X=369;Color='GraphChanceColor'},
+    @{Name='Window';Text='W';X=398;Color='GraphWindowColor'},
+    @{Name='Stock';Text='S';X=427;Color='GraphStockColor'}
+)){
+    $textBody=[regex]::Match($ini,'(?ms)^\[MeterGraph'+$entry.Name+'\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    $buttonBody=[regex]::Match($ini,'(?ms)^\[MeterGraph'+$entry.Name+'Button\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+    if([string]::IsNullOrWhiteSpace($textBody) -or [string]::IsNullOrWhiteSpace($buttonBody)){Fail "Missing graph visual header toggle $($entry.Name).";continue}
+    if($buttonBody -notmatch ('(?im)^X='+[string]$entry.X+'\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+) -or $buttonBody -notmatch '(?im)^W=23\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $buttonBody -notmatch '(?im)^H=23\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $buttonBody -notmatch '(?im)^Shape=Rectangle 0,0,23,23,4 \|'){Fail "Graph visual toggle $($entry.Name) must remain a 23px square sort-style button."}
+    if($textBody -notmatch ('(?im)^Text='+[regex]::Escape([string]$entry.Text)+'\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+) -or $textBody -notmatch '(?im)^FontSize=11\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $textBody -notmatch '(?im)^StringStyle=Bold\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $textBody -notmatch ('(?im)^FontColor=#'+[regex]::Escape([string]$entry.Color)+'#\s*
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+)){Fail "Graph visual toggle $($entry.Name) label/style contract changed."}
+    if($textBody -notmatch ('ToggleGraphVisual\('''+[regex]::Escape([string]$entry.Name)+'''\)') -or $buttonBody -notmatch ('ToggleGraphVisual\('''+[regex]::Escape([string]$entry.Name)+'''\)')){Fail "Graph visual toggle $($entry.Name) must call StateReader directly."}
+    if($textBody -match '(?im)^ToolTipText=.+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+ -or $buttonBody -match '(?im)^ToolTipText=.+
+$tokens=$null; $parseErrors=$null
+[void][System.Management.Automation.Language.Parser]::ParseFile($rendererPath,[ref]$tokens,[ref]$parseErrors)
+foreach($parseError in @($parseErrors)){ Fail "RenderInlineGraph.ps1 parse error: $($parseError.Message)" }
+foreach ($token in @(
+    'RuntimeObservationFile','SeedObservationFile','$historySource = ''runtime_observations''','if ($allRows.Count -eq 0)',
+    'Compress-StockHistory','history_bootstrap','history_repair_baseline','current_snapshot',
+    'Add-Type -AssemblyName System.Drawing','New-Object System.Drawing.Bitmap','for ($i=0; $i -le 8; $i++)',
+    'Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force','StableImageFile','PointCount','ChangeCount',
+    'UnknownBeforeTimestamp','WindowStartTimestamp',
+    '$graphics.Clear([System.Drawing.Color]::FromArgb(0,0,0))',
+    'FromArgb(126,190,73),2','FromArgb(0,71,171),1','FromArgb(255,117,24),1'
+)) {
+    if (-not $renderer.Contains($token)) { Fail "Inline renderer missing '$token'." }
+}
+if ($renderer -match '(?i)Invoke-RestMethod|Invoke-WebRequest|curl\.exe|api\.torn\.com|prombot\.co\.uk|yata\.yt') { Fail 'Inline renderer must remain local-only.' }
+foreach ($retired in @('H STOCK  |','retained point(s)','change(s)','Path GraphPath','display_carry')) {
+    if ($renderer.Contains($retired)) { Fail "Inline renderer retains retired visible/fabricated-history token '$retired'." }
+}
+
+if ($errors.Count -gt 0) {
+    foreach ($message in $errors) { Write-Host "FAIL: $message" -ForegroundColor Red }
+    Write-Host "Rainmeter native-image opportunity validation failed with $($errors.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'Rainmeter card layering, bounded update timeout, isolated inline-graph visibility, native FlagKit cards, sort-collapse behavior, separate inline/popup transports, and observed-only PNG history validation passed.' -ForegroundColor Green
+exit 0
+){Fail "Graph visual header toggle $($entry.Name) must not expose a tooltip."}
 }
 
 $tokens=$null; $parseErrors=$null
