@@ -16,6 +16,8 @@ $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
+$RuntimeCycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
+$SeedCycleFile = Join-Path $SeedDir 'cycles.jsonl'
 $ChanceHistoryFile = Join-Path $RuntimeDir 'chance-history.jsonl'
 $ResolvedArrivalHistoryFile = Join-Path $RuntimeDir 'resolved-arrival-history.jsonl'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
@@ -25,6 +27,9 @@ $LocalSettingsFile = Join-Path $ConfigDir 'settings.local.json'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared graph history reads.' }
 . $AtomicFileScript
+$CycleForecastFilterScript = Join-Path $PSScriptRoot 'CycleForecastFilter.ps1'
+if (-not (Test-Path -LiteralPath $CycleForecastFilterScript)) { throw 'CycleForecastFilter.ps1 is required for modeled restock-window markers.' }
+. $CycleForecastFilterScript
 
 $focusUpdatedAt=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $focusText=('MarketKey={0}{1}UpdatedAt={2}{1}' -f $MarketKey,[Environment]::NewLine,$focusUpdatedAt)
@@ -120,6 +125,72 @@ function Read-MarketHistory {
         if ($null -ne $reader) { $reader.Dispose() }
     }
     return $rows
+}
+
+
+function Read-InlineMarketCycles {
+    param([string[]]$Paths,[string]$Country,[int]$ItemId)
+    $rows=New-Object System.Collections.Generic.List[object]
+    $seen=@{}
+    $countryNeedle='"country":"'+$Country+'"'
+    $itemPattern='"itemId"\s*:\s*'+[regex]::Escape([string]$ItemId)+'(?=\s*[,}])'
+    foreach($path in $Paths){
+        if(-not(Test-Path -LiteralPath $path)){continue}
+        $reader=$null
+        try{
+            $reader=Open-TravelAssistantSharedTextReader -Path $path
+            while(($line=$reader.ReadLine()) -ne $null){
+                if([string]::IsNullOrWhiteSpace($line)){continue}
+                if($line.IndexOf($countryNeedle,[System.StringComparison]::OrdinalIgnoreCase) -lt 0){continue}
+                if($line -notmatch $itemPattern){continue}
+                try{$row=$line|ConvertFrom-Json}catch{continue}
+                $restockAt=[long](Get-InlineProperty $row 'restockAt')
+                $soldOutAt=[long](Get-InlineProperty $row 'soldOutAt')
+                $delay=[long](Get-InlineProperty $row 'restockDelaySeconds')
+                if($restockAt -le 0 -or $soldOutAt -le 0 -or $delay -le 0){continue}
+                $identity=('{0}:{1}:{2}' -f $restockAt,$soldOutAt,$delay)
+                if($seen.ContainsKey($identity)){continue}
+                $seen[$identity]=$true
+                $rows.Add($row)
+            }
+        }finally{
+            if($null -ne $reader){$reader.Dispose()}
+        }
+    }
+    return $rows.ToArray()
+}
+
+function Get-InlineRestockWindowSummary {
+    param([object[]]$Cycles,[int]$RecentSamples=12)
+    $usable=@($Cycles|Where-Object{
+        $null -ne $_ -and
+        $_.PSObject.Properties['restockDelaySeconds'] -and [long]$_.restockDelaySeconds -gt 0 -and
+        (Test-CycleForecastBoundaryEvidence -Cycle $_ -Purpose Forecast)
+    }|Sort-Object @{Expression={if($_.PSObject.Properties['soldOutAt']){[long]$_.soldOutAt}else{0L}};Descending=$true})
+    if($usable.Count -eq 0){return $null}
+    $recent=@($usable)
+    if($RecentSamples -gt 0 -and $recent.Count -gt $RecentSamples){$recent=@($recent|Select-Object -First $RecentSamples)}
+    $delays=[long[]]@($recent|ForEach-Object{[long]$_.restockDelaySeconds})
+    return [pscustomobject]@{
+        sampleCount=[int]$recent.Count
+        averageDelaySeconds=[long][Math]::Round([double](($delays|Measure-Object -Average).Average))
+        earliestDelaySeconds=[long](($delays|Measure-Object -Minimum).Minimum)
+        latestDelaySeconds=[long](($delays|Measure-Object -Maximum).Maximum)
+    }
+}
+
+function Get-InlineOosTransitions {
+    param([object[]]$Rows)
+    $result=New-Object System.Collections.Generic.List[long]
+    $previous=$null
+    foreach($row in @($Rows|Sort-Object timestamp)){
+        $stock=[long]$row.stock
+        if($null -ne $previous -and [long]$previous.stock -gt 0 -and $stock -eq 0){
+            $result.Add([long]$row.timestamp)
+        }
+        $previous=$row
+    }
+    return $result.ToArray()
 }
 
 function Read-MarketChanceHistory {
@@ -300,6 +371,7 @@ $windowHours = [Math]::Max(1,[Math]::Min(24,$windowHours))
 
 $showGrid=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showGrid' -Default $true
 $showTransitions=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showTransitions' -Default $true
+$showRestockWindowBounds=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showRestockWindowBounds' -Default $true
 $showChance=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showChance' -Default $true
 $showHindsightWindows=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showHindsightWindows' -Default $true
 $showAccuracyMarkers=Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showAccuracyMarkers' -Default $true
@@ -324,6 +396,9 @@ if ($allRows.Count -eq 0) {
     $historySource = 'seed_fallback'
 }
 $allRows = @(Compress-StockHistory -Rows $allRows)
+$cycleRows=@(Read-InlineMarketCycles -Paths @($RuntimeCycleFile,$SeedCycleFile) -Country $country -ItemId $itemId)
+$restockWindowSummary=Get-InlineRestockWindowSummary -Cycles $cycleRows
+$oosTransitions=@(Get-InlineOosTransitions -Rows $allRows)
 
 $rows = @()
 $predecessor = @($allRows | Where-Object { [long]$_.timestamp -lt $cutoff } | Select-Object -Last 1)
@@ -353,6 +428,8 @@ $realizedThrough=$now-$flightSeconds
 $realizedWindows=@(Get-RealizedDepartureWindows -Rows $realizedRows -RealizedThrough $realizedThrough -Cutoff $cutoff)
 $hoverRegions=New-Object System.Collections.Generic.List[object]
 $transitionHoverRegions=New-Object System.Collections.Generic.List[object]
+$forecastHoverRegions=New-Object System.Collections.Generic.List[object]
+$forecastBoundaryCount=0
 $maximumHoverRegions=48
 
 $maxStock = 0L
@@ -390,6 +467,7 @@ $errorPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(85,22
 $hitBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(115,190,230,95))
 $missBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(140,255,117,24))
 $restockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(0,71,171),1)
+$restockWindowPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(145,132,165,190),1)
 $selloutPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255,117,24),1)
 $labelBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(170,178,190))
 $labelFont = New-Object System.Drawing.Font('Segoe UI',7,[System.Drawing.FontStyle]::Regular,[System.Drawing.GraphicsUnit]::Point)
@@ -494,6 +572,46 @@ if ($null -ne $previous -and [single]$previous.x -lt [single]$plotRight) {
     $graphics.DrawLine($stockPen,[single]$previous.x,[single]$previous.y,[single]$plotRight,[single]$previous.y)
 }
 
+# Current-model restock bounds are applied to each observed OoS transition. The
+# graph is still past-only: future bounds are skipped rather than collapsed onto now.
+if($showRestockWindowBounds -and $null -ne $restockWindowSummary){
+    $earlyDelay=[long]$restockWindowSummary.earliestDelaySeconds
+    $lateDelay=[long]$restockWindowSummary.latestDelaySeconds
+    $sampleCount=[int]$restockWindowSummary.sampleCount
+    $forecastMarkerTop=[single]($plotBottom+3)
+    $forecastMarkerBottom=[single]($plotBottom+6)
+    foreach($oosAt in $oosTransitions){
+        $openAt=[long]$oosAt+$earlyDelay
+        $closeAt=[long]$oosAt+$lateDelay
+        if($openAt -ge $cutoff -and $openAt -le $now){
+            $x=Get-InlineX $openAt
+            $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
+            $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerBottom,[single]($x+3),$forecastMarkerBottom)
+            $forecastBoundaryCount++
+            if($showTooltips){
+                $forecastHoverRegions.Add([pscustomobject]@{
+                    x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
+                    text=('Restock window opens: '+(Format-InlineRelativeTime -Timestamp $openAt -NowEpoch $now)+' | OoS + '+(Format-InlineDuration -Seconds $earlyDelay)+' | '+$sampleCount+' recent cycle(s)')
+                    kind='restock_window_open';timestamp=$openAt
+                })
+            }
+        }
+        if($closeAt -ge $cutoff -and $closeAt -le $now){
+            $x=Get-InlineX $closeAt
+            $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
+            $graphics.DrawLine($restockWindowPen,[single]($x-3),$forecastMarkerBottom,$x,$forecastMarkerBottom)
+            $forecastBoundaryCount++
+            if($showTooltips){
+                $forecastHoverRegions.Add([pscustomobject]@{
+                    x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
+                    text=('Restock window closes: '+(Format-InlineRelativeTime -Timestamp $closeAt -NowEpoch $now)+' | OoS + '+(Format-InlineDuration -Seconds $lateDelay)+' | '+$sampleCount+' recent cycle(s)')
+                    kind='restock_window_close';timestamp=$closeAt
+                })
+            }
+        }
+    }
+}
+
 # Strictly resolved forecasts use confirmed calibration truth. Keep this as
 # validation metadata rather than another full curve.
 if($showAccuracyMarkers){
@@ -539,11 +657,17 @@ if($showChance){
     
 }
 
-# Hindsight/accuracy regions take priority. Use remaining capacity for the most
-# recent actual Restock/OoS ticks so dense rapid-cycle graphs remain bounded.
+# Hindsight/accuracy regions take priority. Actual transitions are next, then the
+# current-model restock-window boundary ticks use any remaining bounded capacity.
 $remaining=[Math]::Max(0,$maximumHoverRegions-$hoverRegions.Count)
 if($remaining -gt 0){
     foreach($region in @($transitionHoverRegions.ToArray()|Sort-Object timestamp -Descending|Select-Object -First $remaining)){
+        $hoverRegions.Add($region)
+    }
+}
+$remaining=[Math]::Max(0,$maximumHoverRegions-$hoverRegions.Count)
+if($remaining -gt 0){
+    foreach($region in @($forecastHoverRegions.ToArray()|Sort-Object timestamp -Descending|Select-Object -First $remaining)){
         $hoverRegions.Add($region)
     }
 }
@@ -562,7 +686,7 @@ $tmpImage = $imagePath + '.tmp'
 $bitmap.Save($tmpImage,[System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()
-$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $hindsightBandBrush.Dispose(); $hindsightBoundaryPen.Dispose(); $errorPen.Dispose(); $hitBrush.Dispose(); $missBrush.Dispose(); $restockPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
+$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $hindsightBandBrush.Dispose(); $hindsightBoundaryPen.Dispose(); $errorPen.Dispose(); $hitBrush.Dispose(); $missBrush.Dispose(); $restockPen.Dispose(); $restockWindowPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
 Move-Item -LiteralPath $tmpImage -Destination $imagePath -Force
 Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force
 
@@ -611,8 +735,13 @@ $specValues=@{
     UnknownBeforeTimestamp = $unknownBefore
     WindowStartTimestamp = $cutoff
     HindsightWindowCount = $realizedWindows.Count
+    ForecastRestockBoundaryCount = $forecastBoundaryCount
+    RestockWindowSampleCount = $(if($null -ne $restockWindowSummary){[int]$restockWindowSummary.sampleCount}else{0})
+    RestockWindowEarlyDelaySeconds = $(if($null -ne $restockWindowSummary){[long]$restockWindowSummary.earliestDelaySeconds}else{0})
+    RestockWindowLateDelaySeconds = $(if($null -ne $restockWindowSummary){[long]$restockWindowSummary.latestDelaySeconds}else{0})
     ShowGrid = $(if($showGrid){1}else{0})
     ShowTransitions = $(if($showTransitions){1}else{0})
+    ShowRestockWindowBounds = $(if($showRestockWindowBounds){1}else{0})
     ShowChance = $(if($showChance){1}else{0})
     ShowHindsightWindows = $(if($showHindsightWindows){1}else{0})
     ShowAccuracyMarkers = $(if($showAccuracyMarkers){1}else{0})
