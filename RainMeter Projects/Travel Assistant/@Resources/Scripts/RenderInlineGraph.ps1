@@ -218,6 +218,99 @@ function Get-FlightShiftedRealizedHistory {
     return $compressed.ToArray()
 }
 
+function Format-InlineDuration {
+    param([long]$Seconds)
+    $value=[Math]::Max(0L,$Seconds)
+    $hours=[Math]::Floor($value/3600)
+    $minutes=[Math]::Floor(($value%3600)/60)
+    $seconds=$value%60
+    return ('{0:00}:{1:00}:{2:00}' -f $hours,$minutes,$seconds)
+}
+
+function Format-InlineRelativeTime {
+    param([long]$Timestamp,[long]$NowEpoch)
+    if($Timestamp -le 0){return 'unknown'}
+    $delta=$NowEpoch-$Timestamp
+    if($delta -ge 0){return ((Format-InlineDuration -Seconds $delta)+' ago')}
+    return ('in '+(Format-InlineDuration -Seconds (-$delta)))
+}
+
+function Get-ChanceThresholdCrossing {
+    param([object]$Left,[object]$Right,[double]$Threshold)
+    $leftAt=[long]$Left.timestamp
+    $rightAt=[long]$Right.timestamp
+    $leftP=[double]$Left.probability
+    $rightP=[double]$Right.probability
+    if($rightAt -le $leftAt -or [Math]::Abs($rightP-$leftP) -lt 0.0000001){return $rightAt}
+    $fraction=($Threshold-$leftP)/($rightP-$leftP)
+    $fraction=[Math]::Max(0.0,[Math]::Min(1.0,$fraction))
+    return [long][Math]::Round($leftAt+(($rightAt-$leftAt)*$fraction))
+}
+
+function Get-ChanceWindows {
+    param(
+        [object[]]$Rows,
+        [double]$Threshold,
+        [long]$Cutoff,
+        [long]$NowEpoch,
+        [long]$MaximumGapSeconds=300L,
+        [long]$FreshTailSeconds=180L
+    )
+    $ordered=@($Rows|Sort-Object timestamp)
+    $windows=New-Object System.Collections.Generic.List[object]
+    $previous=$null
+    $activeStart=0L
+
+    foreach($row in $ordered){
+        $at=[long]$row.timestamp
+        $p=[double]$row.probability
+        if($at -lt $Cutoff -or $at -gt ($NowEpoch+60L)){continue}
+
+        if($null -eq $previous){
+            if($p -ge $Threshold){$activeStart=[Math]::Max($Cutoff,$at)}
+            $previous=$row
+            continue
+        }
+
+        $gap=$at-[long]$previous.timestamp
+        if($gap -le 0){$previous=$row;continue}
+        if($gap -gt $MaximumGapSeconds){
+            if($activeStart -gt 0){
+                $end=[long]$previous.timestamp
+                if($end -gt $activeStart){
+                    $windows.Add([pscustomobject]@{startAt=$activeStart;endAt=$end;openEnded=$false;endedByGap=$true})
+                }
+            }
+            $activeStart=if($p -ge $Threshold){$at}else{0L}
+            $previous=$row
+            continue
+        }
+
+        $previousP=[double]$previous.probability
+        if($previousP -lt $Threshold -and $p -ge $Threshold){
+            $activeStart=Get-ChanceThresholdCrossing -Left $previous -Right $row -Threshold $Threshold
+        }elseif($previousP -ge $Threshold -and $p -lt $Threshold){
+            $end=Get-ChanceThresholdCrossing -Left $previous -Right $row -Threshold $Threshold
+            if($activeStart -le 0){$activeStart=[long]$previous.timestamp}
+            if($end -gt $activeStart){
+                $windows.Add([pscustomobject]@{startAt=$activeStart;endAt=$end;openEnded=$false;endedByGap=$false})
+            }
+            $activeStart=0L
+        }
+        $previous=$row
+    }
+
+    if($activeStart -gt 0 -and $null -ne $previous){
+        $lastAt=[long]$previous.timestamp
+        $fresh=(($NowEpoch-$lastAt) -le $FreshTailSeconds)
+        $end=if($fresh){$NowEpoch}else{$lastAt}
+        if($end -gt $activeStart){
+            $windows.Add([pscustomobject]@{startAt=$activeStart;endAt=$end;openEnded=[bool]$fresh;endedByGap=$false})
+        }
+    }
+    return $windows.ToArray()
+}
+
 function Compress-StockHistory {
     param([object[]]$Rows)
     $compressed = @()
@@ -285,6 +378,11 @@ $chanceRows=@(Read-MarketChanceHistory -Path $ChanceHistoryFile -Key $MarketKey 
 $resolvedRows=@(Read-MarketResolvedArrivalHistory -Path $ResolvedArrivalHistoryFile -Key $MarketKey -Cutoff $cutoff -MaximumForecastAt $now)
 $flightSeconds=Get-InlineTravelSeconds -State $state -Country $country
 $realizedRows=@(Get-FlightShiftedRealizedHistory -StockRows $allRows -FlightSeconds $flightSeconds -Cutoff $cutoff -NowEpoch $now)
+$chanceBandThreshold=0.50
+$chanceWindows=@(Get-ChanceWindows -Rows $chanceRows -Threshold $chanceBandThreshold -Cutoff $cutoff -NowEpoch $now)
+$hoverRegions=New-Object System.Collections.Generic.List[object]
+$transitionHoverRegions=New-Object System.Collections.Generic.List[object]
+$maximumHoverRegions=48
 
 $maxStock = 0L
 if ($rows.Count -gt 0) {
@@ -315,6 +413,8 @@ $gridMajor = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(72,7
 $gridMinor = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(48,53,61),1)
 $stockPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(126,190,73),2)
 $chancePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(105,200,235),1.5)
+$chanceBandBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(28,165,165,235))
+$chanceBoundaryPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(150,165,165,235),1)
 $realizedPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(90,205,205,205),1)
 $realizedPen.DashStyle=[System.Drawing.Drawing2D.DashStyle]::Dot
 $errorPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(85,225,225,225),1)
@@ -335,6 +435,39 @@ for ($i=0; $i -le 3; $i++) {
     $y = [single]($plotTop + ($plotHeight * $i / 3.0))
     $pen = if ($i -eq 0 -or $i -eq 3) { $gridMajor } else { $gridMinor }
     $graphics.DrawLine($pen,[single]$plotLeft,$y,[single]$plotRight,$y)
+}
+
+# Shade modeled chance windows only. This is deliberately independent of the
+# green stock trace / raw in-stock intervals. A chance window is a contiguous
+# recorded probability run at or above the explicit 50% action threshold.
+foreach($window in $chanceWindows){
+    $startX=Get-InlineX ([long]$window.startAt)
+    $endX=Get-InlineX ([long]$window.endAt)
+    $bandWidth=[single][Math]::Max(1.0,$endX-$startX)
+    $graphics.FillRectangle($chanceBandBrush,$startX,[single]$plotTop,$bandWidth,[single]$plotHeight)
+
+    $opened=(Format-InlineRelativeTime -Timestamp ([long]$window.startAt) -NowEpoch $now)
+    $closed=if([bool]$window.openEnded){'still open'}else{Format-InlineRelativeTime -Timestamp ([long]$window.endAt) -NowEpoch $now}
+    $hoverRegions.Add([pscustomobject]@{
+        x=[double]$startX;y=[double]$plotTop;w=[double]$bandWidth;h=[double]$plotHeight
+        text=('Chance >=50% window: '+$opened+' to '+$closed)
+        kind='chance_band'
+        timestamp=[long]$window.startAt
+    })
+    $hoverRegions.Add([pscustomobject]@{
+        x=[double]([Math]::Max($plotLeft,$startX-3));y=[double]$plotTop;w=7.0;h=[double]$plotHeight
+        text=('Chance window opened: '+$opened)
+        kind='chance_open'
+        timestamp=[long]$window.startAt
+    })
+    if(-not[bool]$window.openEnded){
+        $hoverRegions.Add([pscustomobject]@{
+            x=[double]([Math]::Max($plotLeft,$endX-3));y=[double]$plotTop;w=7.0;h=[double]$plotHeight
+            text=('Chance window closed: '+(Format-InlineRelativeTime -Timestamp ([long]$window.endAt) -NowEpoch $now))
+            kind='chance_close'
+            timestamp=[long]$window.endAt
+        })
+    }
 }
 
 function Get-InlineX([long]$Timestamp) {
@@ -361,8 +494,22 @@ foreach ($row in $rows) {
         # them in the gutter below the X axis so they never obscure the stock trace.
         $markerTop=[single]($plotBottom+2)
         $markerBottom=[single]($plotBottom+8)
-        if ([long]$previous.stock -eq 0 -and [long]$row.stock -gt 0) { $graphics.DrawLine($restockPen,$x,$markerTop,$x,$markerBottom) }
-        if ([long]$previous.stock -gt 0 -and [long]$row.stock -eq 0) { $graphics.DrawLine($selloutPen,$x,$markerTop,$x,$markerBottom) }
+        if ([long]$previous.stock -eq 0 -and [long]$row.stock -gt 0) {
+            $graphics.DrawLine($restockPen,$x,$markerTop,$x,$markerBottom)
+            $transitionHoverRegions.Add([pscustomobject]@{
+                x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
+                text=('Restocked: '+(Format-InlineRelativeTime -Timestamp ([long]$row.timestamp) -NowEpoch $now))
+                kind='restock';timestamp=[long]$row.timestamp
+            })
+        }
+        if ([long]$previous.stock -gt 0 -and [long]$row.stock -eq 0) {
+            $graphics.DrawLine($selloutPen,$x,$markerTop,$x,$markerBottom)
+            $transitionHoverRegions.Add([pscustomobject]@{
+                x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
+                text=('OoS: '+(Format-InlineRelativeTime -Timestamp ([long]$row.timestamp) -NowEpoch $now))
+                kind='oos';timestamp=[long]$row.timestamp
+            })
+        }
     }
     $previous = [pscustomobject]@{ x=$x; y=$y; stock=[long]$row.stock }
 }
@@ -422,6 +569,26 @@ if ($null -ne $previousChance -and ($now-[long]$previousChance.timestamp) -le 18
     $graphics.DrawLine($chancePen,[single]$previousChance.x,[single]$previousChance.y,[single]$plotRight,[single]$previousChance.y)
 }
 
+# Re-draw chance boundaries after stock / probability traces so exact edges stay
+# visible while the translucent band carries the interval visually.
+foreach($window in $chanceWindows){
+    $startX=Get-InlineX ([long]$window.startAt)
+    $endX=Get-InlineX ([long]$window.endAt)
+    $graphics.DrawLine($chanceBoundaryPen,$startX,[single]$plotTop,$startX,[single]$plotBottom)
+    if(-not[bool]$window.openEnded){
+        $graphics.DrawLine($chanceBoundaryPen,$endX,[single]$plotTop,$endX,[single]$plotBottom)
+    }
+}
+
+# Chance-window hover regions have first priority. Use remaining capacity for the
+# most recent restock/OoS ticks so dense rapid-cycle graphs remain bounded.
+$remaining=[Math]::Max(0,$maximumHoverRegions-$hoverRegions.Count)
+if($remaining -gt 0){
+    foreach($region in @($transitionHoverRegions.ToArray()|Sort-Object timestamp -Descending|Select-Object -First $remaining)){
+        $hoverRegions.Add($region)
+    }
+}
+
 $maxLabel = if ($maxStock -gt 0) { ('{0:N0}' -f $maxStock) } else { '0' }
 $graphics.DrawString($maxLabel,$labelFont,$labelBrush,0,0)
 $graphics.DrawString('0',$labelFont,$labelBrush,18,88)
@@ -436,7 +603,7 @@ $tmpImage = $imagePath + '.tmp'
 $bitmap.Save($tmpImage,[System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()
-$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $realizedPen.Dispose(); $errorPen.Dispose(); $hitBrush.Dispose(); $missBrush.Dispose(); $restockPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
+$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $chanceBandBrush.Dispose(); $chanceBoundaryPen.Dispose(); $realizedPen.Dispose(); $errorPen.Dispose(); $hitBrush.Dispose(); $missBrush.Dispose(); $restockPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
 Move-Item -LiteralPath $tmpImage -Destination $imagePath -Force
 Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force
 
@@ -448,8 +615,21 @@ $earliestTimestamp = if ($rows.Count -gt 0) { [long]$rows[0].timestamp } else { 
 $latestTimestamp = if ($rows.Count -gt 0) { [long]$rows[$rows.Count-1].timestamp } else { 0L }
 $unknownBefore = if ($predecessor.Count -gt 0) { 0L } else { $earliestTimestamp }
 
+$hoverValues=@{}
+$hoverCount=[Math]::Min($maximumHoverRegions,$hoverRegions.Count)
+for($i=0;$i -lt $hoverCount;$i++){
+    $region=$hoverRegions[$i]
+    $n=$i+1
+    $hoverValues['Hover'+$n+'X']=[Math]::Round([double]$region.x,2)
+    $hoverValues['Hover'+$n+'Y']=[Math]::Round([double]$region.y,2)
+    $hoverValues['Hover'+$n+'W']=[Math]::Round([Math]::Max(1.0,[double]$region.w),2)
+    $hoverValues['Hover'+$n+'H']=[Math]::Round([Math]::Max(1.0,[double]$region.h),2)
+    $hoverValues['Hover'+$n+'Text']=[string]$region.text
+    $hoverValues['Hover'+$n+'Kind']=[string]$region.kind
+}
+
 $specPath = Join-Path $GeneratedDir ('inline-graph-' + $safeName + '.kv')
-Write-InlineKvAtomic -Path $specPath -Values @{
+$specValues=@{
     MarketKey = $MarketKey
     UpdatedAt = $now
     ImageFile = $imageFile
@@ -471,7 +651,12 @@ Write-InlineKvAtomic -Path $specPath -Values @{
     LatestTimestamp = $latestTimestamp
     UnknownBeforeTimestamp = $unknownBefore
     WindowStartTimestamp = $cutoff
+    ChanceWindowThreshold = $chanceBandThreshold
+    ChanceWindowCount = $chanceWindows.Count
+    HoverCount = $hoverCount
 }
+foreach($hoverKey in $hoverValues.Keys){$specValues[$hoverKey]=$hoverValues[$hoverKey]}
+Write-InlineKvAtomic -Path $specPath -Values $specValues
 
 Get-ChildItem -LiteralPath $GeneratedDir -Filter 'inline-graph-*-*.png' -File -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
