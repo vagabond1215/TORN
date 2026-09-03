@@ -278,12 +278,6 @@ local function arrivalChanceText(row)
     return ''
 end
 
-local function withArrivalChance(text,row)
-    local chance=arrivalChanceText(row)
-    if chance=='' then return text end
-    return text..' '..chance
-end
-
 local function outboundTooltip(row,state,now)
     local remaining=liveTravelRemainingSeconds(state,now)
     local landingAt=now+remaining
