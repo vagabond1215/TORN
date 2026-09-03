@@ -792,6 +792,8 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'CurrentCycleLiveProbabilityEvidenceSpanSeconds']='0'
     $state[$prefix+'CurrentCycleLiveProbabilityMedianRunwaySeconds']='0'
     $state[$prefix+'CurrentStockSafetyEligible']='0'
+    $state[$prefix+'CurrentStockSafetyMode']='none'
+    $state[$prefix+'CurrentStockSafetyMinimumHoldHorizonSeconds']='0'
     $state[$prefix+'CurrentStockSafetySampleCount']='0'
     $state[$prefix+'CurrentStockSafetyEvidenceSpanSeconds']='0'
     $state[$prefix+'CurrentStockSafetyPercentileUnitsPerHour']='0'
@@ -898,34 +900,43 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
     $state[$prefix+'NextCycleOrdinal']=if ($stock -gt 0) { '1' } else { '0' }
 
-    # A left-censored restock boundary does not make directly observed current
-    # depletion useless. When the normal authoritative path would otherwise say
-    # Collecting Data, test whether a pessimistic current-stock runway is plainly
-    # longer than the physically earliest arrival. This never writes a percentage,
-    # never creates a completed cycle, and never changes recurring Safe/Best evidence.
-    if ([string]$state[$prefix+'WindowDataQuality'] -eq 'collecting' -and $stock -gt 0) {
+    # Compute direct current-stock fallback telemetry for every fresh positive-stock
+    # market. Normal current-cycle / Safe-Best / multi-cycle logic still owns the
+    # card whenever it can produce actionable guidance; this evidence is consumed
+    # only by otherwise non-informative presentation states.
+    $safety=$null
+    if ($stock -gt 0) {
         $marketObservations=@()
         if($observationMap.ContainsKey($key)){$marketObservations=@($observationMap[$key].ToArray())}
-        $safety=Get-CurrentStockSafetyProjection -CurrentStock $stock -SourceTimestamp $sourceTimestamp -Observations $marketObservations -EarliestArrivalAt $earliestArrival -NowEpoch $Now
-        $state[$prefix+'CurrentStockSafetySampleCount']=[int]$safety.sampleCount
-        $state[$prefix+'CurrentStockSafetyEvidenceSpanSeconds']=[long]$safety.evidenceSpanSeconds
-        $state[$prefix+'CurrentStockSafetyPercentileUnitsPerHour']=[double]$safety.percentileUnitsPerHour
-        $state[$prefix+'CurrentStockSafetyGuardedUnitsPerHour']=[double]$safety.guardedUnitsPerHour
-        $state[$prefix+'CurrentStockSafetyRunwaySeconds']=[long]$safety.runwaySeconds
-        $state[$prefix+'CurrentStockSafetyArrivalHorizonSeconds']=[long]$safety.arrivalHorizonSeconds
-        $state[$prefix+'CurrentStockSafetyMarginSeconds']=[long]$safety.arrivalMarginSeconds
-        $state[$prefix+'CurrentStockSafetySelloutEstimateAt']=[long]$safety.selloutEstimateAt
-        $state[$prefix+'CurrentStockSafetyReason']=[string]$safety.reason
-        if([bool]$safety.eligible){
-            $state[$prefix+'CurrentStockSafetyEligible']='1'
-            $state[$prefix+'WindowDataQuality']='current_stock_safe'
-            $state[$prefix+'WindowDataQualityReason']='current stock is conservatively safe to the earliest arrival despite an unknown cycle boundary'
-            $state[$prefix+'WindowStartAt']=[Math]::Max($Now,$earliestDeparture)
-            $state[$prefix+'WindowText']='SAFE WINDOW OPEN'
-            $state[$prefix+'ChanceText']=''
-            $state[$prefix+'ProbabilityValue']='-1'
-            continue
-        }
+        $safety=Get-CurrentStockSafetyProjection -CurrentStock $stock -SourceTimestamp $sourceTimestamp -Observations $marketObservations -EarliestArrivalAt $earliestArrival -NowEpoch $Now -KnownSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt)
+        $state[$prefix+'CurrentStockSafetyMode']=[string](Get-WindowProperty $safety 'mode')
+        $state[$prefix+'CurrentStockSafetyMinimumHoldHorizonSeconds']=[long](Get-WindowProperty $safety 'minimumHoldHorizonSeconds')
+        $state[$prefix+'CurrentStockSafetySampleCount']=[int](Get-WindowProperty $safety 'sampleCount')
+        $state[$prefix+'CurrentStockSafetyEvidenceSpanSeconds']=[long](Get-WindowProperty $safety 'evidenceSpanSeconds')
+        $state[$prefix+'CurrentStockSafetyPercentileUnitsPerHour']=[double](Get-WindowProperty $safety 'percentileUnitsPerHour')
+        $state[$prefix+'CurrentStockSafetyGuardedUnitsPerHour']=[double](Get-WindowProperty $safety 'guardedUnitsPerHour')
+        $state[$prefix+'CurrentStockSafetyRunwaySeconds']=[long](Get-WindowProperty $safety 'runwaySeconds')
+        $state[$prefix+'CurrentStockSafetyArrivalHorizonSeconds']=[long](Get-WindowProperty $safety 'arrivalHorizonSeconds')
+        $state[$prefix+'CurrentStockSafetyMarginSeconds']=[long](Get-WindowProperty $safety 'arrivalMarginSeconds')
+        $state[$prefix+'CurrentStockSafetySelloutEstimateAt']=[long](Get-WindowProperty $safety 'selloutEstimateAt')
+        $state[$prefix+'CurrentStockSafetyReason']=[string](Get-WindowProperty $safety 'reason')
+        if([bool](Get-WindowProperty $safety 'eligible')){$state[$prefix+'CurrentStockSafetyEligible']='1'}
+    }
+
+    # Only an already-non-informative producer state may be replaced directly here.
+    # A ready model continues below even when fallback telemetry is eligible.
+    if (
+        [string]$state[$prefix+'WindowDataQuality'] -eq 'collecting' -and
+        $null -ne $safety -and
+        [bool](Get-WindowProperty $safety 'eligible')
+    ) {
+        $state[$prefix+'WindowDataQuality']='current_stock_safe'
+        $state[$prefix+'WindowDataQualityReason']='verified current stock provides low-authority travel guidance while the main window model is non-informative'
+        $state[$prefix+'WindowStartAt']=[Math]::Max($Now,$earliestDeparture)
+        $state[$prefix+'WindowText']='STOCK HOLDING'
+        $state[$prefix+'ChanceText']=''
+        $state[$prefix+'ProbabilityValue']='-1'
+        continue
     }
 
     if ([string]$state[$prefix+'WindowDataQuality'] -eq 'collecting') {
