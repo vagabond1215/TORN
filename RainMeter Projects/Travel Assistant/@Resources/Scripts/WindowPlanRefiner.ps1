@@ -739,6 +739,57 @@ function Remove-WindowMachineEnvelope {
     return $value
 }
 
+function Get-WindowObservedPhase {
+    param([object]$Engine,[string]$Key)
+
+    $market=Get-WindowProperty $Engine.observedMarkets $Key
+    $destinationState=$null
+    if($Engine.PSObject.Properties['destinations']){
+        $destinationState=Get-WindowProperty $Engine.destinations $Key
+    }
+
+    $observedStock=0L
+    $sourceTimestamp=0L
+    if($null -ne $market){
+        $observedStock=[long](Get-WindowProperty $market 'lastStock')
+        $sourceTimestamp=[long](Get-WindowProperty $market 'sourceTimestamp')
+    }
+
+    $activeRestockAt=0L
+    $activeCycle=Get-WindowProperty $destinationState 'activeCycle'
+    if($null -ne $activeCycle){
+        $activeRestockAt=[long](Get-WindowProperty $activeCycle 'restockAt')
+    }
+
+    $lastSellOutAt=0L
+    $lastSellOutQuality=''
+    if($null -ne $destinationState){
+        $lastSellOutAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')
+        $lastSellOutQuality=[string](Get-WindowProperty $destinationState 'lastSellOutBoundaryQuality')
+    }
+
+    # An OoS estimate is authoritative only while that sellout remains the latest
+    # verified phase. A later observed/recovered restock supersedes it permanently,
+    # including after the positive source snapshot itself becomes stale.
+    $unresolvedOos=(
+        $lastSellOutAt -gt 0 -and
+        (Test-WindowBoundaryQuality -Quality $lastSellOutQuality) -and
+        $activeRestockAt -le $lastSellOutAt -and
+        -not($observedStock -gt 0 -and $sourceTimestamp -gt $lastSellOutAt)
+    )
+
+    return [pscustomobject]@{
+        market=$market
+        destinationState=$destinationState
+        observedStock=[long]$observedStock
+        sourceTimestamp=[long]$sourceTimestamp
+        activeRestockAt=[long]$activeRestockAt
+        lastSellOutAt=[long]$lastSellOutAt
+        lastSellOutQuality=[string]$lastSellOutQuality
+        unresolvedOos=[bool]$unresolvedOos
+    }
+}
+
 if ($WindowPlanRefinerSkipMain) { return }
 if ($Now -le 0) { $Now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 $state=Read-WindowStateKv $StateKvFile
@@ -754,7 +805,16 @@ for ($i=1; $i -le $count; $i++) {
     $prefix='Opportunity'+$i
     $key=[string]$state[$prefix+'Key']
     $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
-    if (-not [string]::IsNullOrWhiteSpace($key) -and $forecastMode -ne 'sleeping_oos') { $wanted[$key]=$true }
+    if([string]::IsNullOrWhiteSpace($key)){continue}
+    if($forecastMode -ne 'sleeping_oos'){
+        $wanted[$key]=$true
+        continue
+    }
+
+    # Sleeping OoS is only a performance hint. If the observed phase has already
+    # advanced to restock, wake this row and load normal cycle/observation evidence.
+    $phaseInfo=Get-WindowObservedPhase -Engine $engine -Key $key
+    if(-not[bool]$phaseInfo.unresolvedOos){$wanted[$key]=$true}
 }
 $cycleMap=Read-WindowCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile,$PendingCycleFile) -Wanted $wanted
 $observationMap=Read-WindowObservationsForKeys -Path $RuntimeObservationFile -Wanted $wanted -Cutoff ($Now-28800L)
@@ -826,11 +886,19 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'CurrentStockSafetySelloutEstimateAt']='0'
     $state[$prefix+'CurrentStockSafetyReason']=''
     $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
-    if ($forecastMode -eq 'sleeping_oos') {
-        # OpportunityState already published the cheap absolute restock estimate.
-        # Do not read cycle evidence or build recurring probability geometry until
-        # the wake boundary/focus marker promotes this market back to detailed mode.
+    $phaseInfo=Get-WindowObservedPhase -Engine $engine -Key $key
+    $market=$phaseInfo.market
+    $destinationState=$phaseInfo.destinationState
+    $observedStock=[long]$phaseInfo.observedStock
+    $sourceTimestamp=[long]$phaseInfo.sourceTimestamp
+
+    if ($forecastMode -eq 'sleeping_oos' -and [bool]$phaseInfo.unresolvedOos) {
+        # The lightweight restock estimate remains valid only while its verified
+        # sellout is still the latest observed phase.
         $state[$prefix+'CurrentStock']='0'
+        $state[$prefix+'StockEvidenceAt']=$sourceTimestamp
+        $state[$prefix+'ActiveRestockAt']=[long]$phaseInfo.activeRestockAt
+        $state[$prefix+'LastObservedOosAt']=[long]$phaseInfo.lastSellOutAt
         $state[$prefix+'WindowDataQuality']='ready'
         $state[$prefix+'WindowDataQualityReason']=''
         $state[$prefix+'CurrentCycleReachable']='0'
@@ -838,18 +906,19 @@ for ($i=1; $i -le $count; $i++) {
         $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
         continue
     }
+    if($forecastMode -eq 'sleeping_oos'){
+        # Defensive same-generation repair: OpportunityState and this refiner may
+        # straddle a provider refresh. Never render the old OoS estimate after a
+        # later observed restock has superseded it.
+        $state[$prefix+'ForecastMode']='phase_invalidated'
+        $forecastMode='phase_invalidated'
+    }
+
     $countryId=($key -split ':',2)[0]
     $cycles=@()
     if ($cycleMap.ContainsKey($key)) { $cycles=@($cycleMap[$key].ToArray()) }
     $forecastEligibleCycles=@($cycles | Where-Object { Test-CycleForecastBoundaryEvidence -Cycle $_ -Purpose Forecast })
-    $market=Get-WindowProperty $engine.observedMarkets $key
-    $destinationState=$null
-    if ($engine.PSObject.Properties['destinations']) { $destinationState=Get-WindowProperty $engine.destinations $key }
-    $stock=0L; $sourceTimestamp=0L
-    if ($null -ne $market) {
-        $stock=[long](Get-WindowProperty $market 'lastStock')
-        $sourceTimestamp=[long](Get-WindowProperty $market 'sourceTimestamp')
-    }
+    $stock=$observedStock
     $liveProjection=Get-LiveCycleProjection -CurrentStock $stock -SourceTimestamp $sourceTimestamp -DestinationState $destinationState -Cycles $cycles -NowEpoch $Now
     $stock=[long]$liveProjection.currentStock
     $state[$prefix+'CurrentStock']=$stock
@@ -861,22 +930,25 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'LiveCycleProjectionMode']=[string]$liveProjection.mode
     $state[$prefix+'WindowDataQuality']='ready'
     $state[$prefix+'WindowDataQualityReason']=''
-    $lastObservedOosAt=0L
-    if($null -ne $destinationState){
-        $candidateOosAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')
-        $candidateOosQuality=[string](Get-WindowProperty $destinationState 'lastSellOutBoundaryQuality')
-        if($candidateOosAt -gt 0 -and (Test-WindowBoundaryQuality -Quality $candidateOosQuality)){
-            $lastObservedOosAt=$candidateOosAt
-        }
-    }
+    # LastObservedOosAt is the unresolved current OoS phase, not merely the
+    # historical timestamp of the most recent sellout. A later restock clears it.
+    $lastObservedOosAt=if([bool]$phaseInfo.unresolvedOos){[long]$phaseInfo.lastSellOutAt}else{0L}
     $state[$prefix+'LastObservedOosAt']=$lastObservedOosAt
-    $anchorAt=0L; $phase='sellout'
+
+    $anchorAt=0L
+    $phase='sellout'
     if ($stock -gt 0) {
         $phase='restock'
-        $activeCycle=Get-WindowProperty $destinationState 'activeCycle'
-        if ($null -ne $activeCycle) { $anchorAt=[long](Get-WindowProperty $activeCycle 'restockAt') }
-    } else {
-        $anchorAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')
+        $anchorAt=[long]$phaseInfo.activeRestockAt
+    } elseif(-not[bool]$phaseInfo.unresolvedOos -and [long]$phaseInfo.activeRestockAt -gt 0) {
+        # Forecast-only availability may be unknown, but the latest verified phase
+        # is still the observed restock. Build any future geometry from that phase,
+        # never from the superseded sellout.
+        $phase='restock'
+        $anchorAt=[long]$phaseInfo.activeRestockAt
+    } elseif([bool]$phaseInfo.unresolvedOos) {
+        $phase='sellout'
+        $anchorAt=[long]$phaseInfo.lastSellOutAt
     }
 
     # Never turn frozen provider state or an unobserved transition into forecast
@@ -884,7 +956,11 @@ for ($i=1; $i -le $count; $i++) {
     # next-cycle geometry.
     $collectingReason=''
     if ([string]$liveProjection.mode -eq 'stale-source') {
-        $collectingReason='live stock source is stale'
+        if($observedStock -gt 0 -and $sourceTimestamp -gt [long]$phaseInfo.lastSellOutAt){
+            $collectingReason='live stock source is stale after a later observed restock; preceding OoS timing is suppressed'
+        } else {
+            $collectingReason='live stock source is stale'
+        }
     } elseif ($stock -gt 0) {
         $activeCycle=Get-WindowProperty $destinationState 'activeCycle'
         $restockAt=if ($null -ne $activeCycle) { [long](Get-WindowProperty $activeCycle 'restockAt') } else { 0L }
@@ -923,7 +999,7 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'CurrentCycleReachable']='0'
     $state[$prefix+'CurrentCycleLeaveDeadlineAt']='0'
     $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
-    $state[$prefix+'NextCycleOrdinal']=if ($stock -gt 0) { '1' } else { '0' }
+    $state[$prefix+'NextCycleOrdinal']=if ($phase -eq 'restock') { '1' } else { '0' }
 
     # Compute direct current-stock fallback telemetry for every fresh positive-stock
     # market. Normal current-cycle / Safe-Best / multi-cycle logic still owns the
