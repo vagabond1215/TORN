@@ -80,6 +80,25 @@ foreach($token in @(
     '$forecastMarkerTop=[single]($plotBottom+3)',
     '$forecastMarkerBottom=[single]($plotBottom+6)',
     'RestockWindowVarianceSeconds',
+    'Get-InlineInfoTimeline',
+    '[int]$MaximumCycles=4',
+    'Sort-Object timestamp -Descending',
+    "'8h cycle summary'",
+    "'Avg restock delay: '",
+    "'Avg in-stock time: '",
+    "'Avg open variance: +/-'",
+    "'Midpoint after OoS: '",
+    "'Leave after OoS for midpoint: '",
+    "'Timeline - newest first (max 4 cycles)'",
+    "-Label 'Early open'",
+    "-Label 'Late open'",
+    "-Label 'Actual window open'",
+    "-Label 'Actual window closed'",
+    'Format-InlineClockTime',
+    '$graphics.DrawEllipse($infoPen',
+    'InfoEnabled',
+    'InfoLineCount',
+    'InfoTimelineCycleCount',
     '$graphics.DrawString((''-{0}h'' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)',
     '$graphics.DrawString(''now'',$labelFont,$labelBrush,[single]($plotRight-18),110)'
 )){
@@ -151,14 +170,15 @@ if(-not(Test-Path -LiteralPath $hitboxPath)){
     Fail 'InlineGraphHitboxes.inc is required for marker/window tooltips.'
 }else{
     $hitboxes=Get-Content -LiteralPath $hitboxPath -Raw
-    $count=[regex]::Matches($hitboxes,'(?m)^\[MeterInlineGraphHitbox\d+\]\s*$').Count
-    if($count -ne 48){Fail "Inline graph tooltip pool must remain bounded at 48 reusable hitboxes; found $count."}
+    $count=[regex]::Matches($hitboxes,'(?m)^\[MeterInlineGraphHitbox\d+\]\s*
     foreach($token in @(
         '[MeterInlineGraphHitbox1]',
         '[MeterInlineGraphHitbox48]',
+        '[MeterInlineGraphInfo]',
         'Group=InlineGraphHitboxes',
         'Fill Color 0,0,0,1',
-        'ToolTipWidth=280'
+        'ToolTipWidth=280',
+        'ToolTipWidth=420'
     )){
         if(-not$hitboxes.Contains($token)){Fail "Inline graph hitbox contract missing '$token'."}
     }
@@ -171,6 +191,9 @@ if(-not(Test-Path -LiteralPath $stateReaderPath)){
     foreach($token in @(
         'local maxGraphHoverRegions = 48',
         'local graphHoverSignatures = {}',
+        'local graphInfoSignature = nil',
+        'hideGraphInfoRegion',
+        'updateGraphInfoRegion',
         'hideGraphHoverRegions',
         'updateGraphHoverRegions',
         'if graphHoverSignatures[i] ~= signature then',
@@ -179,6 +202,121 @@ if(-not(Test-Path -LiteralPath $stateReaderPath)){
         'graphMeter:GetX()',
         'graphMeter:GetY()',
         "'ToolTipText', tooltip",
+        "'MeterInlineGraphInfo'",
+        'spec.InfoLineCount',
+        "table.concat(lines, '\n')",
+        'updateGraphInfoRegion(spec, graphMeterName)',
+        'spec.HoverCount'
+    )){
+        if(-not$reader.Contains($token)){Fail "StateReader graph hitbox contract missing '$token'."}
+    }
+    if($reader -match 'local function updateGraphHoverRegions\([^\)]*\)\s*\r?\n\s*hideGraphHoverRegions\(\)'){
+        Fail 'Graph tooltip refresh must not hide every hitbox before rebuilding; that causes hover blinking.'
+    }
+}
+
+if($failures.Count -gt 0){
+    foreach($failure in $failures){Write-Host "FAIL: $failure" -ForegroundColor Red}
+    Write-Host "Graph window / interaction validation failed with $($failures.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host 'Graph window / retention / interaction validation passed.' -ForegroundColor Green
+Write-Host 'Visible: 8h | mandatory lime stock | continuous cyan forecast | periwinkle hindsight departure windows | optional validation/event overlays | raw learning retention: 48h' -ForegroundColor DarkGreen
+exit 0
+).Count
+    if($count -ne 48){Fail "Inline graph tooltip pool must remain bounded at 48 reusable hitboxes; found $count."}
+    $infoCount=[regex]::Matches($hitboxes,'(?m)^\[MeterInlineGraphInfo\]\s*
+    foreach($token in @(
+        '[MeterInlineGraphHitbox1]',
+        '[MeterInlineGraphHitbox48]',
+        '[MeterInlineGraphInfo]',
+        'Group=InlineGraphHitboxes',
+        'Fill Color 0,0,0,1',
+        'ToolTipWidth=280',
+        'ToolTipWidth=420'
+    )){
+        if(-not$hitboxes.Contains($token)){Fail "Inline graph hitbox contract missing '$token'."}
+    }
+}
+
+if(-not(Test-Path -LiteralPath $stateReaderPath)){
+    Fail 'StateReader.lua is required for inline graph tooltip placement.'
+}else{
+    $reader=Get-Content -LiteralPath $stateReaderPath -Raw
+    foreach($token in @(
+        'local maxGraphHoverRegions = 48',
+        'local graphHoverSignatures = {}',
+        'local graphInfoSignature = nil',
+        'hideGraphInfoRegion',
+        'updateGraphInfoRegion',
+        'hideGraphHoverRegions',
+        'updateGraphHoverRegions',
+        'if graphHoverSignatures[i] ~= signature then',
+        'for i = count + 1, maxGraphHoverRegions do',
+        "'MeterInlineGraphHitbox' .. i",
+        'graphMeter:GetX()',
+        'graphMeter:GetY()',
+        "'ToolTipText', tooltip",
+        "'MeterInlineGraphInfo'",
+        'spec.InfoLineCount',
+        "table.concat(lines, '\n')",
+        'updateGraphInfoRegion(spec, graphMeterName)',
+        'spec.HoverCount'
+    )){
+        if(-not$reader.Contains($token)){Fail "StateReader graph hitbox contract missing '$token'."}
+    }
+    if($reader -match 'local function updateGraphHoverRegions\([^\)]*\)\s*\r?\n\s*hideGraphHoverRegions\(\)'){
+        Fail 'Graph tooltip refresh must not hide every hitbox before rebuilding; that causes hover blinking.'
+    }
+}
+
+if($failures.Count -gt 0){
+    foreach($failure in $failures){Write-Host "FAIL: $failure" -ForegroundColor Red}
+    Write-Host "Graph window / interaction validation failed with $($failures.Count) error(s)." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host 'Graph window / retention / interaction validation passed.' -ForegroundColor Green
+Write-Host 'Visible: 8h | mandatory lime stock | continuous cyan forecast | periwinkle hindsight departure windows | optional validation/event overlays | raw learning retention: 48h' -ForegroundColor DarkGreen
+exit 0
+).Count
+    if($infoCount -ne 1){Fail "Expanded graph must expose exactly one dedicated info tooltip meter; found $infoCount."}
+    foreach($token in @(
+        '[MeterInlineGraphHitbox1]',
+        '[MeterInlineGraphHitbox48]',
+        '[MeterInlineGraphInfo]',
+        'Group=InlineGraphHitboxes',
+        'Fill Color 0,0,0,1',
+        'ToolTipWidth=280',
+        'ToolTipWidth=420'
+    )){
+        if(-not$hitboxes.Contains($token)){Fail "Inline graph hitbox contract missing '$token'."}
+    }
+}
+
+if(-not(Test-Path -LiteralPath $stateReaderPath)){
+    Fail 'StateReader.lua is required for inline graph tooltip placement.'
+}else{
+    $reader=Get-Content -LiteralPath $stateReaderPath -Raw
+    foreach($token in @(
+        'local maxGraphHoverRegions = 48',
+        'local graphHoverSignatures = {}',
+        'local graphInfoSignature = nil',
+        'hideGraphInfoRegion',
+        'updateGraphInfoRegion',
+        'hideGraphHoverRegions',
+        'updateGraphHoverRegions',
+        'if graphHoverSignatures[i] ~= signature then',
+        'for i = count + 1, maxGraphHoverRegions do',
+        "'MeterInlineGraphHitbox' .. i",
+        'graphMeter:GetX()',
+        'graphMeter:GetY()',
+        "'ToolTipText', tooltip",
+        "'MeterInlineGraphInfo'",
+        'spec.InfoLineCount',
+        "table.concat(lines, '\n')",
+        'updateGraphInfoRegion(spec, graphMeterName)',
         'spec.HoverCount'
     )){
         if(-not$reader.Contains($token)){Fail "StateReader graph hitbox contract missing '$token'."}
