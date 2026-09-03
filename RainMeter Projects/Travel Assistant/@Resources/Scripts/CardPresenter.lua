@@ -498,6 +498,49 @@ local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,n
     end
     return 'Window Open: '..chancePercent(liveChance)..'. Closes: '..formatCountdown(closeDeparture-now),'',tooltip
 end
+local function averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)
+    if state==nil or statePrefix==nil or statePrefix=='' or currentStock>0 or flightSeconds<=0 then return nil,nil,nil end
+
+    local lastOosAt=number(state[statePrefix..'LastObservedOosAt'])
+    local averageDelay=number(state[statePrefix..'RestockAverageDelaySeconds'])
+    local lifetimeLongest=number(state[statePrefix..'RestockLifetimeLongestDelaySeconds'])
+    local samples=math.floor(number(state[statePrefix..'RestockSampleCount']))
+    if lastOosAt<=0 or averageDelay<=0 or samples<2 or now<lastOosAt then return nil,nil,nil end
+
+    local averageRestockAt=lastOosAt+averageDelay
+    local averageLeaveAt=averageRestockAt-flightSeconds
+    local leaveAfterOos=math.max(0,averageDelay-flightSeconds)
+    local credibleUntil=(lifetimeLongest>0) and (lastOosAt+lifetimeLongest) or 0
+
+    local nl='#CRLF#'
+    local lines={
+        'Average-only OoS timing fallback',
+        'Last observed OoS: '..formatDuration(now-lastOosAt)..' ago',
+        'Avg restock delay: '..formatDuration(averageDelay),
+        'Avg leave-after-OoS: '..formatDuration(leaveAfterOos),
+        'Evidence: '..tostring(samples)..' forecast-eligible completed cycle(s)',
+        'No Chance to Hit percentage is assigned to this rough timing fallback.',
+        'Live/current-cycle, Safe/Best, or multi-cycle guidance automatically replaces it.'
+    }
+    if lifetimeLongest>0 then table.insert(lines,'Longest observed restock delay: '..formatDuration(lifetimeLongest)) end
+
+    if credibleUntil>0 and now>credibleUntil then
+        table.insert(lines,'Current OoS has exceeded the longest observed restock delay; average timing is no longer trusted.')
+        return 'WAIT DATA','',table.concat(lines,nl)
+    end
+    if now<averageLeaveAt then
+        table.insert(lines,'Average midpoint departure is still ahead.')
+        return 'AVG LEAVE IN '..formatCountdown(averageLeaveAt-now),'',table.concat(lines,nl)
+    end
+    if now<averageRestockAt then
+        table.insert(lines,'Average midpoint departure has arrived; the average restock target is still ahead.')
+        return 'AVG LEAVE NOW','',table.concat(lines,nl)
+    end
+
+    table.insert(lines,'Average restock target has passed while the market remains OoS.')
+    return 'AVG RESTOCK LATE','',table.concat(lines,nl)
+end
+
 local function liveWindowAction(index,plan,state,country,defaultTravel,now)
     local countryId=countryIdsByName[country] or ''; local travelState=trim(state.TravelState):lower(); local destinationId=trim(state.TravelDestinationCountryId):lower()
     local flightSeconds=countryTravelSeconds(state,country,defaultTravel); if flightSeconds<=0 then return nil,nil,nil end
@@ -536,6 +579,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         if dataQuality=='collecting' then
             local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
             if multiAction~=nil then return multiAction,multiChance,multiTooltip end
+            local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)
+            if avgAction~=nil then return avgAction,avgChance,avgTooltip end
             return 'Collecting Data: See Weav3r','',formatCollectingTooltip(dataQualityReason)
         end
 
@@ -554,6 +599,8 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         if lowerLegacy:find('collecting data',1,true)~=nil or lowerLegacy=='next cycle unavailable' or lowerLegacy=='window closed.' then
             local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)
             if multiAction~=nil then return multiAction,multiChance,multiTooltip end
+            local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)
+            if avgAction~=nil then return avgAction,avgChance,avgTooltip end
         end
         return legacyAction,legacyChance,legacyTooltip
     end
