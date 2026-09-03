@@ -100,6 +100,7 @@ function Get-AnchorTransitions {
     $lastSellOutQuality = ''
     $lastRestockLowerBoundAt = 0L
     $lastRestockUpperBoundAt = 0L
+    $lastRestockQuantity = 0L
     $lastSellOutLowerBoundAt = 0L
     $lastSellOutUpperBoundAt = 0L
     $lastUnknownBoundaryAt = 0L
@@ -138,6 +139,7 @@ function Get-AnchorTransitions {
                     $lastRestockQuality=$quality
                     $lastRestockLowerBoundAt=$lower
                     $lastRestockUpperBoundAt=$timestamp
+                    $lastRestockQuantity=[Math]::Max(0L,$stock)
                 } else {
                     # Keep the representative sellout anchor at the first observed
                     # OOS timestamp. The preceding positive-stock timestamp is the
@@ -172,6 +174,7 @@ function Get-AnchorTransitions {
         lastSellOutQuality = $lastSellOutQuality
         lastRestockLowerBoundAt = $lastRestockLowerBoundAt
         lastRestockUpperBoundAt = $lastRestockUpperBoundAt
+        lastRestockQuantity = $lastRestockQuantity
         lastSellOutLowerBoundAt = $lastSellOutLowerBoundAt
         lastSellOutUpperBoundAt = $lastSellOutUpperBoundAt
         lastUnknownBoundaryAt = $lastUnknownBoundaryAt
@@ -252,6 +255,12 @@ foreach ($key in @($wanted.Keys)) {
         Set-AnchorProperty -Object $activeCycle -Name 'restockBoundaryQuality' -Value ([string]$transition.lastRestockQuality)
         Set-AnchorProperty -Object $activeCycle -Name 'restockLowerBoundAt' -Value ([long]$transition.lastRestockLowerBoundAt)
         Set-AnchorProperty -Object $activeCycle -Name 'restockUpperBoundAt' -Value ([long]$transition.lastRestockUpperBoundAt)
+        if([long]$transition.lastRestockQuantity -gt 0){
+            $existingRestockQuantity=[long](Get-AnchorProperty $activeCycle 'restockQuantity')
+            if($existingRestockQuantity -le 0 -or $before -ne [long]$transition.lastRestockAt){
+                Set-AnchorProperty -Object $activeCycle -Name 'restockQuantity' -Value ([long]$transition.lastRestockQuantity)
+            }
+        }
         Set-AnchorProperty -Object $activeCycle -Name 'anchorSource' -Value 'observations'
         Set-AnchorProperty -Object $activeCycle -Name 'anchorObservedAt' -Value ([long]$transition.latestTimestamp)
     } elseif ($stock -gt 0 -and $continuityInvalidatedAt -gt 0) {
