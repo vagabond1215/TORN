@@ -172,21 +172,28 @@ function Get-InlineRestockWindowSummary {
     $recent=@($usable)
     if($RecentSamples -gt 0 -and $recent.Count -gt $RecentSamples){$recent=@($recent|Select-Object -First $RecentSamples)}
     $delays=[long[]]@($recent|ForEach-Object{[long]$_.restockDelaySeconds})
+    $minimum=[long](($delays|Measure-Object -Minimum).Minimum)
+    $maximum=[long](($delays|Measure-Object -Maximum).Maximum)
+    $sigma=[long](Get-CycleForecastRobustSigma -Values $delays)
+    if($sigma -le 0 -and $maximum -gt $minimum){
+        $sigma=[long][Math]::Ceiling(($maximum-$minimum)/2.0)
+    }
     return [pscustomobject]@{
         sampleCount=[int]$recent.Count
         averageDelaySeconds=[long][Math]::Round([double](($delays|Measure-Object -Average).Average))
-        earliestDelaySeconds=[long](($delays|Measure-Object -Minimum).Minimum)
-        latestDelaySeconds=[long](($delays|Measure-Object -Maximum).Maximum)
+        earliestDelaySeconds=$minimum
+        latestDelaySeconds=$maximum
+        varianceSeconds=[Math]::Max(0L,$sigma)
     }
 }
 
-function Get-InlineOosTransitions {
+function Get-InlineRestockTransitions {
     param([object[]]$Rows)
     $result=New-Object System.Collections.Generic.List[long]
     $previous=$null
     foreach($row in @($Rows|Sort-Object timestamp)){
         $stock=[long]$row.stock
-        if($null -ne $previous -and [long]$previous.stock -gt 0 -and $stock -eq 0){
+        if($null -ne $previous -and [long]$previous.stock -eq 0 -and $stock -gt 0){
             $result.Add([long]$row.timestamp)
         }
         $previous=$row
@@ -399,7 +406,7 @@ if ($allRows.Count -eq 0) {
 $allRows = @(Compress-StockHistory -Rows $allRows)
 $cycleRows=@(Read-InlineMarketCycles -Paths @($RuntimeCycleFile,$SeedCycleFile) -Country $country -ItemId $itemId)
 $restockWindowSummary=Get-InlineRestockWindowSummary -Cycles $cycleRows
-$oosTransitions=@(Get-InlineOosTransitions -Rows $allRows)
+$restockTransitions=@(Get-InlineRestockTransitions -Rows $allRows)
 
 $rows = @()
 $predecessor = @($allRows | Where-Object { [long]$_.timestamp -lt $cutoff } | Select-Object -Last 1)
@@ -573,41 +580,44 @@ if ($null -ne $previous -and [single]$previous.x -lt [single]$plotRight) {
     $graphics.DrawLine($stockPen,[single]$previous.x,[single]$previous.y,[single]$plotRight,[single]$previous.y)
 }
 
-# Current-model restock bounds are applied to each observed OoS transition. The
-# graph is still past-only: future bounds are skipped rather than collapsed onto now.
+# Restock-window brackets are a variance diagnostic around observed truth. Center
+# each pair on the actual restock transition; never project unrelated old OoS anchors
+# forward into the visible chart. The blue observed restock tick must sit between them.
 if($showRestockWindowBounds -and $null -ne $restockWindowSummary){
-    $earlyDelay=[long]$restockWindowSummary.earliestDelaySeconds
-    $lateDelay=[long]$restockWindowSummary.latestDelaySeconds
+    $varianceSeconds=[long]$restockWindowSummary.varianceSeconds
     $sampleCount=[int]$restockWindowSummary.sampleCount
     $forecastMarkerTop=[single]($plotBottom+3)
     $forecastMarkerBottom=[single]($plotBottom+6)
-    foreach($oosAt in $oosTransitions){
-        $openAt=[long]$oosAt+$earlyDelay
-        $closeAt=[long]$oosAt+$lateDelay
-        if($openAt -ge $cutoff -and $openAt -le $now){
-            $x=Get-InlineX $openAt
-            $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
-            $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerBottom,[single]($x+3),$forecastMarkerBottom)
-            $forecastBoundaryCount++
-            if($showTooltips){
-                $forecastHoverRegions.Add([pscustomobject]@{
-                    x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
-                    text=('Restock window opens: '+(Format-InlineRelativeTime -Timestamp $openAt -NowEpoch $now)+' | OoS + '+(Format-InlineDuration -Seconds $earlyDelay)+' | '+$sampleCount+' recent cycle(s)')
-                    kind='restock_window_open';timestamp=$openAt
-                })
+    if($varianceSeconds -gt 0){
+        foreach($restockAt in $restockTransitions){
+            if($restockAt -lt $cutoff -or $restockAt -gt $now){continue}
+            $openAt=[long]$restockAt-$varianceSeconds
+            $closeAt=[long]$restockAt+$varianceSeconds
+            if($openAt -ge $cutoff){
+                $x=Get-InlineX $openAt
+                $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
+                $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerBottom,[single]($x+3),$forecastMarkerBottom)
+                $forecastBoundaryCount++
+                if($showTooltips){
+                    $forecastHoverRegions.Add([pscustomobject]@{
+                        x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
+                        text=('Restock variance opens: '+(Format-InlineRelativeTime -Timestamp $openAt -NowEpoch $now)+' | actual restock - '+(Format-InlineDuration -Seconds $varianceSeconds)+' | '+$sampleCount+' recent cycle(s)')
+                        kind='restock_window_open';timestamp=$openAt
+                    })
+                }
             }
-        }
-        if($closeAt -ge $cutoff -and $closeAt -le $now){
-            $x=Get-InlineX $closeAt
-            $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
-            $graphics.DrawLine($restockWindowPen,[single]($x-3),$forecastMarkerBottom,$x,$forecastMarkerBottom)
-            $forecastBoundaryCount++
-            if($showTooltips){
-                $forecastHoverRegions.Add([pscustomobject]@{
-                    x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
-                    text=('Restock window closes: '+(Format-InlineRelativeTime -Timestamp $closeAt -NowEpoch $now)+' | OoS + '+(Format-InlineDuration -Seconds $lateDelay)+' | '+$sampleCount+' recent cycle(s)')
-                    kind='restock_window_close';timestamp=$closeAt
-                })
+            if($closeAt -le $now){
+                $x=Get-InlineX $closeAt
+                $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
+                $graphics.DrawLine($restockWindowPen,[single]($x-3),$forecastMarkerBottom,$x,$forecastMarkerBottom)
+                $forecastBoundaryCount++
+                if($showTooltips){
+                    $forecastHoverRegions.Add([pscustomobject]@{
+                        x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
+                        text=('Restock variance closes: '+(Format-InlineRelativeTime -Timestamp $closeAt -NowEpoch $now)+' | actual restock + '+(Format-InlineDuration -Seconds $varianceSeconds)+' | '+$sampleCount+' recent cycle(s)')
+                        kind='restock_window_close';timestamp=$closeAt
+                    })
+                }
             }
         }
     }
@@ -740,6 +750,7 @@ $specValues=@{
     RestockWindowSampleCount = $(if($null -ne $restockWindowSummary){[int]$restockWindowSummary.sampleCount}else{0})
     RestockWindowEarlyDelaySeconds = $(if($null -ne $restockWindowSummary){[long]$restockWindowSummary.earliestDelaySeconds}else{0})
     RestockWindowLateDelaySeconds = $(if($null -ne $restockWindowSummary){[long]$restockWindowSummary.latestDelaySeconds}else{0})
+    RestockWindowVarianceSeconds = $(if($null -ne $restockWindowSummary){[long]$restockWindowSummary.varianceSeconds}else{0})
     ShowGrid = $(if($showGrid){1}else{0})
     ShowTransitions = $(if($showTransitions){1}else{0})
     ShowRestockWindowBounds = $(if($showRestockWindowBounds){1}else{0})
