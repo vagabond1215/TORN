@@ -184,9 +184,6 @@ function Test-CycleSuppressedByObservationPlausibility {
     $registry=Get-CycleSpuriousTransitionRegistry
     if($null -eq $registry -or -not$registry.PSObject.Properties['markets']){return $false}
     $marketKey=$country+':'+[string]$itemId
-    $updatedAt=[long](Get-CycleFilterProperty $registry 'updatedAt')
-    $now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    if($updatedAt -gt 0 -and ($now-$updatedAt) -gt 600L){return $false}
     $marketProperty=$registry.markets.PSObject.Properties[$marketKey]
     if($null -eq $marketProperty -or $null -eq $marketProperty.Value){return $false}
     $suppressed=@{}
