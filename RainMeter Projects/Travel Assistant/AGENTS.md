@@ -131,7 +131,7 @@ There is one graph surface: the inline card graph.
 - Opened with the per-row chart Shape button.
 - Rendered inside the Rainmeter card/list.
 - One expanded market at a time.
-- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering. Graph-hover tooltip telemetry is retired; graph rendering is local/display-only and may read the separate forecast/replay journals but never writes learning evidence.
+- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering. The old GraphHover telemetry subsystem remains retired. Marker/window tooltips use only the bounded `InlineGraphHitboxes.inc` pool positioned from the renderer's local graph-spec KV; no extra process, provider request, or learning write is allowed.
 - Refreshing an open graph is local-only and may occur at approximately one-minute cadence.
 - The standalone WinForms Viewer and its launcher are retired; do not restore them.
 
@@ -146,6 +146,9 @@ The inline graph:
 - stores live forecast probabilities separately in ignored `data/runtime/chance-history.jsonl`, one market/minute for 8 hours;
 - stores strictly resolved forecast/outcome pairs separately in `resolved-arrival-history.jsonl` plus `chance-accuracy.json`; future evidence labels the later outcome but never alters the previously recorded probability;
 - may render a flight-shifted realized-hit proxy from actual retained stock for hindsight pattern analysis, but that hindsight waveform is truth/diagnostic only and must never feed forecasting evidence.
+- shades only modeled Chance-to-Hit intervals where the recorded arrival probability is >=50%, using a low-opacity periwinkle fill between interpolated threshold crossings; never shade raw in-stock intervals.
+- keeps exact chance-window boundaries visible above the fill and publishes simple local hover regions for `Chance window opened/closed`, `Restocked: HH:MM:SS ago`, and `OoS: HH:MM:SS ago`.
+- limits semantic graph hover targets to 48 reusable meters for the single expanded graph; chance-window regions take priority, then the most recent restock/OoS events fill remaining capacity.
 
 Change-only history must carry the last predecessor across the display/retention cutoff. A previous bootstrap-only migration hole may be repaired to a carried baseline using recorded `firstSeenAt` and unchanged current state; this is continuity metadata, not a fabricated transition.
 
