@@ -7,6 +7,7 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $rendererPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 $stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 $hitboxPath = Join-Path $ProjectRoot '@Resources\Includes\InlineGraphHitboxes.inc'
+$settingsWindowPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenSettings.ps1'
 
 $failures = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:failures.Add($Message) }
@@ -17,9 +18,16 @@ if ([int]$settings.highResolutionRetentionHours -lt [int]$settings.graphWindowHo
 if ([int]$settings.highResolutionRetentionHours -ne 48) { Fail 'High-resolution learning retention should remain 48 hours.' }
 if ([int]$settings.cycleRetentionDays -ne 90) { Fail 'Completed-cycle learning retention should remain 90 days.' }
 if ([int]$settings.staleAfterSeconds -ne 300) { Fail 'Live-provider stale threshold should remain 300 seconds.' }
+if($null -eq $settings.PSObject.Properties['graphVisuals']){
+    Fail 'settings.example.json must define graphVisuals defaults.'
+}else{
+    foreach($name in @('showGrid','showTransitions','showChance','showHindsightWindows','showAccuracyMarkers','showTooltips')){
+        if($null -eq $settings.graphVisuals.PSObject.Properties[$name]){Fail "Graph visual default missing '$name'."}
+    }
+}
 
 $renderer = Get-Content -LiteralPath $rendererPath -Raw
-if(-not$renderer.Contains('return [single]($plotBottom - ($p * $plotHeight))')){Fail 'Chance and realized-hit overlays must use an independent fixed 0..100% vertical scale.'}
+if(-not$renderer.Contains('return [single]($plotBottom - ($p * $plotHeight))')){Fail 'Chance/validation overlays must use an independent fixed 0..100% vertical scale.'}
 if($renderer -match '(?i)Chance.*DrawString|DrawString.*Chance'){Fail 'Chance overlay must not add a second labeled Y axis.'}
 
 foreach($token in @(
@@ -28,22 +36,28 @@ foreach($token in @(
     'FromArgb(0,71,171),1',
     'FromArgb(255,117,24),1',
     'FromArgb(105,200,235),1.5',
-    'FromArgb(28,165,165,235)',
-    'FromArgb(150,165,165,235),1',
-    '$chanceBandThreshold=0.50',
-    'Get-ChanceWindows',
-    '$graphics.FillRectangle($chanceBandBrush',
-    'ChanceWindowThreshold',
-    'ChanceWindowCount',
+    'FromArgb(32,165,165,235)',
+    'FromArgb(155,165,165,235),1',
+    'Get-RealizedDepartureWindows',
+    '$graphics.FillRectangle($hindsightBandBrush',
+    'HindsightWindowCount',
     'HoverCount',
     "text=('Restocked: '",
     "text=('OoS: '",
-    "text=('Chance window opened: '",
-    "text=('Chance window closed: '",
+    "text=('Hindsight departure window: '",
+    "text=('Actual hindsight window opened: '",
+    "text=('Actual hindsight window closed: '",
     'Get-FlightShiftedRealizedHistory',
-    '$realizedPen.DashStyle=[System.Drawing.Drawing2D.DashStyle]::Dot',
+    '$realizedThrough=$now-$flightSeconds',
     'Read-MarketResolvedArrivalHistory',
     '$graphics.DrawLine($errorPen,$x,$predictedY,$x,$actualY)',
+    "text=('Forecast '+([Math]::Round(100.0*$predicted,1))+'% | Actual '",
+    "Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showGrid'",
+    "Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showTransitions'",
+    "Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showChance'",
+    "Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showHindsightWindows'",
+    "Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showAccuracyMarkers'",
+    "Get-InlineSettingBool -Base $settings -Local $localSettings -Name 'showTooltips'",
     'ChancePointCount',
     'RealizedHitProxyPointCount',
     'ResolvedForecastPointCount',
@@ -56,11 +70,22 @@ foreach($token in @(
     if(-not$renderer.Contains($token)){Fail "Inline graph palette/interaction contract missing '$token'."}
 }
 
-if($renderer.Contains('$graphics.FillRectangle($chanceBandBrush,$x')){
-    Fail 'Chance shading must be driven by modeled chance-window geometry, not raw stock transition X coordinates.'
+foreach($retired in @(
+    '$chanceBandThreshold=0.50',
+    'Get-ChanceWindows',
+    'Get-ChanceThresholdCrossing',
+    'ChanceWindowThreshold',
+    '$chanceBandBrush',
+    '$chanceBoundaryPen',
+    '$realizedPen.DashStyle'
+)){
+    if($renderer.Contains($retired)){Fail "Retired 50%-threshold/dotted hindsight graph primitive is still present: $retired"}
 }
-if(-not$renderer.Contains('# Shade modeled chance windows only. This is deliberately independent of the')){
-    Fail 'Renderer must explicitly keep chance-window shading independent of stock/in-stock intervals.'
+if(-not$renderer.Contains('# Periwinkle is hindsight truth, not another forecast encoding.')){
+    Fail 'Periwinkle must represent flight-shifted realized departure windows, never a thresholded copy of cyan.'
+}
+if(-not$renderer.Contains('# No 50% display suppression is permitted; missing evidence remains a gap.')){
+    Fail 'Cyan chance history must remain continuous across all recorded probabilities without a 50% display threshold.'
 }
 
 foreach($forbidden in @(
@@ -68,6 +93,24 @@ foreach($forbidden in @(
     '$graphics.DrawLine($selloutPen,$x,[single]$plotTop,$x,[single]$plotBottom)'
 )){
     if($renderer.Contains($forbidden)){Fail "Transition markers must stay below the X axis; found retired full-plot marker '$forbidden'."}
+}
+
+if(-not(Test-Path -LiteralPath $settingsWindowPath)){
+    Fail 'OpenSettings.ps1 is required for graph visual toggles.'
+}else{
+    $settingsWindow=Get-Content -LiteralPath $settingsWindowPath -Raw
+    foreach($token in @(
+        "'CHART VISUALS'",
+        "'Grid' -SettingName 'showGrid'",
+        "'Restock / OoS markers' -SettingName 'showTransitions'",
+        "'Live Chance to Hit' -SettingName 'showChance'",
+        "'Hindsight departure windows' -SettingName 'showHindsightWindows'",
+        "'Forecast accuracy markers' -SettingName 'showAccuracyMarkers'",
+        "'Graph tooltips' -SettingName 'showTooltips'",
+        'Set-ObjectProperty -Object $local -Name ''graphVisuals'''
+    )){
+        if(-not$settingsWindow.Contains($token)){Fail "Settings chart visual contract missing '$token'."}
+    }
 }
 
 $ini = Get-Content -LiteralPath $iniPath -Raw
@@ -126,5 +169,5 @@ if($failures.Count -gt 0){
 }
 
 Write-Host 'Graph window / retention / interaction validation passed.' -ForegroundColor Green
-Write-Host 'Visible: 8h | lime stock | cyan chance | periwinkle >=50% chance bands | semantic marker tooltips | raw learning retention: 48h' -ForegroundColor DarkGreen
+Write-Host 'Visible: 8h | mandatory lime stock | continuous cyan forecast | periwinkle hindsight departure windows | optional validation/event overlays | raw learning retention: 48h' -ForegroundColor DarkGreen
 exit 0
