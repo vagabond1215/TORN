@@ -23,6 +23,7 @@ local lastInlineRenderRequestAt = 0
 local lastLayoutSignature = ''
 local lastGraphSignature = ''
 local graphHoverSignatures = {}
+local graphInfoSignature = nil
 local lastFlagKeys = {}
 local lastItemImageRequestSignature = ''
 local lastItemImageRequestAt = 0
@@ -620,6 +621,61 @@ local function graphSpecPath(key)
     return generatedDir .. 'inline-graph-' .. safeFileKey(key) .. '.kv'
 end
 
+local function hideGraphInfoRegion()
+    if graphInfoSignature ~= nil then
+        SKIN:Bang('!HideMeter', 'MeterInlineGraphInfo')
+        SKIN:Bang('!SetOption', 'MeterInlineGraphInfo', 'ToolTipText', '')
+        graphInfoSignature = nil
+    end
+end
+
+local function updateGraphInfoRegion(spec, graphMeterName)
+    if spec == nil or graphMeterName == nil or graphMeterName == '' or math.floor(number(spec.InfoEnabled)) ~= 1 then
+        hideGraphInfoRegion()
+        return
+    end
+    local graphMeter = SKIN:GetMeter(graphMeterName)
+    if graphMeter == nil then
+        hideGraphInfoRegion()
+        return
+    end
+
+    local count = math.max(0, math.min(40, math.floor(number(spec.InfoLineCount))))
+    if count <= 0 then
+        hideGraphInfoRegion()
+        return
+    end
+    local lines = {}
+    for i = 1, count do
+        local line = safeText(spec['InfoLine' .. i], '')
+        if line ~= '' then table.insert(lines, line) end
+    end
+    if #lines == 0 then
+        hideGraphInfoRegion()
+        return
+    end
+
+    local baseX = number(graphMeter:GetX())
+    local baseY = number(graphMeter:GetY())
+    local x = baseX + number(spec.InfoX)
+    local y = baseY + number(spec.InfoY)
+    local w = math.max(1, number(spec.InfoW))
+    local h = math.max(1, number(spec.InfoH))
+    local tooltip = table.concat(lines, '
+')
+    local signature = table.concat({tostring(x), tostring(y), tostring(w), tostring(h), tooltip}, '|')
+    if graphInfoSignature ~= signature then
+        SKIN:Bang('!SetOption', 'MeterInlineGraphInfo', 'X', tostring(x))
+        SKIN:Bang('!SetOption', 'MeterInlineGraphInfo', 'Y', tostring(y))
+        SKIN:Bang('!SetOption', 'MeterInlineGraphInfo', 'W', tostring(w))
+        SKIN:Bang('!SetOption', 'MeterInlineGraphInfo', 'H', tostring(h))
+        SKIN:Bang('!SetOption', 'MeterInlineGraphInfo', 'Shape', 'Rectangle 0,0,' .. tostring(w) .. ',' .. tostring(h) .. ' | Fill Color 0,0,0,1 | StrokeWidth 0')
+        SKIN:Bang('!SetOption', 'MeterInlineGraphInfo', 'ToolTipText', tooltip)
+        SKIN:Bang('!ShowMeter', 'MeterInlineGraphInfo')
+        graphInfoSignature = signature
+    end
+end
+
 local function hideGraphHoverRegions()
     for i = 1, maxGraphHoverRegions do
         if graphHoverSignatures[i] ~= nil then
@@ -630,6 +686,7 @@ local function hideGraphHoverRegions()
         end
     end
     graphHoverSignatures = {}
+    hideGraphInfoRegion()
 end
 
 local function updateGraphHoverRegions(spec, graphMeterName, row)
@@ -688,6 +745,7 @@ local function updateGraphHoverRegions(spec, graphMeterName, row)
             graphHoverSignatures[i] = nil
         end
     end
+    updateGraphInfoRegion(spec, graphMeterName)
 end
 
 local function graphImagePath(key)
