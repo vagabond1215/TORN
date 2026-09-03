@@ -93,6 +93,11 @@ calibration transform is user-facing.
 
 `MultiCycleChanceBridge.ps1` now reuses stochastic-v1.1 for one earliest-feasible arrival at 256 scenarios with adaptive departure search disabled. Eligibility requires >=3 usable completed cycles and arrival-horizon / weighted mean cycle >=2.0. It publishes per-opportunity chance, full-load chance, occupancy baseline, cycle ratio, timing SD, approximate accumulated phase SD, evidence count, and maximum simulated ordinal into the build state before UI publication. `CardPresenter.lua` shows `Chance to hit: NN%` only when legacy guidance would otherwise be Collecting/WAIT/closed-unusable. The stage is network-free/fail-soft and has its own runtime error channel.
 
+Current-stock Collecting Data now has a conservative direct-evidence fallback for slow depletion. `WindowPlanRefiner.ps1` can emit `current_stock_safe` / `Safe Window Open` only from fresh positive stock with >=3 uncensored positive-stock depletion samples spanning >=10 minutes. The guarded rate is max(60 units/hour, 1.5 x the observed 90th-percentile depletion rate), and conservative runway must exceed both 2x time-to-arrival and arrival+30 minutes. It deliberately sets `ProbabilityValue=-1`; recurring cycle evidence is untouched.
+
+Live chance trend/replay telemetry is also implemented. After UI heartbeat publication, `ChanceHistory.ps1` records at most one prospective probability per market/minute for eight hours in `chance-history.jsonl`, with flight-aligned forecast/departure/arrival timestamps. `ResolveChanceHistory.ps1` later scores only matured arrivals using the same confirmed truth semantics as stochastic calibration and writes `resolved-arrival-history.jsonl` plus `chance-accuracy.json` (Brier/log loss/absolute error/classification accuracy/predicted-vs-observed calibration). The inline graph overlays the cyan live probability on an unlabeled 0..100% scale, a faint dotted actual-stock waveform shifted backward by one country flight time, and confirmed forecast-error markers. The shifted waveform is hindsight truth only and cannot enter learning history.
+
+
 ## Accepted target-host baseline before this redesign
 
 At commit `f5a4f0b`, target testing confirmed:
