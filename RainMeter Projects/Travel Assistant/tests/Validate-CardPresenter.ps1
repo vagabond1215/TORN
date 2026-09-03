@@ -99,6 +99,8 @@ if ($errors.Count -eq 0) {
         'formatSleepingRestockTooltip',"'Restocks in ~'",
         "'Collecting Data: See Weav3r'",
         'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'",
+        'currentStockSafetyAction',"'CurrentStockSafetyEligible'","'CurrentStockSafetyRunwaySeconds'","'CurrentStockSafetyMarginSeconds'",
+        "'Current-stock safety fallback'","return 'Safe Window Open',''","'No hit percentage is fabricated; recurring Safe/Best evidence remains unchanged.'",
         'multiCycleChanceAction',"'MultiCycleChanceEligible'","'MultiCycleChanceProbability'","'MultiCycleTargetProbability'",
         "'MultiCycleDutyCycleProbability'","'MultiCycleArrivalCycleRatio'","'MultiCycleExpectedFullCycles'","'MultiCyclePhaseStdDevSeconds'",
         "'Multi-cycle arrival forecast'","'Modeled Chance to Hit: '","return 'Chance to hit:',chancePercent(probability)",
@@ -144,12 +146,21 @@ if ($errors.Count -eq 0) {
         '-SafetyMarginFraction 0.05',
         '$medianAvailable = Get-StableWindowMedian',
         'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
+        'Get-CurrentStockSafetyProjection','CurrentStockSafetyEligible','CurrentStockSafetyGuardedUnitsPerHour',
+        "'current_stock_safe'","'SAFE WINDOW OPEN'","'ProbabilityValue']='-1'",
         "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
         'MaximumOrdinal = 1','immediately next cycle',
         'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock',
         "'WP2:'","'PV1#'","'PV0#'"
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
+    }
+
+    $reachableAt=$presenter.IndexOf('if currentStock>0 and reachable',[System.StringComparison]::Ordinal)
+    $safeFallbackAt=$presenter.IndexOf("if dataQuality=='current_stock_safe' then",[System.StringComparison]::Ordinal)
+    $collectingAt=$presenter.IndexOf("if dataQuality=='collecting' then",[System.StringComparison]::Ordinal)
+    if($reachableAt -lt 0 -or $safeFallbackAt -le $reachableAt -or $collectingAt -le $safeFallbackAt){
+        Fail 'Current-stock Safe Window Open fallback must sit below normal current-cycle reachability and immediately before Collecting Data.'
     }
 
     foreach ($token in @(
