@@ -94,7 +94,7 @@ if ($currentMode -notin @('standard','airstrip','wlt','business')) { $currentMod
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Travel Assistant Settings'
-$form.Size = New-Object System.Drawing.Size(560, 760)
+$form.Size = New-Object System.Drawing.Size(560, 800)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -271,6 +271,7 @@ $showChanceCheck = New-GraphCheckBox -Text 'Live Chance to Hit' -SettingName 'sh
 $showHindsightCheck = New-GraphCheckBox -Text 'Hindsight departure windows' -SettingName 'showHindsightWindows' -X 278 -Y 608
 $showAccuracyCheck = New-GraphCheckBox -Text 'Forecast accuracy markers' -SettingName 'showAccuracyMarkers' -X 18 -Y 634
 $showTooltipsCheck = New-GraphCheckBox -Text 'Graph tooltips' -SettingName 'showTooltips' -X 278 -Y 634
+$showRestockBoundsCheck = New-GraphCheckBox -Text 'Restock window bounds' -SettingName 'showRestockWindowBounds' -X 18 -Y 660
 
 $script:modeIds = @()
 $script:updatingUi = $false
@@ -481,14 +482,14 @@ $sync.Add_Click({
 
 $save = New-Object System.Windows.Forms.Button
 $save.Text = 'Save'
-$save.Location = New-Object System.Drawing.Point(354,680)
+$save.Location = New-Object System.Drawing.Point(354,720)
 $save.Size = New-Object System.Drawing.Size(82,30)
 $save.BackColor = [System.Drawing.Color]::FromArgb(82,174,255)
 $save.ForeColor = [System.Drawing.Color]::Black
 $form.Controls.Add($save)
 $cancel = New-Object System.Windows.Forms.Button
 $cancel.Text = 'Cancel'
-$cancel.Location = New-Object System.Drawing.Point(446,680)
+$cancel.Location = New-Object System.Drawing.Point(446,720)
 $cancel.Size = New-Object System.Drawing.Size(82,30)
 $form.Controls.Add($cancel)
 $cancel.Add_Click({ $form.Close() })
@@ -504,6 +505,7 @@ $save.Add_Click({
         $graphVisuals=[pscustomobject]@{
             showGrid=[bool]$showGridCheck.Checked
             showTransitions=[bool]$showTransitionsCheck.Checked
+            showRestockWindowBounds=[bool]$showRestockBoundsCheck.Checked
             showChance=[bool]$showChanceCheck.Checked
             showHindsightWindows=[bool]$showHindsightCheck.Checked
             showAccuracyMarkers=[bool]$showAccuracyCheck.Checked
