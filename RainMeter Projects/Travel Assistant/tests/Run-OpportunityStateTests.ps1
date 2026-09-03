@@ -196,7 +196,7 @@ $rows = @(
         key='japan:1'; name='First'; countryName='Japan'; countryCode='JP'; tripBand='long'; probability=.9; probabilityKnown=$true; elapsedSeconds=3600L; grossProfit=1000L; quantity=10; profitPerHour=1000.0; windowStartAt=100100L; foreignPrice=10L; marketValue=20L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='first'
     },
     [pscustomobject]@{
-        key='united_kingdom:2'; name='Second'; countryName='United Kingdom'; countryCode='UK'; tripBand='medium'; probability=.8; probabilityKnown=$true; elapsedSeconds=1800L; grossProfit=1200L; quantity=12; profitPerHour=2400.0; windowStartAt=100200L; foreignPrice=12L; marketValue=24L; marketValueFresh=$false; priceColor='145,152,164,255'; windowText='WINDOW 10m'; leaveText='LEAVE NOW'; tooltip='second'
+        key='united_kingdom:2'; name='Second'; countryName='United Kingdom'; countryCode='UK'; tripBand='medium'; probability=.8; probabilityKnown=$true; elapsedSeconds=1800L; grossProfit=1200L; quantity=12; profitPerHour=2400.0; windowStartAt=100200L; foreignPrice=12L; marketValue=24L; marketValueFresh=$false; priceColor='145,152,164,255'; windowText='Opens in 10m'; leaveText='LEAVE NOW'; tooltip='second'
     }
 )
 Write-OpportunityProjection -State $state -Rows $rows -SortMode 'gross' -Message ''
