@@ -278,7 +278,7 @@ $sleepRows=@(
         key='china:123'; name='Sleeping OOS'; countryName='China'; countryCode='CN'; tripBand='long';
         probability=-1.0; probabilityKnown=$false; elapsedSeconds=40000L; grossProfit=50000L; quantity=10; profitPerHour=4500.0;
         windowStartAt=140000L; foreignPrice=100L; marketValue=500L; marketValueFresh=$true; priceColor='86,190,116,255';
-        windowText='RESTOCK ESTIMATE'; leaveText='Restocks in ~11h'; tooltip='sleeping';
+        windowText=''; leaveText='Restocks in ~11h'; tooltip='sleeping';
         forecastMode='sleeping_oos'; restockEstimateAt=140000L; restockAverageDelaySeconds=39600L;
         restockEarliestDelaySeconds=36000L; restockLatestDelaySeconds=43200L;
         restockLifetimeShortestDelaySeconds=35000L; restockLifetimeLongestDelaySeconds=45000L; restockSampleCount=3
