@@ -160,6 +160,15 @@ Change-only history must carry the last predecessor across the display/retention
 
 A sold-out-only graph must remain visually flat at zero, not use a fake `0..1` stock axis.
 
+Missed-transition recovery is evidence repair, not forecasting:
+
+- Prometheus and YATA are live snapshot feeds in this project. If a complete short restock/sellout occurs between their snapshots, those feeds cannot reconstruct it afterward.
+- `HistoryRecovery.ps1` may optionally query Torn Intel's rolling observed foreign-stock history only after the modeled W/restock-window close has passed by at least 60 seconds, the market is still locally observed at zero, and no local positive transition proves the expected restock. It requires a separate approved-client key from `settings.local.json.tornIntelClientKey` or `TORN_INTEL_CLIENT_KEY`; never reuse `tornApiKey`, spoof browser fetch headers, or enter the browser-extension exemption path.
+- Recovery is post-publication/fail-soft and globally rate-limited to at most one history request per minute. Negative evidence is retried no faster than every 15 minutes while the same verified OoS anchor remains inside the configured recovery-history horizon.
+- A forecast never becomes history. Only timestamped external history points are appended, with `transitionBoundaryQuality=recovered`. A current fresh zero snapshot may close a recovered positive interval as `history_recovery_live_bridge` because that zero is already observed fact.
+- A proven complete recovered micro-cycle may be appended as schema-v2 cycle evidence. Its restock/sellout boundaries remain `recovered`, interval eligibility follows the same conservative lower-bound rule as native cycles, and ambiguous recovered cycles remain stored but `forecastEligible=false`.
+- The normal `CycleAnchorReconciler` consumes recovered observations on the next heartbeat; history recovery must never delay the already-published UI generation.
+
 ## Filters and local UI state
 
 Persistent local UI state lives in ignored `data/runtime/preferences.json`.
