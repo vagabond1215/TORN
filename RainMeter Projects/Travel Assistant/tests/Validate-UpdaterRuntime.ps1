@@ -6,6 +6,8 @@ $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $launcherPath = Join-Path $ProjectRoot '@Resources\Scripts\LaunchUpdate.ps1'
 $settingsPopupPath = Join-Path $ProjectRoot '@Resources\Scripts\OpenOptimizerSettings.ps1'
 $filterPreferencesPath = Join-Path $ProjectRoot '@Resources\Scripts\FilterPreferences.ps1'
+$runUpdatePath = Join-Path $ProjectRoot '@Resources\Scripts\RunUpdate.ps1'
+$graphVisualPreferencesPath = Join-Path $ProjectRoot '@Resources\Scripts\GraphVisualPreferences.ps1'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
@@ -58,7 +60,8 @@ if (-not (Test-Path -LiteralPath $iniPath)) {
         'MeasureSettings',
         'MeasureFilterPopup',
         'MeasureInlineGraph',
-        'MeasurePreferenceAction'
+        'MeasurePreferenceAction',
+        'MeasureGraphVisualAction'
     )) {
         $body = Get-SectionBody $section
         if ([string]::IsNullOrWhiteSpace($body)) {
@@ -114,6 +117,29 @@ if (-not (Test-Path -LiteralPath $filterPreferencesPath)) {
         if (-not $filterPreferences.Contains($token)) {
             Fail "Preference-triggered filter refresh contract missing '$token'."
         }
+    }
+}
+
+if (-not (Test-Path -LiteralPath $graphVisualPreferencesPath)) {
+    Fail 'Missing GraphVisualPreferences.ps1.'
+} else {
+    $tokens=$null; $parseErrors=$null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($graphVisualPreferencesPath,[ref]$tokens,[ref]$parseErrors)
+    foreach($parseError in @($parseErrors)){Fail ('GraphVisualPreferences.ps1 parse error: '+$parseError.Message)}
+}
+
+if (-not (Test-Path -LiteralPath $runUpdatePath)) {
+    Fail 'Missing RunUpdate.ps1.'
+} else {
+    $runUpdate=Get-Content -LiteralPath $runUpdatePath -Raw
+    foreach($token in @(
+        'function Invoke-FilterRefreshPricing',
+        'if ($itemIds.Count -eq 0) { return $false }',
+        '$filterPricingAttempted=[bool](Invoke-FilterRefreshPricing)',
+        'if($filterPricingAttempted){',
+        'Warm-cache filter saves publish immediately from that first pass'
+    )){
+        if(-not$runUpdate.Contains($token)){Fail "RefreshFilters warm-cache optimization missing '$token'."}
     }
 }
 
