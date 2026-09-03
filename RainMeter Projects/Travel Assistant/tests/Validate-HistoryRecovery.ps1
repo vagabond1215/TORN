@@ -31,8 +31,11 @@ if ($errors.Count -eq 0) {
         'https://torn-intel.com/api/v1/public/foreign-stock/history',
         'X-Torn-Intel-Key',
         '[int]$MinimumAttemptIntervalSeconds = 60',
+        '[int]$NoEvidenceRetrySeconds = 900',
         'if($MinimumAttemptIntervalSeconds -lt 60){$MinimumAttemptIntervalSeconds=60}',
+        'if($NoEvidenceRetrySeconds -lt 300){$NoEvidenceRetrySeconds=300}',
         '$windowClose=$lastOos+[long]$summary.averageDelaySeconds+[long]$summary.varianceSeconds',
+        'if(($now-$lastOos) -gt ([long]$MaximumHistoryHours*3600L)){continue}',
         '$now -lt ($windowClose+60L)',
         '[int]$summary.sampleCount -lt 2',
         'Get-RecoveryProperty $market ''lastStock''',
@@ -45,6 +48,9 @@ if ($errors.Count -eq 0) {
         'Append-RecoveryCycle -Cycle $recoveredCycle',
         "restockBoundaryQuality='recovered'",
         "soldOutBoundaryQuality='recovered'",
+        '$availabilityEligible=($availabilityMin -gt 0)',
+        '$forecastEligible=($availabilityEligible -and $restockDelayEligible)',
+        "evidenceQuality=$(if($forecastEligible){'bounded_fresh'}else{'incomplete'})",
         "status='NO_MISSED_TRANSITION'",
         "status='RECOVERED'"
     )) {
