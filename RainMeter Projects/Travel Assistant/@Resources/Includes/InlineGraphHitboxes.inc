@@ -674,3 +674,20 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
+
+; Dedicated fixed hover target for the bottom-center circled information icon.
+; It is intentionally separate from the 48 semantic event hitboxes.
+[MeterInlineGraphInfo]
+Meter=Shape
+Group=InlineGraphHitboxes
+X=0
+Y=0
+W=1
+H=1
+Hidden=1
+DynamicVariables=1
+Shape=Rectangle 0,0,1,1 | Fill Color 0,0,0,1 | StrokeWidth 0
+ToolTipText=
+ToolTipWidth=420
+LeftMouseUpAction=
+
