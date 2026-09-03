@@ -11,7 +11,8 @@ This directory separates durable architecture from the active implementation han
 5. [`PROVIDER_DISCOVERY.md`](./PROVIDER_DISCOVERY.md) — provider notes.
 6. [`HISTORICAL_BOOTSTRAP.md`](./HISTORICAL_BOOTSTRAP.md) — historical truth/provenance rules.
 7. [`WINDOWS_VALIDATION.md`](./WINDOWS_VALIDATION.md) — target Windows/Rainmeter validation procedure.
-8. [`../Readme.md`](../Readme.md) — human-facing summary.
+8. [`FUTURE_DEVELOPMENT_INTENTS.md`](./FUTURE_DEVELOPMENT_INTENTS.md) — non-active architectural directions; never overrides the active run.
+9. [`../Readme.md`](../Readme.md) — human-facing summary.
 
 ## Instruction precedence
 
@@ -20,6 +21,7 @@ This directory separates durable architecture from the active implementation han
 - `ARCHITECTURE.md` controls durable structure unless the active run intentionally changes and updates it.
 - `IMPLEMENTATION_STATUS.md` records evidence, not future authority.
 - provider/bootstrap docs do not override architecture/safety.
+- `FUTURE_DEVELOPMENT_INTENTS.md` records long-horizon ideas only; it does not authorize current implementation.
 - conversation history is background, not a replacement for repository instructions.
 
 ## Current project state
