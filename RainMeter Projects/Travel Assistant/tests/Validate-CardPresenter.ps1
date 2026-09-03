@@ -278,8 +278,8 @@ if ($errors.Count -eq 0) {
         'displayTripBands',
         'showProfitableOnly',
         'Get-OpportunityRestockSummary',
-        "$windowText = 'Opens in '+(Format-OpportunityDuration ($windowStartAt-$Now))",
-        "if ($travelState -eq 'traveling' -and $outboundSeconds -gt 0) { $leaveText = '' }",
+        '$windowText = ''Opens in ''+(Format-OpportunityDuration ($windowStartAt-$Now))',
+        'if ($travelState -eq ''traveling'' -and $outboundSeconds -gt 0) { $leaveText = '''' }',
         'Test-OpportunityUnresolvedOosPhase',
         '$unresolvedOos=Test-OpportunityUnresolvedOosPhase',
         'A later observed restock supersedes the preceding OoS',
@@ -291,9 +291,9 @@ if ($errors.Count -eq 0) {
         if (-not $opportunity.Contains($token)) { Fail "OpportunityState outbound destination filter missing '$token'." }
     }
     foreach($retired in @(
-        "$windowText = 'WINDOW '+",
-        "$windowText = 'WINDOW NOW'",
-        "$leaveText = 'EN ROUTE'"
+        '$windowText = ''WINDOW ''+',
+        '$windowText = ''WINDOW NOW''',
+        '$leaveText = ''EN ROUTE'''
     )){
         if($opportunity.Contains($retired)){Fail "OpportunityState retains ambiguous/redundant card wording '$retired'."}
     }
