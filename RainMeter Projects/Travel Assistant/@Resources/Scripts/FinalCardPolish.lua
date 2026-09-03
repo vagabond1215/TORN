@@ -15,10 +15,51 @@ local function setText(name,value)
     end
 end
 
-local function hasAuthoritativeChance(text)
+local function numericPercent(text)
     local raw=trim(text)
-    local value=tonumber(raw:match('^(%d+)%%$'))
+    return tonumber(raw:match('^([%+%-]?[%d%.]+)%%$'))
+end
+
+local function hasAuthoritativeChance(text)
+    local value=numericPercent(text)
     return value~=nil and value>=0 and value<=100
+end
+
+local function sanitizeChance(name,text)
+    local raw=trim(text)
+    local value=numericPercent(raw)
+    if value==nil then return raw end
+
+    -- A probability above 100% (or below 0%) is a producer/model invariant
+    -- violation, not a special confidence state. Do not turn it into a plausible
+    -- looking value at presentation time; suppress it until the next valid update.
+    if value<0 or value>100 then
+        setText(name,'')
+        return ''
+    end
+
+    local normalized=string.format('%.0f%%',value)
+    if normalized~=raw then setText(name,normalized) end
+    return normalized
+end
+
+local function descriptiveAction(text)
+    local raw=trim(text)
+    local lower=raw:lower()
+    for _,status in ipairs({'in stock','window open'}) do
+        local prefix=status..' / leave '
+        if lower:sub(1,#prefix)==prefix then
+            local remainder=trim(raw:sub(#prefix+1))
+            if remainder:lower()=='now' then
+                return status=='in stock' and 'In stock, leave now' or 'Window open, leave now'
+            end
+            if remainder:lower():find('before:',1,true)==1 then
+                return (status=='in stock' and 'In stock, leave ' or 'Window open, leave ')..remainder
+            end
+            return (status=='in stock' and 'In stock, leave before: ' or 'Window open, leave before: ')..remainder
+        end
+    end
+    return raw
 end
 
 local function isNonInformativeAction(text)
@@ -31,14 +72,16 @@ end
 
 function Update()
     -- CardPresenter / travel-state presentation own the action and Chance meters.
-    -- This final pass enforces one cross-field invariant only: an authoritative
-    -- visible probability cannot coexist with a non-informative WAIT DATA-style
-    -- action. The percentage already passed the upstream probability authority;
-    -- replace only the contradictory action label and touch no geometry/model state.
+    -- This final pass enforces cross-field presentation invariants only: make the
+    -- current-stock departure deadline explicit, reject impossible percentages,
+    -- and never pair a valid probability with a non-informative WAIT DATA action.
     for i=1,8 do
         local prefix='MeterOpportunity'..tostring(i)
-        local chance=meterText(prefix..'Chance')
-        local action=meterText(prefix..'Leave')
+        local chanceName=prefix..'Chance'
+        local chance=sanitizeChance(chanceName,meterText(chanceName))
+        local action=descriptiveAction(meterText(prefix..'Leave'))
+        setText(prefix..'Leave',action)
+
         if hasAuthoritativeChance(chance) and isNonInformativeAction(action) then
             setText(prefix..'Leave','Chance to hit:')
         end
