@@ -813,7 +813,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                         windowStartAt=[long]$restockEstimateAt
                         windowEndAt=0L
                         leaveDelaySeconds=[long][Math]::Max(0L,$restockEstimateAt-$Now)
-                        windowText='RESTOCK ESTIMATE'
+                        windowText=''
                         leaveText=$restockText
                         foreignPrice=$foreignPrice
                         marketValue=[long]$resaleUse.marketValue
