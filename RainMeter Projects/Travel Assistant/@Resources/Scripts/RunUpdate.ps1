@@ -28,6 +28,7 @@ $CycleAnalytics = Join-Path $PSScriptRoot 'CycleAnalytics.ps1'
 $TrendForecast = Join-Path $PSScriptRoot 'TrendForecast.ps1'
 $StochasticForecast = Join-Path $PSScriptRoot 'StochasticForecast.ps1'
 $StochasticCalibration = Join-Path $PSScriptRoot 'StochasticCalibration.ps1'
+$HistoryRecovery = Join-Path $PSScriptRoot 'HistoryRecovery.ps1'
 $ResalePriority = Join-Path $PSScriptRoot 'ResalePriority.ps1'
 $ResaleQueue = Join-Path $PSScriptRoot 'ResaleQueue.ps1'
 $Finalizer = Join-Path $PSScriptRoot 'FinalizeState.ps1'
@@ -57,6 +58,7 @@ $CycleAnalyticsErrorFile = Join-Path $RuntimeDir 'cycle-analytics-error.txt'
 $TrendForecastErrorFile = Join-Path $RuntimeDir 'trend-forecast-error.txt'
 $StochasticForecastErrorFile = Join-Path $RuntimeDir 'stochastic-forecast-error.txt'
 $StochasticCalibrationErrorFile = Join-Path $RuntimeDir 'stochastic-calibration-error.txt'
+$HistoryRecoveryErrorFile = Join-Path $RuntimeDir 'history-recovery-error.txt'
 $ResaleQueueErrorFile = Join-Path $RuntimeDir 'resale-queue-error.txt'
 $GeneratedDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Generated'
 $HeartbeatFile = Join-Path $GeneratedDir 'last-update.txt'
@@ -577,6 +579,12 @@ try {
         # remains shadow-only. If the forecast stage failed, the scorer can still
         # resolve older pending rows but rejects stale artifacts for new freezes.
         Invoke-FailSoftScript -Path $StochasticCalibration -ErrorPath $StochasticCalibrationErrorFile
+
+        # Optional post-publication forensic recovery. This may make at most one
+        # keyed history request per minute after a modeled restock window has fully
+        # passed without a locally observed restock. Recovered observations are
+        # consumed by the normal reconciler on the next heartbeat.
+        Invoke-FailSoftScript -Path $HistoryRecovery -ErrorPath $HistoryRecoveryErrorFile
     }
 
     if (Get-Command Clear-TravelAssistantLatestError -ErrorAction SilentlyContinue) { Clear-TravelAssistantLatestError -Component 'run-update' }
