@@ -45,8 +45,8 @@ foreach($token in @(
     'HoverCount',
     "text=('Restocked: '",
     "text=('OoS: '",
-    "text=('Restock window opens: '",
-    "text=('Restock window closes: '",
+    "text=('Restock variance opens: '",
+    "text=('Restock variance closes: '",
     "text=('Hindsight departure window: '",
     "text=('Actual hindsight window opened: '",
     "text=('Actual hindsight window closed: '",
@@ -55,11 +55,13 @@ foreach($token in @(
     'Read-MarketResolvedArrivalHistory',
     'Read-InlineMarketCycles',
     'Get-InlineRestockWindowSummary',
-    'Get-InlineOosTransitions',
-    '$openAt=[long]$oosAt+$earlyDelay',
-    '$closeAt=[long]$oosAt+$lateDelay',
-    'if($openAt -ge $cutoff -and $openAt -le $now)',
-    'if($closeAt -ge $cutoff -and $closeAt -le $now)',
+    'Get-InlineRestockTransitions',
+    'Get-CycleForecastRobustSigma -Values $delays',
+    '$openAt=[long]$restockAt-$varianceSeconds',
+    '$closeAt=[long]$restockAt+$varianceSeconds',
+    'if($restockAt -lt $cutoff -or $restockAt -gt $now){continue}',
+    'if($openAt -ge $cutoff)',
+    'if($closeAt -le $now)',
     '$graphics.DrawLine($errorPen,$x,$predictedY,$x,$actualY)',
     "text=('Forecast '+([Math]::Round(100.0*`$predicted,1))+'% | Actual '",
     "Get-InlineSettingBool -Base `$settings -Local `$localSettings -Name 'showGrid'",
@@ -77,6 +79,7 @@ foreach($token in @(
     '$markerBottom=[single]($plotBottom+8)',
     '$forecastMarkerTop=[single]($plotBottom+3)',
     '$forecastMarkerBottom=[single]($plotBottom+6)',
+    'RestockWindowVarianceSeconds',
     '$graphics.DrawString((''-{0}h'' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)',
     '$graphics.DrawString(''now'',$labelFont,$labelBrush,[single]($plotRight-18),110)'
 )){
@@ -103,7 +106,10 @@ if(-not$renderer.Contains('# No 50% display suppression is permitted; missing ev
 
 foreach($forbidden in @(
     '$graphics.DrawLine($restockPen,$x,[single]$plotTop,$x,[single]$plotBottom)',
-    '$graphics.DrawLine($selloutPen,$x,[single]$plotTop,$x,[single]$plotBottom)'
+    '$graphics.DrawLine($selloutPen,$x,[single]$plotTop,$x,[single]$plotBottom)',
+    '$openAt=[long]$oosAt+$earlyDelay',
+    '$closeAt=[long]$oosAt+$lateDelay',
+    'Get-InlineOosTransitions'
 )){
     if($renderer.Contains($forbidden)){Fail "Transition markers must stay below the X axis; found retired full-plot marker '$forbidden'."}
 }
