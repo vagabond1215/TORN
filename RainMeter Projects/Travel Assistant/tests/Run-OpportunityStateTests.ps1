@@ -193,7 +193,7 @@ Assert-True (-not [bool]$missingUse.usable) 'Missing MV must remain excluded unt
 $state = @{}
 $rows = @(
     [pscustomobject]@{
-        key='japan:1'; name='First'; countryName='Japan'; countryCode='JP'; tripBand='long'; probability=.9; probabilityKnown=$true; elapsedSeconds=3600L; grossProfit=1000L; quantity=10; profitPerHour=1000.0; windowStartAt=100100L; foreignPrice=10L; marketValue=20L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='first'
+        key='japan:1'; name='First'; countryName='Japan'; countryCode='JP'; tripBand='long'; probability=.9; probabilityKnown=$true; elapsedSeconds=3600L; grossProfit=1000L; quantity=10; profitPerHour=1000.0; windowStartAt=100100L; foreignPrice=10L; marketValue=20L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='In stock'; leaveText='LEAVE NOW'; tooltip='first'
     },
     [pscustomobject]@{
         key='united_kingdom:2'; name='Second'; countryName='United Kingdom'; countryCode='UK'; tripBand='medium'; probability=.8; probabilityKnown=$true; elapsedSeconds=1800L; grossProfit=1200L; quantity=12; profitPerHour=2400.0; windowStartAt=100200L; foreignPrice=12L; marketValue=24L; marketValueFresh=$false; priceColor='145,152,164,255'; windowText='Opens in 10m'; leaveText='LEAVE NOW'; tooltip='second'
@@ -253,7 +253,7 @@ for ($i=1; $i -le 12; $i++) {
     $poolRows += [pscustomobject]@{
         key=('canada:{0}' -f $i); itemId=$i; name=('Candidate {0}' -f $i); countryName='Canada'; countryCode='CA'; tripBand=$band;
         probability=.5; probabilityKnown=$true; elapsedSeconds=1800L; grossProfit=(1000L+$i); quantity=1; profitPerHour=2000.0;
-        windowStartAt=(100000L+$i); foreignPrice=10L; marketValue=20L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='pool'
+        windowStartAt=(100000L+$i); foreignPrice=10L; marketValue=20L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='In stock'; leaveText='LEAVE NOW'; tooltip='pool'
     }
 }
 Write-OpportunityProjection -State $poolState -Rows $poolRows -SortMode 'upcoming' -Message ''
@@ -264,7 +264,7 @@ Assert-Equal $poolState['Opportunity12TripBand'] 'long' 'Candidate pool must ret
 $learningState = @{}
 $learningRows = @(
     [pscustomobject]@{
-        key='canada:3'; name='Learning Stock'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=-1.0; probabilityKnown=$false; elapsedSeconds=2100L; grossProfit=5000L; quantity=18; profitPerHour=8571.4; windowStartAt=100000L; foreignPrice=100L; marketValue=500L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='IN STOCK'; leaveText='LEAVE NOW'; tooltip='likelihood learning'
+        key='canada:3'; name='Learning Stock'; countryName='Canada'; countryCode='CA'; tripBand='short'; probability=-1.0; probabilityKnown=$false; elapsedSeconds=2100L; grossProfit=5000L; quantity=18; profitPerHour=8571.4; windowStartAt=100000L; foreignPrice=100L; marketValue=500L; marketValueFresh=$true; priceColor='86,190,116,255'; windowText='In stock'; leaveText='LEAVE NOW'; tooltip='likelihood learning'
     }
 )
 Write-OpportunityProjection -State $learningState -Rows $learningRows -SortMode 'upcoming' -Message ''
