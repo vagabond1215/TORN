@@ -144,6 +144,11 @@ if ($errors.Count -eq 0) {
     if ($presenter.Contains("setOption(name,'ToolTipHidden'")) { Fail 'CardPresenter.lua must not dynamically mutate ToolTipHidden; empty tooltip text owns visibility on the target host.' }
     foreach($token in @(
         "if leave:lower()=='en route' then leave='' end",
+        "local function projectedArrivalCertainty(state,statePrefix)",
+        "ImmediateArrivalProbabilityValue",
+        "MultiCycleChanceProbability",
+        "only show a probability aligned to actual",
+        "certainty=projectedArrivalCertainty(state,projectedPrefix)",
         "local sleepingOosValid=(",
         "lastObservedOosAt>0",
         "(activeRestockAt<=0 or activeRestockAt<=lastObservedOosAt)",
