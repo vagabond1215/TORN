@@ -864,9 +864,9 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                 if ($targetPurchaseAt -le ($earliestArrivalAt+1) -and $windowStartAt -le $earliestArrivalAt) {
                     $windowText = 'IN STOCK'
                 } elseif ($windowStartAt -le $Now) {
-                    $windowText = 'WINDOW NOW'
+                    $windowText = 'Window open'
                 } else {
-                    $windowText = 'WINDOW '+(Format-OpportunityDuration ($windowStartAt-$Now))
+                    $windowText = 'Opens in '+(Format-OpportunityDuration ($windowStartAt-$Now))
                 }
             } else {
                 $purchaseAtSeconds = $initialWait + $outboundSeconds
@@ -922,8 +922,8 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             } | ForEach-Object { [long]$_.restockQuantity })
             if ($quantitySamples.Count -gt 0) { $availableQuantity=Get-OptimalMedian $quantitySamples }
             if ($availableQuantity -le 0) { $learning++; continue }
-            if ($windowStartAt -le $Now) { $windowText = 'WINDOW NOW' }
-            else { $windowText = 'WINDOW '+(Format-OpportunityDuration ($windowStartAt-$Now)) }
+            if ($windowStartAt -le $Now) { $windowText = 'Window open' }
+            else { $windowText = 'Opens in '+(Format-OpportunityDuration ($windowStartAt-$Now)) }
         }
 
         if ($availableQuantity -le 0) { continue }
@@ -948,7 +948,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $priceColor = if (-not $marketValueFresh) { '150,150,150,255' } elseif ($profitPerItem -gt 0) { '86,190,116,255' } else { '224,90,90,255' }
         $leaveText = if ($leaveDelaySeconds -le 60) { 'LEAVE NOW' } else { 'LEAVE '+(Format-OpportunityDuration $leaveDelaySeconds) }
         if ($travelState -in @('abroad','foreign') -and $outboundSeconds -eq 0) { $leaveText = 'AT DEST.' }
-        if ($travelState -eq 'traveling' -and $outboundSeconds -gt 0) { $leaveText = 'EN ROUTE' }
+        if ($travelState -eq 'traveling' -and $outboundSeconds -gt 0) { $leaveText = '' }
         $wasteText = Get-OpportunityWasteText -Energy $energy -Nerve $nerve
         $chanceText = if ($probabilityKnown) { ('{0:N0}% modeled hit' -f (100.0*$probability)) } else { 'hit likelihood learning' }
         $mvStateText = if ($marketValueFresh) { 'MV fresh' } else { 'MV STALE '+(Format-OpportunityDuration ([long]$resaleUse.ageSeconds))+' old; refresh queued' }
