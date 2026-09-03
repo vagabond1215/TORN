@@ -72,7 +72,7 @@ Card rules:
 - The top-right `$` button and lower-right chart button are centered in the two halves of the card-edge end cap. Their active fill is inset one pixel so the card border and T separators always remain visible above/around the highlight.
 - Inactive end-cap icons are light gray. Active controls use a Torn-lime fill with dark-gray icon/text. Active sort text plus the main filter/settings icons use Torn lime; the graph's cobalt event ticks are intentionally unchanged.
 - At most one economics strip and one inline graph are expanded at a time; both track stable `country:itemId` identity. Clicking the card body toggles both sections together; the `$` and chart end-cap buttons retain independent control of their own section.
-- Inline graph rendering uses a black background and Torn-lime stock trace. Cobalt-blue restock/in-stock and pumpkin-orange sellout/out-of-stock transitions render as short ticks in a dedicated gutter below the X axis, not across the active plot.
+- Inline graph rendering uses a black background and Torn-lime stock trace. A thin cyan hit-probability trace overlays the same 8-hour X-axis on its own implicit 0..100% scale (bottom=0%, top=100%) with no second axis labels. A faint dotted realized-hit waveform is the observed stock history shifted left by configured one-way flight time: top=that departure would have hit, bottom=it would have missed. Confirmed replay outcomes may add small hit/miss/error markers. Cobalt-blue restock/in-stock and pumpkin-orange sellout/out-of-stock transitions remain short ticks in the gutter below the X axis.
 - Expanded economics use equal Each/Total halves with a vertical 40px label block at the left of each half. Each half is split into equal left/right metric cells by a subtle vertical separator. Every metric cell renders its label on the left and its monetary value right-aligned at the cell edge; economics-strip typography is 9 pt. MV is top-left. Top-right shows the profitability metric not used by the primary card: round-trip flight `$/hr` for `UPCOMING` / `PROFIT`, or signed Net for `PROFIT/HR`. Bottom-left shows per-item foreign Price / exact total purchase Price, and bottom-right shows Tax when nonzero. `$/hr` is after-tax Each/Total net divided by `2 x` configured one-way flight seconds and excludes waiting/window time. The expansion remains 34px at 0% tax, with only Tax label/value hidden.
 - The FlagKit image is the visual left end cap. It extends underneath the card's top/bottom border (`67x50` beginning at the card origin), eliminating the former 1px bands. A panel-tinted alpha mask clips the flag to the rounded left corners and a border-only overlay redraws the card edge above it. Collapsed cards round both left corners; graph-expanded cards keep only the top-left flag corner rounded; economics-expanded cards keep only the bottom-left flag corner rounded; if both expansions are open the flag edge is square because neither flag corner coincides with the card corner.
 - The region between the flag's right edge and the item-name text is a true `48x48` square, matching the card's interior height. Decorative Torn item art is rendered `44x44` with a 2px inset inside that square and cached locally from Torn's direct item PNG path (`https://www.torn.com/images/items/<id>/large.png`).
@@ -118,6 +118,7 @@ Fresh current stock is useful even before enough cycles exist to estimate arriva
 - `LEARNING` likelihood must not erase the row or collapse the entire surface.
 - Known arrival probabilities remain displayed as percentages.
 - A restricted production multi-cycle fallback may show `Chance to hit: NN%` when the earliest feasible arrival spans at least two weighted mean full cycles, at least three usable completed joint cycles exist, and legacy current-cycle/Safe/Best guidance cannot produce an actionable result. It reuses stochastic-v1.1 joint-cycle renewal simulation at exactly one earliest-feasible arrival; it is not a second forecasting model and must never be labeled Safe/Guaranteed.
+- When fresh positive stock is already observed but its restock boundary is left-censored, `WindowPlanRefiner` may replace Collecting Data with `Safe Window Open` only if >=3 uncensored positive-stock depletion samples span >=10 minutes and a pessimistic current-run depletion rate still gives at least 2x the time-to-arrival (and >=30 minutes extra) of runway. The guarded rate uses the 90th-percentile observed nonzero depletion x1.5 with a hard floor of 60 units/hour. This fallback never fabricates a percentage and never teaches recurring cycle history.
 - Sold-out/future opportunities still require completed sellout→restock + availability evidence before a future window is shown.
 - If already at a recognized destination, fresh current stock remains direct current-state evidence.
 
@@ -142,6 +143,9 @@ The inline graph:
 - never turns a forecast into observed history;
 - never invents a restock or sellout transition;
 - preserves learning retention independently (48h high-resolution observations / 90d completed cycles).
+- stores live forecast probabilities separately in ignored `data/runtime/chance-history.jsonl`, one market/minute for 8 hours;
+- stores strictly resolved forecast/outcome pairs separately in `resolved-arrival-history.jsonl` plus `chance-accuracy.json`; future evidence labels the later outcome but never alters the previously recorded probability;
+- may render a flight-shifted realized-hit proxy from actual retained stock for hindsight pattern analysis, but that hindsight waveform is truth/diagnostic only and must never feed forecasting evidence.
 
 Change-only history must carry the last predecessor across the display/retention cutoff. A previous bootstrap-only migration hole may be repaired to a carried baseline using recorded `firstSeenAt` and unchanged current state; this is continuity metadata, not a fabricated transition.
 
@@ -232,6 +236,8 @@ Negative-value items remain legal candidates unless `Show profitable items only`
 10. Stale provider markets are not visible opportunity candidates.
 11. Change-only pruning preserves one predecessor/baseline per market.
 12. Sorting and inline graph expansion never write forecast history.
+13. Chance history / resolved replay history are forecast diagnostics, not observations; they never enter `observations.jsonl` or `cycles.jsonl`.
+14. Hindsight flight-shifted hit/miss data may evaluate pattern quality but must never be used as if it were known at the original departure timestamp.
 
 ## Energy / Nerve constraints
 
