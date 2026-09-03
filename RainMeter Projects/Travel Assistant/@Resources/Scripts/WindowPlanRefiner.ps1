@@ -772,6 +772,12 @@ foreach($pendingKey in @($pendingObservationMap.Keys)){
         if(-not$seenObservation.ContainsKey($identity)){$observationMap[$pendingKey].Add($pending);$seenObservation[$identity]=$true}
     }
 }
+foreach($observationKey in @($observationMap.Keys)){
+    $filtered=@(Get-PlausibilityFilteredStockObservations -Rows @($observationMap[$observationKey].ToArray()) -ExpectedPollIntervalSeconds 60)
+    $list=New-Object System.Collections.Generic.List[object]
+    foreach($row in $filtered){$list.Add($row)}
+    $observationMap[$observationKey]=$list
+}
 $travelState=([string]$state['TravelState']).Trim().ToLowerInvariant()
 $destinationCountry=([string]$state['TravelDestinationCountryId']).Trim().ToLowerInvariant()
 $travelLeft=0L
