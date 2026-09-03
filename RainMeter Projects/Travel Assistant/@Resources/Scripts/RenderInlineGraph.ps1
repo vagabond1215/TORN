@@ -147,8 +147,9 @@ function Read-InlineMarketCycles {
                 $restockAt=[long](Get-InlineProperty $row 'restockAt')
                 $soldOutAt=[long](Get-InlineProperty $row 'soldOutAt')
                 $delay=[long](Get-InlineProperty $row 'restockDelaySeconds')
-                if($restockAt -le 0 -or $soldOutAt -le 0 -or $delay -le 0){continue}
-                $identity=('{0}:{1}:{2}' -f $restockAt,$soldOutAt,$delay)
+                $available=[long](Get-InlineProperty $row 'availabilitySeconds')
+                if($delay -le 0){continue}
+                $identity=('{0}:{1}:{2}:{3}' -f $restockAt,$soldOutAt,$delay,$available)
                 if($seen.ContainsKey($identity)){continue}
                 $seen[$identity]=$true
                 $rows.Add($row)
