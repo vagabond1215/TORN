@@ -35,7 +35,7 @@ if ($errors.Count -eq 0) {
         '$windowClose=$lastOos+[long]$summary.averageDelaySeconds+[long]$summary.varianceSeconds',
         '$now -lt ($windowClose+60L)',
         '[int]$summary.sampleCount -lt 2',
-        "Get-RecoveryProperty $market 'lastStock'",
+        'Get-RecoveryProperty $market ''lastStock''',
         'Sort-Object windowCloseAt,marketKey|Select-Object -First 1',
         'Scan retained evidence only for the one request we are actually about to make.',
         "source='torn_intel_history_recovery'",
