@@ -170,7 +170,10 @@ if(-not(Test-Path -LiteralPath $hitboxPath)){
     Fail 'InlineGraphHitboxes.inc is required for marker/window tooltips.'
 }else{
     $hitboxes=Get-Content -LiteralPath $hitboxPath -Raw
-    $count=[regex]::Matches($hitboxes,'(?m)^\[MeterInlineGraphHitbox\d+\]\s*
+    $count=[regex]::Matches($hitboxes,'(?m)^\[MeterInlineGraphHitbox\d+\]\s*$').Count
+    if($count -ne 48){Fail "Inline graph tooltip pool must remain bounded at 48 reusable hitboxes; found $count."}
+    $infoCount=[regex]::Matches($hitboxes,'(?m)^\[MeterInlineGraphInfo\]\s*$').Count
+    if($infoCount -ne 1){Fail "Expanded graph must expose exactly one dedicated info tooltip meter; found $infoCount."}
     foreach($token in @(
         '[MeterInlineGraphHitbox1]',
         '[MeterInlineGraphHitbox48]',
