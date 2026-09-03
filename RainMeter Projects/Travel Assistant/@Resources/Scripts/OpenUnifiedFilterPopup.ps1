@@ -12,14 +12,16 @@ $EngineStateFile=Join-Path $RuntimeDir 'engine-state.json'
 $FlagDir=Join-Path $ProjectRoot '@Resources\Images\Flags'
 $logComponent='popup-filter-unified'
 
-$ColorPanel=[System.Drawing.Color]::FromArgb(24,27,31)
-$ColorCard=[System.Drawing.Color]::FromArgb(31,35,40)
-$ColorInput=[System.Drawing.Color]::FromArgb(20,23,27)
-$ColorBorder=[System.Drawing.Color]::FromArgb(58,64,73)
-$ColorText=[System.Drawing.Color]::FromArgb(222,226,232)
-$ColorMuted=[System.Drawing.Color]::FromArgb(145,152,164)
+# Match the Rainmeter card palette exactly: neutral charcoal/black surfaces and
+# Torn lime for active state. Avoid the older blue-gray popup tint.
+$ColorPanel=[System.Drawing.Color]::FromArgb(17,17,17)
+$ColorCard=[System.Drawing.Color]::FromArgb(32,32,32)
+$ColorInput=[System.Drawing.Color]::FromArgb(0,0,0)
+$ColorBorder=[System.Drawing.Color]::FromArgb(64,64,64)
+$ColorText=[System.Drawing.Color]::FromArgb(225,225,225)
+$ColorMuted=[System.Drawing.Color]::FromArgb(150,150,150)
 $ColorAccent=[System.Drawing.Color]::FromArgb(126,190,73)
-$ColorSelected=[System.Drawing.Color]::FromArgb(37,46,55)
+$ColorHover=[System.Drawing.Color]::FromArgb(38,38,38)
 
 function Read-PopupJson([string]$Path) {
     try { return (Read-FilterJson -Path $Path) }
@@ -172,17 +174,21 @@ function Get-CountryFlagImage([string]$CountryId) {
 
 function Set-ChipStyle($Chip) {
     if([bool]$Chip.Checked) {
-        $Chip.BackColor=$ColorSelected
-        $Chip.ForeColor=$ColorText
+        $Chip.BackColor=$ColorAccent
+        $Chip.ForeColor=[System.Drawing.Color]::Black
         $Chip.FlatAppearance.BorderColor=$ColorAccent
+        $Chip.FlatAppearance.MouseOverBackColor=$ColorAccent
+        $Chip.FlatAppearance.MouseDownBackColor=$ColorAccent
     } else {
         $Chip.BackColor=$ColorCard
         $Chip.ForeColor=$ColorMuted
         $Chip.FlatAppearance.BorderColor=$ColorBorder
+        $Chip.FlatAppearance.MouseOverBackColor=$ColorHover
+        $Chip.FlatAppearance.MouseDownBackColor=$ColorHover
     }
 }
 
-function New-Chip([string]$Text,[int]$Width,[bool]$Checked,[string]$Tag,[System.Drawing.Image]$Image=$null) {
+function New-Chip([string]$Text,[int]$Width,[bool]$Checked,[string]$Tag,[System.Drawing.Image]$Image=$null,[bool]$ShowBorder=$true) {
     $chip=New-Object System.Windows.Forms.CheckBox
     $chip.Appearance=[System.Windows.Forms.Appearance]::Button
     $chip.AutoSize=$false
@@ -191,7 +197,7 @@ function New-Chip([string]$Text,[int]$Width,[bool]$Checked,[string]$Tag,[System.
     $chip.Tag=$Tag
     $chip.Checked=$Checked
     $chip.FlatStyle=[System.Windows.Forms.FlatStyle]::Flat
-    $chip.FlatAppearance.BorderSize=1
+    $chip.FlatAppearance.BorderSize=$(if($ShowBorder){1}else{0})
     $chip.TextAlign=[System.Drawing.ContentAlignment]::MiddleCenter
     $chip.Font=New-Object System.Drawing.Font('Segoe UI Semibold',8)
     $chip.Margin=New-Object System.Windows.Forms.Padding(0,0,6,6)
@@ -436,7 +442,7 @@ $categoryFlow.BackColor=$ColorPanel
 $content.Controls.Add($categoryFlow)
 foreach($category in $categories) {
     $categoryLabel=if([string]$category -eq 'Miscellaneous'){'Misc'}else{[string]$category}
-    $chip=New-Chip -Text $categoryLabel -Width 93 -Checked ([bool]$script:categorySelection[$category]) -Tag $category
+    $chip=New-Chip -Text $categoryLabel -Width 93 -Checked ([bool]$script:categorySelection[$category]) -Tag $category -ShowBorder $false
     $chip.Margin=New-Object System.Windows.Forms.Padding(0,0,4,6)
     $chip.Padding=New-Object System.Windows.Forms.Padding(1,0,1,0)
     $chip.Font=New-Object System.Drawing.Font('Segoe UI Semibold',9.5)
