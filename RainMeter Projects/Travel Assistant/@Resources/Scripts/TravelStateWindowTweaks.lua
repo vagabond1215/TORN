@@ -163,6 +163,7 @@ local function buildLookup(state)
                 nextRestockAt=number(state[prefix..'NextRestockEstimateAt']),
                 lastObservedOosAt=number(state[prefix..'LastObservedOosAt']),
                 forecastMode=trim(state[prefix..'ForecastMode']):lower(),
+                liveCycleProjectionMode=trim(state[prefix..'LiveCycleProjectionMode']):lower(),
                 immediateArrivalProbability=optionalProbability(state[prefix..'ImmediateArrivalProbabilityValue']),
                 multiCycleChanceEligible=number(state[prefix..'MultiCycleChanceEligible'])>=1,
                 multiCycleArrivalProbability=optionalProbability(state[prefix..'MultiCycleChanceProbability'])
@@ -181,6 +182,18 @@ local function applyTooltip(prefix,tooltip,title)
     setOption(prefix..'Leave','ToolTipTitle',heading)
     setOption(prefix..'Leave','ToolTipText',text)
     setOption(prefix..'Leave','DynamicVariables',1)
+end
+
+local function setTravelChance(prefix,value)
+    local chance=trim(value)
+    setOption(prefix..'Chance','Text',chance)
+    if chance=='' then
+        setOption(prefix..'Leave','W',263)
+        SKIN:Bang('!HideMeter',prefix..'Chance')
+    else
+        setOption(prefix..'Leave','W',122)
+        SKIN:Bang('!ShowMeter',prefix..'Chance')
+    end
 end
 
 local function liveTravelRemainingSeconds(state,now)
@@ -278,7 +291,7 @@ local function outboundTooltip(row,state,now)
     local group=landingRelevantGroup(plan,landingAt)
     local nl='#CRLF#'
     local lines={}
-    local hasDirectEvidence=row~=nil and number(row.stockEvidenceAt)>0
+    local hasDirectEvidence=row~=nil and number(row.stockEvidenceAt)>0 and row.liveCycleProjectionMode~='stale-source'
     if hasDirectEvidence and number(row.currentStock)>0 then
         if number(row.activeSelloutAt)>now then
             table.insert(lines,'Sellout in: '..formatDuration(number(row.activeSelloutAt)-now))
@@ -332,34 +345,35 @@ end
 
 local function outboundStatus(row,state,now)
     local plan=phaseSafePlan(row)
-    if row~=nil and number(row.stockEvidenceAt)>0 then
+    local hasDirectEvidence=row~=nil and number(row.stockEvidenceAt)>0 and row.liveCycleProjectionMode~='stale-source'
+    if hasDirectEvidence then
         if number(row.currentStock)>0 then
-            if number(row.activeSelloutAt)>now then return withArrivalChance('Sells out in '..formatDuration(number(row.activeSelloutAt)-now),row) end
-            return withArrivalChance('In stock',row)
+            if number(row.activeSelloutAt)>now then return 'Sells out in '..formatDuration(number(row.activeSelloutAt)-now) end
+            return 'In stock'
         end
         if rowHasUnresolvedOos(row) then
-            if number(row.nextRestockAt)>now then return withArrivalChance('Restocks in '..formatDuration(number(row.nextRestockAt)-now),row) end
-            if number(row.nextRestockAt)>0 then return withArrivalChance('Restock estimate overdue',row) end
-            return withArrivalChance('Restock timing learning',row)
+            if number(row.nextRestockAt)>now then return 'Restocks in '..formatDuration(number(row.nextRestockAt)-now) end
+            if number(row.nextRestockAt)>0 then return 'Restock estimate overdue' end
+            return 'Restock timing learning'
         end
-        -- A later observed restock supersedes the preceding OoS. If that positive
-        -- source later goes stale, present uncertainty instead of resurrecting the
-        -- old restock countdown.
-        if number(row.activeRestockAt)>0 then return withArrivalChance('Stock status stale',row) end
-        return withArrivalChance('Stock status unknown',row)
+        if number(row.activeRestockAt)>0 then return 'Stock status stale' end
+        return 'Stock status unknown'
     end
-    if plan==nil then return withArrivalChance('MARKET DATA PENDING',row) end
+
+    -- Forecast-only/stale provider mode still has valid phase/cycle geometry when a
+    -- verified anchor exists. Use that model instead of degrading the row to
+    -- Collecting Data solely because the last stock snapshot is older than 5m.
+    if plan==nil then return 'Market data pending' end
     local remaining=liveTravelRemainingSeconds(state,now)
     local landingAt=now+remaining
     local group=landingRelevantGroup(plan,landingAt)
-    if group==nil then return withArrivalChance('MARKET DATA PENDING',row) end
+    if group==nil then return 'Market data pending' end
     local restockAt=expectedRestockAt(plan,group)
     local selloutAt=expectedSelloutAt(plan,group,restockAt)
-    if restockAt>now then return withArrivalChance('Restocks in '..formatDuration(restockAt-now),row) end
-    if selloutAt>now then return withArrivalChance('Sells out in '..formatDuration(selloutAt-now),row) end
-    return withArrivalChance('MARKET DATA PENDING',row)
+    if restockAt>now then return 'Restocks in '..formatDuration(restockAt-now) end
+    if selloutAt>now then return 'Sells out in '..formatDuration(selloutAt-now) end
+    return 'Market data pending'
 end
-
 local function currentCycleStatus(row,now)
     local plan=phaseSafePlan(row)
     if plan==nil or plan.anchorAt<=0 then
@@ -378,12 +392,12 @@ local function currentCycleStatus(row,now)
     end
 
     local available=averageAvailability(plan)
-    if available<=0 then return 'IN STOCK','' end
+    if available<=0 then return 'In stock','' end
     local selloutAt=plan.anchorAt+available
     if selloutAt>now then
-        return 'IN STOCK FOR '..formatDuration(selloutAt-now),'Sold out in: '..formatDuration(selloutAt-now)
+        return 'In stock for '..formatDuration(selloutAt-now),'Sold out in: '..formatDuration(selloutAt-now)
     end
-    return 'IN STOCK - AVG SELLOUT '..formatDuration(now-selloutAt)..' AGO',''
+    return 'In stock - avg sellout '..formatDuration(now-selloutAt)..' ago',''
 end
 
 local function syncPanelHeight()
@@ -414,7 +428,7 @@ local function updateRow(index,state,lookup,now)
     end
 
     if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then
-        setOption(prefix..'Chance','Text','')
+        setTravelChance(prefix,'')
     end
 
     local country=rowCountry(index)
@@ -433,6 +447,7 @@ local function updateRow(index,state,lookup,now)
 
     if travelState=='traveling' then
         setOption(prefix..'Leave','Text',outboundStatus(row,state,now))
+        setTravelChance(prefix,arrivalChanceText(row))
         applyTooltip(prefix,outboundTooltip(row,state,now),'Arrival estimate')
         return
     end
