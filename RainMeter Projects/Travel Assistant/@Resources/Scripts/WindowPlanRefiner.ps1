@@ -19,8 +19,10 @@ $GeneratedDir = Join-Path $ProjectRoot '@Resources\Generated'
 $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $StateKvFile = Join-Path $GeneratedDir 'state.kv'
 $RuntimeCycleFile = Join-Path $RuntimeDir 'cycles.jsonl'
+$PendingCycleFile = Join-Path $RuntimeDir 'cycles.pending.jsonl'
 $SeedCycleFile = Join-Path $SeedDir 'cycles.jsonl'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
+$PendingObservationFile = Join-Path $RuntimeDir 'observations.pending.jsonl'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared depletion-history reads.' }
 . $AtomicFileScript
@@ -754,8 +756,22 @@ for ($i=1; $i -le $count; $i++) {
     $forecastMode=([string]$state[$prefix+'ForecastMode']).Trim().ToLowerInvariant()
     if (-not [string]::IsNullOrWhiteSpace($key) -and $forecastMode -ne 'sleeping_oos') { $wanted[$key]=$true }
 }
-$cycleMap=Read-WindowCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile) -Wanted $wanted
+$cycleMap=Read-WindowCyclesForKeys -Paths @($SeedCycleFile,$RuntimeCycleFile,$PendingCycleFile) -Wanted $wanted
 $observationMap=Read-WindowObservationsForKeys -Path $RuntimeObservationFile -Wanted $wanted -Cutoff ($Now-28800L)
+$pendingObservationMap=Read-WindowObservationsForKeys -Path $PendingObservationFile -Wanted $wanted -Cutoff ($Now-28800L)
+foreach($pendingKey in @($pendingObservationMap.Keys)){
+    if(-not $observationMap.ContainsKey($pendingKey)){$observationMap[$pendingKey]=New-Object System.Collections.Generic.List[object]}
+    $seenObservation=@{}
+    foreach($existing in @($observationMap[$pendingKey].ToArray())){
+        $at=[long](Get-WindowProperty $existing 'sourceTimestamp');if($at -le 0){$at=[long](Get-WindowProperty $existing 'timestamp')}
+        $seenObservation[([string]$at+':'+[string][long](Get-WindowProperty $existing 'stock'))]=$true
+    }
+    foreach($pending in @($pendingObservationMap[$pendingKey].ToArray())){
+        $at=[long](Get-WindowProperty $pending 'sourceTimestamp');if($at -le 0){$at=[long](Get-WindowProperty $pending 'timestamp')}
+        $identity=([string]$at+':'+[string][long](Get-WindowProperty $pending 'stock'))
+        if(-not$seenObservation.ContainsKey($identity)){$observationMap[$pendingKey].Add($pending);$seenObservation[$identity]=$true}
+    }
+}
 $travelState=([string]$state['TravelState']).Trim().ToLowerInvariant()
 $destinationCountry=([string]$state['TravelDestinationCountryId']).Trim().ToLowerInvariant()
 $travelLeft=0L
@@ -819,6 +835,7 @@ for ($i=1; $i -le $count; $i++) {
     $countryId=($key -split ':',2)[0]
     $cycles=@()
     if ($cycleMap.ContainsKey($key)) { $cycles=@($cycleMap[$key].ToArray()) }
+    $forecastEligibleCycles=@($cycles | Where-Object { Test-CycleForecastBoundaryEvidence -Cycle $_ -Purpose Forecast })
     $market=Get-WindowProperty $engine.observedMarkets $key
     $destinationState=$null
     if ($engine.PSObject.Properties['destinations']) { $destinationState=Get-WindowProperty $engine.destinations $key }
@@ -993,7 +1010,7 @@ for ($i=1; $i -le $count; $i++) {
     $model=Get-StableRecurringScenarioModel -Cycles $cycles -AnchorAt $anchorAt -AnchorPhase $phase -NowEpoch $Now
     if ([int]$model.sampleCount -le 0) {
         $state[$prefix+'WindowDataQuality']='collecting'
-        $state[$prefix+'WindowDataQualityReason']='no verified completed cycles are available for the next restock'
+        $state[$prefix+'WindowDataQualityReason']=('no forecast-eligible completed cycles are available for the next restock (raw cycles {0}, eligible {1})' -f $cycles.Count,$forecastEligibleCycles.Count)
         $state[$prefix+'WindowStartAt']='0'
         $state[$prefix+'WindowText']='Collecting Data: See Weav3r'
         $state[$prefix+'ChanceText']=''
