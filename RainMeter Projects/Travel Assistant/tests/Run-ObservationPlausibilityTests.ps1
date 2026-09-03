@@ -27,6 +27,17 @@ $filtered=@(Get-PlausibilityFilteredStockObservations -Rows $isolatedZero -Expec
 Assert-Equal $filtered.Count 4 'Spurious zero should be removed while surrounding positive observations remain.'
 Assert-True (@($filtered|Where-Object{[long]$_.stock -eq 0}).Count -eq 0) 'Filtered trajectory should remain continuously positive.'
 
+$dropoutThenRealSellout=@(
+    [pscustomobject]@{timestamp=100L;stock=1000L;source='prometheus'},
+    [pscustomobject]@{timestamp=160L;stock=900L;source='prometheus'},
+    [pscustomobject]@{timestamp=220L;stock=0L;source='prometheus'},
+    [pscustomobject]@{timestamp=280L;stock=820L;source='prometheus'},
+    [pscustomobject]@{timestamp=340L;stock=0L;source='prometheus'}
+)
+$dropoutThenReal=@(Resolve-StockObservationPlausibility -Rows $dropoutThenRealSellout -ExpectedPollIntervalSeconds 60)
+$finalZero=@($dropoutThenReal|Where-Object{[long]$_.timestamp -eq 340L})[0]
+Assert-True ([bool]$finalZero.calculationEligible) 'Suppressing an isolated zero must not also erase the later genuine sellout.'
+
 $realRestock=@(
     [pscustomobject]@{timestamp=100L;stock=120L;source='prometheus'},
     [pscustomobject]@{timestamp=160L;stock=0L;source='prometheus'},
