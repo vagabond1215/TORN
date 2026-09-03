@@ -513,6 +513,10 @@ $save.Add_Click({
         }
         Set-ObjectProperty -Object $local -Name 'graphVisuals' -Value $graphVisuals
         Write-JsonAtomic -Path $LocalSettingsPath -Value $local
+        $graphVisualPreferenceScript=Join-Path $PSScriptRoot 'GraphVisualPreferences.ps1'
+        if(Test-Path -LiteralPath $graphVisualPreferenceScript){
+            & $graphVisualPreferenceScript -Action Read -Value Hindsight
+        }
 
         # Re-read immediately so an Ignore List popup opened while Settings was
         # visible cannot be overwritten by a stale in-memory preference object.
