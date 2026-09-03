@@ -790,6 +790,14 @@ function Get-WindowObservedPhase {
     }
 }
 
+function Test-WindowStaleSourceCanUseRecurringModel {
+    param([string]$LiveProjectionMode,[long]$AnchorAt)
+    return (
+        ([string]$LiveProjectionMode).Trim().ToLowerInvariant() -eq 'stale-source' -and
+        $AnchorAt -gt 0
+    )
+}
+
 if ($WindowPlanRefinerSkipMain) { return }
 if ($Now -le 0) { $Now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 $state=Read-WindowStateKv $StateKvFile
@@ -956,11 +964,11 @@ for ($i=1; $i -le $count; $i++) {
     # next-cycle geometry.
     $collectingReason=''
     if ([string]$liveProjection.mode -eq 'stale-source') {
-        if($observedStock -gt 0 -and $sourceTimestamp -gt [long]$phaseInfo.lastSellOutAt){
-            $collectingReason='live stock source is stale after a later observed restock; preceding OoS timing is suppressed'
-        } else {
-            $collectingReason='live stock source is stale'
+        if(-not(Test-WindowStaleSourceCanUseRecurringModel -LiveProjectionMode ([string]$liveProjection.mode) -AnchorAt $anchorAt)){
+            $collectingReason='live stock source is stale and no verified phase anchor is available for forecast-only geometry'
         }
+        # Staleness invalidates current-stock claims, not previously verified phase
+        # evidence. With a restock/OoS anchor, continue into recurring cycle geometry.
     } elseif ($stock -gt 0) {
         $activeCycle=Get-WindowProperty $destinationState 'activeCycle'
         $restockAt=if ($null -ne $activeCycle) { [long](Get-WindowProperty $activeCycle 'restockAt') } else { 0L }
