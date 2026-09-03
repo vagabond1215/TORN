@@ -77,7 +77,7 @@ Card rules:
 - The FlagKit image is the visual left end cap. It extends underneath the card's top/bottom border (`67x50` beginning at the card origin), eliminating the former 1px bands. A panel-tinted alpha mask clips the flag to the rounded left corners and a border-only overlay redraws the card edge above it. Collapsed cards round both left corners; graph-expanded cards keep only the top-left flag corner rounded; economics-expanded cards keep only the bottom-left flag corner rounded; if both expansions are open the flag edge is square because neither flag corner coincides with the card corner.
 - The region between the flag's right edge and the item-name text is a true `48x48` square, matching the card's interior height. Decorative Torn item art is rendered `44x44` with a 2px inset inside that square and cached locally from Torn's direct item PNG path (`https://www.torn.com/images/items/<id>/large.png`).
 - The window/guidance line sits low in the card with minimal bottom padding.
-- Tooltip policy is strict: destination flags, visible window/guidance text, and explicitly enabled inline-graph semantic hitboxes may expose tooltips. Header controls, sort buttons, item art/text, economics, profit, and end-cap buttons do not. Graph tooltips are local-only and limited to hindsight windows, resolved forecast markers, and observed restock/OoS ticks.
+- Tooltip policy is strict: destination flags, visible window/guidance text, and explicitly enabled inline-graph semantic hitboxes may expose tooltips. Header controls, sort buttons, graph-visual toggle buttons, item art/text, economics, profit, and end-cap buttons do not. Graph event-history detail is centralized in the bottom-center circled info tooltip; individual event markers do not expose duplicate tooltips. Sparse resolved forecast-accuracy markers may retain their own calibration tooltip.
 - Active-window tooltips never present already-passed departure timestamps as actionable times. Once the departure window has opened they say `OPEN NOW`; expired Safe windows say `closed`, and only future departure/close timestamps remain.
 
 Ordering is selectable and persistent only for:
@@ -90,6 +90,7 @@ Ordering is selectable and persistent only for:
 - Multi-cycle fallback hit likelihood is `pAnyStock` at the earliest feasible arrival. Full-load `pTargetQty`, long-run occupancy `E[in-stock]/E[full cycle]`, flight/cycle ratio, and phase-dispersion diagnostics belong in tooltip/diagnostic context; they do not alter sort ranking.
 - There is no user-facing `NAME`, `OPTIMAL`, Chance, or shortest-Time sort.
 - The three main sort/filter controls use equal-width 104px buttons with bold 11 pt labels so UPCOMING / PROFIT / PROFIT/HR remain legible without changing the header height.
+- Four compact 23x23 graph-visual toggles sit immediately to the right of the sort controls: `H` = hindsight departure windows, `%` = Chance to Hit trace, `W` = restock-window open/close bounds, and `S` = actual Restock/OoS stock-transition ticks. They use the same neutral sort-button chrome with Torn-lime active text / muted inactive text, persist to `settings.local.json.graphVisuals`, and rerender an expanded graph locally without starting a full opportunity update.
 - Sort controls reorder already-projected rows immediately in Lua; persistence is a tiny local write and must not wait on a full opportunity recompute.
 
 Economic semantics:
@@ -400,7 +401,7 @@ ResaleQueue              # <= 1 market request
 - Stale compact error markers may clear after successful component runs.
 - Popups launch through hidden STA PowerShell; no visible console should persist.
 - Popup launchers are spawn-only and reusable: after spawning they `return` rather than `exit`, so nested popup calls do not terminate the parent Settings host.
-- Settings/filter saves that need a projection refresh route through `Start-FilterProjectionRefresh` / `LaunchUpdate.ps1`; do not start `RunUpdate.ps1` directly under Windows PowerShell 5.1. Settings, Filter, Ignore, and Reset changes use mutex-waiting `RefreshFilters`: it recomputes against the retained all-market stock snapshot, targets missing/stale resale prices for newly eligible items (bounded to 40 explicit requests), reruns opportunity economics, and only then publishes the new UI generation.
+- Settings/filter saves that need a projection refresh route through `Start-FilterProjectionRefresh` / `LaunchUpdate.ps1`; do not start `RunUpdate.ps1` directly under Windows PowerShell 5.1. Settings, Filter, Ignore, and Reset changes use mutex-waiting `RefreshFilters`: it recomputes against the retained all-market stock snapshot, targets missing/stale resale prices for newly eligible items (bounded to 40 explicit requests), reruns opportunity economics only when that targeted pricing pass was actually needed, and only then publishes the new UI generation. Warm-cache filter saves must not repeat the full opportunity/window/refiner stack.
 - Runtime logs/history/preferences/generated graph specs remain ignored/local.
 
 ## Secrets / local files
