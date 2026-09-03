@@ -99,8 +99,10 @@ if ($errors.Count -eq 0) {
         'formatSleepingRestockTooltip',"'Restocks in ~'",
         "'Collecting Data: See Weav3r'",
         'WindowDataQuality','WindowDataQualityReason','formatCollectingTooltip',"'Collecting Data: See Weav3r'",
-        'currentStockSafetyAction',"'CurrentStockSafetyEligible'","'CurrentStockSafetyRunwaySeconds'","'CurrentStockSafetyMarginSeconds'",
-        "'Current-stock safety fallback'","return 'Safe Window Open',''","'No hit percentage is fabricated; recurring Safe/Best evidence remains unchanged.'",
+        'currentStockSafetyAction',"'CurrentStockSafetyEligible'","'CurrentStockSafetyMode'","'CurrentStockSafetyMinimumHoldHorizonSeconds'",
+        "'CurrentStockSafetyRunwaySeconds'","'CurrentStockSafetyMarginSeconds'","'Verified-stock holding fallback'",
+        "holding and 'STOCK HOLDING' or 'Safe Window Open'","'This fallback is used only when the primary window guidance is non-informative.'",
+        "'No hit percentage is fabricated; current-cycle, Safe/Best, and multi-cycle evidence retain priority.'",
         'multiCycleChanceAction',"'MultiCycleChanceEligible'","'MultiCycleChanceProbability'","'MultiCycleTargetProbability'",
         "'MultiCycleDutyCycleProbability'","'MultiCycleArrivalCycleRatio'","'MultiCycleExpectedFullCycles'","'MultiCyclePhaseStdDevSeconds'",
         "'Multi-cycle arrival forecast'","'Modeled Chance to Hit: '","return 'Chance to hit:',chancePercent(probability)",
@@ -155,8 +157,11 @@ if ($errors.Count -eq 0) {
         'Get-StableRecurringProbabilityAt','ImmediateArrivalAt','ImmediateArrivalProbabilityValue','ImmediateArrivalProbabilitySource',
         'Get-StableCurrentCycleArrivalProbability','-ObservationAt $sourceTimestamp',
         'Get-LiveDepletionArrivalProbability','CurrentCycleLiveProbability','current_cycle_live_depletion','current_cycle_conditional_survival',
-        'Get-CurrentStockSafetyProjection','CurrentStockSafetyEligible','CurrentStockSafetyGuardedUnitsPerHour',
-        "'current_stock_safe'","'SAFE WINDOW OPEN'","'ProbabilityValue']='-1'",
+        'Get-CurrentStockSafetyProjection','CurrentStockSafetyEligible','CurrentStockSafetyMode','CurrentStockSafetyMinimumHoldHorizonSeconds','CurrentStockSafetyGuardedUnitsPerHour',
+        '-KnownSelloutEstimateAt ([long]$liveProjection.activeSelloutEstimateAt)',
+        '[long]$MinimumFarHorizonSeconds=21600L','[double]$FarHorizonArrivalMultiplier=2.0',
+        '[long]$MinimumLowDepletionEvidenceSpanSeconds=900L',"'low-depletion-hold'","'far-sellout'",
+        "'current_stock_safe'","'STOCK HOLDING'","'ProbabilityValue']='-1'",
         "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
         'MaximumOrdinal = 1','immediately next cycle',
         'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock',
@@ -171,7 +176,13 @@ if ($errors.Count -eq 0) {
     $safeFallbackAt=$presenter.IndexOf("if dataQuality=='current_stock_safe' then",[System.StringComparison]::Ordinal)
     $collectingAt=$presenter.IndexOf("if dataQuality=='collecting' then",[System.StringComparison]::Ordinal)
     if($safeFallbackAt -lt 0 -or $collectingAt -le $safeFallbackAt){
-        Fail 'Current-stock Safe Window Open presentation must sit immediately before the remaining Collecting Data branch.'
+        Fail 'Current-stock fallback presentation must sit immediately before the remaining Collecting Data branch.'
+    }
+    $collectingMultiAt=$presenter.IndexOf("local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)",$collectingAt,[System.StringComparison]::Ordinal)
+    $collectingStockAt=$presenter.IndexOf("local stockAction,stockChance,stockTooltip=currentStockSafetyAction(state,statePrefix,now)",$collectingMultiAt,[System.StringComparison]::Ordinal)
+    $collectingAvgAt=$presenter.IndexOf("local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)",$collectingStockAt,[System.StringComparison]::Ordinal)
+    if($collectingMultiAt -lt 0 -or $collectingStockAt -le $collectingMultiAt -or $collectingAvgAt -le $collectingStockAt){
+        Fail 'Collecting-state fallback authority must remain multi-cycle -> verified-stock holding -> average-OoS timing.'
     }
     foreach($snippet in @(
         "local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)",
@@ -185,13 +196,17 @@ if ($errors.Count -eq 0) {
     $firstAvg=$presenter.IndexOf("local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)",[System.StringComparison]::Ordinal)
     if($firstMulti -lt 0 -or $firstAvg -le $firstMulti){Fail 'Average OoS fallback must remain below the multi-cycle forecast authority.'}
     foreach($token in @(
-        'if ([string]$state[$prefix+''WindowDataQuality''] -eq ''collecting'' -and $stock -gt 0)',
+        'Compute direct current-stock fallback telemetry for every fresh positive-stock',
+        'Only an already-non-informative producer state may be replaced directly here.',
+        '[string]$state[$prefix+''WindowDataQuality''] -eq ''collecting''',
+        '[bool](Get-WindowProperty $safety ''eligible'')',
         '$state[$prefix+''WindowDataQuality'']=''current_stock_safe''',
+        '$state[$prefix+''WindowText'']=''STOCK HOLDING''',
         '$state[$prefix+''ProbabilityValue'']=''-1''',
         'continue'
     )){
         if(-not$windowRefiner.Contains($token)){
-            Fail "Safe Window Open must remain producer-gated from Collecting Data without a fabricated probability; missing '$token'."
+            Fail "Stock-holding fallback must remain producer-gated from non-informative state without a fabricated probability; missing '$token'."
         }
     }
 
