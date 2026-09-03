@@ -187,7 +187,7 @@ Click the chart button:
 - clicking the active chart button collapses it;
 - the graph follows stable `country:itemId` identity through sorting.
 
-Inline graph rendering reads retained local observations only. It makes no Prometheus/YATA/Torn request. The standalone WinForms Viewer has been removed.
+Inline graph stock/transition truth reads retained local observations; the chance/replay overlays read only the separate ignored local forecast-diagnostic journals. Rendering makes no Prometheus/YATA/Torn request. The standalone WinForms Viewer has been removed.
 
 The graph uses an 8-hour display while learning retention remains approximately 48h raw observations / 90d completed cycles. Change-only history carries its prior state across the window boundary. Sold-out-only history stays flat at zero rather than showing an artificial `0..1` axis.
 
