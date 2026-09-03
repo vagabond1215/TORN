@@ -57,7 +57,8 @@ local opportunitySuffixes = {
     'MultiCycleExpectedFullCycles','MultiCyclePhaseStdDevSeconds','MultiCyclePhaseStdDevCycles','MultiCycleSampleCount',
     'MultiCycleEffectiveSampleSize','MultiCycleMaximumOrdinal','MultiCycleArrivalAt','MultiCycleGeneratedAt',
     'MultiCycleSimulationCount','MultiCycleModelVersion','MultiCycleReason',
-    'CurrentStockSafetyEligible','CurrentStockSafetySampleCount','CurrentStockSafetyEvidenceSpanSeconds',
+    'CurrentStockSafetyEligible','CurrentStockSafetyMode','CurrentStockSafetyMinimumHoldHorizonSeconds',
+    'CurrentStockSafetySampleCount','CurrentStockSafetyEvidenceSpanSeconds',
     'CurrentStockSafetyPercentileUnitsPerHour','CurrentStockSafetyGuardedUnitsPerHour','CurrentStockSafetyRunwaySeconds',
     'CurrentStockSafetyArrivalHorizonSeconds','CurrentStockSafetyMarginSeconds','CurrentStockSafetySelloutEstimateAt',
     'CurrentStockSafetyReason'
