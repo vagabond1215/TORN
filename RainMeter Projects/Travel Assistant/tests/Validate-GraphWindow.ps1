@@ -204,7 +204,7 @@ if(-not(Test-Path -LiteralPath $graphVisualPreferencePath)){
         "'showTransitions'",
         'settings.local.json',
         'graph-visuals.kv',
-        'Write-TravelAssistantAtomicText -Path $LocalSettingsPath',
+        'Write-GraphVisualJsonAtomic -Path $LocalSettingsPath -Value $local',
         'Write-GraphVisualState -Base $base -Local $local'
     )){
         if(-not$graphVisualPreferences.Contains($token)){Fail "Graph visual preference contract missing '$token'."}
