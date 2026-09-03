@@ -1,9 +1,9 @@
 local function hideRetiredCardMeters()
-    -- The compact card no longer uses the split Window meter or separate Chance
-    -- column. StateReader owns geometry; CardPresenter owns visible text/tooltips.
+    -- The split Window meter remains retired. Chance is now a live dedicated
+    -- centered field owned by CardPresenter / travel-state presentation, so this
+    -- later compatibility pass must never hide it.
     for i=1,8 do
         SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Window')
-        SKIN:Bang('!HideMeter','MeterOpportunity'..i..'Chance')
     end
 end
 
