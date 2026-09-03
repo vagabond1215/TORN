@@ -11,6 +11,11 @@ function Assert-Equal($Actual,$Expected,[string]$Message) { if ($Actual -ne $Exp
 function Assert-Near([double]$Actual,[double]$Expected,[double]$Tolerance,[string]$Message) { if ([Math]::Abs($Actual-$Expected) -gt $Tolerance) { $script:failures.Add("$Message Expected=$Expected Actual=$Actual") } }
 
 $anchor=100000L
+
+Assert-True (Test-WindowStaleSourceCanUseRecurringModel -LiveProjectionMode 'stale-source' -AnchorAt 90000L) 'A stale provider snapshot with a verified phase anchor should continue into recurring forecast geometry.'
+Assert-True (-not (Test-WindowStaleSourceCanUseRecurringModel -LiveProjectionMode 'stale-source' -AnchorAt 0L)) 'A stale provider snapshot without any verified phase anchor must remain non-informative.'
+Assert-True (-not (Test-WindowStaleSourceCanUseRecurringModel -LiveProjectionMode 'live-depletion' -AnchorAt 90000L)) 'The stale-source recurring fallback gate must not replace normal live-cycle authority.'
+
 $cycles=@(
     [pscustomobject]@{restockDelaySeconds=3600L;availabilitySeconds=1800L;soldOutAt=10L}, # period 5400
     [pscustomobject]@{restockDelaySeconds=4200L;availabilitySeconds=1800L;soldOutAt=11L}, # period 6000
