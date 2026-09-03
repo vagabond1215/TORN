@@ -555,7 +555,9 @@ if($infoEnabled){
         $infoLines.Add('Avg open variance: +/-'+(Format-InlineDuration -Seconds $variance))
         $infoLines.Add('Avg variance width: '+(Format-InlineDuration -Seconds (2L*$variance)))
         $infoLines.Add('Midpoint after OoS: '+(Format-InlineDuration -Seconds $midpoint))
-        if($midpoint -le $flightSeconds){
+        if($flightSeconds -le 0){
+            $infoLines.Add('Leave after OoS for midpoint: travel time unavailable')
+        }elseif($midpoint -le $flightSeconds){
             $infoLines.Add('Leave after OoS for midpoint: LEAVE NOW')
         }else{
             $infoLines.Add('Leave after OoS for midpoint: '+(Format-InlineDuration -Seconds $leaveAfter))
