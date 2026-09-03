@@ -510,18 +510,18 @@ local function homeNextCycleAction(plan,currentStock,nextOrdinal,flightSeconds,n
         local safeOpen=group.safeStart-flightSeconds
         local safeClose=group.safeEnd-flightSeconds
         if now<safeOpen then
-            return 'Window Open: '..chancePercent(liveChance)..'. Safe Departure: '..formatCountdown(safeOpen-now),'',tooltip
+            return 'Window Open. Safe Departure: '..formatCountdown(safeOpen-now),chancePercent(liveChance),tooltip
         end
         if now<safeClose then
             return 'Guaranteed Hit for: '..formatCountdown(safeClose-now),'',tooltip
         end
-        return 'Window Open: '..chancePercent(liveChance)..'. Closes: '..formatCountdown(closeDeparture-now),'',tooltip
+        return 'Window Open. Closes: '..formatCountdown(closeDeparture-now),chancePercent(liveChance),tooltip
     end
 
     if bestDeparture>now and bestDeparture<closeDeparture then
         return 'Window Open. Optimal Departure: '..formatCountdown(bestDeparture-now),chancePercent(bestChance),tooltip
     end
-    return 'Window Open: '..chancePercent(liveChance)..'. Closes: '..formatCountdown(closeDeparture-now),'',tooltip
+    return 'Window Open. Closes: '..formatCountdown(closeDeparture-now),chancePercent(liveChance),tooltip
 end
 local function averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)
     if state==nil or statePrefix==nil or statePrefix=='' or currentStock>0 or flightSeconds<=0 then return nil,nil,nil end
@@ -735,7 +735,7 @@ local function applyCompactLayout(index)
     setOption(prefix..'Make','X',504); setOption(prefix..'Make','W',142); setOption(prefix..'Make','H',50); setOption(prefix..'Make','FontFace',face); setOption(prefix..'Make','FontSize',14); setOption(prefix..'Make','StringAlign','RightCenter'); setOption(prefix..'Make','ClipString',1)
     setOption(prefix..'Window','X',123); setOption(prefix..'Window','W',1)
     setOption(prefix..'Leave','X',123); setOption(prefix..'Leave','W',263); setOption(prefix..'Leave','FontFace',face); setOption(prefix..'Leave','FontSize',9); setOption(prefix..'Leave','ClipString',1)
-    setOption(prefix..'Chance','X',123); setOption(prefix..'Chance','W',1)
+    setOption(prefix..'Chance','X',276); setOption(prefix..'Chance','W',72); setOption(prefix..'Chance','H',16); setOption(prefix..'Chance','FontFace',face); setOption(prefix..'Chance','FontSize',9); setOption(prefix..'Chance','FontColor','#Text#'); setOption(prefix..'Chance','StringAlign','CenterCenter'); setOption(prefix..'Chance','AntiAlias',1); setOption(prefix..'Chance','ClipString',1)
     setOption(prefix..'DetailToggle','X',531); setOption(prefix..'DetailToggle','W',24); setOption(prefix..'DetailToggle','H',23); setOption(prefix..'DetailToggle','StringAlign','CenterCenter'); setOption(prefix..'DetailToggle','FontFace',face); setOption(prefix..'DetailToggle','FontSize',10)
     setOption(prefix..'Graph','X',519); setOption(prefix..'Graph','W',24); setOption(prefix..'Graph','H',23)
 end
@@ -748,6 +748,21 @@ local function configureWindowTooltipMeter(name,tooltip)
     setOption(name,'ToolTipWidth',420)
     setOption(name,'ToolTipText',tooltip or '')
     setOption(name,'SolidColor','0,0,0,1')
+end
+
+local function setCenteredChance(prefix,value)
+    local chance=trim(value or '')
+    setOption(prefix..'Chance','Text',chance)
+    configureWindowTooltipMeter(prefix..'Chance','')
+    if chance=='' then
+        setOption(prefix..'Leave','W',263)
+        SKIN:Bang('!HideMeter',prefix..'Chance')
+    else
+        -- Keep the event/action at left and reserve the true horizontal center of
+        -- the 536px card for Chance to Hit.
+        setOption(prefix..'Leave','W',122)
+        SKIN:Bang('!ShowMeter',prefix..'Chance')
+    end
 end
 
 local function updateRow(index,state,now)
@@ -896,14 +911,15 @@ local function updateRow(index,state,now)
     local liveAction,liveCertainty,windowTooltip=liveWindowAction(index,plan,state,country,travel,now)
 
     local actionText=''
+    local certainty=''
     if liveAction~=nil then
         actionText=liveAction
-        local certainty=trim(liveCertainty or '')
-        if certainty~='' then actionText=actionText..' '..certainty end
+        certainty=trim(liveCertainty or '')
+        if certainty=='' then certainty=fallbackCertainty end
         configureWindowTooltipMeter(prefix..'Leave',windowTooltip or '')
     else
         actionText=statusText(fallbackWindow,fallbackLeave)
-        local certainty=fallbackCertainty
+        certainty=fallbackCertainty
         local travelState=trim(state.TravelState):lower()
         local destinationId=trim(state.TravelDestinationCountryId):lower()
         local countryId=countryIdsByName[country] or ''
@@ -913,11 +929,10 @@ local function updateRow(index,state,now)
             -- arrival; if none is available, omit the percentage rather than imply it.
             certainty=projectedArrivalCertainty(state,projectedPrefix)
         end
-        if certainty~='' then actionText=actionText..' '..certainty end
         configureWindowTooltipMeter(prefix..'Leave','')
     end
     setOption(prefix..'Leave','Text',actionText)
-    configureWindowTooltipMeter(prefix..'Chance','')
+    setCenteredChance(prefix,certainty)
 end
 
 function Initialize()
