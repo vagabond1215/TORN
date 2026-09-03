@@ -184,21 +184,117 @@ function Get-InlineRestockWindowSummary {
         earliestDelaySeconds=$minimum
         latestDelaySeconds=$maximum
         varianceSeconds=[Math]::Max(0L,$sigma)
+        averageInStockSeconds=[long][Math]::Round([double](($recent|ForEach-Object{[long]$_.availabilitySeconds}|Measure-Object -Average).Average))
     }
 }
 
-function Get-InlineRestockTransitions {
+function Get-InlineStockTransitions {
     param([object[]]$Rows)
-    $result=New-Object System.Collections.Generic.List[long]
+    $result=New-Object System.Collections.Generic.List[object]
     $previous=$null
     foreach($row in @($Rows|Sort-Object timestamp)){
         $stock=[long]$row.stock
-        if($null -ne $previous -and [long]$previous.stock -eq 0 -and $stock -gt 0){
-            $result.Add([long]$row.timestamp)
+        if($null -ne $previous){
+            if([long]$previous.stock -gt 0 -and $stock -eq 0){
+                $result.Add([pscustomobject]@{kind='oos';timestamp=[long]$row.timestamp;quantity=0L})
+            }elseif([long]$previous.stock -eq 0 -and $stock -gt 0){
+                $result.Add([pscustomobject]@{kind='restock';timestamp=[long]$row.timestamp;quantity=$stock})
+            }
         }
         $previous=$row
     }
     return $result.ToArray()
+}
+
+function Get-InlineRestockTransitions {
+    param([object[]]$Rows)
+    return @((Get-InlineStockTransitions -Rows $Rows)|Where-Object{[string]$_.kind -eq 'restock'}|ForEach-Object{[long]$_.timestamp})
+}
+
+function Get-InlineInfoTimeline {
+    param(
+        [object[]]$Transitions,
+        [long]$Cutoff,
+        [long]$NowEpoch,
+        [long]$VarianceSeconds,
+        [long]$FlightSeconds,
+        [int]$MaximumCycles=4
+    )
+
+    $cycles=New-Object System.Collections.Generic.List[object]
+    $active=$null
+    $lastOosAt=0L
+    foreach($event in @($Transitions|Sort-Object timestamp)){
+        $at=[long]$event.timestamp
+        $kind=[string]$event.kind
+        if($kind -eq 'oos'){
+            if($null -ne $active -and [long]$active.restockAt -gt 0 -and [long]$active.soldOutAt -le 0 -and $at -gt [long]$active.restockAt){
+                $active.soldOutAt=$at
+                $active.latestAt=$at
+            }elseif($null -eq $active){
+                $orphan=[pscustomobject]@{priorOosAt=0L;restockAt=0L;quantity=0L;soldOutAt=$at;latestAt=$at}
+                $cycles.Add($orphan)
+            }
+            $lastOosAt=$at
+        }elseif($kind -eq 'restock'){
+            $record=[pscustomobject]@{
+                priorOosAt=$lastOosAt
+                restockAt=$at
+                quantity=[long]$event.quantity
+                soldOutAt=0L
+                latestAt=$at
+            }
+            $cycles.Add($record)
+            $active=$record
+            $lastOosAt=0L
+        }
+    }
+
+    $selected=@($cycles.ToArray()|Where-Object{
+        [long]$_.latestAt -ge $Cutoff -or
+        [long]$_.restockAt -ge $Cutoff -or
+        [long]$_.priorOosAt -ge $Cutoff
+    }|Sort-Object latestAt -Descending|Select-Object -First ([Math]::Max(1,$MaximumCycles)))
+
+    $events=New-Object System.Collections.Generic.List[object]
+    $seen=@{}
+    function Add-InlineInfoEvent {
+        param([long]$At,[string]$Kind,[string]$Label)
+        if($At -lt $Cutoff -or $At -gt $NowEpoch){return}
+        $key=$Kind+':'+[string]$At
+        if($seen.ContainsKey($key)){return}
+        $seen[$key]=$true
+        $events.Add([pscustomobject]@{timestamp=$At;kind=$Kind;label=$Label})
+    }
+
+    foreach($cycle in $selected){
+        $priorOos=[long]$cycle.priorOosAt
+        $restock=[long]$cycle.restockAt
+        $soldOut=[long]$cycle.soldOutAt
+        if($priorOos -gt 0){Add-InlineInfoEvent -At $priorOos -Kind 'oos' -Label 'OoS'}
+        if($restock -gt 0){
+            $qty=[long]$cycle.quantity
+            Add-InlineInfoEvent -At $restock -Kind 'restock' -Label ('Restock of '+('{0:N0}' -f $qty))
+            if($VarianceSeconds -gt 0){
+                Add-InlineInfoEvent -At ($restock-$VarianceSeconds) -Kind 'early_open' -Label 'Early open'
+                Add-InlineInfoEvent -At ($restock+$VarianceSeconds) -Kind 'late_open' -Label 'Late open'
+            }
+            if($FlightSeconds -gt 0){
+                Add-InlineInfoEvent -At ($restock-$FlightSeconds) -Kind 'actual_window_open' -Label 'Actual window open'
+            }
+        }
+        if($soldOut -gt 0){
+            Add-InlineInfoEvent -At $soldOut -Kind 'oos' -Label 'OoS'
+            if($FlightSeconds -gt 0){
+                Add-InlineInfoEvent -At ($soldOut-$FlightSeconds) -Kind 'actual_window_closed' -Label 'Actual window closed'
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        cycleCount=$selected.Count
+        events=@($events.ToArray()|Sort-Object timestamp -Descending)
+    }
 }
 
 function Read-MarketChanceHistory {
@@ -406,7 +502,8 @@ if ($allRows.Count -eq 0) {
 $allRows = @(Compress-StockHistory -Rows $allRows)
 $cycleRows=@(Read-InlineMarketCycles -Paths @($RuntimeCycleFile,$SeedCycleFile) -Country $country -ItemId $itemId)
 $restockWindowSummary=Get-InlineRestockWindowSummary -Cycles $cycleRows
-$restockTransitions=@(Get-InlineRestockTransitions -Rows $allRows)
+$stockTransitions=@(Get-InlineStockTransitions -Rows $allRows)
+$restockTransitions=@($stockTransitions|Where-Object{[string]$_.kind -eq 'restock'}|ForEach-Object{[long]$_.timestamp})
 
 $rows = @()
 $predecessor = @($allRows | Where-Object { [long]$_.timestamp -lt $cutoff } | Select-Object -Last 1)
@@ -434,6 +531,43 @@ $flightSeconds=Get-InlineTravelSeconds -State $state -Country $country
 $realizedRows=@(Get-FlightShiftedRealizedHistory -StockRows $allRows -FlightSeconds $flightSeconds -Cutoff $cutoff -NowEpoch $now)
 $realizedThrough=$now-$flightSeconds
 $realizedWindows=@(Get-RealizedDepartureWindows -Rows $realizedRows -RealizedThrough $realizedThrough -Cutoff $cutoff)
+
+$infoLines=New-Object System.Collections.Generic.List[string]
+$infoTimeline=$null
+$infoEnabled=$showTooltips
+if($infoEnabled){
+    $infoLines.Add('8h cycle summary')
+    if($null -ne $restockWindowSummary){
+        $avgDelay=[long]$restockWindowSummary.averageDelaySeconds
+        $avgInStock=[long]$restockWindowSummary.averageInStockSeconds
+        $variance=[long]$restockWindowSummary.varianceSeconds
+        $midpoint=$avgDelay
+        $leaveAfter=[Math]::Max(0L,$midpoint-$flightSeconds)
+        $infoLines.Add('Avg restock delay: '+(Format-InlineDuration -Seconds $avgDelay))
+        $infoLines.Add('Avg in-stock time: '+(Format-InlineDuration -Seconds $avgInStock))
+        $infoLines.Add('Avg open variance: +/-'+(Format-InlineDuration -Seconds $variance))
+        $infoLines.Add('Avg variance width: '+(Format-InlineDuration -Seconds (2L*$variance)))
+        $infoLines.Add('Midpoint after OoS: '+(Format-InlineDuration -Seconds $midpoint))
+        if($midpoint -le $flightSeconds){
+            $infoLines.Add('Leave after OoS for midpoint: LEAVE NOW')
+        }else{
+            $infoLines.Add('Leave after OoS for midpoint: '+(Format-InlineDuration -Seconds $leaveAfter))
+        }
+    }else{
+        $infoLines.Add('Averages: collecting forecast-eligible cycle evidence')
+    }
+    $infoLines.Add('Timeline - newest first (max 4 cycles)')
+    $varianceForTimeline=if($null -ne $restockWindowSummary){[long]$restockWindowSummary.varianceSeconds}else{0L}
+    $infoTimeline=Get-InlineInfoTimeline -Transitions $stockTransitions -Cutoff $cutoff -NowEpoch $now -VarianceSeconds $varianceForTimeline -FlightSeconds $flightSeconds -MaximumCycles 4
+    if($null -eq $infoTimeline -or @($infoTimeline.events).Count -eq 0){
+        $infoLines.Add('No cycle events in the last 8 hours')
+    }else{
+        foreach($event in @($infoTimeline.events)){
+            $infoLines.Add('['+(Format-InlineRelativeTime -Timestamp ([long]$event.timestamp) -NowEpoch $now)+'] '+[string]$event.label)
+        }
+    }
+}
+
 $hoverRegions=New-Object System.Collections.Generic.List[object]
 $transitionHoverRegions=New-Object System.Collections.Generic.List[object]
 $forecastHoverRegions=New-Object System.Collections.Generic.List[object]
@@ -479,6 +613,8 @@ $restockWindowPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromAr
 $selloutPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255,117,24),1)
 $labelBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(170,178,190))
 $labelFont = New-Object System.Drawing.Font('Segoe UI',7,[System.Drawing.FontStyle]::Regular,[System.Drawing.GraphicsUnit]::Point)
+$infoPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(190,198,210),1)
+$infoBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(190,198,210))
 
 # Eight one-hour segments: seven internal vertical separators plus both boundaries.
 if($showGrid){
@@ -689,6 +825,19 @@ $graphics.DrawString('0',$labelFont,$labelBrush,18,88)
 $graphics.DrawString(('-{0}h' -f $windowHours),$labelFont,$labelBrush,[single]($plotLeft-8),110)
 $graphics.DrawString('now',$labelFont,$labelBrush,[single]($plotRight-18),110)
 
+$infoCenterX=[single](($plotLeft+$plotRight)/2.0)
+$infoCenterY=[single]114.0
+$infoRadius=[single]6.0
+$infoX=[double]($infoCenterX-$infoRadius-2.0)
+$infoY=[double]($infoCenterY-$infoRadius-2.0)
+$infoW=16.0
+$infoH=16.0
+if($infoEnabled){
+    $graphics.DrawEllipse($infoPen,[single]($infoCenterX-$infoRadius),[single]($infoCenterY-$infoRadius),[single](2.0*$infoRadius),[single](2.0*$infoRadius))
+    $graphics.FillEllipse($infoBrush,[single]($infoCenterX-0.8),[single]($infoCenterY-3.5),[single]1.6,[single]1.6)
+    $graphics.DrawLine($infoPen,$infoCenterX,[single]($infoCenterY-0.5),$infoCenterX,[single]($infoCenterY+3.5))
+}
+
 $safeName = ($MarketKey -replace '[^a-zA-Z0-9_-]','_')
 $imageFile = ('inline-graph-{0}-{1}.png' -f $safeName,$now)
 $imagePath = Join-Path $GeneratedDir $imageFile
@@ -697,7 +846,7 @@ $tmpImage = $imagePath + '.tmp'
 $bitmap.Save($tmpImage,[System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()
-$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $hindsightBandBrush.Dispose(); $hindsightBoundaryPen.Dispose(); $errorPen.Dispose(); $hitBrush.Dispose(); $missBrush.Dispose(); $restockPen.Dispose(); $restockWindowPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose()
+$gridMajor.Dispose(); $gridMinor.Dispose(); $stockPen.Dispose(); $chancePen.Dispose(); $hindsightBandBrush.Dispose(); $hindsightBoundaryPen.Dispose(); $errorPen.Dispose(); $hitBrush.Dispose(); $missBrush.Dispose(); $restockPen.Dispose(); $restockWindowPen.Dispose(); $selloutPen.Dispose(); $labelBrush.Dispose(); $labelFont.Dispose(); $infoPen.Dispose(); $infoBrush.Dispose()
 Move-Item -LiteralPath $tmpImage -Destination $imagePath -Force
 Copy-Item -LiteralPath $imagePath -Destination $stableImagePath -Force
 
@@ -720,6 +869,12 @@ for($i=0;$i -lt $hoverCount;$i++){
     $hoverValues['Hover'+$n+'H']=[Math]::Round([Math]::Max(1.0,[double]$region.h),2)
     $hoverValues['Hover'+$n+'Text']=[string]$region.text
     $hoverValues['Hover'+$n+'Kind']=[string]$region.kind
+}
+
+$infoValues=@{}
+$infoLineCount=if($infoEnabled){$infoLines.Count}else{0}
+for($i=0;$i -lt $infoLineCount;$i++){
+    $infoValues['InfoLine'+($i+1)]=[string]$infoLines[$i]
 }
 
 $specPath = Join-Path $GeneratedDir ('inline-graph-' + $safeName + '.kv')
@@ -759,8 +914,16 @@ $specValues=@{
     ShowAccuracyMarkers = $(if($showAccuracyMarkers){1}else{0})
     ShowTooltips = $(if($showTooltips){1}else{0})
     HoverCount = $hoverCount
+    InfoEnabled = $(if($infoEnabled){1}else{0})
+    InfoX = [Math]::Round($infoX,2)
+    InfoY = [Math]::Round($infoY,2)
+    InfoW = [Math]::Round($infoW,2)
+    InfoH = [Math]::Round($infoH,2)
+    InfoLineCount = $infoLineCount
+    InfoTimelineCycleCount = $(if($null -ne $infoTimeline){[int]$infoTimeline.cycleCount}else{0})
 }
 foreach($hoverKey in $hoverValues.Keys){$specValues[$hoverKey]=$hoverValues[$hoverKey]}
+foreach($infoKey in $infoValues.Keys){$specValues[$infoKey]=$infoValues[$infoKey]}
 Write-InlineKvAtomic -Path $specPath -Values $specValues
 
 Get-ChildItem -LiteralPath $GeneratedDir -Filter 'inline-graph-*-*.png' -File -ErrorAction SilentlyContinue |
