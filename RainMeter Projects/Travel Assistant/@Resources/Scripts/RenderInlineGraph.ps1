@@ -213,6 +213,7 @@ function Get-InlineInfoTimeline {
         [object[]]$Transitions,
         [long]$Cutoff,
         [long]$NowEpoch,
+        [long]$AverageDelaySeconds,
         [long]$VarianceSeconds,
         [long]$FlightSeconds,
         [int]$MaximumCycles=4
@@ -264,27 +265,38 @@ function Get-InlineInfoTimeline {
         $events.Add([pscustomobject]@{timestamp=$At;kind=$Kind;label=$Label})
     }
 
+    $forecastOosAnchors=@{}
     foreach($cycle in $selected){
         $priorOos=[long]$cycle.priorOosAt
         $restock=[long]$cycle.restockAt
         $soldOut=[long]$cycle.soldOutAt
-        if($priorOos -gt 0){Add-InlineInfoEvent -At $priorOos -Kind 'oos' -Label 'OoS'}
+        if($priorOos -gt 0){
+            Add-InlineInfoEvent -At $priorOos -Kind 'oos' -Label 'OoS'
+            $forecastOosAnchors[[string]$priorOos]=$priorOos
+        }
         if($restock -gt 0){
             $qty=[long]$cycle.quantity
             Add-InlineInfoEvent -At $restock -Kind 'restock' -Label ('Restock of '+('{0:N0}' -f $qty))
-            if($VarianceSeconds -gt 0){
-                Add-InlineInfoEvent -At ($restock-$VarianceSeconds) -Kind 'early_open' -Label 'Early open'
-                Add-InlineInfoEvent -At ($restock+$VarianceSeconds) -Kind 'late_open' -Label 'Late open'
-            }
             if($FlightSeconds -gt 0){
                 Add-InlineInfoEvent -At ($restock-$FlightSeconds) -Kind 'actual_window_open' -Label 'Actual window open'
             }
         }
         if($soldOut -gt 0){
             Add-InlineInfoEvent -At $soldOut -Kind 'oos' -Label 'OoS'
+            $forecastOosAnchors[[string]$soldOut]=$soldOut
             if($FlightSeconds -gt 0){
                 Add-InlineInfoEvent -At ($soldOut-$FlightSeconds) -Kind 'actual_window_closed' -Label 'Actual window closed'
             }
+        }
+    }
+
+    # Restock-window events are forecasts made from the preceding observed OoS,
+    # never hindsight bands centered on the actual restock that later occurred.
+    if($AverageDelaySeconds -gt 0 -and $VarianceSeconds -ge 0){
+        foreach($oosAt in @($forecastOosAnchors.Values)){
+            $centerAt=[long]$oosAt+$AverageDelaySeconds
+            Add-InlineInfoEvent -At ($centerAt-$VarianceSeconds) -Kind 'restock_window_open' -Label 'Restock window open'
+            Add-InlineInfoEvent -At ($centerAt+$VarianceSeconds) -Kind 'restock_window_close' -Label 'Restock window closed'
         }
     }
 
@@ -542,6 +554,7 @@ $cycleRows=@(Read-InlineMarketCycles -Paths @($RuntimeCycleFile,$SeedCycleFile) 
 $restockWindowSummary=Get-InlineRestockWindowSummary -Cycles $cycleRows
 $stockTransitions=@(Get-InlineStockTransitions -Rows $allRows)
 $restockTransitions=@($stockTransitions|Where-Object{[string]$_.kind -eq 'restock'}|ForEach-Object{[long]$_.timestamp})
+$oosTransitions=@($stockTransitions|Where-Object{[string]$_.kind -eq 'oos'}|ForEach-Object{[long]$_.timestamp})
 
 $rows = @()
 $predecessor = @($allRows | Where-Object { [long]$_.timestamp -lt $cutoff } | Select-Object -Last 1)
@@ -593,8 +606,9 @@ if($infoEnabled){
         $infoLines.Add('Averages: collecting forecast-eligible cycle evidence')
     }
     $infoLines.Add('Timeline - newest first (max 4 cycles)')
+    $delayForTimeline=if($null -ne $restockWindowSummary){[long]$restockWindowSummary.averageDelaySeconds}else{0L}
     $varianceForTimeline=if($null -ne $restockWindowSummary){[long]$restockWindowSummary.varianceSeconds}else{0L}
-    $infoTimeline=Get-InlineInfoTimeline -Transitions $stockTransitions -Cutoff $cutoff -NowEpoch $now -VarianceSeconds $varianceForTimeline -FlightSeconds $flightSeconds -MaximumCycles 4
+    $infoTimeline=Get-InlineInfoTimeline -Transitions $stockTransitions -Cutoff $cutoff -NowEpoch $now -AverageDelaySeconds $delayForTimeline -VarianceSeconds $varianceForTimeline -FlightSeconds $flightSeconds -MaximumCycles 4
     if($null -eq $infoTimeline -or @($infoTimeline.events).Count -eq 0){
         $infoLines.Add('No cycle events in the last 8 hours')
     }else{
@@ -713,24 +727,26 @@ if ($null -ne $previous -and [single]$previous.x -lt [single]$plotRight) {
     $graphics.DrawLine($stockPen,[single]$previous.x,[single]$previous.y,[single]$plotRight,[single]$previous.y)
 }
 
-# Restock variance brackets remain visual calibration aids, but their individual
-# hover regions are suppressed because the same timestamps live in the info timeline.
+# Restock-window brackets are prospective timing forecasts anchored to the actual
+# preceding OoS transition: OoS + average delay +/- learned variance. The later
+# blue restock tick is truth for calibration and must not be used to place them.
 if($showRestockWindowBounds -and $null -ne $restockWindowSummary){
+    $averageDelaySeconds=[long]$restockWindowSummary.averageDelaySeconds
     $varianceSeconds=[long]$restockWindowSummary.varianceSeconds
     $forecastMarkerTop=[single]($plotBottom+3)
     $forecastMarkerBottom=[single]($plotBottom+6)
-    if($varianceSeconds -gt 0){
-        foreach($restockAt in $restockTransitions){
-            if($restockAt -lt $cutoff -or $restockAt -gt $now){continue}
-            $openAt=[long]$restockAt-$varianceSeconds
-            $closeAt=[long]$restockAt+$varianceSeconds
-            if($openAt -ge $cutoff){
+    if($averageDelaySeconds -gt 0 -and $varianceSeconds -ge 0){
+        foreach($oosAt in $oosTransitions){
+            $centerAt=[long]$oosAt+$averageDelaySeconds
+            $openAt=$centerAt-$varianceSeconds
+            $closeAt=$centerAt+$varianceSeconds
+            if($openAt -ge $cutoff -and $openAt -le $now){
                 $x=Get-InlineX $openAt
                 $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
                 $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerBottom,[single]($x+3),$forecastMarkerBottom)
                 $forecastBoundaryCount++
             }
-            if($closeAt -le $now){
+            if($closeAt -ge $cutoff -and $closeAt -le $now){
                 $x=Get-InlineX $closeAt
                 $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
                 $graphics.DrawLine($restockWindowPen,[single]($x-3),$forecastMarkerBottom,$x,$forecastMarkerBottom)
