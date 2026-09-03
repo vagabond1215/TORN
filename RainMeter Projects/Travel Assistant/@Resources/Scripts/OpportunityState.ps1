@@ -482,6 +482,10 @@ function Write-OpportunityProjection {
             'CurrentStock','StockEvidenceAt','ActiveRestockAt','ActiveSelloutEstimateAt','NextRestockEstimateAt','LastObservedOosAt',
             'MedianRestockDelaySeconds','LiveCycleProjectionMode','WindowDataQuality','WindowDataQualityReason',
             'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds',
+            'CurrentStockSafetyEligible','CurrentStockSafetyMode','CurrentStockSafetyMinimumHoldHorizonSeconds',
+            'CurrentStockSafetySampleCount','CurrentStockSafetyEvidenceSpanSeconds','CurrentStockSafetyPercentileUnitsPerHour',
+            'CurrentStockSafetyGuardedUnitsPerHour','CurrentStockSafetyRunwaySeconds','CurrentStockSafetyArrivalHorizonSeconds',
+            'CurrentStockSafetyMarginSeconds','CurrentStockSafetySelloutEstimateAt','CurrentStockSafetyReason',
             'NextCycleOrdinal','WindowMedianPeriodSeconds','PriceVaries','PriceVariationReason',
             'MinObservedPrice','MaxObservedPrice'
         )) {
