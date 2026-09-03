@@ -4,6 +4,7 @@ Set-StrictMode -Version 2.0
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $iniPath = Join-Path $ProjectRoot 'TravelAssistant.ini'
 $rowIncludePath = Join-Path $ProjectRoot '@Resources\Includes\OpportunityRows.inc'
+$graphHitboxIncludePath = Join-Path $ProjectRoot '@Resources\Includes\InlineGraphHitboxes.inc'
 $stateReaderPath = Join-Path $ProjectRoot '@Resources\Scripts\StateReader.lua'
 $rendererPath = Join-Path $ProjectRoot '@Resources\Scripts\RenderInlineGraph.ps1'
 $itemImageScriptPath = Join-Path $ProjectRoot '@Resources\Scripts\EnsureItemImages.ps1'
@@ -12,7 +13,7 @@ $uiImageDir = Join-Path $ProjectRoot '@Resources\Images\UI'
 $errors = New-Object System.Collections.Generic.List[string]
 function Fail([string]$Message) { $script:errors.Add($Message) }
 
-foreach ($path in @($iniPath,$rowIncludePath,$stateReaderPath,$rendererPath,$itemImageScriptPath)) {
+foreach ($path in @($iniPath,$rowIncludePath,$graphHitboxIncludePath,$stateReaderPath,$rendererPath,$itemImageScriptPath)) {
     if (-not (Test-Path -LiteralPath $path)) { Fail "Missing required UI file: $path" }
 }
 if ($errors.Count -gt 0) { foreach($e in $errors){Write-Host "FAIL: $e" -ForegroundColor Red}; exit 1 }
@@ -33,12 +34,16 @@ $renderer = Get-Content -LiteralPath $rendererPath -Raw
 
 if ($ini -notmatch '(?m)^Version=0\.6\.0\s*$') { Fail 'Skin must report version 0.6.0.' }
 $includeToken='@IncludeRows=#@#Includes\OpportunityRows.inc'
+$graphHitboxIncludeToken='@IncludeGraphHitboxes=#@#Includes\InlineGraphHitboxes.inc'
 $includeAt=$ini.IndexOf($includeToken,[System.StringComparison]::Ordinal)
 $backgroundAt=$ini.IndexOf('[MeterBackground]',[System.StringComparison]::Ordinal)
 $messageAt=$ini.IndexOf('[MeterOpportunityMessage]',[System.StringComparison]::Ordinal)
 if ($includeAt -lt 0) { Fail 'TravelAssistant.ini must include OpportunityRows.inc as the final row layer.' }
 elseif ($includeAt -lt $backgroundAt -or $includeAt -lt $messageAt) { Fail 'OpportunityRows.inc must be included after the panel/background meters so cards render above the background.' }
 if ($ini.Contains('@Include=#@#Includes\OpportunityRows.inc')) { Fail 'Retired early OpportunityRows include would darken the cards beneath MeterBackground.' }
+$graphHitboxAt=$ini.IndexOf($graphHitboxIncludeToken,[System.StringComparison]::Ordinal)
+if($graphHitboxAt -lt 0){Fail 'TravelAssistant.ini must include the lightweight inline graph hitbox layer.'}
+elseif($graphHitboxAt -le $includeAt){Fail 'Inline graph hitboxes must be parsed after opportunity rows so tooltip targets sit above the graph image.'}
 
 foreach ($section in @('MeasureUpdate','MeasureSettings','MeasureFilterPopup','MeasureInlineGraph','MeasureItemImages','MeasurePreferenceAction','MeasureState','MeterSortUpcoming','MeterSortGross','MeterSortProfitHour')) {
     if ($ini -notmatch ('(?m)^\['+[regex]::Escape($section)+'\]\s*$')) { Fail "Missing [$section]." }
