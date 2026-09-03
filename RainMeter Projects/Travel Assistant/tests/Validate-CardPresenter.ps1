@@ -104,7 +104,13 @@ if ($errors.Count -eq 0) {
         'multiCycleChanceAction',"'MultiCycleChanceEligible'","'MultiCycleChanceProbability'","'MultiCycleTargetProbability'",
         "'MultiCycleDutyCycleProbability'","'MultiCycleArrivalCycleRatio'","'MultiCycleExpectedFullCycles'","'MultiCyclePhaseStdDevSeconds'",
         "'Multi-cycle arrival forecast'","'Modeled Chance to Hit: '","return 'Chance to hit:',chancePercent(probability)",
-        "'This is a modeled arrival probability, not a Safe/Best departure-window guarantee.'"
+        "'This is a modeled arrival probability, not a Safe/Best departure-window guarantee.'",
+        'averageOosFallbackAction',"state[statePrefix..'LastObservedOosAt']","state[statePrefix..'RestockAverageDelaySeconds']",
+        "state[statePrefix..'RestockLifetimeLongestDelaySeconds']","state[statePrefix..'RestockSampleCount']",
+        'samples<2',"local averageRestockAt=lastOosAt+averageDelay","local averageLeaveAt=averageRestockAt-flightSeconds",
+        "'AVG LEAVE IN '","'AVG LEAVE NOW'","'AVG RESTOCK LATE'","return 'WAIT DATA',''",
+        "'Average-only OoS timing fallback'","'No Chance to Hit percentage is assigned to this rough timing fallback.'",
+        "'Live/current-cycle, Safe/Best, or multi-cycle guidance automatically replaces it.'"
     )) {
         if (-not $presenter.Contains($token)) { Fail "CardPresenter.lua missing '$token'." }
     }
@@ -154,6 +160,9 @@ if ($errors.Count -eq 0) {
         "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
         'MaximumOrdinal = 1','immediately next cycle',
         'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock',
+        "'LastObservedOosAt'","$candidateOosAt=[long](Get-WindowProperty $destinationState 'lastSellOutAt')",
+        "$candidateOosQuality=[string](Get-WindowProperty $destinationState 'lastSellOutBoundaryQuality')",
+        'Test-WindowBoundaryQuality -Quality $candidateOosQuality',
         "'WP2:'","'PV1#'","'PV0#'"
     )) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
@@ -164,6 +173,17 @@ if ($errors.Count -eq 0) {
     if($safeFallbackAt -lt 0 -or $collectingAt -le $safeFallbackAt){
         Fail 'Current-stock Safe Window Open presentation must sit immediately before the remaining Collecting Data branch.'
     }
+    foreach($snippet in @(
+        "local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)",
+        "local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)",
+        "lowerLegacy=='next cycle unavailable'",
+        "if avgAction~=nil then return avgAction,avgChance,avgTooltip end"
+    )){
+        if(-not$presenter.Contains($snippet)){Fail "Average OoS fallback authority contract missing '$snippet'."}
+    }
+    $firstMulti=$presenter.IndexOf("local multiAction,multiChance,multiTooltip=multiCycleChanceAction(state,statePrefix,flightSeconds,now)",[System.StringComparison]::Ordinal)
+    $firstAvg=$presenter.IndexOf("local avgAction,avgChance,avgTooltip=averageOosFallbackAction(state,statePrefix,currentStock,flightSeconds,now)",[System.StringComparison]::Ordinal)
+    if($firstMulti -lt 0 -or $firstAvg -le $firstMulti){Fail 'Average OoS fallback must remain below the multi-cycle forecast authority.'}
     foreach($token in @(
         'if ([string]$state[$prefix+''WindowDataQuality''] -eq ''collecting'' -and $stock -gt 0)',
         '$state[$prefix+''WindowDataQuality'']=''current_stock_safe''',
@@ -224,7 +244,8 @@ if ($errors.Count -eq 0) {
         'showProfitableOnly',
         'Get-OpportunityRestockSummary',
         "forecastMode='sleeping_oos'",
-        '$wakeAt=$earlyRestockAt-600L'
+        '$wakeAt=$earlyRestockAt-600L',
+        "'LastObservedOosAt'"
     )) {
         if (-not $opportunity.Contains($token)) { Fail "OpportunityState outbound destination filter missing '$token'." }
     }
