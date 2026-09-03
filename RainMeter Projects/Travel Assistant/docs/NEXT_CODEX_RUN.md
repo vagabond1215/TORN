@@ -55,13 +55,23 @@ update and inspect all three stochastic artifacts. The pre-review 25.3-second /
 ~1 MB measurement is no longer authoritative because adaptive refinement,
 observation-shape extraction, prospective evidence scans, and current-stock
 conditioning changed. After 20-60 minutes, use updater performance telemetry to
-measure `multi-cycle-chance-bridge`, `stochastic-forecast`, and `stochastic-calibration` stages. The bridge is pre-publication and therefore has a stricter latency budget than the shadow search.
+measure `multi-cycle-chance-bridge`, `chance-history`, `resolve-chance-history`, `stochastic-forecast`, and `stochastic-calibration` stages. The bridge is pre-publication and therefore has a stricter latency budget than the shadow search; chance journaling/resolution are deliberately post-publication.
 
 Also inspect `stochastic-calibration.json`: confirm `pendingCount` grows
 reasonably, `maximumPendingPerMarket=24`, `maximumPendingTotal=4096`, and no
 `stochastic-calibration-error.txt` is present. Do not interpret calibration
 quality from a handful of resolved rows; first verify that prospective freezes and
 later outcomes are accumulating at all.
+
+Also inspect the new graph/replay telemetry after normal minute updates:
+
+- `chance-history.jsonl` should retain one prospective row per projected market/minute and no rows older than eight hours;
+- `resolved-arrival-history.jsonl` should begin filling only after recorded arrivals pass and truth becomes unambiguous;
+- `chance-accuracy.json` should expose overall/per-market Brier, log loss, classification accuracy, observed hit rate, predicted rate, and calibration gap;
+- `chance-history-error.txt` and `resolve-chance-history-error.txt` should be absent;
+- an expanded graph should show the cyan 0..100% chance trace without a second Y-axis, plus the faint flight-shifted realized hit/miss waveform. Strict error markers will appear only as predictions actually recorded after this implementation mature.
+
+The flight-shifted realized waveform can populate immediately from retained observations and is intentionally hindsight-only. Do not use it to rebuild an “as known then” forecast. Time/price/phase features may be proposed from it, but promotion requires walk-forward/prospective improvement.
 
 Known stochastic-v1.1 research gaps remain deliberately open:
 
