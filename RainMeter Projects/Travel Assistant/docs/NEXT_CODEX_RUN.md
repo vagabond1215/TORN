@@ -90,6 +90,8 @@ Known stochastic-v1.1 research gaps remain deliberately open:
 
 Do not solve all of these at once. First obtain post-review live shadow evidence.
 
+Long-horizon central/shared-backend work is intentionally deferred and recorded in `FUTURE_DEVELOPMENT_INTENTS.md`. Do not begin that migration during the current acceptance/calibration run.
+
 ## Baseline already accepted on the target host
 
 Immediately before the unified-filter redesign, target-host testing at commit `f5a4f0b` established the following:
