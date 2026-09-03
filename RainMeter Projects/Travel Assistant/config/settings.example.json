@@ -26,7 +26,7 @@
   "profitability": {
     "sellTarget": "market_value",
     "minimumProfitPerItem": 0,
-    "minimumMarginPercent": 0.0,
+    "minimumMarginPercent": 0,
     "minimumTotalTripProfit": 0,
     "capacityOverride": 0,
     "resaleStaleAfterSeconds": 21600,
@@ -40,8 +40,8 @@
     "allowNegativeValueCandidates": true
   },
   "cycleAnalytics": {
-    "significantPriceChangePercent": 5.0,
-    "significantSelloutChangePercent": 15.0,
+    "significantPriceChangePercent": 5,
+    "significantSelloutChangePercent": 15,
     "significantSelloutChangeSeconds": 300,
     "maxRecentSamplesPerMarket": 96,
     "maxRegimesPerMarket": 24,
@@ -61,5 +61,13 @@
   },
   "externalLinks": {
     "weav3rTravelStock": "https://weav3r.dev/travel-stock"
+  },
+  "graphVisuals": {
+    "showGrid": true,
+    "showTransitions": true,
+    "showChance": true,
+    "showHindsightWindows": true,
+    "showAccuracyMarkers": true,
+    "showTooltips": true
   }
 }
