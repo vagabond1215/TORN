@@ -862,7 +862,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                 $probability = [double]$window.probability
                 $availableQuantity = $stock
                 if ($targetPurchaseAt -le ($earliestArrivalAt+1) -and $windowStartAt -le $earliestArrivalAt) {
-                    $windowText = 'IN STOCK'
+                    $windowText = 'In stock'
                 } elseif ($windowStartAt -le $Now) {
                     $windowText = 'Window open'
                 } else {
@@ -882,7 +882,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
                     $probability = -1.0
                     $availableQuantity = $stock
                 }
-                $windowText = 'IN STOCK'
+                $windowText = 'In stock'
             }
         } else {
             if ($recurringCycles.Count -lt $minimumSamples) { $learning++; continue }
