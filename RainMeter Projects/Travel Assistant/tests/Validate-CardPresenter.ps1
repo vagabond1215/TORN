@@ -143,6 +143,7 @@ if ($errors.Count -eq 0) {
     }
     if ($presenter.Contains("setOption(name,'ToolTipHidden'")) { Fail 'CardPresenter.lua must not dynamically mutate ToolTipHidden; empty tooltip text owns visibility on the target host.' }
     foreach($token in @(
+        "if leave:lower()=='en route' then leave='' end",
         "local sleepingOosValid=(",
         "lastObservedOosAt>0",
         "(activeRestockAt<=0 or activeRestockAt<=lastObservedOosAt)",
@@ -175,7 +176,7 @@ if ($errors.Count -eq 0) {
         'Sleeping OoS is only a performance hint','phase_invalidated',
         'MaximumOrdinal = 1','immediately next cycle',
         'Scenario 1 is fully resolved from the direct current cycle','Only an unreachable current cycle or an OOS market needs next-restock',
-        "'LastObservedOosAt'",'LastObservedOosAt means an unresolved current OoS phase',
+        "'LastObservedOosAt'",'LastObservedOosAt is the unresolved current OoS phase',
         'preceding OoS timing is suppressed',
         "'WP2:'","'PV1#'","'PV0#'"
     )) {
