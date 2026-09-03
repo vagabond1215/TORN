@@ -302,19 +302,19 @@ local function outboundStatus(row,state,now)
     local plan=phaseSafePlan(row)
     if row~=nil and number(row.stockEvidenceAt)>0 then
         if number(row.currentStock)>0 then
-            if number(row.activeSelloutAt)>now then return 'UPCOMING - SELLOUT IN '..formatDuration(number(row.activeSelloutAt)-now) end
-            return 'UPCOMING - IN STOCK'
+            if number(row.activeSelloutAt)>now then return 'Sells out in '..formatDuration(number(row.activeSelloutAt)-now) end
+            return 'In stock'
         end
         if rowHasUnresolvedOos(row) then
-            if number(row.nextRestockAt)>now then return 'UPCOMING - RESTOCK IN '..formatDuration(number(row.nextRestockAt)-now) end
-            if number(row.nextRestockAt)>0 then return 'UPCOMING - RESTOCK ESTIMATE OVERDUE' end
-            return 'UPCOMING - RESTOCK LEARNING'
+            if number(row.nextRestockAt)>now then return 'Restocks in '..formatDuration(number(row.nextRestockAt)-now) end
+            if number(row.nextRestockAt)>0 then return 'Restock estimate overdue' end
+            return 'Restock timing learning'
         end
         -- A later observed restock supersedes the preceding OoS. If that positive
         -- source later goes stale, present uncertainty instead of resurrecting the
         -- old restock countdown.
-        if number(row.activeRestockAt)>0 then return 'UPCOMING - STOCK STATUS STALE' end
-        return 'UPCOMING - STOCK STATUS UNKNOWN'
+        if number(row.activeRestockAt)>0 then return 'Stock status stale' end
+        return 'Stock status unknown'
     end
     if plan==nil then return 'MARKET DATA PENDING' end
     local remaining=liveTravelRemainingSeconds(state,now)
@@ -323,8 +323,8 @@ local function outboundStatus(row,state,now)
     if group==nil then return 'MARKET DATA PENDING' end
     local restockAt=expectedRestockAt(plan,group)
     local selloutAt=expectedSelloutAt(plan,group,restockAt)
-    if restockAt>now then return 'UPCOMING - RESTOCK IN '..formatDuration(restockAt-now) end
-    if selloutAt>now then return 'UPCOMING - SELLOUT IN '..formatDuration(selloutAt-now) end
+    if restockAt>now then return 'Restocks in '..formatDuration(restockAt-now) end
+    if selloutAt>now then return 'Sells out in '..formatDuration(selloutAt-now) end
     return 'MARKET DATA PENDING'
 end
 
