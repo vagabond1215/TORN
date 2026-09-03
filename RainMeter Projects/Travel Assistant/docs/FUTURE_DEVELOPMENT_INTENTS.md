@@ -261,6 +261,20 @@ If used, Sites is best treated initially as a dashboard/control plane for:
 
 Do not make Sites the sole production market-processing authority until continuous ingestion, external connectivity, scheduled/background processing, storage durability, and operational limits have been validated against the project's runtime requirements.
 
+## Future current-cycle live-probability refinement
+
+The current legacy current-cycle probability is deliberately conservative: `Get-StableCurrentCycleArrivalProbability` computes an empirical survival fraction from completed historical availability durations at `active-cycle age + flight time`. It can therefore step downward while current stock is still visibly healthy. This is not a graph-threshold artifact.
+
+A future challenger should test whether live depletion evidence improves this probability out of sample. Candidate approaches include conditioning the current-cycle survival distribution on:
+
+- observed current stock fraction;
+- guarded live depletion rate / depletion shape;
+- projected sellout margin relative to arrival;
+- current foreign price if prospective scoring demonstrates value;
+- recent-regime cycle behavior.
+
+Do not simply force 100% when live stock appears healthy. Compare the hybrid against the existing empirical-survival baseline using frozen forecast -> later truth Brier/log-loss/calibration before promotion.
+
 ## Future graph forecast-domain overlay
 
 Projected early/late restock and sellout markers could be valuable as an advanced optional chart layer, especially for visualizing uncertainty width around the next cycle. Do not add them to the current past-only 8-hour X-axis by collapsing future timestamps onto `now`. Implement only after the graph gains a legitimate future-time region or a separate forecast gutter capable of showing:
