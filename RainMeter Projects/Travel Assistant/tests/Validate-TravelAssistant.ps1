@@ -9,7 +9,7 @@ $required = @(
     'TravelAssistant.ini','AGENTS.md','Readme.md','Install.ps1',
     'config\countries.json','config\travel-modes.json','config\travel-perks.json','config\settings.example.json','config\settings.local.example.json',
     'data\seed\metadata.json','data\seed\observations.jsonl','data\seed\cycles.jsonl',
-    '@Resources\Includes\OpportunityRows.inc',
+    '@Resources\Includes\OpportunityRows.inc','@Resources\Includes\InlineGraphHitboxes.inc',
     '@Resources\Scripts\RunUpdate.ps1','@Resources\Scripts\ShadowCollector.ps1','@Resources\Scripts\UpdateTracker.ps1','@Resources\Scripts\ProjectCollectedState.ps1','@Resources\Scripts\MaintainObservationHistory.ps1','@Resources\Scripts\TravelContext.ps1',
     '@Resources\Scripts\OptimalRoute.ps1','@Resources\Scripts\OpportunityState.ps1','@Resources\Scripts\FilterPreferences.ps1','@Resources\Scripts\FilterState.ps1','@Resources\Scripts\StochasticForecast.ps1','@Resources\Scripts\StochasticCalibration.ps1','@Resources\Scripts\MultiCycleChanceBridge.ps1','@Resources\Scripts\ChanceHistory.ps1','@Resources\Scripts\ResolveChanceHistory.ps1',
     '@Resources\Scripts\StateReader.lua','@Resources\Scripts\RenderInlineGraph.ps1','@Resources\Scripts\EnsureItemImages.ps1',
