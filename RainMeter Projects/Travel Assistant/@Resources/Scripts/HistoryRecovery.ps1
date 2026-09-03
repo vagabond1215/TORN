@@ -13,6 +13,7 @@ $ConfigDir=Join-Path $ProjectRoot 'config'
 $RuntimeDir=Join-Path $ProjectRoot 'data\runtime'
 $EngineStateFile=Join-Path $RuntimeDir 'engine-state.json'
 $CycleFile=Join-Path $RuntimeDir 'cycles.jsonl'
+$PendingCycleFile=Join-Path $RuntimeDir 'cycles.pending.jsonl'
 $SeedCycleFile=Join-Path $ProjectRoot 'data\seed\cycles.jsonl'
 $ObservationFile=Join-Path $RuntimeDir 'observations.jsonl'
 $PendingObservationFile=Join-Path $RuntimeDir 'observations.pending.jsonl'
@@ -130,11 +131,17 @@ function Write-RecoveryAppendBytes([string]$Path,[byte[]]$Bytes){
         $mutex.Dispose()
     }
 }
-function Append-RecoveryObservation([object]$Observation){
-    $line=($Observation|ConvertTo-Json -Compress -Depth 10)+[Environment]::NewLine
+function Append-RecoveryJsonLine([string]$Path,[string]$PendingPath,[object]$Value){
+    $line=($Value|ConvertTo-Json -Compress -Depth 12)+[Environment]::NewLine
     $bytes=[System.Text.UTF8Encoding]::new($false).GetBytes($line)
-    try{Write-RecoveryAppendBytes -Path $ObservationFile -Bytes $bytes}
-    catch{Write-RecoveryAppendBytes -Path $PendingObservationFile -Bytes $bytes}
+    try{Write-RecoveryAppendBytes -Path $Path -Bytes $bytes}
+    catch{Write-RecoveryAppendBytes -Path $PendingPath -Bytes $bytes}
+}
+function Append-RecoveryObservation([object]$Observation){
+    Append-RecoveryJsonLine -Path $ObservationFile -PendingPath $PendingObservationFile -Value $Observation
+}
+function Append-RecoveryCycle([object]$Cycle){
+    Append-RecoveryJsonLine -Path $CycleFile -PendingPath $PendingCycleFile -Value $Cycle
 }
 function Invoke-TornIntelHistory([string]$ClientKey,[string]$CountryCode,[int]$ItemId,[int]$Hours,[int]$TimeoutSec=6){
     $hours=[Math]::Max(1,[Math]::Min(48,$Hours))
@@ -210,7 +217,15 @@ foreach($marketProperty in @($engine.observedMarkets.PSObject.Properties)){
     if([long]$attempt.lastAttemptAt -gt 0 -and ($now-[long]$attempt.lastAttemptAt) -lt $FailureBackoffSeconds -and [string]$attempt.status -eq 'ERROR'){continue}
     $countryCode=Get-RecoveryCountryCode -Countries $countries -CountryId $countryId
     if([string]::IsNullOrWhiteSpace($countryCode)){continue}
-    $candidates.Add([pscustomobject]@{marketKey=$marketKey;country=$countryId;countryCode=$countryCode;itemId=$itemId;anchorAt=$lastOos;windowCloseAt=$windowClose})
+    $candidates.Add([pscustomobject]@{
+        marketKey=$marketKey;country=$countryId;countryCode=$countryCode;itemId=$itemId
+        anchorAt=$lastOos;anchorLowerAt=[long](Get-RecoveryProperty $dest 'lastSellOutLowerBoundAt')
+        anchorUpperAt=[long](Get-RecoveryProperty $dest 'lastSellOutUpperBoundAt')
+        anchorQuality=$quality;windowCloseAt=$windowClose
+        currentStock=[long](Get-RecoveryProperty $market 'lastStock')
+        currentSourceTimestamp=[long](Get-RecoveryProperty $market 'sourceTimestamp')
+        currentForeignPrice=[long](Get-RecoveryProperty $market 'lastForeignPrice')
+    })
 }
 if($candidates.Count -eq 0){$state.status='IDLE_NO_CANDIDATE';$state.lastError='';Save-RecoveryState $state;return}
 
@@ -250,7 +265,15 @@ try{
         $at=Convert-RecoveryTimestamp (Get-RecoveryProperty $point 't')
         $qty=[long](Get-RecoveryProperty $point 'quantity');$cost=[long](Get-RecoveryProperty $point 'cost')
         if($at -lt ([long]$candidate.anchorAt-120L) -or $at -gt $now -or $qty -lt 0){continue}
-        $normalized.Add([pscustomobject]@{at=$at;quantity=$qty;cost=$cost})
+        $normalized.Add([pscustomobject]@{at=$at;quantity=$qty;cost=$cost;source='torn_intel_history_recovery'})
+    }
+    # If the upstream history catches a brief positive period but ends before the
+    # final zero, our current fresh zero snapshot can close the recovered sequence.
+    if([long]$candidate.currentStock -eq 0 -and [long]$candidate.currentSourceTimestamp -gt [long]$candidate.anchorAt){
+        $normalized.Add([pscustomobject]@{
+            at=[long]$candidate.currentSourceTimestamp;quantity=0L;cost=[long]$candidate.currentForeignPrice
+            source='history_recovery_live_bridge'
+        })
     }
     $ordered=@($normalized.ToArray()|Sort-Object at)
     $compressed=New-Object System.Collections.Generic.List[object]
@@ -271,16 +294,78 @@ try{
         $observation=[pscustomobject]@{
             schemaVersion=2;timestamp=[long]$point.at;sourceTimestamp=[long]$point.at
             country=[string]$candidate.country;itemId=[int]$candidate.itemId;stock=[long]$point.quantity;foreignPrice=[long]$point.cost
-            source='torn_intel_history_recovery';previousFreshSourceTimestamp=$prevAt;transitionGapSeconds=$gap;transitionBoundaryQuality='recovered'
+            source=[string]$point.source;previousFreshSourceTimestamp=$prevAt;transitionGapSeconds=$gap;transitionBoundaryQuality='recovered'
             depletionEvidence=$kind;depletionIntervalSeconds=$gap;depletionUnits=$units;depletionLowerBoundUnits=$lower;depletionCensored=$censored
             evidenceQuality='bounded_fresh';recoveryAnchorAt=[long]$candidate.anchorAt;recoveryWindowCloseAt=[long]$candidate.windowCloseAt;recoveredAt=$now
         }
         Append-RecoveryObservation -Observation $observation
         $candidate.known[$knownKey]=$true;$candidate.knownAt[[string][long]$point.at]=$true;$recovered++;$previousPoint=$point
     }
+    $recoveredCycle=$null
+    if($sawPositiveAfter){
+        $sequence=New-Object System.Collections.Generic.List[object]
+        $sequence.Add([pscustomobject]@{
+            at=[long]$candidate.anchorAt;quantity=0L;cost=[long]$candidate.currentForeignPrice;source='local_verified_oos_anchor'
+        })
+        foreach($point in $compressed.ToArray()){
+            if([long]$point.at -gt [long]$candidate.anchorAt){$sequence.Add($point)}
+        }
+        $restockPoint=$null;$selloutPoint=$null;$beforeRestock=$null;$beforeSellout=$null;$previousSequence=$null
+        foreach($point in @($sequence.ToArray()|Sort-Object at)){
+            if($null -eq $restockPoint -and [long]$point.quantity -gt 0){
+                $restockPoint=$point;$beforeRestock=$previousSequence
+            }elseif($null -ne $restockPoint -and $null -eq $selloutPoint -and [long]$point.at -gt [long]$restockPoint.at -and [long]$point.quantity -eq 0){
+                $selloutPoint=$point;$beforeSellout=$previousSequence;break
+            }
+            $previousSequence=$point
+        }
+        if($null -ne $restockPoint -and $null -ne $selloutPoint){
+            $restockAt=[long]$restockPoint.at;$soldOutAt=[long]$selloutPoint.at
+            $restockLower=if($null -ne $beforeRestock){[long]$beforeRestock.at}else{[long]$candidate.anchorAt}
+            $restockUpper=$restockAt
+            $selloutLower=if($null -ne $beforeSellout){[long]$beforeSellout.at}else{$restockAt}
+            $selloutUpper=$soldOutAt
+            $anchorLower=if([long]$candidate.anchorLowerAt -gt 0){[long]$candidate.anchorLowerAt}else{[long]$candidate.anchorAt}
+            $anchorUpper=if([long]$candidate.anchorUpperAt -gt 0){[long]$candidate.anchorUpperAt}else{[long]$candidate.anchorAt}
+            $delayMin=[Math]::Max(0L,$restockLower-$anchorUpper)
+            $delayMax=[Math]::Max(0L,$restockUpper-$anchorLower)
+            $availabilityMin=[Math]::Max(0L,$selloutLower-$restockUpper)
+            $availabilityMax=[Math]::Max(0L,$selloutUpper-$restockLower)
+            $eligible=($delayMax -gt 0 -and $availabilityMax -gt 0)
+            if($eligible){
+                $existing=@($cycleMap[[string]$candidate.marketKey].ToArray()|Where-Object{
+                    [long](Get-RecoveryProperty $_ 'restockAt') -eq $restockAt -and [long](Get-RecoveryProperty $_ 'soldOutAt') -eq $soldOutAt
+                })
+                if($existing.Count -eq 0){
+                    $price=[long]$restockPoint.cost
+                    $recoveredCycle=[pscustomobject]@{
+                        schemaVersion=2;country=[string]$candidate.country;itemId=[int]$candidate.itemId
+                        foreignPrice=$price;minimumForeignPrice=$price;maximumForeignPrice=$price
+                        restockAt=$restockAt;restockLowerBoundAt=$restockLower;restockUpperBoundAt=$restockUpper;restockBoundaryQuality='recovered'
+                        restockQuantity=[long]$restockPoint.quantity
+                        soldOutAt=$soldOutAt;soldOutLowerBoundAt=$selloutLower;soldOutUpperBoundAt=$selloutUpper;soldOutBoundaryQuality='recovered'
+                        availabilitySeconds=[Math]::Max(0L,$soldOutAt-$restockAt)
+                        availabilityMinimumSeconds=$availabilityMin;availabilityMaximumSeconds=$availabilityMax;availabilityEligible=($availabilityMax -gt 0)
+                        previousSoldOutAt=[long]$candidate.anchorAt;previousSoldOutLowerBoundAt=$anchorLower;previousSoldOutUpperBoundAt=$anchorUpper
+                        previousSellOutBoundaryQuality=[string]$candidate.anchorQuality
+                        restockDelaySeconds=[Math]::Max(0L,$restockAt-[long]$candidate.anchorAt)
+                        restockDelayMinimumSeconds=$delayMin;restockDelayMaximumSeconds=$delayMax;restockDelayEligible=($delayMax -gt 0)
+                        trendEligible=$eligible;forecastEligible=$eligible;evidenceQuality='bounded_fresh';isRightCensored=$false
+                        selloutDepletionEvidence='sellout_censored'
+                        selloutDemandLowerBoundUnits=$(if($null -ne $beforeSellout){[Math]::Max(0L,[long]$beforeSellout.quantity)}else{0L})
+                        source='torn_intel_history_recovery';recoveredAt=$now;recoveryWindowCloseAt=[long]$candidate.windowCloseAt
+                    }
+                    Append-RecoveryCycle -Cycle $recoveredCycle
+                    $cycleMap[[string]$candidate.marketKey].Add($recoveredCycle)
+                }
+            }
+        }
+    }
+
     if($sawPositiveAfter -and $recovered -gt 0){
         $attempt.status='RECOVERED';$attempt.lastSuccessAt=$now;$attempt.recoveredPoints=[int]$attempt.recoveredPoints+$recovered
-        $state.status='RECOVERED';$state.lastSuccessAt=$now;$state.recoveredPoints=[int]$state.recoveredPoints+$recovered
+        $state.status=$(if($null -ne $recoveredCycle){'RECOVERED_CYCLE'}else{'RECOVERED'})
+        $state.lastSuccessAt=$now;$state.recoveredPoints=[int]$state.recoveredPoints+$recovered
     }else{$attempt.status='NO_MISSED_TRANSITION';$state.status='NO_MISSED_TRANSITION'}
     $attempt.lastError='';$state.lastError=''
 }catch{
