@@ -34,8 +34,10 @@ $realRestock=@(
     [pscustomobject]@{timestamp=280L;stock=4700L;source='prometheus'}
 )
 $realClassified=@(Resolve-StockObservationPlausibility -Rows $realRestock -ExpectedPollIntervalSeconds 60)
-Assert-True ([bool](@($realClassified|Where-Object{[long]$_.timestamp -eq 160L})[0].calculationEligible) 'A zero followed by a clear replenishment jump must remain a real sellout.'
-Assert-True ([bool](@($realClassified|Where-Object{[long]$_.timestamp -eq 220L})[0].transitionCalculationEligible) 'A full replenishment jump must remain a real restock.'
+$realZero=@($realClassified|Where-Object{[long]$_.timestamp -eq 160L})[0]
+$realPositive=@($realClassified|Where-Object{[long]$_.timestamp -eq 220L})[0]
+Assert-True ([bool]$realZero.calculationEligible) 'A zero followed by a clear replenishment jump must remain a real sellout.'
+Assert-True ([bool]$realPositive.transitionCalculationEligible) 'A full replenishment jump must remain a real restock.'
 
 $tinyBlip=@(
     [pscustomobject]@{timestamp=100L;stock=0L;source='prometheus'},
@@ -57,7 +59,8 @@ $recoveredTiny=@(
     [pscustomobject]@{timestamp=220L;stock=0L;source='history_recovery_live_bridge';transitionBoundaryQuality='recovered'}
 )
 $recoveredClassified=@(Resolve-StockObservationPlausibility -Rows $recoveredTiny -ExpectedPollIntervalSeconds 60)
-Assert-True ([bool](@($recoveredClassified|Where-Object{[long]$_.timestamp -eq 160L})[0].calculationEligible) 'Recovered micro-restock evidence must override the heuristic suppression gate.'
+$recoveredPositive=@($recoveredClassified|Where-Object{[long]$_.timestamp -eq 160L})[0]
+Assert-True ([bool]$recoveredPositive.calculationEligible) 'Recovered micro-restock evidence must override the heuristic suppression gate.'
 
 $script:CycleSpuriousRegistryLoaded=$true
 $script:CycleSpuriousRegistry=[pscustomobject]@{
