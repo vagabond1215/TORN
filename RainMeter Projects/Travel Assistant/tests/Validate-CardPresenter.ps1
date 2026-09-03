@@ -151,6 +151,7 @@ if ($errors.Count -eq 0) {
     foreach($token in @(
         "if window:lower()=='in stock' then window='In stock' end",
         "if leave:lower()=='in stock' then leave='In stock' end",
+        "if window:lower()=='restock estimate' and leave:lower():find('restocks in ~',1,true)==1 then window='' end",
         "if leave:lower()=='en route' then leave='' end",
         "local function projectedArrivalCertainty(state,statePrefix)",
         "ImmediateArrivalProbabilityValue",
@@ -304,7 +305,8 @@ if ($errors.Count -eq 0) {
     foreach($retired in @(
         '$windowText = ''WINDOW ''+',
         '$windowText = ''WINDOW NOW''',
-        '$leaveText = ''EN ROUTE'''
+        '$leaveText = ''EN ROUTE''',
+        'windowText=''RESTOCK ESTIMATE'''
     )){
         if($opportunity.Contains($retired)){Fail "OpportunityState retains ambiguous/redundant card wording '$retired'."}
     }
