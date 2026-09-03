@@ -498,6 +498,30 @@ function Get-StableRecurringScenarioModel {
     }
 }
 
+function Get-StableRecurringProbabilityAt {
+    param([object]$Model,[long]$ArrivalAt)
+    if($null -eq $Model -or [int](Get-WindowProperty $Model 'sampleCount') -le 0 -or $ArrivalAt -le 0){return -1.0}
+    $groups=@(Get-WindowProperty $Model 'groups')
+    if($groups.Count -eq 0){return -1.0}
+    $maxSupportedAt=0L
+    foreach($group in $groups){
+        $end=[long](Get-WindowProperty $group 'lateSelloutAt')
+        if($end -gt $maxSupportedAt){$maxSupportedAt=$end}
+    }
+    # Legacy geometry intentionally ends at the immediately next cycle. Do not
+    # call a later multi-cycle arrival a known 0% merely because it lies beyond
+    # the supported legacy horizon.
+    if($maxSupportedAt -le 0 -or $ArrivalAt -gt $maxSupportedAt){return -1.0}
+    foreach($segment in @(Get-WindowProperty $Model 'segments')){
+        $start=[long](Get-WindowProperty $segment 'startAt')
+        $end=[long](Get-WindowProperty $segment 'endAt')
+        if($ArrivalAt -ge $start -and $ArrivalAt -lt $end){
+            return [Math]::Max(0.0,[Math]::Min(1.0,[double](Get-WindowProperty $segment 'probability')))
+        }
+    }
+    return 0.0
+}
+
 function Select-StableWindowPlanGroup {
     param([object]$Model,[long]$EarliestArrivalAt,[double]$MinimumBestProbability = 0.5)
     if ($null -eq $Model) { return $null }
@@ -583,6 +607,9 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
     $state[$prefix+'NextCycleOrdinal']='0'
     $state[$prefix+'WindowMedianPeriodSeconds']='0'
+    $state[$prefix+'ImmediateArrivalAt']='0'
+    $state[$prefix+'ImmediateArrivalProbabilityValue']='-1'
+    $state[$prefix+'ImmediateArrivalProbabilitySource']='unknown'
     $state[$prefix+'CurrentStockSafetyEligible']='0'
     $state[$prefix+'CurrentStockSafetySampleCount']='0'
     $state[$prefix+'CurrentStockSafetyEvidenceSpanSeconds']='0'
@@ -675,6 +702,7 @@ for ($i=1; $i -le $count; $i++) {
         $earliestArrival=$Now
         $flightSeconds=0L
     }
+    $state[$prefix+'ImmediateArrivalAt']=[long]$earliestArrival
     $state[$prefix+'CurrentCycleReachable']='0'
     $state[$prefix+'CurrentCycleLeaveDeadlineAt']='0'
     $state[$prefix+'CurrentCycleSafetyMarginSeconds']='0'
@@ -729,6 +757,8 @@ for ($i=1; $i -le $count; $i++) {
         if ($currentProbability -ge 0) {
             $state[$prefix+'ProbabilityValue']=(Convert-WindowProbabilityText ([double]$currentProbability))
             $state[$prefix+'ChanceText']=('{0:N0}%' -f (100.0*[double]$currentProbability))
+            $state[$prefix+'ImmediateArrivalProbabilityValue']=(Convert-WindowProbabilityText ([double]$currentProbability))
+            $state[$prefix+'ImmediateArrivalProbabilitySource']='current_cycle'
         }
         # Scenario 1 is fully resolved from the direct current cycle. Do not build
         # the recurring next-cycle model merely to calculate a far-future close.
@@ -746,6 +776,12 @@ for ($i=1; $i -le $count; $i++) {
         $state[$prefix+'ChanceText']=''
         $state[$prefix+'ProbabilityValue']='-1'
         continue
+    }
+
+    $immediateProbability=Get-StableRecurringProbabilityAt -Model $model -ArrivalAt $earliestArrival
+    if($immediateProbability -ge 0){
+        $state[$prefix+'ImmediateArrivalProbabilityValue']=(Convert-WindowProbabilityText ([double]$immediateProbability))
+        $state[$prefix+'ImmediateArrivalProbabilitySource']='legacy_current_or_next_cycle'
     }
 
     $machine=Convert-WindowPlanMachineText -Model $model
