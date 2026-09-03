@@ -621,7 +621,7 @@ end
 
 local function hideGraphHoverRegions()
     for i = 1, maxGraphHoverRegions do
-        local name = 'MeterGraphHover' .. i
+        local name = 'MeterInlineGraphHitbox' .. i
         SKIN:Bang('!HideMeter', name)
         SKIN:Bang('!SetOption', name, 'ToolTipText', '')
         SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', '')
@@ -645,7 +645,7 @@ local function updateGraphHoverRegions(spec, graphMeterName, row)
         local h = math.max(1, number(spec[prefix .. 'H']))
         local tooltip = safeText(spec[prefix .. 'Text'], '')
         if tooltip ~= '' then
-            local name = 'MeterGraphHover' .. i
+            local name = 'MeterInlineGraphHitbox' .. i
             SKIN:Bang('!SetOption', name, 'X', tostring(baseX + x))
             SKIN:Bang('!SetOption', name, 'Y', tostring(baseY + y))
             SKIN:Bang('!SetOption', name, 'W', tostring(w))
