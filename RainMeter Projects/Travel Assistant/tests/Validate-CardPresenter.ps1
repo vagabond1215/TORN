@@ -157,11 +157,20 @@ if ($errors.Count -eq 0) {
         if (-not $windowRefiner.Contains($token)) { Fail "WindowPlanRefiner.ps1 missing current-cycle deadline token '$token'." }
     }
 
-    $reachableAt=$presenter.IndexOf('if currentStock>0 and reachable',[System.StringComparison]::Ordinal)
     $safeFallbackAt=$presenter.IndexOf("if dataQuality=='current_stock_safe' then",[System.StringComparison]::Ordinal)
     $collectingAt=$presenter.IndexOf("if dataQuality=='collecting' then",[System.StringComparison]::Ordinal)
-    if($reachableAt -lt 0 -or $safeFallbackAt -le $reachableAt -or $collectingAt -le $safeFallbackAt){
-        Fail 'Current-stock Safe Window Open fallback must sit below normal current-cycle reachability and immediately before Collecting Data.'
+    if($safeFallbackAt -lt 0 -or $collectingAt -le $safeFallbackAt){
+        Fail 'Current-stock Safe Window Open presentation must sit immediately before the remaining Collecting Data branch.'
+    }
+    foreach($token in @(
+        'if ([string]$state[$prefix+''WindowDataQuality''] -eq ''collecting'' -and $stock -gt 0)',
+        '$state[$prefix+''WindowDataQuality'']=''current_stock_safe''',
+        '$state[$prefix+''ProbabilityValue'']=''-1''',
+        'continue'
+    )){
+        if(-not$windowRefiner.Contains($token)){
+            Fail "Safe Window Open must remain producer-gated from Collecting Data without a fabricated probability; missing '$token'."
+        }
     }
 
     foreach ($token in @(
