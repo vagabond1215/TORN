@@ -32,6 +32,7 @@ local detailExtra = 34
 local graphExtra = 133
 local footerExtra = 16
 local maxCandidateRows = 256
+local maxGraphHoverRegions = 48
 
 local opportunitySuffixes = {
     'Key','Name','Country','CountryCode','TripBand','WindowText','LeaveText','ChanceText','TimeText',
@@ -618,6 +619,45 @@ local function graphSpecPath(key)
     return generatedDir .. 'inline-graph-' .. safeFileKey(key) .. '.kv'
 end
 
+local function hideGraphHoverRegions()
+    for i = 1, maxGraphHoverRegions do
+        local name = 'MeterGraphHover' .. i
+        SKIN:Bang('!HideMeter', name)
+        SKIN:Bang('!SetOption', name, 'ToolTipText', '')
+        SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', '')
+    end
+end
+
+local function updateGraphHoverRegions(spec, graphMeterName, row)
+    hideGraphHoverRegions()
+    if spec == nil or graphMeterName == nil or graphMeterName == '' then return end
+    local graphMeter = SKIN:GetMeter(graphMeterName)
+    if graphMeter == nil then return end
+
+    local baseX = number(graphMeter:GetX())
+    local baseY = number(graphMeter:GetY())
+    local count = math.max(0, math.min(maxGraphHoverRegions, math.floor(number(spec.HoverCount))))
+    for i = 1, count do
+        local prefix = 'Hover' .. i
+        local x = number(spec[prefix .. 'X'])
+        local y = number(spec[prefix .. 'Y'])
+        local w = math.max(1, number(spec[prefix .. 'W']))
+        local h = math.max(1, number(spec[prefix .. 'H']))
+        local tooltip = safeText(spec[prefix .. 'Text'], '')
+        if tooltip ~= '' then
+            local name = 'MeterGraphHover' .. i
+            SKIN:Bang('!SetOption', name, 'X', tostring(baseX + x))
+            SKIN:Bang('!SetOption', name, 'Y', tostring(baseY + y))
+            SKIN:Bang('!SetOption', name, 'W', tostring(w))
+            SKIN:Bang('!SetOption', name, 'H', tostring(h))
+            SKIN:Bang('!SetOption', name, 'Shape', 'Rectangle 0,0,' .. tostring(w) .. ',' .. tostring(h) .. ' | Fill Color 0,0,0,1 | StrokeWidth 0')
+            SKIN:Bang('!SetOption', name, 'ToolTipText', tooltip)
+            SKIN:Bang('!SetOption', name, 'LeftMouseUpAction', '[!CommandMeasure MeasureState "ToggleCardExpanded(' .. tostring(row) .. ')"]')
+            SKIN:Bang('!ShowMeter', name)
+        end
+    end
+end
+
 local function graphImagePath(key)
     if generatedDir == nil then return '' end
     return generatedDir .. 'inline-graph-' .. safeFileKey(key) .. '.png'
@@ -650,6 +690,7 @@ local function setDetailButtonState(name, expanded)
 end
 
 local function collapseInlineGraph()
+    hideGraphHoverRegions()
     expandedKey = ''
     expandedRow = 0
     lastGraphSignature = ''
@@ -985,8 +1026,10 @@ local function updateExpandedGraph()
             SKIN:Bang('!SetOption', meter, 'ImageName', graphImagePath(expandedKey))
         end
         SKIN:Bang('!ShowMeter', meter)
+        updateGraphHoverRegions(spec, meter, expandedRow)
     else
         SKIN:Bang('!HideMeter', meter)
+        hideGraphHoverRegions()
     end
 end
 
