@@ -134,6 +134,7 @@ local function statusText(windowText,leaveText)
     local window=trim(windowText); local leave=trim(leaveText); if isDurationOnly(window) then window='' end
     if window:lower()=='in stock' then window='In stock' end
     if leave:lower()=='in stock' then leave='In stock' end
+    if window:lower()=='restock estimate' and leave:lower():find('restocks in ~',1,true)==1 then window='' end
     -- Character travel state is already owned by the title. Suppress any retained
     -- legacy EN ROUTE token so the row can spend its space on market timing + %.
     if leave:lower()=='en route' then leave='' end
