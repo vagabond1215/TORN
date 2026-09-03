@@ -95,7 +95,7 @@ function Get-RecoveryWindowSummary([object[]]$Cycles,[int]$RecentSamples=12){
     return [pscustomobject]@{sampleCount=$delays.Count;averageDelaySeconds=$average;varianceSeconds=[Math]::Max(0L,$sigma)}
 }
 function Read-RecoveryObservationSummary([string]$Path,[string]$Country,[int]$ItemId,[long]$AfterAt){
-    $result=[pscustomobject]@{hasPositiveAfter=$false;known=@{}}
+    $result=[pscustomobject]@{hasPositiveAfter=$false;known=@{};knownAt=@{}}
     if(-not(Test-Path -LiteralPath $Path)){return $result}
     $reader=$null
     try{
@@ -109,6 +109,7 @@ function Read-RecoveryObservationSummary([string]$Path,[string]$Country,[int]$It
             if($at -le 0){continue}
             $stock=[long](Get-RecoveryProperty $row 'stock')
             $result.known[([string]$at+':'+[string]$stock)]=$true
+            $result.knownAt[[string]$at]=$true
             if($at -gt $AfterAt -and $stock -gt 0){$result.hasPositiveAfter=$true}
         }
     }finally{if($null -ne $reader){$reader.Dispose()}}
@@ -199,23 +200,42 @@ foreach($marketProperty in @($engine.observedMarkets.PSObject.Properties)){
     $windowClose=$lastOos+[long]$summary.averageDelaySeconds+[long]$summary.varianceSeconds
     if($windowClose -le 0 -or $now -lt ($windowClose+60L)){continue}
 
-    $localSummary=Read-RecoveryObservationSummary -Path $ObservationFile -Country $countryId -ItemId $itemId -AfterAt $lastOos
-    if([bool]$localSummary.hasPositiveAfter){continue}
-    if(Test-Path -LiteralPath $PendingObservationFile){
-        $pendingSummary=Read-RecoveryObservationSummary -Path $PendingObservationFile -Country $countryId -ItemId $itemId -AfterAt $lastOos
-        if([bool]$pendingSummary.hasPositiveAfter){continue}
-    }
+    # A currently positive market proves this expected restock was observed on our
+    # live path. Recovery is for a restock that may have appeared and sold out
+    # entirely between local snapshots, leaving the current phase at zero.
+    if([long](Get-RecoveryProperty $market 'lastStock') -gt 0){continue}
 
     $attempt=Get-RecoveryAttempt -State $state -MarketKey $marketKey -Create
     if([long]$attempt.anchorAt -eq $lastOos -and [string]$attempt.status -in @('RECOVERED','NO_MISSED_TRANSITION')){continue}
     if([long]$attempt.lastAttemptAt -gt 0 -and ($now-[long]$attempt.lastAttemptAt) -lt $FailureBackoffSeconds -and [string]$attempt.status -eq 'ERROR'){continue}
     $countryCode=Get-RecoveryCountryCode -Countries $countries -CountryId $countryId
     if([string]::IsNullOrWhiteSpace($countryCode)){continue}
-    $candidates.Add([pscustomobject]@{marketKey=$marketKey;country=$countryId;countryCode=$countryCode;itemId=$itemId;anchorAt=$lastOos;windowCloseAt=$windowClose;known=$localSummary.known})
+    $candidates.Add([pscustomobject]@{marketKey=$marketKey;country=$countryId;countryCode=$countryCode;itemId=$itemId;anchorAt=$lastOos;windowCloseAt=$windowClose})
 }
 if($candidates.Count -eq 0){$state.status='IDLE_NO_CANDIDATE';$state.lastError='';Save-RecoveryState $state;return}
 
 $candidate=@($candidates.ToArray()|Sort-Object windowCloseAt,marketKey|Select-Object -First 1)[0]
+
+# Scan retained evidence only for the one request we are actually about to make.
+$localSummary=Read-RecoveryObservationSummary -Path $ObservationFile -Country ([string]$candidate.country) -ItemId ([int]$candidate.itemId) -AfterAt ([long]$candidate.anchorAt)
+if(Test-Path -LiteralPath $PendingObservationFile){
+    $pendingSummary=Read-RecoveryObservationSummary -Path $PendingObservationFile -Country ([string]$candidate.country) -ItemId ([int]$candidate.itemId) -AfterAt ([long]$candidate.anchorAt)
+    if([bool]$pendingSummary.hasPositiveAfter){
+        $attempt=Get-RecoveryAttempt -State $state -MarketKey ([string]$candidate.marketKey) -Create
+        $attempt.anchorAt=[long]$candidate.anchorAt;$attempt.windowCloseAt=[long]$candidate.windowCloseAt;$attempt.status='NO_MISSED_TRANSITION'
+        $state.status='IDLE_LOCAL_TRANSITION';Save-RecoveryState $state;return
+    }
+    foreach($knownKey in @($pendingSummary.known.Keys)){$localSummary.known[$knownKey]=$true}
+    foreach($knownAt in @($pendingSummary.knownAt.Keys)){$localSummary.knownAt[$knownAt]=$true}
+}
+if([bool]$localSummary.hasPositiveAfter){
+    $attempt=Get-RecoveryAttempt -State $state -MarketKey ([string]$candidate.marketKey) -Create
+    $attempt.anchorAt=[long]$candidate.anchorAt;$attempt.windowCloseAt=[long]$candidate.windowCloseAt;$attempt.status='NO_MISSED_TRANSITION'
+    $state.status='IDLE_LOCAL_TRANSITION';Save-RecoveryState $state;return
+}
+$candidate|Add-Member NoteProperty known $localSummary.known
+$candidate|Add-Member NoteProperty knownAt $localSummary.knownAt
+
 $attempt=Get-RecoveryAttempt -State $state -MarketKey ([string]$candidate.marketKey) -Create
 $attempt.anchorAt=[long]$candidate.anchorAt;$attempt.windowCloseAt=[long]$candidate.windowCloseAt;$attempt.lastAttemptAt=$now;$attempt.status='CHECKING'
 $state.lastAttemptAt=$now;$state.lastMarketKey=[string]$candidate.marketKey;$state.status='CHECKING';Save-RecoveryState $state
@@ -241,7 +261,7 @@ try{
     foreach($point in $compressed.ToArray()){
         if([long]$point.at -gt [long]$candidate.anchorAt -and [long]$point.quantity -gt 0){$sawPositiveAfter=$true}
         $knownKey=([string][long]$point.at+':'+[string][long]$point.quantity)
-        if($candidate.known.ContainsKey($knownKey)){$previousPoint=$point;continue}
+        if($candidate.known.ContainsKey($knownKey) -or $candidate.knownAt.ContainsKey([string][long]$point.at)){$previousPoint=$point;continue}
         $prevAt=if($null -ne $previousPoint){[long]$previousPoint.at}else{0L}
         $prevQty=if($null -ne $previousPoint){[long]$previousPoint.quantity}else{-1L}
         $gap=if($prevAt -gt 0){[Math]::Max(0L,[long]$point.at-$prevAt)}else{0L}
@@ -256,7 +276,7 @@ try{
             evidenceQuality='bounded_fresh';recoveryAnchorAt=[long]$candidate.anchorAt;recoveryWindowCloseAt=[long]$candidate.windowCloseAt;recoveredAt=$now
         }
         Append-RecoveryObservation -Observation $observation
-        $candidate.known[$knownKey]=$true;$recovered++;$previousPoint=$point
+        $candidate.known[$knownKey]=$true;$candidate.knownAt[[string][long]$point.at]=$true;$recovered++;$previousPoint=$point
     }
     if($sawPositiveAfter -and $recovered -gt 0){
         $attempt.status='RECOVERED';$attempt.lastSuccessAt=$now;$attempt.recoveredPoints=[int]$attempt.recoveredPoints+$recovered
