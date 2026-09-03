@@ -116,7 +116,7 @@ Up to eight opportunities may be shown.
 - The space between the flag and item text is a 48×48 square matching the card's interior height. Torn's transparent item art is enlarged to 44×44 with a 2px inset in that square and cached from `https://www.torn.com/images/items/<itemId>/large.png` on demand.
 - The window/guidance text is lowered close to the bottom border.
 - Only one economics strip and one inline graph may be expanded at a time; each follows stable `country:itemId` identity through local reordering. Clicking the card body toggles both sections together, while the `$` and chart buttons still toggle their individual section.
-- Inline graphs use a black background with a Torn-lime stock line. Cobalt-blue in-stock/restock and pumpkin-orange out-of-stock/sellout transitions are short ticks below the X axis so they do not cover the stock trace.
+- Inline graphs use a black background with a Torn-lime stock line. A thin cyan Chance-to-Hit trace uses an independent implicit 0..100% scale (bottom to top) without adding another labeled axis. A faint dotted hindsight trace shows whether a departure at each historical X-time actually would have landed in or out of stock after the configured one-way flight; confirmed scored forecasts add small outcome/error markers. Cobalt-blue in-stock/restock and pumpkin-orange out-of-stock/sellout transitions remain short ticks below the X axis.
 - Only the flag and the visible window/guidance line have tooltips. When a departure window is already open, its tooltip uses `OPEN NOW` instead of listing past departure timestamps; expired Safe windows are labeled `closed`.
 
 Expanded economics are:
@@ -151,6 +151,8 @@ For a fresh in-stock market:
 - trained likelihood shows as a percentage;
 - untrained likelihood shows as **LEARNING**;
 - the row remains visible rather than disappearing.
+
+When a current restock boundary is unknown but fresh positive stock has a long, clean, slow-depletion run, the authoritative window stage may show **Safe Window Open** instead of Collecting Data. It requires at least three uncensored positive-stock depletion samples over at least ten minutes and uses a deliberately pessimistic rate (90th-percentile observed depletion x1.5, never slower than 60 units/hour). Conservative runway must still exceed twice the time to arrival and leave at least 30 minutes beyond arrival. No percentage is invented by this fallback.
 
 Sold-out/future windows remain evidence-gated and require completed sellout/restock + availability history.
 
@@ -188,6 +190,10 @@ Click the chart button:
 Inline graph rendering reads retained local observations only. It makes no Prometheus/YATA/Torn request. The standalone WinForms Viewer has been removed.
 
 The graph uses an 8-hour display while learning retention remains approximately 48h raw observations / 90d completed cycles. Change-only history carries its prior state across the window boundary. Sold-out-only history stays flat at zero rather than showing an artificial `0..1` axis.
+
+Live modeled hit probabilities are journaled once per market/minute for the same 8-hour window in ignored `data/runtime/chance-history.jsonl`. Each row stores the forecast timestamp, physically aligned departure/arrival, configured flight time, source/model, and probability. `ResolveChanceHistory.ps1` later scores only forecasts whose arrival has actually passed, using the same confirmed exact/cycle/continuity truth semantics as prospective stochastic calibration. Resolved rows live in `resolved-arrival-history.jsonl`; `chance-accuracy.json` reports 8-hour Brier score, log loss, mean absolute outcome error, 0.5-threshold classification accuracy, mean predicted chance, observed hit rate, and calibration gap overall/by market/by forecast source.
+
+For immediate pattern inspection, the graph also shifts the actual retained stock waveform left by one country flight duration. That dotted binary trace answers: “if I had departed at this X-time, would the later observed stock have been available?” It is hindsight truth with normal polling uncertainty, not a reconstructed forecast and never a learning input.
 
 ## Filters / Ignore List
 
