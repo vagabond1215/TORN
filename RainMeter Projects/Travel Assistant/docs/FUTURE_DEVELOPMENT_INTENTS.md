@@ -261,6 +261,17 @@ If used, Sites is best treated initially as a dashboard/control plane for:
 
 Do not make Sites the sole production market-processing authority until continuous ingestion, external connectivity, scheduled/background processing, storage durability, and operational limits have been validated against the project's runtime requirements.
 
+## Future graph forecast-domain overlay
+
+Projected early/late restock and sellout markers could be valuable as an advanced optional chart layer, especially for visualizing uncertainty width around the next cycle. Do not add them to the current past-only 8-hour X-axis by collapsing future timestamps onto `now`. Implement only after the graph gains a legitimate future-time region or a separate forecast gutter capable of showing:
+
+- projected early restock;
+- projected late restock;
+- projected early OoS/sellout;
+- projected late OoS/sellout;
+
+with styling and tooltips clearly distinct from vivid observed Restock/OoS markers. The layer should default off and remain independently toggleable.
+
 ## Status
 
 **Future intent only. No current implementation commitment.**
