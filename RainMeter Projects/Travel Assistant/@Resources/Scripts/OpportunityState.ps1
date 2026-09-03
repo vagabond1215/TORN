@@ -370,6 +370,27 @@ function Get-OpportunityActiveRestockAt {
     return [Math]::Max(0L,[long]$activeCycle.restockAt)
 }
 
+function Test-OpportunityUnresolvedOosPhase {
+    param(
+        [object]$DestinationState,
+        [long]$ObservedStock,
+        [long]$ObservedAt
+    )
+    if($null -eq $DestinationState){return $false}
+    $lastSellOutAt=[long](Get-OptimalProperty $DestinationState 'lastSellOutAt')
+    $lastSellOutQuality=[string](Get-OptimalProperty $DestinationState 'lastSellOutBoundaryQuality')
+    if($lastSellOutAt -le 0 -or -not(Test-OpportunityBoundaryQuality -Quality $lastSellOutQuality)){return $false}
+
+    # A later observed restock supersedes the preceding OoS even if that positive
+    # snapshot subsequently ages into forecast-only status. Staleness can make
+    # present availability unknown; it cannot make an already-observed restock
+    # unhappen and resurrect an old restock countdown.
+    $activeRestockAt=Get-OpportunityActiveRestockAt -DestinationState $DestinationState
+    if($activeRestockAt -gt $lastSellOutAt){return $false}
+    if($ObservedStock -gt 0 -and $ObservedAt -gt $lastSellOutAt){return $false}
+    return $true
+}
+
 function Get-OpportunityCountryCode {
     param([string]$CountryId)
     $map = @{
@@ -688,7 +709,9 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         $recurringCycles = @(Get-OpportunityRecurringCycles -Cycles $cycles)
         $destinationState = $null
         if ($engine.PSObject.Properties['destinations']) { $destinationState = Get-OptimalProperty $engine.destinations $marketKey }
-        $stock = if ($useForecastOnly) { 0L } else { [long](Get-OptimalProperty $market 'lastStock') }
+        $observedStock=[long](Get-OptimalProperty $market 'lastStock')
+        $stock = if ($useForecastOnly) { 0L } else { $observedStock }
+        $unresolvedOos=Test-OpportunityUnresolvedOosPhase -DestinationState $destinationState -ObservedStock $observedStock -ObservedAt $sourceTimestamp
 
         $initialWait = $returningWait
         $outboundSeconds = $oneWaySeconds
@@ -706,7 +729,7 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
         # every minute. Keep a cheap absolute restock estimate from verified cycle
         # delays and wake detailed forecasting only near the historically earliest
         # restock boundary.
-        if ($stock -le 0) {
+        if ($stock -le 0 -and $unresolvedOos) {
             $lastSellOutAt=0L
             $lastSellOutQuality=''
             if ($null -ne $destinationState) {
@@ -870,12 +893,15 @@ foreach ($country in @($countries.countries | Where-Object { $_.collect -eq $tru
             # anchor, so use that anchor for the recurring forecast when available.
             if ($useForecastOnly) {
                 $activeRestockAt = Get-OpportunityActiveRestockAt -DestinationState $destinationState
-                if ($activeRestockAt -gt 0) {
+                $lastSellOutAt = if($null -ne $destinationState){[long](Get-OptimalProperty $destinationState 'lastSellOutAt')}else{0L}
+                if ($activeRestockAt -gt 0 -and ($lastSellOutAt -le 0 -or $activeRestockAt -gt $lastSellOutAt)) {
                     $window = Get-OpportunityNextRecurringWindow -Cycles $recurringCycles -AnchorAt $activeRestockAt -AnchorPhase 'restock' -NowEpoch $Now -EarliestArrivalAt $earliestArrivalAt
                 }
             }
 
-            if ($null -eq $window) {
+            # Do not fall back to a preceding OoS anchor after any later restock
+            # observation has already invalidated that phase.
+            if ($null -eq $window -and $unresolvedOos) {
                 $lastSellOutAt = 0L
                 if ($null -ne $destinationState -and $destinationState.PSObject.Properties['lastSellOutAt']) { $lastSellOutAt = [long]$destinationState.lastSellOutAt }
                 $window = Get-OpportunityNextRecurringWindow -Cycles $recurringCycles -AnchorAt $lastSellOutAt -AnchorPhase 'sellout' -NowEpoch $Now -EarliestArrivalAt $earliestArrivalAt
