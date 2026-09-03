@@ -24,6 +24,7 @@ $rows = @(
 )
 $transition = Get-AnchorTransitions -Rows $rows
 Assert-Equal 'Latest real restock transition is used' ([long]$transition.lastRestockAt) 150L
+Assert-Equal 'Latest restock quantity is retained for live depletion repair' ([long]$transition.lastRestockQuantity) 40L
 Assert-Equal 'Latest real sellout transition is retained' ([long]$transition.lastSellOutAt) 140L
 Assert-Equal 'Latest observation timestamp is retained' ([long]$transition.latestTimestamp) 150L
 
