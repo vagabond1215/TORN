@@ -588,6 +588,8 @@ $infoTimeline=$null
 $infoEnabled=$showTooltips
 if($infoEnabled){
     $infoLines.Add('8h cycle summary')
+    $ignoredSpurious=@($allRows|Where-Object{([string](Get-CycleFilterProperty $_ 'transitionPlausibility')) -in @('spurious_zero','spurious_restock')}).Count
+    if($ignoredSpurious -gt 0){$infoLines.Add('Ignored spurious phase transitions: '+[string]$ignoredSpurious)}
     if($null -ne $restockWindowSummary){
         $avgDelay=[long]$restockWindowSummary.averageDelaySeconds
         $avgInStock=[long]$restockWindowSummary.averageInStockSeconds
