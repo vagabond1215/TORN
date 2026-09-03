@@ -290,6 +290,17 @@ local function chancePercent(value)
     return string.format('%.0f%%',clampProbability(value)*100)
 end
 
+local function projectedArrivalCertainty(state,statePrefix)
+    if state==nil or statePrefix==nil or statePrefix=='' then return '' end
+    local immediate=number(state[statePrefix..'ImmediateArrivalProbabilityValue'])
+    if immediate>=0 and immediate<=1 then return chancePercent(immediate) end
+    if number(state[statePrefix..'MultiCycleChanceEligible'])>=1 then
+        local multi=number(state[statePrefix..'MultiCycleChanceProbability'])
+        if multi>=0 and multi<=1 then return chancePercent(multi) end
+    end
+    return ''
+end
+
 local function groupByOrdinal(plan,ordinal)
     if plan==nil then return nil end
     for _,group in ipairs(plan.groups or {}) do
@@ -892,7 +903,17 @@ local function updateRow(index,state,now)
         configureWindowTooltipMeter(prefix..'Leave',windowTooltip or '')
     else
         actionText=statusText(fallbackWindow,fallbackLeave)
-        if fallbackCertainty~='' then actionText=actionText..' '..fallbackCertainty end
+        local certainty=fallbackCertainty
+        local travelState=trim(state.TravelState):lower()
+        local destinationId=trim(state.TravelDestinationCountryId):lower()
+        local countryId=countryIdsByName[country] or ''
+        if travelState=='traveling' and countryId~='' and destinationId==countryId then
+            -- OpportunityState's fallback ChanceText can describe a later selected
+            -- window. While in flight, only show a probability aligned to actual
+            -- arrival; if none is available, omit the percentage rather than imply it.
+            certainty=projectedArrivalCertainty(state,projectedPrefix)
+        end
+        if certainty~='' then actionText=actionText..' '..certainty end
         configureWindowTooltipMeter(prefix..'Leave','')
     end
     setOption(prefix..'Leave','Text',actionText)
