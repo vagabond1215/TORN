@@ -277,14 +277,16 @@ Do not simply force 100% when live stock appears healthy. Compare the hybrid aga
 
 ## Future graph forecast-domain overlay
 
-Projected early/late restock and sellout markers could be valuable as an advanced optional chart layer, especially for visualizing uncertainty width around the next cycle. Do not add them to the current past-only 8-hour X-axis by collapsing future timestamps onto `now`. Implement only after the graph gains a legitimate future-time region or a separate forecast gutter capable of showing:
+The current graph now renders small modeled restock-window open/close ticks only when those boundary timestamps have actually entered the past-only 8-hour domain. They are anchored to observed OoS events using the current recent-cycle early/late restock-delay envelope and are never collapsed onto `now`.
 
-- projected early restock;
-- projected late restock;
-- projected early OoS/sellout;
-- projected late OoS/sellout;
+A true future forecast-domain overlay remains deferred. It could add forward-looking early/late restock and sellout markers once the graph gains a legitimate future-time region or a separate forecast gutter capable of showing:
 
-with styling and tooltips clearly distinct from vivid observed Restock/OoS markers. The layer should default off and remain independently toggleable.
+- future projected early restock;
+- future projected late restock;
+- future projected early OoS/sellout;
+- future projected late OoS/sellout;
+
+with styling and tooltips clearly distinct from vivid observed Restock/OoS markers and the already-implemented past-domain restock-window ticks.
 
 ## Status
 
