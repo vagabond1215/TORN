@@ -412,6 +412,12 @@ function Format-InlineRelativeTime {
     return ('in '+(Format-InlineDuration -Seconds (-$delta)))
 }
 
+function Format-InlineClockTime {
+    param([long]$Timestamp)
+    if($Timestamp -le 0){return '--:--:--'}
+    return [DateTimeOffset]::FromUnixTimeSeconds($Timestamp).ToLocalTime().ToString('HH:mm:ss')
+}
+
 function Get-InlineSettingBool {
     param([object]$Base,[object]$Local,[string]$Name,[bool]$Default=$true)
     $value=$Default
@@ -564,7 +570,7 @@ if($infoEnabled){
         $infoLines.Add('No cycle events in the last 8 hours')
     }else{
         foreach($event in @($infoTimeline.events)){
-            $infoLines.Add('['+(Format-InlineRelativeTime -Timestamp ([long]$event.timestamp) -NowEpoch $now)+'] '+[string]$event.label)
+            $infoLines.Add('['+(Format-InlineClockTime -Timestamp ([long]$event.timestamp))+'] '+[string]$event.label)
         }
     }
 }
