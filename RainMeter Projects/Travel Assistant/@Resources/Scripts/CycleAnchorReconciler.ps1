@@ -13,6 +13,7 @@ $EngineStateFile = Join-Path $RuntimeDir 'engine-state.json'
 $RuntimeObservationFile = Join-Path $RuntimeDir 'observations.jsonl'
 $RuntimePendingObservationFile = Join-Path $RuntimeDir 'observations.pending.jsonl'
 $SeedObservationFile = Join-Path $SeedDir 'observations.jsonl'
+$SpuriousTransitionFile = Join-Path $RuntimeDir 'spurious-transitions.json'
 $AtomicFileScript = Join-Path $PSScriptRoot 'AtomicFile.ps1'
 $CycleForecastFilterScript = Join-Path $PSScriptRoot 'CycleForecastFilter.ps1'
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for shared anchor IO.' }
@@ -219,6 +220,12 @@ $runtimeMap = Read-AnchorObservationMap -Path $RuntimeObservationFile -Wanted $w
 $pendingRuntimeMap = Read-AnchorObservationMap -Path $RuntimePendingObservationFile -Wanted $wanted
 $seedMap = Read-AnchorObservationMap -Path $SeedObservationFile -Wanted $wanted
 $changed = $false
+$spuriousRegistry = [pscustomobject]@{
+    schemaVersion = 1
+    updatedAt = [long]$Now
+    methodology = 'short contradictory phase transitions are retained raw but excluded from calculations'
+    markets = [pscustomobject]@{}
+}
 
 foreach ($key in @($wanted.Keys)) {
     $rows = @()
@@ -226,6 +233,28 @@ foreach ($key in @($wanted.Keys)) {
     if ($pendingRuntimeMap.ContainsKey($key) -and $pendingRuntimeMap[$key].Count -gt 0) { $rows += @($pendingRuntimeMap[$key].ToArray()) }
     if ($rows.Count -eq 0 -and $seedMap.ContainsKey($key) -and $seedMap[$key].Count -gt 0) { $rows = @($seedMap[$key].ToArray()) }
     if ($rows.Count -lt 2) { continue }
+
+    $classifiedRows=@(Resolve-StockObservationPlausibility -Rows $rows -ExpectedPollIntervalSeconds 60)
+    $suppressedTransitions=@($classifiedRows|Where-Object{-not[bool](Get-CycleFilterProperty $_ 'transitionCalculationEligible')})
+    if($suppressedTransitions.Count -gt 0){
+        $transitionTimes=[long[]]@($suppressedTransitions|ForEach-Object{Get-StockObservationEvidenceAt $_}|Where-Object{$_ -gt 0}|Sort-Object -Unique)
+        $calculationTimes=[long[]]@($classifiedRows|Where-Object{-not[bool](Get-CycleFilterProperty $_ 'calculationEligible')}|ForEach-Object{Get-StockObservationEvidenceAt $_}|Where-Object{$_ -gt 0}|Sort-Object -Unique)
+        $events=@($suppressedTransitions|ForEach-Object{
+            [pscustomobject]@{
+                timestamp=[long](Get-StockObservationEvidenceAt $_)
+                stock=[long](Get-CycleFilterProperty $_ 'stock')
+                classification=[string](Get-CycleFilterProperty $_ 'transitionPlausibility')
+                source=[string](Get-CycleFilterProperty $_ 'source')
+            }
+        })
+        $spuriousRegistry.markets|Add-Member NoteProperty $key ([pscustomobject]@{
+            transitionTimestamps=$transitionTimes
+            calculationTimestamps=$calculationTimes
+            events=$events
+        })
+    }
+    $rows=@($classifiedRows|Where-Object{[bool](Get-CycleFilterProperty $_ 'calculationEligible')})
+    if($rows.Count -lt 2){continue}
 
     $market = $engine.observedMarkets.PSObject.Properties[$key].Value
     if ($null -eq $market) { continue }
@@ -289,5 +318,6 @@ foreach ($key in @($wanted.Keys)) {
     }
 }
 
+Write-AnchorJsonAtomic -Path $SpuriousTransitionFile -Value $spuriousRegistry -Depth 12
 if ($changed) { Write-AnchorJsonAtomic -Path $EngineStateFile -Value $engine }
 return
