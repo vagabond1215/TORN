@@ -38,8 +38,12 @@ if ($errors.Count -eq 0) {
         'multiCycleChanceEligible=number(state[prefix..''MultiCycleChanceEligible''])>=1',
         'multiCycleArrivalProbability=optionalProbability(state[prefix..''MultiCycleChanceProbability''])',
         'arrivalChanceText',
-        'withArrivalChance',
-        "return text..' '..chance",
+        'setTravelChance',
+        "setOption(prefix..'Chance','Text',chance)",
+        "SKIN:Bang('!ShowMeter',prefix..'Chance')",
+        'liveCycleProjectionMode=trim(state[prefix..''LiveCycleProjectionMode'']):lower()',
+        "row.liveCycleProjectionMode~='stale-source'",
+        'Forecast-only/stale provider mode still has valid phase/cycle geometry',
         'rowHasUnresolvedOos',
         'phaseSafePlan',
         "plan.anchorPhase=='S' and not rowHasUnresolvedOos(row)",
@@ -64,7 +68,7 @@ if ($errors.Count -eq 0) {
     )) {
         if (-not $lua.Contains($token)) { Fail ("TravelStateWindowTweaks.lua missing contract token '{0}'." -f $token) }
     }
-    foreach ($retired in @('Safe formula:','Best formula:','UPCOMING - SELLOUT IN ','UPCOMING - RESTOCK IN ','UPCOMING - IN STOCK','UPCOMING - STOCK STATUS')) {
+    foreach ($retired in @('Safe formula:','Best formula:','UPCOMING - SELLOUT IN ','UPCOMING - RESTOCK IN ','UPCOMING - IN STOCK','UPCOMING - STOCK STATUS',"return 'IN STOCK'","return 'IN STOCK FOR '","return 'IN STOCK - AVG SELLOUT '",'withArrivalChance')) {
         if ($lua.Contains($retired)) { Fail ("Travel-state tooltip must not contain generic home-window detail '{0}'." -f $retired) }
     }
 
