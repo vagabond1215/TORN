@@ -65,41 +65,35 @@ function Resolve-StockObservationPlausibility {
 
     $poll=[Math]::Max(15,$ExpectedPollIntervalSeconds)
     $maximumTransientSeconds=[long][Math]::Max(150,(2*$poll)+30)
-    $ordered=@($Rows|Where-Object{$null -ne $_}|Sort-Object @{Expression={Get-StockObservationEvidenceAt $_}})
-    if($ordered.Count -eq 0){return @()}
+    $incoming=@($Rows|Where-Object{$null -ne $_}|Sort-Object @{Expression={Get-StockObservationEvidenceAt $_}})
+    if($incoming.Count -eq 0){return @()}
 
-    # Collapse duplicate timestamp/stock rows for plausibility classification only.
-    $deduped=New-Object System.Collections.Generic.List[object]
-    $seen=@{}
-    foreach($row in $ordered){
+    # Collapse exact duplicate timestamp/stock rows for classification only. When
+    # duplicate providers agree, preserve recovered evidence in preference to an
+    # ordinary snapshot because recovery is stronger than this heuristic.
+    $byIdentity=@{}
+    foreach($row in $incoming){
         $at=Get-StockObservationEvidenceAt $row
         $stock=[long](Get-CycleFilterProperty $row 'stock')
         if($at -le 0 -or $stock -lt 0){continue}
         $identity=([string]$at+':'+[string]$stock)
-        if($seen.ContainsKey($identity)){continue}
-        $seen[$identity]=$true
+        if(-not$byIdentity.ContainsKey($identity)){
+            $byIdentity[$identity]=$row
+        }elseif((Test-RecoveredStockObservation $row) -and -not(Test-RecoveredStockObservation $byIdentity[$identity])){
+            $byIdentity[$identity]=$row
+        }
+    }
+    $ordered=@($byIdentity.Values|Sort-Object @{Expression={Get-StockObservationEvidenceAt $_}})
+    foreach($row in $ordered){
         Set-CycleFilterProperty -Object $row -Name 'calculationEligible' -Value $true
         Set-CycleFilterProperty -Object $row -Name 'transitionCalculationEligible' -Value $true
         Set-CycleFilterProperty -Object $row -Name 'transitionPlausibility' -Value 'normal'
-        $deduped.Add($row)
     }
-    $ordered=@($deduped.ToArray())
     if($ordered.Count -lt 3){return $ordered}
 
-    # Estimate a normal restock quantity only from obvious zero -> positive jumps.
-    $candidateRestocks=New-Object System.Collections.Generic.List[long]
-    for($i=1;$i -lt $ordered.Count;$i++){
-        $prevStock=[long](Get-CycleFilterProperty $ordered[$i-1] 'stock')
-        $stock=[long](Get-CycleFilterProperty $ordered[$i] 'stock')
-        if($prevStock -eq 0 -and $stock -gt 0 -and -not(Test-RecoveredStockObservation $ordered[$i])){
-            $candidateRestocks.Add($stock)
-        }
-    }
-    $medianRestock=if($candidateRestocks.Count -ge 2){Get-CycleForecastMedian -Values ([long[]]$candidateRestocks.ToArray())}else{0L}
-    $tinyThreshold=if($medianRestock -gt 0){
-        [long][Math]::Max($AbsoluteTinyRestockUnits,[Math]::Floor($medianRestock*[Math]::Max(0.05,[Math]::Min(0.5,$TinyRestockFraction))))
-    }else{$AbsoluteTinyRestockUnits}
-
+    # Pass 1: remove isolated zero dropouts. This must run before the tiny-restock
+    # pass so the false zero cannot itself become the "preceding OoS" for a second
+    # false classification.
     for($i=1;$i -lt ($ordered.Count-1);$i++){
         $prev=$ordered[$i-1];$cur=$ordered[$i];$next=$ordered[$i+1]
         $prevAt=Get-StockObservationEvidenceAt $prev
@@ -111,10 +105,6 @@ function Resolve-StockObservationPlausibility {
         if($prevAt -le 0 -or $curAt -le $prevAt -or $nextAt -le $curAt){continue}
         if(($curAt-$prevAt) -gt $maximumTransientSeconds -or ($nextAt-$curAt) -gt $maximumTransientSeconds){continue}
         if((Test-RecoveredStockObservation $cur) -or (Test-RecoveredStockObservation $next)){continue}
-
-        # Positive -> isolated zero -> positive is a provider dropout when the
-        # returning positive quantity continues the old depletion trajectory rather
-        # than jumping upward like a real replenishment.
         if($prevStock -gt 0 -and $curStock -eq 0 -and $nextStock -gt 0){
             $tolerance=[long][Math]::Max(5,[Math]::Ceiling($prevStock*[Math]::Max(0.0,$ContinuationToleranceFraction)))
             if($nextStock -le ($prevStock+$tolerance)){
@@ -123,13 +113,39 @@ function Resolve-StockObservationPlausibility {
                 Set-CycleFilterProperty -Object $cur -Name 'transitionPlausibility' -Value 'spurious_zero'
                 Set-CycleFilterProperty -Object $next -Name 'transitionCalculationEligible' -Value $false
                 Set-CycleFilterProperty -Object $next -Name 'transitionPlausibility' -Value 'spurious_zero_partner'
-                continue
             }
         }
+    }
 
-        # Zero -> tiny positive -> zero is not promoted to a real micro-cycle when
-        # the temporary quantity is far below the market's normal replenishment.
-        # With no normal-restock baseline, only an absolute <=10 unit blip qualifies.
+    $effective=@($ordered|Where-Object{[bool](Get-CycleFilterProperty $_ 'calculationEligible')})
+
+    # Estimate normal replenishment only after isolated-zero partners have been
+    # removed from the phase sequence.
+    $candidateRestocks=New-Object System.Collections.Generic.List[long]
+    for($i=1;$i -lt $effective.Count;$i++){
+        $prevStock=[long](Get-CycleFilterProperty $effective[$i-1] 'stock')
+        $stock=[long](Get-CycleFilterProperty $effective[$i] 'stock')
+        if($prevStock -eq 0 -and $stock -gt 0 -and -not(Test-RecoveredStockObservation $effective[$i])){
+            $candidateRestocks.Add($stock)
+        }
+    }
+    $medianRestock=if($candidateRestocks.Count -ge 2){Get-CycleForecastMedian -Values ([long[]]$candidateRestocks.ToArray())}else{0L}
+    $tinyThreshold=if($medianRestock -gt 0){
+        [long][Math]::Max($AbsoluteTinyRestockUnits,[Math]::Floor($medianRestock*[Math]::Max(0.05,[Math]::Min(0.5,$TinyRestockFraction))))
+    }else{$AbsoluteTinyRestockUnits}
+
+    # Pass 2: suppress a one-poll tiny positive blip inside a true OoS plateau.
+    for($i=1;$i -lt ($effective.Count-1);$i++){
+        $prev=$effective[$i-1];$cur=$effective[$i];$next=$effective[$i+1]
+        $prevAt=Get-StockObservationEvidenceAt $prev
+        $curAt=Get-StockObservationEvidenceAt $cur
+        $nextAt=Get-StockObservationEvidenceAt $next
+        $prevStock=[long](Get-CycleFilterProperty $prev 'stock')
+        $curStock=[long](Get-CycleFilterProperty $cur 'stock')
+        $nextStock=[long](Get-CycleFilterProperty $next 'stock')
+        if($prevAt -le 0 -or $curAt -le $prevAt -or $nextAt -le $curAt){continue}
+        if(($curAt-$prevAt) -gt $maximumTransientSeconds -or ($nextAt-$curAt) -gt $maximumTransientSeconds){continue}
+        if((Test-RecoveredStockObservation $cur) -or (Test-RecoveredStockObservation $next)){continue}
         if($prevStock -eq 0 -and $curStock -gt 0 -and $nextStock -eq 0 -and $curStock -le $tinyThreshold){
             Set-CycleFilterProperty -Object $cur -Name 'calculationEligible' -Value $false
             Set-CycleFilterProperty -Object $cur -Name 'transitionCalculationEligible' -Value $false
@@ -140,7 +156,6 @@ function Resolve-StockObservationPlausibility {
     }
     return $ordered
 }
-
 function Get-PlausibilityFilteredStockObservations {
     param([object[]]$Rows,[int]$ExpectedPollIntervalSeconds=60)
     $classified=@(Resolve-StockObservationPlausibility -Rows $Rows -ExpectedPollIntervalSeconds $ExpectedPollIntervalSeconds)
