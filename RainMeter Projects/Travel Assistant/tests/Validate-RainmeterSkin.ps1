@@ -23,7 +23,9 @@ $reader = Get-Content -LiteralPath $stateReaderPath -Raw
 foreach($token in @(
     "'MultiCycleChanceEligible'","'MultiCycleChanceProbability'","'MultiCycleTargetProbability'",
     "'MultiCycleDutyCycleProbability'","'MultiCycleArrivalCycleRatio'","'MultiCycleArrivalAt'",
-    "'MultiCycleModelVersion'","'MultiCycleReason'"
+    "'MultiCycleModelVersion'","'MultiCycleReason'",
+    "'CurrentStockSafetyEligible'","'CurrentStockSafetyRunwaySeconds'","'CurrentStockSafetyMarginSeconds'",
+    "'CurrentStockSafetyGuardedUnitsPerHour'","'CurrentStockSafetyReason'"
 )){
     if(-not $reader.Contains($token)){Fail "StateReader local sort projection must preserve bridge field $token."}
 }
