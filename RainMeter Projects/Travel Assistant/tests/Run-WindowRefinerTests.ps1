@@ -148,6 +148,35 @@ Assert-True (-not [bool]$missedCurrent.reachable) 'Current cycle must fall back 
 $currentProbability=Get-StableCurrentCycleArrivalProbability -Cycles $projectionCycles -ActiveRestockAt 10000L -ArrivalAt 11250L
 Assert-Near ([double]$currentProbability) (2.0/3.0) 0.0001 'Current-cycle arrival confidence should use completed-cycle availability durations at the live restock anchor.'
 
+
+# A left-censored current restock can still be obviously safe from direct depletion.
+# Use only uncensored positive-stock intervals from the current run and pessimistically
+# floor the guarded rate at one unit/minute.
+$slowObservations=@(
+    [pscustomobject]@{timestamp=9000L;sourceTimestamp=9000L;stock=606L;depletionEvidence='observed_nonzero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=2L;transitionGapSeconds=300L},
+    [pscustomobject]@{timestamp=9300L;sourceTimestamp=9300L;stock=604L;depletionEvidence='observed_nonzero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=2L;transitionGapSeconds=300L},
+    [pscustomobject]@{timestamp=9600L;sourceTimestamp=9600L;stock=602L;depletionEvidence='observed_nonzero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=2L;transitionGapSeconds=300L}
+)
+$slowSafety=Get-CurrentStockSafetyProjection -CurrentStock 600L -SourceTimestamp 10000L -Observations $slowObservations -EarliestArrivalAt 17200L -NowEpoch 10000L
+Assert-True ([bool]$slowSafety.eligible) 'Slow uncensored depletion should allow the current-stock Safe Window Open fallback even when the restock boundary is unknown.'
+Assert-Equal ([int]$slowSafety.sampleCount) 3 'Safety fallback must require the configured three observed depletion samples.'
+Assert-True ([long]$slowSafety.evidenceSpanSeconds -ge 600L) 'Safety fallback must require a meaningful current-run evidence span.'
+Assert-Near ([double]$slowSafety.guardedUnitsPerHour) 60.0 0.001 'Slow markets should still use the conservative one-unit-per-minute guarded floor.'
+Assert-True ([long]$slowSafety.runwaySeconds -ge 36000L) '600 units at the guarded floor should imply at least ten hours of conservative runway.'
+Assert-True ([long]$slowSafety.arrivalMarginSeconds -gt 0L) 'Obvious safety must retain a positive margin beyond arrival.'
+
+$fastObservations=@(
+    [pscustomobject]@{timestamp=9000L;sourceTimestamp=9000L;stock=660L;depletionEvidence='observed_nonzero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=20L;transitionGapSeconds=300L},
+    [pscustomobject]@{timestamp=9300L;sourceTimestamp=9300L;stock=640L;depletionEvidence='observed_nonzero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=20L;transitionGapSeconds=300L},
+    [pscustomobject]@{timestamp=9600L;sourceTimestamp=9600L;stock=620L;depletionEvidence='observed_nonzero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=20L;transitionGapSeconds=300L}
+)
+$fastSafety=Get-CurrentStockSafetyProjection -CurrentStock 600L -SourceTimestamp 10000L -Observations $fastObservations -EarliestArrivalAt 17200L -NowEpoch 10000L
+Assert-True (-not [bool]$fastSafety.eligible) 'Fast depletion must not be mislabeled Safe Window Open merely because current stock is positive.'
+Assert-True ([double]$fastSafety.guardedUnitsPerHour -ge 360.0) 'Guard multiplier must pessimistically increase an observed 240-unit/hour depletion regime.'
+
+$tooSparse=Get-CurrentStockSafetyProjection -CurrentStock 600L -SourceTimestamp 10000L -Observations @($slowObservations[0],$slowObservations[1]) -EarliestArrivalAt 17200L -NowEpoch 10000L
+Assert-True (-not [bool]$tooSparse.eligible) 'Two depletion samples are insufficient for the safe-window fallback.'
+
 # Long but valid cycles must still construct the immediate next cycle even when the
 # period exceeds the default 24-hour display horizon.
 $longCycleAnchor=100000L
