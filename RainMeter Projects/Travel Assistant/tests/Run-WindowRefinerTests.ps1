@@ -127,6 +127,27 @@ Assert-Equal ([long]$projection.activeSelloutEstimateAt) 11334L 'Live sellout sh
 Assert-Equal ([long]$projection.medianRestockDelaySeconds) 7200L 'Next restock should use the cleaned median OOS delay.'
 Assert-Equal ([long]$projection.nextRestockEstimateAt) 18534L 'Restock projection must begin after the projected sellout.'
 
+
+$phaseEngine=[pscustomobject]@{observedMarkets=[pscustomobject]@{};destinations=[pscustomobject]@{}}
+$phaseEngine.observedMarkets|Add-Member NoteProperty 'japan:123' ([pscustomobject]@{lastStock=5000L;sourceTimestamp=1300L})
+$phaseEngine.destinations|Add-Member NoteProperty 'japan:123' ([pscustomobject]@{
+    lastSellOutAt=1000L
+    lastSellOutBoundaryQuality='observed'
+    activeCycle=[pscustomobject]@{restockAt=1200L;restockQuantity=5000L}
+})
+$restockedPhase=Get-WindowObservedPhase -Engine $phaseEngine -Key 'japan:123'
+Assert-True (-not[bool]$restockedPhase.unresolvedOos) 'A later observed/reconciled restock must invalidate the preceding OoS phase even if the stock source later becomes stale.'
+Assert-Equal ([long]$restockedPhase.activeRestockAt) 1200L 'Observed-phase helper should retain the later restock anchor.'
+
+$phaseEngine.observedMarkets.PSObject.Properties['japan:123'].Value=[pscustomobject]@{lastStock=0L;sourceTimestamp=1300L}
+$phaseEngine.destinations.PSObject.Properties['japan:123'].Value=[pscustomobject]@{
+    lastSellOutAt=1250L
+    lastSellOutBoundaryQuality='observed'
+    activeCycle=[pscustomobject]@{restockAt=1200L;restockQuantity=5000L}
+}
+$oosPhase=Get-WindowObservedPhase -Engine $phaseEngine -Key 'japan:123'
+Assert-True ([bool]$oosPhase.unresolvedOos) 'A later verified sellout with zero stock should remain an unresolved OoS phase.'
+
 # Positive stock must still get a current-cycle sellout estimate when there is not
 # enough quantity-change evidence for live depletion. This is the Whale Meat case:
 # current stock exists and completed cycles provide a stable in-stock duration.
