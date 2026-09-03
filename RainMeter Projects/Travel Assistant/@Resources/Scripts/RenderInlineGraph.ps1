@@ -110,9 +110,6 @@ function Read-MarketHistory {
                 $timestamp = [long](Get-InlineProperty $row 'timestamp')
                 if ($timestamp -le 0) { continue }
                 $source = [string](Get-InlineProperty $row 'source')
-                # Older migration builds wrote current stock backward through time as
-                # history_bootstrap/history_repair_baseline. Those are not observations
-                # and must never be rendered as historical truth.
                 if ($source -in @('history_bootstrap','history_repair_baseline')) { continue }
                 $rows += [pscustomobject]@{
                     timestamp = $timestamp
@@ -126,7 +123,6 @@ function Read-MarketHistory {
     }
     return $rows
 }
-
 
 function Read-InlineMarketCycles {
     param([string[]]$Paths,[string]$Country,[int]$ItemId)
@@ -306,7 +302,7 @@ function Read-MarketChanceHistory {
     $reader=$null
     try {
         $reader=Open-TravelAssistantSharedTextReader -Path $Path
-        while (($line=$reader.ReadLine()) -ne $null) {
+        while (($line = $reader.ReadLine()) -ne $null) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             if ($line.IndexOf($needle,[System.StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
             try { $row=$line | ConvertFrom-Json } catch { continue }
@@ -355,6 +351,44 @@ function Read-MarketResolvedArrivalHistory {
         if($null -ne $reader){$reader.Dispose()}
     }
     return @($rows|Sort-Object forecastAt)
+}
+
+function Get-InlineDisplayAccuracyMarkers {
+    param([object[]]$Rows,[int]$BucketSeconds=900)
+    $bucketSize=[Math]::Max(60,$BucketSeconds)
+    $groups=@{}
+    foreach($row in @($Rows|Sort-Object forecastAt)){
+        $at=[long]$row.forecastAt
+        if($at -le 0){continue}
+        $actual=[int]$row.actualAnyStock
+        $source=([string]$row.source).Trim().ToLowerInvariant()
+        $bucket=[long][Math]::Floor($at/[double]$bucketSize)
+        $key=('{0}|{1}|{2}' -f $bucket,$actual,$source)
+        if(-not $groups.ContainsKey($key)){$groups[$key]=New-Object System.Collections.Generic.List[object]}
+        $groups[$key].Add($row)
+    }
+
+    $result=New-Object System.Collections.Generic.List[object]
+    foreach($group in $groups.Values){
+        $ordered=@($group.ToArray()|Sort-Object forecastAt)
+        if($ordered.Count -eq 0){continue}
+        $first=[long]$ordered[0].forecastAt
+        $last=[long]$ordered[$ordered.Count-1].forecastAt
+        $predicted=[double](($ordered|Measure-Object predictedProbability -Average).Average)
+        $brier=[double](($ordered|Measure-Object brier -Average).Average)
+        $representativeAt=[long][Math]::Round((([double]$first+[double]$last)/2.0))
+        $result.Add([pscustomobject]@{
+            forecastAt=$representativeAt
+            firstForecastAt=$first
+            lastForecastAt=$last
+            predictedProbability=$predicted
+            actualAnyStock=[int]$ordered[0].actualAnyStock
+            brier=$brier
+            sampleCount=[int]$ordered.Count
+            source=[string]$ordered[0].source
+        })
+    }
+    return @($result.ToArray()|Sort-Object forecastAt)
 }
 
 function Get-FlightShiftedRealizedHistory {
@@ -497,9 +531,6 @@ if ($null -eq $market) { throw ('Market not found in observedMarkets: ' + $Marke
 $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $cutoff = $now - ([long]$windowHours * 3600L)
 
-# Runtime observations are the shared high-resolution ShadowCollector database and
-# are authoritative. Seed evidence is used only if this market has no real retained
-# runtime rows after synthetic migration rows are excluded.
 $allRows = @(Read-MarketHistory -Path $RuntimeObservationFile -Country $country -ItemId $itemId)
 $historySource = 'runtime_observations'
 if ($allRows.Count -eq 0) {
@@ -520,8 +551,6 @@ if ($predecessor.Count -gt 0) {
 $rows += @($allRows | Where-Object { [long]$_.timestamp -ge $cutoff -and [long]$_.timestamp -le ($now+60) })
 $rows = @(Compress-StockHistory -Rows $rows)
 
-# Never paint current stock backward through an interval with no retained sample.
-# If there is no predecessor, the left side of the graph remains genuinely unknown.
 $currentStock = [long](Get-InlineProperty $market 'lastStock')
 $currentTimestamp = [long](Get-InlineProperty $market 'sourceTimestamp')
 if ($currentTimestamp -le 0) { $currentTimestamp = [long](Get-InlineProperty $market 'lastSeenAt') }
@@ -529,11 +558,9 @@ if ($currentTimestamp -le 0 -or $currentTimestamp -lt $cutoff -or $currentTimest
 $rows += [pscustomobject]@{ timestamp=$currentTimestamp; stock=$currentStock; source='current_snapshot' }
 $rows = @(Compress-StockHistory -Rows $rows)
 
-# Chance history is forecast-only and intentionally separate from retained stock
-# observations. It is sampled by the normal updater and rendered on an independent
-# fixed 0..100% scale.
 $chanceRows=@(Read-MarketChanceHistory -Path $ChanceHistoryFile -Key $MarketKey -Cutoff $cutoff -MaximumTimestamp ($now+60L))
 $resolvedRows=@(Read-MarketResolvedArrivalHistory -Path $ResolvedArrivalHistoryFile -Key $MarketKey -Cutoff $cutoff -MaximumForecastAt $now)
+$displayAccuracyRows=@(Get-InlineDisplayAccuracyMarkers -Rows $resolvedRows -BucketSeconds 900)
 $flightSeconds=Get-InlineTravelSeconds -State $state -Country $country
 $realizedRows=@(Get-FlightShiftedRealizedHistory -StockRows $allRows -FlightSeconds $flightSeconds -Cutoff $cutoff -NowEpoch $now)
 $realizedThrough=$now-$flightSeconds
@@ -577,9 +604,9 @@ if($infoEnabled){
     }
 }
 
+# The chronological info tooltip owns event-history detail. Per-marker hover regions
+# are now reserved for accuracy diagnostics only, preventing duplicate/stacked tips.
 $hoverRegions=New-Object System.Collections.Generic.List[object]
-$transitionHoverRegions=New-Object System.Collections.Generic.List[object]
-$forecastHoverRegions=New-Object System.Collections.Generic.List[object]
 $forecastBoundaryCount=0
 $maximumHoverRegions=48
 
@@ -591,8 +618,6 @@ if ($rows.Count -gt 0) {
 $scaleMax = if ($maxStock -gt 0) { [double]$maxStock } else { 1.0 }
 
 Add-Type -AssemblyName System.Drawing
-# The image now nearly fills the 536px card width and is exactly 25% taller than
-# the previous 100px renderer. CardTweaks reserves the matching 125px display area.
 $width = 528
 $height = 125
 $plotLeft = 34.0
@@ -625,7 +650,6 @@ $labelFont = New-Object System.Drawing.Font('Segoe UI',7,[System.Drawing.FontSty
 $infoPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(190,198,210),1)
 $infoBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(190,198,210))
 
-# Eight one-hour segments: seven internal vertical separators plus both boundaries.
 if($showGrid){
     for ($i=0; $i -le 8; $i++) {
         $x = [single]($plotLeft + ($plotWidth * $i / 8.0))
@@ -655,6 +679,7 @@ function Get-ChanceY([double]$Probability) {
 # Periwinkle is hindsight truth, not another forecast encoding. Shift actual
 # observed stock backward by the configured one-way flight duration and fill only
 # historical departure intervals that are now known to have landed in stock.
+# Its exact boundaries are already listed by the central chronological info tooltip.
 if($showHindsightWindows){
     foreach($window in $realizedWindows){
         $startX=Get-InlineX ([long]$window.startAt)
@@ -663,27 +688,6 @@ if($showHindsightWindows){
         $graphics.FillRectangle($hindsightBandBrush,$startX,[single]$plotTop,$bandWidth,[single]$plotHeight)
         $graphics.DrawLine($hindsightBoundaryPen,$startX,[single]$plotTop,$startX,[single]$plotBottom)
         $graphics.DrawLine($hindsightBoundaryPen,$endX,[single]$plotTop,$endX,[single]$plotBottom)
-
-        if($showTooltips){
-            $opened=Format-InlineRelativeTime -Timestamp ([long]$window.startAt) -NowEpoch $now
-            $closed=Format-InlineRelativeTime -Timestamp ([long]$window.endAt) -NowEpoch $now
-            $duration=Format-InlineDuration -Seconds ([long]$window.endAt-[long]$window.startAt)
-            $hoverRegions.Add([pscustomobject]@{
-                x=[double]$startX;y=[double]$plotTop;w=[double]$bandWidth;h=[double]$plotHeight
-                text=('Hindsight departure window: '+$opened+' to '+$closed+' | duration '+$duration)
-                kind='hindsight_window';timestamp=[long]$window.startAt
-            })
-            $hoverRegions.Add([pscustomobject]@{
-                x=[double]([Math]::Max($plotLeft,$startX-3));y=[double]$plotTop;w=7.0;h=[double]$plotHeight
-                text=('Actual hindsight window opened: '+$opened)
-                kind='hindsight_open';timestamp=[long]$window.startAt
-            })
-            $hoverRegions.Add([pscustomobject]@{
-                x=[double]([Math]::Max($plotLeft,$endX-3));y=[double]$plotTop;w=7.0;h=[double]$plotHeight
-                text=('Actual hindsight window closed: '+$closed)
-                kind='hindsight_close';timestamp=[long]$window.endAt
-            })
-        }
     }
 }
 
@@ -694,29 +698,13 @@ foreach ($row in $rows) {
     if ($null -ne $previous) {
         $graphics.DrawLine($stockPen,[single]$previous.x,[single]$previous.y,$x,[single]$previous.y)
         $graphics.DrawLine($stockPen,$x,[single]$previous.y,$x,$y)
-        # Restock/sellout transitions are event ticks, not stock magnitude. Draw
-        # them in the gutter below the X axis so they never obscure the stock trace.
         $markerTop=[single]($plotBottom+2)
         $markerBottom=[single]($plotBottom+8)
         if ($showTransitions -and [long]$previous.stock -eq 0 -and [long]$row.stock -gt 0) {
             $graphics.DrawLine($restockPen,$x,$markerTop,$x,$markerBottom)
-            if($showTooltips){
-                $transitionHoverRegions.Add([pscustomobject]@{
-                    x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
-                    text=('Restocked: '+(Format-InlineRelativeTime -Timestamp ([long]$row.timestamp) -NowEpoch $now))
-                    kind='restock';timestamp=[long]$row.timestamp
-                })
-            }
         }
         if ($showTransitions -and [long]$previous.stock -gt 0 -and [long]$row.stock -eq 0) {
             $graphics.DrawLine($selloutPen,$x,$markerTop,$x,$markerBottom)
-            if($showTooltips){
-                $transitionHoverRegions.Add([pscustomobject]@{
-                    x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
-                    text=('OoS: '+(Format-InlineRelativeTime -Timestamp ([long]$row.timestamp) -NowEpoch $now))
-                    kind='oos';timestamp=[long]$row.timestamp
-                })
-            }
         }
     }
     $previous = [pscustomobject]@{ x=$x; y=$y; stock=[long]$row.stock }
@@ -725,12 +713,10 @@ if ($null -ne $previous -and [single]$previous.x -lt [single]$plotRight) {
     $graphics.DrawLine($stockPen,[single]$previous.x,[single]$previous.y,[single]$plotRight,[single]$previous.y)
 }
 
-# Restock-window brackets are a variance diagnostic around observed truth. Center
-# each pair on the actual restock transition; never project unrelated old OoS anchors
-# forward into the visible chart. The blue observed restock tick must sit between them.
+# Restock variance brackets remain visual calibration aids, but their individual
+# hover regions are suppressed because the same timestamps live in the info timeline.
 if($showRestockWindowBounds -and $null -ne $restockWindowSummary){
     $varianceSeconds=[long]$restockWindowSummary.varianceSeconds
-    $sampleCount=[int]$restockWindowSummary.sampleCount
     $forecastMarkerTop=[single]($plotBottom+3)
     $forecastMarkerBottom=[single]($plotBottom+6)
     if($varianceSeconds -gt 0){
@@ -743,35 +729,22 @@ if($showRestockWindowBounds -and $null -ne $restockWindowSummary){
                 $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
                 $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerBottom,[single]($x+3),$forecastMarkerBottom)
                 $forecastBoundaryCount++
-                if($showTooltips){
-                    $forecastHoverRegions.Add([pscustomobject]@{
-                        x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
-                        text=('Restock variance opens: '+(Format-InlineRelativeTime -Timestamp $openAt -NowEpoch $now)+' | actual restock - '+(Format-InlineDuration -Seconds $varianceSeconds)+' | '+$sampleCount+' recent cycle(s)')
-                        kind='restock_window_open';timestamp=$openAt
-                    })
-                }
             }
             if($closeAt -le $now){
                 $x=Get-InlineX $closeAt
                 $graphics.DrawLine($restockWindowPen,$x,$forecastMarkerTop,$x,$forecastMarkerBottom)
                 $graphics.DrawLine($restockWindowPen,[single]($x-3),$forecastMarkerBottom,$x,$forecastMarkerBottom)
                 $forecastBoundaryCount++
-                if($showTooltips){
-                    $forecastHoverRegions.Add([pscustomobject]@{
-                        x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotBottom;w=9.0;h=12.0
-                        text=('Restock variance closes: '+(Format-InlineRelativeTime -Timestamp $closeAt -NowEpoch $now)+' | actual restock + '+(Format-InlineDuration -Seconds $varianceSeconds)+' | '+$sampleCount+' recent cycle(s)')
-                        kind='restock_window_close';timestamp=$closeAt
-                    })
-                }
             }
         }
     }
 }
 
-# Strictly resolved forecasts use confirmed calibration truth. Keep this as
-# validation metadata rather than another full curve.
+# Raw resolved forecasts stay one-row-per-frozen forecast for calibration. The graph
+# intentionally renders only 15-minute representatives so minute-level repeats do
+# not become a comb of nearly identical full-height error strokes.
 if($showAccuracyMarkers){
-    foreach($row in $resolvedRows){
+    foreach($row in $displayAccuracyRows){
         $x=Get-InlineX ([long]$row.forecastAt)
         $predicted=[double]$row.predictedProbability
         $actual=[int]$row.actualAnyStock
@@ -782,9 +755,12 @@ if($showAccuracyMarkers){
         $graphics.FillEllipse($brush,[single]($x-1.75),[single]($actualY-1.75),[single]3.5,[single]3.5)
         if($showTooltips){
             $actualText=if($actual -eq 1){'HIT'}else{'MISS'}
+            $sampleCount=[int]$row.sampleCount
+            $span=[Math]::Max(0L,[long]$row.lastForecastAt-[long]$row.firstForecastAt)
+            $sampleText=if($sampleCount -gt 1){' | '+$sampleCount+' forecasts / '+(Format-InlineDuration -Seconds $span)}else{' | 1 forecast'}
             $hoverRegions.Add([pscustomobject]@{
                 x=[double]([Math]::Max($plotLeft,$x-4));y=[double]$plotTop;w=9.0;h=[double]$plotHeight
-                text=('Forecast '+([Math]::Round(100.0*$predicted,1))+'% | Actual '+$actualText+' | Brier '+([Math]::Round([double]$row.brier,3)))
+                text=('Forecast '+([Math]::Round(100.0*$predicted,1))+'% avg | Actual '+$actualText+$sampleText+' | Brier '+([Math]::Round([double]$row.brier,3)))
                 kind='resolved_forecast';timestamp=[long]$row.forecastAt
             })
         }
@@ -808,23 +784,6 @@ if($showChance){
     }
     if ($null -ne $previousChance -and ($now-[long]$previousChance.timestamp) -le 180L -and [single]$previousChance.x -lt [single]$plotRight) {
         $graphics.DrawLine($chancePen,[single]$previousChance.x,[single]$previousChance.y,[single]$plotRight,[single]$previousChance.y)
-    }
-    
-    
-}
-
-# Hindsight/accuracy regions take priority. Actual transitions are next, then the
-# current-model restock-window boundary ticks use any remaining bounded capacity.
-$remaining=[Math]::Max(0,$maximumHoverRegions-$hoverRegions.Count)
-if($remaining -gt 0){
-    foreach($region in @($transitionHoverRegions.ToArray()|Sort-Object timestamp -Descending|Select-Object -First $remaining)){
-        $hoverRegions.Add($region)
-    }
-}
-$remaining=[Math]::Max(0,$maximumHoverRegions-$hoverRegions.Count)
-if($remaining -gt 0){
-    foreach($region in @($forecastHoverRegions.ToArray()|Sort-Object timestamp -Descending|Select-Object -First $remaining)){
-        $hoverRegions.Add($region)
     }
 }
 
@@ -900,6 +859,7 @@ $specValues=@{
     FlightSeconds = $flightSeconds
     RealizedHitProxyPointCount = $realizedRows.Count
     ResolvedForecastPointCount = $resolvedRows.Count
+    DisplayedAccuracyMarkerCount = $displayAccuracyRows.Count
     ResolvedBrierScore = $(if($resolvedRows.Count -gt 0){[Math]::Round((($resolvedRows|Measure-Object brier -Average).Average),4)}else{-1})
     ResolvedObservedHitRate = $(if($resolvedRows.Count -gt 0){[Math]::Round((($resolvedRows|Measure-Object actualAnyStock -Average).Average),4)}else{-1})
     ResolvedMeanPredictedChance = $(if($resolvedRows.Count -gt 0){[Math]::Round((($resolvedRows|Measure-Object predictedProbability -Average).Average),4)}else{-1})
