@@ -131,14 +131,14 @@ There is one graph surface: the inline card graph.
 - Opened with the per-row chart Shape button.
 - Rendered inside the Rainmeter card/list.
 - One expanded market at a time.
-- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering. Graph-hover tooltip telemetry is retired; the graph is display-only.
+- Uses dedicated `MeasureInlineGraph` -> `RenderInlineGraph.ps1` local rendering. Graph-hover tooltip telemetry is retired; graph rendering is local/display-only and may read the separate forecast/replay journals but never writes learning evidence.
 - Refreshing an open graph is local-only and may occur at approximately one-minute cadence.
 - The standalone WinForms Viewer and its launcher are retired; do not restore them.
 
 The inline graph:
 
 - displays an 8-hour history window;
-- uses retained observations only plus truthful carried-baseline continuity;
+- uses retained observations only for the stock/transition truth layer plus truthful carried-baseline continuity; chance/replay overlays come only from the separate ignored forecast-diagnostic journals;
 - never polls Prometheus/YATA/Torn;
 - never turns a forecast into observed history;
 - never invents a restock or sellout transition;
