@@ -147,6 +147,8 @@ if ($errors.Count -eq 0) {
         '$medianAvailable = Get-StableWindowMedian',
         'Test-WindowBoundaryQuality','WindowDataQuality','Collecting Data: See Weav3r',
         'Get-StableRecurringProbabilityAt','ImmediateArrivalAt','ImmediateArrivalProbabilityValue','ImmediateArrivalProbabilitySource',
+        'Get-StableCurrentCycleArrivalProbability','-ObservationAt $sourceTimestamp',
+        'Get-LiveDepletionArrivalProbability','CurrentCycleLiveProbability','current_cycle_live_depletion','current_cycle_conditional_survival',
         'Get-CurrentStockSafetyProjection','CurrentStockSafetyEligible','CurrentStockSafetyGuardedUnitsPerHour',
         "'current_stock_safe'","'SAFE WINDOW OPEN'","'ProbabilityValue']='-1'",
         "'sleeping_oos'",'Do not read cycle evidence or build recurring probability geometry',
