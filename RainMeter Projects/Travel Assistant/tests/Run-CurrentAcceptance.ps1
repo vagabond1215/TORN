@@ -42,6 +42,7 @@ $tests = @(
     'Validate-LegacyWindowAuthority.ps1',
     'Run-StochasticForecastTests.ps1',
     'Run-MultiCycleChanceBridgeTests.ps1',
+    'Run-ChanceHistoryTests.ps1',
     'Run-StochasticCalibrationTests.ps1',
     'Validate-ResaleQueue.ps1',
     'Run-ResalePriorityTests.ps1',
