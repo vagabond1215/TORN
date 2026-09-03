@@ -479,7 +479,7 @@ function Write-OpportunityProjection {
             # WindowPlan owns these generation-scoped legacy timing fields. Clear
             # them before every projection so an interrupted/degraded window pass
             # cannot leak a value produced for an older row or generation.
-            'CurrentStock','StockEvidenceAt','ActiveRestockAt','ActiveSelloutEstimateAt','NextRestockEstimateAt',
+            'CurrentStock','StockEvidenceAt','ActiveRestockAt','ActiveSelloutEstimateAt','NextRestockEstimateAt','LastObservedOosAt',
             'MedianRestockDelaySeconds','LiveCycleProjectionMode','WindowDataQuality','WindowDataQualityReason',
             'CurrentCycleReachable','CurrentCycleLeaveDeadlineAt','CurrentCycleSafetyMarginSeconds',
             'NextCycleOrdinal','WindowMedianPeriodSeconds','PriceVaries','PriceVariationReason',
