@@ -172,6 +172,7 @@ function Get-InlineRestockWindowSummary {
     $recent=@($usable)
     if($RecentSamples -gt 0 -and $recent.Count -gt $RecentSamples){$recent=@($recent|Select-Object -First $RecentSamples)}
     $delays=[long[]]@($recent|ForEach-Object{[long]$_.restockDelaySeconds})
+    $availability=[long[]]@($recent|Where-Object{$_.PSObject.Properties['availabilitySeconds'] -and [long]$_.availabilitySeconds -gt 0}|ForEach-Object{[long]$_.availabilitySeconds})
     $minimum=[long](($delays|Measure-Object -Minimum).Minimum)
     $maximum=[long](($delays|Measure-Object -Maximum).Maximum)
     $sigma=[long](Get-CycleForecastRobustSigma -Values $delays)
@@ -184,7 +185,7 @@ function Get-InlineRestockWindowSummary {
         earliestDelaySeconds=$minimum
         latestDelaySeconds=$maximum
         varianceSeconds=[Math]::Max(0L,$sigma)
-        averageInStockSeconds=[long][Math]::Round([double](($recent|ForEach-Object{[long]$_.availabilitySeconds}|Measure-Object -Average).Average))
+        averageInStockSeconds=$(if($availability.Count -gt 0){[long][Math]::Round([double](($availability|Measure-Object -Average).Average))}else{0L})
     }
 }
 
