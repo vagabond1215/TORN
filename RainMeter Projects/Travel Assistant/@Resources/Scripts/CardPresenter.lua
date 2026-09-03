@@ -132,6 +132,9 @@ end
 
 local function statusText(windowText,leaveText)
     local window=trim(windowText); local leave=trim(leaveText); if isDurationOnly(window) then window='' end
+    -- Character travel state is already owned by the title. Suppress any retained
+    -- legacy EN ROUTE token so the row can spend its space on market timing + %.
+    if leave:lower()=='en route' then leave='' end
     -- Collection state is mutually exclusive with departure guidance. If the
     -- authoritative window stage cannot yet justify an action, do not append a
     -- stale OpportunityState LEAVE/EN ROUTE fallback to the collecting message.
