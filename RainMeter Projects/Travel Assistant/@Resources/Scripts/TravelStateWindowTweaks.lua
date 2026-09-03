@@ -146,8 +146,11 @@ local function buildLookup(state)
                 plannedQuantity=parsePlannedQuantity(state[prefix..'QuantityText']),
                 currentStock=number(state[prefix..'CurrentStock']),
                 stockEvidenceAt=number(state[prefix..'StockEvidenceAt']),
+                activeRestockAt=number(state[prefix..'ActiveRestockAt']),
                 activeSelloutAt=number(state[prefix..'ActiveSelloutEstimateAt']),
-                nextRestockAt=number(state[prefix..'NextRestockEstimateAt'])
+                nextRestockAt=number(state[prefix..'NextRestockEstimateAt']),
+                lastObservedOosAt=number(state[prefix..'LastObservedOosAt']),
+                forecastMode=trim(state[prefix..'ForecastMode']):lower()
             }
         end
     end
@@ -218,10 +221,28 @@ local function landingRelevantGroup(plan,landingAt)
     return nil
 end
 
+local function rowHasUnresolvedOos(row)
+    if row==nil then return false end
+    local oosAt=number(row.lastObservedOosAt)
+    local restockAt=number(row.activeRestockAt)
+    return oosAt>0 and (restockAt<=0 or restockAt<=oosAt)
+end
+
+local function phaseSafePlan(row)
+    if row==nil then return nil end
+    local plan=row.plan
+    if plan~=nil and plan.anchorPhase=='S' and not rowHasUnresolvedOos(row) then
+        -- A later restock or otherwise-resolved OoS invalidates sellout-anchored
+        -- geometry. Never let an old S-plan resurrect a pre-restock countdown.
+        return nil
+    end
+    return plan
+end
+
 local function outboundTooltip(row,state,now)
     local remaining=liveTravelRemainingSeconds(state,now)
     local landingAt=now+remaining
-    local plan=row and row.plan or nil
+    local plan=phaseSafePlan(row)
     local group=landingRelevantGroup(plan,landingAt)
     local nl='#CRLF#'
     local lines={}
@@ -233,12 +254,18 @@ local function outboundTooltip(row,state,now)
             table.insert(lines,'Sellout estimate: learning from live stock')
         end
     elseif hasDirectEvidence then
-        if number(row.nextRestockAt)>now then
-            table.insert(lines,'Restock in: '..formatDuration(number(row.nextRestockAt)-now))
-        elseif number(row.nextRestockAt)>0 then
-            table.insert(lines,'Restock estimate: '..formatRelativeTarget(number(row.nextRestockAt),now))
+        if rowHasUnresolvedOos(row) then
+            if number(row.nextRestockAt)>now then
+                table.insert(lines,'Restock in: '..formatDuration(number(row.nextRestockAt)-now))
+            elseif number(row.nextRestockAt)>0 then
+                table.insert(lines,'Restock estimate: '..formatRelativeTarget(number(row.nextRestockAt),now))
+            else
+                table.insert(lines,'Restock estimate: learning')
+            end
+        elseif number(row.activeRestockAt)>0 then
+            table.insert(lines,'Latest observed phase: restocked; current stock status is stale/unknown')
         else
-            table.insert(lines,'Restock estimate: learning')
+            table.insert(lines,'Current stock status: unknown; no unresolved OoS phase')
         end
     end
     table.insert(lines,'Landing in '..formatDuration(remaining))
@@ -272,15 +299,22 @@ local function outboundTooltip(row,state,now)
 end
 
 local function outboundStatus(row,state,now)
-    local plan=row and row.plan or nil
+    local plan=phaseSafePlan(row)
     if row~=nil and number(row.stockEvidenceAt)>0 then
         if number(row.currentStock)>0 then
             if number(row.activeSelloutAt)>now then return 'UPCOMING - SELLOUT IN '..formatDuration(number(row.activeSelloutAt)-now) end
             return 'UPCOMING - IN STOCK'
         end
-        if number(row.nextRestockAt)>now then return 'UPCOMING - RESTOCK IN '..formatDuration(number(row.nextRestockAt)-now) end
-        if number(row.nextRestockAt)>0 then return 'UPCOMING - RESTOCK ESTIMATE OVERDUE' end
-        return 'UPCOMING - RESTOCK LEARNING'
+        if rowHasUnresolvedOos(row) then
+            if number(row.nextRestockAt)>now then return 'UPCOMING - RESTOCK IN '..formatDuration(number(row.nextRestockAt)-now) end
+            if number(row.nextRestockAt)>0 then return 'UPCOMING - RESTOCK ESTIMATE OVERDUE' end
+            return 'UPCOMING - RESTOCK LEARNING'
+        end
+        -- A later observed restock supersedes the preceding OoS. If that positive
+        -- source later goes stale, present uncertainty instead of resurrecting the
+        -- old restock countdown.
+        if number(row.activeRestockAt)>0 then return 'UPCOMING - STOCK STATUS STALE' end
+        return 'UPCOMING - STOCK STATUS UNKNOWN'
     end
     if plan==nil then return 'MARKET DATA PENDING' end
     local remaining=liveTravelRemainingSeconds(state,now)
@@ -294,8 +328,14 @@ local function outboundStatus(row,state,now)
     return 'MARKET DATA PENDING'
 end
 
-local function currentCycleStatus(plan,now)
-    if plan==nil or plan.anchorAt<=0 then return 'WAIT DATA','' end
+local function currentCycleStatus(row,now)
+    local plan=phaseSafePlan(row)
+    if plan==nil or plan.anchorAt<=0 then
+        if row~=nil and number(row.activeRestockAt)>0 and not rowHasUnresolvedOos(row) then
+            return 'STOCK STATUS STALE','Latest observed phase: restocked; current stock status is stale/unknown'
+        end
+        return 'WAIT DATA',''
+    end
     if plan.anchorPhase=='S' then
         local delay=averageRestockDelay(plan)
         if delay<=0 then return 'WAIT DATA','' end
@@ -366,7 +406,7 @@ local function updateRow(index,state,lookup,now)
     end
 
     if travelState=='abroad' or travelState=='foreign' then
-        local status,tooltip=currentCycleStatus(row.plan,now)
+        local status,tooltip=currentCycleStatus(row,now)
         setOption(prefix..'Leave','Text',status)
         applyTooltip(prefix,tooltip,'Market estimate')
     end
