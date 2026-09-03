@@ -188,6 +188,30 @@ Assert-True ([double]$fastSafety.guardedUnitsPerHour -ge 360.0) 'Guard multiplie
 $tooSparse=Get-CurrentStockSafetyProjection -CurrentStock 600L -SourceTimestamp 10000L -Observations @($slowObservations[0],$slowObservations[1]) -EarliestArrivalAt 17200L -NowEpoch 10000L
 Assert-True (-not [bool]$tooSparse.eligible) 'Two depletion samples are insufficient for the safe-window fallback.'
 
+
+$flatObservations=@(
+    [pscustomobject]@{timestamp=8500L;sourceTimestamp=8500L;stock=975L;depletionEvidence='observed_zero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=0L;transitionGapSeconds=300L},
+    [pscustomobject]@{timestamp=8800L;sourceTimestamp=8800L;stock=975L;depletionEvidence='observed_zero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=0L;transitionGapSeconds=300L},
+    [pscustomobject]@{timestamp=9100L;sourceTimestamp=9100L;stock=975L;depletionEvidence='observed_zero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=0L;transitionGapSeconds=300L},
+    [pscustomobject]@{timestamp=9400L;sourceTimestamp=9400L;stock=975L;depletionEvidence='observed_zero';depletionCensored=$false;depletionIntervalSeconds=300L;depletionUnits=0L;transitionGapSeconds=300L}
+)
+$flatSafety=Get-CurrentStockSafetyProjection -CurrentStock 975L -SourceTimestamp 10000L -Observations $flatObservations -EarliestArrivalAt 17200L -NowEpoch 10000L
+Assert-True ([bool]$flatSafety.eligible) 'Verified flat positive stock spanning 15 minutes should support the low-depletion holding fallback when stress runway is very long.'
+Assert-Equal ([string]$flatSafety.mode) 'low-depletion-hold' 'Flat-stock fallback must be explicitly lower-authority low-depletion evidence.'
+Assert-True ([long]$flatSafety.minimumHoldHorizonSeconds -ge 21600L) 'Low-depletion fallback must require at least a six-hour adaptive hold horizon.'
+Assert-Near ([double]$flatSafety.guardedUnitsPerHour) 60.0 0.001 'Flat-stock fallback must stress at no less than the one-unit-per-minute floor.'
+Assert-True ([long]$flatSafety.runwaySeconds -ge 57600L) '975 units at the guarded floor should retain more than sixteen hours of stress runway.'
+Assert-Equal ([long]$flatSafety.selloutEstimateAt) 0L 'Flat-stock fallback must not fabricate a precise OoS timestamp when the slope is effectively unmeasurable.'
+
+$farSelloutSafety=Get-CurrentStockSafetyProjection -CurrentStock 975L -SourceTimestamp 10000L -Observations @() -EarliestArrivalAt 17200L -NowEpoch 10000L -KnownSelloutEstimateAt 40000L
+Assert-True ([bool]$farSelloutSafety.eligible) 'A verified sellout estimate more than six hours out should support low-authority holding guidance even without a local depletion slope.'
+Assert-Equal ([string]$farSelloutSafety.mode) 'far-sellout' 'Far-sellout fallback must identify its evidence mode.'
+Assert-Equal ([long]$farSelloutSafety.selloutEstimateAt) 40000L 'Far-sellout fallback should retain the verified projected sellout timestamp.'
+
+$longFlightFarGate=Get-CurrentStockSafetyProjection -CurrentStock 975L -SourceTimestamp 10000L -Observations @() -EarliestArrivalAt 24400L -NowEpoch 10000L -KnownSelloutEstimateAt 35200L
+Assert-True (-not [bool]$longFlightFarGate.eligible) 'For a four-hour arrival horizon, a seven-hour sellout estimate must not pass the adaptive 2x-flight eight-hour hold gate.'
+Assert-True ([long]$longFlightFarGate.minimumHoldHorizonSeconds -ge 28800L) 'Adaptive holding gate must scale to at least twice a long arrival horizon.'
+
 # Long but valid cycles must still construct the immediate next cycle even when the
 # period exceeds the default 24-hour display horizon.
 $longCycleAnchor=100000L
