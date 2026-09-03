@@ -437,6 +437,19 @@ for ($i=0; $i -le 3; $i++) {
     $graphics.DrawLine($pen,[single]$plotLeft,$y,[single]$plotRight,$y)
 }
 
+function Get-InlineX([long]$Timestamp) {
+    $clamped = [Math]::Max($cutoff,[Math]::Min($now,$Timestamp))
+    return [single]($plotLeft + ((($clamped-$cutoff) / [double]($windowHours*3600L)) * $plotWidth))
+}
+function Get-InlineY([long]$Stock) {
+    if ($maxStock -le 0) { return [single]$plotBottom }
+    return [single]($plotBottom - (($Stock / $scaleMax) * $plotHeight))
+}
+function Get-ChanceY([double]$Probability) {
+    $p=[Math]::Max(0.0,[Math]::Min(1.0,$Probability))
+    return [single]($plotBottom - ($p * $plotHeight))
+}
+
 # Shade modeled chance windows only. This is deliberately independent of the
 # green stock trace / raw in-stock intervals. A chance window is a contiguous
 # recorded probability run at or above the explicit 50% action threshold.
@@ -470,18 +483,6 @@ foreach($window in $chanceWindows){
     }
 }
 
-function Get-InlineX([long]$Timestamp) {
-    $clamped = [Math]::Max($cutoff,[Math]::Min($now,$Timestamp))
-    return [single]($plotLeft + ((($clamped-$cutoff) / [double]($windowHours*3600L)) * $plotWidth))
-}
-function Get-InlineY([long]$Stock) {
-    if ($maxStock -le 0) { return [single]$plotBottom }
-    return [single]($plotBottom - (($Stock / $scaleMax) * $plotHeight))
-}
-function Get-ChanceY([double]$Probability) {
-    $p=[Math]::Max(0.0,[Math]::Min(1.0,$Probability))
-    return [single]($plotBottom - ($p * $plotHeight))
-}
 
 $previous = $null
 foreach ($row in $rows) {
