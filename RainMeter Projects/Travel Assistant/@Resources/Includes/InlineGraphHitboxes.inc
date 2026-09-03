@@ -2,9 +2,9 @@
 ; StateReader.lua positions only the active regions published by RenderInlineGraph.ps1.
 ; Keeping these global avoids multiplying hover meters across all eight opportunity rows.
 
-[MeterGraphHover1]
+[MeterInlineGraphHitbox1]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -16,9 +16,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover2]
+[MeterInlineGraphHitbox2]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -30,9 +30,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover3]
+[MeterInlineGraphHitbox3]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -44,9 +44,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover4]
+[MeterInlineGraphHitbox4]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -58,9 +58,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover5]
+[MeterInlineGraphHitbox5]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -72,9 +72,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover6]
+[MeterInlineGraphHitbox6]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -86,9 +86,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover7]
+[MeterInlineGraphHitbox7]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -100,9 +100,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover8]
+[MeterInlineGraphHitbox8]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -114,9 +114,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover9]
+[MeterInlineGraphHitbox9]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -128,9 +128,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover10]
+[MeterInlineGraphHitbox10]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -142,9 +142,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover11]
+[MeterInlineGraphHitbox11]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -156,9 +156,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover12]
+[MeterInlineGraphHitbox12]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -170,9 +170,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover13]
+[MeterInlineGraphHitbox13]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -184,9 +184,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover14]
+[MeterInlineGraphHitbox14]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -198,9 +198,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover15]
+[MeterInlineGraphHitbox15]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -212,9 +212,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover16]
+[MeterInlineGraphHitbox16]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -226,9 +226,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover17]
+[MeterInlineGraphHitbox17]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -240,9 +240,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover18]
+[MeterInlineGraphHitbox18]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -254,9 +254,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover19]
+[MeterInlineGraphHitbox19]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -268,9 +268,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover20]
+[MeterInlineGraphHitbox20]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -282,9 +282,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover21]
+[MeterInlineGraphHitbox21]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -296,9 +296,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover22]
+[MeterInlineGraphHitbox22]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -310,9 +310,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover23]
+[MeterInlineGraphHitbox23]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -324,9 +324,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover24]
+[MeterInlineGraphHitbox24]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -338,9 +338,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover25]
+[MeterInlineGraphHitbox25]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -352,9 +352,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover26]
+[MeterInlineGraphHitbox26]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -366,9 +366,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover27]
+[MeterInlineGraphHitbox27]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -380,9 +380,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover28]
+[MeterInlineGraphHitbox28]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -394,9 +394,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover29]
+[MeterInlineGraphHitbox29]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -408,9 +408,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover30]
+[MeterInlineGraphHitbox30]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -422,9 +422,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover31]
+[MeterInlineGraphHitbox31]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -436,9 +436,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover32]
+[MeterInlineGraphHitbox32]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -450,9 +450,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover33]
+[MeterInlineGraphHitbox33]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -464,9 +464,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover34]
+[MeterInlineGraphHitbox34]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -478,9 +478,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover35]
+[MeterInlineGraphHitbox35]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -492,9 +492,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover36]
+[MeterInlineGraphHitbox36]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -506,9 +506,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover37]
+[MeterInlineGraphHitbox37]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -520,9 +520,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover38]
+[MeterInlineGraphHitbox38]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -534,9 +534,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover39]
+[MeterInlineGraphHitbox39]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -548,9 +548,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover40]
+[MeterInlineGraphHitbox40]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -562,9 +562,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover41]
+[MeterInlineGraphHitbox41]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -576,9 +576,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover42]
+[MeterInlineGraphHitbox42]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -590,9 +590,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover43]
+[MeterInlineGraphHitbox43]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -604,9 +604,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover44]
+[MeterInlineGraphHitbox44]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -618,9 +618,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover45]
+[MeterInlineGraphHitbox45]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -632,9 +632,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover46]
+[MeterInlineGraphHitbox46]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -646,9 +646,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover47]
+[MeterInlineGraphHitbox47]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
@@ -660,9 +660,9 @@ ToolTipText=
 ToolTipWidth=280
 LeftMouseUpAction=
 
-[MeterGraphHover48]
+[MeterInlineGraphHitbox48]
 Meter=Shape
-Group=GraphHover
+Group=InlineGraphHitboxes
 X=0
 Y=0
 W=1
