@@ -21,9 +21,17 @@
   "profitability": {
     "sellTarget": "market_value",
     "minimumProfitPerItem": 0,
-    "minimumMarginPercent": 0.0,
+    "minimumMarginPercent": 0,
     "minimumTotalTripProfit": 0,
     "capacityOverride": 0,
     "resaleStaleAfterSeconds": 21600
+  },
+  "graphVisuals": {
+    "showGrid": true,
+    "showTransitions": true,
+    "showChance": true,
+    "showHindsightWindows": true,
+    "showAccuracyMarkers": true,
+    "showTooltips": true
   }
 }
