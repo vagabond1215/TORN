@@ -78,16 +78,114 @@ function Get-StableCurrentCycleArrivalProbability {
     param(
         [object[]]$Cycles,
         [long]$ActiveRestockAt,
+        [long]$ObservationAt = 0L,
         [long]$ArrivalAt
     )
     $usable=@(Get-StableWindowUsableCycles -Cycles $Cycles)
     if ($usable.Count -eq 0 -or $ActiveRestockAt -le 0 -or $ArrivalAt -lt $ActiveRestockAt) { return -1.0 }
-    $age=[Math]::Max(0L,$ArrivalAt-$ActiveRestockAt)
-    $hits=0
-    foreach ($cycle in $usable) {
-        if ([long]$cycle.availabilitySeconds -gt $age) { $hits++ }
+
+    # The current cycle is factually still in stock at ObservationAt. Estimate
+    # survival to arrival conditional on having already survived that long; the old
+    # unconditional fraction could fall to 0% even while live stock remained high.
+    $observedAt=if($ObservationAt -gt $ActiveRestockAt){$ObservationAt}else{$ActiveRestockAt}
+    $observedAge=[Math]::Max(0L,$observedAt-$ActiveRestockAt)
+    $arrivalAge=[Math]::Max(0L,$ArrivalAt-$ActiveRestockAt)
+    $survivors=@($usable|Where-Object{[long]$_.availabilitySeconds -gt $observedAge})
+    if($survivors.Count -eq 0){return -1.0}
+    $hits=@($survivors|Where-Object{[long]$_.availabilitySeconds -gt $arrivalAge}).Count
+    return ($hits/[double]$survivors.Count)
+}
+
+function Get-LiveDepletionArrivalProbability {
+    param(
+        [long]$CurrentStock,
+        [long]$SourceTimestamp,
+        [object[]]$Observations,
+        [long]$ArrivalAt,
+        [long]$NowEpoch,
+        [long]$LiveMaximumAgeSeconds=300L,
+        [int]$MinimumSamples=3,
+        [long]$MinimumEvidenceSpanSeconds=600L,
+        [long]$MaximumDepletionIntervalSeconds=600L
+    )
+
+    $sourceAt=if($SourceTimestamp -gt 0){[Math]::Min($SourceTimestamp,$NowEpoch)}else{0L}
+    $sourceFresh=($sourceAt -gt 0 -and ($NowEpoch-$sourceAt) -le $LiveMaximumAgeSeconds)
+    if(-not $sourceFresh -or $CurrentStock -le 0 -or $ArrivalAt -le $sourceAt){
+        return [pscustomobject]@{eligible=$false;probability=-1.0;sampleCount=0;evidenceSpanSeconds=0L;medianRunwaySeconds=0L;reason='fresh positive stock and a future arrival are required'}
     }
-    return ($hits/[double]$usable.Count)
+
+    $rows=@($Observations|Sort-Object{
+        $at=[long](Get-WindowProperty $_ 'sourceTimestamp')
+        if($at -le 0){$at=[long](Get-WindowProperty $_ 'timestamp')}
+        $at
+    })
+    $rates=New-Object System.Collections.Generic.List[object]
+    $previousStock=$null
+    foreach($row in $rows){
+        $at=[long](Get-WindowProperty $row 'sourceTimestamp')
+        if($at -le 0){$at=[long](Get-WindowProperty $row 'timestamp')}
+        if($at -le 0 -or $at -gt ($sourceAt+60L)){continue}
+        $stock=[long](Get-WindowProperty $row 'stock')
+        $transitionGap=[long](Get-WindowProperty $row 'transitionGapSeconds')
+        $reset=(
+            $stock -le 0 -or
+            ($null -ne $previousStock -and $previousStock -gt 0 -and $stock -gt $previousStock) -or
+            $transitionGap -gt $MaximumDepletionIntervalSeconds
+        )
+        if($reset){$rates.Clear()}
+
+        $kind=([string](Get-WindowProperty $row 'depletionEvidence')).Trim().ToLowerInvariant()
+        $censored=[bool](Get-WindowProperty $row 'depletionCensored')
+        $interval=[long](Get-WindowProperty $row 'depletionIntervalSeconds')
+        $units=[long](Get-WindowProperty $row 'depletionUnits')
+        if(
+            $stock -gt 0 -and
+            $kind -eq 'observed_nonzero' -and
+            -not $censored -and
+            $interval -ge 10L -and
+            $interval -le $MaximumDepletionIntervalSeconds -and
+            $units -gt 0
+        ){
+            $rates.Add([pscustomobject]@{at=$at;unitsPerSecond=($units/[double]$interval)})
+        }
+        $previousStock=$stock
+    }
+
+    if($rates.Count -lt $MinimumSamples){
+        return [pscustomobject]@{eligible=$false;probability=-1.0;sampleCount=$rates.Count;evidenceSpanSeconds=0L;medianRunwaySeconds=0L;reason='too few uncensored live depletion samples'}
+    }
+    $firstAt=[long](@($rates.ToArray()|Sort-Object at|Select-Object -First 1)[0].at)
+    $lastAt=[long](@($rates.ToArray()|Sort-Object at|Select-Object -Last 1)[0].at)
+    $span=[Math]::Max(0L,$lastAt-$firstAt)
+    if($span -lt $MinimumEvidenceSpanSeconds){
+        return [pscustomobject]@{eligible=$false;probability=-1.0;sampleCount=$rates.Count;evidenceSpanSeconds=$span;medianRunwaySeconds=0L;reason='live depletion evidence does not yet span enough time'}
+    }
+
+    $horizon=[Math]::Max(0L,$ArrivalAt-$sourceAt)
+    $runways=New-Object System.Collections.Generic.List[long]
+    $hits=0
+    foreach($sample in $rates.ToArray()){
+        $rate=[double]$sample.unitsPerSecond
+        if($rate -le 0){continue}
+        $runway=[long][Math]::Ceiling($CurrentStock/$rate)
+        $runways.Add($runway)
+        if($runway -gt $horizon){$hits++}
+    }
+    if($runways.Count -lt $MinimumSamples){
+        return [pscustomobject]@{eligible=$false;probability=-1.0;sampleCount=$runways.Count;evidenceSpanSeconds=$span;medianRunwaySeconds=0L;reason='too few usable live depletion rates'}
+    }
+    $ordered=[long[]]@($runways.ToArray()|Sort-Object)
+    $mid=[int][Math]::Floor($ordered.Count/2.0)
+    $medianRunway=if(($ordered.Count%2)-eq 1){[long]$ordered[$mid]}else{[long][Math]::Round(([double]$ordered[$mid-1]+[double]$ordered[$mid])/2.0)}
+    return [pscustomobject]@{
+        eligible=$true
+        probability=($hits/[double]$runways.Count)
+        sampleCount=$runways.Count
+        evidenceSpanSeconds=$span
+        medianRunwaySeconds=$medianRunway
+        reason='arrival probability from uncensored live current-run depletion rates'
+    }
 }
 function Get-StableWindowUsableCycles {
     param(
@@ -610,6 +708,10 @@ for ($i=1; $i -le $count; $i++) {
     $state[$prefix+'ImmediateArrivalAt']='0'
     $state[$prefix+'ImmediateArrivalProbabilityValue']='-1'
     $state[$prefix+'ImmediateArrivalProbabilitySource']='unknown'
+    $state[$prefix+'CurrentCycleLiveProbability']='-1'
+    $state[$prefix+'CurrentCycleLiveProbabilitySampleCount']='0'
+    $state[$prefix+'CurrentCycleLiveProbabilityEvidenceSpanSeconds']='0'
+    $state[$prefix+'CurrentCycleLiveProbabilityMedianRunwaySeconds']='0'
     $state[$prefix+'CurrentStockSafetyEligible']='0'
     $state[$prefix+'CurrentStockSafetySampleCount']='0'
     $state[$prefix+'CurrentStockSafetyEvidenceSpanSeconds']='0'
@@ -753,12 +855,34 @@ for ($i=1; $i -le $count; $i++) {
         $state[$prefix+'CurrentCycleSafetyMarginSeconds']=[long]$currentCycle.safetyMarginSeconds
         $state[$prefix+'WindowStartAt']=[Math]::Max($Now,$earliestDeparture)
         $state[$prefix+'WindowText']='IN STOCK'
-        $currentProbability=Get-StableCurrentCycleArrivalProbability -Cycles $cycles -ActiveRestockAt ([long]$liveProjection.activeRestockAt) -ArrivalAt $earliestArrival
+        $marketObservations=@()
+        if($observationMap.ContainsKey($key)){$marketObservations=@($observationMap[$key].ToArray())}
+        $liveProbability=Get-LiveDepletionArrivalProbability -CurrentStock $stock -SourceTimestamp $sourceTimestamp -Observations $marketObservations -ArrivalAt $earliestArrival -NowEpoch $Now
+        $state[$prefix+'CurrentCycleLiveProbability']=[double]$liveProbability.probability
+        $state[$prefix+'CurrentCycleLiveProbabilitySampleCount']=[int]$liveProbability.sampleCount
+        $state[$prefix+'CurrentCycleLiveProbabilityEvidenceSpanSeconds']=[long]$liveProbability.evidenceSpanSeconds
+        $state[$prefix+'CurrentCycleLiveProbabilityMedianRunwaySeconds']=[long]$liveProbability.medianRunwaySeconds
+
+        $currentProbability=-1.0
+        $currentProbabilitySource='unknown'
+        if([bool]$liveProbability.eligible){
+            $currentProbability=[double]$liveProbability.probability
+            $currentProbabilitySource='current_cycle_live_depletion'
+        }else{
+            $currentProbability=Get-StableCurrentCycleArrivalProbability -Cycles $cycles -ActiveRestockAt ([long]$liveProjection.activeRestockAt) -ObservationAt $sourceTimestamp -ArrivalAt $earliestArrival
+            if($currentProbability -ge 0){$currentProbabilitySource='current_cycle_conditional_survival'}
+        }
+
         if ($currentProbability -ge 0) {
             $state[$prefix+'ProbabilityValue']=(Convert-WindowProbabilityText ([double]$currentProbability))
             $state[$prefix+'ChanceText']=('{0:N0}%' -f (100.0*[double]$currentProbability))
             $state[$prefix+'ImmediateArrivalProbabilityValue']=(Convert-WindowProbabilityText ([double]$currentProbability))
-            $state[$prefix+'ImmediateArrivalProbabilitySource']='current_cycle'
+            $state[$prefix+'ImmediateArrivalProbabilitySource']=$currentProbabilitySource
+        }else{
+            $state[$prefix+'ProbabilityValue']='-1'
+            $state[$prefix+'ChanceText']=''
+            $state[$prefix+'ImmediateArrivalProbabilityValue']='-1'
+            $state[$prefix+'ImmediateArrivalProbabilitySource']='current_cycle_insufficient_live_or_conditional_evidence'
         }
         # Scenario 1 is fully resolved from the direct current cycle. Do not build
         # the recurring next-cycle model merely to calculate a far-future close.
