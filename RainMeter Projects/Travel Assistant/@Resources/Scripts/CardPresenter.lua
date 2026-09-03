@@ -576,9 +576,21 @@ local function liveWindowAction(index,plan,state,country,defaultTravel,now)
         local restockLifetimeShort=statePrefix~='' and number(state[statePrefix..'RestockLifetimeShortestDelaySeconds']) or 0
         local restockLifetimeLong=statePrefix~='' and number(state[statePrefix..'RestockLifetimeLongestDelaySeconds']) or 0
         local restockSamples=statePrefix~='' and number(state[statePrefix..'RestockSampleCount']) or 0
+        local lastObservedOosAt=statePrefix~='' and number(state[statePrefix..'LastObservedOosAt']) or 0
+        local activeRestockAt=statePrefix~='' and number(state[statePrefix..'ActiveRestockAt']) or 0
         local nextOrdinal=statePrefix~='' and math.floor(number(state[statePrefix..'NextCycleOrdinal'])) or ((currentStock>0) and 1 or 0)
 
-        if forecastMode=='sleeping_oos' and restockEstimateAt>now then
+        -- A cheap OoS countdown is presentation-valid only while that OoS remains
+        -- the latest verified phase. A later observed restock permanently supersedes
+        -- the preceding OoS estimate, even if the provider snapshot is now stale.
+        local sleepingOosValid=(
+            forecastMode=='sleeping_oos' and
+            restockEstimateAt>now and
+            currentStock<=0 and
+            lastObservedOosAt>0 and
+            (activeRestockAt<=0 or activeRestockAt<=lastObservedOosAt)
+        )
+        if sleepingOosValid then
             return 'Restocks in ~'..formatDuration(restockEstimateAt-now),'',
                 formatSleepingRestockTooltip(restockEstimateAt,restockAverageDelay,restockEarlyDelay,restockLateDelay,restockLifetimeShort,restockLifetimeLong,restockSamples,now)
         end
