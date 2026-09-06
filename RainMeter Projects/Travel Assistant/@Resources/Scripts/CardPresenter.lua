@@ -934,6 +934,8 @@ local function updateRow(index,state,now)
         end
         configureWindowTooltipMeter(prefix..'Leave','')
     end
+    local normalizedAction=trim(actionText):lower()
+    if normalizedAction=='in stock' or normalizedAction=='stock holding' then actionText='In Stock - Safe to Leave' end
     setOption(prefix..'Leave','Text',actionText)
     setCenteredChance(prefix,certainty)
 end

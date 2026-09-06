@@ -196,7 +196,7 @@ $state['UISelectedCategories'] = (@($prefs.selectedCategories | ForEach-Object {
 $state['UIShowProfitableOnly'] = if ([bool]$prefs.showProfitableOnly) { 1 } else { 0 }
 $state['UIIgnoredItemIds'] = (@($prefs.ignoredItemIds | ForEach-Object { [string][int]$_ }) -join ',')
 
-$state['UIOldestMarketSourceTimestamp'] = [long]$sourceRange.freshest
+$state['UIOldestMarketSourceTimestamp'] = [long]$sourceRange.oldest
 $state['UIOldestActiveMarketSourceTimestamp'] = [long]$sourceRange.oldest
 $state['UIFreshestMarketSourceTimestamp'] = [long]$sourceRange.freshest
 
