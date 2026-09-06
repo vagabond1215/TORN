@@ -18,7 +18,7 @@ if ($errors.Count -eq 0) {
     $travel = Get-Content -LiteralPath $travelTweaksPath -Raw
     Assert-True 'Travel presenter must not require a WP2/window plan before rendering direct stock evidence.' (-not $travel.Contains('if row==nil or row.plan==nil then'))
     Assert-True 'Travel presenter must retain a row-existence guard.' $travel.Contains('if row==nil then')
-    Assert-True 'Travel presenter must still evaluate direct outbound status after the row-only guard.' $travel.Contains("setOption(prefix..'Leave','Text',outboundStatus(row,state,now))")
+    Assert-True 'Travel presenter must still evaluate direct outbound status after the row-only guard.' $travel.Contains("setOption(prefix..'Leave','Text',safeStockStatus(outboundStatus(row,state,now)))")
     Assert-True 'Independently valid arrival probability must remain renderable without a window plan.' $travel.Contains('setTravelChance(prefix,arrivalChanceText(row))')
     Assert-True 'Outbound tooltip must remain able to explain unknown arrival stock when plan geometry is absent.' $travel.Contains("table.insert(lines,'Estimated Stock at arrival: ?')")
 
