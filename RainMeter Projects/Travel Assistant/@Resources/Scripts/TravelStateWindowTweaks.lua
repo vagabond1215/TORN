@@ -427,7 +427,7 @@ local function updateRow(index,state,lookup,now)
 
     local country=rowCountry(index)
     local row=lookup[normalizeName(country)..'|'..normalizeName(name)]
-    if row==nil or row.plan==nil then
+    if row==nil then
         if travelState=='traveling' or travelState=='abroad' or travelState=='foreign' then applyTooltip(prefix,'','') end
         return
     end
