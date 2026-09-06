@@ -575,16 +575,18 @@ local function updateRow(index,state,now)
     local actionText=''
     if liveAction~=nil then
         actionText=liveAction
+        local normalizedAction=trim(actionText):lower()
+        if normalizedAction=='in stock' or normalizedAction=='stock holding' then actionText='In Stock - Safe to Leave' end
         local certainty=trim(liveCertainty or '')
         if certainty~='' then actionText=actionText..' '..certainty end
         configureWindowTooltipMeter(prefix..'Leave',windowTooltip or '')
     else
         actionText=statusText(fallbackWindow,fallbackLeave)
+        local normalizedAction=trim(actionText):lower()
+        if normalizedAction=='in stock' or normalizedAction=='stock holding' then actionText='In Stock - Safe to Leave' end
         if fallbackCertainty~='' then actionText=actionText..' '..fallbackCertainty end
         configureWindowTooltipMeter(prefix..'Leave','')
     end
-    local normalizedAction=trim(actionText):lower()
-    if normalizedAction=='in stock' or normalizedAction=='stock holding' then actionText='In Stock - Safe to Leave' end
     setOption(prefix..'Leave','Text',actionText)
     configureWindowTooltipMeter(prefix..'Chance','')
 end
