@@ -27,7 +27,12 @@ $StochasticScript=Join-Path $PSScriptRoot 'StochasticForecast.ps1'
 if (-not (Test-Path -LiteralPath $AtomicFileScript)) { throw 'AtomicFile.ps1 is required for multi-cycle chance bridge publication.' }
 if (-not (Test-Path -LiteralPath $StochasticScript)) { throw 'StochasticForecast.ps1 is required for multi-cycle chance bridge evaluation.' }
 . $AtomicFileScript
+$MCImportNow=$Now
+$MCImportSimulationCount=$SimulationCount
 . $StochasticScript -SkipMain
+$Now=$MCImportNow
+$SimulationCount=$MCImportSimulationCount
+Remove-Variable MCImportNow,MCImportSimulationCount -ErrorAction SilentlyContinue
 
 function Write-MCStateKvAtomic {
     param([hashtable]$Values,[string]$Path)
