@@ -196,6 +196,13 @@ local function setTravelChance(prefix,value)
     end
 end
 
+local function safeStockStatus(value)
+    local status=trim(value)
+    local normalized=status:lower()
+    if normalized=='in stock' or normalized=='stock holding' then return 'In Stock - Safe to Leave' end
+    return status
+end
+
 local function liveTravelRemainingSeconds(state,now)
     local arrivalAt=number(state.TravelArrivalAt)
     if arrivalAt>now then return arrivalAt-now end
@@ -440,7 +447,7 @@ local function updateRow(index,state,lookup,now)
     end
 
     if travelState=='traveling' then
-        setOption(prefix..'Leave','Text',outboundStatus(row,state,now))
+        setOption(prefix..'Leave','Text',safeStockStatus(outboundStatus(row,state,now)))
         setTravelChance(prefix,arrivalChanceText(row))
         applyTooltip(prefix,outboundTooltip(row,state,now),'Arrival estimate')
         return
@@ -448,7 +455,7 @@ local function updateRow(index,state,lookup,now)
 
     if travelState=='abroad' or travelState=='foreign' then
         local status,tooltip=currentCycleStatus(row,now)
-        setOption(prefix..'Leave','Text',status)
+        setOption(prefix..'Leave','Text',safeStockStatus(status))
         applyTooltip(prefix,tooltip,'Market estimate')
     end
 end
