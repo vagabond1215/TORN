@@ -583,6 +583,8 @@ local function updateRow(index,state,now)
         if fallbackCertainty~='' then actionText=actionText..' '..fallbackCertainty end
         configureWindowTooltipMeter(prefix..'Leave','')
     end
+    local normalizedAction=trim(actionText):lower()
+    if normalizedAction=='in stock' or normalizedAction=='stock holding' then actionText='In Stock - Safe to Leave' end
     setOption(prefix..'Leave','Text',actionText)
     configureWindowTooltipMeter(prefix..'Chance','')
 end
