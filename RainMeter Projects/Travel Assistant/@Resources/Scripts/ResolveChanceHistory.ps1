@@ -20,7 +20,14 @@ $ObservationFile=Join-Path $RuntimeDir 'observations.jsonl'
 $CycleFile=Join-Path $RuntimeDir 'cycles.jsonl'
 $CalibrationScript=Join-Path $PSScriptRoot 'StochasticCalibration.ps1'
 if (-not (Test-Path -LiteralPath $CalibrationScript)) { throw 'StochasticCalibration.ps1 is required for shared confirmed-outcome semantics.' }
+$RCHImportNow=$Now
+$RCHImportOutcomeGraceSeconds=$OutcomeGraceSeconds
+$RCHImportSummaryFile=$SummaryFile
 . $CalibrationScript -SkipMain
+$Now=$RCHImportNow
+$OutcomeGraceSeconds=$RCHImportOutcomeGraceSeconds
+$SummaryFile=$RCHImportSummaryFile
+Remove-Variable RCHImportNow,RCHImportOutcomeGraceSeconds,RCHImportSummaryFile -ErrorAction SilentlyContinue
 
 function Get-RCHProperty {
     param([object]$Object,[string]$Name)
