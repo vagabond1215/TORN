@@ -19,16 +19,18 @@ if ($errors.Count -eq 0) {
     $polish = Get-Content -LiteralPath $polishPath -Raw
     $info = Get-Content -LiteralPath $infoPath -Raw
 
-    Assert-True 'FreshnessGuard must capture the StateReader-owned panel height before the travel presentation pass.' $freshness.Contains("setVariable('AuthoritativePanelHeight',math.floor(value))")
-    Assert-True 'Fresh mode must capture authoritative panel height before its early return.' ($freshness.IndexOf("setVariable('StockFreshnessMode','fresh')") -lt $freshness.IndexOf('captureAuthoritativePanelHeight()', $freshness.IndexOf("setVariable('StockFreshnessMode','fresh')")))
-    Assert-True 'FreshnessGuard must also capture the final degraded/hard-stale height.' $freshness.Contains("captureAuthoritativePanelHeight()`n`n    -- Display-only fence")
+    Assert-True 'FreshnessGuard must capture the StateReader-owned panel height before the travel presentation pass.' ($freshness.Contains("setVariable('AuthoritativePanelHeight',math.floor(value))"))
+    $freshModeAt = $freshness.IndexOf("setVariable('StockFreshnessMode','fresh')")
+    $freshCaptureAt = $freshness.IndexOf('captureAuthoritativePanelHeight()', $freshModeAt)
+    Assert-True 'Fresh mode must capture authoritative panel height before its early return.' ($freshModeAt -ge 0 -and $freshCaptureAt -gt $freshModeAt)
+    Assert-True 'FreshnessGuard must also capture the final degraded/hard-stale height.' ($freshness.Contains("captureAuthoritativePanelHeight()`n`n    -- Display-only fence"))
 
-    Assert-True 'Final polish must restore the captured panel height after travel-state presentation.' $polish.Contains("SKIN:Bang('!SetVariable','PanelHeight',tostring(math.floor(authoritativePanelHeight)))")
-    Assert-True 'Final polish must identify physical rows so duplicate retained slots cannot render twice.' $polish.Contains('local function rowIdentity(prefix)')
-    Assert-True 'Final polish must suppress duplicate row identities.' $polish.Contains('seenRows[identity]==true')
-    Assert-True 'Final polish must reject chance meters positioned below the authoritative panel body.' $polish.Contains('chanceOutsideAuthoritativePanel(prefix,authoritativePanelHeight)')
-    Assert-True 'Out-of-panel detection must use the current Rainmeter meter Y position.' $polish.Contains('meter:GetY()')
-    Assert-True 'Stale physical slots must actively clear and hide Chance.' $polish.Contains('if stalePhysicalSlot then') -and $polish.Contains('suppressChance(prefix)')
+    Assert-True 'Final polish must restore the captured panel height after travel-state presentation.' ($polish.Contains("SKIN:Bang('!SetVariable','PanelHeight',tostring(math.floor(authoritativePanelHeight)))"))
+    Assert-True 'Final polish must identify physical rows so duplicate retained slots cannot render twice.' ($polish.Contains('local function rowIdentity(prefix)'))
+    Assert-True 'Final polish must suppress duplicate row identities.' ($polish.Contains('seenRows[identity]==true'))
+    Assert-True 'Final polish must reject chance meters positioned below the authoritative panel body.' ($polish.Contains('chanceOutsideAuthoritativePanel(prefix,authoritativePanelHeight)'))
+    Assert-True 'Out-of-panel detection must use the current Rainmeter meter Y position.' ($polish.Contains('meter:GetY()'))
+    Assert-True 'Stale physical slots must actively clear and hide Chance.' ($polish.Contains('if stalePhysicalSlot then') -and $polish.Contains('suppressChance(prefix)'))
 
     $freshIndex = $info.IndexOf('[MeasureFreshnessGuard]')
     $travelIndex = $info.IndexOf('[MeasureTravelStateWindowTweaks]')
