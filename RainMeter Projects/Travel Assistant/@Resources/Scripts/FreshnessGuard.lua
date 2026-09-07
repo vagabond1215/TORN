@@ -37,6 +37,12 @@ local function setVariable(name,value)
     SKIN:Bang('!SetVariable',name,tostring(value or ''))
 end
 
+local function captureAuthoritativePanelHeight()
+    local value=number(SKIN:GetVariable('PanelHeight','160'))
+    if value<=0 then value=160 end
+    setVariable('AuthoritativePanelHeight',math.floor(value))
+end
+
 local function providerLabel(value)
     local text=trim(value):lower()
     if text=='prometheus' then return 'Prometheus' end
@@ -120,6 +126,7 @@ function Update()
     local stale=sourceAge>staleAfter
     if not stale then
         setVariable('StockFreshnessMode','fresh')
+        captureAuthoritativePanelHeight()
         return 0
     end
 
@@ -138,6 +145,8 @@ function Update()
         enterDegradedMode(data)
         setVariable('UpdatedText',uiText..'FORECAST ONLY - '..provider..' '..ageText)
     end
+
+    captureAuthoritativePanelHeight()
 
     -- Display-only fence. StateReader owns updater cadence; this measure must never
     -- launch MeasureUpdate from the one-second render loop.
