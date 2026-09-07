@@ -3,10 +3,14 @@ local function trim(value)
     return (text:gsub('^%s+',''):gsub('%s+$',''))
 end
 
-local function meterText(name)
+local function meterOption(name,option)
     local meter=SKIN:GetMeter(name)
     if meter==nil then return '' end
-    return trim(meter:GetOption('Text',''))
+    return trim(meter:GetOption(option,''))
+end
+
+local function meterText(name)
+    return meterOption(name,'Text')
 end
 
 local function setText(name,value)
@@ -76,19 +80,52 @@ local function isNonInformativeAction(text)
     return false
 end
 
+local function rowIdentity(prefix)
+    local name=meterText(prefix..'Name'):lower()
+    if name=='' then return '' end
+    local country=meterOption(prefix..'Flag','ToolTipText'):lower()
+    return name..'|'..country
+end
+
+local function chanceOutsideAuthoritativePanel(prefix,panelHeight)
+    if panelHeight<=0 then return false end
+    local meter=SKIN:GetMeter(prefix..'Chance')
+    if meter==nil then return false end
+    local y=tonumber(meter:GetY()) or 0
+    -- StateReader leaves at least the footer gap below the last visible card body.
+    -- A Chance meter at or below this fence belongs to a stale physical row slot.
+    return y>=(panelHeight-24)
+end
+
 function Update()
+    -- FreshnessGuard runs after StateReader/CardPresenter and before the travel pass.
+    -- Preserve the height it observed so TravelStateWindowTweaks cannot resurrect a
+    -- stale old-row height by scanning retained hidden Name text.
+    local authoritativePanelHeight=tonumber(SKIN:GetVariable('AuthoritativePanelHeight','0')) or 0
+    if authoritativePanelHeight>0 then
+        SKIN:Bang('!SetVariable','PanelHeight',tostring(math.floor(authoritativePanelHeight)))
+    end
+
     -- CardPresenter / travel-state presentation own the action and Chance meters.
-    -- This final pass enforces cross-field presentation invariants only: make the
-    -- current-stock departure deadline explicit, reject impossible percentages,
-    -- and never pair a valid probability with a non-informative WAIT DATA action.
+    -- This final pass enforces cross-field presentation invariants and also fences
+    -- stale physical row slots. Hidden rows retain meter options after a reflow, so
+    -- a later !ShowMeter on Chance must not be allowed to escape its hidden group.
+    local seenRows={}
     for i=1,8 do
         local prefix='MeterOpportunity'..tostring(i)
-        local chance=sanitizeChance(prefix,meterText(prefix..'Chance'))
-        local action=descriptiveAction(meterText(prefix..'Leave'))
-        setText(prefix..'Leave',action)
+        local identity=rowIdentity(prefix)
+        local stalePhysicalSlot=(identity=='' or seenRows[identity]==true or chanceOutsideAuthoritativePanel(prefix,authoritativePanelHeight))
+        if stalePhysicalSlot then
+            suppressChance(prefix)
+        else
+            seenRows[identity]=true
+            local chance=sanitizeChance(prefix,meterText(prefix..'Chance'))
+            local action=descriptiveAction(meterText(prefix..'Leave'))
+            setText(prefix..'Leave',action)
 
-        if hasAuthoritativeChance(chance) and isNonInformativeAction(action) then
-            setText(prefix..'Leave','Chance to hit:')
+            if hasAuthoritativeChance(chance) and isNonInformativeAction(action) then
+                setText(prefix..'Leave','Chance to hit:')
+            end
         end
     end
     return 0
