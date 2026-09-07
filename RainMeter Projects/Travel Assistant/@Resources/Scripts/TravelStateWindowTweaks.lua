@@ -162,6 +162,9 @@ local function buildLookup(state)
                 activeSelloutAt=number(state[prefix..'ActiveSelloutEstimateAt']),
                 nextRestockAt=number(state[prefix..'NextRestockEstimateAt']),
                 lastObservedOosAt=number(state[prefix..'LastObservedOosAt']),
+                medianRestockDelay=number(state[prefix..'MedianRestockDelaySeconds']),
+                restockSampleCount=number(state[prefix..'RestockSampleCount']),
+                windowDataQualityReason=trim(state[prefix..'WindowDataQualityReason']),
                 forecastMode=trim(state[prefix..'ForecastMode']):lower(),
                 liveCycleProjectionMode=trim(state[prefix..'LiveCycleProjectionMode']):lower(),
                 immediateArrivalProbability=optionalProbability(state[prefix..'ImmediateArrivalProbabilityValue']),
@@ -263,6 +266,39 @@ local function rowHasUnresolvedOos(row)
     return oosAt>0 and (restockAt<=0 or restockAt<=oosAt)
 end
 
+local function restockTimingDiagnostic(row)
+    if row==nil then return 'Restock unavailable - market row missing','No market row is available for restock diagnostics.' end
+    local nl='#CRLF#'
+    local samples=math.max(0,math.floor(number(row.restockSampleCount)))
+    local medianDelay=number(row.medianRestockDelay)
+    local modelReason=trim(row.windowDataQualityReason)
+    local lines={}
+
+    if not rowHasUnresolvedOos(row) then
+        table.insert(lines,'Sellout anchor: missing or superseded')
+        table.insert(lines,'Diagnostic: a verified unresolved OoS boundary is required before a restock timestamp can be projected.')
+        if modelReason~='' then table.insert(lines,'Window model: '..modelReason) end
+        return 'Restock unavailable - sellout anchor missing',table.concat(lines,nl)
+    end
+
+    table.insert(lines,'Sellout anchor: present')
+    table.insert(lines,'Verified restock cycles: '..tostring(samples))
+    table.insert(lines,'Median restock delay: '..(medianDelay>0 and formatDuration(medianDelay) or 'unavailable'))
+    if modelReason~='' then table.insert(lines,'Window model: '..modelReason) end
+
+    if medianDelay<=0 and samples<=0 then
+        table.insert(lines,'Diagnostic: no completed cycle currently survives the restock-timing eligibility path. Check collection gaps / boundary quality before treating this as ordinary timing variability.')
+        return 'Restock unavailable - 0 verified cycles',table.concat(lines,nl)
+    end
+    if medianDelay<=0 then
+        table.insert(lines,'Diagnostic: verified cycle history exists, but the timing stage did not publish a positive median restock delay.')
+        return 'Restock unavailable - no usable delay',table.concat(lines,nl)
+    end
+
+    table.insert(lines,'Diagnostic: timing inputs exist, but no next-restock timestamp was published for the current OoS phase.')
+    return 'Restock unavailable - estimate not published',table.concat(lines,nl)
+end
+
 local function phaseSafePlan(row)
     if row==nil then return nil end
     local plan=row.plan
@@ -306,7 +342,9 @@ local function outboundTooltip(row,state,now)
             elseif number(row.nextRestockAt)>0 then
                 table.insert(lines,'Restock estimate: '..formatRelativeTarget(number(row.nextRestockAt),now))
             else
-                table.insert(lines,'Restock estimate: learning')
+                local _,diagnostic=restockTimingDiagnostic(row)
+                table.insert(lines,'Restock estimate: unavailable')
+                table.insert(lines,diagnostic)
             end
         elseif number(row.activeRestockAt)>0 then
             table.insert(lines,'Latest observed phase: restocked; current stock status is stale/unknown')
@@ -355,7 +393,8 @@ local function outboundStatus(row,state,now)
         if rowHasUnresolvedOos(row) then
             if number(row.nextRestockAt)>now then return 'Restocks in '..formatDuration(number(row.nextRestockAt)-now) end
             if number(row.nextRestockAt)>0 then return 'Restock estimate overdue' end
-            return 'Restock timing learning'
+            local status=restockTimingDiagnostic(row)
+            return status
         end
         if number(row.activeRestockAt)>0 then return 'Stock status stale' end
         return 'Stock status unknown'
@@ -378,6 +417,9 @@ end
 local function currentCycleStatus(row,now)
     local plan=phaseSafePlan(row)
     if plan==nil or plan.anchorAt<=0 then
+        if row~=nil and rowHasUnresolvedOos(row) then
+            return restockTimingDiagnostic(row)
+        end
         if row~=nil and number(row.activeRestockAt)>0 and not rowHasUnresolvedOos(row) then
             return 'STOCK STATUS STALE','Latest observed phase: restocked; current stock status is stale/unknown'
         end
@@ -385,7 +427,7 @@ local function currentCycleStatus(row,now)
     end
     if plan.anchorPhase=='S' then
         local delay=averageRestockDelay(plan)
-        if delay<=0 then return 'WAIT DATA','' end
+        if delay<=0 then return restockTimingDiagnostic(row) end
         local restockAt=plan.anchorAt+delay
         local outOfStockFor=math.max(0,now-plan.anchorAt)
         return 'OoS: '..formatDuration(outOfStockFor)..'. Restock: '..formatRelativeTarget(restockAt,now),
