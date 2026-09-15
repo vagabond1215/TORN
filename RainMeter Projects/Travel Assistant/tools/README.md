@@ -1,5 +1,10 @@
 # Travel Assistant Tools
 
+<!-- repo-scope-guard -->
+> **Repository/subtree boundary — mandatory:** This document belongs to [`vagabond1215/TORN`](https://github.com/vagabond1215/TORN) and applies only to `RainMeter Projects/Travel Assistant/`. Other Git repositories are read-only reference/data sources only when deliberately needed; do not mutate them or treat their instructions/handoffs/task state as authority. Cross-repository mutation requires a separate explicit work order naming that repository.
+<!-- /repo-scope-guard -->
+
+
 These scripts support **bounded provider discovery, seed-data preparation, offline analysis, and local validation**. They are not part of the one-second Rainmeter UI path.
 
 ## `Probe-DroqsDb.ps1`
