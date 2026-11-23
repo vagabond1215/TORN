@@ -93,10 +93,12 @@ const tornRoadmap=(()=>{
    ["train-book","Plan 31-day books around cash, perks and activity","Do not activate rare training books without enough funds and Energy to maximize the full effect window.","gym"]
   ]
  };
- let selected=null;
+ let selected=null,selectedFor=null;
  const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
  const styleOptions=["Balanced","Training","Trade","Mug","Business","War","Revive","Crime","Racing"];
  function selectedStyles(){
+  const owner=activeProfile||"guest";
+  if(selectedFor!==owner){selectedFor=owner;selected=null;}
   if(selected)return selected;
   let data;
   try{data=JSON.parse(read(activeProfile?activeKey("playstyle:selection"):"playstyle:guest")||'["Balanced"]');}catch{data=["Balanced"];}
@@ -143,37 +145,38 @@ const tornRoadmap=(()=>{
   out+='<section class="panel"><div class="panel-content"><p class="fine-print">Sources: the faction rough beginner guide (May–August 2026), official Torn wiki, and community beginner guides. Progress is personal, not a promise that each milestone is universally optimal. Property and item prices change.</p></div></section>';
   return out;
  }
- function wire(view){
-  if(view.dataset.roadmapBound)return;view.dataset.roadmapBound="1";
-  // Daily tasks retain their existing per-profile storage keys.
+ function setupDaily(view){
   const boxes=[...view.querySelectorAll('.checklist input[type="checkbox"]')];
-  const dailyStatus=()=>{const p=view.querySelector("#task-progress");if(p)p.textContent=boxes.filter(b=>b.checked).length+" of "+boxes.length+" complete";};
-  for(const box of boxes){
-   if(!activeProfile)continue;
-   const key=activeKey("task:"+box.name);
-   box.checked=read(key)==="done";
-   box.addEventListener("change",()=>{write(key,box.checked?"done":null);dailyStatus();});
-  }
-  dailyStatus();
+  for(const box of boxes)if(activeProfile)box.checked=read(activeKey("task:"+box.name))==="done";
+  const status=view.querySelector("#task-progress");
+  if(status)status.textContent=boxes.filter(b=>b.checked).length+" of "+boxes.length+" complete";
+ }
+ function wire(view){
+  if(view.dataset.roadmapBound==="1")return;
+  view.dataset.roadmapBound="1";setupDaily(view);
   view.addEventListener("change",event=>{
    const el=event.target;
    if(el.dataset.roadmapStyle){
     const value=el.dataset.roadmapStyle;
-    selected=selectedStyles().filter(x=>x!==value);
-    if(el.checked)selected.push(value);
-    if(value!=="Balanced"&&el.checked)selected=selected.filter(x=>x!=="Balanced");
-    if(!selected.length)selected=["Balanced"];
+    if(value==="Balanced"&&el.checked)selected=["Balanced"];
+    else{
+      selected=selectedStyles().filter(x=>x!==value&&x!=="Balanced");
+      if(el.checked)selected.push(value);
+      if(!selected.length)selected=["Balanced"];
+    }
     write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
     view.innerHTML=render();
-    view.dataset.roadmapBound="";
-    wire(view);
-   } else if(el.dataset.roadmapStep){
+    setupDaily(view);
+   }else if(el.dataset.roadmapStep){
     write(stepKey(el.dataset.roadmapStep),el.checked?"done":null);
-    const entries=all(),count=entries.filter(s=>checked(s.id)).length;
+    const entries=all(),count=entries.filter(step=>checked(step.id)).length;
     const progress=view.querySelector("#roadmap-progress");
     if(progress)progress.textContent=count+" of "+entries.length+" current milestones complete";
     const bar=view.querySelector(".roadmap-bar span");
     if(bar)bar.style.width=Math.round(count/entries.length*100)+"%";
+   }else if(el.closest(".checklist")&&activeProfile){
+    write(activeKey("task:"+el.name),el.checked?"done":null);
+    setupDaily(view);
    }
   });
  }
