@@ -173,7 +173,7 @@ const tornTrainSequence=(()=>{
   }
   function chart(natural,jump){
     const xval=hour=>80+hour/p.hours*800;
-    const bottom=Math.min(natural.stat,natural.final,jump.final);
+    const bottom=Math.min(ctx.state.statValues[ctx.state.compareStat],natural.final,jump.final);
     const top=Math.max(natural.final,jump.final,bottom+1);
     const yval=val=>210-(val-bottom)/(top-bottom)*190;
     const path=serie=>serie.map((v,i)=>(i?"L":"M")+xval(v.h).toFixed(1)+","+yval(v.s).toFixed(1)).join(" ");

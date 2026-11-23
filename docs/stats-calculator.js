@@ -194,110 +194,6 @@ const tornStatPlanner = (() => {
     const start=state.statValues[stat];
     return trainBlock(start,state.happy,energy,gym,stat,effectsFor(stat).multiplier);
   }
-  function naturalEvents(opts,kind) {
-    const horizon=Math.floor(state.hours*60),reg=state.regenMinutes;
-    const cap=state.maxEnergy,gym=selectedGym(),stat=state.compareStat;
-    const cost=Math.max(1,Math.floor(gym.energy));
-    const totalX=kind==="natural"?state.naturalXan:state.jumpXan;
-    const ecst=kind==="natural"?state.naturalEcstasy:state.jumpEcstasy;
-    const candy=kind==="natural"?state.naturalCandy:state.jumpCandy;
-    const refills=kind==="natural"?state.naturalRefill:state.jumpRefill;
-    const jump=kind==="jump";
-    const stackDelay=totalX*480;
-    const feasible=jump ? (horizon>=stackDelay && state.jumpDvd*6+state.jumpCandy*0.5<=state.boosterCap) : (state.naturalCandy*0.5<=state.boosterCap);
-    const multiplier=effectsFor(stat).multiplier;
-    let current=state.statValues[stat],E=state.currentEnergy,H=state.happy;
-    const initialH=state.happy;
-    let used=0,missedRegen=0,spentX=0,spentEc=0,spentCandy=0,spentDvd=0,spentPoints=0;
-    let nextX=ecst&& !jump?240:0;
-    let boosterApplied=false,stacked=false;
-    const series=[{hour:0,value:current}];
-    function train() {
-      const result=trainBlock(current,H,E,gym,stat,multiplier);
-      current=result.stat;H=result.happy;E-=result.used;used+=result.used;
-    }
-    function boost(countCandy,countDvd,ecstasy) {
-      H=Math.min(99999,H+countCandy*state.candyHappy+countDvd*state.dvdHappy);
-      spentCandy+=countCandy;spentDvd+=countDvd;
-      if(ecstasy) {H=Math.min(99999,H*2);spentEc+=1;}
-      boosterApplied=true;
-    }
-    function addEnergy(amount) {
-      const newE=Math.min(1000,E+amount);
-      E=newE;
-    }
-    function refill() {
-      E=cap;spentPoints+=1;
-    }
-    if(jump && totalX>0) {
-      // A 4-Xanax stack starts with an empty bar, so train starting Energy before banking.
-      train();
-      if(feasible) {addEnergy(250);spentX++;stacked=true;}
-    } else {
-      if(feasible) boost(candy,jump?state.jumpDvd:0,ecst);
-      train();
-      if(!jump && totalX>0 && !ecst) {addEnergy(250);spentX++;train();nextX=480;}
-      if(!jump && refills>0) {refill();train();}
-      if(jump && feasible && refills>0) {refill();train();}
-    }
-    for(let minute=5;minute<=horizon;minute+=5) {
-      if(minute%reg===0) {
-        if(E<cap && !(jump&&stacked)) E=Math.min(cap,E+5);
-        else missedRegen+=5;
-      }
-      if(minute%15===0) {
-        H=Math.min(state.maxHappy,H+5);
-        if(H>state.maxHappy) H=state.maxHappy;
-      }
-      if(jump && totalX>0 && feasible && minute%480===0 && minute<stackDelay && spentX<totalX) {
-        addEnergy(250);spentX++;
-      }
-      if(jump && totalX>0 && feasible && minute===stackDelay) {
-        boost(candy,state.jumpDvd,ecst);train();
-        if(refills>0) {refill();train();}
-        stacked=false;
-      }
-      if(!jump && spentX<totalX && minute>=nextX) {
-        addEnergy(250);spentX++;train();nextX=minute+480;
-      }
-      if(!jump && spentPoints<refills && minute>=spentPoints*1440 && minute>0) {
-        refill();train();
-      }
-      if(!stacked && minute!==stackDelay) train();
-      if(minute%60===0 || minute===horizon) series.push({hour:minute/60,value:current});
-    }
-    const costMoney=spentX*state.priceXan+spentEc*state.priceEcstasy+spentCandy*state.priceCandy+
-      spentDvd*state.priceDvd+spentPoints*30*state.pricePoint;
-    return {start:state.statValues[stat],final:current,gain:current-state.statValues[stat],energyUsed:used,
-      happyAtBoost:boosterApplied?Math.min(99999,(initialH+candy*state.candyHappy+(jump?state.jumpDvd:0)*state.dvdHappy)*(ecst?2:1)):null,
-      missedRegen,spentX,spentEc,spentCandy,spentDvd,spentPoints,cost:costMoney,complete:feasible,
-      series};
-  }
-  function fields() {
-    const a=state;
-    const number=(key,label,step,min,max,tip)=>{
-      return '<label class="tc-field"><span>'+esc(label)+'</span><input type="number" data-tc="'+esc(key)+'" value="'+esc(a[key])+'" step="'+step+'" min="'+min+'" max="'+max+'">'+(tip?'<small>'+esc(tip)+'</small>':"")+'</label>';
-    };
-    return '<div class="tc-settings-grid">'+
-      number("hours","Same time window (hours)",1,1,168,"Both strategies run for this entire period")+
-      number("regenMinutes","Energy +5 every (minutes)",5,10,15,"10 = donor/subscriber; 15 = standard")+
-      number("naturalXan","Natural: Xanax doses",1,0,16,"250 Energy each, spaced at least 8 hours")+
-      number("naturalRefill","Natural: points refills",1,0,7,"30 points each; one per ~24 hours")+
-      number("naturalCandy","Natural: candy units",1,0,60,"Consumed just before starting training")+
-      number("naturalEcstasy","Natural: Ecstasy (0 or 1)",1,0,1,"Doubles happiness before first train")+
-      number("jumpXan","Jump: stacked Xanax",1,0,4,"Up to 1,000 Energy; allow 8 hours per dose")+
-      number("jumpRefill","Jump: points refill (0 or 1)",1,0,1,"Used immediately during the jump")+
-      number("jumpDvd","Jump: eDVD count",1,0,9,"+2,500 Happy each before Ecstasy")+
-      number("jumpCandy","Jump: candy count",1,0,60,"Combined with eDVDs; booster cap applies")+
-      number("jumpEcstasy","Jump: Ecstasy (0 or 1)",1,0,1,"Doubles happiness immediately before training")+
-      number("candyHappy","Happy per candy",1,0,5000,"Lollipop: 25; Big Box of Chocolate: 35")+
-      number("dvdHappy","Happy per eDVD",1,0,10000,"Usually 2,500; job perks may raise this")+
-      number("boosterCap","Available booster cooldown hours",1,0,96,"Typical cap is 24 hours, faction perks can change it")+
-      '</div><details class="tc-advanced"><summary>Editable estimated item prices (Torn dollars)</summary><div class="tc-settings-grid">'+
-      number("priceXan","Xanax each",1,0,100000000)+number("priceEcstasy","Ecstasy each",1,0,100000000)+
-      number("priceCandy","Candy each",1,0,100000000)+number("priceDvd","eDVD each",1,0,100000000)+
-      number("pricePoint","Price per point",1,0,100000000)+'</div></details>';
-  }
   function statPanel(stat,gym) {
     const eff=effectsFor(stat);
     const battle=battleEffects(stat);
@@ -325,47 +221,6 @@ const tornStatPlanner = (() => {
       '<div class="tc-stat-meta"><span>Est. final</span><strong>'+nice(projected.stat,2)+'</strong></div>'+
       bonuses+'</div>';
   }
-  function chart(natural,jump) {
-    const width=840,height=260,left=70,right=20,top=20,bottom=40;
-    const base=state.statValues[state.compareStat];
-    const higher=Math.max(natural.final,jump.final,base+1);
-    const range=higher-base;
-    const x=t=>left+(t/state.hours)*(width-left-right);
-    const y=v=>top+(1-(v-base)/range)*(height-top-bottom);
-    const line=(list)=>list.map((p,i)=>(i?"L":"M")+x(p.hour).toFixed(1)+" "+y(p.value).toFixed(1)).join(" ");
-    let markup='<svg class="tc-chart-svg" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Projected '+esc(readable[state.compareStat])+' over '+state.hours+' hours: natural final '+nice(natural.final)+' versus jump final '+nice(jump.final)+'">';
-    for(let i=0;i<5;i++){
-      const v=base+range*i/4,py=y(v);
-      markup+='<line x1="'+left+'" x2="'+(width-right)+'" y1="'+py+'" y2="'+py+'" stroke="#42463d" stroke-width="1"/>';
-      markup+='<text x="'+(left-8)+'" y="'+(py+4)+'" text-anchor="end" fill="#b6baad" font-size="11">'+esc(nice(v))+'</text>';
-    }
-    for(let i=0;i<=4;i++)markup+='<text x="'+x(state.hours*i/4)+'" y="'+(height-10)+'" fill="#b6baad" font-size="12" text-anchor="middle">'+nice(state.hours*i/4,1)+'h</text>';
-    markup+='<path d="'+line(natural.series)+'" stroke="#8dbde0" fill="none" stroke-width="3" stroke-linejoin="round"/>';
-    if(jump.complete)markup+='<path d="'+line(jump.series)+'" stroke="#e4c673" fill="none" stroke-width="3" stroke-linejoin="round"/>';
-    markup+='</svg><div class="tc-chart-legend"><span><i style="background:#8dbde0"></i>Natural / regular</span><span><i style="background:#e4c673"></i>Happy jump</span></div>';
-    return markup;
-  }
-  function comparison() {
-    const n=naturalEvents({}, "natural"),j=naturalEvents({}, "jump"),delta=j.gain-n.gain;
-    const warnings=[];
-    if(state.jumpXan*8>state.hours) warnings.push("The stacked-Xanax jump needs "+state.jumpXan*8+" hours (including the final drug cooldown). It cannot finish inside the selected window.");
-    if(state.jumpDvd*6+state.jumpCandy*0.5>state.boosterCap) warnings.push("Jump boosters require "+nice(state.jumpDvd*6+state.jumpCandy*0.5,1)+" hours of booster capacity. Your selected cap is only "+state.boosterCap+" hours.");
-    if(state.naturalCandy*0.5>state.boosterCap) warnings.push("Natural candy consumption exceeds your selected booster cooldown capacity.");
-    if(state.naturalXan>Math.floor((state.hours*60-(state.naturalEcstasy?240:0))/480)+1)warnings.push("Not all requested natural Xanax doses fit the time window; only the scheduled ones were used.");
-    if(state.naturalRefill>Math.ceil(state.hours/24))warnings.push("Natural points refills are limited to roughly one per 24 hours; not all requested refills fit.");
-    let verdict="The happy jump is not feasible with the chosen timing or cooldown limits.";
-    if(n.complete && j.complete)verdict=delta>0?"Happy jump gains ~"+nice(delta)+" more "+readable[state.compareStat]+" in this window.":delta<0?"Natural training gains ~"+nice(-delta)+" more "+readable[state.compareStat]+" in this window.":"Both approaches produce similar projected gains.";
-    const summary='<div class="tc-compare-summary">'+
-      '<div class="tc-result"><span>Natural: final stat</span><strong>'+(n.complete?nice(n.final,2):"Not feasible")+'</strong><small>+'+nice(n.gain,2)+' gained · '+nice(n.energyUsed)+' Energy</small><small>Est. cost $'+nice(n.cost)+'</small></div>'+
-      '<div class="tc-result"><span>Happy jump: final stat</span><strong>'+ (j.complete?nice(j.final,2):"Not feasible")+'</strong><small>+'+nice(j.gain,2)+' gained · '+nice(j.energyUsed)+' Energy</small><small>Est. cost $'+nice(j.cost)+'</small></div>'+
-      '<div class="tc-result"><span>Difference in gain</span><strong>'+(n.complete&&j.complete?(delta>0?"+":"")+nice(delta,2):"—")+'</strong><small>Jump minus natural</small><small>Same '+nice(state.hours)+'-hour period</small></div></div>';
-    return (warnings.length?'<div class="tc-warnings" role="status">'+warnings.map(s=>'<p>'+esc(s)+'</p>').join("")+'</div>':"")+
-      summary+'<p class="tc-verdict">'+esc(verdict)+'</p>'+
-      (n.complete&&j.complete?chart(n,j):'<p class="fine-print">The comparison graph is hidden because one or more recipes cannot complete under the current settings.</p>')+
-      '<div class="tc-footnotes"><p>Natural: immediate training, continuous energy regeneration when below the cap, scheduled Xanax, optional candy/Ecstasy and point refills. Jump: train your starting energy before stacking Xanax, wait for each drug cooldown, apply happy boosters and Ecstasy once, then train the banked energy and optional refill. Other time is spent regenerating or waiting.</p>'+
-      '<p>Average estimates, not exact predictions. No overdose probability, drug addiction progression, combat injury, shop-job train conversion, calendar happy-reset alignment, faction perks altering item effectiveness, or fluctuating item prices are simulated. Drug cooldown is modeled as 8 hours for Xanax and 4 hours for Ecstasy; actual cooldowns vary. Points refills cost 30 points and are limited to one per day.</p>'+
-      '<p><a href="https://wiki.torn.com/wiki/Gym#Training_Formulas" target="_blank" rel="noopener noreferrer">Torn Gym formula</a> · <a href="https://wiki.torn.com/wiki/Happy" target="_blank" rel="noopener noreferrer">Happy mechanics</a> · <a href="https://aidapaul.github.io/torn-happy-jumps/" target="_blank" rel="noopener noreferrer">Jump timing guide</a></p></div>';
-  }
   function render() {
     hydrateFromApi();
     const gym=selectedGym();
@@ -385,16 +240,18 @@ const tornStatPlanner = (() => {
       '<p class="tc-budget '+(remaining<0?"tc-neg":"")+'">Allocated '+nice(totalEnergy)+' E of '+nice(state.currentEnergy)+' currently available · '+(remaining>=0?nice(remaining)+' unallocated':nice(-remaining)+' over budget')+'</p>'+
       '<div class="tc-stat-scroll"><div class="tc-four">'+statNames.map(stat=>statPanel(stat,gym)).join("")+'</div></div>'+
       '<p class="fine-print">Training gains use the current Happy level and average per-train Happy loss. Combat-only penalties (including some drug and merit effects) are listed separately and are not treated as gym-gain modifiers. Different stats have independent faction and education bonuses.</p></div></section>';
-    markup+='<section class="panel"><div class="panel-heading"><h2>Natural energy vs. happy jump</h2></div><div class="panel-content">'+
+    markup+='<section class="panel"><div class="panel-heading"><h2>Natural Energy vs. Happy Jump · Execution Timeline</h2></div><div class="panel-content">'+
       '<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+readable[stat]+'</button>').join("")+'</div>'+
-      '<div class="tc-compare-intro">Choose the same time window and edit both strategies. Natural uses regeneration continuously; the jump banks energy with Xanax, losing natural regeneration while above the cap. Both start from '+nice(state.statValues[state.compareStat])+' '+readable[state.compareStat]+'.</div>'+
-      fields()+'<div id="tc-comparison">'+comparison()+'</div></div></section>';
+      '<div class="tc-compare-intro">Choose a stat and edit each plan as a sequence of actions. Both use the same starting stat of '+nice(state.statValues[state.compareStat])+' and the same time window.</div>'+
+      '<div id="tc-sequencer">'+tornTrainSequence.render({state,gym,trainBlock,effectsFor})+'</div></div></section>';
     return markup;
   }
   function wire(view) {
     if (view.dataset.tcPlannerBound === "1") return;
     view.dataset.tcPlannerBound = "1";
+    tornTrainSequence.wire(view);
     view.addEventListener("change",event=>{
+      if(event.target.closest("#tc-sequencer")) return;
       const el=event.target;
       if(el.dataset.tc) {
         const key=el.dataset.tc;
@@ -415,12 +272,14 @@ const tornStatPlanner = (() => {
       view.innerHTML=render();
     });
     view.addEventListener("click",event=>{
+      if(event.target.closest("#tc-sequencer")) return;
       const pick=event.target.closest("[data-tc-pick]");
       const action=event.target.closest("[data-tc-action]");
       if(pick){state.compareStat=pick.dataset.tcPick;view.innerHTML=render();}
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
   }
-  return {render,wire,simulate:()=>({natural:naturalEvents({},"natural"),jump:naturalEvents({},"jump")}),
+  return {render,wire,
+    simulate:()=>({natural:tornTrainSequence.simulate(tornTrainSequence.steps.natural),jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump)}),
     state,internal:{oneTrain,trainBlock,percentage,gainPerks}};
 })();
