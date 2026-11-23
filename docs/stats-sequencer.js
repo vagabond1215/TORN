@@ -4,9 +4,15 @@ const tornTrainSequence=(()=>{
   const make=(type,qty=1,minutes=0)=>({type,qty,minutes});
   const defaults={
     natural:()=>[make("xanax"),make("candy",2),make("train"),make("refill"),make("train"),make("autoOn"),make("waitDrug"),make("xanax")],
-    jump:()=>[make("train"),make("xanax",4),make("waitDrug"),make("dvd",5),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")]
+    jump:()=>[make("train"),make("xanax"),make("xanax"),make("xanax"),make("xanax"),make("dvd",5),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")]
   };
   const steps={natural:defaults.natural(),jump:defaults.jump()};
+  // Booster quantities are immediate batches. They never hide several hours
+  // of waiting between candy and training; users add separate Wait rows.
+  const maxCandy=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
+    Math.max(1,Math.round(1800*cfg.candyCDMultiplier))));
+  const maxDvd=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
+    Math.max(1,Math.round(21600*cfg.dvdCDMultiplier))));
   const p={hours:32,regenMin:10,boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:25,dvdHappy:2500,autoWait:true,
     xanaxPrice:850000,ecstasyPrice:40000,candyPrice:850,dvdPrice:4300000,pointPrice:30000};
   const $=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
@@ -45,7 +51,7 @@ const tornTrainSequence=(()=>{
     const gymCost=Math.max(1,Math.floor(gym.energy));
     const mult=ctx.effectsFor(stat).multiplier;
     const v={time:0,stat:base,energy:ctx.state.currentEnergy,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),auto:false,
-      costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0};
+      costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0,warnings:[]};
     const snap=()=>({time:v.time,energy:v.energy,happy:v.happy,drug:v.drug,booster:v.booster,stat:v.stat});
     const point=()=>{const last=v.series[v.series.length-1],h=v.time/3600;if(Math.abs(last.h-h)<1e-8)last.s=v.stat;else v.series.push({h,s:v.stat});};
     function train(){
@@ -86,7 +92,10 @@ const tornTrainSequence=(()=>{
       }else{
         // The threshold is evaluated BEFORE each consumption. A final item
         // can push the cooldown over the cap; after 4 DVDs, wait one second.
-        if(!waitFor(Math.max(0,v.booster-boosterLimit+1),"Booster cooldown"))return false;
+        if(v.booster>=boosterLimit){
+          v.errors.push("Booster batch cannot continue: add an explicit Wait for booster space before another item row. No delay is inserted during candy/DVD consumption.");
+          return false;
+        }
         const secs=type==="dvd"?21600*cfg.dvdCDMultiplier:1800*cfg.candyCDMultiplier;
         v.booster+=Math.round(secs);
         v.happy=Math.min(99999,v.happy+(type==="dvd"?cfg.dvdHappy:cfg.candyHappy));
@@ -96,9 +105,10 @@ const tornTrainSequence=(()=>{
     }
     for(let i=0;i<list.length;i++){
       if(v.errors.length)break;
-      const a=list[i],start=snap(),qty=Math.floor(clamp(a.qty,1,40)),type=a.type;
+      const a=list[i],start=snap(),type=a.type;
+      const qty=Math.floor(clamp(a.qty,1,type==="candy"?maxCandy(cfg):type==="dvd"?maxDvd(cfg):1));
       if(["xanax","ecstasy","dvd","candy"].includes(type)){
-        for(let k=0;k<(type==="ecstasy"?1:qty);k++){
+        for(let k=0;k<qty;k++){
           if(!useItem(type))break;
         }
       }else if(type==="train")train();
@@ -154,10 +164,11 @@ const tornTrainSequence=(()=>{
   }
   function row(side,a,index){
     const types=Object.entries(names).map(([id,label])=>'<option value="'+id+'" '+(a.type===id?"selected":"")+'>'+$(label)+'</option>').join("");
-    const qty=["xanax","candy","dvd"].includes(a.type);
+    const qty=["candy","dvd"].includes(a.type);
     const wait=a.type==="wait";
+    const ceiling=a.type==="candy"?maxCandy(p):a.type==="dvd"?maxDvd(p):1;
     return '<div class="ts-step"><span>'+(index+1)+'</span><select data-ts-side="'+side+'" data-ts-index="'+index+'" data-ts-edit="type">'+types+'</select>'+
-      (qty||wait?'<input type="number" min="'+(qty?1:0)+'" max="'+(qty?40:10080)+'" step="'+(qty?1:.01)+'" value="'+(qty?a.qty:a.minutes)+'" data-ts-side="'+side+'" data-ts-index="'+index+'" data-ts-edit="'+(qty?"qty":"minutes")+'" aria-label="'+(qty?"Quantity":"Minutes")+'">':'<span></span>')+
+      (qty||wait?'<input type="number" min="'+(qty?1:0)+'" max="'+(qty?ceiling:10080)+'" step="'+(qty?1:.01)+'" value="'+(qty?a.qty:a.minutes)+'" data-ts-side="'+side+'" data-ts-index="'+index+'" data-ts-edit="'+(qty?"qty":"minutes")+'" aria-label="'+(qty?"Quantity":"Minutes")+'">':'<span></span>')+
       '<div class="ts-arrows"><button type="button" title="Move up" data-ts-op="up" data-ts-side="'+side+'" data-ts-index="'+index+'">↑</button>'+
       '<button type="button" title="Move down" data-ts-op="down" data-ts-side="'+side+'" data-ts-index="'+index+'">↓</button>'+
       '<button type="button" title="Remove" data-ts-op="remove" data-ts-side="'+side+'" data-ts-index="'+index+'">×</button></div></div>';
@@ -202,7 +213,7 @@ const tornTrainSequence=(()=>{
     const a=simulate(steps.natural),b=simulate(steps.jump);
     const diff=b.gain-a.gain;
     const perks=activePerks();
-    return '<p class="ts-intro">Build both strategies as an ordered timeline. Drug cooldown must reach zero before the next drug. Boosters can exceed their use threshold on the last item: a fifth eDVD becomes legal after one second below 24 hours. Wait steps move the clock forward; automatic training spends regenerated energy after each tick.</p>'+
+    return '<p class="ts-intro">Build both strategies as ordered actions. Xanax and Ecstasy are one dose per action. Candy/eDVD quantities are immediate batches with no hidden waiting before training. Use explicit Wait rows when cooldown blocks the next item. </p>'+
       controls()+
       (perks.length?'<p class="fine-print">Possibly relevant current perks: '+perks.map($).join(" • ")+'</p>':"")+
       '<div class="ts-layout">'+section("natural")+section("jump")+'</div>'+
@@ -224,7 +235,7 @@ const tornTrainSequence=(()=>{
       if(edit&&steps[side]&&steps[side][index]){
         const a=steps[side][index];
         if(edit==="type"){a.type=el.value;a.qty=1;a.minutes=0;}
-        if(edit==="qty")a.qty=clamp(Math.floor(n(el.value,1)),1,40);
+        if(edit==="qty")a.qty=clamp(Math.floor(n(el.value,1)),1,a.type==="candy"?maxCandy(p):a.type==="dvd"?maxDvd(p):1);
         if(edit==="minutes")a.minutes=clamp(el.value,0,10080);
         rebuild();
       }
