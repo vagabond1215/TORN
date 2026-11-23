@@ -16,6 +16,7 @@
   <script src="./company-catalog.js?v=20261123-natural-reports1" defer></script>
   <script src="./job-guide.js?v=20261123-natural-reports1" defer></script>
   <script src="./roadmap.js?v=20261123-natural-reports1" defer></script>
+  <script src="./preferences.js?v=20261123-natural-reports1" defer></script>
   <script src="./tools-guide.js?v=20261123-natural-reports1" defer></script>
   <script src="./crime-guide.js?v=20261123-natural-reports1" defer></script>
   <script src="./guide.js?v=20261123-natural-reports1" defer></script>
@@ -24,12 +25,14 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="#home" aria-label="Torn City Guide home">
-        <span class="brand-mark" aria-hidden="true">T</span>
-        <span>TORN CITY <strong>GUIDE</strong></span>
+      <a class="brand torn-brand" href="https://www.torn.com/" target="_blank" rel="noopener noreferrer" aria-label="Open Torn" title="Open Torn">
+        <span class="brand-mark"><span class="brand-fallback" aria-hidden="true">T</span><img src="https://www.torn.com/favicon.ico" alt="" width="28" height="28"></span>
       </a>
       <button class="menu-button button secondary" id="menu-button" type="button" aria-controls="guide-nav" aria-expanded="false">Menu</button>
-      <button class="button secondary top-refresh" id="refresh-top" type="button" disabled aria-label="Refresh Torn data" title="Refresh Torn data now">↻ Refresh</button>
+      <button class="top-refresh" id="refresh-top" type="button" disabled aria-label="Refresh Torn data" title="Refresh Torn data now">
+        <svg class="refresh-symbol" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.6-4.6L3 9m0-6v6h6"/><path d="M4 13a8 8 0 0 0 14.6 4.6L21 15m0 6v-6h-6"/></svg>
+        <span id="refresh-age" aria-hidden="true">--:--</span>
+      </button>
       <div class="top-account">
         <div class="tct-widget" id="tct-widget">
           <button type="button" class="tct-button" id="tct-toggle" aria-controls="tct-dropdown" aria-expanded="false" aria-label="Torn City Time and countdowns">TCT <time id="tct-time">--:--:--</time> <span aria-hidden="true">▾</span></button>
@@ -46,7 +49,31 @@
             <p class="fine-print" id="tct-load-status" role="status">No API calls are made just by opening this dropdown.</p>
           </section>
         </div>
-        <a class="profile-link" id="profile-link" href="#profile">Connect Torn API</a>
+        <a class="profile-link" id="profile-link" href="#profile" title="Open your Torn Guide account">Connect Torn API</a>
+        <div class="settings-widget" id="settings-widget">
+          <button type="button" class="settings-toggle" id="settings-toggle" aria-controls="settings-panel" aria-expanded="false" aria-label="Open settings" title="Settings">⋯</button>
+          <section class="settings-panel" id="settings-panel" aria-label="Guide settings" hidden>
+            <div class="settings-heading"><h2>Settings</h2><span>Saved in this browser</span></div>
+            <label class="settings-field" for="setting-theme">Theme
+              <select id="setting-theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">Follow system</option></select>
+            </label>
+            <label class="settings-field" for="setting-timezone">Display time zone
+              <select id="setting-timezone"><option value="local">Browser local time</option></select>
+            </label>
+            <p class="settings-hint">Torn City Time remains UTC; this setting changes local timestamps.</p>
+            <label class="settings-field" for="setting-links">Open external links in
+              <select id="setting-links"><option value="tab">New tab (default)</option><option value="window">New window (browser permitting)</option></select>
+            </label>
+            <label class="settings-check" for="setting-contextual">
+              <input type="checkbox" id="setting-contextual">
+              <span><strong>Contextual Quick Access</strong><small>Only show tool icons relevant to the current page.</small></span>
+            </label>
+            <div class="settings-footer">
+              <a href="#profile" id="settings-account">Account &amp; API</a>
+              <button type="button" class="settings-signout" id="settings-signout" disabled>Sign out</button>
+            </div>
+          </section>
+        </div>
       </div>
       <span class="sr-only" id="refresh-status" role="status" aria-live="polite"></span>
     </div>
