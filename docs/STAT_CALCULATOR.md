@@ -75,3 +75,18 @@ The subview switch is local client state and causes no API call.
 - The same-window comparison does not treat waiting for a booster as free training. No hidden clock advancement occurs during a candy batch.
 
 Validation compares 15 versus 30 candy consumed at t=0 in the same gym and verifies no additional delay, with equal starting state and greater projected gain for the larger valid batch.
+
+
+## November 23, 2026: realistic natural training visits and account status
+
+The **automatic natural trainer** no longer spends small batches of Energy every +5 regeneration tick. It is an unattended check-in estimate: Energy is trained only when the bar **reaches its maximum**, or at the exact moment a previously active **drug cooldown finishes**. If auto-training starts while the bar is already full, the first train can happen immediately. Explicit \`Train\` actions remain manual gym visits and spend Energy at their timeline position. The \`Points energy refill\` also creates a full bar and may trigger a check-in.
+
+Drug cooldown is a true event in the simulation clock, even when it expires between Energy regeneration and 15-minute Happy ticks. The execution log includes scheduled automatic check-ins and their reason. Time can continue with partial Energy unspent at the end of the comparison window; it is not artificially trained just to inflate the projected total.
+
+An **account model** selector in Compare offers Auto (from the already cached current Energy bar), Standard (100 maximum, +5 / 15 minutes), Donator (150 maximum, +5 / 10 minutes), and Subscriber (150 maximum, +5 / 10 minutes). This uses no additional Torn API selections. Since the current Energy bar alone cannot distinguish Donator and Subscriber, Auto labels the equivalent Energy rules rather than claiming to know which paid status is active. A manual status scenario caps its starting Energy at the chosen bar maximum; Auto preserves any genuinely stacked Energy.
+
+The existing optional Energy regeneration interval setting now defaults to **0 = follow chosen account model**; a positive value is an explicit what-if override.
+
+The simulator also displays cached current/max Nerve where available. **Donator and Subscriber status do not change natural Nerve regeneration:** +1 every 5 minutes, up to the player's Nerve bar, which may be affected by crime experience and perks. The displayed end-of-window Nerve estimate assumes no crimes, nerve refills, or other nerve actions, and is deliberately separate from battle-stat gains.
+
+Sources: https://wiki.torn.com/wiki/Energy , https://wiki.torn.com/wiki/Nerve , https://wiki.torn.com/wiki/Donator

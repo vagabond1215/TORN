@@ -61,3 +61,10 @@ Sources:
 - [Torn staff clarification of scripting rules](https://www.torn.com/forums.php?t=16534470)
 - [Tampermonkey documentation](https://www.tampermonkey.net/documentation.php)
 - [TornStats API docs](https://www.tornstats.com/api)
+
+
+## Activity report previews
+
+The Home page's existing nine **Activity and detailed reports** links are now explicit, allowlisted report-launch buttons. Clicking one opens a native in-page dialog with an iframe pointing to the matching Torn Report page, alongside **Open in new tab** and **Pop out window** controls. The external page is loaded **only on user interaction**, with a no-referrer policy, an iframe sandbox, and the iframe source removed when the dialog closes. It neither loads any report automatically nor sends the Torn Guide API key or cached Torn account data to the external provider.
+
+**Compatibility constraint:** Third-party sites control whether iframe embedding is permitted. Torn Report might send X-Frame-Options/CSP frame-ancestor restrictions, and some logged-in pages fail under third-party-cookie restrictions. An iframe refusing to load cannot be reliably detected from the guide's separate origin. For that reason, the dialog always displays the fallback link and pop-out option; it does not try to bypass the restriction, scrape the page, or proxy the authenticated content. Live frame compatibility was not verified.

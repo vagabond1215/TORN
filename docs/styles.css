@@ -515,3 +515,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .report-dialog-actions{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;padding:.8rem 1rem}
 .report-dialog-actions a,.report-dialog-actions button{font-size:.78rem;min-height:35px}
 @media(max-width:650px){.report-dialog{width:100vw;height:98vh;max-height:98vh;border-radius:0}.report-dialog-actions{justify-content:stretch}.report-dialog-actions>*{flex:1;text-align:center;padding:.4rem}.report-frame-wrap{margin:0 .5rem}}
+
+
+/* Normal Energy check-ins and optional account-status comparisons */
+.ts-membership{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;color:var(--muted);font-size:.83rem;margin:.85rem 0}
+.ts-membership select{background:var(--canvas);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:.45rem .65rem;min-width:210px}
+.ts-account-summary{padding:.75rem .85rem;border:1px solid var(--border);border-radius:7px;background:var(--raised);font-size:.84rem;line-height:1.6}
+.ts-account-summary>strong{color:var(--accent-strong)}
+.ts-account-summary>span{display:block;font-size:.78rem;color:var(--muted);margin-top:.2rem}
