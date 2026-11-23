@@ -187,7 +187,7 @@ const tornGuideApi = (() => {
   function refresh(){
     if(!secret)return Promise.reject(Error("Connect a Torn API key first."));
     if(inFlight)return inFlight;
-    inFlight=refreshInternal().finally(()=>{inFlight=null;});
+    inFlight=refreshInternal().finally(()=>{inFlight=null;state.loading=false;announce();});
     return inFlight;
   }
   function disconnect() {
@@ -347,7 +347,7 @@ function renderDashboard() {
   let result = '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Live character dashboard</h1><p>Private read-only snapshots directly from Torn API v2. Full Access keys are accepted; most displayed selections work with a more restrictive key.</p></header>';
   if (!tornGuideApi.isConnected()) return result + '<section class="panel"><div class="panel-content"><p>Connect your own Torn API key in <a href="#profile">Account</a> to populate this dashboard. No key is stored in the browser.</p></div></section>';
   const st = tornGuideApi.state;
-  result += '<div class="panel"><div class="panel-content"><p class="progress-line">' + safe(st.identity.name) + " [#" + safe(st.identity.id) + "] · Level " + safe(st.identity.level) + '</p><p class="fine-print">' + (st.loading ? "Refreshing…" : st.updated ? "Last refreshed: " + safe(new Date(st.updated).toLocaleString()) : "Connecting…") + '</p></div></div>';
+  result += '<div class="panel"><div class="panel-content"><p class="progress-line">' + safe(st.identity.name) + " [#" + safe(st.identity.id) + "] · Level " + safe(st.identity.level) + '</p><p class="fine-print">' + (st.loading ? "Refreshing…" : st.updated ? "Last refreshed: " + safe(new Date(st.updated).toLocaleString()) + (st.cached ? " (restored from browser cache)" : " (live Torn API)") : "Connecting…") + '</p></div></div>';
   result += '<section class="panel"><div class="panel-heading"><h2>Energy, nerve, happiness and life</h2></div><div class="panel-content">' + barsMarkup() + '</div></section>';
   result += '<section class="panel"><div class="panel-heading"><h2>Battle stats</h2></div><div class="panel-content">' + battleMarkup() + '</div></section>';
   const gym = payload("gym", "gym");
