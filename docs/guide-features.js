@@ -84,7 +84,7 @@ const tornGuideApi = (() => {
     }
     state.updated = Date.now();
     state.loading = false;
-    if (location.hash === "#dashboard" || location.hash === "#quickstart" || location.hash === "#stats") renderRoute();
+    if (location.hash === "#dashboard" || location.hash === "#quickstart" || location.hash === "#checklist" || location.hash === "#stats") renderRoute();
     return { failures: Object.keys(state.errors).length + Object.keys(state.inventoryErrors).length };
   }
   function disconnect() {
@@ -179,7 +179,8 @@ function stepKey(id) { return activeProfile ? activeKey("quickstart:" + id) : "q
 function renderQuickstart() {
   const sections = [...new Set(guideSteps.map(step => step.stage))];
   const count = guideSteps.filter(step => autoDone(step) || read(stepKey(step.id)) === "done").length;
-  let output = '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Beginner quickstart</h1><p>A prioritized roadmap from the first hour through banking, travel and a future Private Island. Checked steps are saved in this browser; selected milestones are verified against your connected Torn account.</p></header>';
+  let output = '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Checklist & quickstart</h1><p>Your daily routine and milestone roadmap are now one checklist. Supported milestones are checked against your Torn API data; your previous progress remains saved.</p></header>';
+  output += '<section class="panel"><div class="panel-heading"><h2>Daily routine</h2></div><div class="panel-content"><p id="task-progress" role="status"></p><div class="checklist">' + Object.entries(tasks).map(([id,label]) => '<label><input type="checkbox" name="' + safe(id) + '" ' + (activeProfile ? "" : "disabled") + '><span>' + safe(label) + '</span></label>').join("") + '</div><p class="fine-print">The daily tasks reuse your old Checklist progress. Uncheck these when starting a new day.</p></div></section>';
   output += '<div class="panel"><div class="panel-content"><p class="progress-line" role="status">' + count + " of " + guideSteps.length + ' milestones complete</p><p class="fine-print">Guidance last reviewed November 2026. Rental prices and game mechanics may change. Always verify current in-game prices.</p></div></div>';
   for (const stage of sections) {
     output += '<section class="panel"><div class="panel-heading"><h2>' + safe(stage) + '</h2></div><div class="panel-content step-list">';
@@ -202,7 +203,7 @@ function wireQuickstart() {
   }
 }
 function metric(label, value, description) {
-  return '<div class="metric"><span class="metric-label">' + safe(label) + '</span><strong>' + safe(value) + '</strong>' + (description ? '<small>' + safe(description) + '</small>' : "") + "</div>";
+  return '<div class="metric"><span class="metric-label">' + safe(label) + '</span><strong class="metric-value">' + safe(value) + '</strong>' + (description ? '<small>' + safe(description) + '</small>' : "") + "</div>";
 }
 function val(obj, key) { return obj && typeof obj === "object" ? obj[key] : undefined; }
 function barsMarkup() {
@@ -282,7 +283,15 @@ function renderDashboard() {
   result += sourceError("stocks") + sourceError("stockCatalog") + '</div></section>';
   result += '<section class="panel"><div class="panel-heading"><h2>Your inventory</h2></div><div class="panel-content">' + inventoryMarkup() + '</div></section>';
   const errors = Object.keys(st.errors).length + Object.keys(st.inventoryErrors).length;
-  if (errors) result += '<section class="panel"><div class="panel-content"><p class="api-error">' + errors + ' API section(s) could not be loaded. They remain separate so a problem in one selection does not hide the rest.</p></div></section>';
+  if(errors){
+    result += '<section class="panel"><div class="panel-heading"><h2>API diagnostics (' + errors + ' unavailable)</h2></div><div class="panel-content"><p class="fine-print">A Full Access key does not resolve invalid endpoints, cache limits or temporary API failures. Here are the specific requests that need attention.</p><ul class="api-failure-list">';
+    for(const [name,reason] of Object.entries(st.errors)){
+      const path=name==="gymCatalog"?"torn/gyms":name==="meritCatalog"?"torn/merits":name==="stockCatalog"?"torn/stocks":"user/"+name;
+      result += '<li><strong>/v2/' + safe(path) + '</strong><small>' + safe(reason) + '</small></li>';
+    }
+    for(const [category,reason] of Object.entries(st.inventoryErrors)) result += '<li><strong>Inventory: '+safe(category)+'</strong><small>'+safe(reason)+'</small></li>';
+    result += '</ul></div></section>';
+  }
   return result;
 }
 
