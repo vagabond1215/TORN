@@ -22,8 +22,8 @@ const topics = {
   },
   crime: {
     title: "Crime",
-    summary: "Plan your nerve spending",
-    intro: "Pick an in-game crime to practice and use your notes to track what works.",
+    summary: "Crimes 2.0, CE, NNB and difficulty",
+    intro: "Build crime experience and tackle harder crimes safely.",
     prompts: ["Check your available nerve before starting.", "Review the requirements shown in the game.", "Record any outcomes you want to compare later."],
   },
   attacking: {
@@ -143,8 +143,12 @@ function renderDirectory() {
 function renderProfile() {
   byId("profile-link").textContent = activePlayerName || "Connect Torn API";
   byId("profile-summary").textContent = activeProfile
-    ? "Connected as " + activePlayerName + ". Guide progress is saved in this browser, associated with your Torn player ID. Your API key stays in memory only."
-    : "Enter your own Torn API key to load your character stats and item inventory. A Limited Access key is enough for most sections; Full Access is accepted.";
+    ? "Connected as " + activePlayerName + ". " + (tornGuideApi.isRemembering()
+      ? "This browser remembers your API key and last refreshed account data."
+      : "This is a session-only connection; your API key is forgotten on reload.")
+    : "Connect your Torn API key to load your stats and inventory. Opt into Stay logged in only on a private, trusted browser.";
+  byId("remember-active").checked=tornGuideApi.isRemembering();
+  updateRefreshUI();
   byId("profile-form").hidden = Boolean(activeProfile);
   byId("profile-actions").hidden = !activeProfile;
   byId("profile-name").value = "";
@@ -163,6 +167,7 @@ function renderTopic(route) {
   if (route === "checklist") { view.innerHTML = renderQuickstart(); wireQuickstart(); wireChecklist(view); return; }
   if (route === "stats") { view.innerHTML = tornStatPlanner.render(); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render(); tornRacingGuide.wire(view); return; }
+  if (route === "crime") { view.innerHTML = tornCrimeGuide.render(); if(activeProfile)wireNotes("crime"); return; }
   const taskList = `<p id="task-progress" role="status"></p><div class="checklist">${Object.entries(tasks).map(([id, label]) =>
     `<label><input type="checkbox" name="${id}" ${activeProfile ? "" : "disabled"}><span>${label}</span></label>`
   ).join("")}</div>`;
@@ -255,7 +260,7 @@ byId("profile-form").addEventListener("submit", async (event) => {
   const button = byId("connect-api");
   button.disabled = true; feedback.textContent = "Connecting directly to Torn API…";
   try {
-    const identity = await tornGuideApi.connect(input.value);
+    const identity = await tornGuideApi.connect(input.value,byId("stay-logged-in").checked);
     input.value = "";
     activeProfile = String(identity.id);
     activePlayerName = identity.name;
@@ -265,7 +270,9 @@ byId("profile-form").addEventListener("submit", async (event) => {
     feedback.textContent = "Connected. Loading your account data…";
     const status = await tornGuideApi.refresh();
     feedback.textContent = "Connected as " + activePlayerName + ". " +
-      (status && status.failures ? status.failures + " sections unavailable; check Dashboard." : "Data loaded.");
+      (status && status.failures ? status.failures + " sections unavailable; check Dashboard." : "Data loaded.") +
+      (tornGuideApi.state.storageWarning ? " " + tornGuideApi.state.storageWarning : "");
+    updateRefreshUI();
   } catch (error) {
     input.value = "";
     feedback.textContent = error.message || "Could not connect to Torn.";
@@ -276,9 +283,11 @@ function disconnectAccount() {
   tornGuideApi.disconnect();
   activeProfile = null; activePlayerName = "";
   write("active", null);
+  byId("stay-logged-in").checked=false;
   renderProfile();
   renderRoute();
-  byId("profile-feedback").textContent = "Disconnected. Your notes and checklists remain saved locally.";
+  updateRefreshUI();
+  byId("profile-feedback").textContent = "Disconnected. Saved API key and account cache cleared. Your notes and checklists remain saved locally.";
 }
 byId("switch-profile").addEventListener("click", () => {
   disconnectAccount();
@@ -288,16 +297,47 @@ byId("sign-out").addEventListener("click", () => {
   disconnectAccount();
   byId("profile-name").focus();
 });
-byId("refresh-data").addEventListener("click", async () => {
-  const feedback = byId("profile-feedback");
-  const button = byId("refresh-data");
-  button.disabled = true; feedback.textContent = "Refreshing account data…";
-  try {
-    const result = await tornGuideApi.refresh();
-    feedback.textContent = result.failures ? result.failures + " sections unavailable; see Dashboard." : "Torn data refreshed.";
-  } catch (error) { feedback.textContent = error.message || "Refresh failed."; }
-  finally { button.disabled = false; }
+function updateRefreshUI(){
+  const connected=tornGuideApi.isConnected();
+  const busy=tornGuideApi.state.loading;
+  const top=byId("refresh-top"),profile=byId("refresh-data");
+  top.disabled=!connected||busy;
+  profile.disabled=!connected||busy;
+  top.textContent=busy?"↻ Updating…":"↻ Refresh";
+  top.title=!connected?"Connect Torn API first":busy?"Torn account refresh in progress":"Refresh Torn data now";
+  byId("remember-active").checked=tornGuideApi.isRemembering();
+  const updated=tornGuideApi.state.updated;
+  byId("refresh-status").textContent=busy?"Refreshing Torn data":connected
+    ? (updated?"Last Torn refresh "+new Date(updated).toLocaleTimeString():"Connected; waiting for data")
+    : "Torn API disconnected";
+}
+async function refreshAccount(){
+  if(!tornGuideApi.isConnected() || tornGuideApi.state.loading)return;
+  const feedback=byId("profile-feedback");
+  feedback.textContent="Refreshing your Torn data…";
+  updateRefreshUI();
+  try{
+    const result=await tornGuideApi.refresh();
+    if(!tornGuideApi.isConnected())return;
+    feedback.textContent = result && result.failures
+      ? result.failures+" section(s) unavailable. See Dashboard API diagnostics."
+      : "Torn data refreshed.";
+    if(tornGuideApi.state.storageWarning) feedback.textContent+=" "+tornGuideApi.state.storageWarning;
+  }catch(error){
+    feedback.textContent=String(error.message||error);
+  }finally{updateRefreshUI();}
+}
+for(const id of ["refresh-data","refresh-top"])
+  byId(id).addEventListener("click",refreshAccount);
+byId("remember-active").addEventListener("change",event=>{
+  const actual=tornGuideApi.setRemember(event.target.checked);
+  event.target.checked=actual;
+  byId("profile-feedback").textContent=actual
+    ? "Stay logged in enabled: this browser will keep your API key and cached account data."
+    : (tornGuideApi.state.storageWarning || "Stay logged in disabled; stored API key and cached data cleared.");
+  renderProfile();
 });
+window.addEventListener("torn-guide-sync",updateRefreshUI);
 
 byId("menu-button").addEventListener("click", () => {
   const open = byId("guide-nav").classList.toggle("is-open");
@@ -324,3 +364,20 @@ document.querySelector(".skip-link").addEventListener("click", (event) => {
   event.preventDefault();
   byId("main").focus();
 });
+
+
+// Resume a previously authorized, opt-in browser session without prompting again.
+// Show cached data immediately. Refresh now only when the last snapshot is stale.
+const resumed=tornGuideApi.restore();
+if(resumed){
+  activeProfile=String(resumed.identity.id);
+  activePlayerName=resumed.identity.name;
+  renderProfile();
+  renderRoute();
+  byId("profile-feedback").textContent=resumed.cached
+    ? "Restored your locally cached Torn profile. Automatic updates are enabled while this page is open."
+    : "Reconnected with your stored API key. Loading account data…";
+  tornGuideApi.refreshOnResume();
+}else{
+  updateRefreshUI();
+}
