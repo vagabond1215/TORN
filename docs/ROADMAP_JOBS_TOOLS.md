@@ -90,3 +90,36 @@ TornTools (browser extension) and Torn PDA (mobile app with its own userscript s
 - Jobs API request isolation and no static-catalog polling
 
 The live GitHub Pages deployment and actual authenticated job response fields still need user-side browser testing. No Full Access API key or private Torn page content was committed.
+
+
+## Quick Access launchers (November 23, 2026)
+
+The user had TornW3B, Torn Travel Planner, Torn Exchange, Torn Report, Torn Intel, Clairvoyant, Torn Training Gains Calculator, CAT Script and FFScouter open. The extension directly read the first seven; host permissions blocked reading CAT Script, FFScouter and Torn Report pages, so their capabilities were cross-checked from public materials where possible.
+
+The site adds a **single compact Quick Access bar below the header**, visible across routes. It always links to Torn, plus **up to four pinned external tools**. On first use it suggests three or four destinations based on saved gameplay style:
+
+- Balanced: TornW3B Travel Stock, Torn Exchange and Torn Report
+- Trade: stock availability, multi-flight planning, trading and history
+- War: Torn Intel, CAT Script and FFScouter
+- Mug: scouting, intel and trading
+- Business: Clairvoyant, Torn Exchange and Torn Report
+- Training: historical reports and an independent gym-calculator cross-check
+- Crime, Revive and Racing: a smaller set without filler
+
+Pin controls are on the Tools page. Preferences are only allowlisted tool names, stored in browser localStorage under a new key. No API key is stored or sent as a consequence of pinning. Restore suggested shortcuts removes the manual override. External links open in new tabs without an opener or referrer.
+
+Contextual compact external-link rows appear only on relevant pages (Money to Clairvoyant/Exchange; War to CAT/Intel/FFScouter; Attacking to FFScouter; Stats to external calculator/report; Inventory to Exchange). A link already pinned to the bar is suppressed from the page's contextual row.
+
+The Tools directory retains 24 resources but prioritizes frequently used ones and collapses specialized tools, installers and references behind More specialized tools. Search shows all matching results directly.
+
+### What deliberately stays external
+
+- TornW3B handles real-time abroad stock and item margins. Torn Travel Planner handles multiple-flight optimization. Torn Intel overlaps with both and adds war intelligence and alerts; this guide does not reconcile competing live forecasts.
+- Torn Exchange manages trade price lists and receipts, not this guide.
+- Torn Report supplies history, not a parallel polling and analytics pipeline.
+- Clairvoyant stock-benefit comparison is linked from Money rather than duplicated.
+- CAT Script coordinates live war calls, while FFScouter estimates combat strength, which may already be supported in TornTools.
+- Torn PDA and TornTools are install/setup tools, not default launch buttons for every visit.
+- External credentials and live data are not shared among unrelated services.
+
+Validation covers script syntax and load order, gameplay-style defaults, pin/unpin, limit and persistence, contextual deduplication, and zero Torn API calls from loading or using the launcher. Live GitHub Pages deployment and provider authentication were not tested.
