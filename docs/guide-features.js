@@ -216,7 +216,7 @@ function barsMarkup() {
 function battleMarkup() {
   const stats = payload("battlestats", "battlestats");
   if (!stats) return sourceError("battlestats") || '<p>Battle stats not loaded yet.</p>';
-  return '<div class="metric-grid">' + ["strength", "defense", "speed", "dexterity", "total"].map(name => metric(name[0].toUpperCase() + name.slice(1), formatNumber(stats[name]))).join("") + "</div>";
+  return '<div class="metric-grid">' + ["strength", "defense", "speed", "dexterity", "total"].map(name => metric(name[0].toUpperCase() + name.slice(1), formatNumber(stats[name] && typeof stats[name] === "object" ? stats[name].value : stats[name]))).join("") + "</div>";
 }
 function inventoryMarkup() {
   let result = '<p class="fine-print">Torn caches inventory by category for 15 minutes. Quantities reflect the last successful API response. Sections show your inventory, not the faction armory.</p><div class="inventory-grid">';
