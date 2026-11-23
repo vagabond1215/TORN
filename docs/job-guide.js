@@ -30,7 +30,20 @@ const tornJobsGuide=(()=>{
  ["Private Security Firm","War/Mug","Check current combat and protective perks by company star."]
  ];
  const styles=["All","Training","Trade","Travel","Mug","Business","War","Revive","Crime","Racing","Money","Beginner"];
- let selected="All",term="",recommendedOnly=false;
+ let selected="All",term="",recommendedOnly=false,styleOwner=null,lastStyleRaw=null,manualStyle=false;
+ function syncRoadmapStyle(){
+  const owner=activeProfile||"guest";
+  let raw=null;
+  try{raw=read(activeProfile?activeKey("playstyle:selection"):"playstyle:guest");}catch{}
+  if(styleOwner!==owner){styleOwner=owner;manualStyle=false;lastStyleRaw=null;}
+  if(raw===lastStyleRaw||manualStyle)return;
+  lastStyleRaw=raw;
+  try{
+   const list=JSON.parse(raw||"[]");
+   const suggested=Array.isArray(list)?list.find(x=>styles.includes(x)&&x!=="Balanced"):null;
+   selected=suggested||"All";
+  }catch{selected="All";}
+ }
  const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
  function live(){
   const d=tornGuideApi.state.data;
@@ -71,6 +84,7 @@ const tornJobsGuide=(()=>{
   return '<div class="job-featured-grid">'+list.map(f=>'<article class="job-featured"><h3>'+esc(f[0])+'</h3><small>'+esc(f[1])+'</small><p>'+esc(f[2])+'</p></article>').join("")+'</div>';
  }
  function render(){
+  syncRoadmapStyle();
   let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Jobs & Careers</h1><p>Compare starting careers, permanent passives and all 39 player-owned company types.</p></header>';
   if(tornGuideApi.isConnected())out+=live();
   else out+='<section class="panel"><div class="panel-content"><p>Connect your account for current job and working stats. The catalogs below work without logging in.</p></div></section>';
@@ -99,7 +113,7 @@ const tornJobsGuide=(()=>{
    if(a)a.innerHTML=results();if(b)b.innerHTML=highlights();
   };
   view.addEventListener("change",e=>{
-   if(e.target.id==="job-style"){selected=e.target.value;redraw();}
+   if(e.target.id==="job-style"){selected=e.target.value;manualStyle=true;redraw();}
    if(e.target.id==="job-recommended"){recommendedOnly=e.target.checked;redraw();}
   });
   view.addEventListener("input",e=>{

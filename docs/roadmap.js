@@ -152,8 +152,9 @@ const tornRoadmap=(()=>{
   if(status)status.textContent=boxes.filter(b=>b.checked).length+" of "+boxes.length+" complete";
  }
  function wire(view){
+  setupDaily(view);
   if(view.dataset.roadmapBound==="1")return;
-  view.dataset.roadmapBound="1";setupDaily(view);
+  view.dataset.roadmapBound="1";
   view.addEventListener("change",event=>{
    const el=event.target;
    if(el.dataset.roadmapStyle){
