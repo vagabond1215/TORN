@@ -79,9 +79,21 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .feedback:not(:empty) { margin-top: .65rem; color: var(--accent); }
 .storage-message { padding: .75rem 1rem; border: 1px solid var(--border); margin-bottom: .8rem; color: var(--accent-strong); }
 
-.topic-header { padding: 1.35rem 1.5rem; margin-bottom: 1rem; }
-.topic-header h1 { font-size: clamp(2rem, 5vw, 3rem); }
-.topic-header p { color: var(--muted); max-width: 65ch; }
+/* Page labels already appear in the sidebar and browser title.
+   Keep page H1s in the accessibility tree and as focus targets, but remove
+   the redundant oversized introductory cards from every content page. */
+.topic-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+}
 .topic-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 1rem; }
 .topic-grid ul { padding-left: 1.15rem; margin: 0; color: var(--muted); }
 .topic-grid li + li { margin-top: .45rem; }
