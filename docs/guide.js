@@ -1,7 +1,6 @@
 "use strict";
 
 const topics = {
-  dashboard: { title: "Dashboard", summary: "Live Torn stats and inventory", intro: "View your character data from Torn." },
   checklist: {
     title: "Checklist",
     summary: "Milestones and daily routine",
@@ -163,7 +162,6 @@ function renderTopic(route) {
   const topic = topics[route];
   const guest = '<p><a href="#profile">Open a local profile</a> to save progress in this browser.</p>';
   const view = byId("topic-view");
-  if (route === "dashboard") { view.innerHTML = renderDashboard(); return; }
   if (route === "checklist") { view.innerHTML = renderQuickstart(); wireQuickstart(); wireChecklist(view); return; }
   if (route === "stats") { view.innerHTML = tornStatPlanner.render(); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render(); tornRacingGuide.wire(view); return; }
@@ -221,21 +219,21 @@ function wireNotes(route) {
 
 function renderRoute() {
   const hash = location.hash.slice(1);
-  const route = hash === "quickstart" ? "checklist" : (Object.hasOwn(topics, hash) || hash === "profile" ? hash : "home");
+  const route = hash === "quickstart" ? "checklist" : hash === "dashboard" ? "home" : (Object.hasOwn(topics, hash) || hash === "profile" ? hash : "home");
   const isTopic = Object.hasOwn(topics, route);
   const navRoute = isTopic ? route : "home";
-  byId("home-view").hidden = isTopic;
-  byId("home-grid").hidden = isTopic;
-  byId("topic-view").hidden = !isTopic;
+  byId("home-grid").hidden = route !== "home" && route !== "profile";
+  byId("topic-view").hidden = !isTopic && route !== "home";
   for (const link of document.querySelectorAll(".nav-link")) {
     if (link.hash === "#" + navRoute) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
   if (isTopic) renderTopic(route);
-  document.title = isTopic ? `${topics[route].title} · Torn City Guide` : "Torn City Guide";
+  else if (route === "home") byId("topic-view").innerHTML = renderDashboard();
+  document.title = isTopic ? `${topics[route].title} · Torn City Guide` : route === "home" ? "Home · Torn City Guide" : "Torn City Guide";
   closeMenu();
   if (lastRoute !== route && (lastRoute !== undefined || route === "profile")) {
-    const heading = byId(route === "profile" ? "profile-title" : isTopic ? "topic-title" : "home-title");
+    const heading = byId(route === "profile" ? "profile-title" : "topic-title");
     heading.focus({ preventScroll: true });
     if (route === "profile") byId("profile").scrollIntoView({ block: "nearest" });
     else window.scrollTo(0, 0);
@@ -356,7 +354,7 @@ byId("guide-nav").addEventListener("click", (event) => {
   const link = event.target.closest(".nav-link");
   if (link?.hash === location.hash) {
     closeMenu();
-    byId(lastRoute === "home" ? "home-title" : "topic-title")?.focus();
+    byId("topic-title")?.focus();
   }
 });
 
