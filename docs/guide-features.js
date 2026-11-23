@@ -449,6 +449,17 @@ function inventoryMarkup() {
   result += "</div>";
   return result;
 }
+const tornReportCatalog=Object.freeze({
+  energy:["Energy","https://torn.report/energy","Energy use & recovery"],
+  nerve:["Nerve","https://torn.report/nerve","Crime nerve history"],
+  education:["Education","https://torn.report/education","Courses and education benefits"],
+  drugs:["Drugs","https://torn.report/drugs","Drug use history"],
+  racing:["Racing","https://torn.report/racing","Races and performance"],
+  uniques:["Crime uniques","https://torn.report/uniques","Unique crime outcomes"],
+  trains:["Trains received","https://torn.report/trains","Workplace training history"],
+  oc:["Organized crimes","https://torn.report/oc","Faction crime participation"],
+  travel:["Travel","https://torn.report/travel","Travel activity and trips"]
+});
 function renderDashboard() {
   let result = '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Live character dashboard</h1><p>Private read-only snapshots directly from Torn API v2. Full Access keys are accepted; most displayed selections work with a more restrictive key.</p></header>';
   if (!tornGuideApi.isConnected()) return result + '<section class="panel"><div class="panel-content"><p>Connect your own Torn API key in <a href="#profile">Account</a> to populate this dashboard. No key is stored in the browser.</p></div></section>';
@@ -504,19 +515,11 @@ function renderDashboard() {
     '<a href="#money"><strong>Stocks & Money</strong><small>Stock positions and WSU benefit fetched on the Money page</small></a>'+
     '<a href="#stats"><strong>Gym & Training</strong><small>Stats perks and the gym reference catalog load on the Stats page</small></a></div>'+
     '<p class="fine-print">API calls this page visit: '+tornGuideApi.state.requests+'. Per-selection freshness is tracked independently, and cached data is reused.</p></div></section>';
-  result += '<section class="panel"><div class="panel-heading"><h2>Activity and detailed reports</h2></div><div class="panel-content"><p class="fine-print">Torn Report has deeper histories and charts than the API snapshot shown here. These links open your existing Torn Report account; this guide does not access or copy its private logs.</p><div class="report-links">';
-  for(const [label,url,tip] of [
-    ["Energy","https://torn.report/energy","Energy use & recovery"],
-    ["Nerve","https://torn.report/nerve","Crime nerve history"],
-    ["Education","https://torn.report/education","Courses and education benefits"],
-    ["Drugs","https://torn.report/drugs","Drug use history"],
-    ["Racing","https://torn.report/racing","Races and performance"],
-    ["Crime uniques","https://torn.report/uniques","Unique crime outcomes"],
-    ["Trains received","https://torn.report/trains","Workplace training history"],
-    ["Organized crimes","https://torn.report/oc","Faction crime participation"],
-    ["Travel","https://torn.report/travel","Travel activity and trips"]
-  ]){
-    result += '<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer"><strong>'+safe(label)+'</strong><small>'+safe(tip)+'</small></a>';
+  result += '<section class="panel"><div class="panel-heading"><h2>Activity and detailed reports</h2></div>'+
+    '<div class="panel-content"><p class="fine-print">Open a report here in a popup, or pop it out to your logged-in Torn Report session. Embedded viewing depends on Torn Report\'s own frame and login settings; no API credentials are forwarded.</p><div class="report-links">';
+  for(const [id,[label,url,tip]] of Object.entries(tornReportCatalog)){
+    result += '<button type="button" class="report-launch" data-report="'+safe(id)+'" aria-haspopup="dialog" title="Preview '+safe(label)+' report">'+
+      '<strong>'+safe(label)+'</strong><small>'+safe(tip)+'</small></button>';
   }
   result += '</div></div></section>';
   result += renderSourcesPanel();
