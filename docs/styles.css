@@ -250,3 +250,40 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rg-build-order,.rg-tips{padding-left:1.35rem;line-height:1.6}
 .rg-build-order li,.rg-tips li{margin-bottom:.65rem}
 @media(max-width:760px){.rg-input-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rg-result-row{grid-template-columns:1fr}}
+
+
+/* November 2026: center-top refresh and optional remembered session */
+.topbar-inner{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center}
+.topbar-inner .brand{justify-self:start;min-width:0}
+.topbar-inner .top-refresh{grid-column:2;justify-self:center;white-space:nowrap;min-height:37px;padding:.38rem .8rem}
+.topbar-inner .profile-link{grid-column:3;justify-self:end;margin-left:0;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.remember-option{display:flex;align-items:flex-start;gap:.65rem;cursor:pointer;margin:.7rem 0;font-size:.89rem}
+.remember-option input{flex:none;margin-top:.22rem;accent-color:var(--accent);width:1rem;height:1rem}
+.remember-option span{line-height:1.4}
+.remember-option small{display:block;color:var(--muted);line-height:1.4;margin:.22rem 0}
+.profile-actions .remember-option{flex-basis:100%;margin:.1rem 0 .4rem}
+@media(max-width:620px){
+  .topbar-inner{padding:.7rem .6rem;gap:.4rem}
+  .topbar-inner .brand{font-size:.72rem;letter-spacing:.025em;gap:.3rem}
+  .topbar-inner .brand-mark{width:25px;height:25px}
+  .topbar-inner .top-refresh{min-height:34px;font-size:.76rem;padding:.3rem .45rem}
+  .topbar-inner .profile-link{font-size:.72rem}
+}
+/* Crimes 2.0 quick reference */
+.crime-nerve{border:1px solid var(--border);background:var(--raised);border-radius:6px;padding:.7rem .8rem;margin-bottom:.75rem;font-size:.89rem}
+.crime-nerve strong{color:var(--accent-strong);font-size:1.02rem}
+.crime-nerve small{display:block;color:var(--muted);margin-top:.2rem}
+.crime-definitions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin:.8rem 0}
+.crime-definitions p{padding:.85rem;border:1px solid var(--border);border-radius:7px;background:var(--raised)}
+.crime-table-scroll{overflow-x:auto;margin-top:.8rem;border:1px solid var(--border);border-radius:6px}
+.crime-table{border-collapse:collapse;width:100%;min-width:620px;font-size:.84rem}
+.crime-table th,.crime-table td{border-bottom:1px solid var(--border);padding:.62rem .65rem;text-align:left;vertical-align:top}
+.crime-table thead th{background:var(--raised);color:var(--accent-strong);font-size:.78rem}
+.crime-table tbody th{white-space:nowrap}
+.crime-table tbody tr:hover{background:var(--raised)}
+.crime-table td:nth-child(2){font-weight:650;white-space:nowrap;color:var(--accent)}
+.crime-tips{padding-left:1.3rem}
+.crime-tips li{margin:.4rem 0}
+#topic-view .panel-content>p+p{margin-top:.65rem}
+#topic-view .fine-print a{color:var(--accent);text-decoration:underline}
