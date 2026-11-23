@@ -13,6 +13,7 @@ const topics = {
     intro: "Use this page to compare factions and remember what your crew expects from you.",
     prompts: ["Ask about activity requirements and war schedules.", "Check how armory access and payouts work.", "Write down who to contact for help."],
   },
+  racing: { title: "Racing", summary: "Tracks, cars, upgrades and point saving", intro: "Reach Class A with points saved for a competitive car." },
   stats: {
     title: "Stats",
     summary: "Four-stat calculator and happy-jump comparator",
@@ -58,6 +59,7 @@ const icons = {
   checklist: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2m-7 8 2 2 5-5m-6 8h6"/>',
   faction: '<path d="M12 22s7-3 7-10V5l-7-3-7 3v7c0 7 7 10 7 10Z"/><path d="M12 8v7m-3-4h6"/>',
   stats: '<path d="M3 3v18h18M7 17v-5m5 5V8m5 9V5"/>',
+  racing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="m12 12 4-7"/>',
   crime: '<path d="M3 11c0-4 4-7 9-7s9 3 9 7-4 8-9 8-9-4-9-8Z"/><circle cx="8" cy="11" r="2"/><circle cx="16" cy="11" r="2"/>',
   attacking: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>',
   war: '<path d="m4 4 5 1 10 10-4 4L5 9zM20 4l-5 1-3 3m-4 4-3 3 4 4 3-3m1 5 8-8M3 13l8 8"/>',
@@ -160,6 +162,7 @@ function renderTopic(route) {
   if (route === "dashboard") { view.innerHTML = renderDashboard(); return; }
   if (route === "checklist") { view.innerHTML = renderQuickstart(); wireQuickstart(); wireChecklist(view); return; }
   if (route === "stats") { view.innerHTML = tornStatPlanner.render(); tornStatPlanner.wire(view); return; }
+  if (route === "racing") { view.innerHTML = tornRacingGuide.render(); tornRacingGuide.wire(view); return; }
   const taskList = `<p id="task-progress" role="status"></p><div class="checklist">${Object.entries(tasks).map(([id, label]) =>
     `<label><input type="checkbox" name="${id}" ${activeProfile ? "" : "disabled"}><span>${label}</span></label>`
   ).join("")}</div>`;
@@ -182,7 +185,7 @@ function renderTopic(route) {
 }
 
 function wireChecklist(view) {
-  const boxes = [...view.querySelectorAll('input[type="checkbox"]')];
+  const boxes = [...view.querySelectorAll('.checklist input[type="checkbox"]')];
   function updateProgress() {
     const total = boxes.filter((box) => box.checked).length;
     byId("task-progress").textContent = `${total} of ${boxes.length} complete`;
