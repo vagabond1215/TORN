@@ -16,8 +16,8 @@ const topics = {
   },
   stats: {
     title: "Stats",
-    summary: "Plan your gym training",
-    intro: "Choose a training priority and track your progress in strength, defense, speed, and dexterity.",
+    summary: "Four-stat calculator and happy-jump comparator",
+    intro: "Calculate gym gains, track perks, and compare natural energy with happy jumps.",
     prompts: ["Record a baseline for your four battle stats.", "Pick one short-term training goal.", "Set a date to compare your progress."],
   },
   crime: {
@@ -160,6 +160,7 @@ function renderTopic(route) {
   const view = byId("topic-view");
   if (route === "dashboard") { view.innerHTML = renderDashboard(); return; }
   if (route === "quickstart") { view.innerHTML = renderQuickstart(); wireQuickstart(); return; }
+  if (route === "stats") { view.innerHTML = tornStatPlanner.render(); tornStatPlanner.wire(view); return; }
   const taskList = `<p id="task-progress" role="status"></p><div class="checklist">${Object.entries(tasks).map(([id, label]) =>
     `<label><input type="checkbox" name="${id}" ${activeProfile ? "" : "disabled"}><span>${label}</span></label>`
   ).join("")}</div>`;

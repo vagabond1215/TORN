@@ -39,7 +39,7 @@ const tornGuideApi = (() => {
     if (!secret) throw Error("Connect a Torn API key first.");
     const currentEpoch = ++epoch;
     state.loading = true;
-    const endpointNames = ["bars", "battlestats", "gym", "profile", "property", "job", "education", "merits", "honors", "money", "stocks", "workstats", "cooldowns", "equipment", "personalstats"];
+    const endpointNames = ["bars", "battlestats", "gym", "perks", "profile", "property", "job", "education", "merits", "honors", "money", "stocks", "workstats", "cooldowns", "equipment", "personalstats"];
     const work = [
       ...endpointNames.map(async name => {
         try { return { name, value: await request("user/" + name, secret) }; }
@@ -52,6 +52,10 @@ const tornGuideApi = (() => {
       (async () => {
         try { return { name: "stockCatalog", value: await request("torn/stocks", secret) }; }
         catch (err) { return { name: "stockCatalog", error: String(err.message || err) }; }
+      })(),
+      (async () => {
+        try { return { name: "gymCatalog", value: await request("torn/gyms", secret) }; }
+        catch (err) { return { name: "gymCatalog", error: String(err.message || err) }; }
       })(),
       ...inventoryTypes.map(async category => {
         try {
@@ -80,7 +84,7 @@ const tornGuideApi = (() => {
     }
     state.updated = Date.now();
     state.loading = false;
-    if (location.hash === "#dashboard" || location.hash === "#quickstart") renderRoute();
+    if (location.hash === "#dashboard" || location.hash === "#quickstart" || location.hash === "#stats") renderRoute();
     return { failures: Object.keys(state.errors).length + Object.keys(state.inventoryErrors).length };
   }
   function disconnect() {
