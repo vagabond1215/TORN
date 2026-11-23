@@ -4,7 +4,7 @@
  * receives the Torn key. Live Torn-page bridge is an optional user-approved snapshot.
  */
 const tornGuideApi=(()=>{
-  let secret=null,remember=false,epoch=0,timer=null,inFlight=null,queued=null;
+  let secret=null,remember=false,epoch=0,timer=null,inFlight=null,queued=null,batchMode="unknown";
   const quarter=15*60*1000;
   const authKey="torn-city-guide:api:v2:remember";
   const cachePrefix="torn-city-guide:api:v2:cache:";
@@ -70,7 +70,7 @@ const tornGuideApi=(()=>{
       !Number.isInteger(Number(ident.id))||!ident.name){
       clearSaved(ident&&ident.id);return null;
     }
-    secret=record.key;remember=true;epoch++;
+    secret=record.key;remember=true;epoch++;batchMode="unknown";
     state.identity={id:Number(ident.id),name:String(ident.name),level:ident.level};
     state.data={};state.inventory={};state.errors={};state.inventoryErrors={};
     state.fetchedAt={};state.failedAt={};state.updated=null;state.bridge=null;state.cached=false;
@@ -133,7 +133,7 @@ const tornGuideApi=(()=>{
     const profile=basic.profile;
     if(!profile||!Number.isInteger(profile.id)||!profile.name)throw Error("Torn returned an unexpected identity.");
     if(remember)clearSaved(state.identity&&state.identity.id);
-    epoch++;secret=key;remember=Boolean(stay);
+    epoch++;secret=key;remember=Boolean(stay);batchMode="unknown";
     state.identity={id:profile.id,name:profile.name,level:profile.level};
     state.data={basic};state.inventory={};state.errors={};state.inventoryErrors={};
     state.fetchedAt={basic:now()};state.failedAt={};state.updated=now();
@@ -206,10 +206,17 @@ const tornGuideApi=(()=>{
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();
     let succeeded=0,failures=0;
-    const jobs=[
-      ...names.map(name=>({name,run:()=>request(endpoint(name),currentKey)})),
-      ...selectedCats.map(cat=>({name:"inventory:"+cat,run:()=>fetchInventory(cat,currentKey)}))
-    ];
+    const userNames=names.filter(name=>!name.endsWith("Catalog"));
+    const otherNames=names.filter(name=>name.endsWith("Catalog"));
+    const jobs=[];
+    if(userNames.length>=2 && batchMode!=="unsupported"){
+      jobs.push({
+        name:"multiUser",names:userNames,
+        run:()=>request("user?selections="+encodeURIComponent(userNames.join(",")),currentKey)
+      });
+    }else for(const name of userNames)jobs.push({name,run:()=>request(endpoint(name),currentKey)});
+    for(const name of otherNames)jobs.push({name,run:()=>request(endpoint(name),currentKey)});
+    for(const cat of selectedCats)jobs.push({name:"inventory:"+cat,run:()=>fetchInventory(cat,currentKey)});
     // At most three simultaneous requests; a visit does not spend the entire
     // per-user quota in a burst. Failed selections back off for ten minutes.
     let cursor=0;
@@ -219,6 +226,26 @@ const tornGuideApi=(()=>{
         let value=null,error=null;
         try{value=await job.run();}catch(ex){error=String(ex.message||ex);}
         if(currentEpoch!==epoch||currentKey!==secret)return;
+        if(job.name==="multiUser"){
+          const present=!error && value && typeof value==="object"
+            ?job.names.filter(name=>Object.prototype.hasOwnProperty.call(value,name)):[];
+          if(present.length>=2){
+            batchMode="supported";
+            for(const name of job.names){
+              if(present.includes(name)){
+                state.fetchedAt[name]=now();delete state.failedAt[name];
+                state.data[name]={[name]:value[name]};
+                delete state.errors[name];succeeded++;
+              }else jobs.push({name,run:()=>request(endpoint(name),currentKey)});
+            }
+          }else{
+            batchMode="unsupported";
+            // A changed response or per-selection failure must never blank
+            // every dashboard card: retry each requested field independently.
+            for(const name of job.names)jobs.push({name,run:()=>request(endpoint(name),currentKey)});
+          }
+          continue;
+        }
         if(error){
           state.failedAt[job.name]=now();failures++;
           if(job.name.startsWith("inventory:"))state.inventoryErrors[job.name.slice(10)]=error;
