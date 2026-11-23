@@ -170,10 +170,10 @@ function renderTopic(route) {
   const guest = '<p><a href="#profile">Open a local profile</a> to save progress in this browser.</p>';
   const view = byId("topic-view");
   if (route === "checklist") { view.innerHTML = tornRoadmap.render(); tornRoadmap.wire(view); return; }
-  if (route === "stats") { view.innerHTML = tornStatPlanner.render(); tornStatPlanner.wire(view); return; }
-  if (route === "racing") { view.innerHTML = tornRacingGuide.render(); tornRacingGuide.wire(view); return; }
-  if (route === "crime") { view.innerHTML = tornCrimeGuide.render(); if(activeProfile)wireNotes("crime"); return; }
-  if (route === "inventory") { view.innerHTML = renderInventoryPage(); return; }
+  if (route === "stats") { view.innerHTML = tornStatPlanner.render()+tornToolsGuide.contextLinks("stats"); tornStatPlanner.wire(view); return; }
+  if (route === "racing") { view.innerHTML = tornRacingGuide.render()+tornToolsGuide.contextLinks("racing"); tornRacingGuide.wire(view); return; }
+  if (route === "crime") { view.innerHTML = tornCrimeGuide.render()+tornToolsGuide.contextLinks("crime"); if(activeProfile)wireNotes("crime"); return; }
+  if (route === "inventory") { view.innerHTML = renderInventoryPage()+tornToolsGuide.contextLinks("inventory"); return; }
   if (route === "jobs") { view.innerHTML = tornJobsGuide.render(); tornJobsGuide.wire(view); return; }
   if (route === "tools") { view.innerHTML = tornToolsGuide.render(); tornToolsGuide.wire(view); return; }
   const taskList = `<p id="task-progress" role="status"></p><div class="checklist">${Object.entries(tasks).map(([id, label]) =>
@@ -194,6 +194,7 @@ function renderTopic(route) {
         + chapter("Your notes", activeProfile ? notes : guest)}</div>`;
 
   if (route === "money") view.innerHTML += renderStocksPanel();
+  if (["money","war","attacking"].includes(route)) view.innerHTML += tornToolsGuide.contextLinks(route);
 
   if (route === "checklist") wireChecklist(view);
   else if (activeProfile) wireNotes(route);
@@ -234,6 +235,7 @@ function renderRoute() {
   const route = hash === "quickstart" ? "checklist" : hash === "dashboard" ? "home" : (Object.hasOwn(topics, hash) || hash === "profile" ? hash : "home");
   const isTopic = Object.hasOwn(topics, route);
   const navRoute = isTopic ? route : "home";
+  tornToolsGuide.updateBar();
   byId("home-grid").hidden = route !== "home" && route !== "profile";
   byId("topic-view").hidden = !isTopic && route !== "home";
   for (const link of document.querySelectorAll(".nav-link")) {
