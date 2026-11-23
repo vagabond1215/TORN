@@ -13,7 +13,7 @@ const tornGuideApi=(()=>{
   const TTL={
     basic:days, bars:2*mins, cooldowns:2*mins, money:15*mins,
     battlestats:15*mins, gym:30*mins, perks:60*mins,
-    education:6*hrs, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
+    education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs,
     gymCatalog:90*days, meritCatalog:30*days, stockCatalog:7*days
   };
@@ -21,6 +21,7 @@ const tornGuideApi=(()=>{
     home:["bars","cooldowns","money","battlestats","gym","job","property","education","merits","meritCatalog"],
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
     jobs:["job","workstats"],
+    timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
     crime:["bars"],
     checklist:["bars","merits","meritCatalog","job"],
     money:["money","stocks","stockCatalog"],
@@ -180,6 +181,7 @@ const tornGuideApi=(()=>{
     return true;
   }
   function endpoint(key){
+    if(key==="factionRankedWars")return "faction/rankedwars";
     if(key==="gymCatalog")return "torn/gyms";
     if(key==="stockCatalog")return "torn/stocks";
     if(key==="meritCatalog")return "torn/merits";
@@ -207,8 +209,8 @@ const tornGuideApi=(()=>{
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();
     let succeeded=0,failures=0;
-    const userNames=names.filter(name=>!name.endsWith("Catalog"));
-    const otherNames=names.filter(name=>name.endsWith("Catalog"));
+    const userNames=names.filter(name=>!name.endsWith("Catalog") && name!=="factionRankedWars");
+    const otherNames=names.filter(name=>name.endsWith("Catalog") || name==="factionRankedWars");
     const jobs=[];
     if(userNames.length>=2 && batchMode!=="unsupported"){
       jobs.push({
