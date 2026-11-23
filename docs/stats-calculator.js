@@ -27,7 +27,7 @@ const tornStatPlanner = (() => {
     ["The Sports Science Lab",25,9,9,9,9],["Fight Club",10,10,10,10]
   ].map((g,i) => ({id:i+1,name:g[0],energy:g[1],strength:g[2],speed:g[3],defense:g[4],dexterity:g[5],offline:true}));
   const state = {
-    selectedGym:null, currentPlayer:null, imported:false, apiStamp:null,
+    selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"calc",
     statValues:{strength:1000,defense:1000,speed:1000,dexterity:1000},
     energy:{strength:150,defense:0,speed:0,dexterity:0},
     extra:{strength:0,defense:0,speed:0,dexterity:0},
@@ -228,7 +228,14 @@ const tornStatPlanner = (() => {
     const remaining=state.currentEnergy-totalEnergy;
     const available=tornGuideApi.isConnected();
     const gymOptions=gyms().map(g=>'<option value="'+esc(g.id)+'" '+(String(g.id)===String(gym.id)?"selected":"")+'>'+esc(g.name)+(g.offline?" (wiki dots)":"")+'</option>').join("");
-    let markup='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Stats & training calculator</h1><p>Four battle stats in parallel, source-by-source perks and combat modifiers, and an equal-time happy-jump comparison.</p></header>';
+    let markup='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Battle stats</h1><p>Current battle stats across both training tools. Calc allocates Energy and reviews gym effects; Compare tests natural training against Happy Jump sequences.</p></header>';
+    markup+='<section class="panel tc-overview"><div class="tc-stat-overview">'+statNames.map(stat=>
+      '<div class="tc-overview-item"><small>'+readable[stat]+'</small><strong>'+nice(state.statValues[stat])+'</strong></div>').join("")+
+      '</div></section>';
+    markup+='<nav class="tc-subnav" aria-label="Stats sections">'+
+      '<button type="button" data-tc-view="calc" class="tc-subtab '+(state.subpage==="calc"?"is-current":"")+'" aria-current="'+(state.subpage==="calc"?"page":"false")+'">Calc · Gym simulator</button>'+
+      '<button type="button" data-tc-view="compare" class="tc-subtab '+(state.subpage==="compare"?"is-current":"")+'" aria-current="'+(state.subpage==="compare"?"page":"false")+'">Compare · Training strategies</button></nav>';
+    if(state.subpage==="calc"){
     markup+='<section class="panel"><div class="panel-heading"><h2>Current training conditions</h2></div><div class="panel-content">'+
       '<div class="tc-status"><span><strong>'+nice(state.currentEnergy)+' / '+nice(state.maxEnergy)+'</strong> Energy</span><span><strong>'+nice(state.happy)+' / '+nice(state.maxHappy)+'</strong> Happy</span><span><strong>'+ (available?"Torn API connected":"Demo / manual mode")+'</strong></span></div>'+
       '<div class="tc-controls"><label class="tc-field"><span>Gym used for the calculation</span><select data-tc="selectedGym">'+gymOptions+'</select></label>'+
@@ -240,10 +247,16 @@ const tornStatPlanner = (() => {
       '<p class="tc-budget '+(remaining<0?"tc-neg":"")+'">Allocated '+nice(totalEnergy)+' E of '+nice(state.currentEnergy)+' currently available · '+(remaining>=0?nice(remaining)+' unallocated':nice(-remaining)+' over budget')+'</p>'+
       '<div class="tc-stat-scroll"><div class="tc-four">'+statNames.map(stat=>statPanel(stat,gym)).join("")+'</div></div>'+
       '<p class="fine-print">Training gains use the current Happy level and average per-train Happy loss. Combat-only penalties (including some drug and merit effects) are listed separately and are not treated as gym-gain modifiers. Different stats have independent faction and education bonuses.</p></div></section>';
+    }
+    if(state.subpage==="compare"){
+      markup+='<div class="tc-compare-conditions">Using <strong>'+esc(gym.name)+'</strong> ('+nice(gym.energy)+' E/train), <strong>'+
+        nice(state.currentEnergy)+' / '+nice(state.maxEnergy)+' Energy</strong> and <strong>'+
+        nice(state.happy)+' / '+nice(state.maxHappy)+' Happy</strong>. Change gym and editable stats on <button type="button" class="text-button" data-tc-view="calc">Calc</button>.</div>';
     markup+='<section class="panel"><div class="panel-heading"><h2>Natural Energy vs. Happy Jump · Execution Timeline</h2></div><div class="panel-content">'+
       '<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+readable[stat]+'</button>').join("")+'</div>'+
       '<div class="tc-compare-intro">Choose a stat and edit each plan as a sequence of actions. Both use the same starting stat of '+nice(state.statValues[state.compareStat])+' and the same time window.</div>'+
       '<div id="tc-sequencer">'+tornTrainSequence.render({state,gym,trainBlock,effectsFor})+'</div></div></section>';
+    }
     return markup;
   }
   function wire(view) {
@@ -273,6 +286,14 @@ const tornStatPlanner = (() => {
     });
     view.addEventListener("click",event=>{
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
+      const tab=event.target.closest("[data-tc-view]");
+      if(tab){
+        if(tab.dataset.tcView==="calc" || tab.dataset.tcView==="compare"){
+          state.subpage=tab.dataset.tcView;
+          view.innerHTML=render();
+        }
+        return;
+      }
       const pick=event.target.closest("[data-tc-pick]");
       const action=event.target.closest("[data-tc-action]");
       if(pick){state.compareStat=pick.dataset.tcPick;view.innerHTML=render();}
