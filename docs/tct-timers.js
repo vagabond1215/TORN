@@ -70,7 +70,7 @@ const tornTctClock=(()=>{
   }
   function cd(section){
     const data=getData("cooldowns"),v=data&&data[section];
-    const remain=typeof v==="object"?(v.remaining??v.time_left??v.seconds):v;
+    const remain=v&&typeof v==="object"?(v.remaining??v.time_left??v.seconds):v;
     const numeric=seconds(remain);
     if(numeric===null)return null;
     const stamp=Number(tornGuideApi.state.fetchedAt.cooldowns)||Date.now();
