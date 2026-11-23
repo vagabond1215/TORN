@@ -147,7 +147,9 @@ function renderDirectory() {
 }
 
 function renderProfile() {
-  byId("profile-link").textContent = activePlayerName || "Connect Torn API";
+  byId("profile-link").textContent = activeProfile
+    ? activePlayerName+" [#"+activeProfile+"]" : "Connect API";
+  byId("settings-signout").disabled=!tornGuideApi.isConnected();
   byId("profile-summary").textContent = activeProfile
     ? "Connected as " + activePlayerName + ". " + (tornGuideApi.isRemembering()
       ? "This browser remembers your API key and last refreshed account data."
@@ -235,7 +237,7 @@ function renderRoute() {
   const route = hash === "quickstart" ? "checklist" : hash === "dashboard" ? "home" : (Object.hasOwn(topics, hash) || hash === "profile" ? hash : "home");
   const isTopic = Object.hasOwn(topics, route);
   const navRoute = isTopic ? route : "home";
-  tornToolsGuide.updateBar();
+  tornToolsGuide.updateBar(route);
   byId("home-grid").hidden = route !== "home" && route !== "profile";
   byId("topic-view").hidden = !isTopic && route !== "home";
   for (const link of document.querySelectorAll(".nav-link")) {
@@ -319,19 +321,38 @@ byId("sign-out").addEventListener("click", () => {
   disconnectAccount();
   byId("profile-name").focus();
 });
+function sinceSync(timestamp){
+  if(!timestamp)return "--:--";
+  const elapsed=Math.max(0,Math.floor((Date.now()-timestamp)/1000));
+  const h=Math.floor(elapsed/3600),m=Math.floor(elapsed%3600/60),sec=elapsed%60;
+  return h?String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(sec).padStart(2,"0"):
+    String(m).padStart(2,"0")+":"+String(sec).padStart(2,"0");
+}
+function updateSyncCounter(){
+  const state=tornGuideApi.state,top=byId("refresh-top");
+  const connected=tornGuideApi.isConnected(),stamp=state.updated;
+  byId("refresh-age").textContent=connected?sinceSync(stamp):"--:--";
+  const when=stamp?tornGuidePreferences.formatDate(stamp):"Not yet synchronized";
+  const label=!connected?"Connect Torn API to refresh":state.loading?"Synchronizing Torn account":
+    "Refresh this page's Torn data. Last sync: "+when+
+    (state.cached?" (restored cache)":"");
+  top.title=label;
+  top.setAttribute("aria-label",label);
+}
 function updateRefreshUI(){
   const connected=tornGuideApi.isConnected();
   const busy=tornGuideApi.state.loading;
   const top=byId("refresh-top"),profile=byId("refresh-data");
   top.disabled=!connected||busy;
   profile.disabled=!connected||busy;
-  top.textContent=busy?"↻ Updating…":"↻ Refresh";
-  top.title=!connected?"Connect Torn API first":busy?"Torn account refresh in progress":"Refresh Torn data now";
+  top.classList.toggle("is-syncing",busy);
   byId("remember-active").checked=tornGuideApi.isRemembering();
+  byId("settings-signout").disabled=!connected;
   const updated=tornGuideApi.state.updated;
   byId("refresh-status").textContent=busy?"Refreshing Torn data":connected
-    ? (updated?"Last Torn refresh "+new Date(updated).toLocaleTimeString():"Connected; waiting for data")
+    ? (updated?"Last Torn refresh "+tornGuidePreferences.formatDate(updated):"Connected; waiting for data")
     : "Torn API disconnected";
+  updateSyncCounter();
 }
 async function refreshAccount(){
   if(!tornGuideApi.isConnected() || tornGuideApi.state.loading)return;
@@ -360,6 +381,63 @@ byId("remember-active").addEventListener("change",event=>{
   renderProfile();
 });
 window.addEventListener("torn-guide-sync",updateRefreshUI);
+setInterval(updateSyncCounter,1000); // local clock only; no Torn API calls
+
+// The ellipsis is an unframed button; settings remain independent of API login.
+function syncSettingsControls(){
+  byId("setting-theme").value=tornGuidePreferences.get("theme");
+  byId("setting-timezone").value=tornGuidePreferences.get("timeZone");
+  byId("setting-links").value=tornGuidePreferences.get("externalMode");
+  byId("setting-contextual").checked=tornGuidePreferences.get("contextualQuickAccess");
+  byId("settings-signout").disabled=!tornGuideApi.isConnected();
+}
+function closeSettings(){
+  byId("settings-panel").hidden=true;
+  byId("settings-toggle").setAttribute("aria-expanded","false");
+}
+function toggleSettings(){
+  const panel=byId("settings-panel"),next=panel.hidden;
+  if(next)syncSettingsControls();
+  panel.hidden=!next;
+  byId("settings-toggle").setAttribute("aria-expanded",String(next));
+}
+byId("setting-timezone").innerHTML=tornGuidePreferences.zones.map(([id,name])=>
+  '<option value="'+id+'">'+name+'</option>').join("");
+tornGuidePreferences.init();
+syncSettingsControls();
+byId("settings-toggle").addEventListener("click",toggleSettings);
+document.addEventListener("click",event=>{
+  if(!byId("settings-panel").hidden&&!event.target.closest("#settings-widget"))closeSettings();
+});
+document.addEventListener("keydown",event=>{
+  if(event.key==="Escape"&&!byId("settings-panel").hidden){
+    closeSettings();byId("settings-toggle").focus();
+  }
+});
+for(const [id,key] of [
+  ["setting-theme","theme"],["setting-timezone","timeZone"],
+  ["setting-links","externalMode"]
+]){
+  byId(id).addEventListener("change",event=>{
+    if(!tornGuidePreferences.set(key,event.target.value))return;
+    updateRefreshUI();
+    if(key==="timeZone"&&location.hash==="#home")renderRoute();
+  });
+}
+byId("setting-contextual").addEventListener("change",event=>{
+  tornGuidePreferences.set("contextualQuickAccess",event.target.checked);
+  tornToolsGuide.updateBar(tornGuideApi.routeName());
+});
+byId("settings-account").addEventListener("click",closeSettings);
+byId("settings-signout").addEventListener("click",()=>{
+  if(!tornGuideApi.isConnected())return;
+  disconnectAccount();
+  closeSettings();
+});
+window.addEventListener("torn-guide-preferences",()=>{
+  tornToolsGuide.updateBar(tornGuideApi.routeName());
+});
+
 byId("topic-view").addEventListener("click",async event=>{
   const button=event.target.closest("[data-inventory-load]");
   if(!button)return;
