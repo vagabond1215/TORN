@@ -27,7 +27,7 @@ const tornStatPlanner = (() => {
     ["The Sports Science Lab",25,9,9,9,9],["Fight Club",10,10,10,10]
   ].map((g,i) => ({id:i+1,name:g[0],energy:g[1],strength:g[2],speed:g[3],defense:g[4],dexterity:g[5],offline:true}));
   const state = {
-    selectedGym:null, currentPlayer:null, imported:false,
+    selectedGym:null, currentPlayer:null, imported:false, apiStamp:null,
     statValues:{strength:1000,defense:1000,speed:1000,dexterity:1000},
     energy:{strength:150,defense:0,speed:0,dexterity:0},
     extra:{strength:0,defense:0,speed:0,dexterity:0},
@@ -51,10 +51,10 @@ const tornStatPlanner = (() => {
   function hydrateFromApi(force=false) {
     const id=tornGuideApi.state.identity&&tornGuideApi.state.identity.id;
     if (!id) {
-      if (state.currentPlayer!==null) { state.currentPlayer=null;state.imported=false;state.selectedGym=null; }
+      if (state.currentPlayer!==null) { state.currentPlayer=null;state.imported=false;state.apiStamp=null;state.selectedGym=null; }
       return;
     }
-    if (!force && state.currentPlayer===id && state.imported) return;
+    if (!force && state.currentPlayer===id && state.imported && state.apiStamp===tornGuideApi.state.updated) return;
     state.currentPlayer=id;
     const bars=rawBars(),stats=rawStats();
     if (bars) {
@@ -75,7 +75,8 @@ const tornStatPlanner = (() => {
       }
     }
     state.selectedGym=null; // Choose actual active gym from catalog after import.
-    state.imported=Boolean(bars&&stats);
+    state.imported=true;
+    state.apiStamp=tornGuideApi.state.updated;
   }
   function gyms() {
     const source=api("gymCatalog");
@@ -163,7 +164,7 @@ const tornStatPlanner = (() => {
     const A={strength:1600,defense:2100,speed:1600,dexterity:1800}[which];
     const B={strength:1700,defense:-600,speed:2000,dexterity:1500}[which];
     const adj=(1-Math.pow(H/99999,2))*A;
-    const raw=(capped*hm+8*Math.pow(H,1.05)+adj+B)/200000*(dots/10)*energy*multiplier;
+    const raw=(capped*hm+8*Math.pow(H,1.05)+adj+B)/200000*dots*energy*multiplier;
     return Math.max(0,raw);
   }
   function trainBlock(baseStat,baseHappy,energyToUse,gym,stat,factor) {
@@ -192,7 +193,7 @@ const tornStatPlanner = (() => {
     const refills=kind==="natural"?state.naturalRefill:state.jumpRefill;
     const jump=kind==="jump";
     const stackDelay=totalX*480;
-    const feasible=!jump || (horizon>=stackDelay && state.jumpDvd*6+state.jumpCandy*0.5<=state.boosterCap);
+    const feasible=jump ? (horizon>=stackDelay && state.jumpDvd*6+state.jumpCandy*0.5<=state.boosterCap) : (state.naturalCandy*0.5<=state.boosterCap);
     const multiplier=effectsFor(stat).multiplier;
     let current=state.statValues[stat],E=state.currentEnergy,H=state.happy;
     const initialH=state.happy;
@@ -342,14 +343,14 @@ const tornStatPlanner = (() => {
     if(state.naturalXan>Math.floor((state.hours*60-(state.naturalEcstasy?240:0))/480)+1)warnings.push("Not all requested natural Xanax doses fit the time window; only the scheduled ones were used.");
     if(state.naturalRefill>Math.ceil(state.hours/24))warnings.push("Natural points refills are limited to roughly one per 24 hours; not all requested refills fit.");
     let verdict="The happy jump is not feasible with the chosen timing or cooldown limits.";
-    if(j.complete)verdict=delta>0?"Happy jump gains ~"+nice(delta)+" more "+readable[state.compareStat]+" in this window.":delta<0?"Natural training gains ~"+nice(-delta)+" more "+readable[state.compareStat]+" in this window.":"Both approaches produce similar projected gains.";
+    if(n.complete && j.complete)verdict=delta>0?"Happy jump gains ~"+nice(delta)+" more "+readable[state.compareStat]+" in this window.":delta<0?"Natural training gains ~"+nice(-delta)+" more "+readable[state.compareStat]+" in this window.":"Both approaches produce similar projected gains.";
     const summary='<div class="tc-compare-summary">'+
-      '<div class="tc-result"><span>Natural: final stat</span><strong>'+nice(n.final,2)+'</strong><small>+'+nice(n.gain,2)+' gained · '+nice(n.energyUsed)+' Energy</small><small>Est. cost $'+nice(n.cost)+'</small></div>'+
+      '<div class="tc-result"><span>Natural: final stat</span><strong>'+(n.complete?nice(n.final,2):"Not feasible")+'</strong><small>+'+nice(n.gain,2)+' gained · '+nice(n.energyUsed)+' Energy</small><small>Est. cost $'+nice(n.cost)+'</small></div>'+
       '<div class="tc-result"><span>Happy jump: final stat</span><strong>'+ (j.complete?nice(j.final,2):"Not feasible")+'</strong><small>+'+nice(j.gain,2)+' gained · '+nice(j.energyUsed)+' Energy</small><small>Est. cost $'+nice(j.cost)+'</small></div>'+
-      '<div class="tc-result"><span>Difference in gain</span><strong>'+(j.complete?(delta>0?"+":"")+nice(delta,2):"—")+'</strong><small>Jump minus natural</small><small>Same '+nice(state.hours)+'-hour period</small></div></div>';
+      '<div class="tc-result"><span>Difference in gain</span><strong>'+(n.complete&&j.complete?(delta>0?"+":"")+nice(delta,2):"—")+'</strong><small>Jump minus natural</small><small>Same '+nice(state.hours)+'-hour period</small></div></div>';
     return (warnings.length?'<div class="tc-warnings" role="status">'+warnings.map(s=>'<p>'+esc(s)+'</p>').join("")+'</div>':"")+
       summary+'<p class="tc-verdict">'+esc(verdict)+'</p>'+
-      (j.complete?chart(n,j):'<p class="fine-print">The jump line is hidden because the chosen recipe cannot complete.</p>')+
+      (n.complete&&j.complete?chart(n,j):'<p class="fine-print">The comparison graph is hidden because one or more recipes cannot complete under the current settings.</p>')+
       '<div class="tc-footnotes"><p>Natural: immediate training, continuous energy regeneration when below the cap, scheduled Xanax, optional candy/Ecstasy and point refills. Jump: train your starting energy before stacking Xanax, wait for each drug cooldown, apply happy boosters and Ecstasy once, then train the banked energy and optional refill. Other time is spent regenerating or waiting.</p>'+
       '<p>Average estimates, not exact predictions. No overdose probability, drug addiction progression, combat injury, shop-job train conversion, calendar happy-reset alignment, faction perks altering item effectiveness, or fluctuating item prices are simulated. Drug cooldown is modeled as 8 hours for Xanax and 4 hours for Ecstasy; actual cooldowns vary. Points refills cost 30 points and are limited to one per day.</p>'+
       '<p><a href="https://wiki.torn.com/wiki/Gym#Training_Formulas" target="_blank" rel="noopener noreferrer">Torn Gym formula</a> · <a href="https://wiki.torn.com/wiki/Happy" target="_blank" rel="noopener noreferrer">Happy mechanics</a> · <a href="https://aidapaul.github.io/torn-happy-jumps/" target="_blank" rel="noopener noreferrer">Jump timing guide</a></p></div>';
@@ -380,6 +381,8 @@ const tornStatPlanner = (() => {
     return markup;
   }
   function wire(view) {
+    if (view.dataset.tcPlannerBound === "1") return;
+    view.dataset.tcPlannerBound = "1";
     view.addEventListener("change",event=>{
       const el=event.target;
       if(el.dataset.tc) {
@@ -398,14 +401,14 @@ const tornStatPlanner = (() => {
       if(el.dataset.tcEnergy)state.energy[el.dataset.tcEnergy]=clamp(el.value,0,1000);
       if(el.dataset.tcExtra)state.extra[el.dataset.tcExtra]=clamp(el.value,-95,300);
       // Refresh calculated results without losing the browser route or API key.
-      view.innerHTML=render();wire(view);
-    },{once:true});
+      view.innerHTML=render();
+    });
     view.addEventListener("click",event=>{
       const pick=event.target.closest("[data-tc-pick]");
       const action=event.target.closest("[data-tc-action]");
-      if(pick){state.compareStat=pick.dataset.tcPick;view.innerHTML=render();wire(view);}
-      if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();wire(view);}
-    },{once:true});
+      if(pick){state.compareStat=pick.dataset.tcPick;view.innerHTML=render();}
+      if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
+    });
   }
   return {render,wire,simulate:()=>({natural:naturalEvents({},"natural"),jump:naturalEvents({},"jump")}),
     state,internal:{oneTrain,trainBlock,percentage,gainPerks}};

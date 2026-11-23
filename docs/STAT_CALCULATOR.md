@@ -18,16 +18,16 @@ When API data is absent or restricted, fields show demo values or unavailable la
 
 ## Gain model
 
-For each train of \`E\` energy, at gym effectiveness \`D\` (API tenths, e.g. 20 means 2.0), \`H\` happiness, and current trained stat \`S\`:
+For each train of \`E\` energy, at gym effectiveness \`D\` (normalized gym dots, e.g. API 20 means 2.0), \`H\` happiness, and current trained stat \`S\`:
 
 \`\`\`
 S_cap = S > 50,000,000 ? 50,000,000 + 0.057406 * (S - 50,000,000)^0.928996 : S
 m_H   = 1 + 0.07 * ln(1 + H/250)
 adj   = (1 - (min(H,99999)/99999)^2) * A
-gain  = (S_cap*m_H + 8*H^1.05 + adj + B) / 200000 * (D/10) * E * Π(1+source_bonus)
+gain  = (S_cap*m_H + 8*H^1.05 + adj + B) / 200000 * D * E * Π(1+source_bonus)
 \`\`\`
 
-Per-stat A/B: STR 1600/1700, DEF 2100/-600, SPD 1600/2000, DEX 1800/1500. Bonuses within a source group are additive, between sources multiplicative. Each train loses an estimated \`0.5 × E\` happiness, with stat value updated before the next train.
+Per-stat A/B: STR 1600/1700, DEF 2100/-600, SPD 1600/2000, DEX 1800/1500. The API stores gym dots at 10× the displayed value; this calculator normalizes to displayed dots before multiplying. Bonuses within a source group are additive, between sources multiplicative. Each train loses an estimated \`0.5 × E\` happiness, with stat value updated before the next train.
 
 Sources:
 - Official [Torn Gym wiki](https://wiki.torn.com/wiki/Gym#Training_Formulas): training variables, gym dots, happiness depletion.
