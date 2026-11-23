@@ -31,7 +31,7 @@ Gameplay styles: Balanced (core only), Training, Trade, Mug, Business, War, Revi
 
 Important: **existing completion keys are retained** (`quickstart:<id>` under each profile). The daily task keys also remain `task:<name>`. Adding jobs, styles or new tasks does not remove prior work.
 
-Some milestones are marked **Verified by API** only where the existing cached API can confirm them, such as level 15 and previously supported merit milestones. Permanent job passives are not automatically marked complete without a reliable data source; they remain manually checkable.
+Some milestones are marked **Verified by API** only where the existing cached API can confirm them, such as level 15, ongoing education, improved property/Private Island, bank deposits, stock-ticker access, and previously supported merit milestones. No new requests are required solely for these checks. Permanent job passives are not automatically marked complete without a reliable data source; they remain manually checkable.
 
 ## Jobs
 
