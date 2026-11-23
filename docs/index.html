@@ -10,6 +10,7 @@
   <script src="./guide-features.js" defer></script>
   <script src="./stats-calculator.js" defer></script>
   <script src="./racing-guide.js" defer></script>
+  <script src="./crime-guide.js" defer></script>
   <script src="./guide.js" defer></script>
 </head>
 <body>
@@ -21,7 +22,9 @@
         <span>TORN CITY <strong>GUIDE</strong></span>
       </a>
       <button class="menu-button button secondary" id="menu-button" type="button" aria-controls="guide-nav" aria-expanded="false">Menu</button>
+      <button class="button secondary top-refresh" id="refresh-top" type="button" disabled aria-label="Refresh Torn data" title="Refresh Torn data now">↻ Refresh</button>
       <a class="profile-link" id="profile-link" href="#profile">Connect Torn API</a>
+      <span class="sr-only" id="refresh-status" role="status" aria-live="polite"></span>
     </div>
   </header>
 
@@ -64,10 +67,18 @@
             <form id="profile-form">
               <label for="profile-name">Torn API key</label>
               <input id="profile-name" name="profile-name" type="password" required maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="profile-feedback api-security">
+              <label class="remember-option" for="stay-logged-in">
+                <input type="checkbox" id="stay-logged-in" name="stay-logged-in">
+                <span>Stay logged in on this device <small>Remember my API key and cache my profile between visits.</small></span>
+              </label>
               <button class="button primary" id="connect-api" type="submit">Connect Torn account</button>
             </form>
-            <p class="fine-print" id="api-security">Your key goes directly to api.torn.com in an Authorization header, is never saved, and is forgotten on reload or disconnect. Full Access exposes sensitive Torn data: prefer Limited or a narrowly scoped custom key. <a href="https://www.torn.com/preferences.php#tab=api" target="_blank" rel="noopener noreferrer">Create a key on Torn ↗</a></p>
+            <p class="fine-print" id="api-security">Your key goes directly to api.torn.com, never into this repository or a third-party proxy. By default it is forgotten on reload. <strong>Stay logged in</strong> stores your key and account data in this browser's local storage, readable by other code running on this site or someone using this browser profile. Do not enable it on shared devices, especially with a Full Access key. <a href="https://www.torn.com/preferences.php#tab=api" target="_blank" rel="noopener noreferrer">Manage your Torn keys ↗</a></p>
             <div class="profile-actions" id="profile-actions" hidden>
+              <label class="remember-option" for="remember-active">
+                <input type="checkbox" id="remember-active">
+                <span>Stay logged in <small>Save this account and its cached data locally.</small></span>
+              </label>
               <button class="button primary" id="refresh-data" type="button">Refresh data</button>
               <button class="button secondary" id="switch-profile" type="button">Switch account</button>
               <button class="text-button" id="sign-out" type="button">Disconnect</button>
