@@ -469,19 +469,11 @@ function renderDashboard() {
   result += metric("Current course", education ? (education.current ? "Course #" + education.current.id : "None active") : "Not available");
   result += metric("Honors earned", merits && merits.honors !== undefined ? formatNumber(merits.honors) : "Not available");
   result += '</div>' + ["education", "merits", "meritCatalog"].map(sourceError).join("") + '</div></section>';
-  const stockPositions = ownedStockPositions();
-  result += '<section class="panel"><div class="panel-heading"><h2>Stock holdings and education benefit</h2></div><div class="panel-content"><div class="metric-grid">';
-  const wsuShares = heldWsuShares();
-  result += metric("WSU shares", wsuShares === null ? "Not available" : formatNumber(wsuShares), wsuShares !== null && wsuShares >= 1000000 ? "Education block unlocked" : "Goal: 1,000,000 shares");
-  result += metric("Stock positions", stockPositions ? formatNumber(stockPositions.length) : "Not available");
-  result += '</div>';
-  if (stockPositions && stockPositions.length) {
-    result += '<ul class="item-list stock-list">' + stockPositions.map(item =>
-      '<li><span>' + safe(item.details && (item.details.name || item.details.acronym) || "Stock #" + item.id) +
-      '</span><strong>' + safe(formatNumber(item.shares)) + ' shares</strong></li>').join("") + '</ul>';
-  }
-  result += sourceError("stocks") + sourceError("stockCatalog") + '</div></section>';
-  result += '<section class="panel"><div class="panel-heading"><h2>Your inventory</h2></div><div class="panel-content">' + inventoryMarkup() + '</div></section>';
+  result += '<section class="panel"><div class="panel-heading"><h2>Detailed account data, on demand</h2></div><div class="panel-content"><div class="report-links">'+
+    '<a href="#inventory"><strong>Inventory</strong><small>Load candy, drugs, tools, and other categories only when requested</small></a>'+
+    '<a href="#money"><strong>Stocks & Money</strong><small>Stock positions and WSU benefit fetched on the Money page</small></a>'+
+    '<a href="#stats"><strong>Gym & Training</strong><small>Stats perks and the gym reference catalog load on the Stats page</small></a></div>'+
+    '<p class="fine-print">API calls this page visit: '+tornGuideApi.state.requests+'. Per-selection freshness is tracked independently, and cached data is reused.</p></div></section>';
   result += '<section class="panel"><div class="panel-heading"><h2>Activity and detailed reports</h2></div><div class="panel-content"><p class="fine-print">Torn Report has deeper histories and charts than the API snapshot shown here. These links open your existing Torn Report account; this guide does not access or copy its private logs.</p><div class="report-links">';
   for(const [label,url,tip] of [
     ["Energy","https://torn.report/energy","Energy use & recovery"],
@@ -510,3 +502,44 @@ function renderDashboard() {
   return result;
 }
 
+
+
+function renderStocksPanel(){
+  let result="";
+  const stockPositions = ownedStockPositions();
+  result += '<section class="panel"><div class="panel-heading"><h2>Stock holdings and education benefit</h2></div><div class="panel-content"><div class="metric-grid">';
+  const wsuShares = heldWsuShares();
+  result += metric("WSU shares", wsuShares === null ? "Not available" : formatNumber(wsuShares), wsuShares !== null && wsuShares >= 1000000 ? "Education block unlocked" : "Goal: 1,000,000 shares");
+  result += metric("Stock positions", stockPositions ? formatNumber(stockPositions.length) : "Not available");
+  result += '</div>';
+  if (stockPositions && stockPositions.length) {
+    result += '<ul class="item-list stock-list">' + stockPositions.map(item =>
+      '<li><span>' + safe(item.details && (item.details.name || item.details.acronym) || "Stock #" + item.id) +
+      '</span><strong>' + safe(formatNumber(item.shares)) + ' shares</strong></li>').join("") + '</ul>';
+  }
+  result += sourceError("stocks") + sourceError("stockCatalog") + '</div></section>';
+
+  return result;
+}
+function renderInventoryPage(){
+  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Inventory</h1><p>Load only the item categories you need. Once loaded, each category is cached independently for 15 minutes and preserved between visits when Stay logged in is enabled.</p></header>';
+  if(!tornGuideApi.isConnected())return out+'<section class="panel"><div class="panel-content">Connect your account to load inventory.</div></section>';
+  const st=tornGuideApi.state;
+  out+='<div class="inventory-grid">';
+  for(const cat of tornGuideApi.inventoryTypes){
+    const items=st.inventory[cat],stamp=Number(st.fetchedAt["inventory:"+cat])||0;
+    const error=st.inventoryErrors[cat];
+    out+='<section class="inventory-panel"><h3>'+safe(cat)+(items?' ('+items.length+')':'')+'</h3>'+
+      '<div class="inventory-actions"><button type="button" class="button secondary" data-inventory-load="'+safe(cat)+'">'+(items?'Refresh category':'Load category')+'</button>';
+    if(stamp)out+='<small>Updated '+safe(new Date(stamp).toLocaleTimeString())+'</small>';
+    out+='</div>';
+    if(error)out+='<p class="api-error">'+safe(error)+'</p>';
+    if(!items)out+='<p>Not requested yet.</p>';
+    else if(!items.length)out+='<p>Nothing held.</p>';
+    else out+='<ul class="item-list">'+items.map(item=>
+      '<li><span>'+safe(item.name)+(item.equipped?' <small>(equipped)</small>':'')+
+      '</span><strong>×'+safe(formatNumber(item.amount))+'</strong></li>').join("")+'</ul>';
+    out+='</section>';
+  }
+  return out+'</div>';
+}
