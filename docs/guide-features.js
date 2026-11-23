@@ -168,18 +168,22 @@ const tornGuideApi = (() => {
     ];
     const results = await Promise.all(work);
     if (currentEpoch !== epoch || !secret) return;
+    let succeeded = 0;
     for (const result of results) {
       if (result.category) {
         if (result.error) state.inventoryErrors[result.category] = result.error;
-        else { state.inventory[result.category] = result.value; delete state.inventoryErrors[result.category]; }
+        else { state.inventory[result.category] = result.value; delete state.inventoryErrors[result.category]; succeeded++; }
         if (result.truncated) state.inventoryErrors[result.category] = "List capped at 2,500 items.";
       } else if (result.error) state.errors[result.name] = result.error;
-      else { state.data[result.name] = result.value; delete state.errors[result.name]; }
+      else { state.data[result.name] = result.value; delete state.errors[result.name]; succeeded++; }
     }
-    state.updated = Date.now();
-    state.cached = false;
+    if(succeeded){
+      state.updated = Date.now();
+      state.cached = false;
+    }
     state.loading = false;
     saveOptIn();
+    if(!succeeded)state.storageWarning="No Torn API sections refreshed successfully; showing the last available snapshot.";
     announce();
     if (["#dashboard","#quickstart","#checklist","#stats","#crime"].includes(location.hash)) renderRoute();
     return { failures: Object.keys(state.errors).length + Object.keys(state.inventoryErrors).length };
