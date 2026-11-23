@@ -206,3 +206,47 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-footnotes a{color:var(--accent);text-decoration:underline}
 @media(max-width:700px){.tc-compare-summary{grid-template-columns:1fr}.tc-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-four{min-width:800px}}
 @media(max-width:400px){.tc-settings-grid{grid-template-columns:1fr}}
+
+
+/* Consolidated guide, dashboard diagnostics and racing route */
+.metric-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.metric strong.metric-value{font-size:clamp(1rem,1.6vw,1.3rem);overflow-wrap:anywhere;word-break:normal;line-height:1.3}
+.api-failure-list{list-style:none;padding:0;margin:.8rem 0 0;display:grid;gap:.6rem}
+.api-failure-list li{padding:.7rem .8rem;background:var(--raised);border:1px solid var(--border);border-radius:6px;display:flex;flex-direction:column;gap:.25rem}
+.api-failure-list li strong{font-weight:700;color:#f4aaa3;overflow-wrap:anywhere}
+.api-failure-list li small{color:var(--muted);overflow-wrap:anywhere}
+.rg-rule{padding:.85rem;background:var(--raised);border-left:4px solid var(--accent);border-radius:4px;margin-bottom:.85rem;font-size:.95rem}
+.rg-rule strong{color:var(--accent-strong)}
+.rg-class-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:.75rem}
+.rg-class-card{border:1px solid var(--border);border-radius:8px;background:var(--raised);padding:.9rem;min-width:0}
+.rg-class-card p{font-size:.85rem;line-height:1.5;margin:.55rem 0 0}
+.rg-class-top{display:flex;gap:.55rem;align-items:center}
+.rg-class{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;background:var(--accent);color:#222;font-weight:850;border-radius:7px}
+.rg-class-top strong{font-size:.92rem;overflow-wrap:anywhere}
+.rg-input-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin:.85rem 0}
+.rg-input{display:flex;flex-direction:column;gap:.3rem;font-size:.81rem;color:var(--muted)}
+.rg-input input,.rg-search input{width:100%;min-width:0;padding:.55rem .65rem;color:var(--text);background:var(--canvas);border:1px solid var(--border);border-radius:5px}
+.rg-result-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;margin:.9rem 0}
+.rg-result{border:1px solid var(--border);background:var(--raised);border-radius:7px;padding:.9rem;display:flex;flex-direction:column;gap:.4rem;min-width:0}
+.rg-result small{color:var(--muted);font-size:.8rem}
+.rg-result strong{font-size:1.3rem;overflow-wrap:anywhere}
+.rg-good{color:#abdcac}.rg-warn{color:#efaba3}
+.rg-table{border-collapse:collapse;width:100%;font-size:.82rem;text-align:left}
+.rg-table th,.rg-table td{border-bottom:1px solid var(--border);padding:.65rem .5rem;vertical-align:top}
+.rg-table thead th{background:var(--raised);color:var(--accent-strong);font-size:.75rem}
+.rg-table tbody th{font-weight:750}
+.rg-table small{display:block;font-weight:400;color:var(--muted);margin-top:.3rem;line-height:1.45}
+.rg-table tbody tr:hover{background:var(--raised)}
+.rg-filter{display:flex;justify-content:space-between;gap:.75rem;align-items:end;flex-wrap:wrap;margin:1rem 0}
+.rg-filter>div{display:flex;gap:.4rem;flex-wrap:wrap}
+.rg-filter-btn{padding:.5rem .8rem;border:1px solid var(--border);border-radius:5px;background:var(--raised);color:var(--muted)}
+.rg-filter-btn.is-selected{color:var(--accent-strong);background:#4b4329;border-color:var(--accent)}
+.rg-search{display:flex;flex-direction:column;gap:.3rem;color:var(--muted);font-size:.78rem;min-width:200px}
+.rg-track-scroll{overflow:auto;max-width:100%;border:1px solid var(--border);border-radius:6px}
+.rg-track-table{min-width:735px}
+.rg-track-table th:first-child{min-width:115px}
+.rg-track-table td:nth-child(3){min-width:130px}
+.rg-track-table td:nth-child(4){min-width:200px}
+.rg-build-order,.rg-tips{padding-left:1.35rem;line-height:1.6}
+.rg-build-order li,.rg-tips li{margin-bottom:.65rem}
+@media(max-width:760px){.rg-input-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rg-result-row{grid-template-columns:1fr}}
