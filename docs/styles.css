@@ -347,3 +347,14 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-bonus-presets>span{color:var(--muted);font-size:.79rem;font-weight:650;margin-right:.3rem}
 .ts-bonus-presets button{border:1px solid var(--border);border-radius:5px;padding:.3rem .55rem;min-height:30px;background:#343a31;color:var(--accent-strong);font-size:.73rem;margin:0}
 .ts-bonus-presets button:hover{background:#4b4f38;border-color:var(--accent)}
+
+
+/* Lazy inventory cards and source transparency */
+.inventory-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:.5rem 0}
+.inventory-actions .button{font-size:.76rem;min-height:30px;padding:.25rem .5rem}
+.inventory-actions small{font-size:.72rem;color:var(--muted)}
+.source-status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:.7rem;margin:.6rem 0 1rem}
+.source-status-grid>div{padding:.85rem;border:1px solid var(--border);border-radius:7px;background:var(--raised);display:flex;flex-direction:column;gap:.3rem}
+.source-status-grid strong{font-size:.9rem;color:var(--accent-strong)}
+.source-status-grid small{font-size:.78rem;color:var(--muted)}
+.source-status-grid span{font-size:.82rem;font-weight:650;margin-top:.2rem}
