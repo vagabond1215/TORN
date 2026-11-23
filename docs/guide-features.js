@@ -185,7 +185,7 @@ const tornGuideApi = (() => {
     saveOptIn();
     if(!succeeded)state.storageWarning="No Torn API sections refreshed successfully; showing the last available snapshot.";
     announce();
-    if (["#dashboard","#quickstart","#checklist","#stats"].includes(location.hash)) renderRoute();
+    if (["","#home","#dashboard","#quickstart","#checklist","#stats"].includes(location.hash)) renderRoute();
     else if(location.hash==="#crime" && typeof tornCrimeGuide!=="undefined") tornCrimeGuide.syncNerve();
     return { failures: Object.keys(state.errors).length + Object.keys(state.inventoryErrors).length };
   }
@@ -353,6 +353,21 @@ function renderDashboard() {
   if (!tornGuideApi.isConnected()) return result + '<section class="panel"><div class="panel-content"><p>Connect your own Torn API key in <a href="#profile">Account</a> to populate this dashboard. No key is stored in the browser.</p></div></section>';
   const st = tornGuideApi.state;
   result += '<div class="panel"><div class="panel-content"><p class="progress-line">' + safe(st.identity.name) + " [#" + safe(st.identity.id) + "] · Level " + safe(st.identity.level) + '</p><p class="fine-print">' + (st.loading ? "Refreshing…" : st.updated ? "Last refreshed: " + safe(new Date(st.updated).toLocaleString()) + (st.cached ? " (restored from browser cache)" : " (live Torn API)") : "Connecting…") + '</p></div></div>';
+  const cooldown=payload("cooldowns","cooldowns");
+  const cdText=value=>{
+    if(value===null||value===undefined||!Number.isFinite(Number(value)))return "Not available";
+    const seconds=Math.max(0,Math.ceil(Number(value)));
+    if(seconds<=0)return "Ready";
+    return Math.floor(seconds/3600)+"h "+Math.floor(seconds%3600/60)+"m";
+  };
+  result += '<section class="panel"><div class="panel-heading"><h2>Cooldowns and next actions</h2></div><div class="panel-content">';
+  result += '<div class="metric-grid">'+
+    metric("Drug cooldown",cooldown?cdText(cooldown.drug):"Unavailable")+
+    metric("Booster cooldown",cooldown?cdText(cooldown.booster):"Unavailable")+
+    metric("Medical cooldown",cooldown?cdText(cooldown.medical):"Unavailable")+
+    metric("Education",payload("education","education")&&payload("education","education").current?"Course in progress":"Check courses")+
+    '</div>';
+  result += sourceError("cooldowns") + '<p class="fine-print">Timers show your last API snapshot, not a running countdown. <a href="#stats">Plan a gym session</a> or <a href="#checklist">review your checklist</a>.</p></div></section>';
   result += '<section class="panel"><div class="panel-heading"><h2>Energy, nerve, happiness and life</h2></div><div class="panel-content">' + barsMarkup() + '</div></section>';
   result += '<section class="panel"><div class="panel-heading"><h2>Battle stats</h2></div><div class="panel-content">' + battleMarkup() + '</div></section>';
   const gym = payload("gym", "gym");
@@ -396,6 +411,21 @@ function renderDashboard() {
   }
   result += sourceError("stocks") + sourceError("stockCatalog") + '</div></section>';
   result += '<section class="panel"><div class="panel-heading"><h2>Your inventory</h2></div><div class="panel-content">' + inventoryMarkup() + '</div></section>';
+  result += '<section class="panel"><div class="panel-heading"><h2>Activity and detailed reports</h2></div><div class="panel-content"><p class="fine-print">Torn Report has deeper histories and charts than the API snapshot shown here. These links open your existing Torn Report account; this guide does not access or copy its private logs.</p><div class="report-links">';
+  for(const [label,url,tip] of [
+    ["Energy","https://torn.report/energy","Energy use & recovery"],
+    ["Nerve","https://torn.report/nerve","Crime nerve history"],
+    ["Education","https://torn.report/education","Courses and education benefits"],
+    ["Drugs","https://torn.report/drugs","Drug use history"],
+    ["Racing","https://torn.report/racing","Races and performance"],
+    ["Crime uniques","https://torn.report/uniques","Unique crime outcomes"],
+    ["Trains received","https://torn.report/trains","Workplace training history"],
+    ["Organized crimes","https://torn.report/oc","Faction crime participation"],
+    ["Travel","https://torn.report/travel","Travel activity and trips"]
+  ]){
+    result += '<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer"><strong>'+safe(label)+'</strong><small>'+safe(tip)+'</small></a>';
+  }
+  result += '</div></div></section>';
   const errors = Object.keys(st.errors).length + Object.keys(st.inventoryErrors).length;
   if(errors){
     result += '<section class="panel"><div class="panel-heading"><h2>API diagnostics (' + errors + ' unavailable)</h2></div><div class="panel-content"><p class="fine-print">A Full Access key does not resolve invalid endpoints, cache limits or temporary API failures. Here are the specific requests that need attention.</p><ul class="api-failure-list">';
