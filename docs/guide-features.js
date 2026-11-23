@@ -1,10 +1,97 @@
 "use strict";
-// Torn City Guide interactive features. The API key is held ONLY in this script's memory.
-// No key in URLs, browser storage, analytics, or the public repository.
+// Torn City Guide API. Normally the key stays in memory; opt-in "Stay logged in" stores
+// the key and a data snapshot in this browser only. Never store credentials in GitHub.
 const tornGuideApi = (() => {
   let secret = null;
   let epoch = 0;
-  const state = { identity: null, data: {}, errors: {}, inventory: {}, inventoryErrors: {}, updated: null, loading: false };
+  let remember = false;
+  let refreshTimer = null;
+  let inFlight = null;
+  const quarter = 15 * 60 * 1000;
+  const authKey = "torn-city-guide:api:v2:remember";
+  const cachePrefix = "torn-city-guide:api:v2:cache:";
+  const state = { identity: null, data: {}, errors: {}, inventory: {}, inventoryErrors: {}, updated: null, loading: false, cached: false, storageWarning: null };
+  function cachedKey(id) { return cachePrefix + id; }
+  function announce() {
+    if (typeof window !== "undefined" && typeof Event !== "undefined") window.dispatchEvent(new Event("torn-guide-sync"));
+  }
+  function clearSaved(id) {
+    try {
+      localStorage.removeItem(authKey);
+      if(id!==null && id!==undefined) localStorage.removeItem(cachedKey(id));
+    } catch { /* Browsers may disallow storage; current session still works. */ }
+  }
+  function saveOptIn() {
+    if(!remember || !secret || !state.identity) return;
+    try {
+      const id=state.identity.id;
+      localStorage.setItem(authKey,JSON.stringify({version:1,key:secret,identity:state.identity}));
+      // Avoid serializing failed network requests or the API key as part of the profile data.
+      const snapshot={version:1,playerId:id,updated:state.updated,data:state.data,inventory:state.inventory,errors:state.errors,inventoryErrors:state.inventoryErrors};
+      localStorage.setItem(cachedKey(id),JSON.stringify(snapshot));
+      state.storageWarning=null;
+    } catch {
+      state.storageWarning="Browser storage is unavailable or full; login and data may not persist.";
+      remember=false;
+      clearSaved(state.identity.id);
+    }
+  }
+  function isRemembering(){return remember;}
+  function setRemember(enabled){
+    if(!secret || !state.identity) return false;
+    if(!enabled){remember=false;clearSaved(state.identity.id);state.cached=false;state.storageWarning=null;announce();return false;}
+    remember=true;saveOptIn();announce();return remember;
+  }
+  function restore(){
+    let record;
+    try { record=JSON.parse(localStorage.getItem(authKey)||"null"); } catch {return null;}
+    const identity=record && record.identity;
+    if(!record || !/^[a-zA-Z0-9]{16}$/.test(String(record.key||"")) || !identity ||
+      !Number.isInteger(Number(identity.id)) || !identity.name) {clearSaved(identity&&identity.id);return null;}
+    secret=record.key;remember=true;epoch++;
+    state.identity={id:Number(identity.id),name:String(identity.name),level:identity.level};
+    state.data={};state.inventory={};state.errors={};state.inventoryErrors={};
+    state.updated=null;state.cached=false;state.storageWarning=null;
+    try{
+      const snap=JSON.parse(localStorage.getItem(cachedKey(state.identity.id))||"null");
+      if(snap && snap.version===1 && Number(snap.playerId)===state.identity.id){
+        state.data=snap.data&&typeof snap.data==="object"?snap.data:{};
+        state.inventory=snap.inventory&&typeof snap.inventory==="object"?snap.inventory:{};
+        state.errors=snap.errors&&typeof snap.errors==="object"?snap.errors:{};
+        state.inventoryErrors=snap.inventoryErrors&&typeof snap.inventoryErrors==="object"?snap.inventoryErrors:{};
+        state.updated=Number.isFinite(Number(snap.updated))?Number(snap.updated):null;
+        state.cached=true;
+      }
+    }catch { /* Corrupted cache is ignored; credentials remain reusable. */ }
+    scheduleRefresh();
+    announce();
+    return {identity:state.identity,cached:state.cached,updated:state.updated};
+  }
+  function stopRefreshTimer(){
+    if(refreshTimer!==null){clearTimeout(refreshTimer);refreshTimer=null;}
+  }
+  function scheduleRefresh(){
+    stopRefreshTimer();
+    if(!secret)return;
+    const now=Date.now();
+    const next=(Math.floor(now/quarter)+1)*quarter;
+    refreshTimer=setTimeout(async()=>{
+      refreshTimer=null;
+      if(secret){
+        try{await refresh();}catch(error){state.storageWarning="Automatic refresh failed: "+String(error.message||error);announce();}
+        scheduleRefresh();
+      }
+    },Math.max(200,next-now+150));
+  }
+  function refreshOnResume(){
+    if(!secret || (typeof document!=="undefined" && document.visibilityState==="hidden"))return;
+    if(!state.updated || Date.now()-state.updated>=quarter){
+      refresh().catch(error=>{state.storageWarning="Refresh failed: "+String(error.message||error);announce();});
+    }
+    scheduleRefresh();
+  }
+  if(typeof document!=="undefined")document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshOnResume();});
+  if(typeof window!=="undefined")window.addEventListener("focus",refreshOnResume);
   const inventoryTypes = ["Candy", "Drug", "Alcohol", "Tool", "Enhancer", "Booster", "Energy Drink", "Medical"];
   async function request(path, candidate) {
     const controller = new AbortController();
@@ -24,21 +111,28 @@ const tornGuideApi = (() => {
       throw error;
     } finally { clearTimeout(timeout); }
   }
-  async function connect(raw) {
+  async function connect(raw, stay = false) {
     const candidate = String(raw || "").trim();
     if (!/^[a-zA-Z0-9]{16}$/.test(candidate)) throw Error("Enter a valid 16-character Torn API key.");
     const rawBasic = await request("user/basic", candidate);
     const person = rawBasic.profile;
     if (!person || !Number.isInteger(person.id) || !person.name) throw Error("Torn returned an unexpected profile response.");
+    if(remember)clearSaved(state.identity && state.identity.id);
     secret = candidate; epoch += 1;
     state.identity = { id: person.id, name: person.name, level: person.level };
-    state.data = { basic: rawBasic }; state.errors = {}; state.inventory = {}; state.inventoryErrors = {}; state.updated = null;
+    state.data = { basic: rawBasic }; state.errors = {}; state.inventory = {}; state.inventoryErrors = {}; state.updated = null;state.cached=false;state.storageWarning=null;
+    remember=Boolean(stay);
+    if(remember)saveOptIn();
+    scheduleRefresh();
+    announce();
     return state.identity;
   }
-  async function refresh() {
+  async function refreshInternal() {
     if (!secret) throw Error("Connect a Torn API key first.");
     const currentEpoch = ++epoch;
     state.loading = true;
+    state.storageWarning=null;
+    announce();
     const endpointNames = ["bars", "battlestats", "gym", "perks", "profile", "property", "job", "education", "merits", "honors", "money", "stocks", "workstats", "cooldowns", "equipment", "personalstats"];
     const work = [
       ...endpointNames.map(async name => {
@@ -83,16 +177,31 @@ const tornGuideApi = (() => {
       else { state.data[result.name] = result.value; delete state.errors[result.name]; }
     }
     state.updated = Date.now();
+    state.cached = false;
     state.loading = false;
-    if (location.hash === "#dashboard" || location.hash === "#quickstart" || location.hash === "#checklist" || location.hash === "#stats") renderRoute();
+    saveOptIn();
+    announce();
+    if (["#dashboard","#quickstart","#checklist","#stats","#crime"].includes(location.hash)) renderRoute();
     return { failures: Object.keys(state.errors).length + Object.keys(state.inventoryErrors).length };
   }
+  function refresh(){
+    if(!secret)return Promise.reject(Error("Connect a Torn API key first."));
+    if(inFlight)return inFlight;
+    inFlight=refreshInternal().finally(()=>{inFlight=null;});
+    return inFlight;
+  }
   function disconnect() {
-    epoch += 1; secret = null;
+    const id=state.identity && state.identity.id;
+    epoch += 1; secret = null; remember=false;
+    stopRefreshTimer();
+    clearSaved(id);
     state.identity = null; state.data = {}; state.errors = {};
     state.inventory = {}; state.inventoryErrors = {}; state.updated = null; state.loading = false;
+    state.cached=false;state.storageWarning=null;
+    announce();
   }
-  return { state, connect, refresh, disconnect, isConnected: () => Boolean(secret) };
+  return { state, connect, refresh, disconnect, restore, setRemember, isRemembering, refreshOnResume,
+    isConnected: () => Boolean(secret) };
 })();
 
 const guideSteps = [
