@@ -91,7 +91,8 @@ const tornTrainSequence=(()=>{
         const eTick=(Math.floor(v.time/regenTime)+1)*regenTime;
         const first=Math.max(1,Math.round(cfg.resetAfterSec));
         const hTick=first+Math.max(0,Math.floor((v.time-first)/900)+1)*900;
-        const next=Math.min(until,eTick,hTick),passed=next-v.time,priorDrug=v.drug;
+        const drugTick=v.drug>0?v.time+v.drug:Infinity;
+        const next=Math.min(until,eTick,hTick,drugTick),passed=next-v.time,priorDrug=v.drug;
         v.time=next;v.drug=Math.max(0,v.drug-passed);v.booster=Math.max(0,v.booster-passed);
         if(next===eTick){if(v.energy<eCap)v.energy=Math.min(eCap,v.energy+5);else v.lostRegen+=5;}
         if(next===hTick){v.happy=v.happy>ctx.state.maxHappy?ctx.state.maxHappy:Math.min(ctx.state.maxHappy,v.happy+5);}
