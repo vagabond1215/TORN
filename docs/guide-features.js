@@ -49,6 +49,10 @@ const tornGuideApi = (() => {
         try { return { name: "meritCatalog", value: await request("torn/merits", secret) }; }
         catch (err) { return { name: "meritCatalog", error: String(err.message || err) }; }
       })(),
+      (async () => {
+        try { return { name: "stockCatalog", value: await request("torn/stocks", secret) }; }
+        catch (err) { return { name: "stockCatalog", error: String(err.message || err) }; }
+      })(),
       ...inventoryTypes.map(async category => {
         try {
           const gathered = [];
@@ -108,7 +112,7 @@ const guideSteps = [
   { id:"suitcase", stage:"Level 15", title:"Acquire a Large Suitcase when it pays for itself", detail:"A Large Suitcase currently adds +3 travel-item capacity (since the June 2026 change); suitcases do not stack. At the Hawaii shop it costs $10m.", source:"https://wiki.torn.com/wiki/Large_Suitcase", auto:"suitcase" },
   { id:"pi-rent", stage:"Level 15", title:"Plan a Private Island rental", detail:"Renting a Private Island is a realistic path to higher Happy and a faster-travel pilot before buying a PI; verify pilot/upkeep terms.", source:"https://wiki.torn.com/wiki/Property" },
   { id:"bank-merit", stage:"Long-term", title:"Raise Bank Interest to 10/10 as deposits grow", detail:"Each merit upgrade increases bank APR by 5%; prioritize it when investment principal makes the gain meaningful. A complete line costs 55 merits.", source:"https://wiki.torn.com/wiki/Bank", auto:"bankMerit" },
-  { id:"wsu", stage:"Long-term", title:"Acquire the WSU education stock benefit", detail:"Hold 1,000,000 West Side University shares for a passive 10% reduction to FUTURE education course lengths; monitor current price.", source:"https://wiki.torn.com/wiki/Education" },
+  { id:"wsu", stage:"Long-term", title:"Acquire the WSU education stock benefit", detail:"Hold 1,000,000 West Side University shares for a passive 10% reduction to FUTURE education course lengths; monitor current price.", source:"https://wiki.torn.com/wiki/Education", auto:"wsu" },
   { id:"principal", stage:"Long-term", title:"Obtain the permanent Principal education-job perk", detail:"Reaching Principal in the Education starter career grants a permanent 10% education-time reduction, even after leaving.", source:"https://wiki.torn.com/wiki/Education" },
   { id:"crime-progression", stage:"Long-term", title:"Invest in Crime Progression when useful", detail:"Crimes 2.0 progression merits improve crime experience and skill gains. Avoid repeatedly failing harder crimes.", source:"https://wiki.torn.com/wiki/Crimes" },
   { id:"bank-2b", stage:"Long-term", title:"Build a sustainable bank investment fund", detail:"The ordinary bank investment cap is $2 billion; invest within your cash-flow needs and grow toward it over time.", source:"https://wiki.torn.com/wiki/Bank" },
@@ -136,12 +140,30 @@ function meritLevel(name) {
   const upgrade = user.upgrades.find(entry => Number(entry.id) === Number(definition.id));
   return upgrade ? Number(upgrade.level) : 0;
 }
+function ownedStockPositions() {
+  const holdings = payload("stocks", "stocks");
+  const catalog = payload("stockCatalog", "stocks");
+  if (!Array.isArray(holdings) || !Array.isArray(catalog)) return null;
+  return holdings.map(item => ({
+    ...item,
+    details: catalog.find(stock => Number(stock.id) === Number(item.id)) || null
+  }));
+}
+function heldWsuShares() {
+  const positions = ownedStockPositions();
+  if (!positions) return null;
+  const position = positions.find(item => item.details &&
+    (String(item.details.acronym).toUpperCase() === "WSU" ||
+    String(item.details.name).toLowerCase() === "west side university"));
+  return position ? Number(position.shares || 0) : 0;
+}
 function autoDone(step) {
   const st = tornGuideApi.state;
   if (!st.identity) return false;
   if (step.auto === "level15") return Number(st.identity.level) >= 15;
   if (step.auto === "educationMerit") return meritLevel("Education Length") === 10;
   if (step.auto === "bankMerit") return meritLevel("Bank Interest") === 10;
+  if (step.auto === "wsu") return heldWsuShares() !== null && heldWsuShares() >= 1000000;
   if (step.auto === "suitcase") return (st.inventory.Enhancer || []).some(item => item.name === "Large Suitcase" && Number(item.amount) > 0);
   if (step.auto === "job") {
     const info = payload("job", "job");
@@ -224,16 +246,39 @@ function renderDashboard() {
   result += metric("Current gym", gym && gym.name || "Not available", gym && Array.isArray(gym.unlocked_gyms) ? gym.unlocked_gyms.filter(g => g.available).length + " gyms available" : "");
   result += metric("Job", job && (job.name || job.position || job.company_name) || "Not available");
   result += metric("Property", property && (property.name || (property.property && property.property.name)) || "Not available");
-  result += metric("Cash on hand", cash && cash.cash !== undefined ? "$" + formatNumber(cash.cash) : "Not available");
-  result += '</div>' + ["gym", "job", "property", "money"].map(sourceError).join("") + '</div></section>';
+  result += metric("Cash on hand", cash && cash.wallet !== undefined ? "$" + formatNumber(cash.wallet) : "Not available");
+  result += metric("Bank balance", cash && cash.city_bank && cash.city_bank.amount !== undefined ? "$" + formatNumber(cash.city_bank.amount) : cash ? "No active deposit" : "Not available");
+  result += metric("Points", cash && cash.points !== undefined ? formatNumber(cash.points) : "Not available");
+  result += '</div>';
+  if (gym && Array.isArray(gym.unlocked_gyms)) {
+    result += '<h3 class="subheading">Gym access</h3><ul class="gym-list">' +
+      gym.unlocked_gyms.map(item => '<li>' + safe(item.name) + ' <small>' +
+        (item.available ? "Available" : "Not yet available") + '</small></li>').join("") + '</ul>';
+  }
+  result += ["gym", "job", "property", "money"].map(sourceError).join("") + '</div></section>';
   result += '<section class="panel"><div class="panel-heading"><h2>Education and merits</h2></div><div class="panel-content"><div class="metric-grid">';
   result += metric("Education Length", meritLevel("Education Length") === null ? "Not available" : meritLevel("Education Length") + " / 10");
   result += metric("Bank Interest", meritLevel("Bank Interest") === null ? "Not available" : meritLevel("Bank Interest") + " / 10");
   result += metric("Available merits", merits ? formatNumber(merits.available) : "Not available");
-  result += metric("Completed courses", education && Array.isArray(education.completed) ? formatNumber(education.completed.length) : "See Torn education");
+  result += metric("Completed courses", education && Array.isArray(education.complete) ? formatNumber(education.complete.length) : "Not available");
+  result += metric("Current course", education ? (education.current ? "Course #" + education.current.id : "None active") : "Not available");
+  result += metric("Honors earned", merits && merits.honors !== undefined ? formatNumber(merits.honors) : "Not available");
   result += '</div>' + ["education", "merits", "meritCatalog"].map(sourceError).join("") + '</div></section>';
+  const stockPositions = ownedStockPositions();
+  result += '<section class="panel"><div class="panel-heading"><h2>Stock holdings and education benefit</h2></div><div class="panel-content"><div class="metric-grid">';
+  const wsuShares = heldWsuShares();
+  result += metric("WSU shares", wsuShares === null ? "Not available" : formatNumber(wsuShares), wsuShares !== null && wsuShares >= 1000000 ? "Education block unlocked" : "Goal: 1,000,000 shares");
+  result += metric("Stock positions", stockPositions ? formatNumber(stockPositions.length) : "Not available");
+  result += '</div>';
+  if (stockPositions && stockPositions.length) {
+    result += '<ul class="item-list stock-list">' + stockPositions.map(item =>
+      '<li><span>' + safe(item.details && (item.details.name || item.details.acronym) || "Stock #" + item.id) +
+      '</span><strong>' + safe(formatNumber(item.shares)) + ' shares</strong></li>').join("") + '</ul>';
+  }
+  result += sourceError("stocks") + sourceError("stockCatalog") + '</div></section>';
   result += '<section class="panel"><div class="panel-heading"><h2>Your inventory</h2></div><div class="panel-content">' + inventoryMarkup() + '</div></section>';
   const errors = Object.keys(st.errors).length + Object.keys(st.inventoryErrors).length;
   if (errors) result += '<section class="panel"><div class="panel-content"><p class="api-error">' + errors + ' API section(s) could not be loaded. They remain separate so a problem in one selection does not hide the rest.</p></div></section>';
   return result;
 }
+

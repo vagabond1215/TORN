@@ -147,3 +147,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .step-row small { display:block; color:var(--muted); margin-top:.25rem; font-size:.84rem; line-height:1.5; }
 .step-foot { display:flex; gap:1rem; justify-content:flex-end; padding-top:.4rem; font-size:.78rem; }
 .verified { color:var(--accent-strong); font-weight:650; }
+
+/* Expanded gym memberships and stock holdings */
+.subheading { font-size:.9rem; margin:1rem 0 .55rem; }
+.gym-list { display:flex; flex-wrap:wrap; gap:.45rem .8rem; list-style:none; padding:0; margin:0; }
+.gym-list li { border:1px solid var(--border); border-radius:6px; padding:.4rem .55rem; font-size:.83rem; }
+.gym-list small { color:var(--muted); padding-left:.35rem; }
+.stock-list { margin-top:.85rem; }
