@@ -1,212 +1,283 @@
 "use strict";
-// Torn City Guide API. Normally the key stays in memory; opt-in "Stay logged in" stores
-// the key and a data snapshot in this browser only. Never store credentials in GitHub.
-const tornGuideApi = (() => {
-  let secret = null;
-  let epoch = 0;
-  let remember = false;
-  let refreshTimer = null;
-  let inFlight = null;
-  const quarter = 15 * 60 * 1000;
-  const authKey = "torn-city-guide:api:v2:remember";
-  const cachePrefix = "torn-city-guide:api:v2:cache:";
-  const state = { identity: null, data: {}, errors: {}, inventory: {}, inventoryErrors: {}, updated: null, loading: false, cached: false, storageWarning: null };
-  function cachedKey(id) { return cachePrefix + id; }
-  function announce() {
-    if (typeof window !== "undefined" && typeof Event !== "undefined") window.dispatchEvent(new Event("torn-guide-sync"));
+/* Page-scoped Torn API coordinator. All network calls are explicit GETs to Torn API v2.
+ * Credential lives in memory, or opt-in browser localStorage only. No external API
+ * receives the Torn key. Live Torn-page bridge is an optional user-approved snapshot.
+ */
+const tornGuideApi=(()=>{
+  let secret=null,remember=false,epoch=0,timer=null,inFlight=null,queued=null;
+  const quarter=15*60*1000;
+  const authKey="torn-city-guide:api:v2:remember";
+  const cachePrefix="torn-city-guide:api:v2:cache:";
+  const inventoryTypes=["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical"];
+  const mins=60*1000,hrs=60*mins,days=24*hrs;
+  const TTL={
+    basic:days, bars:2*mins, cooldowns:2*mins, money:15*mins,
+    battlestats:15*mins, gym:30*mins, perks:60*mins,
+    education:6*hrs, merits:6*hrs, job:6*hrs, property:12*hrs,
+    stocks:60*mins, personalstats:24*hrs,
+    gymCatalog:90*days, meritCatalog:30*days, stockCatalog:7*days
+  };
+  const ROUTES={
+    home:["bars","cooldowns","money","battlestats","gym","job","property","education","merits","meritCatalog"],
+    stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
+    crime:["bars"],
+    checklist:["bars","merits","meritCatalog","job"],
+    money:["money","stocks","stockCatalog"],
+    inventory:[],
+    racing:[], faction:[], attacking:[], war:[], tools:[]
+  };
+  const state={identity:null,data:{},inventory:{},errors:{},inventoryErrors:{},
+    fetchedAt:{},failedAt:{},updated:null,loading:false,cached:false,
+    storageWarning:null,bridge:null,requests:0,lastRequest:0};
+  const cacheKey=id=>cachePrefix+id;
+  const now=()=>Date.now();
+  const routeName=()=>{
+    const hash=(location.hash||"").slice(1);
+    return hash==="quickstart"?"checklist":hash==="dashboard"?"home":ROUTES[hash]?hash:"home";
+  };
+  function announce(){
+    if(typeof window!=="undefined"&&typeof Event!=="undefined")window.dispatchEvent(new Event("torn-guide-sync"));
   }
-  function clearSaved(id) {
-    try {
-      localStorage.removeItem(authKey);
-      if(id!==null && id!==undefined) localStorage.removeItem(cachedKey(id));
-    } catch { /* Browsers may disallow storage; current session still works. */ }
+  function clearSaved(id){
+    try{localStorage.removeItem(authKey);if(id!=null)localStorage.removeItem(cacheKey(id));}catch{}
   }
-  function saveOptIn() {
-    if(!remember || !secret || !state.identity) return;
-    try {
-      const id=state.identity.id;
-      localStorage.setItem(authKey,JSON.stringify({version:1,key:secret,identity:state.identity}));
-      // Avoid serializing failed network requests or the API key as part of the profile data.
-      const snapshot={version:1,playerId:id,updated:state.updated,data:state.data,inventory:state.inventory,errors:state.errors,inventoryErrors:state.inventoryErrors};
-      localStorage.setItem(cachedKey(id),JSON.stringify(snapshot));
+  function save(){
+    if(!remember||!secret||!state.identity)return;
+    try{
+      localStorage.setItem(authKey,JSON.stringify({version:2,key:secret,identity:state.identity}));
+      localStorage.setItem(cacheKey(state.identity.id),JSON.stringify({
+        version:2,playerId:state.identity.id,data:state.data,inventory:state.inventory,
+        errors:state.errors,inventoryErrors:state.inventoryErrors,
+        fetchedAt:state.fetchedAt,failedAt:state.failedAt,updated:state.updated
+      }));
       state.storageWarning=null;
-    } catch {
-      state.storageWarning="Browser storage is unavailable or full; login and data may not persist.";
-      remember=false;
-      clearSaved(state.identity.id);
+    }catch{
+      state.storageWarning="Browser storage unavailable or full. Session data will not persist.";
+      remember=false;clearSaved(state.identity.id);
     }
   }
-  function isRemembering(){return remember;}
-  function setRemember(enabled){
-    if(!secret || !state.identity) return false;
-    if(!enabled){remember=false;clearSaved(state.identity.id);state.cached=false;state.storageWarning=null;announce();return false;}
-    remember=true;saveOptIn();announce();return remember;
+  function setRemember(on){
+    if(!secret||!state.identity)return false;
+    if(!on){remember=false;clearSaved(state.identity.id);state.cached=false;announce();return false;}
+    remember=true;save();announce();return remember;
   }
   function restore(){
     let record;
-    try { record=JSON.parse(localStorage.getItem(authKey)||"null"); } catch {return null;}
-    const identity=record && record.identity;
-    if(!record || !/^[a-zA-Z0-9]{16}$/.test(String(record.key||"")) || !identity ||
-      !Number.isInteger(Number(identity.id)) || !identity.name) {clearSaved(identity&&identity.id);return null;}
+    try{record=JSON.parse(localStorage.getItem(authKey)||"null");}catch{return null;}
+    if(!record)return null;
+    const ident=record.identity;
+    if(!/^[a-zA-Z0-9]{16}$/.test(String(record.key||""))||!ident||
+      !Number.isInteger(Number(ident.id))||!ident.name){
+      clearSaved(ident&&ident.id);return null;
+    }
     secret=record.key;remember=true;epoch++;
-    state.identity={id:Number(identity.id),name:String(identity.name),level:identity.level};
+    state.identity={id:Number(ident.id),name:String(ident.name),level:ident.level};
     state.data={};state.inventory={};state.errors={};state.inventoryErrors={};
-    state.updated=null;state.cached=false;state.storageWarning=null;
+    state.fetchedAt={};state.failedAt={};state.updated=null;state.bridge=null;state.cached=false;
     try{
-      const snap=JSON.parse(localStorage.getItem(cachedKey(state.identity.id))||"null");
-      if(snap && snap.version===1 && Number(snap.playerId)===state.identity.id){
-        state.data=snap.data&&typeof snap.data==="object"?snap.data:{};
-        state.inventory=snap.inventory&&typeof snap.inventory==="object"?snap.inventory:{};
-        state.errors=snap.errors&&typeof snap.errors==="object"?snap.errors:{};
-        state.inventoryErrors=snap.inventoryErrors&&typeof snap.inventoryErrors==="object"?snap.inventoryErrors:{};
-        state.updated=Number.isFinite(Number(snap.updated))?Number(snap.updated):null;
+      const snap=JSON.parse(localStorage.getItem(cacheKey(state.identity.id))||"null");
+      if(snap&&Number(snap.playerId)===state.identity.id){
+        for(const key of ["data","inventory","errors","inventoryErrors","fetchedAt","failedAt"]){
+          state[key]=snap[key]&&typeof snap[key]==="object"?snap[key]:{};
+        }
+        state.updated=Number(snap.updated)||null;
         state.cached=true;
       }
-    }catch { /* Corrupted cache is ignored; credentials remain reusable. */ }
-    scheduleRefresh();
-    announce();
+    }catch{}
+    schedule();announce();
     return {identity:state.identity,cached:state.cached,updated:state.updated};
   }
-  function stopRefreshTimer(){
-    if(refreshTimer!==null){clearTimeout(refreshTimer);refreshTimer=null;}
-  }
-  function scheduleRefresh(){
-    stopRefreshTimer();
-    if(!secret)return;
-    const now=Date.now();
-    const next=(Math.floor(now/quarter)+1)*quarter;
-    refreshTimer=setTimeout(async()=>{
-      refreshTimer=null;
-      if(secret){
-        try{await refresh();}catch(error){state.storageWarning="Automatic refresh failed: "+String(error.message||error);announce();}
-        scheduleRefresh();
-      }
-    },Math.max(200,next-now+150));
+  function stopTimer(){if(timer!==null){clearTimeout(timer);timer=null;}}
+  function schedule(){
+    stopTimer();if(!secret)return;
+    const next=(Math.floor(now()/quarter)+1)*quarter;
+    timer=setTimeout(async()=>{
+      timer=null;
+      try{await refresh({route:routeName()});}
+      catch(error){state.storageWarning=String(error.message||error);announce();}
+      schedule();
+    },Math.max(200,next-now()+125));
   }
   function refreshOnResume(){
-    if(!secret || (typeof document!=="undefined" && document.visibilityState==="hidden"))return;
-    if(!state.updated || Date.now()-state.updated>=quarter){
-      refresh().catch(error=>{state.storageWarning="Refresh failed: "+String(error.message||error);announce();});
-    }
-    scheduleRefresh();
+    if(!secret||typeof document!=="undefined"&&document.visibilityState==="hidden")return;
+    refresh({route:routeName()}).catch(()=>{});
+    schedule();
   }
-  if(typeof document!=="undefined")document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshOnResume();});
+  if(typeof document!=="undefined")document.addEventListener("visibilitychange",()=>{
+    if(document.visibilityState==="visible")refreshOnResume();
+  });
   if(typeof window!=="undefined")window.addEventListener("focus",refreshOnResume);
-  const inventoryTypes = ["Candy", "Drug", "Alcohol", "Tool", "Enhancer", "Booster", "Energy Drink", "Medical"];
-  async function request(path, candidate) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    try {
-      const response = await fetch("https://api.torn.com/v2/" + path, {
-        method: "GET", headers: { "Authorization": "ApiKey " + candidate, "Accept": "application/json" },
-        cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", signal: controller.signal
+  async function request(path,key){
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),15000);
+    try{
+      const response=await fetch("https://api.torn.com/v2/"+path,{
+        method:"GET",headers:{Authorization:"ApiKey "+key,Accept:"application/json"},
+        credentials:"omit",cache:"no-store",referrerPolicy:"no-referrer",signal:controller.signal
       });
-      const payload = await response.json();
-      if (payload && payload.error) throw Error("Torn API: " + String(payload.error.error || payload.error.message || payload.error.code || "request rejected"));
-      if (!response.ok) throw Error("Torn API HTTP " + response.status);
+      const payload=await response.json();
+      if(payload&&payload.error)throw Error("Torn API: "+String(payload.error.error||payload.error.message||payload.error.code||"request rejected"));
+      if(!response.ok)throw Error("Torn API HTTP "+response.status);
+      state.requests++;state.lastRequest=now();
       return payload;
-    } catch (error) {
-      if (error instanceof TypeError) throw Error("Could not reach Torn API. Check connectivity and browser CORS permissions; no third-party proxy is used.");
-      if (error.name === "AbortError") throw Error("Torn API request timed out.");
+    }catch(error){
+      if(error.name==="AbortError")throw Error("Torn API request timed out");
+      if(error instanceof TypeError)throw Error("Cannot reach Torn API. Check network/CORS.");
       throw error;
-    } finally { clearTimeout(timeout); }
+    }finally{clearTimeout(timeout);}
   }
-  async function connect(raw, stay = false) {
-    const candidate = String(raw || "").trim();
-    if (!/^[a-zA-Z0-9]{16}$/.test(candidate)) throw Error("Enter a valid 16-character Torn API key.");
-    const rawBasic = await request("user/basic", candidate);
-    const person = rawBasic.profile;
-    if (!person || !Number.isInteger(person.id) || !person.name) throw Error("Torn returned an unexpected profile response.");
-    if(remember)clearSaved(state.identity && state.identity.id);
-    secret = candidate; epoch += 1;
-    state.identity = { id: person.id, name: person.name, level: person.level };
-    state.data = { basic: rawBasic }; state.errors = {}; state.inventory = {}; state.inventoryErrors = {}; state.updated = null;state.cached=false;state.storageWarning=null;
-    remember=Boolean(stay);
-    if(remember)saveOptIn();
-    scheduleRefresh();
-    announce();
+  async function connect(raw,stay=false){
+    const key=String(raw||"").trim();
+    if(!/^[a-zA-Z0-9]{16}$/.test(key))throw Error("Enter a valid 16-character Torn API key.");
+    const basic=await request("user/basic",key);
+    const profile=basic.profile;
+    if(!profile||!Number.isInteger(profile.id)||!profile.name)throw Error("Torn returned an unexpected identity.");
+    if(remember)clearSaved(state.identity&&state.identity.id);
+    epoch++;secret=key;remember=Boolean(stay);
+    state.identity={id:profile.id,name:profile.name,level:profile.level};
+    state.data={basic};state.inventory={};state.errors={};state.inventoryErrors={};
+    state.fetchedAt={basic:now()};state.failedAt={};state.updated=now();
+    state.cached=false;state.bridge=null;state.storageWarning=null;
+    save();schedule();announce();
     return state.identity;
   }
-  async function refreshInternal() {
-    if (!secret) throw Error("Connect a Torn API key first.");
-    const currentEpoch = ++epoch;
-    state.loading = true;
-    state.storageWarning=null;
+  function bridgeIsFresh(){
+    return state.bridge&&state.identity&&Number(state.bridge.playerId)===state.identity.id&&
+      now()-Number(state.bridge.timestamp)<90000;
+  }
+  // A userscript shares only allowlisted, manually captured public-side-bar values.
+  function acceptLocalSnapshot(snapshot){
+    if(!snapshot||!state.identity||Number(snapshot.playerId)!==state.identity.id)return false;
+    if(!Number.isFinite(Number(snapshot.timestamp))||Math.abs(now()-snapshot.timestamp)>90000)return false;
+    const bars=snapshot.bars;
+    if(!bars||typeof bars!=="object")return false;
+    const clean={};
+    for(const name of ["energy","nerve","happy","life"]){
+      const item=bars[name];
+      if(!item)continue;
+      const current=Number(item.current),maximum=Number(item.maximum);
+      if(Number.isFinite(current)&&Number.isFinite(maximum)&&current>=0&&maximum>0&&current<=maximum+100000)
+        clean[name]={current,maximum};
+    }
+    if(!Object.keys(clean).length)return false;
+    const base=state.data.bars&&state.data.bars.bars||{};
+    state.data.bars={bars:{...base,...clean}};
+    state.bridge={playerId:state.identity.id,timestamp:Number(snapshot.timestamp),fields:Object.keys(clean)};
     announce();
-    const endpointNames = ["bars", "battlestats", "gym", "perks", "profile", "property", "job", "education", "merits", "honors", "money", "stocks", "workstats", "cooldowns", "equipment", "personalstats"];
-    const work = [
-      ...endpointNames.map(async name => {
-        try { return { name, value: await request("user/" + name, secret) }; }
-        catch (err) { return { name, error: String(err.message || err) }; }
-      }),
-      (async () => {
-        try { return { name: "meritCatalog", value: await request("torn/merits", secret) }; }
-        catch (err) { return { name: "meritCatalog", error: String(err.message || err) }; }
-      })(),
-      (async () => {
-        try { return { name: "stockCatalog", value: await request("torn/stocks", secret) }; }
-        catch (err) { return { name: "stockCatalog", error: String(err.message || err) }; }
-      })(),
-      (async () => {
-        try { return { name: "gymCatalog", value: await request("torn/gyms", secret) }; }
-        catch (err) { return { name: "gymCatalog", error: String(err.message || err) }; }
-      })(),
-      ...inventoryTypes.map(async category => {
-        try {
-          const gathered = [];
-          let total = null;
-          for (let offset = 0; offset < 2500; offset += 250) {
-            const payload = await request("user/inventory?cat=" + encodeURIComponent(category) + "&limit=250&offset=" + offset, secret);
-            const batch = payload.inventory && Array.isArray(payload.inventory.items) ? payload.inventory.items : [];
-            gathered.push(...batch);
-            total = Number(payload._metadata && payload._metadata.total);
-            if (batch.length < 250 || (Number.isFinite(total) && total >= 0 && gathered.length >= total)) break;
-          }
-          return { category, value: gathered, truncated: total > gathered.length };
-        } catch (err) { return { category, error: String(err.message || err) }; }
-      })
+    if(["home","stats","crime","checklist"].includes(routeName())&&typeof renderRoute==="function")renderRoute();
+    return true;
+  }
+  // The bridge only replaces very fresh bar readings. It never authorizes
+  // third-party access to inventory, finances, stats or any API key.
+  function stale(key,force=false){
+    if(key==="bars"&&!force&&bridgeIsFresh())return false;
+    if(force)return true;
+    const last=Number(state.fetchedAt[key])||0;
+    if(last&&now()-last< (TTL[key]||15*mins))return false;
+    const failed=Number(state.failedAt[key])||0;
+    if(failed&&now()-failed<10*mins)return false;
+    return true;
+  }
+  function endpoint(key){
+    if(key==="gymCatalog")return "torn/gyms";
+    if(key==="stockCatalog")return "torn/stocks";
+    if(key==="meritCatalog")return "torn/merits";
+    return "user/"+key;
+  }
+  async function fetchInventory(cat,key){
+    const list=[];let total=null;
+    for(let offset=0;offset<2500;offset+=250){
+      const data=await request("user/inventory?cat="+encodeURIComponent(cat)+"&limit=250&offset="+offset,key);
+      const batch=data.inventory&&Array.isArray(data.inventory.items)?data.inventory.items:[];
+      list.push(...batch);
+      total=Number(data._metadata&&data._metadata.total);
+      if(batch.length<250||Number.isFinite(total)&&total>=0&&list.length>=total)break;
+    }
+    return {list,truncated:Number.isFinite(total)&&total>list.length};
+  }
+  async function batch(route,force=false,category=null){
+    if(!secret)throw Error("Connect Torn API first.");
+    const currentEpoch=epoch,currentKey=secret;
+    const names=(ROUTES[route]||ROUTES.home).filter(name=>stale(name,force));
+    const cats=route==="inventory"
+      ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))
+      :[];
+    const selectedCats=cats.filter(cat=>inventoryTypes.includes(cat)&&stale("inventory:"+cat,force));
+    if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
+    state.loading=true;announce();
+    let succeeded=0,failures=0;
+    const jobs=[
+      ...names.map(name=>({name,run:()=>request(endpoint(name),currentKey)})),
+      ...selectedCats.map(cat=>({name:"inventory:"+cat,run:()=>fetchInventory(cat,currentKey)}))
     ];
-    const results = await Promise.all(work);
-    if (currentEpoch !== epoch || !secret) return;
-    let succeeded = 0;
-    for (const result of results) {
-      if (result.category) {
-        if (result.error) state.inventoryErrors[result.category] = result.error;
-        else { state.inventory[result.category] = result.value; delete state.inventoryErrors[result.category]; succeeded++; }
-        if (result.truncated) state.inventoryErrors[result.category] = "List capped at 2,500 items.";
-      } else if (result.error) state.errors[result.name] = result.error;
-      else { state.data[result.name] = result.value; delete state.errors[result.name]; succeeded++; }
+    // At most three simultaneous requests; a visit does not spend the entire
+    // per-user quota in a burst. Failed selections back off for ten minutes.
+    let cursor=0;
+    async function worker(){
+      while(cursor<jobs.length){
+        const index=cursor++,job=jobs[index];
+        let value=null,error=null;
+        try{value=await job.run();}catch(ex){error=String(ex.message||ex);}
+        if(currentEpoch!==epoch||currentKey!==secret)return;
+        if(error){
+          state.failedAt[job.name]=now();failures++;
+          if(job.name.startsWith("inventory:"))state.inventoryErrors[job.name.slice(10)]=error;
+          else state.errors[job.name]=error;
+        }else{
+          state.fetchedAt[job.name]=now();delete state.failedAt[job.name];succeeded++;
+          if(job.name.startsWith("inventory:")){
+            const cat=job.name.slice(10);
+            state.inventory[cat]=value.list;
+            if(value.truncated)state.inventoryErrors[cat]="Inventory list capped at 2,500 items.";
+            else delete state.inventoryErrors[cat];
+          }else{
+            state.data[job.name]=value;delete state.errors[job.name];
+          }
+        }
+      }
     }
-    if(succeeded){
-      state.updated = Date.now();
-      state.cached = false;
+    await Promise.all(Array.from({length:Math.min(3,jobs.length)},()=>worker()));
+    if(currentEpoch!==epoch||currentKey!==secret)return {failures,requested:jobs.length,discarded:true};
+    if(succeeded){state.updated=now();state.cached=false;}
+    if(!succeeded)state.storageWarning="No requested Torn API selections updated; last data is retained.";
+    state.loading=false;save();announce();
+    if(typeof renderRoute==="function" && location.hash!=="#profile")renderRoute();
+    return {failures,requested:jobs.length,skipped:false};
+  }
+  function refresh(options={}){
+    if(!secret)return Promise.reject(Error("Connect Torn API first."));
+    const opts=typeof options==="object"&&options?options:{};
+    const route=opts.route||routeName();
+    // Deduplicate request sets. When one is in flight, schedule one follow-up
+    // using the new route, rather than aborting the current page load.
+    if(inFlight){
+      if(opts.force||opts.category||route!==inFlight.route)queued={route,force:Boolean(opts.force),category:opts.category||null};
+      return inFlight.promise;
     }
-    state.loading = false;
-    saveOptIn();
-    if(!succeeded)state.storageWarning="No Torn API sections refreshed successfully; showing the last available snapshot.";
-    announce();
-    if (["","#home","#dashboard","#quickstart","#checklist","#stats"].includes(location.hash)) renderRoute();
-    else if(location.hash==="#crime" && typeof tornCrimeGuide!=="undefined") tornCrimeGuide.syncNerve();
-    return { failures: Object.keys(state.errors).length + Object.keys(state.inventoryErrors).length };
+    const promise=batch(route,Boolean(opts.force),opts.category||null).finally(()=>{
+      inFlight=null;
+      if(queued){
+        const next=queued;queued=null;
+        refresh(next).catch(()=>{});
+      }
+    });
+    inFlight={route,promise};
+    return promise;
   }
-  function refresh(){
-    if(!secret)return Promise.reject(Error("Connect a Torn API key first."));
-    if(inFlight)return inFlight;
-    inFlight=refreshInternal().finally(()=>{inFlight=null;state.loading=false;announce();});
-    return inFlight;
-  }
-  function disconnect() {
-    const id=state.identity && state.identity.id;
-    epoch += 1; secret = null; remember=false;
-    stopRefreshTimer();
+  function loadPage(route,force=false){return refresh({route,force});}
+  function loadInventory(cat,force=false){return refresh({route:"inventory",force,category:cat});}
+  function disconnect(){
+    const id=state.identity&&state.identity.id;
+    epoch++;secret=null;remember=false;stopTimer();queued=null;
     clearSaved(id);
-    state.identity = null; state.data = {}; state.errors = {};
-    state.inventory = {}; state.inventoryErrors = {}; state.updated = null; state.loading = false;
-    state.cached=false;state.storageWarning=null;
+    state.identity=null;state.data={};state.inventory={};state.errors={};
+    state.inventoryErrors={};state.fetchedAt={};state.failedAt={};
+    state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return { state, connect, refresh, disconnect, restore, setRemember, isRemembering, refreshOnResume,
-    isConnected: () => Boolean(secret) };
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,
+    disconnect,restore,setRemember,isRemembering:()=>remember,
+    isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
 
 const guideSteps = [
