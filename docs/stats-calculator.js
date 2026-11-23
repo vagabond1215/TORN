@@ -251,7 +251,7 @@ const tornStatPlanner = (() => {
     view.dataset.tcPlannerBound = "1";
     tornTrainSequence.wire(view);
     view.addEventListener("change",event=>{
-      if(event.target.closest("#tc-sequencer")) return;
+      if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const el=event.target;
       if(el.dataset.tc) {
         const key=el.dataset.tc;
@@ -272,7 +272,7 @@ const tornStatPlanner = (() => {
       view.innerHTML=render();
     });
     view.addEventListener("click",event=>{
-      if(event.target.closest("#tc-sequencer")) return;
+      if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const pick=event.target.closest("[data-tc-pick]");
       const action=event.target.closest("[data-tc-action]");
       if(pick){state.compareStat=pick.dataset.tcPick;view.innerHTML=render();}
