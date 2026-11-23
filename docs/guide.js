@@ -268,6 +268,7 @@ function closeMenu() {
 
 renderDirectory();
 renderProfile();
+tornTctClock.init();
 renderRoute();
 window.addEventListener("hashchange", renderRoute);
 
