@@ -34,70 +34,63 @@ const tornToolsGuide=(()=>{
  // The full directory is not the launcher. Only frequently used web tools
  // are pin-eligible; installers, reference pages and duplicate entry points
  // stay in the directory, not in the global action bar.
- const maxPinned=4;
- const pinNames=new Set([
+ // One representative per external service. Installers and duplicate pages
+ // remain in the directory rather than occupying permanent launcher space.
+ const launcherNames=[
   "TornW3B","Torn Travel Planner","Torn Exchange","Torn Report",
   "Torn Intel","Clairvoyant","Torn Training Gains Calculator",
   "CAT Script","FFScouter","TornStats","YATA"
- ]);
- const shortNames={
-  "TornW3B":"Travel stock","Torn Travel Planner":"Travel planner",
-  "Torn Exchange":"Trade","Torn Report":"Reports",
-  "Torn Intel":"Torn Intel","Clairvoyant":"Stock benefits",
-  "Torn Training Gains Calculator":"Gym check","CAT Script":"War calls",
-  "FFScouter":"Scout","TornStats":"TornStats","YATA":"YATA"
- };
- const quickKey="torn-city-guide:quick-links:v1";
+ ];
+ const maxPinned=launcherNames.length,quickKey="torn-city-guide:quick-links:hidden:v2";
+ const pinNames=new Set(launcherNames);
  let override=null;
- const stylePresets={
-  Trade:["TornW3B","Torn Travel Planner","Torn Exchange","Torn Report"],
-  War:["Torn Intel","CAT Script","FFScouter"],
-  Mug:["FFScouter","Torn Intel","Torn Exchange"],
-  Business:["Clairvoyant","Torn Exchange","Torn Report"],
-  Revive:["Torn Report","TornW3B"],
-  Training:["Torn Report","Torn Training Gains Calculator"],
-  Crime:["Torn Report","YATA"],
-  Racing:["Torn Report"]
+ const icons={
+  "TornW3B":'<path d="M3 20 21 11 3 3l4 8 14 0-14 1z"/>',
+  "Torn Travel Planner":'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18M8 15h3m3 0h3"/>',
+  "Torn Exchange":'<path d="M2 12 8 6l4 2 4-2 6 6-5 5-4-2-3 3-3-2z"/><path d="m8 12 4 3m4-3-4 3"/>',
+  "Torn Report":'<path d="M4 20h16M6 17v-6m6 6V4m6 13v-9"/>',
+  "Torn Intel":'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3m9-9h-3M6 12H3m9 0 7-5"/>',
+  "Clairvoyant":'<path d="M3 17 9 11l4 4 8-9"/><path d="M15 6h6v6M3 21h18"/>',
+  "Torn Training Gains Calculator":'<path d="m6 7 12 10M4 5l-2 2 4 4 2-2m8 8-2 2 4 4 2-2M7 4l2 2m8 10 2 2"/>',
+  "CAT Script":'<path d="m3 3 18 18M21 3 3 21"/><path d="m5 5 4-1m10 2-3-2M5 19l4 1m10-2-3 2"/>',
+  "FFScouter":'<path d="M12 2 4 5v7c0 5 3 8 8 10 5-2 8-5 8-10V5z"/><path d="m8 12 3 3 5-6"/>',
+  "TornStats":'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 17v-4m5 4V7m5 10v-7"/>',
+  "YATA":'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5z"/>'
  };
- function preferredStyle(){
-  try{
-   const key=typeof activeProfile!=="undefined"&&activeProfile?activeKey("playstyle:selection"):"playstyle:guest";
-   const saved=typeof read==="function"?read(key):null;
-   const choices=JSON.parse(saved||"[]");
-   return Array.isArray(choices)?choices.find(x=>Object.hasOwn(stylePresets,x))||"Balanced":"Balanced";
-  }catch{return "Balanced";}
- }
- function validPins(value){
-  return Array.isArray(value)?
-    [...new Set(value.filter(name=>typeof name==="string"&&pinNames.has(name)))].slice(0,maxPinned):null;
- }
- function pins(){
+ const contexts={
+  home:["Torn Report","TornStats","YATA"],
+  checklist:["Torn Report","TornW3B","Torn Travel Planner"],
+  faction:["Torn Intel","CAT Script","Torn Report"],
+  jobs:["TornStats","Torn Report"],
+  stats:["Torn Training Gains Calculator","Torn Report"],
+  racing:["Torn Report"],
+  crime:["Torn Report","YATA"],
+  attacking:["FFScouter","Torn Intel"],
+  war:["CAT Script","Torn Intel","FFScouter","Torn Report"],
+  inventory:["Torn Exchange","TornW3B"],
+  money:["Clairvoyant","Torn Exchange","TornW3B"],
+  travel:["TornW3B","Torn Travel Planner","Torn Exchange","Torn Intel"],
+  profile:["Torn Report","TornStats"],
+  tools:launcherNames
+ };
+ const hiddenNames=()=>{
   if(override!==null)return [...override];
   try{
-   const saved=localStorage.getItem(quickKey);
-   if(saved!==null){
-    const parsed=validPins(JSON.parse(saved));
-    if(parsed!==null)return parsed;
-   }
-  }catch{}
-  return [...(stylePresets[preferredStyle()]||["TornW3B","Torn Exchange","Torn Report"])];
- }
- function storePins(values){
-  override=validPins(values)||[];
+   const stored=JSON.parse(localStorage.getItem(quickKey)||"[]");
+   return Array.isArray(stored)?[...new Set(stored.filter(n=>pinNames.has(n)))]:[];
+  }catch{return [];}
+ };
+ function pins(){const hidden=new Set(hiddenNames());return launcherNames.filter(n=>!hidden.has(n));}
+ function persistHidden(names){
+  override=[...new Set(names.filter(n=>pinNames.has(n)))];
   try{localStorage.setItem(quickKey,JSON.stringify(override));}catch{}
   updateBar();
-  return pins();
  }
  function togglePin(name){
   if(!pinNames.has(name))return false;
-  const next=pins(),index=next.indexOf(name);
-  if(index!==-1)next.splice(index,1);
-  else{
-   if(next.length>=maxPinned)return false;
-   next.push(name);
-  }
-  storePins(next);
-  return true;
+  const hidden=hiddenNames(),index=hidden.indexOf(name);
+  if(index<0)hidden.push(name);else hidden.splice(index,1);
+  persistHidden(hidden);return true;
  }
  function clearPins(){
   override=null;
@@ -105,38 +98,31 @@ const tornToolsGuide=(()=>{
   updateBar();
  }
  function entry(name){return list.find(item=>item[0]===name);}
- function quickLinks(){
-  const selected=pins().map(entry).filter(Boolean);
-  const links=['<a class="quick-link quick-game" href="https://www.torn.com/" target="_blank" rel="noopener noreferrer" title="Open the Torn game">Torn</a>'];
-  for(const row of selected){
-   links.push('<a class="quick-link" href="'+esc(row[4])+'" target="_blank" rel="noopener noreferrer" title="'+esc(row[1])+'">'+esc(shortNames[row[0]]||row[0])+'</a>');
-  }
-  return '<div class="quick-inner"><strong>Quick Access</strong><div class="quick-links">'+links.join("")+
-    '</div><a class="quick-customize" href="#tools" title="Choose up to four tools for this browser">Customize</a></div>';
+ function svg(name){
+  return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
+    (icons[name]||'<circle cx="12" cy="12" r="8"/>')+'</svg>';
  }
- function updateBar(){
+ function quickLinks(route){
+  const context=route||(typeof location!=="undefined"?(location.hash||"#home").slice(1):"home");
+  const contextual=typeof tornGuidePreferences!=="undefined"&&tornGuidePreferences.get("contextualQuickAccess");
+  const allowed=contextual?new Set(contexts[context]||contexts.home):new Set(launcherNames);
+  const selected=pins().filter(name=>allowed.has(name));
+  const links=selected.map(name=>{
+    const row=entry(name);if(!row)return "";
+    return '<a class="quick-link" href="'+esc(row[4])+'" target="_blank" rel="noopener noreferrer"'+
+      ' title="'+esc(name)+'" aria-label="Open '+esc(name)+'" data-tooltip="'+esc(name)+'">'+svg(name)+'</a>';
+  }).join("");
+  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+
+   '<a class="quick-customize" href="#tools" title="Customize Quick Access" aria-label="Customize Quick Access">'+
+   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3m-3.4-6.6-2.2 2.2M8.6 15.4l-2.2 2.2m0-12L8.6 7.6m6.8 7.8 2.2 2.2"/><circle cx="12" cy="12" r="4"/></svg></a></div>';
+ }
+ function updateBar(route){
   const host=typeof document!=="undefined"&&document.getElementById("tool-quickbar");
-  if(host)host.innerHTML=quickLinks();
+  if(host)host.innerHTML=quickLinks(route);
  }
- function contextLinks(route){
-  const routes={
-   stats:["Torn Training Gains Calculator","Torn Report"],
-   money:["Clairvoyant","Torn Exchange"],
-   war:["CAT Script","Torn Intel","FFScouter"],
-   attacking:["FFScouter"],
-   crime:["Torn Report"],
-   racing:["Torn Report"],
-   inventory:["Torn Exchange"]
-  };
-  const names=(routes[route]||[]).filter(name=>!pins().includes(name));
-  if(!names.length)return "";
-  return '<aside class="tool-context" aria-label="Relevant external tools"><strong>Related tools</strong>'+
-    names.map(name=>{
-     const item=entry(name);
-     return item?'<a href="'+esc(item[4])+'" target="_blank" rel="noopener noreferrer" title="'+esc(item[1])+'">'+esc(shortNames[name]||name)+'</a>':"";
-    }).join("")+'</aside>';
- }
-
+ // Contextual page suggestions are deliberately suppressed: when enabled,
+ // the global icon bar already reflects the current page, without duplicate rows.
+ function contextLinks(){return "";}
  function matches(row){
   const shown=device==="All"||row[2].split(" ").includes(device);
   const found=!query||(row[0]+" "+row[1]+" "+row[3]+" "+row[5]).toLowerCase().includes(query);
@@ -144,33 +130,31 @@ const tornToolsGuide=(()=>{
  }
  function cardMarkup(row){
   const [name,description,deviceTypes,category,url,note]=row;
-  const eligible=pinNames.has(name),picked=pins().includes(name);
-  const pin=eligible?
-   '<button type="button" class="tool-pin'+(picked?" is-pinned":"")+'" data-tool-pin="'+esc(name)+
-   '" aria-label="'+(picked?"Remove ":"Pin ")+esc(name)+(picked?" from":" to")+' Quick Access" aria-pressed="'+picked+'" '+
-   (!picked&&pins().length>=maxPinned?'disabled title="Four pinned tools maximum"':'')+'>'+
-   (picked?"Pinned":"Pin")+'</button>':"";
+  const eligible=pinNames.has(name),visible=pins().includes(name);
+  const toggle=eligible?
+   '<button type="button" class="tool-pin'+(visible?" is-pinned":"")+'" data-tool-pin="'+esc(name)+
+   '" aria-label="'+(visible?"Hide ":"Show ")+esc(name)+' in Quick Access" aria-pressed="'+visible+'">'+
+   (visible?"Visible":"Hidden")+'</button>':"";
   return '<article class="tools-guide-card"><div><strong>'+esc(name)+'</strong><small>'+esc(category)+' · '+esc(deviceTypes.replaceAll(" "," / "))+'</small></div>'+
    '<p>'+esc(description)+'</p><p class="fine-print">'+esc(note)+'</p>'+
-   '<div class="tools-card-actions"><a target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">Open tool</a>'+pin+'</div></article>';
+   '<div class="tools-card-actions"><a target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">Open tool</a>'+toggle+'</div></article>';
  }
  function cards(){
   const selected=list.filter(matches);
-  const featured=new Set(["TornTools","Torn PDA","TornW3B","Torn Travel Planner",
-   "Torn Exchange","Torn Report","Torn Intel","Clairvoyant"]);
-  const main=selected.filter(row=>query||featured.has(row[0])||pins().includes(row[0]));
+  const featured=new Set(["TornTools","Torn PDA",...launcherNames]);
+  const main=selected.filter(row=>query||featured.has(row[0]));
   const other=query?[]:selected.filter(row=>!main.includes(row));
   return '<p class="fine-print">'+selected.length+' tools match this device/filter. '+
-   pins().length+' of '+maxPinned+' external shortcuts pinned. Open links launch the provider in a new tab; no data is sent to it by this guide.</p>'+
+   pins().length+' of '+maxPinned+' launchable sites visible. All are shown by default; hide any you do not use.</p>'+
    '<div class="tools-guide-grid">'+main.map(cardMarkup).join("")+'</div>'+
-   (other.length?'<details class="tools-more"><summary>More specialized tools, setup and references ('+other.length+')</summary>'+
+   (other.length?'<details class="tools-more"><summary>Installers, references and other resources ('+other.length+')</summary>'+
    '<div class="tools-guide-grid">'+other.map(cardMarkup).join("")+'</div></details>':"");
  }
  function render(){
   let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Tools by device</h1><p>Find useful extensions, mobile apps, calculators and specialized Torn services for your setup.</p></header>';
   out+='<section class="panel"><div class="panel-heading"><h2>Quick Access favorites</h2></div><div class="panel-content">'+
-   '<p class="fine-print">Use the Pin button on a tool below to add or remove it from the global launcher. Four external favorites maximum. Preferences stay in this browser and do not require an API request.</p>'+
-   '<button type="button" class="text-button" data-tool-reset>Restore suggested shortcuts for my gameplay style</button></div></section>';
+   '<p class="fine-print">All launchable sites appear as icons by default, once per site. Use Visible / Hidden to customize the bar. Turn on Contextual Quick Access in the top-right settings to show only tools relevant to your current page.</p>'+
+   '<button type="button" class="text-button" data-tool-reset>Show all launchable sites</button></div></section>';
   out+='<section class="panel"><div class="panel-heading"><h2>Choose your device</h2></div><div class="panel-content">'+
     '<div class="tools-device-controls">'+devices.map(x=>'<button type="button" data-tools-device="'+x+'" class="tools-device '+(x===device?"is-selected":"")+'">'+x+'</button>').join("")+'</div>'+
     '<label class="tools-search">Search tools or use cases<input type="search" id="tools-search" value="'+esc(query)+'" placeholder="travel, market, war, mobile..."></label>'+
@@ -204,5 +188,5 @@ const tornToolsGuide=(()=>{
    if(e.target.id==="tools-search"){query=e.target.value.toLowerCase().trim();const cardsEl=view.querySelector("#tools-cards");if(cardsEl)cardsEl.innerHTML=cards();}
   });
  }
- return {render,wire,list,devices,quickLinks,contextLinks,pins,togglePin,updateBar,clearPins,maxPinned};
+ return {render,wire,list,devices,quickLinks,contextLinks,pins,togglePin,updateBar,clearPins,maxPinned,launcherNames,contexts};
 })();
