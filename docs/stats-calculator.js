@@ -54,7 +54,7 @@ const tornStatPlanner = (() => {
       if (state.currentPlayer!==null) { state.currentPlayer=null;state.imported=false;state.apiStamp=null;state.selectedGym=null; }
       return;
     }
-    if (!force && state.currentPlayer===id && state.imported && state.apiStamp===tornGuideApi.state.updated) return;
+    if (!force && state.currentPlayer===id && state.imported) return;
     state.currentPlayer=id;
     const bars=rawBars(),stats=rawStats();
     if (bars) {
@@ -74,19 +74,30 @@ const tornStatPlanner = (() => {
         if(Number.isFinite(Number(actual))) state.statValues[stat]=Math.max(0,Number(actual));
       }
     }
+    if(!bars || !stats) {state.imported=false;return;}
     state.selectedGym=null; // Choose actual active gym from catalog after import.
     state.imported=true;
     state.apiStamp=tornGuideApi.state.updated;
   }
   function gyms() {
     const source=api("gymCatalog");
-    const raw=source&&source.gyms;
-    if (!raw || (typeof raw!=="object")) return fallback;
-    const list=Array.isArray(raw)?raw:Object.entries(raw).map(([id,item])=>Object.assign({id:Number(id)},item));
-    const normalized=list.filter(item=>item&&typeof item==="object"&&item.name).map(item=>{
-      // Official /torn/gyms stores dots multiplied by 10 (e.g., 20 => 2.0).
-      const result={id:item.id,name:String(item.name),energy:numeric(item.energy,5),offline:false};
-      for(const stat of statNames) result[stat]=Math.max(0,numeric(item[stat])/10);
+    const raw=source && source.gyms;
+    if (!raw || typeof raw!=="object") return fallback;
+    const pairs=Array.isArray(raw)?raw.map((item,index)=>[String(item.id??index+1),item]):Object.entries(raw);
+    const pick=(...values)=>values.find(value=>value!==null && value!==undefined && Number.isFinite(Number(value)));
+    const normalized=pairs.filter(([key,item])=>item && typeof item==="object" && item.name).map(([key,item])=>{
+      const known=fallback.find(g=>g.name.toLowerCase()===String(item.name).toLowerCase());
+      const result={id:item.id??Number(key),name:String(item.name),energy:5,offline:false};
+      const cost=pick(item.energy_cost,item.energy_per_train,item.energy,item.cost_energy,known&&known.energy);
+      result.energy=Math.max(1,numeric(cost,10));
+      let needsFallback=false;
+      for(const stat of statNames) {
+        const dots=pick(item[stat],item.gains&&item.gains[stat],item.stats&&item.stats[stat],item.bonuses&&item.bonuses[stat]);
+        if(dots!==undefined) result[stat]=Math.max(0,Number(dots)/10);
+        else if(known){result[stat]=known[stat];needsFallback=true;}
+        else {result[stat]=0;needsFallback=true;}
+      }
+      result.offline=needsFallback || cost===undefined;
       return result;
     });
     return normalized.length?normalized:fallback;
@@ -101,7 +112,7 @@ const tornStatPlanner = (() => {
       const match=all.find(item=>String(item.id)===String(id)||String(item.name).toLowerCase()===String(id).toLowerCase());
       if(match) state.selectedGym=String(match.id);
     }
-    if(state.selectedGym===null) state.selectedGym="1";
+    if(state.selectedGym===null) state.selectedGym=String(all[0].id);
     return all.find(item=>String(item.id)===String(state.selectedGym))||all[0];
   }
   function perkCollections() {
@@ -367,7 +378,7 @@ const tornStatPlanner = (() => {
       '<div class="tc-status"><span><strong>'+nice(state.currentEnergy)+' / '+nice(state.maxEnergy)+'</strong> Energy</span><span><strong>'+nice(state.happy)+' / '+nice(state.maxHappy)+'</strong> Happy</span><span><strong>'+ (available?"Torn API connected":"Demo / manual mode")+'</strong></span></div>'+
       '<div class="tc-controls"><label class="tc-field"><span>Gym used for the calculation</span><select data-tc="selectedGym">'+gymOptions+'</select></label>'+
       '<button type="button" class="button secondary" data-tc-action="restore" '+(!available?"disabled":"")+'>Restore current API values</button></div>'+
-      '<p class="fine-print">The selected gym uses '+gym.energy+' Energy per train. Missing gym dots indicate a stat that cannot be trained there. The '+(gym.offline?"offline wiki":"Torn API")+' gym catalog is in use. Editable values can be used for planning; they do not alter your Torn account.</p></div></section>';
+      '<p class="fine-print">The selected gym uses '+gym.energy+' Energy per train. Missing gym dots indicate a stat that cannot be trained there. The '+(gym.offline?"API + offline fallback":"Torn API")+' gym catalog is in use. Editable values can be used for planning; they do not alter your Torn account.</p></div></section>';
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<section class="panel"><div class="panel-heading"><h2>Four-stat energy allocation</h2></div><div class="panel-content">'+
