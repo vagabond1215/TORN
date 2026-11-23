@@ -67,7 +67,9 @@ const tornTrainSequence=(()=>{
     const regenTime=rule.minutes*60;
     const gymCost=Math.max(1,Math.floor(gym.energy));
     const mult=ctx.effectsFor(stat).multiplier;
-    const v={time:0,stat:base,energy:ctx.state.currentEnergy,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),auto:false,
+    const initialE=rule.mode==="auto"?ctx.state.currentEnergy:
+      Math.min(ctx.state.currentEnergy,eCap);
+    const v={time:0,stat:base,energy:initialE,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),auto:false,
       costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0,warnings:[]};
     const snap=()=>({time:v.time,energy:v.energy,happy:v.happy,drug:v.drug,booster:v.booster,stat:v.stat});
     const point=()=>{const last=v.series[v.series.length-1],h=v.time/3600;if(Math.abs(last.h-h)<1e-8)last.s=v.stat;else v.series.push({h,s:v.stat});};
