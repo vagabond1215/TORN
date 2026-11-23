@@ -8,6 +8,7 @@ This repository contains TORN-related data, assets, automation, and separate pro
 
 ## Active project entry points
 
+- **Torn City Guide:** the static GitHub Pages site lives in `docs/`. Open [the guide](https://vagabond1215.github.io/TORN/) or serve `docs/` locally to preview it. Publish from `main` → `/docs` in the repository's Pages settings. Profile names, checklist progress, and saved notes stay in each browser.
 - **Faction Ledger:** start with `Faction Ledger/AGENTS.md` and `Faction Ledger/docs/README.md`.
 - **Travel Assistant:** start with `RainMeter Projects/Travel Assistant/AGENTS.md` and `RainMeter Projects/Travel Assistant/docs/README.md`.
 

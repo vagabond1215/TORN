@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An unofficial Torn City guide with a personal checklist and notes that stay in your browser.">
+  <meta name="theme-color" content="#171916">
+  <title>Torn City Guide</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./guide.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#home" aria-label="Torn City Guide home">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <span>TORN CITY <strong>GUIDE</strong></span>
+      </a>
+      <button class="menu-button button secondary" id="menu-button" type="button" aria-controls="guide-nav" aria-expanded="false">Menu</button>
+      <a class="profile-link" id="profile-link" href="#profile">Local profile</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="guide-nav">
+      <nav aria-label="Guide navigation">
+        <p class="nav-label">Guide</p>
+        <a class="nav-link" href="#home">
+          <span class="icon" data-icon="home" aria-hidden="true"></span> Overview
+        </a>
+        <div id="section-nav"></div>
+      </nav>
+    </aside>
+
+    <main id="main" tabindex="-1">
+      <p class="storage-message" id="storage-message" role="status" hidden></p>
+      <section class="hero" id="home-view" aria-labelledby="home-title">
+        <div class="hero-inner">
+          <p class="eyebrow">Unofficial player guide</p>
+          <h1 id="home-title" tabindex="-1">Torn City Guide</h1>
+          <p>Plan your next move, track your checklist, and keep your own notes on life in Torn.</p>
+          <a class="button primary" href="#checklist">Open checklist <span aria-hidden="true">→</span></a>
+        </div>
+      </section>
+
+      <div class="home-grid" id="home-grid">
+        <section class="panel directory" aria-labelledby="directory-title">
+          <div class="panel-heading">
+            <h2 id="directory-title">Explore the guide</h2>
+          </div>
+          <div class="section-grid" id="section-grid"></div>
+        </section>
+
+        <section class="panel profile" id="profile" aria-labelledby="profile-title">
+          <div class="panel-heading">
+            <h2 id="profile-title" tabindex="-1">Local profile</h2>
+          </div>
+          <div class="panel-content">
+            <p id="profile-summary">Use a name to save your checklist and notes in this browser. No password or Torn account connection is needed.</p>
+            <form id="profile-form">
+              <label for="profile-name">Profile name</label>
+              <input id="profile-name" name="profile-name" required maxlength="40" autocomplete="off" aria-describedby="profile-feedback">
+              <button class="button primary" type="submit">Open profile</button>
+            </form>
+            <div class="profile-actions" id="profile-actions" hidden>
+              <button class="button secondary" id="switch-profile" type="button">Switch profile</button>
+              <button class="text-button" id="sign-out" type="button">Sign out</button>
+            </div>
+            <p class="feedback" id="profile-feedback" role="status"></p>
+          </div>
+        </section>
+      </div>
+
+      <section id="topic-view" hidden></section>
+      <noscript><p class="panel panel-content">Enable JavaScript to use guide navigation and local profiles.</p></noscript>
+    </main>
+  </div>
+</body>
+</html>
