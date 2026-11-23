@@ -114,8 +114,28 @@ const tornRoadmap=(()=>{
   return common;
  }
  function verified(id){
-  if(id==="level15")return !!(tornGuideApi.state.identity&&Number(tornGuideApi.state.identity.level)>=15);
-  const legacy=guideSteps.find(s=>s.id===id);
+  const st=tornGuideApi.state;
+  if(id==="level15")return !!(st.identity&&Number(st.identity.level)>=15);
+  if(id==="education-start"){
+    const course=st.data.education&&(st.data.education.education||st.data.education).current;
+    return !!(course&&course.id!=null);
+  }
+  if(id==="first-property"||id==="pi-rent"){
+    const raw=st.data.property&&(st.data.property.property||st.data.property);
+    const name=raw&&(raw.name||raw.property?.name);
+    if(!name)return false;
+    const isPi=/private\s*island/i.test(String(name));
+    return id==="pi-rent"?isPi:!/^(shack|trailer)$/i.test(String(name));
+  }
+  if(id==="bank-2b"){
+    const money=st.data.money&&(st.data.money.money||st.data.money);
+    return !!(money&&money.city_bank&&Number(money.city_bank.amount)>=2000000000);
+  }
+  if(id==="stock-ticker"){
+    const stocks=st.data.stocks&&(st.data.stocks.stocks||st.data.stocks);
+    return Array.isArray(stocks)&&stocks.length>0;
+  }
+  const legacy=guideSteps.find(step=>step.id===id);
   return !!(legacy && autoDone(legacy));
  }
  function checked(id){return verified(id)||read(stepKey(id))==="done";}
