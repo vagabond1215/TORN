@@ -12,7 +12,7 @@ const tornTrainSequence=(()=>{
   const maxCandy=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
     Math.max(1,Math.round(1800*cfg.candyCDMultiplier))));
   const maxDvd=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
-    Math.max(1,Math.round(21600*cfg.dvdCDMultiplier))));
+    Math.max(1,Math.round(21600*cfg.dvdCDMultiplier)))+1);
   const p={hours:32,regenMin:10,boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:25,dvdHappy:2500,autoWait:true,
     xanaxPrice:850000,ecstasyPrice:40000,candyPrice:850,dvdPrice:4300000,pointPrice:30000};
   const $=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
@@ -92,8 +92,12 @@ const tornTrainSequence=(()=>{
       }else{
         // The threshold is evaluated BEFORE each consumption. A final item
         // can push the cooldown over the cap; after 4 DVDs, wait one second.
-        if(v.booster>=boosterLimit){
-          v.errors.push("Booster batch cannot continue: add an explicit Wait for booster space before another item row. No delay is inserted during candy/DVD consumption.");
+        if(type==="dvd"){
+          // A fifth DVD may wait ONE SECOND at exactly 24h; eDVDs support
+          // deliberate cooldown sequencing, unlike candy's instant batch.
+          if(!waitFor(Math.max(0,v.booster-boosterLimit+1),"Booster cooldown"))return false;
+        }else if(v.booster>=boosterLimit){
+          v.errors.push("Candy has reached the booster use threshold. Add a separate Wait for booster space and another Candy row; no hidden waiting occurs before training.");
           return false;
         }
         const secs=type==="dvd"?21600*cfg.dvdCDMultiplier:1800*cfg.candyCDMultiplier;
@@ -213,7 +217,7 @@ const tornTrainSequence=(()=>{
     const a=simulate(steps.natural),b=simulate(steps.jump);
     const diff=b.gain-a.gain;
     const perks=activePerks();
-    return '<p class="ts-intro">Build both strategies as ordered actions. Xanax and Ecstasy are one dose per action. Candy/eDVD quantities are immediate batches with no hidden waiting before training. Use explicit Wait rows when cooldown blocks the next item. </p>'+
+    return '<p class="ts-intro">Build both strategies as ordered actions. Xanax and Ecstasy are one dose per action. Candy quantities are immediate with no hidden waiting before training. eDVDs can wait for the one-second threshold gap when using the fifth disc. Use a separate Wait and another Candy row when its booster cap blocks more candy. </p>'+
       controls()+
       (perks.length?'<p class="fine-print">Possibly relevant current perks: '+perks.map($).join(" • ")+'</p>':"")+
       '<div class="ts-layout">'+section("natural")+section("jump")+'</div>'+
