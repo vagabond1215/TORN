@@ -1,6 +1,8 @@
 "use strict";
 
 const topics = {
+  dashboard: { title: "Dashboard", summary: "Live Torn stats and inventory", intro: "View your character data from Torn." },
+  quickstart: { title: "Quickstart", summary: "Follow beginner milestones", intro: "A guided Torn progression roadmap." },
   checklist: {
     title: "Checklist",
     summary: "Track your routine",
@@ -51,6 +53,8 @@ const topics = {
 };
 
 const icons = {
+  dashboard: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 10h18M10 10v11"/>',
+  quickstart: '<path d="M4 12l5 5L20 6"/><path d="M4 4h16v16H4z"/>',
   home: '<path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-7h6v7"/>',
   checklist: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2m-7 8 2 2 5-5m-6 8h6"/>',
   faction: '<path d="M12 22s7-3 7-10V5l-7-3-7 3v7c0 7 7 10 7 10Z"/><path d="M12 8v7m-3-4h6"/>',
@@ -73,7 +77,8 @@ const byId = (id) => document.getElementById(id);
 const prefix = "torn-city-guide:v1:";
 const temporaryStorage = new Map();
 let persistent = true;
-let activeProfile = read("active");
+let activeProfile = null;
+let activePlayerName = "";
 let lastRoute;
 
 function markStorageUnavailable() {
@@ -135,10 +140,10 @@ function renderDirectory() {
 }
 
 function renderProfile() {
-  byId("profile-link").textContent = activeProfile || "Local profile";
+  byId("profile-link").textContent = activePlayerName || "Connect Torn API";
   byId("profile-summary").textContent = activeProfile
-    ? `Signed in as ${activeProfile}. Your checklist and notes stay in this browser.`
-    : "Use a name to save your checklist and notes in this browser. No password or Torn account connection is needed.";
+    ? "Connected as " + activePlayerName + ". Guide progress is saved in this browser, associated with your Torn player ID. Your API key stays in memory only."
+    : "Enter your own Torn API key to load your character stats and item inventory. A Limited Access key is enough for most sections; Full Access is accepted.";
   byId("profile-form").hidden = Boolean(activeProfile);
   byId("profile-actions").hidden = !activeProfile;
   byId("profile-name").value = "";
@@ -153,6 +158,8 @@ function renderTopic(route) {
   const topic = topics[route];
   const guest = '<p><a href="#profile">Open a local profile</a> to save progress in this browser.</p>';
   const view = byId("topic-view");
+  if (route === "dashboard") { view.innerHTML = renderDashboard(); return; }
+  if (route === "quickstart") { view.innerHTML = renderQuickstart(); wireQuickstart(); return; }
   const taskList = `<p id="task-progress" role="status"></p><div class="checklist">${Object.entries(tasks).map(([id, label]) =>
     `<label><input type="checkbox" name="${id}" ${activeProfile ? "" : "disabled"}><span>${label}</span></label>`
   ).join("")}</div>`;
@@ -238,36 +245,55 @@ renderProfile();
 renderRoute();
 window.addEventListener("hashchange", renderRoute);
 
-byId("profile-form").addEventListener("submit", (event) => {
+byId("profile-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const field = byId("profile-name");
-  const name = field.value.trim().normalize("NFC").toWellFormed();
+  const input = byId("profile-name");
   const feedback = byId("profile-feedback");
-  if (!name) {
-    feedback.textContent = "Enter a profile name.";
-    field.focus();
-    return;
-  }
-  const key = profileKey(name) + "name";
-  activeProfile = read(key) ?? name;
-  write(key, activeProfile);
-  write("active", activeProfile);
-  renderProfile();
-  feedback.textContent = `Opened ${activeProfile}.`;
-  byId("profile-title").focus({ preventScroll: true });
+  const button = byId("connect-api");
+  button.disabled = true; feedback.textContent = "Connecting directly to Torn API…";
+  try {
+    const identity = await tornGuideApi.connect(input.value);
+    input.value = "";
+    activeProfile = String(identity.id);
+    activePlayerName = identity.name;
+    write("active", null);
+    renderProfile();
+    renderRoute();
+    feedback.textContent = "Connected. Loading your account data…";
+    const status = await tornGuideApi.refresh();
+    feedback.textContent = "Connected as " + activePlayerName + ". " +
+      (status && status.failures ? status.failures + " sections unavailable; check Dashboard." : "Data loaded.");
+  } catch (error) {
+    input.value = "";
+    feedback.textContent = error.message || "Could not connect to Torn.";
+  } finally { button.disabled = false; }
 });
 
-byId("switch-profile").addEventListener("click", () => {
-  byId("profile-form").hidden = false;
-  byId("profile-name").focus();
-});
-
-byId("sign-out").addEventListener("click", () => {
-  activeProfile = null;
+function disconnectAccount() {
+  tornGuideApi.disconnect();
+  activeProfile = null; activePlayerName = "";
   write("active", null);
   renderProfile();
-  byId("profile-feedback").textContent = "Signed out. You can reopen your profile by name.";
+  renderRoute();
+  byId("profile-feedback").textContent = "Disconnected. Your notes and checklists remain saved locally.";
+}
+byId("switch-profile").addEventListener("click", () => {
+  disconnectAccount();
   byId("profile-name").focus();
+});
+byId("sign-out").addEventListener("click", () => {
+  disconnectAccount();
+  byId("profile-name").focus();
+});
+byId("refresh-data").addEventListener("click", async () => {
+  const feedback = byId("profile-feedback");
+  const button = byId("refresh-data");
+  button.disabled = true; feedback.textContent = "Refreshing account data…";
+  try {
+    const result = await tornGuideApi.refresh();
+    feedback.textContent = result.failures ? result.failures + " sections unavailable; see Dashboard." : "Torn data refreshed.";
+  } catch (error) { feedback.textContent = error.message || "Refresh failed."; }
+  finally { button.disabled = false; }
 });
 
 byId("menu-button").addEventListener("click", () => {

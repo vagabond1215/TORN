@@ -116,3 +116,34 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 @media (max-width: 370px) {
   .section-grid { grid-template-columns: 1fr; }
 }
+
+
+/* API profile and progression pages */
+.hero-actions { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:1.2rem; }
+.fine-print { font-size:.81rem; color:var(--muted); line-height:1.5; margin-top:.65rem; }
+.fine-print a, .step-foot a { text-decoration:underline; text-underline-offset:3px; color:var(--accent); }
+.profile-actions { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:1rem; }
+.profile-actions button { max-width:100%; }
+.progress-line { color:var(--accent-strong); font-weight:700; }
+.metric-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(136px,1fr)); gap:.75rem; }
+.metric { border:1px solid var(--border); background:var(--raised); border-radius:8px; padding:.9rem; display:flex; flex-direction:column; gap:.3rem; min-width:0; }
+.metric strong { font-size:1.28rem; overflow-wrap:anywhere; }
+.metric-label { color:var(--muted); font-size:.8rem; }
+.metric small { color:var(--muted); font-size:.78rem; }
+.api-error { color:#f0b3ab; overflow-wrap:anywhere; font-size:.85rem; margin-top:.5rem; }
+.inventory-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(235px,1fr)); gap:.75rem; margin-top:.9rem; }
+.inventory-panel { background:var(--raised); border:1px solid var(--border); padding:.85rem; border-radius:8px; min-width:0; }
+.inventory-panel h3 { margin:0 0 .65rem; font-size:1rem; color:var(--accent-strong); }
+.inventory-panel p { font-size:.84rem; color:var(--muted); }
+.item-list { list-style:none; padding:0; margin:0; display:grid; gap:.3rem; max-height:350px; overflow:auto; }
+.item-list li { border-bottom:1px solid var(--border); display:flex; justify-content:space-between; gap:.6rem; padding:.3rem 0; font-size:.84rem; }
+.item-list li strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
+.step-list { display:grid; gap:0; }
+.step-row { padding:.85rem 0; border-bottom:1px solid var(--border); }
+.step-row:last-child { border-bottom:0; }
+.step-row label { display:flex; align-items:flex-start; gap:.75rem; cursor:pointer; }
+.step-row input { margin-top:.33rem; accent-color:var(--accent); }
+.step-row strong { display:block; font-size:.94rem; }
+.step-row small { display:block; color:var(--muted); margin-top:.25rem; font-size:.84rem; line-height:1.5; }
+.step-foot { display:flex; gap:1rem; justify-content:flex-end; padding-top:.4rem; font-size:.78rem; }
+.verified { color:var(--accent-strong); font-weight:650; }

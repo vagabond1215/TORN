@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="An unofficial Torn City guide with a personal checklist and notes that stay in your browser.">
+  <meta name="description" content="Torn City interactive guide with API-backed character stats, inventory and a beginner progression checklist.">
   <meta name="theme-color" content="#171916">
   <title>Torn City Guide</title>
   <link rel="stylesheet" href="./styles.css">
+  <script src="./guide-features.js" defer></script>
   <script src="./guide.js" defer></script>
 </head>
 <body>
@@ -18,7 +19,7 @@
         <span>TORN CITY <strong>GUIDE</strong></span>
       </a>
       <button class="menu-button button secondary" id="menu-button" type="button" aria-controls="guide-nav" aria-expanded="false">Menu</button>
-      <a class="profile-link" id="profile-link" href="#profile">Local profile</a>
+      <a class="profile-link" id="profile-link" href="#profile">Connect Torn API</a>
     </div>
   </header>
 
@@ -40,7 +41,7 @@
           <p class="eyebrow">Unofficial player guide</p>
           <h1 id="home-title" tabindex="-1">Torn City Guide</h1>
           <p>Plan your next move, track your checklist, and keep your own notes on life in Torn.</p>
-          <a class="button primary" href="#checklist">Open checklist <span aria-hidden="true">→</span></a>
+          <div class="hero-actions"><a class="button primary" href="#quickstart">Begin quickstart</a> <a class="button secondary" href="#dashboard">Live dashboard</a></div>
         </div>
       </section>
 
@@ -57,15 +58,17 @@
             <h2 id="profile-title" tabindex="-1">Local profile</h2>
           </div>
           <div class="panel-content">
-            <p id="profile-summary">Use a name to save your checklist and notes in this browser. No password or Torn account connection is needed.</p>
+            <p id="profile-summary">Enter your Torn API key to view your character. A Limited Access key is usually sufficient; Full Access keys are supported.</p>
             <form id="profile-form">
-              <label for="profile-name">Profile name</label>
-              <input id="profile-name" name="profile-name" required maxlength="40" autocomplete="off" aria-describedby="profile-feedback">
-              <button class="button primary" type="submit">Open profile</button>
+              <label for="profile-name">Torn API key</label>
+              <input id="profile-name" name="profile-name" type="password" required maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="profile-feedback api-security">
+              <button class="button primary" id="connect-api" type="submit">Connect Torn account</button>
             </form>
+            <p class="fine-print" id="api-security">Your key goes directly to api.torn.com in an Authorization header, is never saved, and is forgotten on reload or disconnect. Full Access exposes sensitive Torn data: prefer Limited or a narrowly scoped custom key. <a href="https://www.torn.com/preferences.php#tab=api" target="_blank" rel="noopener noreferrer">Create a key on Torn ↗</a></p>
             <div class="profile-actions" id="profile-actions" hidden>
-              <button class="button secondary" id="switch-profile" type="button">Switch profile</button>
-              <button class="text-button" id="sign-out" type="button">Sign out</button>
+              <button class="button primary" id="refresh-data" type="button">Refresh data</button>
+              <button class="button secondary" id="switch-profile" type="button">Switch account</button>
+              <button class="text-button" id="sign-out" type="button">Disconnect</button>
             </div>
             <p class="feedback" id="profile-feedback" role="status"></p>
           </div>
