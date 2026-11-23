@@ -273,6 +273,9 @@ byId("profile-form").addEventListener("submit", async (event) => {
     input.value = "";
     activeProfile = String(identity.id);
     activePlayerName = identity.name;
+    // Ask the optional extension for a previously manually shared snapshot
+    // before deciding whether the bars API selection is stale.
+    tornGuideLocalBridge.request();
     write("active", null);
     renderProfile();
     renderRoute();
@@ -396,6 +399,7 @@ const resumed=tornGuideApi.restore();
 if(resumed){
   activeProfile=String(resumed.identity.id);
   activePlayerName=resumed.identity.name;
+  tornGuideLocalBridge.request();
   renderProfile();
   renderRoute();
   byId("profile-feedback").textContent=resumed.cached
