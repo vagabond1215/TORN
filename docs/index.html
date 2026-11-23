@@ -111,5 +111,22 @@
       <noscript><p class="panel panel-content">Enable JavaScript to use guide navigation and local profiles.</p></noscript>
     </main>
   </div>
+  <dialog class="report-dialog" id="report-dialog" aria-labelledby="report-dialog-title" aria-describedby="report-dialog-info">
+    <div class="report-dialog-header">
+      <h2 id="report-dialog-title">Torn Report</h2>
+      <button type="button" class="report-dialog-close" id="report-close" aria-label="Close report">×</button>
+    </div>
+    <p class="fine-print" id="report-dialog-info">This is a live external Torn Report page. If it refuses to display here or cannot access your login session, use Open in new tab or Pop out instead.</p>
+    <div class="report-frame-wrap">
+      <iframe id="report-frame" title="External Torn Report preview" loading="lazy"
+        referrerpolicy="no-referrer"
+        sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-downloads"></iframe>
+    </div>
+    <div class="report-dialog-actions">
+      <a id="report-external" href="https://torn.report/" target="_blank" rel="noopener noreferrer" class="button secondary">Open in new tab</a>
+      <button type="button" class="button secondary" id="report-popout">Pop out window</button>
+      <button type="button" class="button secondary" id="report-dialog-done">Close</button>
+    </div>
+  </dialog>
 </body>
 </html>

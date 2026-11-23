@@ -495,3 +495,23 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-compare-conditions .text-button{font-size:inherit}
 @media(max-width:700px){.tc-stat-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.top-account{gap:.35rem}.top-account .profile-link{max-width:94px;font-size:.72rem}.tct-button{font-size:.73rem;padding:.36rem .4rem}}
 @media(max-width:450px){.tct-dropdown{right:-70px}.top-account .profile-link{max-width:65px}.tc-subtab{flex:1;padding:.5rem .4rem;font-size:.76rem}}
+
+
+/* User-opened Torn Report previews. Hosts may refuse iframing or third-party
+   cookies; an external destination remains available in the dialog. */
+.report-links .report-launch{display:flex;flex-direction:column;align-items:flex-start;gap:.2rem;text-align:left;padding:.75rem;background:var(--raised);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer;min-width:0}
+.report-links .report-launch strong{color:var(--accent-strong);font-size:.88rem}
+.report-links .report-launch small{font-size:.76rem;color:var(--muted)}
+.report-links .report-launch:hover,.report-links .report-launch:focus-visible{border-color:var(--accent);background:#313427}
+.report-dialog{width:min(1160px,97vw);height:min(90vh,940px);max-height:95vh;margin:auto;padding:0;color:var(--text);background:#20241e;border:1px solid var(--border);border-radius:9px;box-shadow:0 12px 55px #000d;overflow:hidden}
+.report-dialog::backdrop{background:rgba(0,0,0,.78)}
+.report-dialog[open]{display:flex;flex-direction:column}
+.report-dialog-header{padding:.85rem 1rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.report-dialog-header h2{margin:0;color:var(--accent-strong);font-size:1.1rem}
+.report-dialog-close{background:transparent;color:var(--text);border:1px solid var(--border);border-radius:5px;padding:0 .55rem;font-size:1.4rem;cursor:pointer}
+#report-dialog-info{margin:.55rem 1rem;font-size:.75rem;color:var(--muted)}
+.report-frame-wrap{flex:1;min-height:150px;margin:0 1rem;border:1px solid var(--border);background:#151813}
+.report-frame-wrap iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+.report-dialog-actions{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;padding:.8rem 1rem}
+.report-dialog-actions a,.report-dialog-actions button{font-size:.78rem;min-height:35px}
+@media(max-width:650px){.report-dialog{width:100vw;height:98vh;max-height:98vh;border-radius:0}.report-dialog-actions{justify-content:stretch}.report-dialog-actions>*{flex:1;text-align:center;padding:.4rem}.report-frame-wrap{margin:0 .5rem}}

@@ -376,6 +376,40 @@ byId("topic-view").addEventListener("click",async event=>{
 });
 
 
+// Torn Report's own CSP / X-Frame-Options and login policies determine whether
+// the preview iframe works. Never proxy, frame-bust or fetch Torn Report privately.
+let activeReport=null;
+const reportDialog=byId("report-dialog"),reportFrame=byId("report-frame");
+byId("topic-view").addEventListener("click",event=>{
+  const button=event.target.closest("[data-report]");
+  if(!button)return;
+  const record=tornReportCatalog[button.dataset.report];
+  if(!record)return;
+  activeReport=record;
+  byId("report-dialog-title").textContent=record[0]+" · Torn Report";
+  byId("report-external").href=record[1];
+  reportFrame.title=record[0]+" · Torn Report embedded preview";
+  // Assign the URL only in direct response to this user click. This does not
+  // trigger any extra Torn API calls or expose the connected Torn API key.
+  reportFrame.src=record[1];
+  if(typeof reportDialog.showModal==="function")reportDialog.showModal();
+  else window.open(record[1],"_blank","noopener,noreferrer");
+});
+const closeReport=()=>{if(reportDialog.open)reportDialog.close();};
+byId("report-close").addEventListener("click",closeReport);
+byId("report-dialog-done").addEventListener("click",closeReport);
+reportDialog.addEventListener("close",()=>{reportFrame.removeAttribute("src");activeReport=null;});
+reportDialog.addEventListener("click",event=>{
+  if(event.target===reportDialog)closeReport();
+});
+byId("report-popout").addEventListener("click",()=>{
+  if(!activeReport)return;
+  const popup=window.open(activeReport[1],"torn-report-view","popup,width=1200,height=800,resizable=yes,scrollbars=yes");
+  if(popup)popup.focus();
+  // The always-visible 'Open in new tab' link remains the fallback if the
+  // browser blocks custom popup windows.
+});
+
 byId("menu-button").addEventListener("click", () => {
   const open = byId("guide-nav").classList.toggle("is-open");
   byId("menu-button").setAttribute("aria-expanded", String(open));
