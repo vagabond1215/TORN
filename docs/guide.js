@@ -12,6 +12,7 @@ const topics = {
     intro: "Use this page to compare factions and remember what your crew expects from you.",
     prompts: ["Ask about activity requirements and war schedules.", "Check how armory access and payouts work.", "Write down who to contact for help."],
   },
+  jobs: { title: "Jobs", summary: "City careers and all 39 companies", intro: "Find training, permanent passives and player-owned job perks." },
   racing: { title: "Racing", summary: "Tracks, cars, upgrades and point saving", intro: "Reach Class A with points saved for a competitive car." },
   stats: {
     title: "Stats",
@@ -46,8 +47,8 @@ const topics = {
   },
   tools: {
     title: "Tools",
-    summary: "Keep references handy",
-    intro: "Use your notes to collect the references and tools you reach for while playing.",
+    summary: "Desktop, phone and tablet tools",
+    intro: "Choose useful Torn tools for your device and gameplay style.",
     prompts: ["Save links to your preferred Torn resources.", "Write down what each tool helps you track.", "Keep API keys and other secrets out of your notes."],
   },
 };
@@ -59,6 +60,7 @@ const icons = {
   checklist: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2m-7 8 2 2 5-5m-6 8h6"/>',
   faction: '<path d="M12 22s7-3 7-10V5l-7-3-7 3v7c0 7 7 10 7 10Z"/><path d="M12 8v7m-3-4h6"/>',
   stats: '<path d="M3 3v18h18M7 17v-5m5 5V8m5 9V5"/>',
+  jobs: '<rect x="4" y="7" width="16" height="14" rx="2"/><path d="M9 7V4h6v3m-11 7h16"/>',
   racing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="m12 12 4-7"/>',
   crime: '<path d="M3 11c0-4 4-7 9-7s9 3 9 7-4 8-9 8-9-4-9-8Z"/><circle cx="8" cy="11" r="2"/><circle cx="16" cy="11" r="2"/>',
   attacking: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>',
@@ -73,6 +75,9 @@ const tasks = {
   nerve: "Check your nerve and plan a crime",
   faction: "Check faction messages and plans",
   money: "Review your cash and savings goal",
+  education: "Confirm a current course is underway",
+  cooldowns: "Review drug, booster and medical cooldowns",
+  city: "Check City finds, missions, and travel timing",
 };
 
 const byId = (id) => document.getElementById(id);
@@ -164,11 +169,13 @@ function renderTopic(route) {
   const topic = topics[route];
   const guest = '<p><a href="#profile">Open a local profile</a> to save progress in this browser.</p>';
   const view = byId("topic-view");
-  if (route === "checklist") { view.innerHTML = renderQuickstart(); wireQuickstart(); wireChecklist(view); return; }
+  if (route === "checklist") { view.innerHTML = tornRoadmap.render(); tornRoadmap.wire(view); return; }
   if (route === "stats") { view.innerHTML = tornStatPlanner.render(); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render(); tornRacingGuide.wire(view); return; }
   if (route === "crime") { view.innerHTML = tornCrimeGuide.render(); if(activeProfile)wireNotes("crime"); return; }
   if (route === "inventory") { view.innerHTML = renderInventoryPage(); return; }
+  if (route === "jobs") { view.innerHTML = tornJobsGuide.render(); tornJobsGuide.wire(view); return; }
+  if (route === "tools") { view.innerHTML = tornToolsGuide.render(); tornToolsGuide.wire(view); return; }
   const taskList = `<p id="task-progress" role="status"></p><div class="checklist">${Object.entries(tasks).map(([id, label]) =>
     `<label><input type="checkbox" name="${id}" ${activeProfile ? "" : "disabled"}><span>${label}</span></label>`
   ).join("")}</div>`;

@@ -13,13 +13,14 @@ const tornGuideApi=(()=>{
   const TTL={
     basic:days, bars:2*mins, cooldowns:2*mins, money:15*mins,
     battlestats:15*mins, gym:30*mins, perks:60*mins,
-    education:6*hrs, merits:6*hrs, job:6*hrs, property:12*hrs,
+    education:6*hrs, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs,
     gymCatalog:90*days, meritCatalog:30*days, stockCatalog:7*days
   };
   const ROUTES={
     home:["bars","cooldowns","money","battlestats","gym","job","property","education","merits","meritCatalog"],
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
+    jobs:["job","workstats","perks"],
     crime:["bars"],
     checklist:["bars","merits","meritCatalog","job"],
     money:["money","stocks","stockCatalog"],
