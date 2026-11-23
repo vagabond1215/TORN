@@ -44,5 +44,11 @@ const tornCrimeGuide = (() => {
     const note=activeProfile ? '<form class="note-form" id="note-form"><label for="topic-note">Personal crime notes</label><textarea id="topic-note" maxlength="5000" rows="4"></textarea><button class="button primary" type="submit">Save notes</button><p class="feedback" id="note-feedback" role="status"></p></form>' : '<p><a href="#profile">Connect your account</a> to save notes locally.</p>';
     return out+'<section class="panel"><div class="panel-heading"><h2>Your notes</h2></div><div class="panel-content">'+note+'</div></section>';
   }
-  return {render,crimes};
+  function syncNerve(){
+    const bars=tornGuideApi.state.data.bars;
+    const nerve=bars&&bars.bars&&bars.bars.nerve;
+    const value=document.querySelector(".crime-nerve strong");
+    if(nerve&&value)value.textContent=number(nerve.current)+" / "+number(nerve.maximum);
+  }
+  return {render,crimes,syncNerve};
 })();

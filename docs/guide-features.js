@@ -185,7 +185,8 @@ const tornGuideApi = (() => {
     saveOptIn();
     if(!succeeded)state.storageWarning="No Torn API sections refreshed successfully; showing the last available snapshot.";
     announce();
-    if (["#dashboard","#quickstart","#checklist","#stats","#crime"].includes(location.hash)) renderRoute();
+    if (["#dashboard","#quickstart","#checklist","#stats"].includes(location.hash)) renderRoute();
+    else if(location.hash==="#crime" && typeof tornCrimeGuide!=="undefined") tornCrimeGuide.syncNerve();
     return { failures: Object.keys(state.errors).length + Object.keys(state.inventoryErrors).length };
   }
   function refresh(){
