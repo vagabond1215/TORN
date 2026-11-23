@@ -2,11 +2,10 @@
 
 const topics = {
   dashboard: { title: "Dashboard", summary: "Live Torn stats and inventory", intro: "View your character data from Torn." },
-  quickstart: { title: "Quickstart", summary: "Follow beginner milestones", intro: "A guided Torn progression roadmap." },
   checklist: {
     title: "Checklist",
-    summary: "Track your routine",
-    intro: "Keep a short list of things to check when you play. Clear individual items whenever you’re ready to repeat them.",
+    summary: "Milestones and daily routine",
+    intro: "Your beginner roadmap and daily tasks in one checklist.",
   },
   faction: {
     title: "Faction",
@@ -159,7 +158,7 @@ function renderTopic(route) {
   const guest = '<p><a href="#profile">Open a local profile</a> to save progress in this browser.</p>';
   const view = byId("topic-view");
   if (route === "dashboard") { view.innerHTML = renderDashboard(); return; }
-  if (route === "quickstart") { view.innerHTML = renderQuickstart(); wireQuickstart(); return; }
+  if (route === "checklist") { view.innerHTML = renderQuickstart(); wireQuickstart(); wireChecklist(view); return; }
   if (route === "stats") { view.innerHTML = tornStatPlanner.render(); tornStatPlanner.wire(view); return; }
   const taskList = `<p id="task-progress" role="status"></p><div class="checklist">${Object.entries(tasks).map(([id, label]) =>
     `<label><input type="checkbox" name="${id}" ${activeProfile ? "" : "disabled"}><span>${label}</span></label>`
@@ -214,7 +213,7 @@ function wireNotes(route) {
 
 function renderRoute() {
   const hash = location.hash.slice(1);
-  const route = Object.hasOwn(topics, hash) || hash === "profile" ? hash : "home";
+  const route = hash === "quickstart" ? "checklist" : (Object.hasOwn(topics, hash) || hash === "profile" ? hash : "home");
   const isTopic = Object.hasOwn(topics, route);
   const navRoute = isTopic ? route : "home";
   byId("home-view").hidden = isTopic;
