@@ -271,7 +271,7 @@ const tornGuideApi=(()=>{
     if(succeeded){state.updated=now();state.cached=false;}
     if(!succeeded)state.storageWarning="No requested Torn API selections updated; last data is retained.";
     state.loading=false;save();announce();
-    if(typeof renderRoute==="function" && location.hash!=="#profile")renderRoute();
+    if(typeof renderRoute==="function" && location.hash!=="#profile" && route!=="timers")renderRoute();
     return {failures,requested:jobs.length,skipped:false};
   }
   function refresh(options={}){
