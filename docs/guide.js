@@ -194,7 +194,7 @@ function renderTopic(route) {
         + chapter("Your notes", activeProfile ? notes : guest)}</div>`;
 
   if (route === "money") view.innerHTML += renderStocksPanel();
-  if (route === "tools") view.innerHTML += renderSourcesPanel();
+
   if (route === "checklist") wireChecklist(view);
   else if (activeProfile) wireNotes(route);
 }

@@ -20,7 +20,7 @@ const tornGuideApi=(()=>{
   const ROUTES={
     home:["bars","cooldowns","money","battlestats","gym","job","property","education","merits","meritCatalog"],
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
-    jobs:["job","workstats","perks"],
+    jobs:["job","workstats"],
     crime:["bars"],
     checklist:["bars","merits","meritCatalog","job"],
     money:["money","stocks","stockCatalog"],
