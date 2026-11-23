@@ -37,6 +37,7 @@ const topics = {
     intro: "Keep your faction’s war schedule, priorities, and instructions in one place.",
     prompts: ["Confirm the start time and your availability.", "Review your faction’s targeting and chain instructions.", "Check which supplies your faction will provide."],
   },
+  inventory: { title: "Inventory", summary: "Load only the categories you need", intro: "On-demand inventory, with per-category caching." },
   money: {
     title: "Money",
     summary: "Track income and costs",
@@ -62,6 +63,7 @@ const icons = {
   crime: '<path d="M3 11c0-4 4-7 9-7s9 3 9 7-4 8-9 8-9-4-9-8Z"/><circle cx="8" cy="11" r="2"/><circle cx="16" cy="11" r="2"/>',
   attacking: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>',
   war: '<path d="m4 4 5 1 10 10-4 4L5 9zM20 4l-5 1-3 3m-4 4-3 3 4 4 3-3m1 5 8-8M3 13l8 8"/>',
+  inventory: '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M8 14h8"/>',
   money: '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h1m10 0h1"/>',
   tools: '<path d="M14 6a4 4 0 0 0-5 5L3 17a2 2 0 0 0 4 4l6-6a4 4 0 0 0 5-5l-3 3-4-4z"/>',
 };
@@ -166,6 +168,7 @@ function renderTopic(route) {
   if (route === "stats") { view.innerHTML = tornStatPlanner.render(); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render(); tornRacingGuide.wire(view); return; }
   if (route === "crime") { view.innerHTML = tornCrimeGuide.render(); if(activeProfile)wireNotes("crime"); return; }
+  if (route === "inventory") { view.innerHTML = renderInventoryPage(); return; }
   const taskList = `<p id="task-progress" role="status"></p><div class="checklist">${Object.entries(tasks).map(([id, label]) =>
     `<label><input type="checkbox" name="${id}" ${activeProfile ? "" : "disabled"}><span>${label}</span></label>`
   ).join("")}</div>`;
@@ -183,6 +186,7 @@ function renderTopic(route) {
       : chapter("Getting started", `<ul>${topic.prompts.map((item) => `<li>${item}</li>`).join("")}</ul>`)
         + chapter("Your notes", activeProfile ? notes : guest)}</div>`;
 
+  if (route === "money") view.innerHTML += renderStocksPanel();
   if (route === "checklist") wireChecklist(view);
   else if (activeProfile) wireNotes(route);
 }
@@ -239,6 +243,12 @@ function renderRoute() {
     else window.scrollTo(0, 0);
   }
   lastRoute = route;
+  // A route change only loads selections required by that page. Each endpoint
+  // has its own TTL and failure-backoff; navigating within cached pages is free.
+  if(tornGuideApi.isConnected() && route !== "profile")
+    tornGuideApi.loadPage(route).catch(error=>{
+      byId("refresh-status").textContent=String(error.message||error);
+    });
 }
 
 function closeMenu() {
@@ -315,7 +325,7 @@ async function refreshAccount(){
   feedback.textContent="Refreshing your Torn data…";
   updateRefreshUI();
   try{
-    const result=await tornGuideApi.refresh();
+    const result=await tornGuideApi.refresh({route:tornGuideApi.routeName(),force:true});
     if(!tornGuideApi.isConnected())return;
     feedback.textContent = result && result.failures
       ? result.failures+" section(s) unavailable. See Dashboard API diagnostics."
@@ -336,6 +346,21 @@ byId("remember-active").addEventListener("change",event=>{
   renderProfile();
 });
 window.addEventListener("torn-guide-sync",updateRefreshUI);
+byId("topic-view").addEventListener("click",async event=>{
+  const button=event.target.closest("[data-inventory-load]");
+  if(!button)return;
+  const category=button.dataset.inventoryLoad;
+  if(!tornGuideApi.inventoryTypes.includes(category))return;
+  const alreadyLoaded=Object.hasOwn(tornGuideApi.state.inventory,category);
+  button.disabled=true;button.textContent="Loading…";
+  try{await tornGuideApi.loadInventory(category,alreadyLoaded);}
+  catch(error){byId("refresh-status").textContent=String(error.message||error);}
+  finally{
+    // A successful request rerenders Inventory, replacing this button.
+    if(button.isConnected){button.disabled=false;button.textContent="Load category";}
+  }
+});
+
 
 byId("menu-button").addEventListener("click", () => {
   const open = byId("guide-nav").classList.toggle("is-open");
