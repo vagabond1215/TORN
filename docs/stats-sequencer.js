@@ -141,6 +141,13 @@ const tornTrainSequence=(()=>{
     ];
     return '<details class="ts-settings" open><summary>Time, cooldowns, effects, prices</summary><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
       '<label><span>'+$(label)+'</span><input type="number" data-ts-param="'+key+'" value="'+$(p[key])+'" min="'+min+'" max="'+max+'" step="'+step+'"></label>').join("")+
+      '</div><div class="ts-bonus-presets"><span>Useful presets:</span>'+
+      '<button type="button" data-ts-bonus="baseline">24h base cap</button>'+
+      '<button type="button" data-ts-bonus="maxVoracity">48h faction cap</button>'+
+      '<button type="button" data-ts-bonus="grocery">Grocery -10% candy CD</button>'+
+      '<button type="button" data-ts-bonus="restaurant">Restaurant -25% candy CD</button>'+
+      '<button type="button" data-ts-bonus="book">Book -50% candy CD</button>'+
+      '<button type="button" data-ts-bonus="adult">Adult Novelties 5,000 Happy/eDVD</button>'+
       '</div><label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label>'+
       '<button type="button" class="button secondary" data-ts-sync>Re-import live cooldowns</button>'+
       '<p class="fine-print">Candy cooldown can be shortened by Grocery Store/Restaurant company perks and some books. The consumable-cooldown book does not shorten eDVD cooldown; keep its multiplier at 1 unless you have a specific applicable perk. Starting cooldowns come from the Torn API when present.</p></details>';
@@ -223,6 +230,17 @@ const tornTrainSequence=(()=>{
       }
     });
     view.addEventListener("click",event=>{
+      const bonus=event.target.closest("[data-ts-bonus]");
+      if(bonus){
+        if(bonus.dataset.tsBonus==="baseline")p.boosterCapH=24;
+        if(bonus.dataset.tsBonus==="maxVoracity")p.boosterCapH=48;
+        if(bonus.dataset.tsBonus==="grocery")p.candyCDMultiplier=0.90;
+        if(bonus.dataset.tsBonus==="restaurant")p.candyCDMultiplier=0.75;
+        if(bonus.dataset.tsBonus==="book")p.candyCDMultiplier=0.50;
+        if(bonus.dataset.tsBonus==="adult")p.dvdHappy=5000;
+        rebuild();
+        return;
+      }
       const el=event.target.closest("[data-ts-op],[data-ts-sync]");
       if(!el)return;
       if(el.hasAttribute("data-ts-sync")){loadLive(true);rebuild();return;}
