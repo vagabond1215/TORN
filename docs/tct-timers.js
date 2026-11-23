@@ -137,10 +137,13 @@ const tornTctClock=(()=>{
     const host=get("tct-countdowns");
     if(!host)return;
     const data=entries();
+    const errors=["education","virus","cooldowns","organizedcrime","factionRankedWars"]
+      .filter(key=>tornGuideApi.state.errors[key]).map(key=>key+": "+tornGuideApi.state.errors[key]);
     host.innerHTML=data.map(item=>'<div class="tct-row" title="'+escape(item.note)+'">'+
       '<span>'+escape(item.title)+'<small>'+escape(item.note)+'</small></span>'+
       '<strong data-tct-id="'+escape(item.id)+'">'+(item.at?formatDuration((item.at-Date.now())/1000):"Not available")+
-      '</strong></div>').join("");
+      '</strong></div>').join("")+
+      (errors.length?'<p class="tct-api-error">'+escape("API unavailable: "+errors.join("; "))+'</p>':"");
     tick();
   }
   function tick(){

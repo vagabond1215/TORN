@@ -56,3 +56,22 @@ Per-stat A/B values: STR 1600/1700, DEF 2100/-600, SPD 1600/2000, DEX 1800/1500.
 - [Torn Candy](https://wiki.torn.com/wiki/Candy)
 - [Torn Happy](https://wiki.torn.com/wiki/Happy)
 - [Torn API](https://www.torn.com/api.html)
+
+
+## November 23, 2026: Calc and Compare subpages
+
+The Stats screen now presents all four battle stats as a read-only summary at the top of both subviews:
+
+- **Calc:** current Energy/Happy, gym selector, four-stat Energy allocation and grouped training/combat modifiers.
+- **Compare:** same starting stats, selected gym and parameters, plus Natural Energy vs Happy Jump action sequences and graph.
+
+The subview switch is local client state and causes no API call.
+
+### Candy, drug and booster execution fixes
+
+- Xanax and Ecstasy always consume **one dose per timeline action**. To schedule another Xanax, add a second Xanax row; drug cooldown still applies between doses. Quantity boxes appear only for candy/eDVD batches and the waiting-minute action.
+- A candy quantity denotes an **immediate batch**. It does *not* secretly wait for several hours of booster cooldown before the following Train. At 24 hours of baseline booster capacity and 30 minutes cooldown per candy, at most **48 candy** fits immediately from zero cooldown. The allowed number scales with the configured maximum booster threshold and candy cooldown multiplier. An existing booster cooldown or preceding boosters may reduce what can be used immediately; if the chosen batch would require a wait, the tool flags the recipe and asks for an explicit Wait and another Candy action.
+- eDVDs retain the distinct final-item threshold behavior: from zero cooldown four DVDs reach 24 hours and the fifth can be taken after one second, leaving 29:59:59. That short threshold wait is modeled intentionally.
+- The same-window comparison does not treat waiting for a booster as free training. No hidden clock advancement occurs during a candy batch.
+
+Validation compares 15 versus 30 candy consumed at t=0 in the same gym and verifies no additional delay, with equal starting state and greater projected gain for the larger valid batch.
