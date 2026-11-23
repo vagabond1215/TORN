@@ -1,6 +1,6 @@
 "use strict";
 const tornTrainSequence=(()=>{
-  const names={xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train available Energy",refill:"Points energy refill",wait:"Wait minutes",waitDrug:"Wait for drug cooldown",waitBooster:"Wait for booster space",autoOn:"Train regenerated energy ON",autoOff:"Train regenerated energy OFF"};
+  const names={xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train available Energy",refill:"Points energy refill",wait:"Wait minutes",waitDrug:"Wait for drug cooldown",waitBooster:"Wait for booster space",autoOn:"Train at full E / drug ready ON",autoOff:"Automatic check-ins OFF",checkin:"Scheduled gym check-in"};
   const make=(type,qty=1,minutes=0)=>({type,qty,minutes});
   const defaults={
     natural:()=>[make("xanax"),make("candy",2),make("train"),make("refill"),make("train"),make("autoOn"),make("waitDrug"),make("xanax")],
@@ -13,7 +13,7 @@ const tornTrainSequence=(()=>{
     Math.max(1,Math.round(1800*cfg.candyCDMultiplier))));
   const maxDvd=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
     Math.max(1,Math.round(21600*cfg.dvdCDMultiplier)))+1);
-  const p={hours:32,regenMin:10,boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:25,dvdHappy:2500,autoWait:true,
+  const p={hours:32,regenMin:0,energyStatus:"auto",boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:25,dvdHappy:2500,autoWait:true,
     xanaxPrice:850000,ecstasyPrice:40000,candyPrice:850,dvdPrice:4300000,pointPrice:30000};
   const $=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
   const n=(v,f=0)=>v===null||v===undefined||v===""||!Number.isFinite(Number(v))?f:Number(v);
@@ -42,12 +42,29 @@ const tornTrainSequence=(()=>{
     if(!collections||typeof collections!=="object")return [];
     return Object.values(collections).flatMap(value=>Array.isArray(value)?value:[]).map(v=>typeof v==="string"?v:v&&(v.name||v.effect||v.description)||"").filter(v=>/cooldown|voracity|metabolism|erotic dvd|candy/i.test(v));
   }
+  function energyRules(config){
+    const mode=config.energyStatus||"auto", observed=ctx&&ctx.state?Number(ctx.state.maxEnergy):150;
+    const cap=mode==="standard"?100:mode==="donator"||mode==="subscriber"?150:Math.max(1,Number.isFinite(observed)?observed:150);
+    const minutes=mode==="standard"?15:mode==="donator"||mode==="subscriber"?10:cap>=150?10:15;
+    const label=mode==="auto"?(cap>=150?"Observed Donator/Subscriber-equivalent bar":"Observed standard-equivalent bar"):
+      mode==="standard"?"Standard":mode==="donator"?"Donator":"Subscriber";
+    return {cap,minutes:config.regenMin>0?Number(config.regenMin):minutes,label,mode};
+  }
+  function nervePreview(config){
+    const source=tornGuideApi.state.data.bars;
+    const value=source&&(source.bars||source),nerve=value&&value.nerve;
+    if(!nerve||!Number.isFinite(Number(nerve.maximum))||!Number.isFinite(Number(nerve.current)))return "Nerve: +1 every 5 minutes regardless of Donator or Subscriber status (current bar unavailable).";
+    const current=Math.max(0,Number(nerve.current)),cap=Math.max(1,Number(nerve.maximum));
+    const final=Math.min(cap,current+Math.floor(config.hours*60/5));
+    return "Nerve "+fmt(current)+" / "+fmt(cap)+"; passive-only estimate after "+fmt(config.hours)+"h: "+fmt(final)+
+      " / "+fmt(cap)+" (+1 every 5 minutes, no crimes or refills simulated).";
+  }
   function simulate(list,overrides={}){
     const cfg={...p,...overrides},base=ctx.state.statValues[ctx.state.compareStat];
     const gym=ctx.gym,stat=ctx.state.compareStat,limit=Math.floor(cfg.hours*3600);
-    const eCap=ctx.state.maxEnergy;
+    const rule=energyRules(cfg),eCap=rule.cap;
     const boosterLimit=cfg.boosterCapH*3600;
-    const regenTime=cfg.regenMin*60;
+    const regenTime=rule.minutes*60;
     const gymCost=Math.max(1,Math.floor(gym.energy));
     const mult=ctx.effectsFor(stat).multiplier;
     const v={time:0,stat:base,energy:ctx.state.currentEnergy,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),auto:false,
@@ -55,9 +72,18 @@ const tornTrainSequence=(()=>{
     const snap=()=>({time:v.time,energy:v.energy,happy:v.happy,drug:v.drug,booster:v.booster,stat:v.stat});
     const point=()=>{const last=v.series[v.series.length-1],h=v.time/3600;if(Math.abs(last.h-h)<1e-8)last.s=v.stat;else v.series.push({h,s:v.stat});};
     function train(){
-      if(v.energy<gymCost || n(gym[stat])<=0)return;
+      if(v.energy<gymCost || n(gym[stat])<=0)return 0;
       const out=ctx.trainBlock(v.stat,v.happy,v.energy,gym,stat,mult);
       v.energy-=out.used;v.happy=out.happy;v.stat=out.stat;v.used+=out.used;
+      return out.used;
+    }
+    function checkin(reason){
+      if(!v.auto)return;
+      const start=snap(),used=train();
+      if(used>0){
+        point();
+        v.log.push({i:"•",type:"checkin",reason,start,end:snap()});
+      }
     }
     function advance(duration){
       const until=Math.min(limit,v.time+Math.max(0,Math.ceil(duration)));
@@ -65,11 +91,12 @@ const tornTrainSequence=(()=>{
         const eTick=(Math.floor(v.time/regenTime)+1)*regenTime;
         const first=Math.max(1,Math.round(cfg.resetAfterSec));
         const hTick=first+Math.max(0,Math.floor((v.time-first)/900)+1)*900;
-        const next=Math.min(until,eTick,hTick),passed=next-v.time;
+        const next=Math.min(until,eTick,hTick),passed=next-v.time,priorDrug=v.drug;
         v.time=next;v.drug=Math.max(0,v.drug-passed);v.booster=Math.max(0,v.booster-passed);
         if(next===eTick){if(v.energy<eCap)v.energy=Math.min(eCap,v.energy+5);else v.lostRegen+=5;}
         if(next===hTick){v.happy=v.happy>ctx.state.maxHappy?ctx.state.maxHappy:Math.min(ctx.state.maxHappy,v.happy+5);}
-        if(v.auto)train();
+        if(v.auto && (priorDrug>0&&v.drug===0 || next===eTick&&v.energy>=eCap))
+          checkin(priorDrug>0&&v.drug===0?"Drug cooldown expired":"Energy bar filled");
         if(next===hTick||next===until||next%3600===0)point();
       }
     }
@@ -88,7 +115,8 @@ const tornTrainSequence=(()=>{
           v.drug=Math.round(cfg.xanaxCDMin*60);
         }else{v.happy=Math.min(99999,v.happy*2);v.drug=Math.round(cfg.ecstasyCDMin*60);}
         v.costs[type]++;
-        if(v.auto)train();
+        // A Xanax dose is not automatically a gym check-in. The next
+        // full-energy or drug-cooldown event triggers the scheduled train.
       }else{
         // The threshold is evaluated BEFORE each consumption. A final item
         // can push the cooldown over the cap; after 4 DVDs, wait one second.
@@ -119,7 +147,7 @@ const tornTrainSequence=(()=>{
       else if(type==="wait")advance(n(a.minutes)*60);
       else if(type==="waitDrug")advance(v.drug);
       else if(type==="waitBooster")advance(Math.max(0,v.booster-boosterLimit+1));
-      else if(type==="autoOn"){v.auto=true;train();}
+      else if(type==="autoOn"){v.auto=true;if(v.energy>=eCap)checkin("Energy already full");}
       else if(type==="autoOff")v.auto=false;
       else if(type==="refill"){
         let day=Math.floor((cfg.tornClockMin*60+v.time)/86400);
@@ -127,7 +155,7 @@ const tornTrainSequence=(()=>{
           if(!waitFor((day+1)*86400-cfg.tornClockMin*60-v.time,"Daily points refill"))break;
           day=Math.floor((cfg.tornClockMin*60+v.time)/86400);
         }
-        if(!v.days.has(day)){v.days.add(day);v.energy=eCap;v.costs.refill++;if(v.auto)train();}
+        if(!v.days.has(day)){v.days.add(day);v.energy=eCap;v.costs.refill++;checkin("Points refill filled Energy");}
       }else{v.errors.push("Unrecognized action: "+type);}
       point();
       v.log.push({i:i+1,type,start,end:snap()});
@@ -141,7 +169,7 @@ const tornTrainSequence=(()=>{
   }
   function controls(){
     const fields=[
-      ["hours","Time window (hours)",1,168,1],["regenMin","Energy +5 every (min)",10,15,5],
+      ["hours","Time window (hours)",1,168,1],["regenMin","Energy +5 interval (0 = status)",0,15,5],
       ["boosterCapH","Booster use threshold (hours)",1,72,1],
       ["startDrugMin","Starting drug CD (min)",0,20000,1],["startBoosterMin","Starting booster CD (min)",0,20000,1],
       ["xanaxCDMin","Xanax CD (360–480 min)",360,480,1],["ecstasyCDMin","Ecstasy CD (200–230 min)",200,230,1],
@@ -153,7 +181,11 @@ const tornTrainSequence=(()=>{
       ["xanaxPrice","Xanax price",0,1e8,1000],["ecstasyPrice","Ecstasy price",0,1e8,1000],
       ["candyPrice","Candy price",0,1e8,100],["dvdPrice","eDVD price",0,1e8,1000],["pointPrice","Point price",0,1e8,1000]
     ];
-    return '<details class="ts-settings" open><summary>Time, cooldowns, effects, prices</summary><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
+    return '<details class="ts-settings" open><summary>Time, cooldowns, effects, prices</summary>'+
+      '<label class="ts-membership">Energy account model <select data-ts-status>'+
+        [['auto','Use current Torn Energy bar'],['standard','Standard (100 E)'],['donator','Donator (150 E)'],['subscriber','Subscriber (150 E)']].map(([key,text])=>
+          '<option value="'+key+'" '+(p.energyStatus===key?'selected':'')+'>'+text+'</option>').join('')+
+      '</select></label><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
       '<label><span>'+$(label)+'</span><input type="number" data-ts-param="'+key+'" value="'+$(p[key])+'" min="'+min+'" max="'+max+'" step="'+step+'"></label>').join("")+
       '</div><div class="ts-bonus-presets"><span>Useful presets:</span>'+
       '<button type="button" data-ts-bonus="baseline">24h base cap</button>'+
@@ -179,7 +211,7 @@ const tornTrainSequence=(()=>{
   }
   function log(data){
     return '<details class="ts-log"><summary>Execution timeline ('+data.log.length+' steps)</summary><div class="ts-log-scroller"><table><thead><tr><th>Step</th><th>Time</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th></tr></thead><tbody>'+
-      data.log.map(a=>'<tr><td>'+$(names[a.type])+'</td><td>'+clock(a.end.time)+'</td><td>'+fmt(a.end.energy)+'</td><td>'+fmt(a.end.happy)+'</td><td>'+clock(a.end.drug)+'</td><td>'+clock(a.end.booster)+'</td></tr>').join("")+
+      data.log.map(a=>'<tr><td>'+$(names[a.type])+(a.reason?" · "+$(a.reason):"")+'</td><td>'+clock(a.end.time)+'</td><td>'+fmt(a.end.energy)+'</td><td>'+fmt(a.end.happy)+'</td><td>'+clock(a.end.drug)+'</td><td>'+clock(a.end.booster)+'</td></tr>').join("")+
       '</tbody></table></div></details>';
   }
   function section(side){
@@ -215,9 +247,13 @@ const tornTrainSequence=(()=>{
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
     loadLive();
     const a=simulate(steps.natural),b=simulate(steps.jump);
+    const rule=energyRules(p);
     const diff=b.gain-a.gain;
     const perks=activePerks();
-    return '<p class="ts-intro">Build both strategies as ordered actions. Xanax and Ecstasy are one dose per action. Candy quantities are immediate with no hidden waiting before training. eDVDs can wait for the one-second threshold gap when using the fifth disc. Use a separate Wait and another Candy row when its booster cap blocks more candy. </p>'+
+    return '<div class="ts-account-summary"><strong>'+$(rule.label)+
+      '</strong> · Natural Energy cap '+fmt(rule.cap)+', +5 every '+fmt(rule.minutes)+' minutes. '+
+      '<span>'+$(nervePreview(p))+'</span></div>'+
+      '<p class="ts-intro">Auto-training now checks in only when Energy reaches its cap or drug cooldown expires, not on every +5 regeneration tick. Explicit Train actions always train immediately. Xanax and Ecstasy are one dose per action. Candy quantities are immediate with no hidden waiting before training. eDVDs can wait for the one-second threshold gap when using the fifth disc. Use a separate Wait and another Candy row when its booster cap blocks more candy. </p>'+
       controls()+
       (perks.length?'<p class="fine-print">Possibly relevant current perks: '+perks.map($).join(" • ")+'</p>':"")+
       '<div class="ts-layout">'+section("natural")+section("jump")+'</div>'+
@@ -235,6 +271,10 @@ const tornTrainSequence=(()=>{
       const param=el.dataset.tsParam;
       if(param && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
       if(el.hasAttribute("data-ts-auto")){p.autoWait=el.checked;rebuild();return;}
+      if(el.hasAttribute("data-ts-status")){
+        if(["auto","standard","donator","subscriber"].includes(el.value))p.energyStatus=el.value;
+        rebuild();return;
+      }
       const edit=el.dataset.tsEdit,side=el.dataset.tsSide,index=Number(el.dataset.tsIndex);
       if(edit&&steps[side]&&steps[side][index]){
         const a=steps[side][index];
