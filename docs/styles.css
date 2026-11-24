@@ -1654,3 +1654,17 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-build-gyms.ts-perk-tiles>.ts-perk-tile,.tc-build-books>.ts-perk-tiles>.ts-perk-tile{display:grid;align-content:start;gap:.12rem;max-width:100%;flex:0 1 auto}
 .tc-build-gyms .ts-perk-tile.is-active small{color:inherit}
 .tc-build-books .ts-perk-tile small{max-width:23rem}
+
+/* Configurable actions: top-layer popup, never an expanded table row. */
+.ts-merged .ts-step{max-width:calc(15rem + 89px)}
+.ts-merged .ts-arrows .ts-row-gear{display:inline-flex;align-items:center;justify-content:center}
+.ts-merged .ts-gear-spacer{width:22px;flex:0 0 22px;height:var(--ts-inline-control-height)}
+.ts-merged .ts-gear-spacer+button{border-left:1px solid var(--border)}
+.ts-row-editor[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box;width:330px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;padding:.65rem;background:var(--raised);color:var(--text);border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 22px #0005;font-size:.78rem;white-space:normal}
+.ts-row-editor-title{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.5rem;color:var(--accent-strong)}
+.ts-row-editor .ts-editor-close{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:.15rem .35rem;font:inherit}
+.ts-row-editor .ts-booster-row{margin:.35rem 0}
+.ts-row-editor .ts-booster-summary{display:block;line-height:1.5}
+.ts-row-editor .ts-booster-summary small{display:block}
+.ts-row-editor .ts-editor-wait{display:flex;gap:.5rem;align-items:center}
+.ts-row-editor .ts-editor-wait input{width:6rem}
