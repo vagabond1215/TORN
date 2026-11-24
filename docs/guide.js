@@ -13,6 +13,7 @@ const topics = {
     prompts: ["Record a baseline for your four battle stats.", "Pick one short-term training goal.", "Set a date to compare your progress."],
   },
   inventory: { title: "Inventory", summary: "Load only the categories you need", intro: "On-demand inventory, with per-category caching." },
+  merits: { title: "Merits", summary: "Honors, medals and merit progression", intro: "Find attainable awards." },
   education: { title: "Education", summary: "Courses and progress", intro: "Review your education progress and available courses." },
   stocks: { title: "Stocks", summary: "Stock holdings and benefits", intro: "Review your stock portfolio and benefit blocks." },
   faction: {
@@ -56,6 +57,7 @@ const topics = {
 };
 
 const icons = {
+  merits: '<circle cx="12" cy="8" r="5"/><path d="m8 12-2 10 6-4 6 4-2-10"/>',
   education: '<path d="m2 9 10-5 10 5-10 5zM6 11v6c4 3 8 3 12 0v-6M22 9v7"/>',
   stocks: '<path d="M3 3v18h18M5 15l5-5 4 3 7-8M16 5h5v5"/>',
   dashboard: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 10h18M10 10v11"/>',
@@ -222,6 +224,7 @@ function renderTopic(route) {
   if (route === "stats") { view.innerHTML = tornStatPlanner.render()+tornToolsGuide.contextLinks("stats"); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render()+tornToolsGuide.contextLinks("racing"); tornRacingGuide.wire(view); return; }
   if (route === "crime") { view.innerHTML = tornCrimeGuide.render()+tornToolsGuide.contextLinks("crime"); if(activeProfile)wireNotes("crime"); return; }
+  if (route === "merits") { view.innerHTML=tornMeritGuide.render();tornMeritGuide.wire(view);return; }
   if (route === "education") { view.innerHTML = renderEducationPage(); wireEducationPage(view); return; }
   if (route === "stocks") { view.innerHTML = '<h1 id="topic-title" tabindex="-1" class="sr-only">Stocks</h1>'+renderStocksPanel(); wireStocksPanel(view); return; }
   if (route === "inventory") { view.innerHTML = renderInventoryPage()+tornToolsGuide.contextLinks("inventory"); return; }
