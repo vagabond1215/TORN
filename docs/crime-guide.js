@@ -132,7 +132,20 @@ const tornCrimeGuide = (() => {
     ["Xanax","Drug",12],["Ecstasy","Drug",2],["Erotic DVD","Booster",5],
     ["Small First Aid Kit","Medical",20],["First Aid Kit","Medical",10],["Morphine","Medical",10]
   ];
+  const ocLevelBands=[[1,2],[3,4],[5,6],[7,8],[9,10]];
+  let ocEnabled=new Set(ocLevelBands.map(([lo])=>lo));
+  let ocOwner=null,ocOpen=false;
+  function loadOcFilters(){
+    const owner=String(tornGuideApi.state.identity?.id??"guest");
+    if(owner===ocOwner)return;
+    ocOwner=owner;ocOpen=false;ocEnabled=new Set(ocLevelBands.map(([lo])=>lo));
+    try{
+      const stored=JSON.parse(localStorage.getItem("torn-city-guide:oc-bands:"+owner));
+      if(Array.isArray(stored))ocEnabled=new Set(stored.filter(v=>ocLevelBands.some(([lo])=>lo===v)));
+    }catch{}
+  }
   function recommendations(){
+    loadOcFilters();
     const st=tornGuideApi.state,raw=payload("itemCatalog","items");
     const catalog=Array.isArray(raw)?raw:Object.values(raw||{});
     const itemsByName=new Map(catalog.map(x=>[normalize(x.name),x]));
@@ -188,6 +201,7 @@ const tornCrimeGuide = (() => {
       for(const item of names.split("|"))add("crime",item,null,target,name+" · optional stock");
     }
     for(const [level,name,tools,materials] of ocReference){
+      if(!ocEnabled.has(level%2?level:level-1))continue;
       for(const item of tools.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · reusable",level);
       for(const item of materials.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · consumed",level);
     }
@@ -208,13 +222,40 @@ const tornCrimeGuide = (() => {
       return '<li><div><strong>'+esc(x.item)+'</strong><small>'+esc(x.reasons.join(" · "))+'</small></div><span title="Owned / suggested reserve">'+number(x.owned)+' / '+number(x.target)+'</span><span>+'+number(missing)+(x.price===null?"":" · $"+number(missing*x.price))+'</span></li>';
     }).join("");
     const section=(label,group,open=false)=>group.size?'<details class="rec-group" '+(open?"open":"")+'><summary>'+esc(label)+' ('+group.size+')</summary><ul class="crime-recommendations">'+rows(group)+'</ul></details>':"";
+    const ocControls='<div class="rec-oc-filters" role="group" aria-label="Optional OC difficulty">'+ocLevelBands.map(([lo,hi])=>'<button type="button" class="rec-oc-toggle" data-oc-band="'+lo+'" aria-pressed="'+ocEnabled.has(lo)+'">'+lo+'–'+hi+'</button>').join("")+'</div>';
+    const optional='<details class="rec-group" data-oc-optional '+(ocOpen?"open":"")+'><summary>Optional OC supplies by difficulty ('+buckets.oc.size+')</summary>'+ocControls+(buckets.oc.size?'<ul class="crime-recommendations">'+rows(buckets.oc)+'</ul>':'<p class="fine-print">'+(ocEnabled.size?"No additional shortages identified for selected levels.":"Select a difficulty range.")+'</p>')+'</details>';
     const total=[...Object.values(buckets)].reduce((n,g)=>n+g.size,0);
     const pending=tornGuideApi.inventoryTypes.filter(c=>!ready(c));
-    return '<details class="home-expand-panel" open><summary>Recommendations'+(total?" ("+total+")":"")+'</summary><div class="home-expand-body">'+
-      section("Assigned OC requirements",buckets.current,true)+section("Low consumable reserves",buckets.stock,true)+section("Crime equipment & materials",buckets.crime,true)+section("Optional OC supplies by difficulty",buckets.oc)+
+    return '<details class="home-expand-panel" data-home-recommendations open><summary>Recommendations'+(total?" ("+total+")":"")+'</summary><div class="home-expand-body">'+
+      section("Assigned OC requirements",buckets.current,true)+section("Low consumable reserves",buckets.stock,true)+section("Crime equipment & materials",buckets.crime,true)+optional+
       (!total?'<p>No shortages identified in loaded inventory.</p>':"")+
       (pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+
       '<p class="fine-print">Reserve targets are suggested defaults, not mandatory purchases. Check faction loans and your assigned role before buying OC supplies. <a href="#crime">Crimes</a> · <a href="https://wiki.torn.com/wiki/Organized_Crime_2.0" target="_blank" rel="noopener noreferrer">OC Wiki</a> · <a href="https://www.torn.com/page.php?sid=ItemMarket" target="_blank" rel="noopener noreferrer">Item Market</a></p></div></details>';
+  }
+  function wireRecommendations(view){
+    if(view.dataset.ocRecommendationsBound==="1")return;
+    view.dataset.ocRecommendationsBound="1";
+    view.addEventListener("toggle",e=>{
+      if(e.target.matches?.("[data-oc-optional]")&&e.target.isConnected)ocOpen=e.target.open;
+    },true);
+    view.addEventListener("click",e=>{
+      const btn=e.target.closest("[data-oc-band]");
+      if(!btn)return;
+      const panel=btn.closest("[data-home-recommendations]");
+      if(!panel)return;
+      const band=Number(btn.dataset.ocBand);
+      if(ocEnabled.has(band))ocEnabled.delete(band);else ocEnabled.add(band);
+      ocOpen=true;
+      try{localStorage.setItem("torn-city-guide:oc-bands:"+ocOwner,JSON.stringify([...ocEnabled]));}catch{}
+      const opened=[...panel.querySelectorAll(".rec-group:not([data-oc-optional])")].map(el=>[el.querySelector("summary")?.textContent?.replace(/ \(\d+\)$/,""),el.open]);
+      panel.outerHTML=recommendations();
+      const fresh=view.querySelector("[data-home-recommendations]");
+      for(const el of fresh?.querySelectorAll(".rec-group:not([data-oc-optional])")||[]){
+        const name=el.querySelector("summary")?.textContent?.replace(/ \(\d+\)$/,"");
+        const prior=opened.find(([key])=>key===name);if(prior)el.open=prior[1];
+      }
+      fresh?.querySelector('[data-oc-band="'+band+'"]')?.focus();
+    });
   }
   function render(){
     const bars=tornGuideApi.state.data.bars;
@@ -250,5 +291,5 @@ const tornCrimeGuide = (() => {
     const value=document.querySelector(".crime-nerve strong");
     if(nerve&&value)value.textContent=number(nerve.current)+" / "+number(nerve.maximum);
   }
-  return {render,crimes,syncNerve,recommendations};
+  return {render,crimes,syncNerve,recommendations,wireRecommendations};
 })();
