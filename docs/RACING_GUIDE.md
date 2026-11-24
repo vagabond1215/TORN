@@ -26,16 +26,16 @@ L/S = Long/Short Ratio; 2/3 = Stage Two/Stage Three Turbo. Stage Three ECU Remap
 | --- | --- | --- |
 | Uptown | Lambrini Torobravo | TL3 |
 | Withdrawal | Veloria LFA | TL3 |
-| Underdog | Edomondo NSX | TS2 |
+| Underdog | Edomondo NSX | TS3 |
 | Parkland | Edomondo NSX | DS3 |
 | Docks | Volt GT | TL3 |
-| Commerce | Edomondo NSX | TS2 |
+| Commerce | Edomondo NSX | TS3 |
 | Two Islands | Edomondo NSX | DL3 |
 | Industrial | Edomondo NSX | TS3 |
 | Vector | Edomondo NSX | TS3 |
 | Mudpit | Colina Tanprice | DL3 |
-| Hammerhead | Edomondo NSX | DS2 |
-| Sewage | Edomondo NSX | TS2 |
+| Hammerhead | Edomondo NSX | DS3 |
+| Sewage | Edomondo NSX | TS3 |
 | Meltdown | Edomondo NSX | TS3 |
 | Speedway | Veloria LFA | TL3 |
 | Stone Park | Echo R8 | DS3 |
@@ -49,3 +49,10 @@ L/S = Long/Short Ratio; 2/3 = Stage Two/Stage Three Turbo. Stage Three ECU Remap
 - 2024 car rebrand official announcement: https://www.torn.com/forums.php?t=16412903
 
 Track "best" recommendations reflect community meta builds, and outcomes remain affected by racing skill, car condition, crashes, and changes to game balance.
+
+
+### Cost-conscious NSX garage (November 2026)
+
+Use **two Edomondo NSX cars**, both Short Ratio / Turbo 3: one **Tarmac (TS3)** and one **Dirt (DS3)**. The tarmac car serves Industrial, Vector, Meltdown, Underdog, Commerce and Sewage. The separate dirt car covers Parkland and is a practical alternative for Hammerhead.
+
+This deliberately replaces the older Tarmac TS2 duplicate. TS2 may be marginally faster on Underdog, Commerce and Sewage, and DS2 may be marginally faster on Hammerhead, but this player's preferred strategy saves racing points and prioritizes two versatile terrain-specific cars. The Two Islands dirt Long Ratio / Turbo 3 specialist remains a later optional upgrade. The table above reflects the **recommended shared-car configuration**, not the theoretical fastest setup for every individual circuit.

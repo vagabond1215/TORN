@@ -145,3 +145,18 @@ Settings persist under localStorage key torn-city-guide:interface:v1. Hidden sit
 By default, external HTTP(S) links open in new tabs across the guide. If new-window mode is selected, the guide requests a separate window in response to the click. Internal hash navigation intentionally stays in the same guide tab so checklists, Stats Calc/Compare and other pages retain their state.
 
 Simulated integration checks covered script order and syntax, zero additional API calls for UI preference changes, all 11 unique domains, icon visibility, contextual mappings, link behavior, timezone formatting, signed-in name/ID, elapsed sync age, and sign-out. Live GitHub Pages rendering and actual popup behavior have not been independently tested.
+
+
+## Compact Home and account connection indicator (November 2026)
+
+The upper-right username and player ID now include a small **green check** when the connected Torn API's requested selections are healthy. Any API selection error, inventory error, or failed connection becomes a **red X** with detailed error messages in a native hover tooltip and accessible label. Disconnected without an error is neutral, not a false red warning. A later successful request clears resolved errors; the guide does not expose API keys in tooltips.
+
+Home now follows the compact shape of Torn's in-game Information sidebar: Energy (green), Nerve (red-orange), Happy (yellow) and Life (blue) progress bars with actual API numbers; Money, Level, Points and Merits; and minimal two-column key/value lists for Battle and Working stats. A reported time-to-full is shown only if a supported API field is present; it is a snapshot, not a fabricated local timer. Level experience and chain bars are omitted until a dependable data source exists.
+
+The Home header no longer repeats the username and timestamp, and the redundant Explore Guide/Account grid is hidden while logged in on Home. The account controls remain accessible from the top bar. The home data refresh now includes workstats under its six-hour TTL; other page-specific requests and freshness rules stay unchanged. Cooldowns, account progression, actionable links, and the existing report-launch buttons remain available in compact sections. Detailed reports and data-source diagnostics are tucked behind expandable headings, except API errors which are expanded for visibility.
+
+The Jobs page's current job and three working stats also use minimalist side-by-side lists. The Stats Calc/Compare page retains its four Battle stats horizontally across the top, scrolling horizontally instead of breaking into a two-column grid at tablet widths.
+
+Racing now avoids purchasing a near-duplicate NSX Short Tarmac T2 build; see RACING_GUIDE.md for the two-car Short Turbo 3 tarmac/dirt setup and track-specific caveats.
+
+No new API polling was added for status or progress bars; Home adds only the cached workstats selection while viewing Home.

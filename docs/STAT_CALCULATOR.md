@@ -90,3 +90,8 @@ The existing optional Energy regeneration interval setting now defaults to **0 =
 The simulator also displays cached current/max Nerve where available. **Donator and Subscriber status do not change natural Nerve regeneration:** +1 every 5 minutes, up to the player's Nerve bar, which may be affected by crime experience and perks. The displayed end-of-window Nerve estimate assumes no crimes, nerve refills, or other nerve actions, and is deliberately separate from battle-stat gains.
 
 Sources: https://wiki.torn.com/wiki/Energy , https://wiki.torn.com/wiki/Nerve , https://wiki.torn.com/wiki/Donator
+
+
+## Minimal visual stat summary (November 2026)
+
+The top of the Stats page remains a single horizontal row of Strength, Defense, Speed and Dexterity above Calc and Compare. On small screens, the row scrolls horizontally rather than wrapping into two columns. The Home and Jobs pages use compact key/value lists for Battle and Working stats so the account summary resembles Torn's in-game sidebar without duplicating the entire interface.
