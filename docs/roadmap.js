@@ -118,16 +118,22 @@ const tornRoadmap=(()=>{
  function preferences(){
   let data={};
   try{data=JSON.parse(read(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences")||"{}")||{};}catch{}
-  return {priority:["growth","networth","company","education"].includes(data.priority)?data.priority:data.priority==="money"?"networth":"growth",risk:["low","medium","high"].includes(data.risk)?data.risk:"low",weeklyBudget:data.weeklyBudget!=null&&Number.isFinite(Number(data.weeklyBudget))?Math.max(0,Number(data.weeklyBudget)):null};
+  return {priority:["growth","networth","company","education","completion"].includes(data.priority)?data.priority:data.priority==="money"?"networth":"growth",risk:["low","medium","high"].includes(data.risk)?data.risk:"low",weeklyBudget:data.weeklyBudget!=null&&Number.isFinite(Number(data.weeklyBudget))?Math.max(0,Number(data.weeklyBudget)):null};
  }
  function renderActivities(){
   const p=preferences();
   const radio=(name,opts,value)=>'<div class="roadmap-styles">'+opts.map(([id,label])=>'<label class="roadmap-style"><input type="radio" name="home-'+name+'" data-home-pref="'+name+'" value="'+id+'" '+(value===id?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div>';
-  return '<section class="panel home-activities"><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div><div class="home-pref-row"><div class="home-pref-group"><strong>Priority</strong>'+radio("priority",[["growth","Stat Growth"],["networth","Networth"],["company","Company"],["education","Education"]],p.priority)+'</div><div class="home-pref-group"><strong>Risk</strong>'+radio("risk",[["low","Low"],["medium","Medium"],["high","High"]],p.risk)+'</div><label class="home-budget"><strong>Weekly budget</strong><span>$</span><input type="number" min="0" step="any" data-home-pref="weeklyBudget" value="'+(p.weeklyBudget??"")+'" placeholder="Not set" aria-label="Weekly training budget"></label></div></div></section>';
+  return '<section class="panel home-activities"><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div><div class="home-pref-row"><div class="home-pref-group"><strong>Priority</strong>'+radio("priority",[["growth","Stat Growth"],["networth","Networth"],["company","Company"],["education","Education"],["completion","Completion"]],p.priority)+'</div><div class="home-pref-group"><strong>Risk</strong>'+radio("risk",[["low","Low"],["medium","Medium"],["high","High"]],p.risk)+'</div><label class="home-budget"><strong>Weekly budget</strong><span>$</span><input type="number" min="0" step="any" data-home-pref="weeklyBudget" value="'+(p.weeklyBudget??"")+'" placeholder="Not set" aria-label="Weekly training budget"></label></div></div></section>';
  }
  function wireActivities(view){
   if(view.dataset.activitiesBound==="1")return;
   view.dataset.activitiesBound="1";
+  const updateBudget=el=>{
+   const p=preferences();p.weeklyBudget=el.value===""?null:Math.max(0,Number(el.value)||0);
+   write(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences",JSON.stringify(p));
+   tornCrimeGuide.refreshRecommendations(view);
+  };
+  view.addEventListener("input",event=>{if(event.target.dataset.homePref==="weeklyBudget"&&event.target.closest(".home-activities")&&event.target.validity.valid)updateBudget(event.target);});
   view.addEventListener("change",event=>{
    const el=event.target,value=el.dataset.roadmapStyle;
    if(!el.closest(".home-activities"))return;
@@ -136,10 +142,10 @@ const tornRoadmap=(()=>{
     if(el.checked)selected.push(value);
     write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
    }else if(el.dataset.homePref==="weeklyBudget"){
-    const p=preferences();p.weeklyBudget=el.value===""?null:Math.max(0,Number(el.value)||0);write(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences",JSON.stringify(p));
+    updateBudget(el);return;
    }else if(el.dataset.homePref&&el.checked){
     const p=preferences(),key=el.dataset.homePref;
-    if(key==="priority"&&["growth","networth","company","education"].includes(el.value)||key==="risk"&&["low","medium","high"].includes(el.value)){
+    if(key==="priority"&&["growth","networth","company","education","completion"].includes(el.value)||key==="risk"&&["low","medium","high"].includes(el.value)){
      p[key]=el.value;write(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences",JSON.stringify(p));
     }
    }else return;
