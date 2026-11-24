@@ -295,7 +295,7 @@ function renderRoute() {
     else link.removeAttribute("aria-current");
   }
   if (isTopic) renderTopic(route);
-  else if (route === "home") byId("topic-view").innerHTML = renderDashboard();
+  else if (route === "home") { const view=byId("topic-view");view.innerHTML=renderDashboard();tornCrimeGuide.wireRecommendations(view); }
   document.title = isTopic ? `${topics[route].title} · Torn City Guide` : route === "home" ? "Home · Torn City Guide" : "Torn City Guide";
   closeMenu();
   if (lastRoute !== route && (lastRoute !== undefined || route === "profile")) {
