@@ -144,8 +144,84 @@ const tornCrimeGuide = (() => {
       if(Array.isArray(stored))ocEnabled=new Set(stored.filter(v=>ocLevelBands.some(([lo])=>lo===v)));
     }catch{}
   }
+  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Stat growth"],["consume","Use consumables"],["crime","Crimes"],["education","Education"],["money","Money"]];
+  let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id));
+  function loadRecFilters(){
+    const owner=String(tornGuideApi.state.identity?.id??"guest");
+    if(recOwner===owner)return;
+    recOwner=owner;recEnabled=new Set(recommendationTypes.map(([id])=>id));
+    try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v))recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}
+  }
+  const recItem=(title,detail,link)=>'<li><div><strong>'+esc(title)+'</strong><small>'+esc(detail)+'</small></div>'+(link?'<a href="'+esc(link)+'">View</a>':"")+'</li>';
+  function adviceSections(count){
+    const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",risk=prefs.risk;
+    const rows={merit:[],growth:[],consume:[],crime:[],education:[],money:[]};
+    const add=(key,title,detail,link)=>rows[key].push(recItem(title,detail,link));
+    const n=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
+    const merit=payload("merits","merits"),merits=n(merit?.available??merit?.unspent??merit?.merits_available);
+    const meritNames=["Education Length","Bank Interest",...(activities.some(x=>["Crime","OC"].includes(x))?["Crime Progression"]:[]),...(activities.some(x=>["War","Mug"].includes(x))?["Life Points","Critical Hit Rate"]:[])];
+    if(!growth)meritNames.reverse();
+    if(!growth){const i=meritNames.indexOf("Bank Interest");meritNames.splice(i,1);meritNames.unshift("Bank Interest");}
+    for(const name of meritNames){
+      const level=meritLevel(name);
+      if(level===null||level>=10)continue;
+      const cost=level+1;
+      add("merit",name+" · "+level+"/10","Next upgrade costs "+cost+" merits"+(merits===null?" · Available balance unknown":merits>=cost?" · Affordable":" · Save "+(cost-merits)+" more"),"#checklist");
+    }
+    if(!rows.merit.length)add("merit","Review merit upgrades","No incomplete preferred upgrade confirmed in cached data. Review education length, bank interest and activity-specific bonuses.","#checklist");
+    const plan=tornStatPlanner.homeTrainingAdvice();
+    if(plan)add("growth","Train "+plan.stat,plan.detail,"#stats");
+    else add("growth","Review your build targets","Load current battle stats and select a build on Stats.","#stats");
+    const bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns");
+    const energy=n(bars?.energy?.current),cap=n(bars?.energy?.maximum),happy=n(bars?.happy?.current),happyCap=n(bars?.happy?.maximum),nerve=n(bars?.nerve?.current);
+    const drug=n(cd?.drug),booster=n(cd?.booster),xan=count("Xanax","Drug");
+    if(xan>0&&drug===0&&energy!==null&&cap!==null){
+      if(energy<=cap&&growth&&risk!=="low")add("consume","Xanax · "+xan+" held","Drug cooldown clear. Consider +250 Energy for training; overdose and addiction risk remain. Avoid interrupting a planned stack.","#stats");
+      else if(risk==="low")add("consume","Preserve Xanax","Low risk selected; avoid routine drug recommendations. Train natural Energy first.","#stats");
+    }
+    if(booster!==null&&booster<86400){
+      const candy=tornStatPlanner.homeCandyAdvice();
+      if(candy&&growth&&happy!==null&&happyCap!==null&&happy<=happyCap)add("consume",candy.name+" · "+candy.qty+" held","Highest known happiness candy in stock; "+candy.happy+" base Happy. Check booster allowance and train before the next happiness reset.","#stats");
+      if(activities.some(x=>["Crime","OC"].includes(x))&&nerve!==null){
+        const alcohol=tornGuideApi.state.inventory.Alcohol;
+        if(Array.isArray(alcohol)&&!tornGuideApi.state.inventoryErrors.Alcohol&&alcohol.some(x=>n(x.amount??x.quantity)>0))add("consume","Alcohol","Consider a nerve boost when there is room in your booster allowance; reserve enough for your planned training.","#crime");
+      }
+    }
+    if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
+    const riskRank={"Starter":0,"Low":0,"Low–Medium":1,"Medium":1,"Variable":1,"Medium–High":2,"High":2};
+    const maxRisk={low:0,medium:1,high:2}[risk];
+    const candidates=crimes.map(([name,r,detail])=>({name,r,detail,cs:skill(name),rank:riskRank[r]??2})).filter(x=>x.rank<=maxRisk&&x.cs!==null);
+    candidates.sort((a,b)=>growth?(Number(b.cs<100)-Number(a.cs<100)||b.cs-a.cs||a.rank-b.rank):(b.cs-a.cs||a.rank-b.rank));
+    for(const c of candidates.slice(0,3))add("crime",c.name+" · CS "+number(c.cs),c.r+" indicative difficulty · "+c.detail+(growth?" · Skill progression focus":" · Reliable skill preferred; profit not verified"),"#crime");
+    if(!rows.crime.length)add("crime","Search for Cash / Bootlegging","Begin with safer crimes if skill information is unavailable. Risk tiers are qualitative, not guaranteed success rates.","#crime");
+    const m=educationModel();
+    if(m.known&&m.courses.length){
+      const groups=educationPaths.filter(([name])=>name!=="Other Perks");
+      const weights={"Gym Perks":growth?5:1,"Passive Battle Stats":activities.some(x=>["War","Mug"].includes(x))?4:1,"Company Perks":activities.includes("Business")?5:0,"Crime Perks":activities.some(x=>["Crime","OC"].includes(x))?5:1,"Jail Perks":activities.includes("Jail")?5:0,"Medical Perks":activities.includes("Revive")?5:0,"Attacking Perks":activities.some(x=>["War","Mug"].includes(x))?4:0};
+      const ranked=m.courses.filter(c=>!m.ids.has(String(c.id))&&String(c.id)!==String(m.id)).map(c=>{
+        const effect=educationEffectText(c),code=educationCode(c);
+        const req=c.prerequisites??c.requirements;
+        const ids=Array.isArray(req)?req.map(x=>String(typeof x==="object"?x.id??x.course_id:x)):null;
+        const unmet=ids&&ids.some(id=>!m.ids.has(id));
+        const score=groups.reduce((sum,[name,codes,pattern])=>sum+((codes.split(" ").includes(code)||pattern?.test(effect))?(weights[name]||0):0),0);
+        return {c,effect,score,unmet};
+      }).filter(x=>!x.unmet&&x.score>0).sort((a,b)=>b.score-a.score);
+      for(const x of ranked.slice(0,3))add("education",x.c.name??x.c.title??"Course",x.effect+" · Verify enrollment prerequisites in Torn","#education");
+    }
+    if(!rows.education.length)add("education",growth?"Prioritize Sports Science / education reductions":"Prioritize Business or useful income-related courses","Course completion or prerequisites may be unavailable. Open Education to compare available courses.","#education");
+    const money=payload("money","money"),wallet=n(money?.wallet??money?.cash),bank=n(money?.city_bank?.amount??money?.city_bank),cayman=n(money?.cayman_bank?.amount??money?.cayman_bank);
+    add("money","Protect operating cash","Keep a reserve for "+(growth?"training, housing and education":"trading, travel and routine expenses")+(wallet===null?"":" · Wallet "+number(wallet)+" cash")+". Avoid carrying unnecessary cash.","#money");
+    if(bank===null||bank<2000000000)add("money","City bank",bank===null?"Check deposit balance, maturity and current interest before locking funds.":number(bank)+" invested · Compare the remaining ordinary bank capacity and available terms.","#money");
+    const holdings=stockRows().filter(x=>x.shares!==null&&x.nextCost>0&&x.nextRoi!=null).sort((a,b)=>b.nextRoi-a.nextRoi);
+    if(growth){const wsu=stockRows().find(x=>x.ticker==="WSU");if(wsu&&!wsu.active&&wsu.nextCost>0)add("money","WSU education block","Next benefit costs $"+number(Math.round(wsu.nextCost))+" · Permanent while held; compare opportunity cost.","#stocks");}
+    for(const stock of holdings.slice(0,risk==="low"?1:3))add("money",stock.ticker+" · next benefit block","$"+number(Math.round(stock.nextCost))+" additional cost · "+stock.nextRoi.toFixed(1)+"% estimated annual marginal dividend ROI; prices fluctuate.","#stocks");
+    if(!holdings.length)add("money","Stocks","Visit Stocks to load current prices and compare benefit-block costs and recurring payouts.","#stocks");
+    add("money","Cayman bank",(cayman===null?"":number(cayman)+" deposited · ")+"Compare liquidity needs and travel exposure; avoid making a trip solely for a small balance.","#money");
+    if(risk!=="low"&&activities.some(x=>["Trade","Travel"].includes(x)))add("money","Trading / contraband","Compare verified buy and sell prices, fees, liquidity, travel time and mugging exposure before committing capital. No live profit estimate available.","#money");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>'<details class="rec-group" data-rec-group="'+id+'" open><summary>'+esc(label)+' ('+rows[id].length+')</summary><ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul></details>').join("");
+  }
   function recommendations(){
-    loadOcFilters();
+    loadOcFilters();loadRecFilters();
     const st=tornGuideApi.state,raw=payload("itemCatalog","items");
     const catalog=Array.isArray(raw)?raw:Object.values(raw||{});
     const itemsByName=new Map(catalog.map(x=>[normalize(x.name),x]));
@@ -226,11 +302,19 @@ const tornCrimeGuide = (() => {
     const optional='<details class="rec-group" data-oc-optional '+(ocOpen?"open":"")+'><summary>Optional OC supplies by difficulty ('+buckets.oc.size+')</summary>'+ocControls+(buckets.oc.size?'<ul class="crime-recommendations">'+rows(buckets.oc)+'</ul>':'<p class="fine-print">'+(ocEnabled.size?"No additional shortages identified for selected levels.":"Select a difficulty range.")+'</p>')+'</details>';
     const total=[...Object.values(buckets)].reduce((n,g)=>n+g.size,0);
     const pending=tornGuideApi.inventoryTypes.filter(c=>!ready(c));
-    return '<details class="home-expand-panel" data-home-recommendations open><summary>Recommendations'+(total?" ("+total+")":"")+'</summary><div class="home-expand-body">'+
-      section("Assigned OC requirements",buckets.current,true)+section("Low consumable reserves",buckets.stock,true)+section("Crime equipment & materials",buckets.crime,true)+optional+
-      (!total?'<p>No shortages identified in loaded inventory.</p>':"")+
-      (pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+
-      '<p class="fine-print">Reserve targets are suggested defaults, not mandatory purchases. Check faction loans and your assigned role before buying OC supplies. <a href="#crime">Crimes</a> · <a href="https://wiki.torn.com/wiki/Organized_Crime_2.0" target="_blank" rel="noopener noreferrer">OC Wiki</a> · <a href="https://www.torn.com/page.php?sid=ItemMarket" target="_blank" rel="noopener noreferrer">Item Market</a></p></div></details>';
+    const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
+    const restock=recEnabled.has("restock")?'<div data-rec-group="restock">'+section("Assigned OC requirements",buckets.current,true)+section("Low consumable reserves",buckets.stock,true)+section("Crime equipment & materials",buckets.crime,true)+optional+(!total?'<p>No shortages identified in loaded inventory.</p>':"")+(pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+'</div>':"";
+    return '<section class="home-expand-panel home-recommendations" data-home-recommendations><div class="rec-titlebar"><h2>Recommendations</h2>'+controls+'</div><div class="home-expand-body">'+restock+adviceSections(count)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
+  }
+  function refreshRecommendations(view){
+    const panel=view.querySelector("[data-home-recommendations]");if(!panel)return;
+    const opened=[...panel.querySelectorAll(".rec-group")].map(el=>[el.querySelector("summary")?.textContent?.replace(/ \(\d+\)$/,""),el.open]);
+    panel.outerHTML=recommendations();
+    const fresh=view.querySelector("[data-home-recommendations]");
+    for(const el of fresh?.querySelectorAll(".rec-group")||[]){
+      const name=el.querySelector("summary")?.textContent?.replace(/ \(\d+\)$/,"");
+      const prior=opened.find(([key])=>key===name);if(prior)el.open=prior[1];
+    }
   }
   function wireRecommendations(view){
     if(view.dataset.ocRecommendationsBound==="1")return;
@@ -239,24 +323,24 @@ const tornCrimeGuide = (() => {
       if(e.target.matches?.("[data-oc-optional]")&&e.target.isConnected)ocOpen=e.target.open;
     },true);
     view.addEventListener("click",e=>{
-      const btn=e.target.closest("[data-oc-band]");
-      if(!btn)return;
-      const panel=btn.closest("[data-home-recommendations]");
-      if(!panel)return;
+      const btn=e.target.closest("[data-oc-band],[data-rec-type]");
+      if(!btn||!btn.closest("[data-home-recommendations]"))return;
+      if(btn.dataset.recType){
+        const id=btn.dataset.recType;
+        if(recEnabled.has(id))recEnabled.delete(id);else recEnabled.add(id);
+        try{localStorage.setItem("torn-city-guide:rec-types:"+recOwner,JSON.stringify([...recEnabled]));}catch{}
+        refreshRecommendations(view);
+        view.querySelector('[data-rec-type="'+id+'"]')?.focus();return;
+      }
       const band=Number(btn.dataset.ocBand);
       if(ocEnabled.has(band))ocEnabled.delete(band);else ocEnabled.add(band);
       ocOpen=true;
       try{localStorage.setItem("torn-city-guide:oc-bands:"+ocOwner,JSON.stringify([...ocEnabled]));}catch{}
-      const opened=[...panel.querySelectorAll(".rec-group:not([data-oc-optional])")].map(el=>[el.querySelector("summary")?.textContent?.replace(/ \(\d+\)$/,""),el.open]);
-      panel.outerHTML=recommendations();
-      const fresh=view.querySelector("[data-home-recommendations]");
-      for(const el of fresh?.querySelectorAll(".rec-group:not([data-oc-optional])")||[]){
-        const name=el.querySelector("summary")?.textContent?.replace(/ \(\d+\)$/,"");
-        const prior=opened.find(([key])=>key===name);if(prior)el.open=prior[1];
-      }
-      fresh?.querySelector('[data-oc-band="'+band+'"]')?.focus();
+      refreshRecommendations(view);
+      view.querySelector('[data-oc-band="'+band+'"]')?.focus();
     });
   }
+
   function render(){
     const bars=tornGuideApi.state.data.bars;
     const nerve=bars && bars.bars && bars.bars.nerve;
@@ -291,5 +375,5 @@ const tornCrimeGuide = (() => {
     const value=document.querySelector(".crime-nerve strong");
     if(nerve&&value)value.textContent=number(nerve.current)+" / "+number(nerve.maximum);
   }
-  return {render,crimes,syncNerve,recommendations,wireRecommendations};
+  return {render,crimes,syncNerve,recommendations,wireRecommendations,refreshRecommendations};
 })();
