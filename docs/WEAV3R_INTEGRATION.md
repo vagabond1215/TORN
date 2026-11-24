@@ -42,6 +42,8 @@ The matching public pricelist row:
 
 ## Guide behavior and verification
 
+The deployed GitHub Pages guide successfully queried item 886 in the browser. It showed $4,700 each and a conditional $47,000 estimate for ten copies. The green marketplace link and the additional-buyer section rendered. After reloading the guide and expanding the item, the cached quote returned without a new Weav3r request.
+
 - One explicit click checks one item. The guide sorts returned public prices, including any sponsored entry, and deduplicates by player ID. The green dollar link signals a recent nonempty result. The last check time is shown, and the guide marks results stale after five minutes when rendered or reopened. A failed refresh preserves the previous result.
 - The optional stack estimate is the highest advertised unit price times the local quantity, contingent on the trader accepting the whole stack. The guide does not send the stack quantity or Torn key, and does not fetch every trader’s full pricelist. Follow the linked pricelist to confirm bulk terms.
 - A 429 applies an in-page cooldown using the readable retry header or a one-minute fallback. Authentication, browser/network failures, and invalid responses show an error while the manual listing link remains available.
