@@ -1262,3 +1262,13 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 @media(min-width:901px){.layout:has(>.guide-right-rail[hidden]){grid-template-columns:205px minmax(0,1fr)}}
 @media(min-width:901px) and (max-width:1120px){.layout:has(>.guide-right-rail[hidden]){grid-template-columns:165px minmax(0,1fr)}}
 @media(max-width:650px){.quick-access .rail-visibility-toggle{width:30px}}
+
+/* Compact Plan controls, aligned with the shared Stats shell. */
+.tc-plan-panel .panel-content{padding-top:.5rem}
+.tc-plan-panel .tc-stat-tabs{margin-bottom:.45rem;gap:.25rem}
+.tc-plan-panel .tc-stat-tab{padding:.35rem .8rem;border-radius:3px;font-weight:700}
+#topic-view .tc-plan-panel .tc-stat-tab.is-selected{background:#111514;color:#d3f47e;border-color:#b5df4f;box-shadow:inset 0 0 0 1px #b5df4f}
+.ts-candy-stock,.ts-market-prices{display:flex;align-items:center;flex-wrap:wrap;gap:.3rem .8rem;padding:.4rem 0;font-size:.75rem}
+.ts-candy-stock small{color:var(--muted)}
+.ts-market-prices{color:var(--muted);border-top:1px solid var(--border)}
+.ts-settings-grid select{width:100%;background:var(--canvas);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.4rem}
