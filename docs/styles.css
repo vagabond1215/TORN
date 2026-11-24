@@ -791,3 +791,55 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .quick-favicon-fallback[hidden]{display:none}
 .quick-favicon-fallback:not([hidden]){display:inline-grid;place-items:center;width:22px;height:22px}
 .quick-favicon-fallback svg{width:20px;height:20px}
+
+
+/* The character card touches the underside of Quick Access. Keep original
+   sidebar widths: 205px at desktop, 165px at <=1000px. */
+.layout{padding-top:0}
+.layout>main{min-width:0;padding-top:1.6rem}
+.sidebar{min-width:0;align-self:start;border-top:0;border-radius:0 0 6px 6px}
+.sidebar-character{min-width:0;border-bottom:1px solid var(--border)}
+.sidebar-character-summary{
+  list-style:none;display:flex;justify-content:space-between;align-items:center;
+  gap:.3rem;padding:.68rem .55rem;min-height:43px;color:var(--accent-strong);
+  cursor:pointer;font-size:.76rem;line-height:1.28;
+}
+.sidebar-character-summary::-webkit-details-marker{display:none}
+.sidebar-character-summary::marker{content:""}
+.sidebar-character-summary:hover{background:var(--raised)}
+.sidebar-character-identity{display:flex;flex-wrap:wrap;align-items:baseline;min-width:0;gap:0 .2rem;overflow-wrap:anywhere}
+.sidebar-character-identity strong{min-width:0;font-size:.77rem;overflow-wrap:anywhere}
+.sidebar-character-identity small{color:var(--muted);font-size:.65rem;white-space:nowrap}
+.sidebar-chevron{flex:none;transition:transform .16s ease}
+.sidebar-character[open] .sidebar-chevron{transform:rotate(180deg)}
+.sidebar-character-details{min-width:0;padding:.2rem .5rem .5rem}
+.sidebar-facts{margin:0 0 .6rem}
+.sidebar-facts .home-pair{display:flex;justify-content:space-between;gap:.15rem;align-items:baseline;padding:.19rem 0;font-size:.69rem;line-height:1.22}
+.sidebar-facts .home-pair dt{min-width:0}
+.sidebar-facts .home-pair dd{min-width:0;max-width:67%;text-align:right;overflow-wrap:anywhere;font-size:.69rem}
+.sidebar-bars{display:grid;gap:.4rem;min-width:0;margin:.55rem 0}
+.sidebar-bars .home-bar{min-width:0}
+.sidebar-bars .home-bar-head{min-width:0;gap:.12rem;font-size:.65rem;line-height:1.2}
+.sidebar-bars .home-bar-head strong{min-width:0;overflow-wrap:anywhere}
+.sidebar-bars .home-bar-head span{font-size:.65rem;white-space:nowrap}
+.sidebar-bars .home-bar-head small{flex:none;white-space:nowrap;font-size:.6rem}
+.sidebar-bars .home-bar-track{height:7px}
+.sidebar-account-link{display:block;color:var(--accent);font-size:.68rem;text-decoration:underline;margin-top:.55rem}
+.home-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1000px){
+  .home-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .home-work{grid-column:auto}
+  .sidebar-character-summary{padding:.6rem .4rem;gap:.2rem}
+  .sidebar-character-details{padding:.2rem .35rem .5rem}
+  .sidebar-facts .home-pair,.sidebar-facts .home-pair dd{font-size:.64rem}
+  .sidebar-bars .home-bar-head,.sidebar-bars .home-bar-head span{font-size:.59rem}
+  .sidebar-bars .home-bar-head small{font-size:.56rem}
+}
+@media(max-width:650px){
+  .layout{padding-top:0}
+  .layout>main{padding-top:.8rem}
+  .sidebar{margin-bottom:0}
+  .home-summary-grid{grid-template-columns:1fr}
+  .sidebar-character-summary{padding:.65rem .7rem}
+  .sidebar-character-details{padding:.3rem .65rem}
+}

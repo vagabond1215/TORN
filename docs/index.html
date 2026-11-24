@@ -6,20 +6,20 @@
   <meta name="description" content="Torn City interactive guide with API-backed character stats, inventory and a beginner progression checklist.">
   <meta name="theme-color" content="#171916">
   <title>Torn City Guide</title>
-  <link rel="stylesheet" href="./styles.css?v=20261124-site-favicons1">
-  <script src="./guide-features.js?v=20261124-live-bars-activity1" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=20261124-sidebar-character1">
+  <script src="./guide-features.js?v=20261124-sidebar-character1" defer></script>
   <script src="./tct-timers.js?v=20261124-live-bars-activity1" defer></script>
   <script src="./local-bridge.js?v=20261124-live-bars-activity1" defer></script>
   <script src="./stats-calculator.js?v=20261124-live-bars-activity1" defer></script>
   <script src="./stats-sequencer.js?v=20261124-live-bars-activity1" defer></script>
-  <script src="./racing-guide.js?v=20261124-live-bars-activity1" defer></script>
+  <script src="./racing-guide.js?v=20261124-sidebar-character1" defer></script>
   <script src="./company-catalog.js?v=20261124-live-bars-activity1" defer></script>
-  <script src="./job-guide.js?v=20261124-live-bars-activity1" defer></script>
+  <script src="./job-guide.js?v=20261124-sidebar-character1" defer></script>
   <script src="./roadmap.js?v=20261124-live-bars-activity1" defer></script>
   <script src="./preferences.js?v=20261124-live-bars-activity1" defer></script>
-  <script src="./tools-guide.js?v=20261124-site-favicons1" defer></script>
-  <script src="./crime-guide.js?v=20261124-live-bars-activity1" defer></script>
-  <script src="./guide.js?v=20261124-live-bars-activity1" defer></script>
+  <script src="./tools-guide.js?v=20261124-sidebar-character1" defer></script>
+  <script src="./crime-guide.js?v=20261124-sidebar-character1" defer></script>
+  <script src="./guide.js?v=20261124-sidebar-character1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -83,8 +83,19 @@
 
   <div class="layout">
     <aside class="sidebar" id="guide-nav">
+      <details class="sidebar-character" id="sidebar-character">
+        <summary class="sidebar-character-summary">
+          <span class="sidebar-character-identity">
+            <strong id="sidebar-character-name">Connect Torn API</strong>
+            <small id="sidebar-character-id"></small>
+          </span>
+          <svg class="sidebar-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <div class="sidebar-character-details" id="sidebar-character-details">
+          <a href="#profile">Connect your account to see character details</a>
+        </div>
+      </details>
       <nav aria-label="Guide navigation">
-        <p class="nav-label">Guide</p>
         <a class="nav-link" href="#home">
           <span class="icon" data-icon="home" aria-hidden="true"></span> Home
         </a>
