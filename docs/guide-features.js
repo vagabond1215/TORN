@@ -547,34 +547,36 @@ function homeBar(name,bar){
       '<span data-home-fill style="width:'+(valid?projected.percentage.toFixed(2):0)+'%"></span></div></div>';
 }
 function updateHomeLiveBars(){
-  if(typeof location!=="undefined"&&!["","home","dashboard"].includes((location.hash||"#home").slice(1)))return;
-  const root=document.getElementById("topic-view");
-  if(!root||root.hidden)return;
-  const bars=payload("bars","bars"),state=tornGuideApi.state;
-  if(!bars)return;
-  for(const row of root.querySelectorAll("[data-home-bar]")){
-    const name=row.dataset.homeBar,bar=bars[name];if(!bar)continue;
-    const bridge=state.bridge&&state.bridge.fields?.includes(name)&&Date.now()-state.bridge.timestamp<90000;
-    const at=bridge?state.bridge.timestamp:state.fetchedAt.bars;
-    const current=tornBarProjection(name,bar,at),number=row.querySelector("[data-home-current]"),
-      time=row.querySelector("[data-home-countdown]"),fill=row.querySelector("[data-home-fill]"),
-      progress=row.querySelector("[role=progressbar]");
-    if(!current)continue;
-    if(number)number.textContent=formatNumber(current.current)+"/"+formatNumber(current.maximum);
-    if(time)time.textContent=current.current>current.maximum?"OVER":current.current>=current.maximum?"FULL":homeCountdown(current.until);
-    if(fill)fill.style.width=current.percentage.toFixed(2)+"%";
-    if(progress)progress.setAttribute("aria-valuenow",String(current.current));
-  }
-
-  for(const time of root.querySelectorAll("[data-activity-deadline]")){
-    const target=Number(time.dataset.activityDeadline);
-    if(Number.isFinite(target)){
-      const remaining=Math.max(0,Math.ceil((target-Date.now())/1000));
-      const days=Math.floor(remaining/86400),hours=Math.floor(remaining%86400/3600),
-        minutes=Math.floor(remaining%3600/60),secs=remaining%60;
-      time.textContent=remaining?((days?days+"d ":"")+String(hours).padStart(2,"0")+":"+
-        String(minutes).padStart(2,"0")+":"+String(secs).padStart(2,"0")):"Ready";
+  const state=tornGuideApi.state,bars=payload("bars","bars");
+  const sidebar=document.getElementById("sidebar-character-details");
+  const route=(location.hash||"#home").slice(1);
+  const home=["","home","dashboard"].includes(route)?document.getElementById("topic-view"):null;
+  const roots=[sidebar,home&&!home.hidden?home:null].filter(Boolean);
+  if(bars)for(const root of roots){
+    for(const row of root.querySelectorAll("[data-home-bar]")){
+      const name=row.dataset.homeBar,bar=bars[name];if(!bar)continue;
+      const bridge=state.bridge&&state.bridge.fields?.includes(name)&&Date.now()-state.bridge.timestamp<90000;
+      const at=bridge?state.bridge.timestamp:state.fetchedAt.bars;
+      const current=tornBarProjection(name,bar,at);
+      if(!current)continue;
+      const number=row.querySelector("[data-home-current]"),time=row.querySelector("[data-home-countdown]"),
+        fill=row.querySelector("[data-home-fill]"),progress=row.querySelector("[role=progressbar]");
+      if(number)number.textContent=formatNumber(current.current)+"/"+formatNumber(current.maximum);
+      if(time)time.textContent=current.current>current.maximum?"OVER":
+        current.current>=current.maximum?"FULL":homeCountdown(current.until);
+      if(fill)fill.style.width=current.percentage.toFixed(2)+"%";
+      if(progress)progress.setAttribute("aria-valuenow",String(current.current));
     }
+  }
+  if(!home||home.hidden)return;
+  for(const time of home.querySelectorAll("[data-activity-deadline]")){
+    const target=Number(time.dataset.activityDeadline);
+    if(!Number.isFinite(target))continue;
+    const remaining=Math.max(0,Math.ceil((target-Date.now())/1000));
+    const days=Math.floor(remaining/86400),hours=Math.floor(remaining%86400/3600),
+      minutes=Math.floor(remaining%3600/60),secs=remaining%60;
+    time.textContent=remaining?((days?days+"d ":"")+String(hours).padStart(2,"0")+":"+
+      String(minutes).padStart(2,"0")+":"+String(secs).padStart(2,"0")):"Ready";
   }
 }
 
@@ -602,17 +604,6 @@ function renderDashboard() {
   const homeProperty=property?.name||property?.property?.name||"Not available";
 
   result+='<div class="home-summary-grid">'+
-    '<section class="panel home-information"><div class="panel-heading"><h2>Information</h2></div><div class="panel-content">'+
-      '<dl class="home-information-list">'+
-        homePair("Money",visibleMoney,"home-money")+
-        homePair("Level",st.identity?.level??"Not available")+
-        homePair("Points",cash?.points??"Not available")+
-        homePair("Merits",merits?.available??"Not available")+
-      '</dl><div class="home-bars">'+
-        ["energy","nerve","happy","life"].map(key=>homeBar(key,bars?.[key])).join("")+
-      '</div>'+
-      ''+
-    '</div></section>'+
     '<section class="panel home-battle"><div class="panel-heading"><h2>Battle stats <a href="#stats" title="Open training calculator">Calc</a></h2></div><div class="panel-content">'+
       homeStatList([
         ["Strength",statValue("strength")],
