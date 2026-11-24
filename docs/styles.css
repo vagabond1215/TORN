@@ -843,3 +843,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
   .sidebar-character-summary{padding:.65rem .7rem}
   .sidebar-character-details{padding:.3rem .65rem}
 }
+
+
+/* Compact optional experience bar, never inferred when absent from the API. */
+.sidebar-level-xp{margin:.55rem 0 .35rem;min-width:0}
+.sidebar-level-xp-head{display:flex;justify-content:space-between;gap:.3rem;align-items:baseline;font-size:.66rem;line-height:1.2;color:var(--muted)}
+.sidebar-level-xp-head strong{font-size:.66rem;color:var(--text);font-variant-numeric:tabular-nums}
+.sidebar-level-xp-track{height:7px;margin-top:.22rem;border:1px solid #4b426e;background:#24212c;border-radius:5px;overflow:hidden}
+.sidebar-level-xp-track span{display:block;height:100%;background:#926deb;border-radius:5px}

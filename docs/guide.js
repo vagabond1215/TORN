@@ -190,11 +190,15 @@ function updateSidebarCharacter(){
     '<dl class="sidebar-facts">'+
       homePair("Money",wallet,"home-money")+
       homePair("Level",identity?.level??"Not loaded")+
-      homePair("Level XP",xp)+
       homePair("Points",money?.points??"Not loaded")+
       homePair("Merits",merits?.available??"Not loaded")+
     '</dl><div class="sidebar-bars">'+
       ["energy","nerve","happy","life"].map(key=>homeBar(key,bars?.[key])).join("")+
+    '</div><div class="sidebar-level-xp"><div class="sidebar-level-xp-head">'+
+      '<span>Level XP</span><strong>'+safe(xp)+'</strong></div>'+
+      (Number.isFinite(xpNumber)&&xpNumber>=0&&xpNumber<=100?
+        '<div class="sidebar-level-xp-track" role="progressbar" aria-label="Level experience" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+xpNumber+'">'+
+        '<span style="width:'+Math.min(100,Math.max(0,xpNumber))+'%"></span></div>':'')+
     '</div><a class="sidebar-account-link" href="#profile">Account &amp; API</a>';
 }
 function renderProfile() {
