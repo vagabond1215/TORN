@@ -12,19 +12,19 @@ const tornGuideApi=(()=>{
   const mins=60*1000,hrs=60*mins,days=24*hrs;
   const TTL={
     basic:days, profile:15*mins, bars:2*mins, cooldowns:2*mins, money:15*mins, networth:60*mins,
-    battlestats:15*mins, gym:30*mins, perks:60*mins,
+    skills:15*mins, battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
     gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
+    home:["skills","itemCatalog","bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
     stats:["profile","bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
     railTimers:["education","virus","itemCatalog","cooldowns","organizedcrime","factionRankedWars","travel","money"],
     activity:["virus","travel","racingrecords","races"],
-    crime:["bars"],
+    crime:["bars","skills","itemCatalog"],
     checklist:["bars","merits","meritCatalog","job"],
     money:["money"],
     stocks:["stocks","stockCatalog","itemCatalog"],
@@ -218,7 +218,7 @@ const tornGuideApi=(()=>{
     const names=(ROUTES[route]||ROUTES.home).filter(name=>stale(name,force));
     const cats=route==="inventory"
       ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))
-      :route==="stats"?["Candy"]:[];
+      :route==="stats"?["Candy"]:["home","crime"].includes(route)?["Tool","Enhancer"]:[];
     const selectedCats=cats.filter(cat=>inventoryTypes.includes(cat)&&stale("inventory:"+cat,force));
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();
@@ -651,6 +651,7 @@ function renderDashboard() {
     return result+'<section class="panel"><div class="panel-content"><p>Connect your Torn API key below to show your in-game-style dashboard. Account data remains private to this browser.</p></div></section>';
   }
   const st=tornGuideApi.state;
+  result+=tornCrimeGuide.recommendations();
   result+='<details class="home-expand-panel"><summary>Activity &amp; detailed reports</summary>'+
     '<div class="home-expand-body"><p class="fine-print">Reports open in a preview window when supported by the provider, with a new-tab fallback.</p><div class="report-links">';
   for(const [id,[label,,tip]] of Object.entries(tornReportCatalog)){
