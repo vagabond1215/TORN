@@ -5,6 +5,22 @@ const tornRightRail=(()=>{
     ["drug","Drug CD"],["booster","Booster CD"],["medical","Medical CD"]];
   let busy=false,initialized=false;
   const collapsed=new Set();
+  const sectionKey="torn-city-guide:right-rail:hidden:v1";
+  const sections=[["timers","Countdowns",'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/>'],["networth","Net worth",'<path d="M3 3v18h18M6 15l5-5 4 3 6-8M16 5h5v5"/>'],["property","Property",'<path d="m3 10 9-7 9 7M5 9v12h14V9M10 21v-7h4v7"/>']];
+  const hiddenSections=new Set();
+  try{const saved=JSON.parse(localStorage.getItem(sectionKey)||"[]");if(Array.isArray(saved))for(const [id] of sections)if(saved.includes(id))hiddenSections.add(id);}catch{}
+  function controls(){
+    return '<div class="rail-visibility-controls" role="group" aria-label="Right pane visibility">'+sections.map(([id,label,icon])=>'<button type="button" class="rail-visibility-toggle" data-rail-visibility="'+id+'" aria-pressed="'+!hiddenSections.has(id)+'" aria-label="Toggle '+label+'" title="Toggle '+label+'"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg></button>').join("")+'</div>';
+  }
+  function syncControls(route){
+    const controls=document.querySelector(".rail-visibility-controls");
+    if(!controls)return;
+    controls.hidden=!tornGuideApi.isConnected()||route==="profile";
+    for(const btn of controls.querySelectorAll("[data-rail-visibility]")){
+      const enabled=!hiddenSections.has(btn.dataset.railVisibility);
+      btn.setAttribute("aria-pressed",String(enabled));
+    }
+  }
   const host=()=>document.getElementById("guide-right-rail");
   function status(entry){
     if(!entry)return "Not loaded";
@@ -67,9 +83,10 @@ const tornRightRail=(()=>{
   }
   function render(route=(location.hash||"#home").slice(1)||"home"){
     const el=host();if(!el)return;
-    el.hidden=!tornGuideApi.isConnected()||route==="profile";
+    syncControls(route);
+    el.hidden=!tornGuideApi.isConnected()||route==="profile"||sections.every(([id])=>hiddenSections.has(id));
     if(el.hidden){el.innerHTML="";return;}
-    el.innerHTML=collapsible(clocks(),"timers")+collapsible(networthPanel(),"networth")+collapsible(property(),"property");
+    el.innerHTML=[["timers",clocks],["networth",networthPanel],["property",property]].filter(([id])=>!hiddenSections.has(id)).map(([id,fn])=>collapsible(fn(),id)).join("");
   }
   function tick(){
     const el=host();if(!el||el.hidden)return;
@@ -90,11 +107,18 @@ const tornRightRail=(()=>{
   }
   function init(){
     if(initialized)return;initialized=true;
+    document.getElementById("tool-quickbar")?.addEventListener("click",event=>{
+      const btn=event.target.closest("[data-rail-visibility]");if(!btn)return;
+      const id=btn.dataset.railVisibility;if(!sections.some(([key])=>key===id))return;
+      if(hiddenSections.has(id))hiddenSections.delete(id);else hiddenSections.add(id);
+      try{localStorage.setItem(sectionKey,JSON.stringify([...hiddenSections]));}catch{}
+      render();
+    });
     host()?.addEventListener("toggle",event=>{const section=event.target;if(!section.matches?.("details[data-rail-section]")||!section.isConnected)return; if(section.open)collapsed.delete(section.dataset.railSection);else collapsed.add(section.dataset.railSection);},true);
     host()?.addEventListener("click",event=>{
       const btn=event.target.closest("[data-rail-refresh]");
       if(btn){event.preventDefault();event.stopPropagation();load(btn);}
     });
   }
-  return {init,render,tick,order};
+  return {init,render,tick,order,controls};
 })();
