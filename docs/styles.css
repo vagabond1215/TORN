@@ -1069,3 +1069,25 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
   .guide-right-rail .panel{margin-bottom:.55rem}
   .home-secondary-grid{grid-template-columns:1fr}
 }
+
+/* Stats subbar and independent gym training controls */
+.tc-subbar{margin:0 0 1rem;border:1px solid var(--border);border-radius:6px;background:var(--raised);overflow:hidden}
+.tc-subbar .tc-subnav{margin:0;padding:.55rem;border-bottom:1px solid var(--border)}
+.tc-subbar .tc-overview{margin:0}
+.tc-subbar .tc-stat-overview{padding:0;min-width:0;grid-template-columns:repeat(4,minmax(0,1fr))}
+.tc-subbar .tc-overview-item{flex-direction:row;align-items:baseline;justify-content:space-between;gap:.4rem;padding:.55rem .7rem}
+.tc-subbar .tc-overview-item small{font-weight:750;flex-shrink:0}
+.tc-subbar .tc-overview-item strong{font-size:.95rem;text-align:right;min-width:0}
+.tc-gym-picker{display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap}
+.tc-gym-tiles{display:grid;grid-template-columns:repeat(2,100px);gap:.45rem}
+.tc-gym-tile{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.35rem;border:1px solid var(--border);border-radius:6px;background:var(--raised);color:var(--muted);font:inherit;font-size:.75rem;font-weight:700;cursor:pointer}
+.tc-gym-tile:hover,.tc-gym-tile.is-selected{border-color:var(--accent);color:var(--accent-strong)}
+.tc-gym-tile.is-selected{box-shadow:inset 0 0 0 1px var(--accent)}
+.tc-gym-details{flex:1;min-width:200px;display:grid;gap:.75rem;justify-items:start}
+.tc-gym-details .tc-field{width:100%;max-width:360px}
+.tc-gym-details .tc-status{margin:0}
+.tc-train-control{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem;font-weight:700}
+.tc-train-control input{width:5rem;min-width:0;padding:.48rem .55rem;background:var(--canvas);border:1px solid var(--border);border-radius:5px;color:var(--text)}
+.tc-train-control small{font-weight:400;color:var(--muted)}
+.tc-train-control .is-selected{border-color:var(--accent);color:var(--accent-strong)}
+@media(max-width:600px){.tc-subbar .tc-stat-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-subbar .tc-overview-item:nth-child(2){border-right:0}.tc-subbar .tc-overview-item:nth-child(-n+2){border-bottom:1px solid var(--border)}}
