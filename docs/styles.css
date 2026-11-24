@@ -1455,3 +1455,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .job-stat-requirements .job-stat-daily{text-align:right}
 .job-current-perks{margin-top:.65rem}
 @media(max-width:460px){.job-stat-requirements .home-pair dd{grid-template-columns:8ch 1ch 8ch 7ch;gap:.12rem;font-size:.75rem}.job-stat-requirements .home-pair dt{font-size:.73rem}.job-stat-requirements .job-stat-daily{font-size:.65rem}}
+
+.tc-candy-summary{display:flex;justify-content:flex-end;align-items:baseline;flex-wrap:wrap;gap:.25rem .65rem;padding:.25rem .65rem;font-size:.72rem;color:var(--muted)}
+.tc-candy-summary strong{color:var(--accent-strong);white-space:nowrap}
+.tc-candy-summary small{font-size:.68rem}
+.tc-candy-control button:disabled{opacity:.45;cursor:not-allowed}
