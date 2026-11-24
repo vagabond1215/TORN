@@ -17,6 +17,7 @@ const tornTrainSequence=(()=>{
   defaults.custom=()=>[make("train")];
   const templates=[["natural","NAT","Natural training"],["maxenergy","MAX E","Maximum Energy"],["mini","MINI","Mini jump"],["low","LOW#","Low-stat jump"],["jump","HJ","Happy jump"],["maxhappy","99k","99k Happy jump"],["custom","CUSTOM","Custom"]];
   const startingEnergy=Object.fromEntries(templates.map(([id])=>[id,["natural","jump","maxhappy"].includes(id)?"zero":"full"]));
+  const startingTime=Object.fromEntries(templates.map(([id])=>[id,0]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openQueues=new Set(),openTimelines=new Set();
   let naturalEdited=false,settingsOpen=false;
@@ -376,12 +377,12 @@ const tornTrainSequence=(()=>{
     const change=state.stat-(previous?.stat??state.stat);
     return '<td>'+fmt(state.energy)+'</td><td>'+fmt(state.happy)+'</td><td>'+clock(state.drug)+'</td><td>'+clock(state.booster)+'</td><td class="ts-row-gain '+(change>0?"is-positive":"")+'">'+(change>0?"+":"")+fmt(change,2)+'</td><td class="ts-row-stat">'+fmt(state.stat,2)+'</td>';
   }
-  function dependencyRow(e){
+  function dependencyRow(e,offset=0){
     const label=e.type==="autoWait"?"Wait "+clock(e.end.time-e.start.time)+" · "+e.reason:e.type==="happyReset"?"Happiness reset":(names[e.type]??e.type)+(e.reason?" · "+e.reason:"");
-    return '<tr class="ts-dependent"><td>'+clock(e.end.time)+'</td><td><span class="ts-dependency-mark" aria-label="Automatic dependent step">↳</span> '+$(label)+'</td>'+timelineCells(e.end,e.type==="autoWait"?e.end:e.start)+'</tr>';
+    return '<tr class="ts-dependent"><td>'+clock(offset+e.end.time)+'</td><td><span class="ts-dependency-mark" aria-label="Automatic dependent step">↳</span> '+$(label)+'</td>'+timelineCells(e.end,e.type==="autoWait"?e.end:e.start)+'</tr>';
   }
   function mergedTimeline(side,data){
-    const list=steps[side],byParent=new Map();
+    const list=steps[side],byParent=new Map(),offset=startingTime[side]??0;
     // A reset matters in the timeline only if the next happiness-changing
     // action is a gym train, rather than another boost or reset.
     const affectsHappy=e=>["xanax","ecstasy","candy","dvd","externalHappy","happyReset","train","checkin"].includes(e.type);
@@ -393,8 +394,8 @@ const tornTrainSequence=(()=>{
       }
       const parent=e.parent??-1;if(!byParent.has(parent))byParent.set(parent,[]);byParent.get(parent).push(e);
     }
-    let rows='<tr class="ts-initial"><td>0:00:00</td><td><div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div></td>'+timelineCells(data.initial)+'</tr>';
-    rows+=(byParent.get(-1)||[]).map(dependencyRow).join("");
+    let rows='<tr class="ts-initial"><td><input class="ts-start-time" type="text" inputmode="numeric" data-ts-start-time="'+side+'" value="'+clock(offset)+'" aria-label="Starting time in hours, minutes and seconds" title="Timeline start (H:MM:SS)"></td><td><div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div></td>'+timelineCells(data.initial)+'</tr>';
+    rows+=(byParent.get(-1)||[]).map(e=>dependencyRow(e,offset)).join("");
     list.forEach((action,i)=>{
       const events=byParent.get(i)||[],main=events.find(e=>e.editable),state=data.actionStates[i],deps=events.filter(e=>!e.editable);
       // Display required waits and any intervening events first, then the
@@ -402,9 +403,9 @@ const tornTrainSequence=(()=>{
       const split=main?events.indexOf(main):0;
       const before=main?events.slice(0,split).filter(e=>!e.editable):deps.filter(e=>e.type==="autoWait");
       const after=main?events.slice(split+1).filter(e=>!e.editable):deps.filter(e=>e.type!=="autoWait");
-      rows+=before.map(dependencyRow).join("");
-      rows+='<tr class="ts-editable-row"><td>'+(main?.end||state?.executed?clock((main?.end??state.end).time):"—")+'</td><td>'+data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,action,i,data.rowInfo[i])+'</td>'+timelineCells(main?.end??(state?.executed?state.end:null),["train","checkin"].includes(action.type)?(main?.start??state?.start):(main?.end??state?.end))+'</tr>';
-      rows+=after.map(dependencyRow).join("");
+      rows+=before.map(e=>dependencyRow(e,offset)).join("");
+      rows+='<tr class="ts-editable-row"><td>'+(main?.end||state?.executed?clock(offset+(main?.end??state.end).time):"—")+'</td><td>'+data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,action,i,data.rowInfo[i])+'</td>'+timelineCells(main?.end??(state?.executed?state.end:null),["train","checkin"].includes(action.type)?(main?.start??state?.start):(main?.end??state?.end))+'</tr>';
+      rows+=after.map(e=>dependencyRow(e,offset)).join("");
     });
     return '<div class="ts-log ts-merged"><div class="ts-log-scroller"><table><thead><tr><th>Time</th><th>Action</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th><th>Stat change</th><th>Current stat</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
       '<div class="ts-add"><select data-ts-choice="'+side+'" aria-label="Select action"><option value="" selected>Select action</option>'+actionOptions.map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select><button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'" disabled>Add action</button><button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div></div>';
@@ -453,6 +454,7 @@ const tornTrainSequence=(()=>{
     view.addEventListener("change",event=>{
       const el=event.target;
       if(el.matches("[data-ts-choice]")){const button=el.closest(".ts-add")?.querySelector('[data-ts-op="add"]');if(button)button.disabled=!Object.hasOwn(names,el.value);return;}
+      if(el.dataset.tsStartTime&&Object.hasOwn(startingTime,el.dataset.tsStartTime)){const m=el.value.trim().match(/^(\d{1,4}):([0-5]?\d):([0-5]?\d)$/);if(m){startingTime[el.dataset.tsStartTime]=Number(m[1])*3600+Number(m[2])*60+Number(m[3]);rebuild();}else{el.value=clock(startingTime[el.dataset.tsStartTime]);}return;}
       if(el.dataset.tsStartEnergy&&Object.hasOwn(startingEnergy,el.dataset.tsStartEnergy)){startingEnergy[el.dataset.tsStartEnergy]=el.value==="zero"?"zero":"full";rebuild();return;}
       if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
       const param=el.dataset.tsParam;
