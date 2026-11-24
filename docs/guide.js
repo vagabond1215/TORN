@@ -167,11 +167,42 @@ function updateApiStatus(){
   status.title=label;
   status.setAttribute("aria-label",label);
 }
+function updateSidebarCharacter(){
+  const state=tornGuideApi.state,identity=state.identity,connected=tornGuideApi.isConnected();
+  byId("sidebar-character-name").textContent=connected?(identity?.name||"Character"):"Connect Torn API";
+  byId("sidebar-character-id").textContent=connected&&identity?.id!=null?"[#"+identity.id+"]":"";
+  const details=byId("sidebar-character-details");
+  if(!connected){
+    details.innerHTML='<a class="sidebar-account-link" href="#profile">Connect your account to see details</a>';
+    return;
+  }
+  const money=payload("money","money"),merits=payload("merits","merits"),
+    bars=payload("bars","bars"),basic=payload("basic","profile");
+  const progress=basic?.level_progress??basic?.level_progress_percentage??
+    basic?.level_progress_percent??identity?.level_progress;
+  const percent=progress&&typeof progress==="object"?
+    (progress.percentage??progress.percent):progress;
+  const xpNumber=percent===null||percent===undefined?NaN:Number(percent);
+  const xp=Number.isFinite(xpNumber)&&xpNumber>=0&&xpNumber<=100?
+    (Math.round(xpNumber*10)/10)+"%":"Not available";
+  const wallet=money?.wallet!=null?"$"+formatNumber(money.wallet):"Not loaded";
+  details.innerHTML=
+    '<dl class="sidebar-facts">'+
+      homePair("Money",wallet,"home-money")+
+      homePair("Level",identity?.level??"Not loaded")+
+      homePair("Level XP",xp)+
+      homePair("Points",money?.points??"Not loaded")+
+      homePair("Merits",merits?.available??"Not loaded")+
+    '</dl><div class="sidebar-bars">'+
+      ["energy","nerve","happy","life"].map(key=>homeBar(key,bars?.[key])).join("")+
+    '</div><a class="sidebar-account-link" href="#profile">Account &amp; API</a>';
+}
 function renderProfile() {
   byId("profile-link").textContent = activeProfile
     ? activePlayerName+" [#"+activeProfile+"]" : "Connect API";
   byId("settings-signout").disabled=!tornGuideApi.isConnected();
   updateApiStatus();
+  updateSidebarCharacter();
   byId("profile-summary").textContent = activeProfile
     ? "Connected as " + activePlayerName + ". " + (tornGuideApi.isRemembering()
       ? "This browser remembers your API key and last refreshed account data."
@@ -291,6 +322,11 @@ function closeMenu() {
 }
 
 renderDirectory();
+const sidebarDisclosure=byId("sidebar-character");
+sidebarDisclosure.open=read("sidebar:expanded")==="1";
+sidebarDisclosure.addEventListener("toggle",()=>{
+  write("sidebar:expanded",sidebarDisclosure.open?"1":"0");
+});
 renderProfile();
 tornTctClock.init();
 renderRoute();
@@ -381,6 +417,7 @@ function updateSyncCounter(){
 }
 function updateRefreshUI(){
   updateApiStatus();
+  updateSidebarCharacter();
   const connected=tornGuideApi.isConnected();
   const busy=tornGuideApi.state.loading;
   const top=byId("refresh-top"),profile=byId("refresh-data");
