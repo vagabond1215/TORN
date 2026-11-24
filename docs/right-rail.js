@@ -28,7 +28,9 @@ const tornRightRail=(()=>{
   }
   function property(){
     const raw=payload("property","property");
-    const p=raw?.property&&typeof raw.property==="object"?raw.property:raw;
+    // user/property returns UserPropertyDetails whose property.name is a
+    // separate BasicProperty; upkeep is on the details object itself.
+    const p=raw?.upkeep?raw:raw?.property?.upkeep?raw.property:raw;
     const name=p?.property?.name??p?.name??"Not loaded";
     const upkeep=p?.upkeep;
     const base=Number(upkeep?.property),staff=Number(upkeep?.staff);
