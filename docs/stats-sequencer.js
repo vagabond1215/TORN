@@ -426,15 +426,19 @@ const tornTrainSequence=(()=>{
       '<label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label></div>';
   }
   function row(side,a,index,info){
-    const types=actionOptions.map(([id,label])=>'<option value="'+id+'" '+(a.type===id?"selected":"")+'>'+$(label)+'</option>').join("");
     const booster=["candy","dvd"].includes(a.type),wait=a.type==="wait";
     const ceiling=a.type==="candy"?maxCandy(p):maxDvd(p);
     const tier=a.candyHappy??p.candyHappy,attr=' data-ts-side="'+side+'" data-ts-index="'+index+'"';
     const candyOptions=["any",...new Set([25,35,50,75,100,150,250,...candyStock().tiers])];
+    const configurable=booster||wait,editorId="ts-editor-"+side+"-"+index;
+    const short=a.type==="candy"?"Candy ×"+(info?.qty??a.qty):a.type==="dvd"?"eDVD ×"+(info?.qty??a.qty):wait?"Wait "+fmt(a.minutes,2)+"m":"";
+    const types=actionOptions.map(([id,label])=>'<option value="'+id+'" '+(a.type===id?"selected":"")+'>'+$(a.type===id&&short?short:label)+'</option>').join("");
     const detail=booster?'<div class="ts-booster-row"><label>'+(a.type==="candy"?"Candy:":"eDVD:")+'</label><input type="number" min="0" max="'+ceiling+'" step="1" value="'+(info?.qty??a.qty)+'"'+attr+' data-ts-edit="qty" aria-label="Quantity"><button type="button" class="button secondary" data-ts-op="max"'+attr+' aria-pressed="'+Boolean(a.max)+'" '+(info?.maximum==null?"disabled":"")+'>MAX</button>'+(a.type==="candy"?'<select'+attr+' data-ts-edit="candy-tier" aria-label="Candy happiness">'+candyOptions.map(h=>'<option value="'+h+'" '+(h===tier?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select>':'<small>2,500 Happy</small>')+'</div><div class="ts-booster-summary">'+(a.type==="candy"&&tier==="any"?Object.entries(info?.used??{}).map(([name,q])=>$(q+"× "+name)).join(" · "):"")+(info?.happy?' <strong>+'+fmt(info.happy)+' Happy</strong>':"")+(info?.held==null?' <small>Inventory or preceding step unavailable</small>':' <small>'+fmt(info.held)+' held · '+fmt(info.allowance)+' CD allowance'+(a.type==="dvd"&&info.qty>info.held?' · '+fmt(info.qty-info.held)+' to purchase':"")+'</small>')+'</div>':"";
+    const editor= configurable?'<div class="ts-row-editor" id="'+editorId+'" popover="auto" data-ts-editor="'+editorId+'" role="dialog" aria-label="'+$(names[a.type])+' settings"><div class="ts-row-editor-title"><strong>'+$(names[a.type])+'</strong><button type="button" class="ts-editor-close" popovertarget="'+editorId+'" popovertargetaction="hide" aria-label="Close settings">×</button></div>'+
+      (booster?detail:'<label class="ts-editor-wait">Minutes <input type="number" min="0" max="10080" step=".01" value="'+a.minutes+'"'+attr+' data-ts-edit="minutes" aria-label="Minutes"></label>')+'</div>':"";
     return '<div class="ts-step"><select'+attr+' data-ts-edit="type" aria-label="Training action">'+types+'</select>'+
-      (wait?'<input type="number" min="0" max="10080" step=".01" value="'+a.minutes+'"'+attr+' data-ts-edit="minutes" aria-label="Minutes">':'')+
-      '<div class="ts-arrows"><button type="button" title="Move up" aria-label="Move up" data-ts-op="up"'+attr+'>↑</button><button type="button" title="Move down" aria-label="Move down" data-ts-op="down"'+attr+'>↓</button><button type="button" title="Remove" aria-label="Remove" data-ts-op="remove"'+attr+'>×</button></div>'+detail+'</div>';
+      '<div class="ts-arrows">'+(configurable?'<button type="button" class="ts-row-gear" data-ts-gear="'+editorId+'" popovertarget="'+editorId+'" title="Action settings" aria-label="Edit '+$(names[a.type])+' settings"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M10 2h4l.6 3 2 .9 2.6-1.7 2.8 2.8-1.7 2.6.9 2 3 .6v4l-3 .6-.9 2 1.7 2.6-2.8 2.8-2.6-1.7-2 .9-.6 3h-4l-.6-3-2-.9-2.6 1.7L2 19l1.7-2.6-.9-2L0 14v-4l2.8-.6.9-2L2 4.8 4.8 2l2.6 1.7 2-.9z" transform="translate(2 2) scale(.83)"/></svg></button>':'<span class="ts-gear-spacer" aria-hidden="true"></span>')+
+      '<button type="button" title="Move up" aria-label="Move up" data-ts-op="up"'+attr+'>↑</button><button type="button" title="Move down" aria-label="Move down" data-ts-op="down"'+attr+'>↓</button><button type="button" title="Remove" aria-label="Remove" data-ts-op="remove"'+attr+'>×</button></div>'+editor+'</div>';
   }
   function timelineCells(state,previous=state){
     if(!state)return '<td>—</td>'.repeat(6);
@@ -524,8 +528,27 @@ const tornTrainSequence=(()=>{
     view.dataset.tsBound="yes";
     view.addEventListener("toggle",event=>{const el=event.target,id=el.dataset?.tsTimeline;if(!el.isConnected||!id)return;if(el.open)openTimelines.add(id);else openTimelines.delete(id);savePlanPreferences();},true);
     const rowControl=(side,index,attribute,value)=>'[data-ts-side="'+side+'"][data-ts-index="'+index+'"][data-ts-'+attribute+'="'+value+'"]';
+    function positionEditor(editor,gear){
+      if(!editor||!gear)return;
+      const rect=gear.getBoundingClientRect(),w=editor.offsetWidth,h=editor.offsetHeight;
+      editor.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-w-8))+"px";
+      editor.style.top=Math.max(8,rect.bottom+6+h<=window.innerHeight?rect.bottom+6:rect.top-h-6)+"px";
+    }
+    view.addEventListener("toggle",event=>{
+      const editor=event.target;
+      if(editor.matches?.(".ts-row-editor")&&editor.matches(":popover-open")){
+        const gear=view.querySelector('[data-ts-gear="'+editor.id+'"]');
+        positionEditor(editor,gear);
+      }
+    },true);
     const rebuild=(focusTarget)=>{
-      const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();
+      const root=view.querySelector("#tc-sequencer");
+      const editorId=root?.querySelector(".ts-row-editor:popover-open")?.id;
+      if(root)root.innerHTML=render();
+      if(editorId){
+        const editor=view.querySelector("#"+editorId),gear=view.querySelector('[data-ts-gear="'+editorId+'"]');
+        if(editor&&gear){editor.showPopover();positionEditor(editor,gear);}
+      }
       const toggles=view.querySelector(".ts-template-toggles");if(toggles)toggles.outerHTML=templateButtons();
       if(focusTarget)view.querySelector(focusTarget)?.focus({preventScroll:true});
     };
