@@ -305,12 +305,8 @@ const tornStatPlanner = (() => {
       '</div></section>';
     }
     if(state.subpage==="compare"){
-      markup+='<div class="tc-compare-conditions">Using <strong>'+esc(gym.name)+'</strong> ('+nice(gym.energy)+' E/train), <strong>'+
-        nice(state.currentEnergy)+' / '+nice(state.maxEnergy)+' Energy</strong> and <strong>'+
-        nice(state.happy)+' / '+nice(state.maxHappy)+' Happy</strong>. Change gym on <button type="button" class="text-button" data-tc-view="gym">Gym</button> or editable stats on <button type="button" class="text-button" data-tc-view="calc">Calc</button>.</div>';
-    markup+='<section class="panel"><div class="panel-heading"><h2>Natural Energy vs. Happy Jump · Execution Timeline</h2></div><div class="panel-content">'+
-      '<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+readable[stat]+'</button>').join("")+'</div>'+
-      '<div class="tc-compare-intro">Choose a stat and edit each plan as a sequence of actions. Both use the same starting stat of '+nice(state.statValues[state.compareStat])+' and the same time window.</div>'+
+      markup+='<section class="panel tc-calc-panel tc-plan-panel"><div class="panel-content">'+
+      '<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+shorthand[stat]+'</button>').join("")+'</div>'+
       '<div id="tc-sequencer">'+tornTrainSequence.render({state,gym,trainBlock,effectsFor})+'</div></div></section>';
     }
     return markup;
