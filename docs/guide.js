@@ -146,9 +146,13 @@ function renderDirectory() {
   ).join("");
 }
 
-let lastApiConnectionError="";
+let lastApiConnectionError="",lastApiErrorSyncStamp=0;
 function updateApiStatus(){
   const connected=tornGuideApi.isConnected(),status=byId("api-status"),state=tornGuideApi.state;
+  if(connected&&lastApiConnectionError&&state.updated&&Number(state.updated)>lastApiErrorSyncStamp &&
+      !Object.keys(state.errors||{}).length&&!Object.keys(state.inventoryErrors||{}).length){
+    lastApiConnectionError="";
+  }
   const failures=[
     ...Object.entries(state.errors||{}).map(([name,reason])=>name+": "+String(reason)),
     ...Object.entries(state.inventoryErrors||{}).map(([name,reason])=>"Inventory "+name+": "+String(reason))
@@ -317,6 +321,7 @@ byId("profile-form").addEventListener("submit", async (event) => {
       (tornGuideApi.state.storageWarning ? " " + tornGuideApi.state.storageWarning : "");
     updateRefreshUI();
   } catch (error) {
+    lastApiErrorSyncStamp=Number(tornGuideApi.state.updated)||0;
     lastApiConnectionError=String(error.message||error||"Could not connect to Torn.");
     input.value = "";
     feedback.textContent = lastApiConnectionError;
@@ -391,6 +396,7 @@ async function refreshAccount(){
       : "Torn data refreshed.";
     if(tornGuideApi.state.storageWarning) feedback.textContent+=" "+tornGuideApi.state.storageWarning;
   }catch(error){
+    lastApiErrorSyncStamp=Number(tornGuideApi.state.updated)||0;
     lastApiConnectionError=String(error.message||error);
     feedback.textContent=lastApiConnectionError;
   }finally{updateRefreshUI();}

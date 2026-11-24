@@ -758,3 +758,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 :root[data-theme="light"] .home-bar-track{background:#e1e6dd;border-color:#aeb9a8}
 :root[data-theme="light"] .home-money{color:#257b3b!important}
 :root[data-theme="light"] .home-action-links a{background:var(--raised)}
+
+/* Keep the four-stat strip horizontal in the 651–700px breakpoint as well. */
+@media(max-width:750px){
+  .tc-overview{overflow-x:auto}
+  .tc-stat-overview{grid-template-columns:repeat(4,minmax(128px,1fr));min-width:512px}
+}
