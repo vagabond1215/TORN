@@ -1661,3 +1661,13 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-merged .ts-row-gain.is-positive{color:var(--accent-strong);font-weight:650}
 .ts-merged table{min-width:820px}
 .ts-merged th:nth-child(2){width:32%}
+
+/* Plan settings disclosure lives at the right edge of the template toolbar. */
+.ts-plan-toolbar .ts-template-toggles{flex:1 1 auto;align-items:center}
+.ts-plan-toolbar .ts-settings-toggle{margin-left:auto;white-space:nowrap;display:inline-flex;align-items:center;gap:.35rem}
+#ts-plan-settings[hidden]{display:none!important}
+#ts-plan-settings:not([hidden]){margin-bottom:.65rem}
+#ts-plan-settings>.ts-settings-summary{display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;font-size:.8rem;font-weight:700;color:var(--accent-strong)}
+#ts-plan-settings>.ts-settings-summary:before{content:none}
+#ts-plan-settings>.ts-settings-summary .ts-cooldown-mode{margin-left:auto}
+@media(max-width:700px){.ts-plan-toolbar .ts-template-toggles{flex-basis:100%}}
