@@ -1436,7 +1436,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-build-controls small{font-size:.7rem;color:var(--muted)}
 .tc-build-ratio{display:flex;min-height:26px;overflow:hidden;border-radius:3px;margin-bottom:.6rem}
 .tc-build-segment{display:flex;justify-content:center;align-items:center;min-width:0;overflow:hidden;white-space:nowrap;font-size:.67rem;color:#171717;font-weight:700;padding:.2rem 0}
-.tc-build-strength{background:#d6d6d6}.tc-build-defense{background:#b5df4f}.tc-build-speed{background:#a5a5a5}.tc-build-dexterity{background:#777777}
+.tc-build-strength{background:#e3a47e}.tc-build-defense{background:#a8c97c}.tc-build-speed{background:#8eb9e8}.tc-build-dexterity{background:#c2a3dc}
 .tc-build-scroll{overflow-x:auto}
 .tc-build-table{width:100%;border-collapse:collapse;min-width:620px;font-size:.73rem;font-variant-numeric:tabular-nums}
 .tc-build-table th,.tc-build-table td{padding:.35rem .4rem;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
