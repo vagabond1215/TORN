@@ -126,7 +126,7 @@ const tornToolsGuide=(()=>{
     'data-site-favicon="'+esc(name)+'" alt="" aria-hidden="true">'+
     '<span class="quick-favicon-fallback" hidden>'+svg(name)+'</span>';
  }
- let iconHandlerBound=false;
+ let iconHandlerBound=false,currentBarRoute=null;
  function iconError(event){
   const img=event?.target;
   const name=img?.dataset?.siteFavicon;
@@ -165,8 +165,9 @@ const tornToolsGuide=(()=>{
  }
  function updateBar(route){
   ensureIconHandler();
+  if(route)currentBarRoute=route;
   const host=typeof document!=="undefined"&&document.getElementById("tool-quickbar");
-  if(host)host.innerHTML=quickLinks(route);
+  if(host)host.innerHTML=quickLinks(currentBarRoute);
  }
  // Contextual page suggestions are deliberately suppressed: when enabled,
  // the global icon bar already reflects the current page, without duplicate rows.
