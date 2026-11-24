@@ -435,21 +435,24 @@ const tornTrainSequence=(()=>{
       '</details>';
   }
   function chart(results){
-    const chartEnd=p.hours+1;
+    const chartEnd=p.hours+1,base=ctx.state.statValues[ctx.state.compareStat];
     const xval=hour=>80+hour/chartEnd*800;
-    const bottom=Math.min(ctx.state.statValues[ctx.state.compareStat],...results.map(x=>x.data.final));
-    const top=Math.max(bottom+1,...results.map(x=>x.data.final));
+    const values=[base,...results.flatMap(x=>[x.data.final,...x.data.series.map(pt=>pt.s)])];
+    const bottom=Math.min(...values),top=Math.max(bottom+1,...values);
     const yval=val=>210-(val-bottom)/(top-bottom)*190;
-    const path=serie=>serie.map((v,i)=>(i?"L":"M")+xval(v.h).toFixed(1)+","+yval(v.s).toFixed(1)).join(" ");
-    const styles={maxenergy:["var(--muted)","10 4"],low:["var(--accent)","2 5"],natural:["var(--text)",""],mini:["var(--text)","7 4"],jump:["var(--accent)",""],maxhappy:["var(--accent)","8 4"],custom:["var(--muted)","2 4"]};
-    let out='<svg viewBox="0 0 910 260" class="ts-chart" role="img" aria-label="Projected stat growth over '+p.hours+' hours">';
+    const path=serie=>serie.map((v,i)=>(i?"H"+xval(v.h).toFixed(1)+"V"+yval(v.s).toFixed(1):"M"+xval(v.h).toFixed(1)+","+yval(v.s).toFixed(1))).join(" ");
+    const styles={natural:["var(--text)",""],maxenergy:["var(--ts-chart-maxenergy)","10 5"],mini:["var(--ts-chart-mini)","1 6"],low:["var(--ts-chart-low)","8 4 1 4"],jump:["var(--accent)",""],maxhappy:["var(--ts-chart-99k)","12 5"],custom:["var(--ts-chart-custom)","4 4"]};
+    let out='<svg viewBox="0 0 910 276" class="ts-chart" role="img" aria-label="Projected stat growth over '+p.hours+' hours">';
     for(let i=0;i<5;i++){
       const val=bottom+(top-bottom)*i/4,y=yval(val),hr=p.hours*i/4;
       out+='<line x1="80" y1="'+y+'" x2="880" y2="'+y+'" class="ts-gridline"/><text x="74" y="'+(y+4)+'" font-size="11" text-anchor="end">'+fmt(val)+'</text><text x="'+xval(hr)+'" y="243" font-size="11" text-anchor="middle">'+fmt(hr,1)+'h</text>';
     }
-    out+='<line x1="'+xval(p.hours)+'" y1="20" x2="'+xval(p.hours)+'" y2="210" stroke="var(--border)" stroke-dasharray="3 4"/><text x="880" y="243" font-size="11" text-anchor="end">'+fmt(chartEnd,1)+'h</text>';
-    for(const {id,data} of results){const [color,dash]=styles[id];out+='<path d="'+path([...data.series,{h:chartEnd,s:data.final}])+'" fill="none" stroke="'+color+'" stroke-dasharray="'+(data.complete?dash:"2 4")+'" stroke-width="3"/>';}
-    return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg width="26" height="8" aria-hidden="true"><line x1="0" y1="4" x2="26" y2="4" stroke="'+styles[id][0]+'" stroke-dasharray="'+(data.complete?styles[id][1]:"2 4")+'" stroke-width="3"/></svg> '+$(label)+(data.complete?"":" (blocked)")+'</span>').join("")+'</div>';
+    out+='<line x1="'+xval(p.hours)+'" y1="20" x2="'+xval(p.hours)+'" y2="210" stroke="var(--border)" stroke-dasharray="3 4"/><text x="880" y="260" font-size="10" text-anchor="end">'+fmt(chartEnd,1)+'h</text>';
+    for(const {id,data} of results){
+      const [color,dash]=styles[id],points=[{h:0,s:base},...data.series,{h:chartEnd,s:data.final}];
+      out+='<path d="'+path(points)+'" fill="none" stroke="'+color+'" stroke-dasharray="'+dash+'" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"'+(data.complete?'':' opacity=".55"')+'/>';
+    }
+    return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg width="30" height="8" aria-hidden="true"><line x1="1" y1="4" x2="29" y2="4" stroke="'+styles[id][0]+'" stroke-dasharray="'+styles[id][1]+'" stroke-width="2.8" stroke-linecap="round"'+(data.complete?'':' opacity=".55"')+'/></svg> '+$(label)+(data.complete?"":" (blocked)")+'</span>').join("")+'</div>';
   }
   function render(context){
     if(context)ctx=context;
