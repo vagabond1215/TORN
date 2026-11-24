@@ -47,12 +47,22 @@ const tornStatPlanner = (() => {
   const esc=(value)=>String(value===null||value===undefined?"":value).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
   const api=(name)=>tornGuideApi.state.data[name]||null;
   const rawStats=()=>{const p=api("battlestats");return p && p.battlestats?p.battlestats:null;};
-  const rawBars=()=>{const p=api("bars");return p && p.bars?p.bars:null;};
+  const rawBars=()=>{const p=api("bars");return p?.bars??p??null;};
   function syncLiveBars(){
     const bars=rawBars();
     if(!bars)return;
     if(bars.energy){state.currentEnergy=clamp(bars.energy.current,0,1000);state.maxEnergy=clamp(bars.energy.maximum,1,1000);}
-    if(bars.happy){state.happy=clamp(bars.happy.current,0,99999);state.maxHappy=clamp(bars.happy.maximum,1,99999);}
+    if(bars.happy){
+      const source=tornGuideApi.state,bar=bars.happy;
+      const bridge=source.bridge?.fields?.includes("happy")&&source.bridge.timestamp>Number(source.fetchedAt.bars||0);
+      const stamp=bridge?source.bridge.timestamp:source.fetchedAt.bars;
+      const observed=numeric(bar.current,NaN),maximum=numeric(bar.maximum,NaN);
+      if(Number.isFinite(maximum)&&maximum>0)state.maxHappy=clamp(maximum,1,99999);
+      if(Number.isFinite(observed)&&observed>=0){
+        const projected=typeof tornBarProjection==="function"?tornBarProjection("happy",bar,stamp):null;
+        state.happy=clamp(projected?.current??observed,0,99999);
+      }
+    }
     state.regenMinutes=state.maxEnergy>100?10:15;
   }
   function hydrateFromApi(force=false) {
@@ -68,8 +78,7 @@ const tornStatPlanner = (() => {
     if (bars) {
       state.currentEnergy=clamp(bars.energy&&bars.energy.current,0,1000);
       state.maxEnergy=clamp(bars.energy&&bars.energy.maximum,1,1000);
-      state.happy=clamp(bars.happy&&bars.happy.current,0,99999);
-      state.maxHappy=clamp(bars.happy&&bars.happy.maximum,1,99999);
+      syncLiveBars();
 
       const donor=state.maxEnergy>100;
       state.regenMinutes=donor?10:15;
@@ -430,6 +439,10 @@ const tornStatPlanner = (() => {
       '<details class="tc-build-books"><summary>Books &amp; training priorities</summary><p>'+esc(reading)+'</p><div>'+statNames.map(stat=>'<div><strong>'+esc(bookNames[stat])+'</strong> · +30% '+label(stat)+' gym gains for 31 days</div>').join("")+'<div><strong>Get Hard Or Go Home</strong> · +20% all gym gains for 31 days</div><div><strong>Higher Daddy, Higher!</strong> · +20% energy regeneration for 31 days</div></div><p>Save unread books until you have a suitable gym, perks, supplies and time to use the entire duration. Ownership is not inferred.</p></details>'+
       '<p class="fine-print">Targets are suggested buffered ratios. Estimated energy uses the current per-energy gain at current happiness in a reported gym; future growth, cooldowns and membership changes are not simulated. <a href="https://wiki.torn.com/wiki/Gym" target="_blank" rel="noopener noreferrer">Gym requirements</a> · <a href="https://www.torn.com/forums.php?f=61&p=threads&t=16132234" target="_blank" rel="noopener noreferrer">Hank / Baldr guide</a></p></div></section>';
   }
+  function happinessStatus(){
+    const book=tornHappinessBook();
+    return '<div class="tc-notice tc-happy-status">Happy: <strong>'+nice(state.happy)+'</strong> / '+nice(state.maxHappy)+' normal maximum' +(book.active?' · <strong>Ignorance Is Bliss active</strong> · 99,999 ceiling':book.known?'':' · Active book status unavailable')+'</div>';
+  }
   function render() {
     hydrateFromApi();
     const gym=selectedGym();
@@ -457,7 +470,7 @@ const tornStatPlanner = (() => {
     markup+=renderBuild(gym,active);
     }
     if(state.subpage==="calc"){
-    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><div class="tc-candy-control"><label for="tc-candy-qty">Candy:</label><input id="tc-candy-qty" type="number" data-tc="calcCandyQty" min="0" max="1000000000" step="1" value="'+calcCandyPlan().requested+'" title="Candy quantity (simulation only)"><button type="button" class="button secondary '+(state.calcCandyMax?"is-selected":"")+'" data-tc-action="candy-max" aria-pressed="'+state.calcCandyMax+'" '+(!calcCandyPlan().loaded||calcCandyPlan().cooldown.allowed===null?"disabled":"")+' title="Maximum candy within inventory and booster cooldown (simulation)">MAX</button><select data-tc="calcCandyHappy" aria-label="Happiness per candy" title="Happiness per candy">'+["any",25,35,50,75,100,150,250].map(h=>'<option value="'+h+'" '+(state.calcCandyHappy===h?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select></div></div>'+'</div>'+calcCandySummary();
+    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><div class="tc-candy-control"><label for="tc-candy-qty">Candy:</label><input id="tc-candy-qty" type="number" data-tc="calcCandyQty" min="0" max="1000000000" step="1" value="'+calcCandyPlan().requested+'" title="Candy quantity (simulation only)"><button type="button" class="button secondary '+(state.calcCandyMax?"is-selected":"")+'" data-tc-action="candy-max" aria-pressed="'+state.calcCandyMax+'" '+(!calcCandyPlan().loaded||calcCandyPlan().cooldown.allowed===null?"disabled":"")+' title="Maximum candy within inventory and booster cooldown (simulation)">MAX</button><select data-tc="calcCandyHappy" aria-label="Happiness per candy" title="Happiness per candy">'+["any",25,35,50,75,100,150,250].map(h=>'<option value="'+h+'" '+(state.calcCandyHappy===h?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select></div></div>'+'</div>'+happinessStatus()+calcCandySummary();
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<div class="panel-content tc-simulator-body">'+
