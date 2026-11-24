@@ -114,3 +114,24 @@ Schema references:
 - https://neon0404.github.io/torn-client/types/UserRacingRecordsResponse.html
 - https://neon0404.github.io/torn-client/types/UserRacesResponse.html
 - https://www.torn.com/swagger.php
+
+
+## November 23, 2026: dedicated Net Worth response
+
+Home now requests the API v2 **user/networth** selection under its own 60-minute TTL. Torn also caches net-worth calculations globally for approximately one hour, so re-requesting this on every Home view is unnecessary. The coordinator batches the selection with other stale Home selections when supported, otherwise handles it independently with the existing failure-backoff logic. No API key is exposed in the DOM or commit.
+
+Unlike money.daily_networth (which is not a categorical breakdown), the v2 networth response supplies an authoritative server-calculated **total** and grouped breakdown:
+
+- Money: wallet, city_bank, cayman_bank, vault, piggy_bank, bookie, pending, loans, unpaid_fees.
+- Assets: stock_market, property, company.
+- Items: inventory, display_case, bazaar, item_market, auction_house, enlisted_cars, trades.
+- Points: monetary value reported by Torn, not points quantity.
+
+The Home Net Worth panel displays Torn's **reported total** rather than reconstructing it from components. Each group has an expandable category breakdown and a clearly identified category subtotal. Loans and unpaid fees are displayed as negative contributions. Zero-valued categories are omitted to avoid visual clutter; an entirely empty group shows No recorded value. Missing selections or API errors are labeled unavailable rather than using an estimate from bank, stocks or inventories.
+
+Source of truth:
+- https://www.torn.com/swagger.php
+- https://neon0404.github.io/torn-client/types/UserNetworthResponse.html
+- https://tornapi.tornplayground.eu/user/networth
+
+Tests use synthetic API responses, including a $9,999,999,999,999 total, nested assets/money/items data, debts, points value, hourly TTL, and no extra requests while re-rendering cached Home.

@@ -187,3 +187,16 @@ When expanded, the panel shows cached Money, Level, Points and available Merits;
 Home no longer renders the duplicate Information panel. Battle and Working Stats remain in the two-column Home layout, with mobile stacking. The existing bar projection from Torn API v2 tick fields is reused in the sidebar and continues to update once per second, even when browsing other pages. This is a local DOM update only and makes **zero additional API requests**. Rendering the sidebar uses already cached Home selections rather than fetching account data on every page.
 
 Automated tests covered disclosure persistence, guest/connected identity, cached Money/Level/Points/Merits, optional Level XP, four compact bars, removal of the Home duplicate, ticker updates off Home, unchanged column widths, and JS parsing. Live GitHub Pages visual dimensions remain to be checked in a real browser.
+
+
+## Home net worth, compact stats, and gunmetal theme (November 23, 2026)
+
+A third compact Home card now shows **Net worth** from Torn API v2 user/networth. Money, Assets, and Items subgroups expand to their category-level breakdowns; the Points contribution displays separately. The total comes directly from Torn and is not inferred from wallet or bank balances. The selection refreshes at most hourly, using existing batching, caching and failure isolation.
+
+Home Battle Stats and Working Stats cards now occupy at most **226px each** on desktop. Stat labels and full numeric values use a wrapping flex row: labels may move above the value where necessary, but number strings (tested through **9,999,999,999,999**) never wrap or collide with labels. Responsive layout stacks cards when screen width requires it.
+
+Left sidebar navigation links now have top and bottom padding **0.4125rem** rather than **0.55rem**, a 25% reduction. Minimum row height is reduced from 44px to 33px, with unchanged sidebar width.
+
+The default Dark theme now uses a **neutral gunmetal gray** canvas (#30363A), brushed stainless-gray card gradients, a black header/sub-bar (#14191C), and lime-green interactive accents (#B5DF4F; brighter hover #D3F47E). Light and Follow system options remain available. Player bar category colors remain distinct to communicate their original Torn functions.
+
+The source and UI tests verified nested Net Worth fields, debt deductions, zero and nonzero groups, one-hour caching, large stat formatting, unchanged left-sidebar width, and no redundant API requests on route re-render. Live GitHub Pages pixel rendering remains unverified.
