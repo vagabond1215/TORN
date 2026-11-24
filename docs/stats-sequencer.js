@@ -13,7 +13,7 @@ const tornTrainSequence=(()=>{
     Math.max(1,Math.round(1800*cfg.candyCDMultiplier))));
   const maxDvd=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
     Math.max(1,Math.round(21600*cfg.dvdCDMultiplier)))+1);
-  const p={hours:32,regenMin:0,energyStatus:"auto",boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:25,dvdHappy:2500,autoWait:true,
+  const p={hours:28,boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:25,dvdHappy:2500,autoWait:true,
     xanaxPrice:null,ecstasyPrice:null,candyPrice:null,dvdPrice:null,pointPrice:null};
   const $=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
   const n=(v,f=0)=>v===null||v===undefined||v===""||!Number.isFinite(Number(v))?f:Number(v);
@@ -88,13 +88,17 @@ const tornTrainSequence=(()=>{
     if(!collections||typeof collections!=="object")return [];
     return Object.values(collections).flatMap(value=>Array.isArray(value)?value:[]).map(v=>typeof v==="string"?v:v&&(v.name||v.effect||v.description)||"").filter(v=>/cooldown|voracity|metabolism|erotic dvd|candy/i.test(v));
   }
-  function energyRules(config){
-    const mode=config.energyStatus||"auto", observed=ctx&&ctx.state?Number(ctx.state.maxEnergy):150;
-    const cap=mode==="standard"?100:mode==="donator"||mode==="subscriber"?150:Math.max(1,Number.isFinite(observed)?observed:150);
-    const minutes=mode==="standard"?15:mode==="donator"||mode==="subscriber"?10:cap>=150?10:15;
-    const label=mode==="auto"?(cap>=150?"Observed Donator/Subscriber-equivalent bar":"Observed standard-equivalent bar"):
-      mode==="standard"?"Standard":mode==="donator"?"Donator":"Subscriber";
-    return {cap,minutes:config.regenMin>0?Number(config.regenMin):minutes,label,mode};
+  function energyRules(){
+    const profile=payload("profile","profile");
+    const known=profile&&Object.prototype.hasOwnProperty.call(profile,"donator_status");
+    const status=String(profile?.donator_status||"").toLowerCase();
+    const observed=Number(ctx?.state?.maxEnergy);
+    const premium=known?status==="donator"||status==="subscriber":observed>=150;
+    return {cap:premium?150:100,minutes:premium?10:15,mode:"auto",label:known?(premium?profile.donator_status:"Standard"):"Estimated from energy bar"};
+  }
+  function preparationHours(){
+    const count=steps.jump.filter(a=>a.type==="xanax").length;
+    return Math.max(1/60,(count*p.xanaxCDMin+p.startDrugMin)/60);
   }
   function nervePreview(config){
     const source=tornGuideApi.state.data.bars;
@@ -106,7 +110,7 @@ const tornTrainSequence=(()=>{
       " / "+fmt(cap)+" (+1 every 5 minutes, no crimes or refills simulated).";
   }
   function simulate(list,overrides={}){
-    const cfg={...p,...overrides},base=ctx.state.statValues[ctx.state.compareStat];
+    const cfg={...p,hours:preparationHours(),...overrides},base=ctx.state.statValues[ctx.state.compareStat];
     const pool=candyPool(cfg),stock=candyStock();
     let candyCost=0,candyGain=0,unknownCandyPrice=false;
     const gym=ctx.gym,stat=ctx.state.compareStat,limit=Math.floor(cfg.hours*3600);
@@ -217,7 +221,7 @@ const tornTrainSequence=(()=>{
       }else{v.errors.push("Unrecognized action: "+type);}
       point();
       v.log.push({i:i+1,type,start,end:snap()});
-      if(v.time>=limit && i<list.length-1){v.errors.push("The "+cfg.hours+"-hour window ended before all steps.");break;}
+      if(v.time>=limit && i<list.length-1 && list.slice(i+1).some(step=>["wait","waitDrug","waitBooster","xanax","ecstasy"].includes(step.type))){v.errors.push("The "+cfg.hours+"-hour window ended before all steps.");break;}
     }
     if(v.time<limit)advance(limit-v.time);
     point();
@@ -228,7 +232,7 @@ const tornTrainSequence=(()=>{
   }
   function controls(){
     const fields=[
-      ["hours","Time window (hours)",1,168,1],["regenMin","Energy +5 interval (0 = status)",0,15,5],
+      
       ["boosterCapH","Booster use threshold (hours)",1,72,1],
       ["startDrugMin","Starting drug CD (min)",0,20000,1],["startBoosterMin","Starting booster CD (min)",0,20000,1],
       ["xanaxCDMin","Xanax CD (360–480 min)",360,480,1],["ecstasyCDMin","Ecstasy CD (200–230 min)",200,230,1],
@@ -244,10 +248,7 @@ const tornTrainSequence=(()=>{
     for(const item of pool){const qty=Math.min(capacity,item.qty);capacity-=qty;usable+=qty;totalHappy+=qty*item.happy;}
     const priceText=v=>v==null?"Unavailable":"$"+fmt(v);
     return '<details class="ts-settings" open><summary>Time, cooldowns, effects, prices</summary>'+
-      '<label class="ts-membership">Energy account model <select data-ts-status>'+
-        [['auto','Use current Torn Energy bar'],['standard','Standard (100 E)'],['donator','Donator (150 E)'],['subscriber','Subscriber (150 E)']].map(([key,text])=>
-          '<option value="'+key+'" '+(p.energyStatus===key?'selected':'')+'>'+text+'</option>').join('')+
-      '</select></label><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
+      '<div class="ts-membership">Preparation window: <strong>'+fmt(p.hours,2)+'h</strong> · '+$(energyRules().label)+'</div><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
       '<label><span>'+$(label)+'</span><input type="number" data-ts-param="'+key+'" value="'+$(p[key])+'" min="'+min+'" max="'+max+'" step="'+step+'"></label>').join("")+
       '<label><span>Max Happy</span><select data-ts-candy '+(!stock.tiers.length?"disabled":"")+'>'+(!stock.tiers.length?'<option>No available candy</option>':stock.tiers.map(t=>'<option value="'+t+'" '+(p.candyHappy===t?"selected":"")+'">'+t+' Happy</option>').join(""))+'</select></label>'+
       '</div><div class="ts-candy-stock"><strong>'+(!stock.loaded?"Candy inventory not loaded":fmt(usable)+' usable candy · +'+fmt(totalHappy)+' Happy')+'</strong><small>'+pool.map(x=>$(x.name)+' ×'+fmt(x.qty)).join(" · ")+'</small></div>'+
@@ -311,6 +312,7 @@ const tornTrainSequence=(()=>{
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
     loadLive();
     marketInputs();
+    p.hours=preparationHours();
     const a=simulate(steps.natural),b=simulate(steps.jump);
     const rule=energyRules(p);
     const diff=b.gain-a.gain;
