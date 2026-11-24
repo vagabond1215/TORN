@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Torn City Guide - Manual Visible Status Bridge
+// @name         Torn City Guide - Passive Visible Status Bridge
 // @namespace    https://vagabond1215.github.io/TORN/
-// @version      1.0.0
-// @description  Manually share visible Torn Energy/Nerve/Happy/Life with your local Torn City Guide. No API key, no network calls, no background scraping.
+// @version      2.0.0
+// @description  Automatically synchronize visible Torn status bars to your local Torn City Guide. Read-only, no API key or network calls.
 // @match        https://www.torn.com/*
 // @match        https://torn.com/*
 // @match        https://vagabond1215.github.io/TORN/*
@@ -13,17 +13,17 @@
 // ==/UserScript==
 (function(){
   "use strict";
-  const key="torn-city-guide:manual-bars:v1";
+  const key="torn-city-guide:passive-bars:v2";
   const guideOrigin="https://vagabond1215.github.io";
-  const maxAge=90*1000;
+  const refreshAge=60*1000;
   const isTorn=location.hostname==="www.torn.com"||location.hostname==="torn.com";
   const isGuide=location.origin===guideOrigin&&location.pathname.startsWith("/TORN/");
   if(window.top!==window)return;
   if(isGuide){
     const share=()=>{
       const packet=GM_getValue(key,null);
-      if(!packet||packet.version!==1||!Number.isInteger(packet.playerId)||
-        !Number.isFinite(packet.timestamp)||Date.now()-packet.timestamp>maxAge)return;
+      if(!packet||packet.version!==2||!Number.isInteger(packet.playerId)||
+        !Number.isFinite(packet.timestamp)||packet.timestamp>Date.now()+5000)return;
       // Only 4 allowlisted bar objects and player ID cross the origin boundary.
       window.dispatchEvent(new CustomEvent("torn-guide-local-snapshot",{
         detail:JSON.stringify(packet)
@@ -34,6 +34,8 @@
     if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",share,{once:true});
     else share();
     setTimeout(share,1200);
+    window.addEventListener("focus",share);
+    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")share();});
     return;
   }
   if(!isTorn)return;
@@ -49,7 +51,7 @@
     return null;
   }
   function extract(){
-    // Read only this manually loaded, focused page. We never store raw DOM text.
+    // Read only the visible status sidebar of a loaded page. Never store raw DOM text.
     const id=extractOwnId();
     if(!id)throw Error("Unable to verify your Torn player ID on this page.");
     let text="";
@@ -61,7 +63,7 @@
       }
     }
     if(!text){
-      const body=String(document.body.innerText||"");
+      const body=String(document.body?.innerText||"");
       const match=/\bInformation\s*\n/i.exec(body);
       if(!match)throw Error("Torn status sidebar was not found.");
       const after=body.slice(match.index+match[0].length,match.index+match[0].length+4000);
@@ -70,38 +72,42 @@
     }
     const bars={};
     for(const name of ["energy","nerve","happy","life"]){
-      const pattern=new RegExp("\\b"+name+"\\s*:?\\s*(\\d{1,7})\\s*\\/\\s*(\\d{1,7})","i");
+      const pattern=new RegExp("\\b"+name+"\\s*:?\\s*([\\d,]{1,12})\\s*\\/\\s*([\\d,]{1,12})","i");
       const match=text.match(pattern);
       if(match){
-        const current=Number(match[1]),maximum=Number(match[2]);
+        const current=Number(match[1].replace(/,/g,"")),maximum=Number(match[2].replace(/,/g,""));
         if(maximum>0&&current>=0&&current<=maximum+100000)bars[name]={current,maximum};
       }
     }
     if(!Object.keys(bars).length)throw Error("No readable Energy/Nerve/Happy/Life values found.");
-    return {version:1,playerId:id,timestamp:Date.now(),bars};
+    return {version:2,playerId:id,timestamp:Date.now(),bars};
   }
-  function inject(){
-    if(document.getElementById("torn-guide-share-bars"))return;
-    const button=document.createElement("button");
-    button.id="torn-guide-share-bars";
-    button.textContent="Share bars with Torn Guide";
-    button.type="button";
-    button.title="Share visible Energy, Nerve, Happy and Life once. No passwords, messages or API calls.";
-    Object.assign(button.style,{position:"fixed",bottom:"18px",right:"22px",zIndex:"2147483000",
-      background:"#29372d",color:"#f2e8bb",border:"1px solid #c0ad65",padding:"9px 12px",
-      borderRadius:"7px",font:"600 12px sans-serif",cursor:"pointer",boxShadow:"0 3px 10px #0009"});
-    button.addEventListener("click",()=>{
-      if(document.visibilityState!=="visible"||!document.hasFocus()){
-        button.textContent="Focus Torn to share";return;
-      }
-      try{
-        const packet=extract();
-        GM_setValue(key,packet);
-        button.textContent="Shared "+Object.keys(packet.bars).length+" bars · valid 90s";
-      }catch(error){button.textContent=String(error.message||error).slice(0,75);}
-    });
-    document.body.appendChild(button);
+  // Observe already loaded pages. Never open tabs, refresh Torn, click controls,
+  // issue requests, collect credentials, chat, or unrelated page contents.
+  let pending=null, lastRead=0;
+  function publish(){
+    pending=null;
+    if(document.visibilityState!=="visible")return;
+    lastRead=Date.now();
+    try{
+      const packet=extract(),previous=GM_getValue(key,null);
+      // Require a complete bar set so an intermediate DOM render cannot
+      // replace the latest valid account snapshot with partial values.
+      if(Object.keys(packet.bars).length!==4)return;
+      const changed=!previous||previous.playerId!==packet.playerId||
+        JSON.stringify(previous.bars)!==JSON.stringify(packet.bars);
+      if(changed||Date.now()-Number(previous.timestamp)>=refreshAge)GM_setValue(key,packet);
+    }catch{}
   }
-  if(document.body)inject();
-  else document.addEventListener("DOMContentLoaded",inject,{once:true});
+  function schedule(){
+    if(document.visibilityState!=="visible"||pending!==null)return;
+    pending=setTimeout(publish,Math.max(250,2000-(Date.now()-lastRead)));
+  }
+  const observer=new MutationObserver(schedule);
+  if(document.body)observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+  window.addEventListener("focus",schedule);
+  window.addEventListener("pageshow",schedule);
+  document.addEventListener("visibilitychange",schedule);
+  setInterval(schedule,15000);
+  schedule();
 })();
