@@ -118,12 +118,12 @@ const tornRoadmap=(()=>{
  function preferences(){
   let data={};
   try{data=JSON.parse(read(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences")||"{}")||{};}catch{}
-  return {priority:["growth","money"].includes(data.priority)?data.priority:"growth",risk:["low","medium","high"].includes(data.risk)?data.risk:"low"};
+  return {priority:["growth","networth","company","education"].includes(data.priority)?data.priority:data.priority==="money"?"networth":"growth",risk:["low","medium","high"].includes(data.risk)?data.risk:"low"};
  }
  function renderActivities(){
   const p=preferences();
   const radio=(name,opts,value)=>'<div class="roadmap-styles">'+opts.map(([id,label])=>'<label class="roadmap-style"><input type="radio" name="home-'+name+'" data-home-pref="'+name+'" value="'+id+'" '+(value===id?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div>';
-  return '<section class="panel home-activities"><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div><div class="home-pref-row"><strong>Priority</strong>'+radio("priority",[["growth","Growth"],["money","Money"]],p.priority)+'</div><div class="home-pref-row"><strong>Acceptable Risk</strong>'+radio("risk",[["low","Low"],["medium","Medium"],["high","High"]],p.risk)+'</div></div></section>';
+  return '<section class="panel home-activities"><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div><div class="home-pref-row"><strong>Priority</strong>'+radio("priority",[["growth","Stat Growth"],["networth","Networth"],["company","Company"],["education","Education"]],p.priority)+'</div><div class="home-pref-row"><strong>Acceptable Risk</strong>'+radio("risk",[["low","Low"],["medium","Medium"],["high","High"]],p.risk)+'</div></div></section>';
  }
  function wireActivities(view){
   if(view.dataset.activitiesBound==="1")return;
@@ -137,7 +137,7 @@ const tornRoadmap=(()=>{
     write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
    }else if(el.dataset.homePref&&el.checked){
     const p=preferences(),key=el.dataset.homePref;
-    if(key==="priority"&&["growth","money"].includes(el.value)||key==="risk"&&["low","medium","high"].includes(el.value)){
+    if(key==="priority"&&["growth","networth","company","education"].includes(el.value)||key==="risk"&&["low","medium","high"].includes(el.value)){
      p[key]=el.value;write(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences",JSON.stringify(p));
     }
    }else return;
