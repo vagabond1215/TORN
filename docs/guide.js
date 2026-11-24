@@ -6,6 +6,15 @@ const topics = {
     summary: "Milestones and daily routine",
     intro: "Your beginner roadmap and daily tasks in one checklist.",
   },
+  stats: {
+    title: "Stats",
+    summary: "Four-stat calculator and happy-jump comparator",
+    intro: "Calculate gym gains, track perks, and compare natural energy with happy jumps.",
+    prompts: ["Record a baseline for your four battle stats.", "Pick one short-term training goal.", "Set a date to compare your progress."],
+  },
+  inventory: { title: "Inventory", summary: "Load only the categories you need", intro: "On-demand inventory, with per-category caching." },
+  education: { title: "Education", summary: "Courses and progress", intro: "Review your education progress and available courses." },
+  stocks: { title: "Stocks", summary: "Stock holdings and benefits", intro: "Review your stock portfolio and benefit blocks." },
   faction: {
     title: "Faction",
     summary: "Find your place in a crew",
@@ -14,12 +23,6 @@ const topics = {
   },
   jobs: { title: "Jobs", summary: "City careers and all 39 companies", intro: "Find training, permanent passives and player-owned job perks." },
   racing: { title: "Racing", summary: "Tracks, cars, upgrades and point saving", intro: "Reach Class A with points saved for a competitive car." },
-  stats: {
-    title: "Stats",
-    summary: "Four-stat calculator and happy-jump comparator",
-    intro: "Calculate gym gains, track perks, and compare natural energy with happy jumps.",
-    prompts: ["Record a baseline for your four battle stats.", "Pick one short-term training goal.", "Set a date to compare your progress."],
-  },
   crime: {
     title: "Crime",
     summary: "Crimes 2.0, CE, NNB and difficulty",
@@ -38,7 +41,6 @@ const topics = {
     intro: "Keep your faction’s war schedule, priorities, and instructions in one place.",
     prompts: ["Confirm the start time and your availability.", "Review your faction’s targeting and chain instructions.", "Check which supplies your faction will provide."],
   },
-  inventory: { title: "Inventory", summary: "Load only the categories you need", intro: "On-demand inventory, with per-category caching." },
   money: {
     title: "Money",
     summary: "Track income and costs",
@@ -54,6 +56,8 @@ const topics = {
 };
 
 const icons = {
+  education: '<path d="m2 9 10-5 10 5-10 5zM6 11v6c4 3 8 3 12 0v-6M22 9v7"/>',
+  stocks: '<path d="M3 3v18h18M5 15l5-5 4 3 7-8M16 5h5v5"/>',
   dashboard: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 10h18M10 10v11"/>',
   quickstart: '<path d="M4 12l5 5L20 6"/><path d="M4 4h16v16H4z"/>',
   home: '<path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-7h6v7"/>',
@@ -218,6 +222,8 @@ function renderTopic(route) {
   if (route === "stats") { view.innerHTML = tornStatPlanner.render()+tornToolsGuide.contextLinks("stats"); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render()+tornToolsGuide.contextLinks("racing"); tornRacingGuide.wire(view); return; }
   if (route === "crime") { view.innerHTML = tornCrimeGuide.render()+tornToolsGuide.contextLinks("crime"); if(activeProfile)wireNotes("crime"); return; }
+  if (route === "education") { view.innerHTML = renderEducationPage(); return; }
+  if (route === "stocks") { view.innerHTML = '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Stocks</h1><p>Stock holdings and benefits.</p></header>'+renderStocksPanel(); return; }
   if (route === "inventory") { view.innerHTML = renderInventoryPage()+tornToolsGuide.contextLinks("inventory"); return; }
   if (route === "jobs") { view.innerHTML = tornJobsGuide.render(); tornJobsGuide.wire(view); return; }
   if (route === "tools") { view.innerHTML = tornToolsGuide.render(); tornToolsGuide.wire(view); return; }
@@ -238,7 +244,7 @@ function renderTopic(route) {
       : chapter("Getting started", `<ul>${topic.prompts.map((item) => `<li>${item}</li>`).join("")}</ul>`)
         + chapter("Your notes", activeProfile ? notes : guest)}</div>`;
 
-  if (route === "money") view.innerHTML += renderStocksPanel();
+
   if (["money","war","attacking"].includes(route)) view.innerHTML += tornToolsGuide.contextLinks(route);
 
   if (route === "checklist") wireChecklist(view);
