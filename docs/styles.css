@@ -1648,3 +1648,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 #ts-plan-settings>.ts-settings-summary:before{content:none}
 #ts-plan-settings>.ts-settings-summary .ts-cooldown-mode{margin-left:auto}
 @media(max-width:700px){.ts-plan-toolbar .ts-template-toggles{flex-basis:100%}}
+
+/* Build reference tiles share the Plan settings visual language. */
+.tc-build-gyms.ts-perk-tiles,.tc-build-books>.ts-perk-tiles{display:flex;flex-wrap:wrap;align-items:stretch;gap:.4rem;margin:.4rem 0}
+.tc-build-gyms.ts-perk-tiles>.ts-perk-tile,.tc-build-books>.ts-perk-tiles>.ts-perk-tile{display:grid;align-content:start;gap:.12rem;max-width:100%;flex:0 1 auto}
+.tc-build-gyms .ts-perk-tile.is-active small{color:inherit}
+.tc-build-books .ts-perk-tile small{max-width:23rem}
