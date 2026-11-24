@@ -316,10 +316,14 @@ const tornTrainSequence=(()=>{
         const midnight=(day+1)*86400-cfg.tornClockMin*60-v.time;
         advance(Math.min(limit-v.time,v.drug||Infinity,Math.max(1,midnight)));
       }
-      if(v.energy>=eCap)checkin("Final full Energy");
     }
     if(v.time<limit)advance(limit-v.time);
-
+    // Spend remaining usable Energy at the common comparison endpoint,
+    // regardless of template or full-bar scheduling during the plan.
+    if(!v.errors.length&&v.energy>0){
+      const start=snap();
+      if(train()>0)v.log.push({i:"•",type:"train",parent:rowIndex,reason:"End of comparison · remaining Energy",start,end:snap()});
+    }
     point();
     const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice]];
     const missingPrice=unknownCandyPrice||prices.some(([qty,price])=>qty>0&&price==null);
