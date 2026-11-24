@@ -1532,3 +1532,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-step select,.ts-step input,.ts-add select{background:#181818;border-color:var(--border);color:var(--text)}
 :root[data-theme="light"] :is(.ts-step select,.ts-step input,.ts-add select){background:#fff}
 :root[data-theme="light"] .ts-arrows button{background:var(--raised);color:var(--text)}
+
+.ts-perk-tiles{display:flex;flex-wrap:wrap;gap:.4rem;margin:.35rem 0 .65rem}
+.ts-perk-tile{display:grid;gap:.12rem;padding:.35rem .55rem;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:4px;font-size:.73rem}
+.ts-perk-tile small{font-size:.67rem}
+.ts-perk-tile.is-active{background:var(--selected-bg);border-color:var(--selected-border);color:var(--selected-text)}
