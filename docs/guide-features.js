@@ -27,7 +27,7 @@ const tornGuideApi=(()=>{
     crime:["bars"],
     checklist:["bars","merits","meritCatalog","job"],
     money:["money"],
-    stocks:["stocks","stockCatalog"],
+    stocks:["stocks","stockCatalog","itemCatalog"],
     education:["education","educationCatalog","merits","meritCatalog"],
     inventory:[],
     racing:[], faction:[], attacking:[], war:[], tools:[]
@@ -671,22 +671,66 @@ function renderDashboard() {
 
 
 
+const stockView={sort:"default",query:"",filter:"all"};
+// Benefit requirements and reward names from the Torn stock market and Clairvoyant.
+// API definitions override fallback data. No personal holdings or prices are stored here.
+const stockFallback={
+ TCI:[1500000,0,"10% bank interest bonus"],SYM:[500000,7,"Drug Pack"],TGP:[2500000,0,"Company advertising boost"],WSU:[1000000,0,"10% course time reduction"],WLT:[9000000,0,"Private jet access"],TCP:[1000000,0,"Company sales boost"],FHG:[2000000,7,"Feathery Hotel Coupon"],MCS:[350000,7,"100 energy"],SYS:[3000000,0,"Advanced firewall"],PRN:[1000000,7,"Erotic DVD"],THS:[150000,7,"Box of Medical Supplies"],ASS:[1000000,7,"Six-Pack of Alcohol"],MSG:[300000,0,"Free classified advertising"],TMI:[6000000,31,"$25,000,000",25000000],IIL:[1000000,0,"50% coding time reduction"],LOS:[7500000,0,"25% mission reward bonus"],PTS:[10000000,7,"100 points"],YAZ:[1000000,0,"Free banner advertising"],TSB:[3000000,31,"$50,000,000",50000000],CNC:[7500000,31,"$80,000,000",80000000],EVL:[100000,7,"1000 happiness"],LSC:[500000,7,"Lottery Voucher"],MUN:[5000000,7,"Six-Pack of Energy Drink"],IST:[100000,0,"Free education courses"],TCC:[7500000,7,"Clothing Cache"],BAG:[3000000,7,"Ammunition Pack"],LAG:[750000,7,"Lawyer's Business Card"],CBD:[350000,7,"50 nerve"],GRN:[500000,31,"$4,000,000",4000000],ELT:[5000000,0,"10% home upgrade discount"],TCT:[100000,31,"$1,000,000",1000000],TCM:[1000000,0,"10% racing skill gain boost"],EWM:[1000000,7,"Box of Grenades"],HRG:[10000000,31,"Random Property"],IOU:[3000000,31,"$12,000,000",12000000]
+};
+function stockRows(){
+ const catalog=payload("stockCatalog","stocks"),holdings=payload("stocks","stocks"),items=payload("itemCatalog","items");
+ const list=Array.isArray(catalog)?catalog:Object.values(catalog||{}),owned=Array.isArray(holdings)?holdings:Object.values(holdings||{}),itemList=Array.isArray(items)?items:Object.values(items||{});
+ const num=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
+ return list.map(c=>{
+  const h=owned.find(x=>Number(x.id)===Number(c.id)),ticker=String(c.acronym||"").toUpperCase(),f=stockFallback[ticker]||[],b=c.benefit||{};
+  const price=num(c.current_price??c.price),shares=holdings==null?null:num(h?.shares??0),value=price!=null&&shares!=null?price*shares:null;
+  const req=num(b.requirement??b.shares??f[0]),freq=num(b.frequency??f[1]),description=typeof b.description==="string"?b.description:typeof b.name==="string"?b.name:f[2]||"Benefit unavailable";
+  const passive=String(b.type||"").toLowerCase()==="passive"||freq===0;
+  const tier=req>0&&shares!=null?Math.max(0,Math.floor(Math.log2(shares/req+1))):0;
+  const active=shares!=null&&req>0&&shares>=req,benefit=h?.dividend??h?.benefit;
+  const ready=benefit?.ready===true||Number(benefit?.ready)>0;
+  const progress=num(benefit?.progress),cycle=num(benefit?.frequency??freq);
+  const days=active&&!passive?(ready?0:progress!=null&&cycle>0?Math.max(0,cycle-progress):null):null;
+  const nextShares=req>0&&shares!=null&&!(passive&&active)?Math.max(0,req*(2**(tier+1)-1)-shares):null;
+  const nextCost=nextShares!=null&&price!=null?nextShares*price:null,blockCost=req>0&&price!=null?req*price:null;
+  const itemName=String(f[2]||description).toLowerCase(),item=itemList.find(x=>String(x.name||"").toLowerCase()===itemName);
+  const itemPrice=num(item?.market_value??item?.value?.market_price??item?.value?.market_value??item?.market_price);
+  const cashMatch=description.match(/^\$([\d,]+)$/);
+  const payout=num((cashMatch?cashMatch[1].replace(/,/g,""):null)??f[3]??itemPrice);
+  const daily=payout!=null&&freq>0?payout/freq:null,roi=daily!=null&&blockCost>0?daily*365/blockCost*100:null;
+  const nextRoi=daily!=null&&blockCost>0?daily*365/(blockCost*2**tier)*100:null;
+  const transactions=Array.isArray(h?.transactions)?h.transactions:Object.values(h?.transactions||{});
+  const costs=transactions.map(t=>{const n=num(t.shares),p=num(t.bought_price??t.price??t.purchase_price);return n!=null&&p!=null?n*p:null;});
+  const cost=shares===0?0:costs.length&&costs.every(x=>x!==null)&&transactions.reduce((sum,t)=>sum+(num(t.shares)||0),0)===shares?costs.reduce((sum,x)=>sum+x,0):null;
+  return {name:c.name||ticker,ticker,price,shares,value,req,freq,description,passive,tier,active,ready,days,nextShares,nextCost,blockCost,payout,daily,roi,nextRoi,cost,profit:cost!=null&&value!=null?value-cost:null};
+ });
+}
 function renderStocksPanel(){
-  let result="";
-  const stockPositions = ownedStockPositions();
-  result += '<section class="panel"><div class="panel-heading"><h2>Stock holdings and education benefit</h2></div><div class="panel-content"><div class="metric-grid">';
-  const wsuShares = heldWsuShares();
-  result += metric("WSU shares", wsuShares === null ? "Not available" : formatNumber(wsuShares), wsuShares !== null && wsuShares >= 1000000 ? "Education block unlocked" : "Goal: 1,000,000 shares");
-  result += metric("Stock positions", stockPositions ? formatNumber(stockPositions.length) : "Not available");
-  result += '</div>';
-  if (stockPositions && stockPositions.length) {
-    result += '<ul class="item-list stock-list">' + stockPositions.map(item =>
-      '<li><span>' + safe(item.details && (item.details.name || item.details.acronym) || "Stock #" + item.id) +
-      '</span><strong>' + safe(formatNumber(item.shares)) + ' shares</strong></li>').join("") + '</ul>';
-  }
-  result += sourceError("stocks") + sourceError("stockCatalog") + '</div></section>';
-
-  return result;
+ const rows=stockRows(),money=v=>v==null?"—":"$"+formatNumber(Math.round(v)),number=v=>v==null?"—":formatNumber(v),percent=v=>v==null?"—":v.toFixed(1)+"%";
+ const total=rows.filter(r=>r.shares>0),sum=key=>total.length&&total.every(r=>r[key]!=null)?total.reduce((n,r)=>n+r[key],0):null;
+ const options=[["default","Active dividends, then value"],["name","Stock name"],["value","Holdings value"],["shares","Shares owned"],["price","Share price"],["roi","Annual ROI (first block)"],["nextRoi","Annual ROI (next block)"],["nextCost","Cost to next block"],["days","Days to payout"],["daily","Daily dividend value"]];
+ const q=stockView.query.toLowerCase(),filtered=rows.filter(r=>(r.name+" "+r.ticker).toLowerCase().includes(q)&&(stockView.filter==="all"||stockView.filter==="owned"&&r.shares>0||stockView.filter==="active"&&r.active||stockView.filter==="cash"&&!r.passive||stockView.filter==="passive"&&r.passive));
+ const cmp=(a,b,k,asc=false)=>a[k]==null?(b[k]==null?0:1):b[k]==null?-1:asc?a[k]-b[k]:b[k]-a[k];
+ filtered.sort((a,b)=>stockView.sort==="default"?Number(b.active&&!b.passive)-Number(a.active&&!a.passive)||Number(b.active)-Number(a.active)||cmp(a,b,"value")||a.name.localeCompare(b.name):stockView.sort==="name"?a.name.localeCompare(b.name):cmp(a,b,stockView.sort,["nextCost","days"].includes(stockView.sort))||a.name.localeCompare(b.name));
+ let out='<section class="panel stock-market-panel"><div class="panel-heading"><h2>Stock Market</h2><span>Value: '+money(sum("value"))+' · Profit: '+money(sum("profit"))+'</span></div><div class="panel-content">';
+ out+='<div class="stock-controls"><label>Search <input data-stock-query value="'+safe(stockView.query)+'" placeholder="Stock name or ticker"></label><label>Show <select data-stock-filter>'+[["all","All stocks"],["owned","Owned"],["active","Active benefits"],["cash","Payout benefits"],["passive","Passive benefits"]].map(([v,l])=>'<option value="'+v+'" '+(stockView.filter===v?"selected":"")+'>'+l+'</option>').join("")+'</select></label><label>Sort <select data-stock-sort>'+options.map(([v,l])=>'<option value="'+v+'" '+(stockView.sort===v?"selected":"")+'>'+l+'</option>').join("")+'</select></label><small>'+filtered.length+' of '+rows.length+' stocks</small></div>';
+ out+='<div class="stock-table-scroll"><table class="stock-market-table"><thead><tr><th>Stock</th><th>Price</th><th>Owned / value</th><th>Dividend / benefit</th><th>Next benefit block</th><th>Annual ROI</th></tr></thead><tbody>';
+ for(const r of filtered){
+ const status=r.shares==null?"Holdings not loaded":!r.active?"Inactive":r.passive?"Benefit active":r.ready?"Collection ready":r.days!=null?"Ready in "+r.days+" days":"Payout timing unavailable";
+ out+='<tr class="'+(r.active?"stock-active":"")+'"><td><span class="stock-ticker">'+safe(r.ticker)+'</span><strong>'+safe(r.name)+'</strong></td><td>'+(r.price!=null?"$"+r.price.toFixed(2):"—")+'</td><td><strong>'+money(r.value)+'</strong><small>'+number(r.shares)+' shares</small>'+(r.cost!=null&&r.shares>0?'<small>Invested '+money(r.cost)+'</small>':'')+'</td><td><strong>'+safe(r.description)+'</strong><small class="'+(r.active?"stock-benefit-active":"")+'">'+safe(status)+(r.active&&!r.passive?' · '+r.tier+' block'+(r.tier===1?'':'s'):'')+'</small>'+(r.freq>0?'<small>Every '+r.freq+' days · '+money(r.payout)+' / block</small>':'')+'</td><td><strong>'+money(r.nextCost)+'</strong><small>'+number(r.nextShares)+' shares remaining</small><small>First block '+money(r.blockCost)+'</small></td><td><strong>'+percent(r.roi)+'</strong><small>Next: '+percent(r.nextRoi)+'</small><small>'+money(r.daily)+' / day</small></td></tr>';
+ }
+ return out+'</tbody></table></div><p class="fine-print">Annual dividend ROI uses current share prices and 365 days, excluding stock price changes. Item rewards use cached Torn market values; passive or unpriced rewards are not assigned a cash ROI. Next block cost is the additional shares required, excluding fees.</p>'+sourceError("stocks")+sourceError("stockCatalog")+sourceError("itemCatalog")+'</div></section>';
+}
+function wireStocksPanel(view){
+ if(view.dataset.stockBound==="1")return;view.dataset.stockBound="1";
+ view.addEventListener("change",event=>{
+ const el=event.target;
+ if(el.matches("[data-stock-sort]"))stockView.sort=el.value;
+ else if(el.matches("[data-stock-filter]"))stockView.filter=el.value;
+ else if(el.matches("[data-stock-query]"))stockView.query=el.value;
+ else return;
+ const panel=view.querySelector(".stock-market-panel");if(panel)panel.outerHTML=renderStocksPanel();
+ });
 }
 function renderInventoryPage(){
   let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Inventory</h1><p>Load only the item categories you need. Once loaded, each category is cached independently for 15 minutes and preserved between visits when Stay logged in is enabled.</p></header>';
