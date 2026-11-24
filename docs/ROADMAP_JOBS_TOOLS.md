@@ -167,3 +167,10 @@ No new API polling was added for status or progress bars; Home adds only the cac
 Home Energy, Nerve and Happy bars now advance locally at the regeneration tick predicted from the API's v2 tick timing fields, without additional API polling; Life is also projected. Over-cap special Happy values are not automatically reset when perk status is unclear. The static API snapshot disclaimer was removed.
 
 A compact Bank, virus, travel & racing panel shows the cached investment value, profit and maturity. Update activity manually fetches only stale virus, travel, personal racing records, and race history selections. Home and the TCT dropdown reuse cached bank and flight deadlines, and the virus completion uses its absolute until timestamp. Last fetch times are visible. A legacy personalstats category error is corrected and removed from restored cache without suppressing other API errors.
+
+
+## Site favicons in Quick Access (November 24, 2026)
+
+Quick Access now shows the websites' own favicon images instead of the previous generic hand-drawn symbols. Each of the eleven curated services loads a direct HTTPS favicon from its corresponding site origin, with the site name kept as a native hover tooltip and accessible link label. If a site moves or blocks its favicon, the browser tries a cached copy of that site's favicon and finally reveals the original SVG fallback. External icons use no-referrer image requests. No Torn API requests or user credentials are involved.
+
+All prior visibility and contextual filtering preferences remain unchanged. The toolbar preserves the current route when hiding or showing an icon. Browser-based integration tests covered all eleven direct favicon URLs, inaccessible-image fallback behavior, tooltip and label preservation, contextual filtering, hide/reset functionality, and absence of additional API requests. Origin favicon availability and pixel-perfect visual appearance still depend on the live provider websites.
