@@ -1315,3 +1315,14 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .job-section[open]>summary::before{transform:rotate(45deg)}
 .job-section:not([open])>summary{border-bottom:0}
 .job-section>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+.crime-reference{border-top:1px solid var(--border)}
+.crime-reference>summary{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.55rem;cursor:pointer;background:var(--raised)}
+.crime-reference>summary small{font-size:.72rem;color:var(--muted)}
+.crime-reference-body{padding:.65rem}
+.crime-reference-body h3{font-size:.83rem;margin:.5rem 0}
+.crime-equipment,.crime-recommendations{list-style:none;padding:0;margin:0}
+.crime-equipment li,.crime-recommendations li{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;border-bottom:1px solid var(--border);padding:.45rem 0;font-size:.78rem}
+.crime-equipment li small,.crime-recommendations li>span{margin-left:auto;color:var(--accent-strong)}
+.crime-equipment li>span,.crime-recommendations small{color:var(--muted)}
+.crime-recommendations small{display:block;margin-top:.2rem}
