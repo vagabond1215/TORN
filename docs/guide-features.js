@@ -14,7 +14,7 @@ const tornGuideApi=(()=>{
     basic:days, bars:2*mins, cooldowns:2*mins, money:15*mins,
     battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
-    stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs,
+    stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
     gymCatalog:90*days, meritCatalog:30*days, stockCatalog:7*days
   };
   const ROUTES={
@@ -22,7 +22,7 @@ const tornGuideApi=(()=>{
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
     jobs:["job","workstats"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
-    activity:["virus","travel","racingrecords"],
+    activity:["virus","travel","racingrecords","races"],
     crime:["bars"],
     checklist:["bars","merits","meritCatalog","job"],
     money:["money","stocks","stockCatalog"],
@@ -657,7 +657,7 @@ function renderDashboard() {
   // These are cached values only. User/virus, /travel and /racingrecords
   // are fetched exclusively when the player explicitly updates this panel.
   const bank=cash?.city_bank??null,virus=payload("virus","virus"),
-    travel=payload("travel","travel"),races=payload("racingrecords","racingrecords");
+    travel=payload("travel","travel"),races=payload("racingrecords","racingrecords"),raceHistory=payload("races","races");
   const unix=x=>{const v=Number(x);return Number.isFinite(v)&&v>1e9?(v>1e12?v:v*1000):null;};
   const when=x=>{const value=unix(x);return value?tornGuidePreferences.formatDate(value):"Not available";};
   const entry=(label,text,deadline)=>'<div class="home-pair"><dt>'+safe(label)+
@@ -682,7 +682,13 @@ function renderDashboard() {
   const flight=travel?tripEnd?destination:travel?.status||"No active flight":"Not loaded";
   const recordArray=Array.isArray(races)?races:
     Array.isArray(races?.records)?races.records:null;
-  const recentRecords=recordArray?recordArray.length+" track records":"Not loaded";
+  const recentRecords=recordArray?recordArray.length+" track"+(recordArray.length===1?"":"s")+" with records":"Not loaded";
+  const history=Array.isArray(raceHistory)?raceHistory:[];
+  const latest=[...history].sort((a,b)=>
+    Number(b?.schedule?.end??b?.schedule?.start??0)-Number(a?.schedule?.end??a?.schedule?.start??0))[0];
+  const myResult=latest?.results?.find(x=>Number(x.driver_id)===Number(st.identity?.id));
+  const latestLabel=latest?(latest.title||"Race #"+latest.id)+
+    (myResult?.position!=null?" · place "+myResult.position:""):"Not loaded";
   result+='<section class="panel home-activity"><div class="panel-heading"><h2>Bank, virus, travel &amp; racing</h2>'+
     '<button type="button" class="home-activity-refresh" data-home-activity-refresh title="Request only stale activity selections">Update activity</button>'+
     '</div><div class="panel-content"><dl class="home-stat-list">'+
@@ -690,10 +696,11 @@ function renderDashboard() {
       entry("Bank maturity",bank?.until!=null?when(bank.until):cash?"No active investment":"Not loaded")+
       entry("Virus",virus?vName:"Not loaded",vAt)+
       entry("Travel",flight,tripEnd)+
+      entry("Latest race",latestLabel)+
       entry("Racing records",recentRecords)+
-    '</dl><p class="fine-print">Bank values reuse the cached Money response. Virus, travel and racing records load on request. Racing records are best laps, not latest finishing position.</p>'+
+    '</dl><p class="fine-print">Bank values reuse the cached Money response. Virus, travel and racing history load on request; records are personal best laps. Latest race placement is shown only when the API includes your own result.</p>'+
     '<p class="fine-print">Last fetched: Money '+safe(st.fetchedAt.money?tornGuidePreferences.formatDate(st.fetchedAt.money):"not loaded")+
-    ' · Activity '+safe(Math.max(0,...["virus","travel","racingrecords"].map(k=>Number(st.fetchedAt[k])||0))?
+    ' · Activity '+safe(Math.max(0,...["virus","travel","racingrecords","races"].map(k=>Number(st.fetchedAt[k])||0))?
       tornGuidePreferences.formatDate(Math.max(...["virus","travel","racingrecords"].map(k=>Number(st.fetchedAt[k])||0))):"not loaded")+'</p>'+
     '<span class="sr-only" id="home-activity-status" role="status"></span></div></section>';
 
