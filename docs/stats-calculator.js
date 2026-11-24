@@ -27,7 +27,7 @@ const tornStatPlanner = (() => {
     ["The Sports Science Lab",25,9,9,9,9]
   ].map((g,i) => ({id:i+1,name:g[0],energy:g[1],strength:g[2],speed:g[3],defense:g[4],dexterity:g[5],offline:true}));
   const state = {
-    gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"gym",
+    bonusOpen:{}, gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"gym",
     statValues:{strength:1000,defense:1000,speed:1000,dexterity:1000},
     trainCount:1, trainMax:false, calcCandyQty:0, calcCandyHappy:25, calcCandyMax:false,
     extra:{strength:0,defense:0,speed:0,dexterity:0},
@@ -313,14 +313,15 @@ const tornStatPlanner = (() => {
     const eff=effectsFor(stat);
     const projected=singleStatSession(stat,trainingCount(gym)*gym.energy,gym);
     const disabled=!gym[stat];
-    let bonuses='<div class="tc-gain-sources">';
+    const totalBonus=(eff.multiplier-1)*100;
+    let bonuses='<details class="tc-total-bonus" data-tc-bonus-stat="'+stat+'" '+(state.bonusOpen[stat]?"open":"")+'><summary><span>Total Bonus</span><strong class="'+(totalBonus<0?"tc-neg":totalBonus>0?"tc-pos":"")+'" title="'+(eff.sourceAvailable?"Combined training multiplier":"Partial estimate: API perks unavailable")+'">'+(totalBonus>=0?"+":"")+nice(totalBonus,2)+'%</strong></summary><div class="tc-gain-sources">';
     for(const group of eff.groups) {
       const label=group.group==="job"?"Job / workplace":group.group[0].toUpperCase()+group.group.slice(1);
       bonuses+='<div class="tc-mod-row" title="'+esc(group.items.map(entry=>entry.text).join("\n"))+'"><span>'+esc(label)+'</span><strong class="'+(group.total<0?"tc-neg":group.total>0?"tc-pos":"")+'">'+(group.total>=0?"+":"")+nice(group.total,2)+'%</strong></div>';
     }
     bonuses+='</div>';
     bonuses+='<label class="tc-manual"><span>Custom gym-gain %</span><input type="number" min="-95" max="300" step="0.1" data-tc-extra="'+stat+'" value="'+esc(state.extra[stat])+'"></label>';
-    bonuses+='<p class="tc-multiplier">Training multiplier ×'+nice(eff.multiplier,3)+(eff.sourceAvailable?"":" · API perks unavailable")+'</p>';
+    bonuses+='<p class="tc-multiplier">Training multiplier ×'+nice(eff.multiplier,3)+(eff.sourceAvailable?"":" · API perks unavailable")+'</p></details>';
     return '<div class="tc-stat-col '+(disabled?"tc-disabled":"")+'"><div class="tc-stat-title">'+readable[stat]+'</div>'+
       '<div class="tc-field"><label for="tc-stat-'+stat+'">Current stat</label><div class="tc-stat-input-row"><input id="tc-stat-'+stat+'" data-tc-stat="'+stat+'" type="number" min="0" step="1" value="'+esc(state.statValues[stat])+'"><button type="button" class="tc-stat-reset" data-tc-reset="'+stat+'" title="Reset '+readable[stat]+' to current API value" aria-label="Reset '+readable[stat]+'" '+(apiStatValue(stat)===null?'disabled':'')+'><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.6-4.6L3 9m0-6v6h6"/><path d="M4 13a8 8 0 0 0 14.6 4.6L21 15m0 6v-6h-6"/></svg></button></div></div>'+
       '<div class="tc-stat-meta"><span>Gym dots</span><strong>'+(disabled?"Unavailable":nice(gym[stat],1))+'</strong></div>'+
@@ -483,7 +484,7 @@ const tornStatPlanner = (() => {
     if (view.dataset.tcPlannerBound === "1") return;
     view.dataset.tcPlannerBound = "1";
     tornTrainSequence.wire(view);
-    view.addEventListener("toggle",event=>{if(event.target.matches?.(".tc-gym-info")&&event.target.isConnected)state.gymInfoOpen=event.target.open;},true);
+    view.addEventListener("toggle",event=>{if(event.target.matches?.(".tc-gym-info")&&event.target.isConnected)state.gymInfoOpen=event.target.open;if(event.target.matches?.("[data-tc-bonus-stat]")&&event.target.isConnected)state.bonusOpen[event.target.dataset.tcBonusStat]=event.target.open;},true);
     view.addEventListener("change",event=>{
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const el=event.target;
