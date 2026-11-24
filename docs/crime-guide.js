@@ -77,26 +77,144 @@ const tornCrimeGuide = (() => {
         '<p class="fine-print"><a href="'+wiki(name)+'" target="_blank" rel="noopener noreferrer">Full unique outcomes and requirements</a> · <a href="'+index+'" target="_blank" rel="noopener noreferrer">Community profitability index</a></p></div></details>';
       }).join("")+'</div></section>';
   }
+  // OC scenario-level equipment checklist. Quantities here are personal reserves,
+  // not the total required by all members of a team.
+  const ocReference=[
+    [1,"First Aid and Abet","Lockpicks","Shaving Foam"],
+    [1,"Mob Mentality","Jemmy",""],
+    [1,"Pet Project","Net|Lockpicks","Dog Treats"],
+    [2,"Disorderly Conduct","Megaphone","Spray Paint : Pink|Molotov Cocktail|Brick"],
+    [2,"Thou Shalt Not Steal","Lockpicks|Cassock","Cell Phone"],
+    [2,"Cash Me If You Can","","ID Badge|ATM Key"],
+    [2,"Best of the Lot","Lockpicks|Police Badge",""],
+    [3,"Smoke and Wing Mirrors","DSLR Camera|RF Detector",""],
+    [3,"Market Forces","","Gasoline"],
+    [3,"Gaslight the Way","Construction Helmet","ID Badge"],
+    [4,"Snow Blind","","PCP"],
+    [4,"Plucking the Lotus Petal","","Blank Casino Chips"],
+    [4,"Stage Fright","Binoculars",""],
+    [5,"Guardian Angels","","Hand Drill"],
+    [5,"Honey Trap","Billfold",""],
+    [5,"Counter Offer","Wire Cutters|Lockpicks","Zip Ties|Polymorphic Virus"],
+    [5,"No Reserve","Bolt Cutters","Spray Paint : Black|Chloroform"],
+    [6,"Bidding War","Jemmy|Dental Mirror","C4 Explosive|Flash Grenade"],
+    [6,"Leave No Trace","Police Badge",""],
+    [6,"Dish It Out","Bolt Cutters|Wire Cutters","Thermite|Ipecac Syrup"],
+    [6,"Sneaky Git Grab","Wireless Dongle","Tunneling Virus"],
+    [7,"Blast from the Past","Core Drill","Zip Ties|Shaped Charge|Firewalk Virus"],
+    [7,"Window of Opportunity","Wire Cutters|Ladder|Angle Grinder","Razor Wire|Floor Cleaner"],
+    [7,"Cleared for Takeoff","Large Suitcase|Hand Drill|Tracking Device|Bone Saw",""],
+    [8,"Break the Bank","Hand Drill","Zip Ties"],
+    [8,"Ship Happens","Core Drill","Single Red Rose"],
+    [8,"Clinical Precision","","Chloroform|Blood Bag : Irradiated|Syringe"],
+    [8,"Stacking the Deck","Jemmy","Smoke Grenade|ID Badge|Stealth Virus"],
+    [8,"Lock Stock","","Ecstasy|Lubricant|Armored Virus"],
+    [8,"Manifest Cruelty","Cigar Cutter|Car Battery","Zip Ties|Stealth Virus"],
+    [9,"Ace in the Hole","","ID Badge"],
+    [9,"Gone Fission","DSLR Camera|Cut-Throat Razor","Zip Ties|Thermite|C4 Explosive"],
+    [9,"Hostile Takeover","China Lake","Tunneling Virus|PSU|Hard Drive|Igniter Cord|Nail Bomb"],
+    [10,"Crane Reaction","Binoculars|Remote Detonator","Shaped Charge|Tear Gas"]
+  ];
+  const extraCrimeItems=[
+    ["Search for Cash","Lost and Found Office Key|Bucket",1],
+    ["Bootlegging","Blank DVDs",10],
+    ["Graffiti","Spray Paint : Black|Spray Paint : Blue|Spray Paint : Green|Spray Paint : Orange|Spray Paint : Pink|Spray Paint : Purple|Spray Paint : Red|Spray Paint : White",3],
+    ["Card Skimming","Card Skimmer",5],
+    ["Disposal","Double Cut File|Handkerchief|Wheelbarrow|Shovel",1],
+    ["Disposal","Anchor|Bleach|Disposable Mask|Gasoline|Hydrochloric Acid|Lye|Paper Towels|Rope",2],
+    ["Burglary","Lockpicks|Rope",1],
+    ["Cracking","Computer Fan|CPU|ECPU|HPCPU|Heat Sink",1],
+    ["Forgery","Card Programmer|Crucible|Embosser|Fountain Pen|Graver|Grinding Stone|Hand Drill|Hole Punch|Hot Foil Stamper|Lump of Coal|Perforator|Permanent Marker|Polishing Pad|Printer|Scissors|Sewing Kit|Thimble|Wax Seal Stamp",1],
+    ["Forgery","Adhesive Plastic|Aluminum Plate|Bank Statement|Binder|Bond Paper|Bonded Latex|Brass Ingot|Candle|Cardstock|Certificate Seal|Crushed Enamel|Glow Stick|Glue|Inkwell|Lanyard|Medical Bill|PVC Cards|Picture Frame|Toner",3],
+    ["Arson","Diesel|Fire Extinguisher|Gasoline|Hydrogen Tank|Kerosene|Magnesium Shavings|Methane Tank|Oxygen Tank|Potassium Nitrate|Sand|Thermite",3]
+  ];
+  const reserveDefaults=[
+    ["Xanax","Drug",12],["Ecstasy","Drug",2],["Erotic DVD","Booster",5],
+    ["Small First Aid Kit","Medical",20],["First Aid Kit","Medical",10],["Morphine","Medical",10]
+  ];
   function recommendations(){
-    const st=tornGuideApi.state;
-    const ready=["Tool","Enhancer"].every(c=>Array.isArray(st.inventory[c])&&!st.inventoryErrors[c]);
-    const candidates=[];
-    if(ready){
-      for(const ref of reference){
-        const name=ref[0],cs=skill(name);
-        // No purchase recommendations from an unknown or unstarted skill.
-        if(cs===null||cs<=1||cs>=100)continue;
-        for(const [item,cat,reason,min] of equipment(ref)){
-          if(min&&cs<min||inventoryStatus(item,cat)!==false)continue;
-          candidates.push({name,item,reason,cs,price:market(item)});
-        }
+    const st=tornGuideApi.state,raw=payload("itemCatalog","items");
+    const catalog=Array.isArray(raw)?raw:Object.values(raw||{});
+    const itemsByName=new Map(catalog.map(x=>[normalize(x.name),x]));
+    const itemsById=new Map(catalog.map(x=>[String(x.id),x]));
+    const ready=cat=>Array.isArray(st.inventory[cat])&&!st.inventoryErrors[cat];
+    const qty=x=>Math.max(0,Number(x.amount??x.quantity??0)||0);
+    const category=x=>{const t=x?.type?.name??x?.type??x?.category?.name??x?.category;return typeof t==="string"?t:null;};
+    const matches=(x,name)=>normalize(x.name??x.item?.name??itemsById.get(String(x.id??x.item_id))?.name)===normalize(name);
+    function count(name,hint){
+      const cat=category(itemsByName.get(normalize(name)))||hint;
+      // Search all fetched categories for positive holdings first; missing stock
+      // is only inferred when the matching catalog category was fully loaded.
+      const all=Object.entries(st.inventory).filter(([k])=>ready(k)).flatMap(([,list])=>list);
+      if(cat&&ready(cat))return st.inventory[cat].filter(x=>matches(x,name)).reduce((n,x)=>n+qty(x),0);
+      const owned=all.filter(x=>matches(x,name)).reduce((n,x)=>n+qty(x),0);
+      return owned||null;
+    }
+    const buckets={current:new Map(),stock:new Map(),crime:new Map(),oc:new Map()};
+    function add(bucket,item,hint,target,reason,level){
+      const n=count(item,hint);
+      if(n===null||n>=target)return;
+      const key=normalize(item),map=buckets[bucket],old=map.get(key);
+      if(old){old.target=Math.max(old.target,target);if(!old.reasons.includes(reason))old.reasons.push(reason);old.level=Math.min(old.level,level??99);return;}
+      map.set(key,{item,owned:n,target,reasons:[reason],price:market(item),level:level??99});
+    }
+    // Assigned OC items take precedence over elective stockpiling. API slot
+    // formats vary; only recommend exact requirements explicitly attributed to us.
+    const oc=payload("organizedcrime","organizedcrime");
+    const slots=oc?.slots??oc?.crime?.slots??[];
+    const self=String(st.identity?.id??"");
+    for(const slot of Array.isArray(slots)?slots:Object.values(slots||{})){
+      const member=slot.user??slot.member??slot.participant;
+      if(!self||String(member?.id??member?.user_id??slot.user_id??slot.member_id??"")!==self)continue;
+      const needs=slot.item_requirements??slot.required_items??slot.items??(slot.item_requirement?[slot.item_requirement]:[]);
+      for(const req of Array.isArray(needs)?needs:Object.values(needs||{})){
+        if(req?.is_available===true||req?.available===true||req?.fulfilled===true)continue;
+        const item=itemsById.get(String(req?.id??req?.item_id??req?.item?.id));
+        const name=req?.item?.name??req?.name??item?.name;
+        if(name)add("current",name,category(item),Math.max(1,Number(req.quantity??req.amount??1)||1),oc?.name??oc?.crime?.name??"Assigned OC");
       }
     }
-    candidates.sort((a,b)=>b.cs-a.cs||(a.price??Infinity)-(b.price??Infinity));
-    const rows=candidates.map(x=>'<li><div><strong>'+esc(x.item)+'</strong><small>'+esc(x.name)+' · CS '+number(x.cs)+' · '+esc(x.reason)+'</small></div><span>'+(x.price===null?"Price unavailable":"$"+number(x.price))+'</span></li>').join("");
-    return '<details class="home-expand-panel" open><summary>Recommendations'+(candidates.length?" ("+candidates.length+")":"")+'</summary><div class="home-expand-body">'+
-      (!ready?'<p>Waiting for Tool and Enhancer inventory. Missing or inaccessible inventory is not treated as empty.</p>':rows?'<ul class="crime-recommendations">'+rows+'</ul>':'<p>No missing equipment identified for known in-progress crime skills. If skill data is unavailable, recommendations are withheld.</p>')+
-      '<p class="fine-print">Compare prices and free unique rewards before buying. Suggestions are read-only and based on cached Torn data. <a href="#crime">Crime reference</a> · <a href="https://www.torn.com/page.php?sid=ItemMarket" target="_blank" rel="noopener noreferrer">Item Market</a></p></div></details>';
+    for(const ref of reference){
+      const cs=skill(ref[0]);
+      if(cs===null||cs<=1)continue;
+      for(const [item,cat,reason,min] of equipment(ref)){
+        if(min&&cs<min)continue;
+        if(cs>=100&&cat==="Enhancer")continue;
+        add("crime",item,cat,1,ref[0]+" · "+reason);
+      }
+    }
+    for(const [name,names,target] of extraCrimeItems){
+      const cs=skill(name);if(cs===null||cs<=1)continue;
+      for(const item of names.split("|"))add("crime",item,null,target,name+" · optional stock");
+    }
+    for(const [level,name,tools,materials] of ocReference){
+      for(const item of tools.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · reusable",level);
+      for(const item of materials.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · consumed",level);
+    }
+    for(const [name,cat,target] of reserveDefaults)add("stock",name,cat,target,"Suggested reserve");
+    for(const [cat,target] of [["Candy",50],["Alcohol",25],["Energy Drink",5]]){
+      if(!ready(cat))continue;
+      const owned=st.inventory[cat].reduce((n,x)=>n+qty(x),0);
+      if(owned<target)buckets.stock.set(cat,{item:cat+" (any type)",owned,target,reasons:["Suggested category reserve"],price:null,level:99});
+    }
+    // Avoid duplicate shopping rows while retaining every relevant use.
+    const seen=new Map();
+    for(const group of Object.values(buckets))for(const [key,x] of group){
+      if(!seen.has(key)){seen.set(key,x);continue;}
+      const first=seen.get(key);first.target=Math.max(first.target,x.target);first.reasons=[...new Set([...first.reasons,...x.reasons])];group.delete(key);
+    }
+    const rows=group=>[...group.values()].sort((a,b)=>a.level-b.level||a.item.localeCompare(b.item)).map(x=>{
+      const missing=x.target-x.owned;
+      return '<li><div><strong>'+esc(x.item)+'</strong><small>'+esc(x.reasons.join(" · "))+'</small></div><span title="Owned / suggested reserve">'+number(x.owned)+' / '+number(x.target)+'</span><span>+'+number(missing)+(x.price===null?"":" · $"+number(missing*x.price))+'</span></li>';
+    }).join("");
+    const section=(label,group,open=false)=>group.size?'<details class="rec-group" '+(open?"open":"")+'><summary>'+esc(label)+' ('+group.size+')</summary><ul class="crime-recommendations">'+rows(group)+'</ul></details>':"";
+    const total=[...Object.values(buckets)].reduce((n,g)=>n+g.size,0);
+    const pending=tornGuideApi.inventoryTypes.filter(c=>!ready(c));
+    return '<details class="home-expand-panel" open><summary>Recommendations'+(total?" ("+total+")":"")+'</summary><div class="home-expand-body">'+
+      section("Assigned OC requirements",buckets.current,true)+section("Low consumable reserves",buckets.stock,true)+section("Crime equipment & materials",buckets.crime,true)+section("Optional OC supplies by difficulty",buckets.oc)+
+      (!total?'<p>No shortages identified in loaded inventory.</p>':"")+
+      (pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+
+      '<p class="fine-print">Reserve targets are suggested defaults, not mandatory purchases. Check faction loans and your assigned role before buying OC supplies. <a href="#crime">Crimes</a> · <a href="https://wiki.torn.com/wiki/Organized_Crime_2.0" target="_blank" rel="noopener noreferrer">OC Wiki</a> · <a href="https://www.torn.com/page.php?sid=ItemMarket" target="_blank" rel="noopener noreferrer">Item Market</a></p></div></details>';
   }
   function render(){
     const bars=tornGuideApi.state.data.bars;
