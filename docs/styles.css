@@ -1403,3 +1403,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .stock-detail-pair>strong{white-space:nowrap}
 .stock-detail-grid .fine-print{font-size:.68rem;white-space:normal;margin:.35rem 0 0}
 @media(max-width:700px){.stock-detail-grid{grid-template-columns:1fr;gap:.6rem}}
+
+.edu-inline-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:.25rem 1rem;margin:.35rem 0;font-size:.75rem}
+.edu-inline-pair{display:inline-flex;align-items:baseline;gap:.35rem;white-space:nowrap;color:var(--muted)}
+.edu-inline-pair strong{display:inline;color:var(--text);font-variant-numeric:tabular-nums}
