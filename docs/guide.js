@@ -177,29 +177,15 @@ function updateSidebarCharacter(){
     return;
   }
   const money=payload("money","money"),merits=payload("merits","merits"),
-    bars=payload("bars","bars"),basic=payload("basic","profile");
-  const progress=basic?.level_progress??basic?.level_progress_percentage??
-    basic?.level_progress_percent??identity?.level_progress;
-  const percent=progress&&typeof progress==="object"?
-    (progress.percentage??progress.percent):progress;
-  const xpNumber=percent===null||percent===undefined?NaN:Number(percent);
-  const xp=Number.isFinite(xpNumber)&&xpNumber>=0&&xpNumber<=100?
-    (Math.round(xpNumber*10)/10)+"%":"Not available";
+    bars=payload("bars","bars");
   const wallet=money?.wallet!=null?"$"+formatNumber(money.wallet):"Not loaded";
-  details.innerHTML=
-    '<dl class="sidebar-facts">'+
-      homePair("Money",wallet,"home-money")+
-      homePair("Level",identity?.level??"Not loaded")+
-      homePair("Points",money?.points??"Not loaded")+
-      homePair("Merits",merits?.available??"Not loaded")+
+  details.innerHTML='<dl class="sidebar-facts">'+
+    homePair("Money",wallet,"home-money")+
+    homePair("Level",identity?.level??"Not loaded")+
+    homePair("Points",money?.points??"Not loaded")+
+    homePair("Merits",merits?.available??"Not loaded")+
     '</dl><div class="sidebar-bars">'+
-      ["energy","nerve","happy","life"].map(key=>homeBar(key,bars?.[key])).join("")+
-    '</div><div class="sidebar-level-xp"><div class="sidebar-level-xp-head">'+
-      '<span>Level XP</span><strong>'+safe(xp)+'</strong></div>'+
-      (Number.isFinite(xpNumber)&&xpNumber>=0&&xpNumber<=100?
-        '<div class="sidebar-level-xp-track" role="progressbar" aria-label="Level experience" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+xpNumber+'">'+
-        '<span style="width:'+Math.min(100,Math.max(0,xpNumber))+'%"></span></div>':'')+
-    '</div><a class="sidebar-account-link" href="#profile">Account &amp; API</a>';
+    ["energy","nerve","happy","life"].map(key=>homeBar(key,bars?.[key])).join("")+'</div>';
 }
 function renderProfile() {
   byId("profile-link").textContent = activeProfile
@@ -295,6 +281,7 @@ function renderRoute() {
   const isTopic = Object.hasOwn(topics, route);
   const navRoute = isTopic ? route : "home";
   tornToolsGuide.updateBar(route);
+  tornRightRail.render(route);
   byId("home-grid").hidden = route !== "profile" && (route !== "home" || tornGuideApi.isConnected());
   byId("topic-view").hidden = !isTopic && route !== "home";
   for (const link of document.querySelectorAll(".nav-link")) {
@@ -333,6 +320,7 @@ sidebarDisclosure.addEventListener("toggle",()=>{
 });
 renderProfile();
 tornTctClock.init();
+tornRightRail.init();
 renderRoute();
 window.addEventListener("hashchange", renderRoute);
 document.getElementById("topic-view").addEventListener("click",async event=>{
@@ -422,6 +410,7 @@ function updateSyncCounter(){
 function updateRefreshUI(){
   updateApiStatus();
   updateSidebarCharacter();
+  tornRightRail.render(tornGuideApi.routeName());
   const connected=tornGuideApi.isConnected();
   const busy=tornGuideApi.state.loading;
   const top=byId("refresh-top"),profile=byId("refresh-data");
@@ -466,7 +455,7 @@ byId("remember-active").addEventListener("change",event=>{
   renderProfile();
 });
 window.addEventListener("torn-guide-sync",updateRefreshUI);
-setInterval(()=>{updateSyncCounter();updateHomeLiveBars();},1000); // local DOM updates only; no Torn API calls
+setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornRightRail.tick();},1000); // local DOM updates only; no Torn API calls
 
 // The ellipsis is an unframed button; settings remain independent of API login.
 function syncSettingsControls(){

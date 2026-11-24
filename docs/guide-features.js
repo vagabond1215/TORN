@@ -22,6 +22,7 @@ const tornGuideApi=(()=>{
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
     jobs:["job","workstats"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
+    railTimers:["education","virus","cooldowns","organizedcrime","factionRankedWars","travel","money"],
     activity:["virus","travel","racingrecords","races"],
     crime:["bars"],
     checklist:["bars","merits","meritCatalog","job"],
@@ -280,7 +281,7 @@ const tornGuideApi=(()=>{
     if(succeeded){state.updated=now();state.cached=false;}
     if(!succeeded)state.storageWarning="No requested Torn API selections updated; last data is retained.";
     state.loading=false;save();announce();
-    if(typeof renderRoute==="function" && location.hash!=="#profile" && route!=="timers")renderRoute();
+    if(typeof renderRoute==="function" && location.hash!=="#profile" && route!=="timers" && route!=="railTimers")renderRoute();
     return {failures,requested:jobs.length,skipped:false};
   }
   function refresh(options={}){
@@ -609,7 +610,7 @@ function networthPanel(){
     '<div class="panel-content">';
   if(!wealth||!Number.isFinite(Number(wealth.total))){
     return out+'<p class="networth-not-loaded">Net worth '+(error?"unavailable":"not loaded yet")+
-      '</p>'+error+'<p class="fine-print">Torn API net-worth selection refreshes at most hourly.</p></div></section>';
+      '</p>'+error+'</div></section>';
   }
   out+='<div class="networth-total" aria-label="Total net worth"><small>Total net worth</small>'+
     '<strong>'+safe(networthAmount(wealth.total))+'</strong></div>';
@@ -635,9 +636,9 @@ function networthPanel(){
       safe(networthAmount(wealth.points))+'</strong></div>';
   }
   const snapshot=Number(wealth.timestamp)*1000||tornGuideApi.state.fetchedAt.networth;
-  out+='<p class="networth-footnote">Torn-calculated total · '+safe(
-    snapshot?tornGuidePreferences.formatDate(snapshot):"timestamp unavailable")+
-    ' · hourly cache</p>'+error+'</div></section>';
+  const date=snapshot?tornGuidePreferences.formatDate(snapshot)
+    .replace(/(\b\d{4}),\s+(?=\d{1,2}:)/,"$1 "):"Date unavailable";
+  out+='<p class="networth-footnote">'+safe(date)+'</p>'+error+'</div></section>';
   return out;
 }
 function renderDashboard() {
@@ -663,42 +664,18 @@ function renderDashboard() {
   const currentJob=job?.name||job?.company_name||job?.position||"Not available";
   const homeProperty=property?.name||property?.property?.name||"Not available";
 
-  result+='<div class="home-summary-grid">'+
-    '<section class="panel home-battle"><div class="panel-heading"><h2>Battle stats <a href="#stats" title="Open training calculator">Calc</a></h2></div><div class="panel-content">'+
-      homeStatList([
-        ["Strength",statValue("strength")],
-        ["Defense",statValue("defense")],
-        ["Speed",statValue("speed")],
-        ["Dexterity",statValue("dexterity")],
-        ["Total",statValue("total")]
-      ])+sourceError("battlestats")+
-    '</div></section>'+
-    '<section class="panel home-work"><div class="panel-heading"><h2>Working stats <a href="#jobs" title="Open Jobs and careers">Jobs</a></h2></div><div class="panel-content">'+
-      homeStatList([
-        ["Manual labor",workValue("manual_labor","manual","man")],
-        ["Intelligence",workValue("intelligence","intel","int")],
-        ["Endurance",workValue("endurance","end")]
-      ])+'<p class="home-subline">Job: '+safe(currentJob)+'</p>'+sourceError("workstats")+
-    '</div></section>'+
-    networthPanel()+
-  '</div>';
 
   result+='<div class="home-secondary-grid">'+
     '<section class="panel"><div class="panel-heading"><h2>Account &amp; progress</h2></div>'+
     '<div class="panel-content">'+homeStatList([
-      ["Property",homeProperty],
       ["Current gym",gym?.name||"Not available"],
       ["Bank",cash?.city_bank?.amount!=null?"$"+formatNumber(cash.city_bank.amount):"Not available"],
       ["Education merit",meritLevel("Education Length")===null?"Not loaded":meritLevel("Education Length")+"/10"],
       ["Bank merit",meritLevel("Bank Interest")===null?"Not loaded":meritLevel("Bank Interest")+"/10"],
       ["Education",education?.current?"Course #"+education.current.id:education?"None active":"Not loaded"]
     ])+'</div></section>'+
-    '<section class="panel"><div class="panel-heading"><h2>Cooldowns &amp; next steps</h2></div>'+
-    '<div class="panel-content">'+homeStatList([
-      ["Drug",cdText(cooldowns?.drug)],
-      ["Booster",cdText(cooldowns?.booster)],
-      ["Medical",cdText(cooldowns?.medical)]
-    ])+'<div class="home-action-links">'+
+    '<section class="panel"><div class="panel-heading"><h2>Quick actions</h2></div>'+
+    '<div class="panel-content"><div class="home-action-links">'+
        '<a href="#stats">Train</a><a href="#crime">Crimes</a>'+
        '<a href="#checklist">Checklist</a><a href="#inventory">Inventory</a>'+
        '<a href="#money">Money</a>'+
