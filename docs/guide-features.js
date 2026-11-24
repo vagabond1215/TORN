@@ -30,7 +30,7 @@ const tornGuideApi=(()=>{
     money:["money"],
     stocks:["stocks","stockCatalog","itemCatalog"],
     education:["education","educationCatalog","merits","meritCatalog","stocks","stockCatalog","perks"],
-    inventory:[],
+    inventory:["itemCatalog"],
     racing:[], faction:[], attacking:[], war:[], tools:[]
   };
   const state={identity:null,data:{},inventory:{},errors:{},inventoryErrors:{},
@@ -790,8 +790,43 @@ function wireStocksPanel(view){
  const panel=view.querySelector(".stock-market-panel");if(panel)panel.outerHTML=renderStocksPanel();
  });
 }
+const inventoryExpanded=new Set();
+let inventoryExpandedOwner=null;
+function inventoryDetailRow(item,category,index){
+  const owner=tornGuideApi.state.identity?.id??null;
+  if(owner!==inventoryExpandedOwner){inventoryExpanded.clear();inventoryExpandedOwner=owner;}
+  const raw=payload("itemCatalog","items");
+  const catalog=Array.isArray(raw)?raw:Object.entries(raw||{}).map(([id,x])=>({...x,id:x.id??id}));
+  const name=String(item.name??item.item?.name??"Unknown item");
+  const numericId=v=>/^\d+$/.test(String(v??""))&&Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):null;
+  const supplied=numericId(item.item_id??item.item?.id??item.id);
+  const exact=catalog.filter(x=>String(x.name??"").trim().toLowerCase()===name.trim().toLowerCase());
+  const record=exact.find(x=>numericId(x.id)===supplied)??(exact.length===1?exact[0]:null);
+  const id=numericId(record?.id)??(!catalog.length?numericId(item.item_id??item.item?.id):null);
+  const rowKey=category+":"+String(id??name)+":"+String(item.uid??item.unique_id??index);
+  const info=record??item.item??item;
+  const description=typeof info.description==="string"&&info.description.trim()?info.description:"Description unavailable in cached item data.";
+  const effectText=value=>{
+    if(typeof value==="string")return value.trim();
+    if(Array.isArray(value))return value.map(effectText).filter(Boolean).join(" · ");
+    if(value&&typeof value==="object")return Object.entries(value).map(([k,v])=>{const t=typeof v==="number"||typeof v==="boolean"?String(v):effectText(v);return t?k.replace(/_/g," ")+": "+t:"";}).filter(Boolean).join(" · ");
+    return "";
+  };
+  const effects=effectText(info.effect??info.effects??item.effect??item.effects);
+  const price=info.market_value??info.value?.market_price??info.value?.market_value??info.market_price;
+  const qty=Number(item.amount??item.quantity);
+  const validPrice=price!=null&&Number.isFinite(Number(price))&&Number(price)>0;
+  const url=id?"https://weav3r.dev/dashboard?tab=marketplace&intent=sell&item="+id:"";
+  return '<li class="inventory-detail-row"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span>'+safe(name)+(item.equipped?' <small>(equipped)</small>':'')+'</span><strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body"><p>'+safe(description)+'</p><dl><dt>Type</dt><dd>'+safe(category)+'</dd>'+(id?'<dt>Item ID</dt><dd>'+id+'</dd>':'')+'<dt>Effects</dt><dd>'+safe(effects||"No effect information available")+'</dd><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+'<div class="inventory-market-actions">'+(url?'<a class="button secondary inventory-market-link" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">$</span> Search Weav3r buyers</a>':'<small>Item ID unavailable; marketplace search disabled.</small>')+'</div><p class="fine-print">Manual search opens Weav3r; no buyer demand is verified in the guide.</p></div></details></li>';
+}
+if(typeof document!=="undefined")document.addEventListener("toggle",event=>{
+  const el=event.target,key=el.dataset?.inventoryDetail;
+  if(!key||!el.isConnected)return;
+  if(el.open)inventoryExpanded.add(key);else inventoryExpanded.delete(key);
+},true);
+
 function renderInventoryPage(){
-  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Inventory</h1><p>Load only the item categories you need. Once loaded, each category is cached independently for 15 minutes and preserved between visits when Stay logged in is enabled.</p></header>';
+  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Inventory</h1><p>Load only the item categories you need. Once loaded, each category is cached independently for 15 minutes. Expand items for cached details and manual buyer searches.</p></header>';
   if(!tornGuideApi.isConnected())return out+'<section class="panel"><div class="panel-content">Connect your account to load inventory.</div></section>';
   const st=tornGuideApi.state;
   out+='<div class="inventory-grid">';
@@ -805,9 +840,7 @@ function renderInventoryPage(){
     if(error)out+='<p class="api-error">'+safe(error)+'</p>';
     if(!items)out+='<p>Not requested yet.</p>';
     else if(!items.length)out+='<p>Nothing held.</p>';
-    else out+='<ul class="item-list">'+items.map(item=>
-      '<li><span>'+safe(item.name)+(item.equipped?' <small>(equipped)</small>':'')+
-      '</span><strong>×'+safe(formatNumber(item.amount))+'</strong></li>').join("")+'</ul>';
+    else out+='<ul class="item-list inventory-detail-list">'+items.map((item,index)=>inventoryDetailRow(item,cat,index)).join("")+'</ul>';
     out+='</section>';
   }
   return out+'</div>';
