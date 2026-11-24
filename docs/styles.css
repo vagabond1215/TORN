@@ -1366,3 +1366,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .edu-detail-grid{width:fit-content;max-width:100%;grid-template-columns:repeat(2,minmax(0,max-content));gap:.6rem 1.5rem}
 .edu-detail-grid>div>div{justify-content:flex-start;gap:.55rem}
 @media(max-width:600px){.edu-detail-grid{grid-template-columns:1fr}}
+
+.edu-heading-status{cursor:default}
+.edu-heading-status [title]{cursor:help}
+.edu-completion-count{margin-left:auto;color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.edu-wiki-link{color:var(--accent-strong);font-size:.75rem;align-self:center}
