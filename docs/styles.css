@@ -1159,3 +1159,15 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-stat-reset{display:grid;place-items:center;flex:none;width:28px;height:30px;padding:0;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px}
 .tc-stat-reset:not(:disabled):hover{color:var(--accent-strong);background:var(--raised)}
 .tc-stat-reset:disabled{opacity:.35;cursor:default}
+
+/* One continuous collapsible right-hand pane. */
+.guide-right-rail:not([hidden]){display:block;gap:0;padding:0;border:1px solid var(--border);border-radius:0 0 5px 5px;background:var(--surface)}
+.guide-right-rail .rail-section.panel{margin:0;border:0;border-radius:0;box-shadow:none;width:100%;max-width:none}
+.guide-right-rail .rail-section+.rail-section{border-top:1px solid var(--border)}
+.guide-right-rail .rail-section>summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none}
+.guide-right-rail .rail-section>summary::-webkit-details-marker{display:none}
+.guide-right-rail .rail-section-title{display:flex;align-items:center;gap:.5rem;font-size:.84rem;font-weight:700;flex:1}
+.guide-right-rail .rail-section-title::before{content:"";width:.42rem;height:.42rem;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+.guide-right-rail .rail-section[open]>.panel-heading .rail-section-title::before{transform:rotate(45deg)}
+.guide-right-rail .rail-section:not([open])>.panel-heading{border-bottom:0}
+.guide-right-rail .rail-section>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
