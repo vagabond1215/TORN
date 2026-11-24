@@ -197,6 +197,7 @@ const tornTrainSequence=(()=>{
   }
   function createEngine(overrides,planning=false){
     const cfg={...p,...overrides},base=ctx.state.statValues[ctx.state.compareStat];
+    const bliss=tornHappinessBook().active;
     const stock=candyStock(),pool=stock.rows.map(x=>({...x})).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity));
     const dvdInventory=tornGuideApi.state.inventory.Booster;
     const dvdKnown=Array.isArray(dvdInventory)&&!tornGuideApi.state.inventoryErrors?.Booster;
@@ -238,7 +239,7 @@ const tornTrainSequence=(()=>{
         const next=Math.min(until,eTick,hTick,drugTick),passed=next-v.time;
         v.time=next;v.drug=Math.max(0,v.drug-passed);v.booster=Math.max(0,v.booster-passed);
         if(next===eTick){if(v.energy<eCap)v.energy=Math.min(eCap,v.energy+5);else v.lostRegen+=5;}
-        if(next===hTick){const before=v.happy,start=snap();v.happy=before>ctx.state.maxHappy?ctx.state.maxHappy:Math.min(ctx.state.maxHappy,before+5);if(before>ctx.state.maxHappy)v.log.push({i:"•",type:"happyReset",parent:rowIndex,reason:"Quarter-hour reset",start,end:snap()});}
+        if(next===hTick){const before=v.happy,start=snap();v.happy=bliss?Math.min(99999,before+5):before>ctx.state.maxHappy?ctx.state.maxHappy:Math.min(ctx.state.maxHappy,before+5);if(!bliss&&before>ctx.state.maxHappy)v.log.push({i:"•",type:"happyReset",parent:rowIndex,reason:"Quarter-hour reset",start,end:snap()});}
         if(next===hTick||next===until||next%3600===0)point();
       }
     }
@@ -315,7 +316,7 @@ const tornTrainSequence=(()=>{
         }
       }else if(type==="externalHappy"){
         v.happy=Math.max(v.happy,50000);
-        const warning="99k assumes a separately arranged external happiness source; its cost is not included.";
+        const warning="99k assumes coordinated Poison Mistletoe use; its cost is not included.";
         if(!v.warnings.includes(warning))v.warnings.push(warning);
       }else if(type==="train")train();
       else if(type==="wait"){
@@ -409,12 +410,16 @@ const tornTrainSequence=(()=>{
   function cooldownTiles(){
     return '<div class="ts-perk-tiles" aria-label="Cooldown perk status">'+cooldownEffects.tiles.map(x=>'<div class="ts-perk-tile '+(x.active?"is-active":"")+'" title="'+$(x.source||x.detail)+'"><strong>'+$(x.label)+'</strong><small>'+$(x.detail)+'</small><small>'+ (x.active?"Active":cooldownEffects.known?"Not detected":"Unknown")+'</small></div>').join("")+'</div>';
   }
+  function happinessStatus(){
+    const book=tornHappinessBook();
+    return '<div class="ts-membership">Happy: <strong>'+fmt(ctx.state.happy)+'</strong> / '+fmt(ctx.state.maxHappy)+' normal maximum'+(book.active?' · <strong>Ignorance Is Bliss active</strong> · 99,999 ceiling':book.known?'':' · Active book status unavailable')+'</div>';
+  }
   function controls(){
     const priceText=v=>v==null?"Unavailable":"$"+fmt(v);
     const effect=(label,minutes,source)=>'<span title="'+$(source.join("\n")|| (cooldownEffects.known?"No applicable reduction reported":"Perks unavailable; base cooldown assumed"))+'">'+label+' <strong>'+fmt(minutes,2)+'m</strong></span>';
     return '<div id="ts-plan-settings" class="ts-settings" '+(settingsOpen?"":"hidden")+'><div class="ts-settings-summary"><span>Time, cooldowns, effects, prices</span>'+cooldownControls()+'</div>'+
       '<div class="ts-membership">Preparation window: <strong>'+fmt(p.hours,2)+'h</strong> · '+$(energyRules().label)+'</div>'+
-      '<div class="ts-market-prices ts-auto-cooldowns">'+effect("Xanax",p.xanaxCDMin,[])+effect("Ecstasy",p.ecstasyCDMin,[])+effect("Candy",30*p.candyCDMultiplier,cooldownEffects.sources.candy)+effect("eDVD",360*p.dvdCDMultiplier,cooldownEffects.sources.dvd)+'</div>'+cooldownTiles()+
+      '<div class="ts-market-prices ts-auto-cooldowns">'+effect("Xanax",p.xanaxCDMin,[])+effect("Ecstasy",p.ecstasyCDMin,[])+effect("Candy",30*p.candyCDMultiplier,cooldownEffects.sources.candy)+effect("eDVD",360*p.dvdCDMultiplier,cooldownEffects.sources.dvd)+'</div>'+happinessStatus()+cooldownTiles()+
       '<div class="ts-market-prices"><span>Xanax '+priceText(p.xanaxPrice)+'</span><span>Ecstasy '+priceText(p.ecstasyPrice)+'</span><span>eDVD '+priceText(p.dvdPrice)+'</span><span>Point '+priceText(p.pointPrice)+'</span></div>'+
       '<label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label></div>';
   }
@@ -510,7 +515,7 @@ const tornTrainSequence=(()=>{
     for(const [id] of active)if(!editedPlans.has(id))steps[id]=defaultActions(id);
     const results=active.map(([id,,label])=>({id,label,data:simulate(steps[id])}));
     return controls()+(results.length?'<div class="ts-layout" data-template-count="'+results.length+'">'+results.map(x=>section(x.id,x.data)).join("")+'</div><div class="ts-outcomes"><h3>Same '+fmt(p.hours,2)+'-hour window</h3><div class="ts-comparison-results">'+results.map(({label,data})=>'<span>'+$(label)+': <strong>'+(data.complete?fmt(data.final,2):"Blocked")+'</strong> ('+fmt(data.used)+' E)</span>').join("")+'</div>'+chart(results)+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
-      '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. Happiness resets on Torn quarter-hours. Points refills are limited to one per Torn day.</p>';
+      '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
   }
   function wire(view){
     if(view.dataset.tsBound==="yes")return;
