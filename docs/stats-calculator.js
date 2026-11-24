@@ -466,7 +466,7 @@ const tornStatPlanner = (() => {
     }
     if(state.subpage==="compare"){
       markup+='<section class="panel tc-calc-panel tc-plan-panel"><div class="panel-content">'+
-      '<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+shorthand[stat]+'</button>').join("")+'</div>'+
+      '<div class="ts-plan-toolbar">'+'<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+shorthand[stat]+'</button>').join("")+'</div>'+tornTrainSequence.templateButtons()+'</div>'+
       '<div id="tc-sequencer">'+tornTrainSequence.render({state,gym,trainBlock,effectsFor})+'</div></div></section>';
     }
     return markup;
