@@ -1238,3 +1238,15 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .stock-active td:first-child{box-shadow:inset 2px 0 var(--accent)}
 .stock-market-table .stock-benefit-active{color:var(--accent-strong)}
 .stock-market-panel .fine-print{margin-top:.6rem}
+
+/* Shared compact stat rows and flush three-tab navigation. */
+#topic-view>.tc-subbar{margin:0;border-radius:0;border-bottom:0}
+#topic-view .tc-subbar .tc-subnav{margin:0;padding:0;gap:0;justify-content:flex-start;text-indent:0}
+#topic-view .tc-subbar .tc-subtab{margin:0;border:0;box-sizing:border-box;flex:0 0 auto;padding:0 .95rem}
+#topic-view .tc-subbar .tc-subtab:first-child{margin-left:0;box-shadow:none}
+#topic-view .tc-subbar .tc-subtab:first-child:is(.is-current,:hover){box-shadow:inset -1px 0 var(--border)}
+#topic-view .tc-subbar .tc-overview-item{min-height:27px;padding-block:0;line-height:1.2}
+#topic-view .tc-subbar .tc-overview-item strong{font-size:.82rem}
+#topic-view>.tc-subbar+.tc-calc-panel{margin-top:0}
+.tc-selected-gym{display:flex;align-items:center;gap:.6rem;padding:.45rem .75rem 0}
+.tc-selected-gym small{font-size:.78rem;color:var(--muted)}
