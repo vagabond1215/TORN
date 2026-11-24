@@ -691,7 +691,10 @@ function renderDashboard() {
       entry("Virus",virus?vName:"Not loaded",vAt)+
       entry("Travel",flight,tripEnd)+
       entry("Racing records",recentRecords)+
-    '</dl><p class="fine-print">Bank values are reused from Money. Virus, travel and personal racing records load only on request. Records are best laps, not the latest finishing position.</p>'+
+    '</dl><p class="fine-print">Bank values reuse the cached Money response. Virus, travel and racing records load on request. Racing records are best laps, not latest finishing position.</p>'+
+    '<p class="fine-print">Last fetched: Money '+safe(st.fetchedAt.money?tornGuidePreferences.formatDate(st.fetchedAt.money):"not loaded")+
+    ' · Activity '+safe(Math.max(0,...["virus","travel","racingrecords"].map(k=>Number(st.fetchedAt[k])||0))?
+      tornGuidePreferences.formatDate(Math.max(...["virus","travel","racingrecords"].map(k=>Number(st.fetchedAt[k])||0))):"not loaded")+'</p>'+
     '<span class="sr-only" id="home-activity-status" role="status"></span></div></section>';
 
   result+='<details class="home-expand-panel"><summary>Activity &amp; detailed reports</summary>'+
