@@ -1,7 +1,7 @@
 "use strict";
 /* Page-scoped Torn API coordinator. All network calls are explicit GETs to Torn API v2.
  * Credential lives in memory, or opt-in browser localStorage only. No external API
- * receives the Torn key. Live Torn-page bridge is an optional user-approved snapshot.
+ * receives the Torn key. The optional passive Torn-page bridge reads only allowlisted status bars.
  */
 const tornGuideApi=(()=>{
   let secret=null,remember=false,epoch=0,timer=null,inFlight=null,queued=null,batchMode="unknown";
@@ -154,14 +154,15 @@ const tornGuideApi=(()=>{
     save();schedule();announce();
     return state.identity;
   }
+  // Keep the newest observation; older stored packets never overwrite newer API data.
   function bridgeIsFresh(){
     return state.bridge&&state.identity&&Number(state.bridge.playerId)===state.identity.id&&
-      now()-Number(state.bridge.timestamp)<90000;
+      state.bridge.fields.length===4&&now()-Number(state.bridge.timestamp)<TTL.bars;
   }
-  // A userscript shares only allowlisted, manually captured public-side-bar values.
   function acceptLocalSnapshot(snapshot){
-    if(!snapshot||!state.identity||Number(snapshot.playerId)!==state.identity.id)return false;
-    if(!Number.isFinite(Number(snapshot.timestamp))||Math.abs(now()-snapshot.timestamp)>90000)return false;
+    if(!snapshot||snapshot.version!==2||!state.identity||Number(snapshot.playerId)!==state.identity.id)return false;
+    const stamp=Number(snapshot.timestamp);
+    if(!Number.isFinite(stamp)||stamp<=0||stamp>now()+5000||stamp<=Number(state.bridge?.timestamp||0)||stamp<=Number(state.fetchedAt.bars||0))return false;
     const bars=snapshot.bars;
     if(!bars||typeof bars!=="object")return false;
     const clean={};
@@ -169,19 +170,17 @@ const tornGuideApi=(()=>{
       const item=bars[name];
       if(!item)continue;
       const current=Number(item.current),maximum=Number(item.maximum);
-      if(Number.isFinite(current)&&Number.isFinite(maximum)&&current>=0&&maximum>0&&current<=maximum+100000)
+      if(Number.isInteger(current)&&Number.isInteger(maximum)&&current>=0&&maximum>0&&current<=maximum+100000)
         clean[name]={current,maximum};
     }
-    if(!Object.keys(clean).length)return false;
-    const base=state.data.bars&&state.data.bars.bars||{};
-    state.data.bars={bars:{...base,...clean}};
-    state.bridge={playerId:state.identity.id,timestamp:Number(snapshot.timestamp),fields:Object.keys(clean)};
+    if(Object.keys(clean).length!==4)return false;
+    state.data.bars={bars:clean};
+    state.bridge={playerId:state.identity.id,timestamp:stamp,fields:Object.keys(clean)};
     announce();
-    if(["home","stats","crime","checklist"].includes(routeName())&&typeof renderRoute==="function")renderRoute();
+    if(typeof updateHomeLiveBars==="function")updateHomeLiveBars();
+    if(routeName()==="stats"&&typeof tornStatPlanner!=="undefined")tornStatPlanner.syncLiveBars();
     return true;
   }
-  // The bridge only replaces very fresh bar readings. It never authorizes
-  // third-party access to inventory, finances, stats or any API key.
   function stale(key,force=false){
     if(key==="bars"&&!force&&bridgeIsFresh())return false;
     if(force)return true;
@@ -536,7 +535,7 @@ function homeCountdown(seconds){
 }
 function homeBar(name,bar){
   const state=tornGuideApi.state;
-  const bridge=state.bridge&&state.bridge.fields?.includes(name)&&Date.now()-state.bridge.timestamp<90000;
+  const bridge=state.bridge&&state.bridge.fields?.includes(name)&&state.bridge.timestamp>Number(state.fetchedAt.bars||0);
   const at=bridge?state.bridge.timestamp:state.fetchedAt.bars;
   const projected=tornBarProjection(name,bar,at);
   const valid=projected!==null;
@@ -560,7 +559,7 @@ function updateHomeLiveBars(){
   if(bars)for(const root of roots){
     for(const row of root.querySelectorAll("[data-home-bar]")){
       const name=row.dataset.homeBar,bar=bars[name];if(!bar)continue;
-      const bridge=state.bridge&&state.bridge.fields?.includes(name)&&Date.now()-state.bridge.timestamp<90000;
+      const bridge=state.bridge&&state.bridge.fields?.includes(name)&&state.bridge.timestamp>Number(state.fetchedAt.bars||0);
       const at=bridge?state.bridge.timestamp:state.fetchedAt.bars;
       const current=tornBarProjection(name,bar,at);
       if(!current)continue;
