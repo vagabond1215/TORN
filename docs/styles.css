@@ -1,13 +1,13 @@
 :root {
   color-scheme: dark;
-  --canvas: #151714;
-  --surface: #20231e;
-  --raised: #272a25;
-  --border: #373c32;
-  --text: #f4f3eb;
-  --muted: #b6baad;
-  --accent: #d9c98a;
-  --accent-strong: #e9dba6;
+  --canvas: #30363a;
+  --surface: #383f44;
+  --raised: #464f54;
+  --border: #657078;
+  --text: #f2f5f5;
+  --muted: #c1cbd0;
+  --accent: #b5df4f;
+  --accent-strong: #d3f47e;
   font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.5;
@@ -851,3 +851,140 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .sidebar-level-xp-head strong{font-size:.66rem;color:var(--text);font-variant-numeric:tabular-nums}
 .sidebar-level-xp-track{height:7px;margin-top:.22rem;border:1px solid #4b426e;background:#24212c;border-radius:5px;overflow:hidden}
 .sidebar-level-xp-track span{display:block;height:100%;background:#926deb;border-radius:5px}
+
+
+/* November 2026 default: neutral gunmetal, stainless silver, acid-lime and
+   black. Light mode remains a deliberately separate user preference. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --canvas:#30363a;--surface:#383f44;--raised:#464f54;
+  --border:#657078;--text:#f2f5f5;--muted:#c1cbd0;
+  --accent:#b5df4f;--accent-strong:#d3f47e;
+}
+:root[data-theme="dark"] body{
+  background:linear-gradient(135deg,#343a3e 0%,#2c3236 55%,#30363a 100%);
+}
+:root[data-theme="dark"] .topbar,
+:root[data-theme="dark"] .quick-access{
+  background:#14191c;
+  border-color:#5f6b71;
+}
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .sidebar,
+:root[data-theme="dark"] .home-expand-panel{
+  background:linear-gradient(115deg,rgba(255,255,255,.023),transparent 38%,rgba(0,0,0,.042) 80%),
+    var(--surface);
+  border-color:var(--border);
+}
+:root[data-theme="dark"] .panel-heading{
+  background:linear-gradient(96deg,#49535a 0%,#3b4449 55%,#30373b 100%);
+  border-color:var(--border);
+}
+:root[data-theme="dark"] .nav-link{
+  border-top-color:#566169;color:var(--muted);
+}
+:root[data-theme="dark"] .nav-link:hover,
+:root[data-theme="dark"] .nav-link[aria-current="page"]{
+  background:#202729;color:var(--accent-strong);
+}
+:root[data-theme="dark"] .secondary,
+:root[data-theme="dark"] .tc-subtab,
+:root[data-theme="dark"] .quick-link:hover{
+  background:#30383d;color:var(--text);border-color:var(--border);
+}
+:root[data-theme="dark"] .secondary:hover,
+:root[data-theme="dark"] .tc-subtab.is-current{background:#242c30;border-color:var(--accent)}
+:root[data-theme="dark"] .primary{background:var(--accent);color:#101411}
+:root[data-theme="dark"] .primary:hover{background:var(--accent-strong)}
+:root[data-theme="dark"] .home-money{color:#b9ef6a!important}
+:root[data-theme="dark"] .tct-dropdown,
+:root[data-theme="dark"] .settings-panel,
+:root[data-theme="dark"] .report-dialog{
+  background:#323a3e;color:var(--text);border-color:var(--border);
+}
+:root[data-theme="dark"] .home-action-links a,
+:root[data-theme="dark"] .settings-field select{
+  background:#293136;border-color:var(--border);color:var(--accent-strong);
+}
+/* Reduce nav text's vertical padding and minimum target height by 25%. */
+.sidebar .nav-link{
+  min-height:33px;
+  padding-top:.4125rem;
+  padding-bottom:.4125rem;
+  line-height:1.32;
+}
+/* Compact stat cards: never allow 9,999,999,999,999 to collide with a label. */
+.home-summary-grid{
+  grid-template-columns:repeat(2,minmax(0,226px)) minmax(0,1fr);
+  align-items:start;gap:.7rem;
+}
+.home-battle,.home-work{width:100%;max-width:226px;min-width:0}
+.home-battle .home-pair,.home-work .home-pair{
+  display:flex;flex-wrap:wrap;gap:.13rem .4rem;align-items:baseline;
+  justify-content:space-between;padding:.26rem .05rem;
+}
+.home-battle .home-pair dt,.home-work .home-pair dt{
+  flex:0 1 auto;min-width:0;overflow-wrap:normal;font-size:.76rem;
+}
+.home-battle .home-pair dd,.home-work .home-pair dd{
+  flex:0 0 auto;min-width:0;max-width:100%;
+  white-space:nowrap;text-align:right;overflow-wrap:normal;
+  font-size:.77rem;font-weight:740;font-variant-numeric:tabular-nums;
+  letter-spacing:-.012em;
+}
+.home-networth{min-width:0}
+.home-networth .panel-content{min-width:0;padding:.65rem .78rem}
+.networth-total{display:flex;flex-direction:column;gap:.12rem;padding:.25rem 0 .65rem}
+.networth-total small{font-size:.73rem;color:var(--muted)}
+.networth-total strong{
+  display:block;max-width:100%;font-size:clamp(1rem,2vw,1.35rem);
+  color:var(--accent-strong);font-variant-numeric:tabular-nums;
+  line-height:1.2;overflow-wrap:anywhere;
+}
+.networth-not-loaded{color:var(--muted);font-size:.8rem}
+.networth-group{border-top:1px solid var(--border);min-width:0}
+.networth-group summary{
+  list-style:none;cursor:pointer;display:flex;gap:.4rem;justify-content:space-between;
+  flex-wrap:wrap;align-items:baseline;padding:.38rem 0;font-size:.77rem;
+  color:var(--text);
+}
+.networth-group summary::-webkit-details-marker{display:none}
+.networth-group summary::before{content:"▸";color:var(--accent);font-size:.72rem;margin-right:.2rem}
+.networth-group[open] summary::before{content:"▾"}
+.networth-group summary span{flex:1;min-width:0;font-weight:700}
+.networth-group summary strong{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--accent-strong);font-size:.77rem}
+.networth-lines{margin:0 0 .38rem;padding:0 .1rem 0 .92rem}
+.networth-line{
+  display:flex;justify-content:space-between;gap:.4rem;
+  padding:.17rem 0;font-size:.73rem;line-height:1.25;
+}
+.networth-line dt{min-width:0;color:var(--muted);overflow-wrap:anywhere}
+.networth-line dd{margin:0;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;font-weight:650}
+.networth-empty{font-size:.73rem;color:var(--muted);padding:.2rem 0}
+.networth-points{
+  border-top:1px solid var(--border);display:flex;gap:.4rem;
+  justify-content:space-between;padding:.36rem 0;font-size:.77rem;
+}
+.networth-points strong{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--accent-strong)}
+.networth-footnote{color:var(--muted);font-size:.68rem;line-height:1.4;margin-top:.55rem}
+@media(max-width:1150px){
+  .home-summary-grid{grid-template-columns:repeat(2,minmax(0,226px))}
+  .home-work{grid-column:auto}
+  .home-work .home-stat-list{display:block}
+  .home-work .home-pair{display:flex}
+  .home-work .home-pair dd{text-align:right}
+  .home-networth{grid-column:1 / -1;max-width:464px}
+}
+@media(max-width:750px){
+  .home-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .home-battle,.home-work{max-width:226px}
+  .home-networth{width:100%;max-width:100%}
+}
+@media(max-width:490px){
+  .home-summary-grid{grid-template-columns:minmax(0,1fr)}
+  .home-battle,.home-work{max-width:226px}
+  .home-networth{grid-column:auto;max-width:100%}
+}
+:root[data-theme="light"] .home-networth .networth-total strong,
+:root[data-theme="light"] .networth-points strong,
+:root[data-theme="light"] .networth-group summary strong{color:var(--accent-strong)}
