@@ -1307,3 +1307,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .edu-detail-grid strong{display:block}
 .edu-prerequisites{margin:.5rem 0 0;color:var(--muted)}
 @media(max-width:700px){.edu-detail-grid{grid-template-columns:1fr}}
+
+/* Jobs page: independently collapsible section headers. */
+.job-section>summary.panel-heading{display:flex;align-items:center;gap:.55rem;cursor:pointer;list-style:none}
+.job-section>summary::-webkit-details-marker{display:none}
+.job-section>summary::before{content:"";width:.42rem;height:.42rem;flex:0 0 .42rem;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(-45deg)}
+.job-section[open]>summary::before{transform:rotate(45deg)}
+.job-section:not([open])>summary{border-bottom:0}
+.job-section>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
