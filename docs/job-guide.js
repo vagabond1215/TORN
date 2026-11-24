@@ -45,36 +45,112 @@ const tornJobsGuide=(()=>{
   }catch{selected="All";}
  }
  const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
+
+ // Rank data: required MAN/INT/END, daily MAN/INT/END, salary, JP/day,
+ // promotion cost from the current rank, and new special (if any).
+ // Source: https://wiki.torn.com/wiki/Job
+ const cityRanks={
+ Army:[
+ ["Private",2,2,2,3,1,2,125,1,5,"Strength gain","Variable JP"],
+ ["Corporal",50,15,20,5,2,3,150,2,10],
+ ["Sergeant",120,35,50,8,3,5,180,3,15,"Random weapon","10 JP"],
+ ["Master Sergeant",325,60,115,12,4,7,220,4,20],
+ ["Warrant Officer",700,160,300,17,7,10,225,5,25],
+ ["Lieutenant",1300,360,595,20,9,11,325,6,30,"Defense gain","Variable JP"],
+ ["Major",2550,490,900,24,10,13,550,7,35],
+ ["Colonel",4150,600,1100,28,12,15,755,8,40],
+ ["Brigadier",7500,1350,2530,33,18,15,1000,9,45],
+ ["General",10000,2000,4000,40,25,20,2500,10,null,"Battle-stat spy","10 JP + $5,000"]],
+ Grocer:[
+ ["Bag Boy",2,2,2,2,1,3,150,1,5,"Cash","1 JP"],
+ ["Price Labeller",30,15,50,3,2,5,175,2,10,"Bag of candy","2 JP"],
+ ["Cashier",50,35,120,5,3,8,210,3,15,"Bottle of alcohol","5 JP"],
+ ["Food Delivery",120,60,225,10,5,15,250,4,20],
+ ["Manager",250,200,500,15,10,20,300,5,null,"Energy drink","25 JP"]],
+ Casino:[
+ ["Dealer",2,2,2,1,2,3,250,1,5,"Tips","1 JP"],
+ ["Gaming Consultant",35,50,120,2,3,5,350,2,10,"25 casino tokens","1 JP"],
+ ["Marketing Manager",60,115,325,4,7,12,500,3,15],
+ ["Revenue Manager",360,595,1300,9,11,20,1000,4,20,"Cash","1 JP"],
+ ["Casino Manager",490,900,2550,10,13,24,1750,5,25],
+ ["Casino President",755,1100,4150,12,15,28,3500,6,null,"Card counting","10 JP + $100,000"]],
+ Medical:[
+ ["Medical Student",0,300,0,4,12,7,400,1,5],
+ ["Houseman",100,600,150,7,17,10,600,2,10,"Small First Aid Kit","2 JP"],
+ ["Senior Houseman",175,1000,275,9,20,11,950,3,15,"First Aid Kit","4 JP"],
+ ["GP",300,1500,500,10,24,13,1500,4,20,"Morphine","7 JP"],
+ ["Consultant",600,2500,1000,12,28,15,3000,5,25],
+ ["Surgeon",1300,5000,2000,18,33,15,5000,6,30],
+ ["Brain Surgeon",2600,10000,4000,20,40,25,7000,7,null,"Revive (75E base cost)","Permanent"]],
+ Education:[
+ ["Recess Supervisor",0,500,0,8,10,9,300,1,5,"+100 MAN","10 JP"],
+ ["Substitute Teacher",300,750,500,13,15,14,400,2,10],
+ ["Elementary Teacher",600,1000,700,15,20,17,600,3,15,"+100 END","10 JP"],
+ ["Secondary Teacher",1000,1300,1000,20,25,20,850,4,20],
+ ["Professor",1500,2000,1500,25,30,25,1000,5,25,"+100 INT","10 JP"],
+ ["Vice Principal",1500,3000,1500,30,35,30,1750,6,30],
+ ["Principal",1500,5000,1500,30,40,30,3250,7,null,"10% shorter education","Permanent"]],
+ Law:[
+ ["Law Student",0,0,1500,15,15,20,150,1,5,"+3 nerve","5 JP"],
+ ["Paralegal",1750,2500,5000,17,20,23,600,2,10,"Cash","100 JP"],
+ ["Probate Lawyer",2500,5000,7500,19,23,30,750,3,15],
+ ["Trial Lawyer",3500,6500,7750,25,27,35,1500,4,20,"Release someone from jail","15 JP"],
+ ["Circuit Court Judge",4000,7250,10000,27,30,38,2500,5,25],
+ ["Federal Judge",6000,9000,15000,30,33,45,5000,6,null,"+5% crime experience and skill gains","Permanent"]]
+ };
+ const norm=v=>String(v??"").toLowerCase().replace(/[^a-z0-9]/g,"");
+ const num=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
+ const fmt=v=>v==null?"—":Number(v).toLocaleString();
+ function corePoints(d,career){
+   const p=d.jobpoints?.jobpoints??d.jobpoints;
+   const jobs=p?.jobs??p?.city_jobs??p?.starter_jobs??p;
+   const match=Array.isArray(jobs)?jobs.find(x=>norm(x.name??x.job??x.type)===norm(career)):Object.entries(jobs||{}).find(([k])=>norm(k)===norm(career))?.[1];
+   return num(typeof match==="object"?match?.points??match?.jobpoints??match?.job_points:match);
+ }
+ function coreSpecials(ranks,index){
+   return '<table class="job-special-table"><thead><tr><th>Special</th><th>Cost</th><th>Required rank</th><th>Status</th></tr></thead><tbody>'+ranks.map((r,i)=>r[10]?'<tr><td>'+esc(r[10])+'</td><td>'+esc(r[11])+'</td><td>'+esc(r[0])+'</td><td>'+(i<=index?"Unlocked":"Locked")+'</td></tr>':"").join("")+'</tbody></table>';
+ }
+ function promotion(ranks,index,points,stats){
+   const r=ranks[index],next=ranks[index+1];
+   if(!next)return '<div class="job-promotion"><strong>Maximum rank reached</strong></div>';
+   const requirements=[...next.slice(1,4),r[9]],current=[...stats,points],rates=[...r.slice(4,7),r[8]],labels=["MAN","INT","END","JP"];
+   const days=requirements.map((req,i)=>current[i]===null?null:current[i]>=req?0:rates[i]>0?Math.ceil((req-current[i])/rates[i]):Infinity);
+   const max=days.some(x=>x===null)?null:Math.max(...days);
+   const eta=max===null?"Unknown":max===Infinity?"Blocked":max===0?"Ready to promote":max+" daily payouts";
+   return '<div class="job-promotion"><h3>Next promotion: '+esc(next[0])+' <small>'+esc(eta)+'</small></h3><div class="job-promotion-grid">'+labels.map((label,i)=>'<div><strong>'+label+'</strong> '+fmt(current[i])+' / '+fmt(requirements[i])+' <small class="'+(days[i]===0?"tc-pos":"")+'">'+(days[i]===null?"Unknown":days[i]===0?"Ready":days[i]===Infinity?"Blocked":days[i]+"d")+'</small></div>').join("")+'</div></div>';
+ }
  function live(){
   const d=tornGuideApi.state.data;
   const j=d.job&&(d.job.job||d.job)||{},w=d.workstats&&(d.workstats.workstats||d.workstats)||{};
+  const career=Object.keys(cityRanks).find(k=>[j.name,j.type,j.company_name].some(v=>norm(v)===norm(k)));
+  const ranks=career?cityRanks[career]:null;
+  const index=ranks?ranks.findIndex(r=>norm(r[0])===norm(j.position??j.rank??j.title)):-1;
+  const rank=index>=0?ranks[index]:null;
+  const points=career?corePoints(d,career):null;
+  const stats=[num(w.manual_labor??w.manual??w.man),num(w.intelligence??w.intel??w.int),num(w.endurance??w.end)];
+  const rating=j.company?.rating??j.rating??j.stars;
+  const stars=rating!=null&&rating!==""&&Number.isFinite(Number(rating))?Number(rating):null;
   const jobRows=[
    ["Job / company",j.name||j.company_name||j.company?.name||j.type],
    ["Position",j.position||j.rank||j.title],
-   ["Company stars",j.company?.rating??j.rating??j.stars]
+   ...(career?[["Job points",points],["Daily JP",rank?.[8]],["Daily pay",rank?"$"+fmt(rank[7]):null]]:[["Company stars",stars],["Daily JP",stars]])
   ];
-  const statRows=[
-   ["Manual labor",w.manual_labor??w.manual??w.man],
-   ["Intelligence",w.intelligence??w.intel??w.int],
-   ["Endurance",w.endurance??w.end]
-  ];
+  const statRows=["Manual labor","Intelligence","Endurance"].map((name,i)=>[name,stats[i]===null?null:fmt(stats[i])+(rank?" (+"+rank[4+i]+"/day)":"")]);
   const list=rows=>'<dl class="home-stat-list">'+rows.map(([label,value])=>
    '<div class="home-pair"><dt>'+esc(label)+'</dt><dd>'+esc(value==null?"Not yet loaded":value)+'</dd></div>').join("")+'</dl>';
   const perks=d.perks&&(d.perks.perks||d.perks);
   const jobPerks=perks?.job??perks?.job_perks;
   const livePerks=Array.isArray(jobPerks)?jobPerks.map(x=>typeof x==="string"?x:x?.description??x?.effect??x?.name).filter(Boolean):[];
-  const norm=v=>String(v??"").toLowerCase().replace(/[^a-z0-9]/g,"");
   const candidates=[j.company?.type?.name,j.company?.type,j.company_type?.name,j.company_type,j.type?.name,j.type,j.name,j.company_name,j.company?.name].filter(x=>typeof x==="string");
   const company=tornCompanyCatalog.find(c=>candidates.some(n=>norm(n)===norm(c.name)));
-  const rating=j.company?.rating??j.rating??j.stars;
-  const stars=rating!=null&&rating!==""&&Number.isFinite(Number(rating))?Number(rating):null;
   const specials=company?'<table class="job-special-table"><thead><tr><th>Stars</th><th>Special</th><th>JP cost</th><th>Effect</th><th>Status</th></tr></thead><tbody>'+company.specials.map(x=>'<tr><td>'+x.stars+'★</td><td>'+esc(x.name)+'</td><td>'+esc(x.cost)+'</td><td>'+esc(x.effect)+'</td><td>'+(/temporarily unavailable/i.test(x.effect)?"Unavailable":stars===null?"Unknown":stars>=x.stars?"Unlocked":"Locked")+'</td></tr>').join("")+'</tbody></table>':"";
-  const perkMarkup='<div class="job-current-perks"><h3>Job perks &amp; specials</h3>'+(livePerks.length?'<ul class="job-perk-list">'+livePerks.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>':!specials?'<p class="fine-print">'+(Array.isArray(jobPerks)?"No job perks reported by Torn.":"Job perks not loaded.")+'</p>':"")+specials+'</div>';
+  const perkMarkup='<div class="job-current-perks"><h3>Current job specials</h3>'+(rank?coreSpecials(ranks,index):specials||'<p class="fine-print">Job specials unavailable.</p>')+'</div>'+
+   (livePerks.length?'<div class="job-current-perks"><h3>API-reported career perks</h3><ul class="job-perk-list">'+livePerks.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></div>':"");
   return '<section class="panel"><div class="panel-heading"><h2>Your current job</h2></div>'+
     '<div class="panel-content"><div class="job-live-columns">'+
       '<div><h3>Job details</h3>'+list(jobRows)+'</div>'+
       '<div><h3>Working stats</h3>'+list(statRows)+'</div>'+
-    '</div>'+perkMarkup+'</div></section>';
+    '</div>'+(rank?promotion(ranks,index,points,stats):'')+perkMarkup+'</div></section>';
  }
  // One catalog, one filter, one set of benefit descriptions for both sections.
  const featuredNames=new Set(features.map(f=>f[0]));
