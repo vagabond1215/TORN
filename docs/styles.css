@@ -1199,3 +1199,19 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-gym-info-dots .tc-gym-delta{grid-column:3;text-align:right;font-size:.68rem}
 .tc-gym-alternate{margin-top:.45rem;padding-top:.25rem;border-top:1px solid var(--border)}
 @media(max-width:700px){.tc-gym-info-dots{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Flush unified Stats calculator with a separate effective-stat row. */
+#topic-view>.tc-subbar:has(+ .tc-calc-panel){margin-bottom:0;border-bottom:0;border-radius:0}
+#topic-view>.tc-subbar+.tc-calc-panel{margin-top:0;border-radius:0 0 6px 6px}
+#topic-view .tc-subbar .tc-subnav{display:flex;align-items:stretch;box-sizing:border-box;height:var(--guide-bar-height);min-height:var(--guide-bar-height);border-bottom:1px solid var(--border)}
+#topic-view .tc-subbar .tc-subtab{height:100%;min-height:0;align-self:stretch;margin:0;line-height:1;transform:none;position:relative;top:auto;bottom:auto;vertical-align:middle}
+#topic-view .tc-subbar .tc-subtab.is-current,#topic-view .tc-subbar .tc-subtab:hover{box-shadow:inset 1px 0 var(--border),inset -1px 0 var(--border);border:0}
+#topic-view .tc-subbar .tc-effective-overview{border-top:1px solid var(--border)}
+#topic-view .tc-subbar .tc-effective-overview .tc-overview-item{min-height:27px}
+#topic-view .tc-subbar .tc-effective-overview .tc-overview-item strong{font-size:.82rem}
+.tc-effective-overview [title]{cursor:help}
+.tc-calc-panel .tc-simulator-body{padding-top:.25rem}
+.tc-calc-panel .tc-gym-picker{padding-bottom:.15rem}
+.tc-calc-panel .tc-notice{margin:.2rem .7rem .4rem}
+.tc-gain-sources{margin-top:.55rem;border-top:1px solid var(--border);padding-top:.3rem}
+.tc-gain-sources [title]:not([title=""]){cursor:help}
