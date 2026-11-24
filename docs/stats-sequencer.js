@@ -1,6 +1,6 @@
 "use strict";
 const tornTrainSequence=(()=>{
-  const names={externalHappy:"Arrange external Happy to 50,000",xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train",refill:"Points energy refill",wait:"Wait minutes",waitDrug:"Wait for drug cooldown",waitBooster:"Wait for booster space",autoOn:"Train Nat E w/ Xanax",natOn:"Train natural Energy",autoOff:"Automatic check-ins OFF",checkin:"Use Full Energy"};
+  const names={externalHappy:"Poison Mistletoe",xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train",refill:"Points energy refill",wait:"Wait minutes",waitDrug:"Wait for drug cooldown",waitBooster:"Wait for booster space",autoOn:"Train Nat E w/ Xanax",natOn:"Train natural Energy",autoOff:"Automatic check-ins OFF",checkin:"Use Full Energy"};
   const make=(type,qty=1,minutes=0)=>({type,qty,minutes});
   const defaults={
     natural:()=>[make("xanax"),make("candy",2),make("train"),make("refill"),make("train"),make("autoOn"),make("waitDrug"),make("xanax")],
@@ -278,7 +278,7 @@ const tornTrainSequence=(()=>{
         for(let k=0;k<qty;k++){
           if(!useItem(type))break;
         }
-      }else if(type==="externalHappy"){v.happy=Math.max(v.happy,50000);if(!v.warnings.includes("99k assumes a separately arranged external happiness source; its cost is not included."))v.warnings.push("99k assumes a separately arranged external happiness source; its cost is not included.");}
+      }else if(type==="externalHappy"){v.happy=Math.max(v.happy,50000);if(!v.warnings.includes("99k assumes coordinated Poison Mistletoe use to reach 50,000 Happy; its cost is not included."))v.warnings.push("99k assumes a separately arranged external happiness source; its cost is not included.");}
       else if(type==="checkin"||type==="train"){
         const ticks=Math.max(0,Math.ceil((eCap-v.energy)/5));
         const delay=ticks?((Math.floor(v.time/regenTime)+ticks)*regenTime-v.time):0;
@@ -404,14 +404,17 @@ const tornTrainSequence=(()=>{
       rows+='<tr class="ts-editable-row"><td>'+(main?.end||state?.executed?clock((main?.end??state.end).time):"—")+'</td><td>'+data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,action,i,data.rowInfo[i])+'</td>'+timelineCells(main?.end??(state?.executed?state.end:null))+'</tr>';
       rows+=after.map(dependencyRow).join("");
     });
-    return '<details class="ts-log ts-merged" data-ts-timeline="'+side+'" '+(openTimelines.has(side)?"open":"")+'><summary>Training timeline ('+list.length+' editable steps)</summary><div class="ts-log-scroller"><table><thead><tr><th>Time</th><th>Action</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-      '<div class="ts-add"><select data-ts-choice="'+side+'" aria-label="Select action"><option value="" selected>Select action</option>'+actionOptions.map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select><button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'" disabled>Add action</button><button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div></details>';
+    return '<div class="ts-log ts-merged"><div class="ts-log-scroller"><table><thead><tr><th>Time</th><th>Action</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<div class="ts-add"><select data-ts-choice="'+side+'" aria-label="Select action"><option value="" selected>Select action</option>'+actionOptions.map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select><button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'" disabled>Add action</button><button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div></div>';
   }
   function section(side,data){
     const heading=templates.find(x=>x[0]===side)?.[2]??side;
-    return '<section class="ts-side"><h3><span>'+$(heading)+'</span><strong class="ts-heading-gain" title="Projected stat gain, not final stat value">'+(data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked")+'</strong><small>'+fmt(p.hours,2)+'h</small></h3>'+mergedTimeline(side,data)+
+    const metric=(label,value,extra="")=>'<span class="ts-title-metric '+extra+'"><small>'+label+'</small><strong>'+value+'</strong></span>';
+    return '<details class="ts-side ts-template-card" data-ts-timeline="'+side+'" '+(openTimelines.has(side)?"open":"")+'><summary class="ts-template-header"><span class="ts-template-name">'+$(heading)+'</span>'+
+      metric("Duration",fmt(p.hours,2)+"h")+metric("Energy used",fmt(data.used)+" E")+metric("Stat change",data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked","ts-title-gain")+metric("Ending stat",data.complete?fmt(data.final,2):"—")+metric("Cost",data.money==null?"Unavailable":"$"+fmt(data.money))+
+      '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+mergedTimeline(side,data)+
       (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join("; ")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
-      '<p class="ts-stat">Final: '+(data.complete?fmt(data.final,2):"Blocked")+' <small>+'+fmt(data.gain,2)+' gain, '+fmt(data.used)+' E, '+(data.money==null?"Cost unavailable":"$"+fmt(data.money))+'</small></p></section>';
+      '</details>';
   }
   function chart(results){
     const chartEnd=p.hours+1;
