@@ -312,6 +312,7 @@ const tornStatPlanner = (() => {
     view.addEventListener("change",event=>{
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const el=event.target;
+      if(location.hash!=="#stats" || !el.matches("[data-tc],[data-tc-stat],[data-tc-extra]")) return;
       if(el.dataset.tc) {
         const key=el.dataset.tc;
         if(key==="selectedGym") state.selectedGym=el.value;
@@ -331,6 +332,7 @@ const tornStatPlanner = (() => {
       view.innerHTML=render();
     });
     view.addEventListener("click",event=>{
+      if(location.hash!=="#stats") return;
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const tab=event.target.closest("[data-tc-view]");
       if(tab){
