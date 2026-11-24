@@ -114,11 +114,11 @@ const tornJobsGuide=(()=>{
  function promotion(ranks,index,points,stats){
    const r=ranks[index],next=ranks[index+1];
    if(!next)return '<div class="job-promotion"><strong>Maximum rank reached</strong></div>';
-   const requirements=[...next.slice(1,4),r[9]],current=[...stats,points],rates=[...r.slice(4,7),r[8]],labels=["MAN","INT","END","JP"];
+   const requirements=[...next.slice(1,4),r[9]],current=[...stats,points],rates=[...r.slice(4,7),r[8]];
    const days=requirements.map((req,i)=>current[i]===null?null:current[i]>=req?0:rates[i]>0?Math.ceil((req-current[i])/rates[i]):Infinity);
    const max=days.some(x=>x===null)?null:Math.max(...days);
    const eta=max===null?"Unknown":max===Infinity?"Blocked":max===0?"Ready to promote":max+" daily payouts";
-   return '<div class="job-promotion"><h3>Next promotion: '+esc(next[0])+' <small>'+esc(eta)+'</small></h3><div class="job-promotion-grid">'+labels.map((label,i)=>i!==3?"":'<div><strong>'+label+'</strong> '+fmt(current[i])+' / '+fmt(requirements[i])+' <small class="'+(days[i]===0?"tc-pos":"")+'">'+(days[i]===null?"Unknown":days[i]===0?"Ready":days[i]===Infinity?"Blocked":days[i]+"d")+'</small></div>').join("")+'</div></div>';
+   return '<div class="job-promotion"><h3>Next promotion: '+esc(next[0])+' <small>'+esc(eta)+'</small></h3></div>';
  }
  function live(){
   const d=tornGuideApi.state.data;
@@ -134,14 +134,16 @@ const tornJobsGuide=(()=>{
   const jobRows=[
    ["Job / company",j.name||j.company_name||j.company?.name||j.type],
    ["Position",j.position||j.rank||j.title],
-   ...(career?[["Job points",points],["Daily JP",rank?.[8]],["Daily pay",rank?"$"+fmt(rank[7]):null]]:[["Company stars",stars],["Daily JP",stars]])
+   ...(career?[["Daily pay",rank?"$"+fmt(rank[7]):null]]:[["Company stars",stars]])
   ];
   const nextRank=rank?ranks[index+1]:null;
   const statRows=["Manual labor","Intelligence","Endurance"].map((name,i)=>[name,stats[i]===null?null:fmt(stats[i])+(rank?" (+"+rank[4+i]+"/day)":"")]);
-  const workingStats=nextRank?'<dl class="home-stat-list job-stat-requirements">'+statRows.map(([name],i)=>{
-    const value=stats[i],required=nextRank[i+1],gain=rank[i+4];
-    const status=value===null?"":value>=required?"job-stat-ready":"job-stat-short";
-    return '<div class="home-pair"><dt>'+esc(name)+'</dt><dd><span class="'+status+'" title="'+esc("Current / required for "+nextRank[0])+'">'+fmt(value)+' / '+fmt(required)+'</span> <small class="job-stat-daily">+'+fmt(gain)+'/day</small></dd></div>';
+  if(career)statRows.push(["Job points",fmt(points)+(rank?" (+"+fmt(rank[8])+"/day)":"")]);
+  else statRows.push(["Daily JP",stars]);
+  const comparisonRows=[...["Manual labor","Intelligence","Endurance"].map((name,i)=>[name,stats[i],nextRank?.[i+1],rank?.[i+4]]),["Job points",points,rank?.[9],rank?.[8]]];
+  const workingStats=nextRank?'<dl class="home-stat-list job-stat-requirements">'+comparisonRows.map(([name,value,required,gain])=>{
+    const status=value===null||required==null?"":value>=required?"job-stat-ready":"job-stat-short";
+    return '<div class="home-pair"><dt>'+esc(name)+'</dt><dd title="'+esc("Current / required for "+nextRank[0])+'"><span class="job-stat-current '+status+'">'+fmt(value)+'</span><span class="job-stat-divider '+status+'">/</span><span class="job-stat-required '+status+'">'+fmt(required)+'</span><small class="job-stat-daily">'+(gain==null?"—":"+"+fmt(gain)+"/day")+'</small></dd></div>';
   }).join("")+'</dl>':null;
   const list=rows=>'<dl class="home-stat-list">'+rows.map(([label,value])=>
    '<div class="home-pair"><dt>'+esc(label)+'</dt><dd>'+esc(value==null?"Not yet loaded":value)+'</dd></div>').join("")+'</dl>';
@@ -151,7 +153,7 @@ const tornJobsGuide=(()=>{
   const candidates=[j.company?.type?.name,j.company?.type,j.company_type?.name,j.company_type,j.type?.name,j.type,j.name,j.company_name,j.company?.name].filter(x=>typeof x==="string");
   const company=tornCompanyCatalog.find(c=>candidates.some(n=>norm(n)===norm(c.name)));
   const specials=company?'<table class="job-special-table"><thead><tr><th>Stars</th><th>Special</th><th>JP cost</th><th>Effect</th><th>Status</th></tr></thead><tbody>'+company.specials.map(x=>'<tr><td>'+x.stars+'★</td><td>'+esc(x.name)+'</td><td>'+esc(x.cost)+'</td><td>'+esc(x.effect)+'</td><td>'+(/temporarily unavailable/i.test(x.effect)?"Unavailable":stars===null?"Unknown":stars>=x.stars?"Unlocked":"Locked")+'</td></tr>').join("")+'</tbody></table>':"";
-  const perkMarkup='<div class="job-current-perks"><h3>Current job specials</h3>'+(rank?coreSpecials(ranks,index):specials||'<p class="fine-print">Job specials unavailable.</p>')+'</div>'+
+  const perkMarkup='<div class="job-current-perks">'+(rank?coreSpecials(ranks,index):specials||'<p class="fine-print">Job specials unavailable.</p>')+'</div>'+
    (livePerks.length?'<div class="job-current-perks"><h3>API-reported career perks</h3><ul class="job-perk-list">'+livePerks.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></div>':"");
   return '<section class="panel"><div class="panel-heading"><h2>Your current job</h2></div>'+
     '<div class="panel-content"><div class="job-live-columns">'+
