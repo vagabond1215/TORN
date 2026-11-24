@@ -29,19 +29,20 @@ const tornJobsGuide=(()=>{
  ["Sweet Shop","Training/Beginner","Compare Energy and consumable rewards with other early companies."],
  ["Private Security Firm","War/Mug","Check current combat and protective perks by company star."]
  ];
- const styles=["All","Training","Trade","Travel","Mug","Business","War","Revive","Crime","Racing","Money","Education","Beginner"];
+ const styles=["All","My activities","Training","Trade","Travel","Mug","Business","War","Revive","Crime","Racing","Money","Education","Jail","Beginner"];
  let selected="All",term="",recommendedOnly=false,styleOwner=null,lastStyleRaw=null,manualStyle=false;
  function syncRoadmapStyle(){
   const owner=activeProfile||"guest";
   let raw=null;
   try{raw=read(activeProfile?activeKey("playstyle:selection"):"playstyle:guest");}catch{}
   if(styleOwner!==owner){styleOwner=owner;manualStyle=false;lastStyleRaw=null;}
-  if(raw===lastStyleRaw||manualStyle)return;
+  if(raw===lastStyleRaw)return;
+  manualStyle=false;
   lastStyleRaw=raw;
   try{
    const list=JSON.parse(raw||"[]");
-   const suggested=Array.isArray(list)?list.find(x=>styles.includes(x)&&x!=="Balanced"):null;
-   selected=suggested||"All";
+   const suggested=Array.isArray(list)?list.some(x=>styles.includes(x)||x==="OC"||x==="Merits"):false;
+   selected=suggested?"My activities":"All";
   }catch{selected="All";}
  }
  const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
@@ -172,12 +173,14 @@ const tornJobsGuide=(()=>{
   Racing:/racing|car parts|driving|random car|crashing/i,
   Money:/money|bank|investment|interest|property|upkeep|hunting|funds|erotic dvd|energy drink/i,
   Education:/education/i,
+  Jail:/jail|bust|bail/i,
   Beginner:/experience|happiness|happy|energy|endurance|candy|awareness|special flower|special plushie|mug protection|education/i
  };
+ function activityStyles(){return [...new Set(tornRoadmap.selectedStyles().map(x=>x==="OC"?"Crime":x==="Merits"?"Beginner":x))];}
  function relevant(company){
-  const pattern=patterns[selected];
+  const pattern=selected==="My activities"?null:patterns[selected];
   const eligible=company.specials.filter(x=>! /temporarily unavailable/i.test(x.effect));
-  const matched=pattern?eligible.filter(x=>pattern.test(x.effect)):eligible;
+  const matched=selected==="My activities"?eligible.filter(x=>activityStyles().some(k=>patterns[k]?.test(x.effect))):pattern?eligible.filter(x=>pattern.test(x.effect)):eligible;
   return matched.length?matched:eligible;
  }
  function perkText(x){
@@ -193,7 +196,9 @@ const tornJobsGuide=(()=>{
    '</tbody></table><p class="fine-print"><a href="'+esc(company.source)+'" target="_blank" rel="noopener noreferrer">Official company list</a></p></div></details>';
  }
  function matches(company){
-  if(selected!=="All"&&!company.styles.includes(selected))return false;
+  if(selected==="My activities"){if(!activityStyles().some(k=>company.styles.includes(k)||company.specials.some(x=>patterns[k]?.test(x.effect))))return false;}
+  else if(selected==="Jail"){if(!company.specials.some(x=>patterns.Jail.test(x.effect)))return false;}
+  else if(selected!=="All"&&!company.styles.includes(selected))return false;
   if(recommendedOnly&&!featuredNames.has(company.name))return false;
   return !term||(company.name+" "+company.styles.join(" ")+company.specials.map(s=>s.name+" "+s.effect+" "+s.stars+" "+s.cost).join(" ")).toLowerCase().includes(term);
  }
