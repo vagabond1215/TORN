@@ -6,7 +6,18 @@ const tornTrainSequence=(()=>{
     natural:()=>[make("xanax"),make("candy",2),make("train"),make("refill"),make("train"),make("autoOn"),make("waitDrug"),make("xanax")],
     jump:()=>[make("train"),make("xanax"),make("xanax"),make("xanax"),make("xanax"),make("dvd",5),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")]
   };
-  const steps={natural:defaults.natural(),jump:defaults.jump()};
+  const maxAction=type=>({...make(type),max:true});
+  defaults.natural=()=>[make("train"),make("autoOn")];
+  defaults.mini=()=>[make("train"),make("xanax"),maxAction("candy"),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
+  defaults.jump=()=>[make("train"),...Array.from({length:4},()=>make("xanax")),make("waitDrug"),make("dvd",5),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
+  // 99k is a target template: DVDs alone do not guarantee 99,999 Happy.
+  defaults.maxhappy=()=>[make("train"),...Array.from({length:4},()=>make("xanax")),make("waitDrug"),maxAction("dvd"),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
+  defaults.custom=()=>[make("train")];
+  const templates=[["natural","NAT","Natural training"],["mini","MINI","Mini jump"],["jump","HJ","Happy jump"],["maxhappy","99k","99k Happy jump"],["custom","CUSTOM","Custom"]];
+  const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
+  const selected=new Set(["natural","jump"]);
+  function templateButtons(){return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'</div>';}
+  function activeTemplates(){return templates.filter(([id])=>selected.has(id));}
   // Booster quantities are immediate batches. They never hide several hours
   // of waiting between candy and training; users add separate Wait rows.
   const maxCandy=cfg=>Math.max(1,Math.floor(cfg.boosterCapH*3600/
@@ -96,8 +107,18 @@ const tornTrainSequence=(()=>{
     return {cap:premium?150:100,minutes:premium?10:15,mode:"auto",label:known?(premium?profile.donator_status:"Standard"):"Estimated from energy bar"};
   }
   function preparationHours(){
-    const count=steps.jump.filter(a=>a.type==="xanax").length;
-    return Math.max(1/60,(count*p.xanaxCDMin+p.startDrugMin)/60);
+    const jumps=activeTemplates().filter(([id])=>["jump","maxhappy"].includes(id));
+    if(!jumps.length)return 24;
+    return Math.max(24,...jumps.map(([id])=>{
+      let time=0,drug=Math.round(p.startDrugMin*60);
+      for(const step of steps[id]){
+        if(step.type==="waitDrug"){time+=drug;drug=0;}
+        else if(step.type==="wait"){const wait=Math.max(0,Math.ceil(n(step.minutes)*60));time+=wait;drug=Math.max(0,drug-wait);}
+        else if(step.type==="xanax"||step.type==="ecstasy"){time+=drug;drug=Math.round((step.type==="xanax"?p.xanaxCDMin:p.ecstasyCDMin)*60);}
+        else if(step.type==="dvd"||step.type==="candy")time+=1; // allowance for exact-threshold final item
+      }
+      return Math.ceil(time/3600*100)/100;
+    }));
   }
   function nervePreview(config){
     const source=tornGuideApi.state.data.bars;
@@ -127,7 +148,8 @@ const tornTrainSequence=(()=>{
     const v={time:0,stat:base,energy:initialE,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),auto:false,
       costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0,warnings:[]};
     const snap=()=>({time:v.time,energy:v.energy,happy:v.happy,drug:v.drug,booster:v.booster,stat:v.stat});
-    const point=()=>{const last=v.series[v.series.length-1],h=v.time/3600;if(Math.abs(last.h-h)<1e-8)last.s=v.stat;else v.series.push({h,s:v.stat});};
+    v.peakHappy=v.happy;
+    const point=()=>{v.peakHappy=Math.max(v.peakHappy,v.happy);const last=v.series[v.series.length-1],h=v.time/3600;if(Math.abs(last.h-h)<1e-8)last.s=v.stat;else v.series.push({h,s:v.stat});};
     function train(){
       if(v.energy<gymCost || n(gym[stat])<=0)return 0;
       const out=ctx.trainBlock(v.stat,v.happy,v.energy,gym,stat,mult);
@@ -161,8 +183,9 @@ const tornTrainSequence=(()=>{
     function waitFor(seconds,label){
       if(seconds<=0)return true;
       if(!cfg.autoWait){v.errors.push(label+" blocked ("+clock(seconds)+" left).");return false;}
+      const target=v.time+Math.ceil(seconds);
       advance(seconds);
-      if(v.time>=limit){v.errors.push(label+" could not fit in the remaining time.");return false;}
+      if(target>limit){v.errors.push(label+" could not fit in the remaining time.");return false;}
       return true;
     }
     function useItem(type){
@@ -237,6 +260,19 @@ const tornTrainSequence=(()=>{
       v.log.push({i:i+1,type,start,end:snap()});
       if(v.time>=limit && i<list.length-1 && list.slice(i+1).some(step=>["wait","waitDrug","waitBooster","xanax","ecstasy"].includes(step.type))){v.errors.push("The "+cfg.hours+"-hour window ended before all steps.");break;}
     }
+    // Natural and mini profiles continue using available drug cycles and daily
+    // refills through the common comparison window, without modifying their rows.
+    if(cfg.repeatTraining&&!v.errors.length){
+      v.auto=true;
+      while(v.time<limit){
+        const day=Math.floor((cfg.tornClockMin*60+v.time)/86400);
+        if(!v.days.has(day)){const start=snap();train();v.days.add(day);v.energy=eCap;v.costs.refill++;train();v.log.push({i:"•",type:"refill",reason:"Daily refill",start,end:snap()});}
+        if(v.drug===0){const start=snap();train();useItem("xanax");train();v.log.push({i:"•",type:"xanax",reason:"Available drug cycle",start,end:snap()});}
+        const midnight=(day+1)*86400-cfg.tornClockMin*60-v.time;
+        advance(Math.min(limit-v.time,v.drug||Infinity,Math.max(1,midnight)));
+      }
+      train();
+    }
     if(v.time<limit)advance(limit-v.time);
     point();
     const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice]];
@@ -291,56 +327,44 @@ const tornTrainSequence=(()=>{
       data.log.map(a=>'<tr><td>'+$(names[a.type])+(a.reason?" · "+$(a.reason):"")+'</td><td>'+clock(a.end.time)+'</td><td>'+fmt(a.end.energy)+'</td><td>'+fmt(a.end.happy)+'</td><td>'+clock(a.end.drug)+'</td><td>'+clock(a.end.booster)+'</td></tr>').join("")+
       '</tbody></table></div></details>';
   }
-  function section(side){
-    const data=simulate(steps[side]);
-    const heading=side==="jump"?"Happy jump":"Natural energy";
-    return '<section class="ts-side"><h3>'+heading+'</h3><div class="ts-list">'+steps[side].map((a,i)=>row(side,a,i,data.rowInfo[i])).join("")+'</div>'+
+  function section(side,data){
+    const heading=templates.find(x=>x[0]===side)?.[2]??side;
+    return '<section class="ts-side"><h3>'+heading+' <small>'+fmt(p.hours,2)+'h</small></h3><div class="ts-list">'+steps[side].map((a,i)=>row(side,a,i,data.rowInfo[i])).join("")+'</div>'+
       '<div class="ts-add"><select data-ts-choice="'+side+'">'+Object.entries(names).map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select>'+
       '<button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'">Add action</button>'+
       '<button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div>'+
-      (data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
+      (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
       '<p class="ts-stat">Final: '+(data.complete?fmt(data.final,2):"Blocked")+' <small>+'+fmt(data.gain,2)+' gain, '+fmt(data.used)+' E, '+(data.money==null?"Cost unavailable":"$"+fmt(data.money))+'</small></p>'+
       log(data)+'</section>';
   }
-  function chart(natural,jump){
+  function chart(results){
     const xval=hour=>80+hour/p.hours*800;
-    const bottom=Math.min(ctx.state.statValues[ctx.state.compareStat],natural.final,jump.final);
-    const top=Math.max(natural.final,jump.final,bottom+1);
+    const bottom=Math.min(ctx.state.statValues[ctx.state.compareStat],...results.map(x=>x.data.final));
+    const top=Math.max(bottom+1,...results.map(x=>x.data.final));
     const yval=val=>210-(val-bottom)/(top-bottom)*190;
     const path=serie=>serie.map((v,i)=>(i?"L":"M")+xval(v.h).toFixed(1)+","+yval(v.s).toFixed(1)).join(" ");
+    const styles={natural:["var(--text)",""],mini:["var(--text)","7 4"],jump:["var(--accent)",""],maxhappy:["var(--accent)","8 4"],custom:["var(--muted)","2 4"]};
     let out='<svg viewBox="0 0 910 260" class="ts-chart" role="img" aria-label="Projected stat growth over '+p.hours+' hours">';
     for(let i=0;i<5;i++){
-      const val=bottom+(top-bottom)*i/4,y=yval(val);
-      out+='<line x1="80" y1="'+y+'" x2="880" y2="'+y+'" class="ts-gridline" stroke="var(--border)"/><text x="74" y="'+(y+4)+'" fill="var(--text)" font-size="11" text-anchor="end">'+fmt(val)+'</text>';
-      const hr=p.hours*i/4;
-      out+='<text x="'+xval(hr)+'" y="243" font-size="11" text-anchor="middle" fill="var(--text)">'+fmt(hr,1)+'h</text>';
+      const val=bottom+(top-bottom)*i/4,y=yval(val),hr=p.hours*i/4;
+      out+='<line x1="80" y1="'+y+'" x2="880" y2="'+y+'" class="ts-gridline"/><text x="74" y="'+(y+4)+'" font-size="11" text-anchor="end">'+fmt(val)+'</text><text x="'+xval(hr)+'" y="243" font-size="11" text-anchor="middle">'+fmt(hr,1)+'h</text>';
     }
-    out+='<path d="'+path(natural.series)+'" fill="none" class="ts-natural-line" stroke="var(--text)" stroke-width="3"/>';
-    if(jump.complete)out+='<path d="'+path(jump.series)+'" fill="none" class="ts-jump-line" stroke="var(--accent)" stroke-width="3"/>';
-    return out+'</svg><p class="ts-legend">Neutral: Natural training · Lime: Happy jump</p>';
+    for(const {id,data} of results){const [color,dash]=styles[id];out+='<path d="'+path(data.series)+'" fill="none" stroke="'+color+'" stroke-dasharray="'+(data.complete?dash:"2 4")+'" stroke-width="3"/>';}
+    return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg width="26" height="8" aria-hidden="true"><line x1="0" y1="4" x2="26" y2="4" stroke="'+styles[id][0]+'" stroke-dasharray="'+(data.complete?styles[id][1]:"2 4")+'" stroke-width="3"/></svg> '+$(label)+(data.complete?"":" (blocked)")+'</span>').join("")+'</div>';
   }
   function render(context){
     if(context)ctx=context;
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
-    loadLive();
-    marketInputs();
-    cooldownEffects=applyCooldownPerks();
+    loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
     p.hours=preparationHours();
-    const a=simulate(steps.natural),b=simulate(steps.jump);
-    const rule=energyRules(p);
-    const diff=b.gain-a.gain;
-    const perks=activePerks();
-    return controls()+
-      '<div class="ts-layout">'+section("natural")+section("jump")+'</div>'+
-      '<div class="ts-outcomes"><h3>Same '+p.hours+'-hour window</h3><p>Natural: <strong>'+fmt(a.final,2)+'</strong> ('+fmt(a.used)+' E) · Jump: <strong>'+fmt(b.final,2)+'</strong> ('+fmt(b.used)+' E)</p>'+
-      '<p><strong>'+(!a.complete||!b.complete?"Review blocked timeline steps":(diff>=0?"Jump exceeds natural by +"+fmt(diff,2):"Natural exceeds jump by +"+fmt(-diff,2)))+'</strong></p>'+
-      chart(a,b)+'</div>'+
-      '<p class="fine-print">Simulated, not actual in-game actions. Drug cooldown varies; overdoses, addiction, book-specific gym effects and fluctuating prices are not predicted. Happiness above your normal cap resets on Torn quarter-hours. Points refills are limited to one per Torn day. <a target="_blank" rel="noopener noreferrer" href="https://wiki.torn.com/wiki/Item_Cooldowns">Booster cooldown rules</a></p>';
+    const results=activeTemplates().map(([id,short,label])=>({id,label,data:simulate(steps[id],{hours:p.hours,repeatTraining:id==="natural"||id==="mini"})}));
+    return controls()+(results.length?'<div class="ts-layout" data-template-count="'+results.length+'">'+results.map(x=>section(x.id,x.data)).join("")+'</div><div class="ts-outcomes"><h3>Same '+fmt(p.hours,2)+'-hour window</h3><div class="ts-comparison-results">'+results.map(({label,data})=>'<span>'+$(label)+': <strong>'+(data.complete?fmt(data.final,2):"Blocked")+'</strong> ('+fmt(data.used)+' E)</span>').join("")+'</div>'+chart(results)+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
+      '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. Happiness resets on Torn quarter-hours. Points refills are limited to one per Torn day.</p>';
   }
   function wire(view){
     if(view.dataset.tsBound==="yes")return;
     view.dataset.tsBound="yes";
-    const rebuild=()=>{const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();};
+    const rebuild=()=>{const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();const toggles=view.querySelector(".ts-template-toggles");if(toggles)toggles.outerHTML=templateButtons();};
     view.addEventListener("change",event=>{
       const el=event.target;
       if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
@@ -362,6 +386,7 @@ const tornTrainSequence=(()=>{
       }
     });
     view.addEventListener("click",event=>{
+      const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);rebuild();view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
       const mode=event.target.closest("[data-ts-cooldown-mode]");
       if(mode){event.preventDefault();useCurrentCooldowns=mode.dataset.tsCooldownMode==="current"&&cooldownsKnown;rebuild();return;}
       const cap=event.target.closest("[data-ts-cap]");if(cap){p.boosterCapH=Number(cap.dataset.tsCap)===48?48:24;rebuild();return;}
@@ -381,5 +406,5 @@ const tornTrainSequence=(()=>{
       rebuild();
     });
   }
-  return {render,wire,simulate,steps,settings:p,loadLive};
+  return {render,wire,simulate,steps,settings:p,loadLive,templateButtons};
 })();
