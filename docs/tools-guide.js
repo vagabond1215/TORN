@@ -159,7 +159,7 @@ const tornToolsGuide=(()=>{
     return '<a class="quick-link" href="'+esc(row[4])+'" target="_blank" rel="noopener noreferrer"'+
       ' title="'+esc(name)+'" aria-label="Open '+esc(name)+'" data-tooltip="'+esc(name)+'">'+siteIcon(name)+'</a>';
   }).join("");
-  return '<div class="quick-inner"><div class="quick-links">'+links+'</div></div>';
+  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+tornRightRail.controls()+'</div>';
  }
  function updateBar(route){
   ensureIconHandler();
