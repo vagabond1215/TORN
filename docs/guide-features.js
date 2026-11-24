@@ -14,7 +14,7 @@ const tornGuideApi=(()=>{
     basic:days, bars:2*mins, cooldowns:2*mins, money:15*mins,
     battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
-    stocks:60*mins, personalstats:24*hrs,
+    stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs,
     gymCatalog:90*days, meritCatalog:30*days, stockCatalog:7*days
   };
   const ROUTES={
@@ -22,6 +22,7 @@ const tornGuideApi=(()=>{
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
     jobs:["job","workstats"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
+    activity:["virus","travel","racingrecords"],
     crime:["bars"],
     checklist:["bars","merits","meritCatalog","job"],
     money:["money","stocks","stockCatalog"],
@@ -86,6 +87,13 @@ const tornGuideApi=(()=>{
         state.cached=true;
       }
     }catch{}
+    // Old builds cached an invalid no-category personalstats error. The new
+    // category-qualified endpoint is not selected by Home, so this obsolete
+    // error must not poison the account status forever.
+    if(/incorrect category/i.test(String(state.errors.personalstats||""))){
+      delete state.errors.personalstats;
+      delete state.failedAt.personalstats;
+    }
     schedule();announce();
     return {identity:state.identity,cached:state.cached,updated:state.updated};
   }
@@ -181,6 +189,7 @@ const tornGuideApi=(()=>{
     return true;
   }
   function endpoint(key){
+    if(key==="personalstats")return "user/personalstats?cat=popular";
     if(key==="factionRankedWars")return "faction/rankedwars";
     if(key==="gymCatalog")return "torn/gyms";
     if(key==="stockCatalog")return "torn/stocks";
@@ -209,8 +218,8 @@ const tornGuideApi=(()=>{
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();
     let succeeded=0,failures=0;
-    const userNames=names.filter(name=>!name.endsWith("Catalog") && name!=="factionRankedWars");
-    const otherNames=names.filter(name=>name.endsWith("Catalog") || name==="factionRankedWars");
+    const userNames=names.filter(name=>!name.endsWith("Catalog") && !["factionRankedWars","personalstats"].includes(name));
+    const otherNames=names.filter(name=>name.endsWith("Catalog") || ["factionRankedWars","personalstats"].includes(name));
     const jobs=[];
     if(userNames.length>=2 && batchMode!=="unsupported"){
       jobs.push({
@@ -470,27 +479,94 @@ function homeStatList(items){
 function homeValue(v){
   return v===undefined||v===null?"Not available":formatNumber(v);
 }
-function homeBar(name,bar){
-  const current=Number(bar?.current),max=Number(bar?.maximum);
-  const valid=Number.isFinite(current)&&Number.isFinite(max)&&max>0;
-  const percentage=valid?Math.max(0,Math.min(100,current/max*100)):0;
-  const currentText=valid?formatNumber(bar.current)+"/"+formatNumber(bar.maximum):"Not loaded";
-  // Some API selections include a fulltime / time_left field. This is
-  // a cached snapshot, not a continuously validated refill countdown.
-  const countdown=bar?.time_left??bar?.fulltime;
-  const secs=Number(countdown);
-  const timer=valid&&current>=max?"FULL":
-    countdown!=null&&Number.isFinite(secs)&&secs>=0?
-      (Math.floor(secs/3600)?String(Math.floor(secs/3600)).padStart(2,"0")+":" :"")+
-      String(Math.floor(secs%3600/60)).padStart(2,"0")+":"+
-      String(Math.floor(secs%60)).padStart(2,"0"):"";
-  return '<div class="home-bar home-bar-'+safe(name)+'">'+
-    '<div class="home-bar-head"><strong>'+safe(name[0].toUpperCase()+name.slice(1))+
-    ': <span>'+safe(currentText)+'</span></strong><small>'+safe(timer)+'</small></div>'+
-    '<div class="home-bar-track" role="progressbar" aria-label="'+safe(name)+'" aria-valuemin="0" '+
-      (valid?'aria-valuenow="'+safe(current)+'" aria-valuemax="'+safe(max)+'"': 'aria-valuetext="Not loaded"')+'>'+
-      '<span style="width:'+percentage.toFixed(2)+'%"></span></div></div>';
+/* Torn API v2 supplies current, maximum, increment, interval, tick_time
+ * (seconds until next tick), and full_time. Preserve its actual tick phase
+ * between cached pulls; never initiate an API request for animation. */
+function tornBarProjection(name,bar,at,now=Date.now()){
+  const rawCurrent=Number(bar?.current),max=Number(bar?.maximum);
+  if(!bar||!Number.isFinite(rawCurrent)||!Number.isFinite(max)||max<=0)return null;
+  const defaults={
+    energy:{step:5,period:max>=150?600:900},
+    nerve:{step:1,period:300},
+    happy:{step:5,period:900},
+    life:{step:Math.max(1,Math.floor(max*.05)),period:300}
+  };
+  const spec=defaults[name];if(!spec)return null;
+  const reportedStep=Number(bar.increment),reportedInterval=Number(bar.interval);
+  const step=reportedStep>0&&Number.isFinite(reportedStep)?reportedStep:spec.step;
+  // v2 intervals are seconds. Do not interpret them as milliseconds.
+  const interval=reportedInterval>0&&Number.isFinite(reportedInterval)?reportedInterval:spec.period;
+  const stamp=Number(at)||now,elapsed=Math.max(0,(now-stamp)/1000);
+  const tick=Number(bar.tick_time??bar.ticktime);
+  const full=Number(bar.full_time??bar.fulltime);
+  let first=null,phaseSource="estimated";
+  if(bar.tick_time!=null||bar.ticktime!=null){
+    if(Number.isFinite(tick)&&tick>=0&&tick<=interval){
+      first=tick;phaseSource="API";
+    }
+  }
+  if(first===null&&(bar.full_time!=null||bar.fulltime!=null)&&rawCurrent<max){
+    const remainingTicks=Math.ceil((max-rawCurrent)/step);
+    const derived=full-(remainingTicks-1)*interval;
+    if(Number.isFinite(derived)&&derived>=0&&derived<=interval){
+      first=derived;phaseSource="API";
+    }
+  }
+  // Without an API tick phase, use a UTC-aligned approximation; this case is
+  // identified in the tooltip and replaced by the next real API bar snapshot.
+  if(first===null)first=(interval-((stamp/1000)%interval))%interval||interval;
+  const ticks=elapsed<first?0:1+Math.floor((elapsed-first)/interval);
+  const current=rawCurrent>=max?rawCurrent:Math.min(max,rawCurrent+ticks*step);
+  const until=current>=max?0:Math.max(0,first+ticks*interval-elapsed);
+  return {current,maximum:max,percentage:Math.max(0,Math.min(100,current/max*100)),
+    until,phaseSource,estimated:phaseSource!=="API",
+    snapshotAt:stamp,step,interval};
 }
+function homeCountdown(seconds){
+  if(seconds<=0)return "FULL";
+  const total=Math.ceil(seconds);
+  return (Math.floor(total/3600)?String(Math.floor(total/3600)).padStart(2,"0")+":" :"")+
+    String(Math.floor(total%3600/60)).padStart(2,"0")+":"+
+    String(total%60).padStart(2,"0");
+}
+function homeBar(name,bar){
+  const state=tornGuideApi.state;
+  const bridge=state.bridge&&state.bridge.fields?.includes(name)&&Date.now()-state.bridge.timestamp<90000;
+  const at=bridge?state.bridge.timestamp:state.fetchedAt.bars;
+  const projected=tornBarProjection(name,bar,at);
+  const valid=projected!==null;
+  const amount=valid?formatNumber(projected.current)+"/"+formatNumber(projected.maximum):"Not loaded";
+  const countdown=valid?(projected.current>=projected.maximum?"FULL":homeCountdown(projected.until)):"";
+  const tooltip=valid?(projected.estimated?"Estimated tick phase; awaiting precise Torn API bar timing":"Live projection from Torn API tick timing")+
+    " • last snapshot "+tornGuidePreferences.formatDate(projected.snapshotAt):"Bar not loaded";
+  return '<div class="home-bar home-bar-'+safe(name)+'" data-home-bar="'+safe(name)+'" title="'+safe(tooltip)+'">'+
+    '<div class="home-bar-head"><strong>'+safe(name[0].toUpperCase()+name.slice(1))+
+    ': <span data-home-current>'+safe(amount)+'</span></strong><small data-home-countdown>'+safe(countdown)+'</small></div>'+
+    '<div class="home-bar-track" role="progressbar" aria-label="'+safe(name)+'" aria-valuemin="0" '+
+      (valid?'aria-valuenow="'+projected.current+'" aria-valuemax="'+projected.maximum+'"':'aria-valuetext="Not loaded"')+'>'+
+      '<span data-home-fill style="width:'+(valid?projected.percentage.toFixed(2):0)+'%"></span></div></div>';
+}
+function updateHomeLiveBars(){
+  if(typeof location!=="undefined"&&!["","home","dashboard"].includes((location.hash||"#home").slice(1)))return;
+  const root=document.getElementById("topic-view");
+  if(!root||root.hidden)return;
+  const bars=payload("bars","bars"),state=tornGuideApi.state;
+  if(!bars)return;
+  for(const row of root.querySelectorAll("[data-home-bar]")){
+    const name=row.dataset.homeBar,bar=bars[name];if(!bar)continue;
+    const bridge=state.bridge&&state.bridge.fields?.includes(name)&&Date.now()-state.bridge.timestamp<90000;
+    const at=bridge?state.bridge.timestamp:state.fetchedAt.bars;
+    const current=tornBarProjection(name,bar,at),number=row.querySelector("[data-home-current]"),
+      time=row.querySelector("[data-home-countdown]"),fill=row.querySelector("[data-home-fill]"),
+      progress=row.querySelector("[role=progressbar]");
+    if(!current)continue;
+    if(number)number.textContent=formatNumber(current.current)+"/"+formatNumber(current.maximum);
+    if(time)time.textContent=current.current>=current.maximum?"FULL":homeCountdown(current.until);
+    if(fill)fill.style.width=current.percentage.toFixed(2)+"%";
+    if(progress)progress.setAttribute("aria-valuenow",String(current.current));
+  }
+}
+
 function renderDashboard() {
   let result='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Home dashboard</h1></header>';
   if(!tornGuideApi.isConnected()){
@@ -524,7 +600,7 @@ function renderDashboard() {
       '</dl><div class="home-bars">'+
         ["energy","nerve","happy","life"].map(key=>homeBar(key,bars?.[key])).join("")+
       '</div>'+
-      '<p class="home-snapshot-note">Bars and timers reflect your last API snapshot. Torn remains authoritative.</p>'+
+      ''+
     '</div></section>'+
     '<section class="panel home-battle"><div class="panel-heading"><h2>Battle stats <a href="#stats" title="Open training calculator">Calc</a></h2></div><div class="panel-content">'+
       homeStatList([
