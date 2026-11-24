@@ -232,29 +232,36 @@ const tornStatPlanner = (() => {
   }
   function statPanel(stat,gym) {
     const eff=effectsFor(stat);
-    const battle=battleEffects(stat);
     const projected=singleStatSession(stat,trainingCount(gym)*gym.energy,gym);
     const disabled=!gym[stat];
-    let bonuses='<div class="tc-mod-head">Gym gain effects (multiplied by source)</div>';
+    let bonuses='<div class="tc-gain-sources">';
     for(const group of eff.groups) {
       const label=group.group==="job"?"Job / workplace":group.group[0].toUpperCase()+group.group.slice(1);
-      bonuses+='<div class="tc-mod-row"><span>'+esc(label)+'</span><strong class="'+(group.total<0?"tc-neg":group.total>0?"tc-pos":"")+'">'+(group.total>=0?"+":"")+nice(group.total,2)+'%</strong></div>';
-      for(const entry of group.items) bonuses+='<small class="tc-mod-detail" title="'+esc(entry.text)+'">'+esc(entry.text)+'</small>';
+      bonuses+='<div class="tc-mod-row" title="'+esc(group.items.map(entry=>entry.text).join("\n"))+'"><span>'+esc(label)+'</span><strong class="'+(group.total<0?"tc-neg":group.total>0?"tc-pos":"")+'">'+(group.total>=0?"+":"")+nice(group.total,2)+'%</strong></div>';
     }
+    bonuses+='</div>';
     bonuses+='<label class="tc-manual"><span>Custom gym-gain %</span><input type="number" min="-95" max="300" step="0.1" data-tc-extra="'+stat+'" value="'+esc(state.extra[stat])+'"></label>';
     bonuses+='<p class="tc-multiplier">Training multiplier ×'+nice(eff.multiplier,3)+(eff.sourceAvailable?"":" · API perks unavailable")+'</p>';
-    bonuses+='<div class="tc-mod-head">Effective combat modifiers (not gym gains)</div>';
-    if(battle) {
-      bonuses+='<p class="tc-combat-total">Total combat modifier: <strong class="'+(battle.total<0?"tc-neg":battle.total>0?"tc-pos":"")+'">'+(battle.total>=0?"+":"")+nice(battle.total,2)+'%</strong></p>';
-      if(battle.lines.length) for(const line of battle.lines) bonuses+='<small class="tc-mod-detail">'+esc(line.text)+(line.value!==null?" ("+(line.value>0?"+":"")+nice(line.value,2)+"%)":"")+'</small>';
-      else bonuses+='<small class="tc-mod-detail">No individual combat modifiers reported.</small>';
-    } else bonuses+='<small class="tc-mod-detail">Requires a connected API key with battle-stat access.</small>';
     return '<div class="tc-stat-col '+(disabled?"tc-disabled":"")+'"><div class="tc-stat-title">'+readable[stat]+'</div>'+
       '<div class="tc-field"><label for="tc-stat-'+stat+'">Current stat</label><div class="tc-stat-input-row"><input id="tc-stat-'+stat+'" data-tc-stat="'+stat+'" type="number" min="0" step="1" value="'+esc(state.statValues[stat])+'"><button type="button" class="tc-stat-reset" data-tc-reset="'+stat+'" title="Reset '+readable[stat]+' to current API value" aria-label="Reset '+readable[stat]+'" '+(apiStatValue(stat)===null?'disabled':'')+'><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.6-4.6L3 9m0-6v6h6"/><path d="M4 13a8 8 0 0 0 14.6 4.6L21 15m0 6v-6h-6"/></svg></button></div></div>'+
       '<div class="tc-stat-meta"><span>Gym dots</span><strong>'+(disabled?"Unavailable":nice(gym[stat],1))+'</strong></div>'+
       '<div class="tc-stat-meta"><span>Est. gain</span><strong>+'+nice(projected.stat-state.statValues[stat],2)+'</strong></div>'+
       '<div class="tc-stat-meta"><span>Est. final</span><strong>'+nice(projected.stat,2)+'</strong></div>'+
       bonuses+'</div>';
+  }
+  function effectiveOverview(){
+    const rows=statNames.map(stat=>{
+      const base=apiStatValue(stat),effect=battleEffects(stat);
+      const effective=base!==null&&effect?Math.max(0,base*(1+effect.total/100)):null;
+      return {stat,base,effect,effective,changed:effective!==null&&effective!==base};
+    });
+    if(!rows.some(row=>row.changed))return "";
+    return '<div class="tc-stat-overview tc-effective-overview" aria-label="Effective battle stats">'+rows.map(row=>{
+      const {stat,base,effect,effective,changed}=row;
+      const signed=value=>(value>0?"+":"")+nice(value,2)+"%";
+      const tooltip=changed?["Effective "+readable[stat]+" · "+signed(effect.total),...effect.lines.map(line=>line.text+(line.value!==null&&!line.text.includes("%")?" ("+signed(line.value)+")":""))].join("\n"):"";
+      return '<div class="tc-overview-item" '+(changed?'title="'+esc(tooltip)+'" tabindex="0"':'')+'><small>'+shorthand[stat]+'</small><strong class="'+(changed?(effect.total>0?"tc-pos":"tc-neg"):"")+'">'+(changed?nice(effective):"—")+'</strong></div>';
+    }).join("")+'</div>';
   }
   function render() {
     hydrateFromApi();
@@ -265,23 +272,23 @@ const tornStatPlanner = (() => {
       '<button type="button" data-tc-view="calc" class="tc-subtab '+(state.subpage==="calc"?"is-current":"")+'" aria-current="'+(state.subpage==="calc"?"page":"false")+'">Calc · Gym simulator</button>'+
       '<button type="button" data-tc-view="compare" class="tc-subtab '+(state.subpage==="compare"?"is-current":"")+'" aria-current="'+(state.subpage==="compare"?"page":"false")+'">Compare · Training strategies</button></nav>'+
       '<div class="tc-overview"><div class="tc-stat-overview">'+statNames.map(stat=>
-      '<div class="tc-overview-item"><small title="'+readable[stat]+'">'+shorthand[stat]+'</small><strong>'+nice(state.statValues[stat])+'</strong></div>').join("")+'</div></div></div>';
+      '<div class="tc-overview-item"><small title="'+readable[stat]+'">'+shorthand[stat]+'</small><strong>'+nice(apiStatValue(stat)??state.statValues[stat])+'</strong></div>').join("")+'</div>'+effectiveOverview()+'</div></div>';
     if(state.subpage==="calc"){
     const catalog=gyms();
     const ordered=[...catalog].sort((a,b)=>{
       const rank=g=>{const i=g.rank>=0?g.rank:gymRank(g);return i<0?999:i;};
       return rank(a)-rank(b);
     });
-    markup+='<section class="panel"><div class="panel-content tc-gym-picker"><div class="tc-gym-board" role="group" aria-label="Select simulation gym">'+gymCategories.map((label,i)=>{
+    markup+='<section class="panel tc-calc-panel"><div class="panel-content tc-gym-picker"><div class="tc-gym-board" role="group" aria-label="Select simulation gym">'+gymCategories.map((label,i)=>{
       const list=ordered.filter(g=>gymCategory(g)===i);
       return '<div class="tc-gym-group" role="group" aria-label="'+label+'"><div class="tc-gym-tiles">'+list.map(g=>
         '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(g)+'<span>'+esc(g.name)+'</span></button>').join("")+'</div></div>';
     }).join("")+'</div>'+
       '<details class="tc-gym-info" '+(state.gymInfoOpen?"open":"")+'><summary>'+gymInfoHeading(active||gym)+'</summary><div class="tc-gym-info-body">'+
-      gymDotRow(active||gym)+(active&&active.name!==gym.name?'<div class="tc-gym-alternate"><div class="tc-gym-comparison-heading">'+gymInfoHeading(gym)+'</div>'+gymDotRow(gym,active)+'</div>':'')+'</div></details></div></section>';
+      gymDotRow(active||gym)+(active&&active.name!==gym.name?'<div class="tc-gym-alternate"><div class="tc-gym-comparison-heading">'+gymInfoHeading(gym)+'</div>'+gymDotRow(gym,active)+'</div>':'')+'</div></details></div>';
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
-    markup+='<section class="panel"><div class="panel-heading"><h2>Gym training simulator</h2></div><div class="panel-content">'+
+    markup+='<div class="panel-content tc-simulator-body">'+
       '<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button></div>'+
       '<div class="tc-stat-scroll"><div class="tc-four">'+statNames.map(stat=>statPanel(stat,gym)).join("")+'</div></div>'+
       '</div></section>';
