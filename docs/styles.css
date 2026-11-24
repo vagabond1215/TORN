@@ -1447,3 +1447,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-build-gyms small{color:var(--muted)}
 .tc-build-books summary{cursor:pointer;color:var(--accent-strong);font-weight:600}
 .tc-build-books>div{display:grid;gap:.25rem}
+
+/* Fixed comparison columns keep every promotion separator aligned. */
+.job-stat-requirements .home-pair dd{display:grid;grid-template-columns:10ch 1ch 10ch 8ch;gap:.25rem;align-items:baseline;justify-content:end;white-space:nowrap;overflow-wrap:normal}
+.job-stat-current,.job-stat-required{text-align:right}
+.job-stat-divider{text-align:center}
+.job-stat-requirements .job-stat-daily{text-align:right}
+.job-current-perks{margin-top:.65rem}
+@media(max-width:460px){.job-stat-requirements .home-pair dd{grid-template-columns:8ch 1ch 8ch 7ch;gap:.12rem;font-size:.75rem}.job-stat-requirements .home-pair dt{font-size:.73rem}.job-stat-requirements .job-stat-daily{font-size:.65rem}}
