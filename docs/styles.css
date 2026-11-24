@@ -1575,11 +1575,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-booster-row{--max-control-height:32px}
 .tc-selected-gym .tc-train-control{--max-control-height:32px}
 .ts-booster-row :is(input,select,button[data-ts-op="max"]),
-.tc-selected-gym .tc-train-control :is(input,select,button[data-tc-action="max"],button[data-tc-action="candy-max"]){
+.tc-selected-gym .tc-train-control :is(input,select,button[data-tc-action="max"],button[data-tc-action="full"],button[data-tc-action="candy-max"]){
   box-sizing:border-box;height:var(--max-control-height);min-height:var(--max-control-height);max-height:var(--max-control-height);margin-block:0;line-height:normal;
 }
 .ts-booster-row button[data-ts-op="max"],
-.tc-selected-gym .tc-train-control :is(button[data-tc-action="max"],button[data-tc-action="candy-max"]){padding-block:0}
+.tc-selected-gym .tc-train-control :is(button[data-tc-action="max"],button[data-tc-action="full"],button[data-tc-action="candy-max"]){padding-block:0}
 
 /* Training plans: full-width cards, independently collapsible queues. */
 #tc-sequencer .ts-layout{grid-template-columns:minmax(0,1fr)}
