@@ -8,7 +8,7 @@ const tornGuideApi=(()=>{
   const quarter=15*60*1000;
   const authKey="torn-city-guide:api:v2:remember";
   const cachePrefix="torn-city-guide:api:v2:cache:";
-  const inventoryTypes=["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical"];
+  const inventoryTypes=["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"];
   const mins=60*1000,hrs=60*mins,days=24*hrs;
   const TTL={
     basic:days, profile:15*mins, bars:2*mins, cooldowns:2*mins, money:15*mins, networth:60*mins,
@@ -18,7 +18,7 @@ const tornGuideApi=(()=>{
     gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["skills","itemCatalog","bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
+    home:["organizedcrime","skills","itemCatalog","bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
     stats:["profile","bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
@@ -218,7 +218,7 @@ const tornGuideApi=(()=>{
     const names=(ROUTES[route]||ROUTES.home).filter(name=>stale(name,force));
     const cats=route==="inventory"
       ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))
-      :route==="stats"?["Candy"]:["home","crime"].includes(route)?["Tool","Enhancer"]:[];
+      :route==="stats"?["Candy"]:route==="home"?inventoryTypes:route==="crime"?["Tool","Enhancer","Material"]:[];
     const selectedCats=cats.filter(cat=>inventoryTypes.includes(cat)&&stale("inventory:"+cat,force));
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();
