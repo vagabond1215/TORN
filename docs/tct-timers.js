@@ -114,6 +114,17 @@ const tornTctClock=(()=>{
       {id:"companyStar",title:"Company star review",at:utcTime(18,0,0),note:"Sunday, approximately 18:00 TCT"}
     ];
     const d=tornGuideApi.state.data;
+    const bank=getData("money")?.city_bank,bankAt=parseAbsolute(bank?.until);
+    list.push({id:"bank",title:"Bank investment matures",
+      at:bankAt&&bankAt>now?bankAt:null,
+      note:bankAt?"From cached user/money investment":"No active bank maturity in cache"});
+    const travel=getData("travel"),arrive=parseAbsolute(travel?.arrival??travel?.until??travel?.timestamp);
+    const remaining=seconds(travel?.time_left??travel?.remaining);
+    const tripAt=arrive||remaining!==null?arrive||
+      (Number(tornGuideApi.state.fetchedAt.travel||Date.now())+remaining*1000):null;
+    list.push({id:"flight",title:"Travel arrival",at:tripAt&&tripAt>now?tripAt:null,
+      note:travel?"From cached user/travel":"Travel not loaded; use Home Activity refresh"});
+
     for(const [id,title,section] of [
       ["education","Education completion","education"],
       ["virus","Current virus completes","virus"],

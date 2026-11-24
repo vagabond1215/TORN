@@ -536,8 +536,8 @@ function homeBar(name,bar){
   const projected=tornBarProjection(name,bar,at);
   const valid=projected!==null;
   const amount=valid?formatNumber(projected.current)+"/"+formatNumber(projected.maximum):"Not loaded";
-  const countdown=valid?(projected.current>=projected.maximum?"FULL":homeCountdown(projected.until)):"";
-  const tooltip=valid?(projected.estimated?"Estimated tick phase; awaiting precise Torn API bar timing":"Live projection from Torn API tick timing")+
+  const countdown=valid?(projected.current>projected.maximum?"OVER":projected.current>=projected.maximum?"FULL":homeCountdown(projected.until)):"";
+  const tooltip=valid?(projected.current>projected.maximum?"Over-cap bar: reset timing depends on active perks; next API snapshot needed":projected.estimated?"Estimated tick phase; awaiting precise Torn API bar timing":"Live projection from Torn API tick timing")+
     " • last snapshot "+tornGuidePreferences.formatDate(projected.snapshotAt):"Bar not loaded";
   return '<div class="home-bar home-bar-'+safe(name)+'" data-home-bar="'+safe(name)+'" title="'+safe(tooltip)+'">'+
     '<div class="home-bar-head"><strong>'+safe(name[0].toUpperCase()+name.slice(1))+
@@ -561,7 +561,7 @@ function updateHomeLiveBars(){
       progress=row.querySelector("[role=progressbar]");
     if(!current)continue;
     if(number)number.textContent=formatNumber(current.current)+"/"+formatNumber(current.maximum);
-    if(time)time.textContent=current.current>=current.maximum?"FULL":homeCountdown(current.until);
+    if(time)time.textContent=current.current>current.maximum?"OVER":current.current>=current.maximum?"FULL":homeCountdown(current.until);
     if(fill)fill.style.width=current.percentage.toFixed(2)+"%";
     if(progress)progress.setAttribute("aria-valuenow",String(current.current));
   }
@@ -661,7 +661,9 @@ function renderDashboard() {
   const unix=x=>{const v=Number(x);return Number.isFinite(v)&&v>1e9?(v>1e12?v:v*1000):null;};
   const when=x=>{const value=unix(x);return value?tornGuidePreferences.formatDate(value):"Not available";};
   const entry=(label,text,deadline)=>'<div class="home-pair"><dt>'+safe(label)+
-    '</dt><dd>'+(deadline?'<span data-activity-deadline="'+deadline+'">'+safe(text)+'</span>':safe(text))+'</dd></div>';
+    '</dt><dd>'+safe(text)+(deadline?
+      ' <span class="activity-countdown" data-activity-deadline="'+deadline+'"></span>':"")+
+    '</dd></div>';
   let bankSummary="No active deposit";
   if(!cash)bankSummary="Not loaded";
   else if(bank&&bank.amount!=null){
@@ -677,7 +679,7 @@ function renderDashboard() {
       st.fetchedAt.travel+travelRemain*1000:null);
   const destination=typeof travel?.destination==="string"?travel.destination:
     travel?.destination?.name||travel?.to||"Flight";
-  const flight=travel?tripEnd?destination+" · countdown":travel?.status||"No active flight":"Not loaded";
+  const flight=travel?tripEnd?destination:travel?.status||"No active flight":"Not loaded";
   const recordArray=Array.isArray(races)?races:
     Array.isArray(races?.records)?races.records:null;
   const recentRecords=recordArray?recordArray.length+" track records":"Not loaded";
@@ -685,8 +687,8 @@ function renderDashboard() {
     '<button type="button" class="home-activity-refresh" data-home-activity-refresh title="Request only stale activity selections">Update activity</button>'+
     '</div><div class="panel-content"><dl class="home-stat-list">'+
       entry("Investment",bankSummary)+
-      entry("Bank maturity",bank?.until!=null?when(bank.until):"Not loaded")+
-      entry("Virus",virus?(vAt?vName+" · countdown":vName):"Not loaded",vAt)+
+      entry("Bank maturity",bank?.until!=null?when(bank.until):cash?"No active investment":"Not loaded")+
+      entry("Virus",virus?vName:"Not loaded",vAt)+
       entry("Travel",flight,tripEnd)+
       entry("Racing records",recentRecords)+
     '</dl><p class="fine-print">Bank values are reused from Money. Virus, travel and personal racing records load only on request. Records are best laps, not the latest finishing position.</p>'+
