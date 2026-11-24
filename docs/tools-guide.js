@@ -44,6 +44,22 @@ const tornToolsGuide=(()=>{
  const maxPinned=launcherNames.length,quickKey="torn-city-guide:quick-links:hidden:v2";
  const pinNames=new Set(launcherNames);
  let override=null;
+ // Primary images are requested directly from the individual sites. If a
+ // provider changes the favicon path or blocks hotlinking, browser-level error
+ // handling tries a cached copy of that site's favicon, then the prior SVG.
+ const siteFavicons=Object.freeze({
+  "TornW3B":"https://weav3r.dev/favicon.ico",
+  "Torn Travel Planner":"https://www.torntravel.com/favicon.ico",
+  "Torn Exchange":"https://www.tornexchange.com/favicon.ico",
+  "Torn Report":"https://torn.report/favicon.ico",
+  "Torn Intel":"https://torn-intel.com/favicon.ico",
+  "Clairvoyant":"https://torn.marches.cafe/favicon.ico",
+  "Torn Training Gains Calculator":"https://www.torncalc.site/favicon.ico",
+  "CAT Script":"https://cat-script.com/favicon.ico",
+  "FFScouter":"https://ffscouter.com/favicon.ico",
+  "TornStats":"https://www.tornstats.com/favicon.ico",
+  "YATA":"https://yata.yt/favicon.ico"
+ });
  const icons={
   "TornW3B":'<path d="M3 20 21 11 3 3l4 8 14 0-14 1z"/>',
   "Torn Travel Planner":'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18M8 15h3m3 0h3"/>',
@@ -102,6 +118,37 @@ const tornToolsGuide=(()=>{
   return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
     (icons[name]||'<circle cx="12" cy="12" r="8"/>')+'</svg>';
  }
+ function siteIcon(name){
+  const site=siteFavicons[name];
+  if(!site)return svg(name);
+  return '<img class="quick-site-favicon" src="'+esc(site)+'" width="22" height="22" '+
+    'loading="lazy" decoding="async" referrerpolicy="no-referrer" '+
+    'data-site-favicon="'+esc(name)+'" alt="" aria-hidden="true">'+
+    '<span class="quick-favicon-fallback" hidden>'+svg(name)+'</span>';
+ }
+ let iconHandlerBound=false;
+ function iconError(event){
+  const img=event?.target;
+  const name=img?.dataset?.siteFavicon;
+  if(!pinNames.has(name))return;
+  const fallback=img.dataset.faviconFallback;
+  if(!fallback){
+    // The fallback is still the same site's own favicon, retrieved from an
+    // independent favicon cache. It never sees account data or API keys.
+    const domain=new URL(entry(name)[4]).hostname;
+    img.dataset.faviconFallback="cache";
+    img.src="https://www.google.com/s2/favicons?domain="+encodeURIComponent(domain)+"&sz=64";
+  }else{
+    img.style.display="none";
+    const symbol=img.nextElementSibling;
+    if(symbol)symbol.hidden=false;
+  }
+ }
+ function ensureIconHandler(){
+  if(iconHandlerBound||typeof document==="undefined")return;
+  document.addEventListener("error",iconError,true);
+  iconHandlerBound=true;
+ }
  function quickLinks(route){
   const context=route||(typeof location!=="undefined"?(location.hash||"#home").slice(1):"home");
   const contextual=typeof tornGuidePreferences!=="undefined"&&tornGuidePreferences.get("contextualQuickAccess");
@@ -110,13 +157,14 @@ const tornToolsGuide=(()=>{
   const links=selected.map(name=>{
     const row=entry(name);if(!row)return "";
     return '<a class="quick-link" href="'+esc(row[4])+'" target="_blank" rel="noopener noreferrer"'+
-      ' title="'+esc(name)+'" aria-label="Open '+esc(name)+'" data-tooltip="'+esc(name)+'">'+svg(name)+'</a>';
+      ' title="'+esc(name)+'" aria-label="Open '+esc(name)+'" data-tooltip="'+esc(name)+'">'+siteIcon(name)+'</a>';
   }).join("");
   return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+
    '<a class="quick-customize" href="#tools" title="Customize Quick Access" aria-label="Customize Quick Access">'+
    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3m-3.4-6.6-2.2 2.2M8.6 15.4l-2.2 2.2m0-12L8.6 7.6m6.8 7.8 2.2 2.2"/><circle cx="12" cy="12" r="4"/></svg></a></div>';
  }
  function updateBar(route){
+  ensureIconHandler();
   const host=typeof document!=="undefined"&&document.getElementById("tool-quickbar");
   if(host)host.innerHTML=quickLinks(route);
  }
@@ -188,5 +236,5 @@ const tornToolsGuide=(()=>{
    if(e.target.id==="tools-search"){query=e.target.value.toLowerCase().trim();const cardsEl=view.querySelector("#tools-cards");if(cardsEl)cardsEl.innerHTML=cards();}
   });
  }
- return {render,wire,list,devices,quickLinks,contextLinks,pins,togglePin,updateBar,clearPins,maxPinned,launcherNames,contexts};
+ return {render,wire,list,devices,quickLinks,contextLinks,pins,togglePin,updateBar,clearPins,maxPinned,launcherNames,contexts,siteFavicons};
 })();
