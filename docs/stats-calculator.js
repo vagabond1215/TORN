@@ -29,7 +29,7 @@ const tornStatPlanner = (() => {
   const state = {
     gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"gym",
     statValues:{strength:1000,defense:1000,speed:1000,dexterity:1000},
-    trainCount:1, trainMax:false,
+    trainCount:1, trainMax:false, calcCandyQty:0, calcCandyHappy:25,
     extra:{strength:0,defense:0,speed:0,dexterity:0},
     currentEnergy:150, maxEnergy:150, happy:1000, maxHappy:1000,
     compareStat:"strength",hours:32,regenMinutes:10,
@@ -202,7 +202,7 @@ const tornStatPlanner = (() => {
   }
   function singleStatSession(stat,energy,gym) {
     const start=state.statValues[stat];
-    return trainBlock(start,state.happy,energy,gym,stat,effectsFor(stat).multiplier);
+    return trainBlock(start,Math.min(99999,state.happy+state.calcCandyQty*state.calcCandyHappy),energy,gym,stat,effectsFor(stat).multiplier);
   }
   const shorthand={strength:"STR",defense:"DEF",speed:"SPD",dexterity:"DEX"};
   const gymCategories=["Lightweight","Middleweight","Heavyweight","Specialty"];
@@ -296,7 +296,7 @@ const tornStatPlanner = (() => {
       gymDotRow(active||gym)+(active&&active.name!==gym.name?'<div class="tc-gym-alternate"><div class="tc-gym-comparison-heading">'+gymInfoHeading(gym)+'</div>'+gymDotRow(gym,active)+'</div>':'')+'</div></details></div></section>';
     }
     if(state.subpage==="calc"){
-    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button></div>'+'</div>';
+    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><div class="tc-candy-control"><label for="tc-candy-qty">Candy:</label><input id="tc-candy-qty" type="number" data-tc="calcCandyQty" min="0" max="1000" step="1" value="'+state.calcCandyQty+'" title="Candy quantity (simulation only)"><select data-tc="calcCandyHappy" aria-label="Happiness per candy" title="Happiness per candy">'+[25,35,50,75,100,150].map(h=>'<option value="'+h+'" '+(state.calcCandyHappy===h?"selected":"")+'>'+h+' Happy</option>').join("")+'</select></div></div>'+'</div>';
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<div class="panel-content tc-simulator-body">'+
@@ -323,6 +323,8 @@ const tornStatPlanner = (() => {
         const key=el.dataset.tc;
         if(key==="selectedGym") state.selectedGym=el.value;
         else if(key==="trainCount"){state.trainCount=Math.floor(clamp(el.value,1,10000));state.trainMax=false;}
+        else if(key==="calcCandyQty")state.calcCandyQty=Math.floor(clamp(el.value,0,1000));
+        else if(key==="calcCandyHappy"){const h=Number(el.value);if([25,35,50,75,100,150].includes(h))state.calcCandyHappy=h;}
         else if(Object.prototype.hasOwnProperty.call(state,key)) {
           let n=numeric(el.value,state[key]);
           const integerFields=["hours","regenMinutes","naturalXan","naturalEcstasy","naturalCandy","naturalRefill","jumpXan","jumpEcstasy","jumpCandy","jumpDvd","jumpRefill"];
