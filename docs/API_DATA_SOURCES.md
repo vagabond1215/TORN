@@ -151,3 +151,8 @@ The rail's Update button calls the manual railTimers selection set only when cli
 The Home Activity panel still offers its more detailed bank and racing information on manual refresh. No API keys or user values are written into the repository.
 
 Property schema: https://neon0404.github.io/torn-client/types/UserPropertyBasicDetails.html
+
+
+## Inventory details and manual Weav3r searches
+
+Inventory uses the cached Torn item catalog (15-minute TTL) for descriptions, effects and market values. Expanding an item makes no new request. Item matching prefers a matching catalog ID and name, then a unique exact name. Unresolved IDs disable external search. Manual Weav3r search opens https://weav3r.dev/dashboard?tab=marketplace&intent=sell&item=ITEM_ID without sharing a key or inventory quantity. No automated marketplace polling or trades. Public pricelist buyers and anonymous marketplace orders are separate; anonymous identities remain hidden until matched through Weav3r. A future per-item API query and green confirmed-buyer indicator require a documented buyer endpoint, permission and CORS verification.
