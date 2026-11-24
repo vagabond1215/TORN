@@ -410,7 +410,7 @@ const tornTrainSequence=(()=>{
   function cooldownTiles(){
     const bliss=tornHappinessBook();
     const tiles=[...cooldownEffects.tiles,{label:"Book · Ignorance Is Bliss",detail:"No Happy reset · 99,999 ceiling",source:bliss.source,active:bliss.active,known:bliss.known}];
-    return '<div class="ts-perk-tiles" aria-label="Training perk status">'+tiles.map(x=>'<div class="ts-perk-tile '+(x.active?"is-active":"")+'" title="'+$(x.source||x.detail)+'"><strong>'+$(x.label)+'</strong><small>'+$(x.detail)+'</small><small>'+ (x.active?"Active":(x.known??cooldownEffects.known)?"Not detected":"Unknown")+'</small></div>').join("")+'</div>';
+    return '<div class="ts-perk-tiles" aria-label="Training perk status">'+tiles.map(x=>{const status=x.label.startsWith("Book · ")?tornBookTileStatus(x.label.slice(7),x.active):x.active?"active":"";return '<div class="ts-perk-tile '+(status?"is-"+status:"")+'" title="'+$(x.source||x.detail)+'"><strong>'+$(x.label)+'</strong><small>'+$(x.detail)+'</small><small>'+ (status?status[0].toUpperCase()+status.slice(1):(x.known??cooldownEffects.known)?"Not detected":"Unknown")+'</small></div>';}).join("")+'</div>';
   }
   function happinessStatus(){
     const book=tornHappinessBook();
