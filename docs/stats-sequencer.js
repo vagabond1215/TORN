@@ -31,7 +31,7 @@ const tornTrainSequence=(()=>{
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,n(v,a)));
   const fmt=(v,d=0)=>Number(v).toLocaleString(undefined,{maximumFractionDigits:d});
   const clock=v=>{const s=Math.max(0,Math.round(v));return Math.floor(s/3600)+":"+String(Math.floor(s/60)%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");};
-  let ctx=null,loadedPlayer=null,useCurrentCooldowns=false,cooldownsKnown=false;
+  let ctx=null,loadedPlayer=null,liveDrug=false,liveBooster=false,cooldownsKnown=false,apiBoosterCap=null,manualBoosterCap=24;
   const candyTiers={"25":["Bag of Bon Bons","Bag of Chocolate Kisses","Box of Bon Bons","Box of Extra Strong Mints","Box of Sweet Hearts","Lollipop","Box of Chocolate Bars"],"35":["Big Box of Chocolate Bars"],"50":["Bag of Candy Kisses","Chocolate Egg"],"75":["Bag of Bloody Eyeballs","Bag of Tootsie Rolls"],"100":["Bag of Chocolate Truffles","Bag of Reindeer Droppings"],"150":["Bag of Humbugs","Bag of Sherbet","Jawbreaker","Pixie Sticks"],"250":["Birthday Cupcake"]};
   const keyName=value=>String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
   const positive=value=>value!=null&&Number.isFinite(Number(value))&&Number(value)>0?Number(value):null;
@@ -73,24 +73,52 @@ const tornTrainSequence=(()=>{
   }
   function readCooldowns(){
     const data=tornGuideApi.state.data.cooldowns;
-    const cd=data&&(data.cooldowns||data);
-    return cd && typeof cd==="object"?{drug:n(cd.drug)/60,booster:n(cd.booster)/60}:null;
+    const cd=data?.cooldowns??data;
+    const valid=v=>v!=null&&v!==""&&Number.isFinite(Number(v))&&Number(v)>=0;
+    return cd&&typeof cd==="object"?{drug:valid(cd.drug)?Number(cd.drug)/60:null,booster:valid(cd.booster)?Number(cd.booster)/60:null}:null;
+  }
+  function detectedBoosterCap(){
+    const data=tornGuideApi.state.data.cooldowns,cd=data?.cooldowns??data;
+    const explicit=[cd?.booster_max,cd?.max_booster,cd?.booster_maximum,cd?.max_booster_cooldown];
+    for(const value of explicit){
+      if(value==null||value==="")continue;
+      const v=Number(value);
+      if(v>=86400&&v<=172800)return v/3600;
+    }
+    const raw=tornGuideApi.state.data.perks,perks=raw?.perks??raw;
+    const faction=Object.entries(perks||{}).filter(([k])=>/faction/i.test(k)).flatMap(([,v])=>Array.isArray(v)?v:[]);
+    for(const entry of faction){
+      const t=typeof entry==="string"?entry:[entry?.name,entry?.effect,entry?.description].filter(Boolean).join(" ");
+      if(!/booster/i.test(t)||!/cooldown/i.test(t)||!/maximum|max\b|capacity|limit|cap\b/i.test(t))continue;
+      const to=t.match(/(?:to|of|:)\s*(\d+(?:\.\d+)?)\s*(?:hours?|h\b)/i);
+      const add=t.match(/(?:\+|by\s+)\s*(\d+(?:\.\d+)?)\s*(?:hours?|h\b)/i);
+      const percent=t.match(/(?:\+|by\s+)\s*(\d+(?:\.\d+)?)\s*%/i);
+      const value=to?Number(to[1]):add?24+Number(add[1]):percent?24*(1+Number(percent[1])/100):null;
+      if(value!==null&&value>=24&&value<=48)return value;
+    }
+    return null;
   }
   function loadLive(force=false){
     const id=tornGuideApi.state.identity?.id??null;
-    if(loadedPlayer!==id){loadedPlayer=id;useCurrentCooldowns=false;}
+    if(loadedPlayer!==id){loadedPlayer=id;liveDrug=false;liveBooster=false;manualBoosterCap=24;}
     const cd=readCooldowns();
     cooldownsKnown=cd!==null;
+    if(cd?.drug==null)liveDrug=false;
+    if(cd?.booster==null)liveBooster=false;
+    apiBoosterCap=detectedBoosterCap();p.boosterCapH=apiBoosterCap??manualBoosterCap;
     const stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns);
     const elapsed=Number.isFinite(stamp)&&stamp>0?Math.max(0,(Date.now()-stamp)/60000):0;
-    p.startDrugMin=useCurrentCooldowns&&cd?Math.max(0,cd.drug-elapsed):0;
-    p.startBoosterMin=useCurrentCooldowns&&cd?Math.max(0,cd.booster-elapsed):0;
+    p.startDrugMin=liveDrug?Math.max(0,cd.drug-elapsed):0;
+    p.startBoosterMin=liveBooster?Math.max(0,cd.booster-elapsed):0;
     const now=new Date();
     p.tornClockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
     p.resetAfterSec=900-(now.getUTCMinutes()%15*60+now.getUTCSeconds());
   }
   function cooldownControls(){
-    return '<div class="ts-cooldown-mode"><strong>Starting cooldowns:</strong><button type="button" class="button secondary '+(!useCurrentCooldowns?"is-selected":"")+'" data-ts-cooldown-mode="zero" aria-pressed="'+(!useCurrentCooldowns)+'">Use 0</button><button type="button" class="button secondary '+(useCurrentCooldowns?"is-selected":"")+'" data-ts-cooldown-mode="current" aria-pressed="'+useCurrentCooldowns+'" '+(!cooldownsKnown?"disabled":"")+'>Use current</button><small>Drug '+fmt(p.startDrugMin,1)+'m · Booster '+fmt(p.startBoosterMin,1)+'m</small><small title="Fixed Torn quarter-hour schedule">Next Happy reset: '+String(Math.floor(p.resetAfterSec/60)).padStart(2,"0")+':'+String(p.resetAfterSec%60).padStart(2,"0")+'</small></div>';
+    const cd=readCooldowns();
+    const toggle=(kind,on,available)=>'<button type="button" class="button secondary" data-ts-cooldown-mode="'+kind+'" aria-pressed="'+on+'" '+(!available?"disabled":"")+'>'+(on?"Live ":"0 ")+(kind==="drug"?"Drug":"Booster")+' CD</button>';
+    const cap=apiBoosterCap===null?'<button type="button" class="button secondary" data-ts-cap="toggle" aria-pressed="'+(p.boosterCapH===48)+'">Max '+p.boosterCapH+'H Booster</button>':'<span title="Maximum booster cooldown detected from API">Max '+fmt(apiBoosterCap,2)+'H Booster</span>';
+    return '<div class="ts-cooldown-mode">'+toggle("drug",liveDrug,cd?.drug!=null)+toggle("booster",liveBooster,cd?.booster!=null)+cap+'<small>Drug '+fmt(p.startDrugMin,1)+'m · Booster '+fmt(p.startBoosterMin,1)+'m</small><small title="Fixed Torn quarter-hour schedule">Next Happy reset: '+String(Math.floor(p.resetAfterSec/60)).padStart(2,"0")+':'+String(p.resetAfterSec%60).padStart(2,"0")+'</small></div>';
   }
   function activePerks(){
     const val=tornGuideApi.state.data.perks;
@@ -306,7 +334,6 @@ const tornTrainSequence=(()=>{
     const effect=(label,minutes,source)=>'<span title="'+$(source.join("\n")|| (cooldownEffects.known?"No applicable reduction reported":"Perks unavailable; base cooldown assumed"))+'">'+label+' <strong>'+fmt(minutes,2)+'m</strong></span>';
     return '<details class="ts-settings" open><summary class="ts-settings-summary"><span>Time, cooldowns, effects, prices</span>'+cooldownControls()+'</summary>'+
       '<div class="ts-membership">Preparation window: <strong>'+fmt(p.hours,2)+'h</strong> · '+$(energyRules().label)+'</div>'+
-      '<div class="ts-cooldown-mode"><strong>Max Booster CD:</strong>'+[24,48].map(h=>'<button type="button" class="button secondary" data-ts-cap="'+h+'" aria-pressed="'+(p.boosterCapH===h)+'">'+h+'h</button>').join("")+'</div>'+
       '<div class="ts-market-prices ts-auto-cooldowns">'+effect("Xanax",p.xanaxCDMin,[])+effect("Ecstasy",p.ecstasyCDMin,[])+effect("Candy",30*p.candyCDMultiplier,cooldownEffects.sources.candy)+effect("eDVD",360*p.dvdCDMultiplier,cooldownEffects.sources.dvd)+'</div>'+cooldownTiles()+
       '<div class="ts-market-prices"><span>Xanax '+priceText(p.xanaxPrice)+'</span><span>Ecstasy '+priceText(p.ecstasyPrice)+'</span><span>eDVD '+priceText(p.dvdPrice)+'</span><span>Point '+priceText(p.pointPrice)+'</span></div>'+
       '<label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label></details>';
@@ -388,8 +415,8 @@ const tornTrainSequence=(()=>{
     view.addEventListener("click",event=>{
       const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);rebuild();view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
       const mode=event.target.closest("[data-ts-cooldown-mode]");
-      if(mode){event.preventDefault();useCurrentCooldowns=mode.dataset.tsCooldownMode==="current"&&cooldownsKnown;rebuild();return;}
-      const cap=event.target.closest("[data-ts-cap]");if(cap){p.boosterCapH=Number(cap.dataset.tsCap)===48?48:24;rebuild();return;}
+      if(mode){event.preventDefault();if(mode.dataset.tsCooldownMode==="drug")liveDrug=!liveDrug;else liveBooster=!liveBooster;rebuild();return;}
+      const cap=event.target.closest("[data-ts-cap]");if(cap){event.preventDefault();if(apiBoosterCap===null)manualBoosterCap=manualBoosterCap===24?48:24;rebuild();return;}
       const el=event.target.closest("[data-ts-op],[data-ts-sync]");
       if(!el)return;
       if(el.hasAttribute("data-ts-sync")){loadLive(true);rebuild();return;}
