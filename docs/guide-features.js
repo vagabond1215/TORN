@@ -812,7 +812,7 @@ function educationReduction(m){
  const parts=[["Merits",m.perks==null?null:Math.min(20,Math.max(0,Number(m.perks)*2))],["WSU stock",m.positions==null?null:m.positions>=1000000?10:0],["Principal career perk",principal===null?null:principal?10:0]];
  const known=parts.filter(([,v])=>v!==null&&Number.isFinite(v));
  const total=known.reduce((a,[,v])=>a+v,0);
- return {label:known.length?total+"%"+(known.length<parts.length?" (partial)":""):"Unavailable",tooltip:parts.map(([name,v])=>name+": "+(v===null?"Not loaded":v+"%")).join("\n")+"\nAdditive reductions apply to future courses."};
+ return {label:known.length?total+"%"+(known.length<parts.length?" (partial)":""):"Unavailable",tooltip:parts.map(([name,v])=>name+": "+(v===null?"Not loaded":v+"%")).join("\n")};
 }
 function educationDuration(seconds){
  if(seconds==null||!Number.isFinite(Number(seconds)))return "Unavailable";
@@ -852,9 +852,9 @@ function educationCourseDetail(c,m){
 }
 function renderEducationPage(){
  const m=educationModel(),reduction=educationReduction(m),name=m.current?.name??m.active?.name??(m.id!=null?"Course #"+m.id:"None active / not loaded");
- const details=reduction.tooltip+"\nCompleted courses: "+(m.known?m.ids.size+"/"+m.courses.length:"Not loaded")+(m.deadline?"\nCompletion (TCT): "+new Date(m.deadline).toISOString().replace("T"," ").slice(0,19):"");
- let out='<section class="panel edu-panel"><div class="panel-heading edu-compact-heading"><div class="edu-heading-status" tabindex="0" title="'+safe(details)+'"><h2>Education:</h2><strong class="edu-active-course">'+safe(name)+'</strong><span class="edu-reduction">'+safe(reduction.label==="Unavailable"?"—":"-"+reduction.label)+'</span>'+(m.deadline?'<span class="edu-time-left" data-edu-deadline="'+m.deadline+'">'+tornTctClock.formatDuration((m.deadline-Date.now())/1000)+'</span>':'')+'</div><a href="https://wiki.torn.com/wiki/Education" target="_blank" rel="noopener noreferrer">Wiki</a></div><div class="panel-content">'+
- '<div class="edu-filters"><label>Group by <select data-edu-groupby><option value="category" '+(educationView.groupBy==="category"?"selected":"")+'>Education category</option><option value="effect" '+(educationView.groupBy==="effect"?"selected":"")+'>Effect / perk</option></select></label>'+
+ const courseTooltip=m.active?(educationEffectText(m.active)||"No additional course perks listed."):"Course perks unavailable.";
+ let out='<section class="panel edu-panel"><div class="panel-heading edu-compact-heading"><div class="edu-heading-status"><h2>Education:</h2><strong class="edu-active-course" tabindex="0" title="'+safe(courseTooltip)+'">'+safe(name)+'</strong><span class="edu-reduction" tabindex="0" title="'+safe(reduction.tooltip)+'">'+safe(reduction.label==="Unavailable"?"—":"-"+reduction.label)+'</span>'+(m.deadline?'<span class="edu-time-left" tabindex="0" title="'+safe(reduction.tooltip)+'" data-edu-deadline="'+m.deadline+'">'+tornTctClock.formatDuration((m.deadline-Date.now())/1000)+'</span>':'')+'</div><span class="edu-completion-count">'+(m.known?m.ids.size:"—")+' / '+m.courses.length+'</span></div><div class="panel-content">'+
+ '<div class="edu-filters"><a class="edu-wiki-link" href="https://wiki.torn.com/wiki/Education" target="_blank" rel="noopener noreferrer">Wiki</a><label>Group by <select data-edu-groupby><option value="category" '+(educationView.groupBy==="category"?"selected":"")+'>Education category</option><option value="effect" '+(educationView.groupBy==="effect"?"selected":"")+'>Effect / perk</option></select></label>'+
  (educationView.groupBy==="effect"?'<label>Education path <select data-edu-path><option value="all">All effects</option>'+educationPaths.map(([name])=>'<option value="'+safe(name)+'" '+(educationView.effect===name?"selected":"")+'>'+safe(name)+'</option>').join("")+'</select></label>':"")+
  '<label>Show <select data-edu-filter>'+[["all","All courses"],["remaining","Remaining"],["completed","Completed"]].map(([v,l])=>'<option value="'+v+'" '+(educationView.filter===v?"selected":"")+'>'+l+'</option>').join("")+'</select></label></div>';
  for(const g of educationGroups(m)){
