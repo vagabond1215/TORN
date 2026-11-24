@@ -405,13 +405,6 @@ const tornStatPlanner = (() => {
       return {stat,i,eff,best,delta,energy,progress:targets[i]>0?Math.min(1,current[i]/targets[i]):1};
     });
     const priority=[...entries].filter(e=>e.delta>0).sort((a,b)=>a.progress-b.progress||(b.eff.multiplier-a.eff.multiplier))[0];
-    const activities=typeof tornRoadmap!=="undefined"?tornRoadmap.selectedStyles():[];
-    const suggestions=[];
-    if(activities.some(x=>["War","Mug"].includes(x)))suggestions.push("War / mugging: keep both offensive stats useful; a neglected defensive stat is a deliberate vulnerability.");
-    if(activities.includes("Revive"))suggestions.push("Reviver: reserve energy for scheduled revives before planning training or a 31-day book.");
-    if(activities.some(x=>["Trade","Travel","Business","Money"].includes(x)))suggestions.push("Income activities: protect training funds and avoid wasting natural energy during long travel or downtime.");
-    if(activities.includes("Training"))suggestions.push("Growth: prioritize gym unlocks, relevant gain perks and uninterrupted energy use.");
-    if(!suggestions.length)suggestions.push("Balanced is a safe starting choice. Specialize only if the combat trade-offs fit your goals.");
     const high=option[3],pair=option[4],requirements=[];
     if(high){
       const i=statNames.indexOf(high),other=Math.max(...current.filter((_,j)=>j!==i));
@@ -426,15 +419,13 @@ const tornStatPlanner = (() => {
     const uniqueBooks=[...new Set(activeBook.map(x=>x.text))];
     const reading=uniqueBooks.length?uniqueBooks.join(" · "):"No active gym-gain book identified in loaded perks.";
     const label=stat=>readable[stat];
-    return '<section class="panel tc-build-panel"><div class="panel-heading"><h2>Build guide</h2></div><div class="panel-content">'+
+    return '<section class="panel tc-build-panel"><div class="panel-heading"><h2>Train next: '+(priority?esc(label(priority.stat))+" to "+nice(targets[priority.i]):"Target reached")+'</h2></div><div class="panel-content">'+
       '<div class="tc-build-controls"><label>Build <select data-tc-build="choice">'+buildOptions.map(([id,name])=>'<option value="'+id+'" '+(buildChoice===id?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
       '<label>Target total <input type="number" min="0" max="1000000000000000" step="any" data-tc-build="total" value="'+(buildTotal||"")+'" placeholder="'+Math.ceil(targetTotal)+'"></label><button class="button secondary" type="button" data-tc-build-reset>Auto</button><small>'+(!live?"Sample / simulated stats · ":"")+'Minimum feasible '+nice(Math.ceil(minimum))+'</small></div>'+
       '<div class="tc-build-ratio">'+entries.map(e=>'<span class="tc-build-segment tc-build-'+e.stat+'" style="flex:'+weights[e.i]+'" title="'+label(e.stat)+' '+nice(shares[e.i]*100,1)+'%">'+shorthand[e.stat]+' '+nice(shares[e.i]*100,1)+'%</span>').join("")+'</div>'+
       '<div class="tc-build-scroll"><table class="tc-build-table"><thead><tr><th>Stat</th><th>Current / %</th><th>Target / %</th><th>Remaining</th><th>Gain perks</th><th>Known gym</th><th>Est. E</th></tr></thead><tbody>'+
       entries.map(e=>'<tr><td><strong>'+shorthand[e.stat]+'</strong></td><td>'+nice(current[e.i])+' <small>'+nice(sum?current[e.i]/sum*100:0,1)+'%</small></td><td>'+nice(targets[e.i])+' <small>'+nice(shares[e.i]*100,1)+'%</small></td><td class="'+(e.delta?"":"tc-pos")+'">'+nice(e.delta)+'</td><td title="'+esc(e.eff.groups.flatMap(g=>g.items.map(x=>x.text)).join("\n"))+'">'+(e.eff.sourceAvailable?nice((e.eff.multiplier-1)*100,1)+"%":"—")+'</td><td>'+esc(e.best?.name??"Unknown")+'</td><td>'+nice(e.energy??NaN)+'</td></tr>').join("")+'</tbody></table></div>'+
-      '<div class="tc-build-recommend"><strong>Train next: '+(priority?label(priority.stat):"Target reached")+'</strong>'+(priority?' · '+nice(priority.delta)+' remaining':"")+
-      (activeBook.length?'<p>Active book: '+esc(reading)+'. Favor applicable training while active, but preserve special-gym eligibility.</p>':'')+
-      '<p>'+esc(suggestions.join(" "))+'</p></div>'+
+      (activeBook.length?'<div class="tc-build-recommend"><p>Active book: '+esc(reading)+'</p></div>':"")+
       (requirements.length?'<div class="tc-build-gyms">'+requirements.map(([name,met,desc,g])=>'<div><strong>'+esc(name)+'</strong><span class="'+(met?"tc-pos":"tc-neg")+'">'+(met?"Ratio met":"Ratio not met")+'</span><small>'+esc(desc)+' · '+(unlocked(g)?"Access reported":"Access not verified")+'</small></div>').join("")+'</div>':"")+
       '<details class="tc-build-books"><summary>Books &amp; training priorities</summary><p>'+esc(reading)+'</p><div>'+statNames.map(stat=>'<div><strong>'+esc(bookNames[stat])+'</strong> · +30% '+label(stat)+' gym gains for 31 days</div>').join("")+'<div><strong>Get Hard Or Go Home</strong> · +20% all gym gains for 31 days</div><div><strong>Higher Daddy, Higher!</strong> · +20% energy regeneration for 31 days</div></div><p>Save unread books until you have a suitable gym, perks, supplies and time to use the entire duration. Ownership is not inferred.</p></details>'+
       '<p class="fine-print">Targets are suggested buffered ratios. Estimated energy uses the current per-energy gain at current happiness in a reported gym; future growth, cooldowns and membership changes are not simulated. <a href="https://wiki.torn.com/wiki/Gym" target="_blank" rel="noopener noreferrer">Gym requirements</a> · <a href="https://www.torn.com/forums.php?f=61&p=threads&t=16132234" target="_blank" rel="noopener noreferrer">Hank / Baldr guide</a></p></div></section>';
