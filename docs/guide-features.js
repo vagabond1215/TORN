@@ -11,14 +11,14 @@ const tornGuideApi=(()=>{
   const inventoryTypes=["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical"];
   const mins=60*1000,hrs=60*mins,days=24*hrs;
   const TTL={
-    basic:days, bars:2*mins, cooldowns:2*mins, money:15*mins,
+    basic:days, bars:2*mins, cooldowns:2*mins, money:15*mins, networth:60*mins,
     battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
     gymCatalog:90*days, meritCatalog:30*days, stockCatalog:7*days
   };
   const ROUTES={
-    home:["bars","cooldowns","money","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
+    home:["bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
     jobs:["job","workstats"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
@@ -580,6 +580,66 @@ function updateHomeLiveBars(){
   }
 }
 
+// Torn API v2 /user/networth is a distinct globally cached selection. Display
+// its server-provided total instead of estimating wealth from visible balances.
+const tornNetworthGroups=Object.freeze([
+  ["Money", [
+    ["wallet","Wallet"],["city_bank","City bank"],["cayman_bank","Cayman bank"],
+    ["vault","Vault"],["piggy_bank","Piggy bank"],["bookie","Bookie"],
+    ["pending","Pending"],["loans","Loans",true],["unpaid_fees","Unpaid fees",true]
+  ]],
+  ["Assets", [
+    ["stock_market","Stocks"],["property","Properties"],["company","Company"]
+  ]],
+  ["Items", [
+    ["inventory","Inventory"],["display_case","Display case"],["bazaar","Bazaar"],
+    ["item_market","Item market"],["auction_house","Auction house"],
+    ["enlisted_cars","Enlisted cars"],["trades","Trades"]
+  ]]
+]);
+function networthAmount(v,negative=false){
+  const value=Number(v);
+  if(v===undefined||v===null||!Number.isFinite(value))return null;
+  const adjusted=negative?-Math.abs(value):value;
+  return adjusted<0?"-$"+formatNumber(Math.abs(adjusted)):"$"+formatNumber(adjusted);
+}
+function networthPanel(){
+  const wealth=payload("networth","networth"),error=sourceError("networth");
+  let out='<section class="panel home-networth"><div class="panel-heading"><h2>Net worth</h2></div>'+
+    '<div class="panel-content">';
+  if(!wealth||!Number.isFinite(Number(wealth.total))){
+    return out+'<p class="networth-not-loaded">Net worth '+(error?"unavailable":"not loaded yet")+
+      '</p>'+error+'<p class="fine-print">Torn API net-worth selection refreshes at most hourly.</p></div></section>';
+  }
+  out+='<div class="networth-total" aria-label="Total net worth"><small>Total net worth</small>'+
+    '<strong>'+safe(networthAmount(wealth.total))+'</strong></div>';
+  for(const [name,entries] of tornNetworthGroups){
+    const raw=wealth[name.toLowerCase()];
+    const rows=[];
+    let sum=0;
+    for(const [key,label,negative] of entries){
+      const input=raw?.[key];
+      if(input===undefined||input===null||!Number.isFinite(Number(input))||Number(input)===0)continue;
+      const contribution=negative?-Math.abs(Number(input)):Number(input);
+      sum+=contribution;
+      rows.push('<div class="networth-line"><dt>'+safe(label)+'</dt><dd>'+
+        safe(networthAmount(input,negative))+'</dd></div>');
+    }
+    out+='<details class="networth-group" open><summary><span>'+safe(name)+'</span>'+
+      '<strong>'+safe(networthAmount(sum))+'</strong></summary>'+
+      '<dl class="networth-lines">'+(rows.join("")||
+        '<div class="networth-empty">No recorded value</div>')+'</dl></details>';
+  }
+  if(wealth.points!==undefined&&wealth.points!==null&&Number.isFinite(Number(wealth.points))){
+    out+='<div class="networth-points"><span>Points value</span><strong>'+
+      safe(networthAmount(wealth.points))+'</strong></div>';
+  }
+  const snapshot=Number(wealth.timestamp)*1000||tornGuideApi.state.fetchedAt.networth;
+  out+='<p class="networth-footnote">Torn-calculated total · '+safe(
+    snapshot?tornGuidePreferences.formatDate(snapshot):"timestamp unavailable")+
+    ' · hourly cache</p>'+error+'</div></section>';
+  return out;
+}
 function renderDashboard() {
   let result='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Home dashboard</h1></header>';
   if(!tornGuideApi.isConnected()){
@@ -620,6 +680,7 @@ function renderDashboard() {
         ["Endurance",workValue("endurance","end")]
       ])+'<p class="home-subline">Job: '+safe(currentJob)+'</p>'+sourceError("workstats")+
     '</div></section>'+
+    networthPanel()+
   '</div>';
 
   result+='<div class="home-secondary-grid">'+
