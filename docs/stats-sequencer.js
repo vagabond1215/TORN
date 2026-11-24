@@ -120,7 +120,7 @@ const tornTrainSequence=(()=>{
     const cd=readCooldowns();
     const toggle=(kind,on,available)=>'<button type="button" class="button secondary" data-ts-cooldown-mode="'+kind+'" aria-pressed="'+on+'" '+(!available?"disabled":"")+'>'+(on?"Live ":"0 ")+(kind==="drug"?"Drug":"Booster")+' CD</button>';
     const cap=apiBoosterCap===null?'<button type="button" class="button secondary" data-ts-cap="toggle" aria-pressed="'+(p.boosterCapH===48)+'">Max '+p.boosterCapH+'H Booster</button>':'<span title="Maximum booster cooldown detected from API">Max '+fmt(apiBoosterCap,2)+'H Booster</span>';
-    return '<div class="ts-cooldown-mode">'+toggle("drug",liveDrug,cd?.drug!=null)+toggle("booster",liveBooster,cd?.booster!=null)+cap+'<small>Drug '+fmt(p.startDrugMin,1)+'m · Booster '+fmt(p.startBoosterMin,1)+'m</small><small title="Fixed Torn quarter-hour schedule">Next Happy reset: '+String(Math.floor(p.resetAfterSec/60)).padStart(2,"0")+':'+String(p.resetAfterSec%60).padStart(2,"0")+'</small></div>';
+    return '<div class="ts-cooldown-mode">'+toggle("drug",liveDrug,cd?.drug!=null)+toggle("booster",liveBooster,cd?.booster!=null)+cap+'</div>';
   }
   function activePerks(){
     const val=tornGuideApi.state.data.perks;
@@ -203,7 +203,7 @@ const tornTrainSequence=(()=>{
         const next=Math.min(until,eTick,hTick,drugTick),passed=next-v.time,priorDrug=v.drug;
         v.time=next;v.drug=Math.max(0,v.drug-passed);v.booster=Math.max(0,v.booster-passed);
         if(next===eTick){if(v.energy<eCap)v.energy=Math.min(eCap,v.energy+5);else v.lostRegen+=5;}
-        if(next===hTick){v.happy=v.happy>ctx.state.maxHappy?ctx.state.maxHappy:Math.min(ctx.state.maxHappy,v.happy+5);}
+        if(next===hTick){const before=v.happy,start=snap();v.happy=before>ctx.state.maxHappy?ctx.state.maxHappy:Math.min(ctx.state.maxHappy,before+5);if(before>ctx.state.maxHappy)v.log.push({i:"•",type:"happyReset",reason:"Quarter-hour reset",start,end:snap()});}
         if(v.auto && (priorDrug>0&&v.drug===0 || next===eTick&&(cfg.naturalOnly?v.energy>=gymCost:v.energy>=eCap)))
           checkin(priorDrug>0&&v.drug===0?"Drug cooldown expired":"Energy bar filled");
         if(next===hTick||next===until||next%3600===0)point();
@@ -306,7 +306,7 @@ const tornTrainSequence=(()=>{
       v.auto=true;
       while(v.time<limit){
         const day=Math.floor((cfg.tornClockMin*60+v.time)/86400);
-        if(v.drug===0){const start=snap();train();useItem("xanax");train();v.log.push({i:"•",type:"xanax",reason:"Available drug cycle",start,end:snap()});}
+        if(v.drug===0){const start=snap();train();useItem("xanax");train();point();v.log.push({i:"•",type:"xanax",reason:"Available drug cycle",start,end:snap()});}
         const midnight=(day+1)*86400-cfg.tornClockMin*60-v.time;
         advance(Math.min(limit-v.time,v.drug||Infinity,Math.max(1,midnight)));
       }
@@ -363,14 +363,14 @@ const tornTrainSequence=(()=>{
   }
   function log(data){
     return '<details class="ts-log"><summary>Execution timeline ('+data.log.length+' steps)</summary><div class="ts-log-scroller"><table><thead><tr><th>Step</th><th>Time</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th></tr></thead><tbody>'+
-      data.log.map(a=>'<tr><td>'+$(names[a.type])+(a.reason?" · "+$(a.reason):"")+'</td><td>'+clock(a.end.time)+'</td><td>'+fmt(a.end.energy)+'</td><td>'+fmt(a.end.happy)+'</td><td>'+clock(a.end.drug)+'</td><td>'+clock(a.end.booster)+'</td></tr>').join("")+
+      data.log.map(a=>'<tr><td>'+$(a.type==="happyReset"?"Happiness reset":names[a.type])+(a.reason?" · "+$(a.reason):"")+'</td><td>'+clock(a.end.time)+'</td><td>'+fmt(a.end.energy)+'</td><td>'+fmt(a.end.happy)+'</td><td>'+clock(a.end.drug)+'</td><td>'+clock(a.end.booster)+'</td></tr>').join("")+
       '</tbody></table></div></details>';
   }
   function section(side,data){
     const heading=templates.find(x=>x[0]===side)?.[2]??side;
     return '<section class="ts-side"><h3>'+heading+' <small>'+fmt(p.hours,2)+'h</small></h3><div class="ts-list">'+'<div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div>'+steps[side].map((a,i)=>data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,a,i,data.rowInfo[i])).join("")+'</div>'+
-      '<div class="ts-add"><select data-ts-choice="'+side+'">'+Object.entries(names).map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select>'+
-      '<button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'">Add action</button>'+
+      '<div class="ts-add"><select data-ts-choice="'+side+'" aria-label="Select action"><option value="" selected>Select action</option>'+Object.entries(names).map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select>'+
+      '<button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'" disabled>Add action</button>'+
       '<button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div>'+
       (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join("; ")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
       '<p class="ts-stat">Final: '+(data.complete?fmt(data.final,2):"Blocked")+' <small>+'+fmt(data.gain,2)+' gain, '+fmt(data.used)+' E, '+(data.money==null?"Cost unavailable":"$"+fmt(data.money))+'</small></p>'+
@@ -408,6 +408,7 @@ const tornTrainSequence=(()=>{
     const rebuild=()=>{const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();const toggles=view.querySelector(".ts-template-toggles");if(toggles)toggles.outerHTML=templateButtons();};
     view.addEventListener("change",event=>{
       const el=event.target;
+      if(el.matches("[data-ts-choice]")){const button=el.closest(".ts-add")?.querySelector('[data-ts-op="add"]');if(button)button.disabled=!Object.hasOwn(names,el.value);return;}
       if(el.dataset.tsStartEnergy&&Object.hasOwn(startingEnergy,el.dataset.tsStartEnergy)){startingEnergy[el.dataset.tsStartEnergy]=el.value==="zero"?"zero":"full";rebuild();return;}
       if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
       const param=el.dataset.tsParam;
@@ -441,7 +442,7 @@ const tornTrainSequence=(()=>{
       else if(op==="preset")steps[side]=defaults[side]();
       else if(op==="add"){
         const select=view.querySelector('[data-ts-choice="'+side+'"]');
-        if(list.length<40)list.push(make(select?select.value:"train"));
+        if(select&&Object.hasOwn(names,select.value)&&list.length<40)list.push(make(select.value));else return;
       }else if(op==="remove")list.splice(index,1);
       else if(op==="up"&&index>0)[list[index-1],list[index]]=[list[index],list[index-1]];
       else if(op==="down"&&index<list.length-1)[list[index+1],list[index]]=[list[index],list[index+1]];
