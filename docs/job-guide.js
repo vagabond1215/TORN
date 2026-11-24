@@ -60,11 +60,21 @@ const tornJobsGuide=(()=>{
   ];
   const list=rows=>'<dl class="home-stat-list">'+rows.map(([label,value])=>
    '<div class="home-pair"><dt>'+esc(label)+'</dt><dd>'+esc(value==null?"Not yet loaded":value)+'</dd></div>').join("")+'</dl>';
+  const perks=d.perks&&(d.perks.perks||d.perks);
+  const jobPerks=perks?.job??perks?.job_perks;
+  const livePerks=Array.isArray(jobPerks)?jobPerks.map(x=>typeof x==="string"?x:x?.description??x?.effect??x?.name).filter(Boolean):[];
+  const norm=v=>String(v??"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const candidates=[j.company?.type?.name,j.company?.type,j.company_type?.name,j.company_type,j.type?.name,j.type,j.name,j.company_name,j.company?.name].filter(x=>typeof x==="string");
+  const company=tornCompanyCatalog.find(c=>candidates.some(n=>norm(n)===norm(c.name)));
+  const rating=j.company?.rating??j.rating??j.stars;
+  const stars=rating!=null&&rating!==""&&Number.isFinite(Number(rating))?Number(rating):null;
+  const specials=company?'<table class="job-special-table"><thead><tr><th>Stars</th><th>Special</th><th>JP cost</th><th>Effect</th><th>Status</th></tr></thead><tbody>'+company.specials.map(x=>'<tr><td>'+x.stars+'★</td><td>'+esc(x.name)+'</td><td>'+esc(x.cost)+'</td><td>'+esc(x.effect)+'</td><td>'+(/temporarily unavailable/i.test(x.effect)?"Unavailable":stars===null?"Unknown":stars>=x.stars?"Unlocked":"Locked")+'</td></tr>').join("")+'</tbody></table>':"";
+  const perkMarkup='<div class="job-current-perks"><h3>Job perks &amp; specials</h3>'+(livePerks.length?'<ul class="job-perk-list">'+livePerks.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>':!specials?'<p class="fine-print">'+(Array.isArray(jobPerks)?"No job perks reported by Torn.":"Job perks not loaded.")+'</p>':"")+specials+'</div>';
   return '<section class="panel"><div class="panel-heading"><h2>Your current job</h2></div>'+
     '<div class="panel-content"><div class="job-live-columns">'+
       '<div><h3>Job details</h3>'+list(jobRows)+'</div>'+
       '<div><h3>Working stats</h3>'+list(statRows)+'</div>'+
-    '</div><p class="fine-print">Current job and working stats load only while needed, then follow their individual cache intervals. Company stars appear only when returned by Torn.</p></div></section>';
+    '</div>'+perkMarkup+'</div></section>';
  }
  // One catalog, one filter, one set of benefit descriptions for both sections.
  const featuredNames=new Set(features.map(f=>f[0]));
