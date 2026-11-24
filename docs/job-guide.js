@@ -29,7 +29,7 @@ const tornJobsGuide=(()=>{
  ["Sweet Shop","Training/Beginner","Compare Energy and consumable rewards with other early companies."],
  ["Private Security Firm","War/Mug","Check current combat and protective perks by company star."]
  ];
- const styles=["All","Training","Trade","Travel","Mug","Business","War","Revive","Crime","Racing","Money","Beginner"];
+ const styles=["All","Training","Trade","Travel","Mug","Business","War","Revive","Crime","Racing","Money","Education","Beginner"];
  let selected="All",term="",recommendedOnly=false,styleOwner=null,lastStyleRaw=null,manualStyle=false;
  function syncRoadmapStyle(){
   const owner=activeProfile||"guest";
@@ -66,28 +66,54 @@ const tornJobsGuide=(()=>{
       '<div><h3>Working stats</h3>'+list(statRows)+'</div>'+
     '</div><p class="fine-print">Current job and working stats load only while needed, then follow their individual cache intervals. Company stars appear only when returned by Torn.</p></div></section>';
  }
+ // One catalog, one filter, one set of benefit descriptions for both sections.
+ const featuredNames=new Set(features.map(f=>f[0]));
+ const patterns={
+  Training:/gym|happiness|happy|energy|erotic dvd|candy|consumable|addiction|overdose|console|^(strength|defense|speed|dexterity)$/i,
+  Travel:/travel|abroad|foreign|country|countries|flight|hunting|cayman/i,
+  Trade:/item market|special flower|special plushie|travel items|abroad|foreign item|advertising|business class|property|candy|energy drink|ammunition|weapon|plushies|flowers/i,
+  Mug:/mug|money on hand|money|investment account|stealth|spy|spies|bounty|someone's stats|employment and faction/i,
+  Business:/company|productivity|financial|advertising|investment|property|money/i,
+  War:/damage|accuracy|armor|armour|passive|stealth|life|health|weapon|ammunition|enemy|faction respect|mission|bounty|epinephrine|tyrosine|serotonin|attack/i,
+  Revive:/energy/i,
+  Crime:/nerve|crime|criminal|bust|bail|arrest|alcohol|virus|fraud|counterfeit|hacking|stealth/i,
+  Racing:/racing|car parts|driving|random car|crashing/i,
+  Money:/money|bank|investment|interest|property|upkeep|hunting|funds|erotic dvd|energy drink/i,
+  Education:/education/i,
+  Beginner:/experience|happiness|happy|energy|endurance|candy|awareness|special flower|special plushie|mug protection|education/i
+ };
+ function relevant(company){
+  const pattern=patterns[selected];
+  const eligible=company.specials.filter(x=>! /temporarily unavailable/i.test(x.effect));
+  const matched=pattern?eligible.filter(x=>pattern.test(x.effect)):eligible;
+  return matched.length?matched:eligible;
+ }
+ function perkText(x){
+  return x.stars+"★ "+x.effect+" ("+(String(x.cost).toLowerCase()==="passive"?"Passive":x.cost+" JP")+")";
+ }
  function details(company){
-  const f=features.find(x=>x[0]===company.name);
+  const perks=relevant(company);
   return '<details class="job-company"><summary><span><strong>'+esc(company.name)+'</strong><small>'+esc(company.styles.join(" · "))+'</small></span>'+
-   '<span class="job-topperk">10★ '+esc(company.specials.at(-1).effect)+'</span></summary><div class="job-company-inner">'+
-   (f?'<p>'+esc(f[2])+'</p>':'<p>Review the star unlocks and compare training, wages, job points and your long-term goals.</p>')+
+   '<span class="job-topperk">'+esc(perkText(perks[0]))+'</span></summary><div class="job-company-inner">'+
+   '<p>'+perks.map(x=>esc(perkText(x))).join(" · ")+'</p>'+
    '<table class="job-special-table"><thead><tr><th>Stars</th><th>Special</th><th>JP cost</th><th>Effect</th></tr></thead><tbody>'+
    company.specials.map(x=>'<tr><td>'+x.stars+'★</td><td>'+esc(x.name)+'</td><td>'+esc(x.cost)+'</td><td>'+esc(x.effect)+'</td></tr>').join("")+
    '</tbody></table><p class="fine-print"><a href="'+esc(company.source)+'" target="_blank" rel="noopener noreferrer">Official company list</a></p></div></details>';
  }
  function matches(company){
   if(selected!=="All"&&!company.styles.includes(selected))return false;
-  if(recommendedOnly&&!features.some(f=>f[0]===company.name))return false;
-  return !term||(company.name+" "+company.styles.join(" ")+company.specials.map(s=>s.name+" "+s.effect).join(" ")).toLowerCase().includes(term);
+  if(recommendedOnly&&!featuredNames.has(company.name))return false;
+  return !term||(company.name+" "+company.styles.join(" ")+company.specials.map(s=>s.name+" "+s.effect+" "+s.stars+" "+s.cost).join(" ")).toLowerCase().includes(term);
  }
+ function filtered(){return tornCompanyCatalog.filter(matches);}
  function results(){
-  const data=tornCompanyCatalog.filter(matches);
-  return '<p class="fine-print">'+data.length+' of 39 company types. Click a company for all five star-unlocked specials. Star requirements and job-point costs matter.</p>'+
+  const data=filtered();
+  return '<p class="fine-print">'+data.length+' of '+tornCompanyCatalog.length+' company types. Click a company for all star-unlocked specials.</p>'+
    '<div class="job-company-list">'+data.map(details).join("")+'</div>';
  }
  function highlights(){
-  const list=features.filter(f=>selected==="All"||f[1].split("/").includes(selected));
-  return '<div class="job-featured-grid">'+list.map(f=>'<article class="job-featured"><h3>'+esc(f[0])+'</h3><small>'+esc(f[1])+'</small><p>'+esc(f[2])+'</p></article>').join("")+'</div>';
+  const data=filtered();
+  return '<div class="job-featured-grid">'+data.map(company=>'<article class="job-featured"><h3>'+esc(company.name)+'</h3><small>'+esc(company.styles.join(" · "))+'</small><p>'+relevant(company).map(x=>esc(perkText(x))).join("<br>")+'</p></article>').join("")+'</div>';
  }
  function render(){
   syncRoadmapStyle();
