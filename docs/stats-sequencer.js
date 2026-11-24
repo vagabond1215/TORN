@@ -1,6 +1,6 @@
 "use strict";
 const tornTrainSequence=(()=>{
-  const names={externalHappy:"Arrange external Happy to 50,000",xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train available Energy",refill:"Points energy refill",wait:"Wait minutes",waitDrug:"Wait for drug cooldown",waitBooster:"Wait for booster space",autoOn:"Train Nat E w/ Xanax",natOn:"Train natural Energy",autoOff:"Automatic check-ins OFF",checkin:"Scheduled gym check-in"};
+  const names={externalHappy:"Arrange external Happy to 50,000",xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train available Energy",refill:"Points energy refill",wait:"Wait minutes",waitDrug:"Wait for drug cooldown",waitBooster:"Wait for booster space",autoOn:"Train Nat E w/ Xanax",natOn:"Train natural Energy",autoOff:"Automatic check-ins OFF",checkin:"Use Full Energy"};
   const make=(type,qty=1,minutes=0)=>({type,qty,minutes});
   const defaults={
     natural:()=>[make("xanax"),make("candy",2),make("train"),make("refill"),make("train"),make("autoOn"),make("waitDrug"),make("xanax")],
@@ -190,7 +190,7 @@ const tornTrainSequence=(()=>{
       const start=snap(),used=train();
       if(used>0){
         point();
-        v.log.push({i:"•",type:"checkin",reason,start,end:snap()});
+        v.log.push({i:"•",type:start.energy>=eCap?"checkin":"train",reason,start,end:snap()});
       }
     }
     function advance(duration){
@@ -204,8 +204,8 @@ const tornTrainSequence=(()=>{
         v.time=next;v.drug=Math.max(0,v.drug-passed);v.booster=Math.max(0,v.booster-passed);
         if(next===eTick){if(v.energy<eCap)v.energy=Math.min(eCap,v.energy+5);else v.lostRegen+=5;}
         if(next===hTick){const before=v.happy,start=snap();v.happy=before>ctx.state.maxHappy?ctx.state.maxHappy:Math.min(ctx.state.maxHappy,before+5);if(before>ctx.state.maxHappy)v.log.push({i:"•",type:"happyReset",reason:"Quarter-hour reset",start,end:snap()});}
-        if(v.auto && (priorDrug>0&&v.drug===0 || next===eTick&&(cfg.naturalOnly?v.energy>=gymCost:v.energy>=eCap)))
-          checkin(priorDrug>0&&v.drug===0?"Drug cooldown expired":"Energy bar filled");
+        if(v.auto && next===eTick && v.energy>=eCap)
+          checkin("Energy bar filled");
         if(next===hTick||next===until||next%3600===0)point();
       }
     }
@@ -281,6 +281,13 @@ const tornTrainSequence=(()=>{
           if(!useItem(type))break;
         }
       }else if(type==="externalHappy"){v.happy=Math.max(v.happy,50000);if(!v.warnings.includes("99k assumes a separately arranged external happiness source; its cost is not included."))v.warnings.push("99k assumes a separately arranged external happiness source; its cost is not included.");}
+      else if(type==="checkin"){
+        const ticks=Math.max(0,Math.ceil((eCap-v.energy)/5));
+        const delay=ticks?((Math.floor(v.time/regenTime)+ticks)*regenTime-v.time):0;
+        const wasAuto=v.auto;v.auto=false;
+        if(waitFor(delay,"Full Energy"))train();
+        v.auto=wasAuto;
+      }
       else if(type==="train")train();
       else if(type==="wait")advance(n(a.minutes)*60);
       else if(type==="waitDrug"){if(cfg.startDrugMin*60>v.time&&v.costs.xanax+v.costs.ecstasy===0&&v.drug>0)notices.push({index:i,critical:true,text:"DELAY "+clock(v.drug)+" · Drug CD"});advance(v.drug);}
@@ -297,7 +304,7 @@ const tornTrainSequence=(()=>{
       }else{v.errors.push("Unrecognized action: "+type);}
       if(isBooster)rowInfo[i].happy=type==="dvd"?(v.costs.dvd-rowInfo[i].dvdBefore)*2500:Object.entries(rowUsed).reduce((sum,[name,q])=>sum+q*(pool.find(x=>x.name===name)?.happy??0),0);
       point();
-      if(!["autoOn","autoOff","natOn","wait","waitDrug","waitBooster"].includes(type)&&(type!=="train"||v.energy<start.energy)&&(!isBooster||rowInfo[i].happy>0)&&!v.errors.length)v.log.push({i:i+1,type,start,end:snap(),qty:isBooster?(type==="dvd"?v.costs.dvd-rowInfo[i].dvdBefore:Object.values(rowUsed).reduce((a,b)=>a+b,0)):undefined});
+      if(!["autoOn","autoOff","natOn","wait","waitDrug","waitBooster"].includes(type)&&(!["train","checkin"].includes(type)||v.stat>start.stat)&&(!isBooster||rowInfo[i].happy>0)&&!v.errors.length)v.log.push({i:i+1,type,start,end:snap(),qty:isBooster?(type==="dvd"?v.costs.dvd-rowInfo[i].dvdBefore:Object.values(rowUsed).reduce((a,b)=>a+b,0)):undefined});
       if(v.time>=limit && i<list.length-1 && list.slice(i+1).some(step=>step.type==="wait"&&step.minutes>0||step.type==="waitDrug"&&v.drug>0||step.type==="waitBooster"&&v.booster>=boosterLimit||["xanax","ecstasy"].includes(step.type)&&v.drug>0)){v.errors.push("The "+cfg.hours+"-hour window ended before all steps.");break;}
     }
     // Natural and mini profiles continue using available drug cycles and daily
@@ -363,18 +370,18 @@ const tornTrainSequence=(()=>{
   }
   function log(data,side){
     return '<details class="ts-log" data-ts-timeline="'+side+'" '+(openTimelines.has(side)?"open":"")+'><summary>Execution timeline ('+data.log.length+' steps)</summary><div class="ts-log-scroller"><table><thead><tr><th>Step</th><th>Time</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th></tr></thead><tbody>'+
-      data.log.map(a=>'<tr><td>'+$(a.type==="happyReset"?"Happiness reset":a.type==="checkin"?"Train available Energy":names[a.type])+(a.qty>1?" ×"+fmt(a.qty):"")+(a.reason?" · "+$(a.reason):"")+'</td><td>'+clock(a.end.time)+'</td><td>'+fmt(a.end.energy)+'</td><td>'+fmt(a.end.happy)+'</td><td>'+clock(a.end.drug)+'</td><td>'+clock(a.end.booster)+'</td></tr>').join("")+
+      data.log.map(a=>'<tr><td>'+$(a.type==="happyReset"?"Happiness reset":a.type==="checkin"?"Use Full Energy":names[a.type])+(a.qty>1?" ×"+fmt(a.qty):"")+(a.reason?" · "+$(a.reason):"")+'</td><td>'+clock(a.end.time)+'</td><td>'+fmt(a.end.energy)+'</td><td>'+fmt(a.end.happy)+'</td><td>'+clock(a.end.drug)+'</td><td>'+clock(a.end.booster)+'</td></tr>').join("")+
       '</tbody></table></div></details>';
   }
   function section(side,data){
     const heading=templates.find(x=>x[0]===side)?.[2]??side;
-    return '<section class="ts-side"><h3><span>'+$(heading)+'</span><strong class="ts-heading-gain" title="Projected stat gain, not final stat value">'+(data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked")+'</strong><small>'+fmt(p.hours,2)+'h</small></h3><details class="ts-queue" data-ts-queue="'+side+'" '+(openQueues.has(side)?"open":"")+'><summary>Training queue ('+steps[side].length+' steps)</summary><div class="ts-list">'+'<div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div>'+steps[side].map((a,i)=>data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,a,i,data.rowInfo[i])).join("")+'</div>'+
+    return '<section class="ts-side"><h3><span>'+$(heading)+'</span><strong class="ts-heading-gain" title="Projected stat gain, not final stat value">'+(data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked")+'</strong><small>'+fmt(p.hours,2)+'h</small></h3><div class="ts-card-columns"><details class="ts-queue" data-ts-queue="'+side+'" '+(openQueues.has(side)?"open":"")+'><summary>Training queue ('+steps[side].length+' steps)</summary><div class="ts-list">'+'<div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div>'+steps[side].map((a,i)=>data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,a,i,data.rowInfo[i])).join("")+'</div>'+
       '<div class="ts-add"><select data-ts-choice="'+side+'" aria-label="Select action"><option value="" selected>Select action</option>'+Object.entries(names).map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select>'+
       '<button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'" disabled>Add action</button>'+
-      '<button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div></details>'+
+      '<button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div></details>'+log(data,side)+'</div>'+
       (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join("; ")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
       '<p class="ts-stat">Final: '+(data.complete?fmt(data.final,2):"Blocked")+' <small>+'+fmt(data.gain,2)+' gain, '+fmt(data.used)+' E, '+(data.money==null?"Cost unavailable":"$"+fmt(data.money))+'</small></p>'+
-      log(data,side)+'</section>';
+      '</section>';
   }
   function chart(results){
     const chartEnd=p.hours+1;
