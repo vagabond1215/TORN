@@ -15,16 +15,17 @@ const tornGuideApi=(()=>{
     jobpoints:15*mins, skills:15*mins, battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
-    gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
+    honors:24*hrs,medals:24*hrs,honorCatalog:30*days,medalCatalog:30*days,gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["organizedcrime","skills","itemCatalog","bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
+    home:["honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
     stats:["profile","bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
     railTimers:["education","virus","itemCatalog","cooldowns","organizedcrime","factionRankedWars","travel","money"],
     activity:["virus","travel","racingrecords","races"],
     crime:["bars","skills","itemCatalog"],
+    merits:["honors","medals","honorCatalog","medalCatalog","merits","meritCatalog"],
     checklist:["bars","merits","meritCatalog","job"],
     money:["money"],
     stocks:["stocks","stockCatalog","itemCatalog"],
@@ -198,6 +199,8 @@ const tornGuideApi=(()=>{
     if(key==="educationCatalog")return "torn/education";
     if(key==="itemCatalog")return "torn/items";
     if(key==="pointsCatalog")return "market/pointsmarket";
+    if(key==="honorCatalog")return "torn/honors";
+    if(key==="medalCatalog")return "torn/medals";
     if(key==="meritCatalog")return "torn/merits";
     return "user/"+key;
   }
@@ -786,7 +789,9 @@ function renderInventoryPage(){
   return out+'</div>';
 }
 
-const educationView={open:new Set(),selected:null,filter:"all",groupBy:"category",effect:"all"};
+const educationView={open:new Set(),selected:null,filter:"all",groupBy:"category",effect:"all",owner:null};
+function loadEducationPreference(){const id=String(tornGuideApi.state.identity?.id??"guest");if(educationView.owner===id)return;educationView.owner=id;educationView.groupBy="category";educationView.effect="all";educationView.selected=null;educationView.open.clear();try{const p=JSON.parse(localStorage.getItem("torn-city-guide:edu-path:"+id));if(p?.groupBy==="effect")educationView.groupBy="effect";if(educationPaths.some(([name])=>name===p?.effect))educationView.effect=p.effect;}catch{}}
+function saveEducationPreference(){try{localStorage.setItem("torn-city-guide:edu-path:"+educationView.owner,JSON.stringify({groupBy:educationView.groupBy,effect:educationView.effect}));}catch{}}
 // Effect paths are editorial groupings, not official degree requirements.
 // A course may contribute to more than one path.
 const educationPaths=[
@@ -886,6 +891,7 @@ function educationCourseDetail(c,m){
  (prerequisites.length?'<p class="edu-prerequisites">Prerequisites: '+safe(prerequisites.join(", "))+'</p>':'')+'</div>';
 }
 function renderEducationPage(){
+ loadEducationPreference();
  const m=educationModel(),reduction=educationReduction(m),name=m.current?.name??m.active?.name??(m.id!=null?"Course #"+m.id:"None active / not loaded");
  const courseTooltip=m.active?(educationEffectText(m.active)||"No additional course perks listed."):"Course perks unavailable.";
  let out='<section class="panel edu-panel"><div class="panel-heading edu-compact-heading"><div class="edu-heading-status"><h2>Education:</h2><strong class="edu-active-course" tabindex="0" title="'+safe(courseTooltip)+'">'+safe(name)+'</strong><span class="edu-reduction" tabindex="0" title="'+safe(reduction.tooltip)+'">'+safe(reduction.label==="Unavailable"?"—":"-"+reduction.label)+'</span>'+(m.deadline?'<span class="edu-time-left" tabindex="0" title="'+safe(reduction.tooltip)+'" data-edu-deadline="'+m.deadline+'">'+tornTctClock.formatDuration((m.deadline-Date.now())/1000)+'</span>':'')+'</div><span class="edu-completion-count">'+(m.known?m.ids.size:"—")+' / '+m.courses.length+'</span></div><div class="panel-content">'+
@@ -911,5 +917,5 @@ function wireEducationPage(view){
  const rebuild=()=>{if(location.hash==="#education")view.innerHTML=renderEducationPage();};
  view.addEventListener("toggle",e=>{const el=e.target;if(!el.matches?.("[data-edu-group]")||!el.isConnected)return;const g=el.dataset.eduGroup;if(el.open){educationView.open.add(g);educationView.open.delete("closed:"+g);}else{educationView.open.delete(g);educationView.open.add("closed:"+g);}},true);
  view.addEventListener("click",e=>{const el=e.target.closest("[data-edu-course]");if(!el||location.hash!=="#education")return;const group=el.closest("[data-edu-group]");if(group){educationView.open.add(group.dataset.eduGroup);educationView.open.delete("closed:"+group.dataset.eduGroup);}educationView.selected=educationView.selected===el.dataset.eduCourse?null:el.dataset.eduCourse;rebuild();});
- view.addEventListener("change",e=>{if(location.hash!=="#education")return;const el=e.target;if(el.matches("[data-edu-filter]"))educationView.filter=el.value;else if(el.matches("[data-edu-groupby]")){educationView.groupBy=el.value;educationView.selected=null;}else if(el.matches("[data-edu-path]")){educationView.effect=el.value;educationView.open.add(el.value);educationView.open.delete("closed:"+el.value);educationView.selected=null;}else return;rebuild();});
+ view.addEventListener("change",e=>{if(location.hash!=="#education")return;const el=e.target;if(el.matches("[data-edu-filter]"))educationView.filter=el.value;else if(el.matches("[data-edu-groupby]")){educationView.groupBy=el.value;educationView.selected=null;}else if(el.matches("[data-edu-path]")){educationView.effect=el.value;educationView.open.add(el.value);educationView.open.delete("closed:"+el.value);educationView.selected=null;}else return;saveEducationPreference();rebuild();});
 }
