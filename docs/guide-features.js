@@ -460,77 +460,128 @@ const tornReportCatalog=Object.freeze({
   oc:["Organized crimes","https://torn.report/oc","Faction crime participation"],
   travel:["Travel","https://torn.report/travel","Travel activity and trips"]
 });
+function homePair(label,value,extraClass=""){
+  return '<div class="home-pair"><dt>'+safe(label)+'</dt><dd class="'+extraClass+'">'+safe(value??"Not available")+'</dd></div>';
+}
+function homeStatList(items){
+  return '<dl class="home-stat-list">'+items.map(([name,value])=>
+    homePair(name,value)).join("")+'</dl>';
+}
+function homeValue(v){
+  return v===undefined||v===null?"Not available":formatNumber(v);
+}
+function homeBar(name,bar){
+  const current=Number(bar?.current),max=Number(bar?.maximum);
+  const valid=Number.isFinite(current)&&Number.isFinite(max)&&max>0;
+  const percentage=valid?Math.max(0,Math.min(100,current/max*100)):0;
+  const currentText=valid?formatNumber(bar.current)+"/"+formatNumber(bar.maximum):"Not loaded";
+  // Some API selections include a fulltime / time_left field. This is
+  // a cached snapshot, not a continuously validated refill countdown.
+  const countdown=bar?.time_left??bar?.fulltime;
+  const secs=Number(countdown);
+  const timer=valid&&current>=max?"FULL":
+    countdown!=null&&Number.isFinite(secs)&&secs>=0?
+      (Math.floor(secs/3600)?String(Math.floor(secs/3600)).padStart(2,"0")+":" :"")+
+      String(Math.floor(secs%3600/60)).padStart(2,"0")+":"+
+      String(Math.floor(secs%60)).padStart(2,"0"):"";
+  return '<div class="home-bar home-bar-'+safe(name)+'">'+
+    '<div class="home-bar-head"><strong>'+safe(name[0].toUpperCase()+name.slice(1))+
+    ': <span>'+safe(currentText)+'</span></strong><small>'+safe(timer)+'</small></div>'+
+    '<div class="home-bar-track" role="progressbar" aria-label="'+safe(name)+'" aria-valuemin="0" '+
+      (valid?'aria-valuenow="'+safe(current)+'" aria-valuemax="'+safe(max)+'"': 'aria-valuetext="Not loaded"')+'>'+
+      '<span style="width:'+percentage.toFixed(2)+'%"></span></div></div>';
+}
 function renderDashboard() {
-  let result = '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Live character dashboard</h1><p>Private read-only snapshots directly from Torn API v2. Full Access keys are accepted; most displayed selections work with a more restrictive key.</p></header>';
-  if (!tornGuideApi.isConnected()) return result + '<section class="panel"><div class="panel-content"><p>Connect your own Torn API key in <a href="#profile">Account</a> to populate this dashboard. No key is stored in the browser.</p></div></section>';
-  const st = tornGuideApi.state;
-  const cooldown=payload("cooldowns","cooldowns");
-  const cdText=value=>{
-    if(value===null||value===undefined||!Number.isFinite(Number(value)))return "Not available";
-    const seconds=Math.max(0,Math.ceil(Number(value)));
-    if(seconds<=0)return "Ready";
-    return Math.floor(seconds/3600)+"h "+Math.floor(seconds%3600/60)+"m";
-  };
-  result += '<section class="panel"><div class="panel-heading"><h2>Cooldowns and next actions</h2></div><div class="panel-content">';
-  result += '<div class="metric-grid">'+
-    metric("Drug cooldown",cooldown?cdText(cooldown.drug):"Unavailable")+
-    metric("Booster cooldown",cooldown?cdText(cooldown.booster):"Unavailable")+
-    metric("Medical cooldown",cooldown?cdText(cooldown.medical):"Unavailable")+
-    metric("Education",payload("education","education")&&payload("education","education").current?"Course in progress":"Check courses")+
-    '</div>';
-  result += sourceError("cooldowns") + '<p class="fine-print">Timers show your last API snapshot, not a running countdown. <a href="#stats">Plan a gym session</a> or <a href="#checklist">review your checklist</a>.</p></div></section>';
-  result += '<section class="panel"><div class="panel-heading"><h2>Energy, nerve, happiness and life</h2></div><div class="panel-content">' + barsMarkup() + '</div></section>';
-  result += '<section class="panel"><div class="panel-heading"><h2>Battle stats</h2></div><div class="panel-content">' + battleMarkup() + '</div></section>';
-  const gym = payload("gym", "gym");
-  const merits = payload("merits", "merits");
-  const job = payload("job", "job");
-  const property = payload("property", "property");
-  const cash = payload("money", "money");
-  const education = payload("education", "education");
-  result += '<section class="panel"><div class="panel-heading"><h2>Gym, career and property</h2></div><div class="panel-content"><div class="metric-grid">';
-  result += metric("Current gym", gym && gym.name || "Not available", gym && Array.isArray(gym.unlocked_gyms) ? gym.unlocked_gyms.filter(g => g.available).length + " gyms available" : "");
-  result += metric("Job", job && (job.name || job.position || job.company_name) || "Not available");
-  result += metric("Property", property && (property.name || (property.property && property.property.name)) || "Not available");
-  result += metric("Cash on hand", cash && cash.wallet !== undefined ? "$" + formatNumber(cash.wallet) : "Not available");
-  result += metric("Bank balance", cash && cash.city_bank && cash.city_bank.amount !== undefined ? "$" + formatNumber(cash.city_bank.amount) : cash ? "No active deposit" : "Not available");
-  result += metric("Points", cash && cash.points !== undefined ? formatNumber(cash.points) : "Not available");
-  result += '</div>';
-  if (gym && Array.isArray(gym.unlocked_gyms)) {
-    result += '<h3 class="subheading">Gym access</h3><ul class="gym-list">' +
-      gym.unlocked_gyms.map(item => '<li>' + safe(item.name) + ' <small>' +
-        (item.available ? "Available" : "Not yet available") + '</small></li>').join("") + '</ul>';
+  let result='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Home dashboard</h1></header>';
+  if(!tornGuideApi.isConnected()){
+    return result+'<section class="panel"><div class="panel-content"><p>Connect your Torn API key below to show your in-game-style dashboard. Account data remains private to this browser.</p></div></section>';
   }
-  result += ["gym", "job", "property", "money"].map(sourceError).join("") + '</div></section>';
-  result += '<section class="panel"><div class="panel-heading"><h2>Education and merits</h2></div><div class="panel-content"><div class="metric-grid">';
-  result += metric("Education Length", meritLevel("Education Length") === null ? "Not available" : meritLevel("Education Length") + " / 10");
-  result += metric("Bank Interest", meritLevel("Bank Interest") === null ? "Not available" : meritLevel("Bank Interest") + " / 10");
-  result += metric("Available merits", merits ? formatNumber(merits.available) : "Not available");
-  result += metric("Completed courses", education && Array.isArray(education.complete) ? formatNumber(education.complete.length) : "Not available");
-  result += metric("Current course", education ? (education.current ? "Course #" + education.current.id : "None active") : "Not available");
-  result += metric("Honors earned", merits && merits.honors !== undefined ? formatNumber(merits.honors) : "Not available");
-  result += '</div>' + ["education", "merits", "meritCatalog"].map(sourceError).join("") + '</div></section>';
-  result += '<section class="panel"><div class="panel-heading"><h2>Detailed account data, on demand</h2></div><div class="panel-content"><div class="report-links">'+
-    '<a href="#inventory"><strong>Inventory</strong><small>Load candy, drugs, tools, and other categories only when requested</small></a>'+
-    '<a href="#money"><strong>Stocks & Money</strong><small>Stock positions and WSU benefit fetched on the Money page</small></a>'+
-    '<a href="#stats"><strong>Gym & Training</strong><small>Stats perks and the gym reference catalog load on the Stats page</small></a></div>'+
-    '<p class="fine-print">API calls this page visit: '+tornGuideApi.state.requests+'. Per-selection freshness is tracked independently, and cached data is reused.</p></div></section>';
-  result += '<section class="panel"><div class="panel-heading"><h2>Activity and detailed reports</h2></div>'+
-    '<div class="panel-content"><p class="fine-print">Open a report here in a popup, or pop it out to your logged-in Torn Report session. Embedded viewing depends on Torn Report\'s own frame and login settings; no API credentials are forwarded.</p><div class="report-links">';
-  for(const [id,[label,url,tip]] of Object.entries(tornReportCatalog)){
-    result += '<button type="button" class="report-launch" data-report="'+safe(id)+'" aria-haspopup="dialog" title="Preview '+safe(label)+' report">'+
+  const st=tornGuideApi.state,bars=payload("bars","bars"),cooldowns=payload("cooldowns","cooldowns");
+  const battle=payload("battlestats","battlestats"),work=payload("workstats","workstats");
+  const cash=payload("money","money"),merits=payload("merits","merits");
+  const gym=payload("gym","gym"),job=payload("job","job"),property=payload("property","property");
+  const education=payload("education","education");
+  const statValue=(key)=>homeValue(battle?.[key]&&typeof battle[key]==="object"?battle[key].value:battle?.[key]);
+  const workValue=(...keys)=>{for(const key of keys)if(work?.[key]!=null)return homeValue(work[key]);return "Not available";};
+  const cdText=value=>{
+    const num=Number(value);
+    if(value==null||!Number.isFinite(num))return "Not loaded";
+    if(num<=0)return "Ready";
+    return (Math.floor(num/3600)?Math.floor(num/3600)+"h ":"")+
+      Math.floor(num%3600/60)+"m";
+  };
+  const visibleMoney=cash?.wallet!=null?"$"+formatNumber(cash.wallet):"Not available";
+  const currentJob=job?.name||job?.company_name||job?.position||"Not available";
+  const homeProperty=property?.name||property?.property?.name||"Not available";
+
+  result+='<div class="home-summary-grid">'+
+    '<section class="panel home-information"><div class="panel-heading"><h2>Information</h2></div><div class="panel-content">'+
+      '<dl class="home-information-list">'+
+        homePair("Money",visibleMoney,"home-money")+
+        homePair("Level",st.identity?.level??"Not available")+
+        homePair("Points",cash?.points??"Not available")+
+        homePair("Merits",merits?.available??"Not available")+
+      '</dl><div class="home-bars">'+
+        ["energy","nerve","happy","life"].map(key=>homeBar(key,bars?.[key])).join("")+
+      '</div>'+
+      '<p class="home-snapshot-note">Bars and timers reflect your last API snapshot. Torn remains authoritative.</p>'+
+    '</div></section>'+
+    '<section class="panel home-battle"><div class="panel-heading"><h2>Battle stats <a href="#stats" title="Open training calculator">Calc</a></h2></div><div class="panel-content">'+
+      homeStatList([
+        ["Strength",statValue("strength")],
+        ["Defense",statValue("defense")],
+        ["Speed",statValue("speed")],
+        ["Dexterity",statValue("dexterity")],
+        ["Total",statValue("total")]
+      ])+sourceError("battlestats")+
+    '</div></section>'+
+    '<section class="panel home-work"><div class="panel-heading"><h2>Working stats <a href="#jobs" title="Open Jobs and careers">Jobs</a></h2></div><div class="panel-content">'+
+      homeStatList([
+        ["Manual labor",workValue("manual_labor","manual","man")],
+        ["Intelligence",workValue("intelligence","intel","int")],
+        ["Endurance",workValue("endurance","end")]
+      ])+'<p class="home-subline">Job: '+safe(currentJob)+'</p>'+sourceError("workstats")+
+    '</div></section>'+
+  '</div>';
+
+  result+='<div class="home-secondary-grid">'+
+    '<section class="panel"><div class="panel-heading"><h2>Account &amp; progress</h2></div>'+
+    '<div class="panel-content">'+homeStatList([
+      ["Property",homeProperty],
+      ["Current gym",gym?.name||"Not available"],
+      ["Bank",cash?.city_bank?.amount!=null?"$"+formatNumber(cash.city_bank.amount):"Not available"],
+      ["Education merit",meritLevel("Education Length")===null?"Not loaded":meritLevel("Education Length")+"/10"],
+      ["Bank merit",meritLevel("Bank Interest")===null?"Not loaded":meritLevel("Bank Interest")+"/10"],
+      ["Education",education?.current?"Course #"+education.current.id:education?"None active":"Not loaded"]
+    ])+'</div></section>'+
+    '<section class="panel"><div class="panel-heading"><h2>Cooldowns &amp; next steps</h2></div>'+
+    '<div class="panel-content">'+homeStatList([
+      ["Drug",cdText(cooldowns?.drug)],
+      ["Booster",cdText(cooldowns?.booster)],
+      ["Medical",cdText(cooldowns?.medical)]
+    ])+'<div class="home-action-links">'+
+       '<a href="#stats">Train</a><a href="#crime">Crimes</a>'+
+       '<a href="#checklist">Checklist</a><a href="#inventory">Inventory</a>'+
+       '<a href="#money">Money</a>'+
+      '</div></div></section>'+
+  '</div>';
+
+  result+='<details class="home-expand-panel"><summary>Activity &amp; detailed reports</summary>'+
+    '<div class="home-expand-body"><p class="fine-print">Reports open in a preview window when supported by the provider, with a new-tab fallback.</p><div class="report-links">';
+  for(const [id,[label,,tip]] of Object.entries(tornReportCatalog)){
+    result+='<button type="button" class="report-launch" data-report="'+safe(id)+'" aria-haspopup="dialog" title="'+safe(tip)+'">'+
       '<strong>'+safe(label)+'</strong><small>'+safe(tip)+'</small></button>';
   }
-  result += '</div></div></section>';
-  result += renderSourcesPanel();
-  const errors = Object.keys(st.errors).length + Object.keys(st.inventoryErrors).length;
-  if(errors){
-    result += '<section class="panel"><div class="panel-heading"><h2>API diagnostics (' + errors + ' unavailable)</h2></div><div class="panel-content"><p class="fine-print">A Full Access key does not resolve invalid endpoints, cache limits or temporary API failures. Here are the specific requests that need attention.</p><ul class="api-failure-list">';
-    for(const [name,reason] of Object.entries(st.errors)){
-      const path=name==="gymCatalog"?"torn/gyms":name==="meritCatalog"?"torn/merits":name==="stockCatalog"?"torn/stocks":"user/"+name;
-      result += '<li><strong>/v2/' + safe(path) + '</strong><small>' + safe(reason) + '</small></li>';
-    }
-    for(const [category,reason] of Object.entries(st.inventoryErrors)) result += '<li><strong>Inventory: '+safe(category)+'</strong><small>'+safe(reason)+'</small></li>';
-    result += '</ul></div></section>';
+  result+='</div></div></details>';
+  result+='<details class="home-expand-panel"><summary>Data sources &amp; request budget</summary>'+
+    '<div class="home-expand-body">'+renderSourcesPanel()+'</div></details>';
+  const issues=[...Object.entries(st.errors).map(([key,value])=>[key,value]),
+    ...Object.entries(st.inventoryErrors).map(([key,value])=>["Inventory: "+key,value])];
+  if(issues.length){
+    result+='<details class="home-expand-panel home-errors" open><summary>API issues ('+issues.length+')</summary>'+
+      '<div class="home-expand-body"><ul class="api-failure-list">'+issues.map(([name,detail])=>
+        '<li><strong>'+safe(name)+'</strong><small>'+safe(detail)+'</small></li>').join("")+
+      '</ul></div></details>';
   }
   return result;
 }

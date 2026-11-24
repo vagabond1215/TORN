@@ -256,7 +256,7 @@ function renderRoute() {
   const isTopic = Object.hasOwn(topics, route);
   const navRoute = isTopic ? route : "home";
   tornToolsGuide.updateBar(route);
-  byId("home-grid").hidden = route !== "home" && route !== "profile";
+  byId("home-grid").hidden = route !== "profile" && (route !== "home" || tornGuideApi.isConnected());
   byId("topic-view").hidden = !isTopic && route !== "home";
   for (const link of document.querySelectorAll(".nav-link")) {
     if (link.hash === "#" + navRoute) link.setAttribute("aria-current", "page");
