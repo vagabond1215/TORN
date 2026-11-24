@@ -776,23 +776,37 @@ function educationDuration(seconds){
  const m=Math.round(Number(seconds)/60);return Math.floor(m/1440)+"d "+Math.floor(m%1440/60)+"h "+m%60+"m";
 }
 function educationCourseDetail(c,m){
+ const code=String(c.code??c.course_code??"").replace(/\s/g,"").toUpperCase();
+ // The wiki repeats the rifle code for pistols; match the course title explicitly.
+ const wikiKey=/study of pistols/i.test(c.name??c.title??"")?"CBT2840":code;
+ const fallback=tornEducationReference[wikiKey]||{};
+ const numeric=v=>v!=null&&v!==""&&Number.isFinite(Number(v));
+ const apiWork=c.working_stats??c.work_stats??c.workingstats??c.stats??c.gains??c.results;
+ const apiDuration=c.duration??c.length??c.time;
+ const apiBenefit=c.effects??c.benefits??c.learning_outcomes??c.outcomes??c.effect??c.results?.perks??c.results?.ability;
+ const apiCost=c.cost??c.price??c.money_cost;
+ const workIsUsable=apiWork&&typeof apiWork==="object"&&Object.entries(apiWork).some(([k,v])=>/^(manual_labor|manual|intelligence|endurance|man|int|end)$/i.test(k)&&numeric(typeof v==="object"?v?.value??v?.amount:v));
+ const durationValue=typeof apiDuration==="object"?apiDuration?.seconds??apiDuration?.base:apiDuration;
+ const effectIsUsable=typeof apiBenefit==="string"?Boolean(apiBenefit.trim()):Array.isArray(apiBenefit)?apiBenefit.length>0:apiBenefit&&typeof apiBenefit==="object"&&Object.keys(apiBenefit).length>0;
+ const fromWiki=Boolean(fallback.source&&(!workIsUsable||!numeric(durationValue)||!effectIsUsable||!numeric(apiCost)));
+
  const values=v=>Array.isArray(v)?v:Object.values(v||{});
  const text=v=>typeof v==="string"?v:v?.description??v?.name??v?.effect??"";
- const benefit=c.effects??c.benefits??c.learning_outcomes??c.outcomes??c.effect??c.results?.perks??c.results?.ability;
+ const benefit=effectIsUsable?apiBenefit:fallback.effects;
  const effects=typeof benefit==="string"?[benefit]:values(benefit).map(text).filter(Boolean);
- const work=c.working_stats??c.work_stats??c.workingstats??c.stats??c.gains??c.results;
- const workLabels={manual_labor:"Manual labor",manual:"Manual labor",intelligence:"Intelligence",endurance:"Endurance"};
+ const work=workIsUsable?apiWork:fallback.working_stats;
+ const workLabels={manual_labor:"Manual labor",manual:"Manual labor",man:"Manual labor",intelligence:"Intelligence",int:"Intelligence",endurance:"Endurance",end:"Endurance"};
  const gains=work&&typeof work==="object"?Object.entries(work).map(([k,v])=>[workLabels[k]||k,typeof v==="object"?v?.value??v?.amount:v]).filter(([,v])=>Number.isFinite(Number(v))&&Number(v)>0):[];
- const rawDuration=c.duration??c.length??c.time;
+ const rawDuration=numeric(durationValue)?durationValue:fallback.duration;
  const duration=typeof rawDuration==="object"?rawDuration?.seconds??rawDuration?.base:rawDuration;
- const cost=c.cost??c.price??c.money_cost;
+ const cost=numeric(apiCost)?apiCost:fallback.cost;
  const req=c.prerequisites??c.requirements;
  const prerequisites=values(req).map(v=>{const id=typeof v==="object"?v.id??v.course_id:v;return m.courses.find(x=>String(x.id)===String(id))?.name??text(v)??String(id);}).filter(Boolean);
  return '<div class="edu-course-detail">'+(c.description?'<p>'+safe(c.description)+'</p>':'')+
- '<div class="edu-detail-grid"><div><h4>Learning outcome</h4>'+(effects.length?effects.map(v=>'<p>'+safe(v)+'</p>').join(""):'<p class="fine-print">Not supplied by catalog.</p>')+
+ '<div class="edu-detail-grid"><div><h4>Learning outcome</h4>'+(effects.length?effects.map(v=>'<p>'+safe(v)+'</p>').join(""):fallback.source?'<p>No additional permanent effect listed.</p>':'<p class="fine-print">Not supplied by catalog.</p>')+
  '</div><div><h4>Working stats gained</h4>'+(gains.length?gains.map(([k,v])=>'<div>'+safe(k)+' <strong>+'+formatNumber(v)+'</strong></div>').join(""):'<p class="fine-print">Not supplied by catalog.</p>')+
  '</div><div><h4>Parameters</h4><div>Base length <strong>'+educationDuration(duration)+'</strong></div><div>Cost <strong>'+(cost!=null?"$"+formatNumber(cost):"Unavailable")+'</strong></div></div></div>'+
- (prerequisites.length?'<p class="edu-prerequisites">Prerequisites: '+safe(prerequisites.join(", "))+'</p>':'')+'</div>';
+ (prerequisites.length?'<p class="edu-prerequisites">Prerequisites: '+safe(prerequisites.join(", "))+'</p>':'')+(fallback.source?'<p class="fine-print">'+(fromWiki?"Missing catalog fields supplemented by ":"Reference: ")+'<a href="'+safe(fallback.source)+'" target="_blank" rel="noopener noreferrer">Torn Wiki</a></p>':'')+'</div>';
 }
 function renderEducationPage(){
  const m=educationModel(),name=m.current?.name??m.active?.name??(m.id!=null?"Course #"+m.id:"None active / not loaded");
