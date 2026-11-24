@@ -385,12 +385,14 @@ async function refreshAccount(){
   try{
     const result=await tornGuideApi.refresh({route:tornGuideApi.routeName(),force:true});
     if(!tornGuideApi.isConnected())return;
+    if(!result?.failures)lastApiConnectionError="";
     feedback.textContent = result && result.failures
       ? result.failures+" section(s) unavailable. See Dashboard API diagnostics."
       : "Torn data refreshed.";
     if(tornGuideApi.state.storageWarning) feedback.textContent+=" "+tornGuideApi.state.storageWarning;
   }catch(error){
-    feedback.textContent=String(error.message||error);
+    lastApiConnectionError=String(error.message||error);
+    feedback.textContent=lastApiConnectionError;
   }finally{updateRefreshUI();}
 }
 for(const id of ["refresh-data","refresh-top"])
