@@ -1514,3 +1514,12 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-booster-summary strong{color:var(--accent-strong)}
 .ts-booster-summary small{font-size:.68rem}
 .ts-booster-row button:disabled{opacity:.45;cursor:not-allowed}
+
+.ts-settings>summary.ts-settings-summary{display:flex;align-items:center;flex-wrap:wrap;gap:.4rem .75rem;list-style:none}
+.ts-settings-summary::-webkit-details-marker{display:none}
+.ts-settings-summary:before{content:"▸";color:var(--muted)}
+.ts-settings[open]>.ts-settings-summary:before{content:"▾"}
+.ts-settings-summary .ts-cooldown-mode{margin:0 0 0 auto;font-weight:400;color:var(--text);gap:.3rem .5rem}
+.ts-settings-summary .ts-cooldown-mode button{min-height:0}
+.ts-auto-cooldowns strong{color:var(--accent-strong)}
+@media(max-width:700px){.ts-settings-summary .ts-cooldown-mode{margin-left:0}}
