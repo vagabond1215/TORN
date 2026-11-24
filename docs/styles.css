@@ -1584,3 +1584,23 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-card-columns>.ts-log>summary{padding:.25rem 0}
 .ts-card-columns .ts-log-scroller{overflow-x:auto;max-width:100%}
 @media(max-width:850px){.ts-card-columns{grid-template-columns:minmax(0,1fr)}}
+
+/* Editable timeline: one table per template with dependent rows. */
+.ts-merged{margin:.35rem 0}
+.ts-merged .ts-log-scroller{max-height:none;overflow-x:auto}
+.ts-merged table{min-width:700px;font-variant-numeric:tabular-nums}
+.ts-merged th:first-child{width:52%}
+.ts-merged td{vertical-align:top}
+.ts-merged td:not(:first-child){padding-top:.65rem}
+.ts-merged .ts-step{grid-template-columns:18px minmax(0,1fr) auto;gap:.3rem}
+.ts-merged .ts-step>span:nth-child(3):empty{display:none}
+.ts-merged .ts-step>input[data-ts-edit="minutes"]{grid-column:2}
+.ts-merged .ts-step>.ts-arrows{grid-column:3;grid-row:1}
+.ts-merged .ts-booster-row,.ts-merged .ts-booster-summary{grid-column:2/-1;white-space:normal}
+.ts-merged .ts-dependent td{color:var(--muted);padding-top:.3rem;padding-bottom:.3rem}
+.ts-merged .ts-dependent td:first-child{padding-left:1.4rem;white-space:normal}
+.ts-dependency-mark{color:var(--accent);font-weight:bold;margin-right:.25rem}
+.ts-merged .ts-initial td:first-child{padding-left:.5rem}
+.ts-merged .ts-editable-row td:first-child{white-space:normal}
+.ts-merged .ts-step select{width:100%}
+.ts-merged .ts-booster-row select{width:auto}
