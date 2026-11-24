@@ -779,3 +779,15 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .home-activity .activity-countdown{font-weight:650;color:var(--accent-strong);font-variant-numeric:tabular-nums}
 .home-activity .fine-print{font-size:.71rem;line-height:1.45;margin:.65rem 0 0}
 @media(max-width:730px){.home-activity .home-stat-list{grid-template-columns:1fr}}
+
+
+/* Authentic third-party favicons in the compact Quick Access row.
+   Direct site icons are tried first; failed images fall back without moving
+   the link, changing its tooltip, or creating API requests. */
+.quick-site-favicon{
+  display:block;width:22px;height:22px;min-width:22px;min-height:22px;
+  object-fit:contain;border-radius:3px;flex:none;
+}
+.quick-favicon-fallback[hidden]{display:none}
+.quick-favicon-fallback:not([hidden]){display:inline-grid;place-items:center;width:22px;height:22px}
+.quick-favicon-fallback svg{width:20px;height:20px}
