@@ -328,13 +328,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-side{border:1px solid var(--border);border-radius:8px;background:var(--raised);padding:.85rem;min-width:0}
 .ts-side h3{margin:0 0 .75rem;color:var(--accent-strong);font-size:1.02rem}
 .ts-list{display:grid;gap:.4rem}
-.ts-step{display:grid;grid-template-columns:20px minmax(0,1fr) 68px auto;gap:.4rem;align-items:center}
-.ts-step>span:first-child{font-size:.8rem;color:var(--muted);text-align:center}
 .ts-step select,.ts-step input,.ts-add select{min-width:0;max-width:100%;padding:.38rem .35rem;border:1px solid var(--border);background:#181818;color:var(--text);border-radius:5px;font-size:.77rem}
 .ts-step input{width:68px}
-.ts-arrows{display:flex;gap:2px}
-.ts-arrows button{min-width:21px;min-height:28px;padding:0 .15rem;color:var(--muted);background:#363636;border:1px solid var(--border);border-radius:4px;font-size:.9rem;cursor:pointer}
-.ts-arrows button:hover{background:#494949;color:var(--accent-strong)}
 .ts-add{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:.8rem 0}
 .ts-add select{max-width:205px;flex:1 1 145px}
 .ts-add .button{font-size:.78rem;min-height:34px;padding:.25rem .5rem}
@@ -346,16 +341,17 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-log summary{color:var(--accent);font-size:.79rem;cursor:pointer;font-weight:650}
 .ts-log-scroller{overflow:auto;max-height:370px;margin-top:.5rem}
 .ts-log table{border-collapse:collapse;width:100%;font-size:.73rem;min-width:485px}
-.ts-log th,.ts-log td{padding:.35rem .3rem;border-bottom:1px solid var(--border);white-space:nowrap;text-align:left}
+.ts-log th,.ts-log td{border-bottom:1px solid var(--border);white-space:nowrap;text-align:left}
+.ts-log th,.ts-log:not(.ts-merged) td{padding:.35rem .3rem}
 .ts-log th{color:var(--accent-strong);font-size:.7rem}
-.ts-outcomes{border:1px solid var(--border);padding:1rem;border-radius:8px}
+.ts-outcomes{--ts-chart-surface:#1b1b1b;border:1px solid var(--border);padding:1rem;border-radius:8px}
 .ts-outcomes h3{color:var(--accent-strong);margin:0 0 .75rem;font-size:1rem}
 .ts-outcomes>p{margin:.4rem 0}
-.ts-chart{display:block;width:100%;height:auto;background:#1b1b1b;border:1px solid var(--border);border-radius:6px;margin:.9rem auto 0}
+.ts-chart{display:block;width:100%;height:auto;background:var(--ts-chart-surface);border:1px solid var(--border);border-radius:6px;margin:.9rem auto 0}
 .ts-legend{text-align:center;color:var(--muted);font-size:.78rem;margin-top:.35rem}
 @media(max-width:1100px){.ts-layout{grid-template-columns:1fr}}
 @media(max-width:650px){.ts-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:440px){.ts-settings-grid{grid-template-columns:1fr}.ts-step{grid-template-columns:15px minmax(0,1fr) 54px auto;gap:3px}.ts-step input{width:54px}}
+@media(max-width:440px){.ts-settings-grid{grid-template-columns:1fr}.ts-step input{width:54px}}
 
 /* Common cooldown and consumable perk shortcuts for the timeline. */
 .ts-bonus-presets{display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;margin:.6rem 0 .85rem}
@@ -664,7 +660,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 :root[data-theme="light"] .settings-check,
 :root[data-theme="light"] .ts-account-summary,
 :root[data-theme="light"] .ts-overview-item{background:var(--raised);color:var(--text)}
-:root[data-theme="light"] .ts-chart{background:#fafafa}
+:root[data-theme="light"] .ts-outcomes{--ts-chart-surface:#fafafa}
 :root[data-theme="light"] .ts-log th{color:var(--accent-strong)}
 :root[data-theme="light"] .ts-chart text{fill:#505050}
 :root[data-theme="light"] .tc-subtab.is-current,
@@ -1524,14 +1520,26 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-auto-cooldowns strong{color:var(--accent-strong)}
 @media(max-width:700px){.ts-settings-summary .ts-cooldown-mode{margin-left:0}}
 
-/* Neutral chrome and chart contrast; preserve semantic status and game bar colors. */
+/* Comparison series share styling between the plot and legend. */
 .ts-chart text{fill:var(--text)}
 .ts-chart .ts-gridline{stroke:var(--border);opacity:.5}
-.ts-chart .ts-natural-line{stroke:var(--text)}
-.ts-chart .ts-jump-line{stroke:var(--accent)}
-.ts-step select,.ts-step input,.ts-add select{background:#181818;border-color:var(--border);color:var(--text)}
-:root[data-theme="light"] :is(.ts-step select,.ts-step input,.ts-add select){background:#fff}
-:root[data-theme="light"] .ts-arrows button{background:var(--raised);color:var(--text)}
+.ts-chart .ts-extension{fill:var(--text);opacity:.05}
+.ts-chart .ts-window-end{stroke:var(--muted);stroke-dasharray:3 4}
+.ts-series-natural{--ts-series-color:var(--text)}
+.ts-series-maxenergy{--ts-series-color:#55d9ed;--ts-series-dash:12 5}
+.ts-series-mini{--ts-series-color:#c49bff;--ts-series-dash:0 6;--ts-series-cap:round}
+.ts-series-low{--ts-series-color:#ffc05c;--ts-series-dash:9 4 2 4}
+.ts-series-jump{--ts-series-color:var(--accent)}
+.ts-series-maxhappy{--ts-series-color:#ff8bbd;--ts-series-dash:12 5}
+.ts-series-custom{--ts-series-color:#a4a4a4;--ts-series-dash:4 4}
+:root[data-theme="light"] .ts-series-maxenergy{--ts-series-color:#00778c}
+:root[data-theme="light"] .ts-series-mini{--ts-series-color:#793fbb}
+:root[data-theme="light"] .ts-series-low{--ts-series-color:#956000}
+:root[data-theme="light"] .ts-series-maxhappy{--ts-series-color:#ad2865}
+:root[data-theme="light"] .ts-series-custom{--ts-series-color:#686868}
+.ts-series-stroke{fill:none;stroke:var(--ts-series-color);stroke-width:2.5;stroke-dasharray:var(--ts-series-dash,none);stroke-linecap:var(--ts-series-cap,butt);stroke-linejoin:round}
+.ts-series-end{fill:var(--ts-series-color);stroke:var(--ts-chart-surface);stroke-width:1}
+.ts-series.is-blocked .ts-series-end{fill:var(--ts-chart-surface);stroke:var(--ts-series-color);stroke-width:1.5}
 
 .ts-perk-tiles{display:flex;flex-wrap:wrap;gap:.4rem;margin:.35rem 0 .65rem}
 .ts-perk-tile{display:grid;gap:.12rem;padding:.35rem .55rem;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:4px;font-size:.73rem}
@@ -1547,7 +1555,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-comparison-results,.ts-multi-legend{display:flex;flex-wrap:wrap;gap:.4rem 1rem;font-size:.78rem}
 .ts-multi-legend span{display:inline-flex;align-items:center;gap:.3rem}
 
-.ts-start-energy{display:flex;align-items:center;gap:.6rem;font-size:.75rem;padding:.25rem 0}.ts-start-energy select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.25rem}.ts-cd-notice{font-size:.73rem;font-weight:700;padding:.25rem .45rem;border-left:2px solid currentColor}.ts-cd-notice.critical{color:#ff9990}.ts-cd-notice.hazard{color:#e8cf65}
+.ts-cd-notice{font-size:.73rem;font-weight:700;padding:.25rem .45rem;border-left:2px solid currentColor}.ts-cd-notice.critical{color:#ff9990}.ts-cd-notice.hazard{color:#e8cf65}
 
 .ts-settings{padding:.45rem .65rem}
 .ts-settings>summary.ts-settings-summary{gap:.25rem .45rem;min-height:0}
@@ -1585,57 +1593,36 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-card-columns .ts-log-scroller{overflow-x:auto;max-width:100%}
 @media(max-width:850px){.ts-card-columns{grid-template-columns:minmax(0,1fr)}}
 
-/* Editable timeline: one table per template with dependent rows. */
-.ts-merged{margin:.35rem 0}
+/* Editable timeline. A 21px control plus the shared border fits a 22px row. */
+.ts-merged{--ts-row-height:22px;--ts-inline-control-height:21px;margin:.35rem 0}
 .ts-merged .ts-log-scroller{max-height:none;overflow-x:auto}
-.ts-merged table{min-width:700px;font-variant-numeric:tabular-nums}
-.ts-merged th:first-child{width:52%}
-.ts-merged td{vertical-align:top}
-
-.ts-merged .ts-step{grid-template-columns:18px minmax(0,1fr) auto;gap:.3rem}
-.ts-merged .ts-step>span:nth-child(3):empty{display:none}
-.ts-merged .ts-step>input[data-ts-edit="minutes"]{grid-column:2}
-.ts-merged .ts-step>.ts-arrows{grid-column:3;grid-row:1}
-.ts-merged .ts-booster-row,.ts-merged .ts-booster-summary{grid-column:2/-1;white-space:normal}
-.ts-merged .ts-dependent td{color:var(--muted);padding-top:.3rem;padding-bottom:.3rem}
-.ts-merged .ts-dependent td:first-child{padding-left:1.4rem;white-space:normal}
-.ts-dependency-mark{color:var(--accent);font-weight:bold;margin-right:.25rem}
-.ts-merged .ts-initial td:first-child{padding-left:.5rem}
-.ts-merged .ts-editable-row td:first-child{white-space:normal}
-.ts-merged .ts-step select{width:100%}
-.ts-merged .ts-booster-row select{width:auto}
-
-/* Timeline time-first layout, without ordinal step numbers. */
+.ts-merged table{min-width:820px;font-variant-numeric:tabular-nums}
 .ts-merged th:first-child{width:5.5rem}
-.ts-merged th:nth-child(2){width:49%}
-.ts-merged .ts-step{grid-template-columns:minmax(0,1fr) auto;gap:.3rem}
-.ts-merged .ts-step>.ts-arrows{grid-column:2;grid-row:1}
-.ts-merged .ts-step>span:empty{display:none}
-.ts-merged .ts-step>input[data-ts-edit="minutes"]{grid-column:1}
-.ts-merged .ts-booster-row,.ts-merged .ts-booster-summary{grid-column:1/-1;white-space:normal}
-.ts-merged .ts-dependent td:first-child{padding-left:.3rem;white-space:nowrap}
-.ts-merged .ts-dependent td:nth-child(2){padding-left:1.25rem;white-space:normal}
-.ts-merged .ts-editable-row td:first-child{white-space:nowrap}
-.ts-merged .ts-editable-row td:nth-child(2){white-space:normal}
-
-
-/* Inline timeline controls, with a consistent baseline for ordinary rows. */
-.ts-merged th:nth-child(2){width:39%}
-.ts-merged td{vertical-align:middle;padding:.18rem .35rem}
-.ts-merged .ts-editable-row td,.ts-merged .ts-dependent td,.ts-merged .ts-initial td{padding-top:.18rem;padding-bottom:.18rem}
+.ts-merged th:nth-child(2){width:32%}
+.ts-merged td{height:var(--ts-row-height);padding:0 .35rem;vertical-align:middle;line-height:1.2}
+.ts-merged td:nth-child(2){white-space:normal}
+.ts-merged .ts-dependent td{color:var(--muted)}
 .ts-merged .ts-dependent td:nth-child(2){padding-left:1.25rem}
-.ts-merged .ts-step{grid-template-columns:minmax(0,15rem) auto;justify-content:start;gap:0;align-items:center}
-.ts-merged .ts-step>select[data-ts-edit="type"]{appearance:none;display:block;width:100%;height:25px;min-height:0;border:0;border-radius:0;background:transparent;color:var(--text);font:inherit;padding:0 1.2rem 0 .25rem;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%23999' stroke-width='1.3'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .25rem center;background-size:12px}
+.ts-dependency-mark{color:var(--accent);font-weight:bold;margin-right:.25rem}
+.ts-merged :is(.ts-row-gain,.ts-row-stat,th:nth-last-child(-n+2)),.ts-merged :is(th,td):nth-child(3){text-align:right}
+.ts-merged .ts-row-gain.is-positive{color:var(--accent-strong);font-weight:650}
+.ts-merged .ts-step{display:grid;grid-template-columns:minmax(0,15rem) auto;justify-content:start;align-items:center;margin:0;padding:0}
+.ts-merged .ts-step>input[data-ts-edit="minutes"]{grid-column:1;margin:.15rem 0}
+.ts-merged .ts-step>.ts-arrows{display:flex;align-items:center;grid-column:2;grid-row:1;margin:0;padding:0;border-left:1px solid var(--border)}
+.ts-merged input.ts-start-time[data-ts-start-time],.ts-merged .ts-start-energy>select,
+.ts-merged .ts-step>select[data-ts-edit="type"],.ts-merged .ts-arrows button{
+  height:var(--ts-inline-control-height);min-height:0;margin:0;padding-block:0;border:0;border-radius:0;background-color:transparent;line-height:normal;
+}
+.ts-merged .ts-step>select[data-ts-edit="type"]{appearance:none;width:100%;font:inherit;padding-inline:.25rem 1.2rem;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%23999' stroke-width='1.3'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .25rem center;background-size:12px}
 .ts-merged .ts-step>select[data-ts-edit="type"] option{background:var(--canvas);color:var(--text)}
-.ts-merged .ts-step>.ts-arrows{gap:0;border-left:1px solid var(--border);margin-left:.2rem}
-.ts-merged .ts-arrows button{height:25px;min-height:0;min-width:22px;padding:0 .3rem;border:0;border-right:1px solid var(--border);border-radius:0;background:transparent;color:var(--muted);font-size:.8rem;line-height:1}
-.ts-merged .ts-arrows button:last-child{border-right:0}
-.ts-merged .ts-arrows button:hover,.ts-merged .ts-step>select[data-ts-edit="type"]:hover{background-color:var(--canvas);color:var(--accent-strong)}
-.ts-merged .ts-step>select[data-ts-edit="type"]:focus-visible,.ts-merged .ts-arrows button:focus-visible{outline:1px solid var(--accent);outline-offset:-1px;box-shadow:none}
-:root[data-theme="light"] .ts-merged .ts-step>select[data-ts-edit="type"],:root[data-theme="light"] .ts-merged .ts-arrows button{background-color:transparent}
-.ts-merged .ts-start-energy{min-height:25px;padding:0}
-.ts-merged .ts-start-energy select{height:25px;min-height:0;padding:0 .3rem;border:0;border-left:1px solid var(--border);border-radius:0;background:transparent}
-.ts-merged .ts-booster-row,.ts-merged .ts-booster-summary{margin:.15rem 0}
+.ts-merged .ts-arrows button{min-width:22px;padding-inline:.3rem;color:var(--muted);font-size:.8rem;cursor:pointer}
+.ts-merged .ts-arrows button+button{border-left:1px solid var(--border)}
+.ts-merged .ts-start-time{display:block;width:5.5rem;max-width:100%;padding-inline:.15rem;color:var(--text);font:inherit}
+.ts-merged .ts-start-energy{display:flex;align-items:center;gap:.6rem;font-size:.75rem}
+.ts-merged .ts-start-energy>select{padding-inline:.3rem;border-left:1px solid var(--border);color:var(--text)}
+.ts-merged :is(.ts-start-time,.ts-start-energy>select,.ts-step>select[data-ts-edit="type"],.ts-arrows button):hover{background-color:var(--canvas);color:var(--accent-strong)}
+.ts-merged :is(.ts-start-time,.ts-start-energy>select,.ts-step>select[data-ts-edit="type"],.ts-arrows button):focus-visible{outline:1px solid var(--accent);outline-offset:-1px;box-shadow:none}
+.ts-merged .ts-booster-row,.ts-merged .ts-booster-summary{grid-column:1/-1;margin:.15rem 0;white-space:normal}
 
 /* Summary-first plan cards: all metrics remain visible when collapsed. */
 .ts-template-card{padding:.5rem .65rem}
@@ -1652,16 +1639,6 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-template-card .ts-merged{margin:.25rem 0 0}
 @media(max-width:750px){.ts-template-header{grid-template-columns:repeat(3,minmax(0,1fr)) 16px;row-gap:.4rem}.ts-template-name{grid-column:1/4}.ts-template-chevron{grid-column:4;grid-row:1}.ts-title-metric:nth-child(5){grid-column:1}}
 
-/* Flush editable controls to the timeline row boundaries. */
-.ts-merged .ts-editable-row td{padding-top:0;padding-bottom:0}
-.ts-merged .ts-step,.ts-merged .ts-step>select[data-ts-edit="type"],.ts-merged .ts-step>.ts-arrows,.ts-merged .ts-arrows button{margin-block:0;padding-block:0}
-.ts-merged .ts-step>select[data-ts-edit="type"],.ts-merged .ts-arrows button{height:22px;min-height:0}
-
-.ts-merged .ts-row-gain,.ts-merged .ts-row-stat,.ts-merged th:nth-last-child(-n+2){text-align:right;font-variant-numeric:tabular-nums}
-.ts-merged .ts-row-gain.is-positive{color:var(--accent-strong);font-weight:650}
-.ts-merged table{min-width:820px}
-.ts-merged th:nth-child(2){width:32%}
-
 /* Plan settings disclosure lives at the right edge of the template toolbar. */
 .ts-plan-toolbar .ts-template-toggles{flex:1 1 auto;align-items:center}
 .ts-plan-toolbar .ts-settings-toggle{margin-left:auto;white-space:nowrap;display:inline-flex;align-items:center;gap:.35rem}
@@ -1671,22 +1648,3 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 #ts-plan-settings>.ts-settings-summary:before{content:none}
 #ts-plan-settings>.ts-settings-summary .ts-cooldown-mode{margin-left:auto}
 @media(max-width:700px){.ts-plan-toolbar .ts-template-toggles{flex-basis:100%}}
-
-.ts-merged :is(th,td):nth-child(3){text-align:right;font-variant-numeric:tabular-nums}
-.ts-merged .ts-start-time{width:5.5rem;max-width:100%;box-sizing:border-box;height:22px;padding:0 .15rem;margin:0;border:0;background:transparent;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
-.ts-merged .ts-start-time:hover{background:var(--canvas)}
-.ts-merged .ts-start-time:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
-
-/* Match editable and dependent row heights; no top inset on action cells. */
-#tc-sequencer .ts-merged tbody tr>td{padding-block:0;vertical-align:middle;height:22px;line-height:1.2}
-#tc-sequencer .ts-merged .ts-editable-row>td:nth-child(2){padding-block:0}
-#tc-sequencer .ts-merged .ts-step{margin-block:0;padding-block:0;row-gap:0;align-items:center}
-#tc-sequencer .ts-merged .ts-step>select[data-ts-edit="type"],#tc-sequencer .ts-merged .ts-arrows button{box-sizing:border-box;height:21px;margin-block:0;padding-block:0;line-height:normal}
-
-/* Distinct series colors, scoped to the Plan chart. */
-:root{--ts-chart-maxenergy:#ffb347;--ts-chart-mini:#c5a2ff;--ts-chart-low:#78d8f0;--ts-chart-99k:#f58ac5;--ts-chart-custom:#b0b9c2}
-:root[data-theme="light"]{--ts-chart-maxenergy:#a85b00;--ts-chart-mini:#7036b5;--ts-chart-low:#087d9b;--ts-chart-99k:#b52a79;--ts-chart-custom:#64748b}
-#tc-sequencer .ts-merged table{border-collapse:collapse;border-spacing:0}
-#tc-sequencer .ts-merged tbody>tr>td{padding-top:0!important;padding-bottom:0!important;vertical-align:middle;height:22px;line-height:1.2}
-#tc-sequencer .ts-merged .ts-step,#tc-sequencer .ts-merged .ts-step>.ts-arrows{margin-block:0!important;padding-block:0!important;row-gap:0}
-#tc-sequencer .ts-merged .ts-step>select[data-ts-edit="type"],#tc-sequencer .ts-merged .ts-arrows button{box-sizing:border-box;height:21px;min-height:21px;margin-block:0!important;padding-block:0!important}

@@ -384,8 +384,8 @@ const tornTrainSequence=(()=>{
     const candyOptions=["any",...new Set([25,35,50,75,100,150,250,...candyStock().tiers])];
     const detail=booster?'<div class="ts-booster-row"><label>'+(a.type==="candy"?"Candy:":"eDVD:")+'</label><input type="number" min="0" max="'+ceiling+'" step="1" value="'+(info?.qty??a.qty)+'"'+attr+' data-ts-edit="qty" aria-label="Quantity"><button type="button" class="button secondary" data-ts-op="max"'+attr+' aria-pressed="'+Boolean(a.max)+'" '+(info?.maximum==null?"disabled":"")+'>MAX</button>'+(a.type==="candy"?'<select'+attr+' data-ts-edit="candy-tier" aria-label="Candy happiness">'+candyOptions.map(h=>'<option value="'+h+'" '+(h===tier?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select>':'<small>2,500 Happy</small>')+'</div><div class="ts-booster-summary">'+(a.type==="candy"&&tier==="any"?Object.entries(info?.used??{}).map(([name,q])=>$(q+"× "+name)).join(" · "):"")+(info?.happy?' <strong>+'+fmt(info.happy)+' Happy</strong>':"")+(info?.held==null?' <small>Inventory or preceding step unavailable</small>':' <small>'+fmt(info.held)+' held · '+fmt(info.allowance)+' CD allowance'+(a.type==="dvd"&&info.qty>info.held?' · '+fmt(info.qty-info.held)+' to purchase':"")+'</small>')+'</div>':"";
     return '<div class="ts-step"><select'+attr+' data-ts-edit="type" aria-label="Training action">'+types+'</select>'+
-      (wait?'<input type="number" min="0" max="10080" step=".01" value="'+a.minutes+'"'+attr+' data-ts-edit="minutes" aria-label="Minutes">':'<span></span>')+
-      '<div class="ts-arrows"><button type="button" title="Move up" data-ts-op="up"'+attr+'>↑</button><button type="button" title="Move down" data-ts-op="down"'+attr+'>↓</button><button type="button" title="Remove" data-ts-op="remove"'+attr+'>×</button></div>'+detail+'</div>';
+      (wait?'<input type="number" min="0" max="10080" step=".01" value="'+a.minutes+'"'+attr+' data-ts-edit="minutes" aria-label="Minutes">':'')+
+      '<div class="ts-arrows"><button type="button" title="Move up" aria-label="Move up" data-ts-op="up"'+attr+'>↑</button><button type="button" title="Move down" aria-label="Move down" data-ts-op="down"'+attr+'>↓</button><button type="button" title="Remove" aria-label="Remove" data-ts-op="remove"'+attr+'>×</button></div>'+detail+'</div>';
   }
   function timelineCells(state,previous=state){
     if(!state)return '<td>—</td>'.repeat(6);
@@ -409,7 +409,7 @@ const tornTrainSequence=(()=>{
       }
       const parent=e.parent??-1;if(!byParent.has(parent))byParent.set(parent,[]);byParent.get(parent).push(e);
     }
-    let rows='<tr class="ts-initial"><td><input class="ts-start-time" type="text" inputmode="numeric" data-ts-start-time="'+side+'" value="'+clock(offset)+'" aria-label="Starting time in hours, minutes and seconds" title="Timeline start (H:MM:SS)"></td><td><div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div></td>'+timelineCells(data.initial)+'</tr>';
+    let rows='<tr class="ts-initial"><td><input class="ts-start-time" type="text" inputmode="numeric" data-ts-start-time="'+side+'" value="'+clock(offset)+'" aria-label="Starting time in hours, minutes and seconds" title="Timeline start (H:MM:SS)"></td><td><div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'" aria-label="Starting Energy"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div></td>'+timelineCells(data.initial)+'</tr>';
     rows+=(byParent.get(-1)||[]).map(e=>dependencyRow(e,offset)).join("");
     list.forEach((action,i)=>{
       const events=byParent.get(i)||[],main=events.find(e=>e.editable),state=data.actionStates[i],deps=events.filter(e=>!e.editable);
@@ -435,24 +435,33 @@ const tornTrainSequence=(()=>{
       '</details>';
   }
   function chart(results){
-    const chartEnd=p.hours+1,base=ctx.state.statValues[ctx.state.compareStat];
+    const chartEnd=p.hours+1;
     const xval=hour=>80+hour/chartEnd*800;
-    const values=[base,...results.flatMap(x=>[x.data.final,...x.data.series.map(pt=>pt.s)])];
+    const values=results.flatMap(({data})=>[data.initial.stat,data.final,...data.series.map(point=>point.s)]);
     const bottom=Math.min(...values),top=Math.max(bottom+1,...values);
     const yval=val=>210-(val-bottom)/(top-bottom)*190;
-    const path=serie=>serie.map((v,i)=>(i?"H"+xval(v.h).toFixed(1)+"V"+yval(v.s).toFixed(1):"M"+xval(v.h).toFixed(1)+","+yval(v.s).toFixed(1))).join(" ");
-    const styles={natural:["var(--text)",""],maxenergy:["var(--ts-chart-maxenergy)","10 5"],mini:["var(--ts-chart-mini)","1 6"],low:["var(--ts-chart-low)","8 4 1 4"],jump:["var(--accent)",""],maxhappy:["var(--ts-chart-99k)","12 5"],custom:["var(--ts-chart-custom)","4 4"]};
-    let out='<svg viewBox="0 0 910 276" class="ts-chart" role="img" aria-label="Projected stat growth over '+p.hours+' hours">';
+    const path=points=>points.map(({h,s},i)=>{
+      const x=xval(h).toFixed(1),y=yval(s).toFixed(1);
+      return i?"H"+x+"V"+y:"M"+x+","+y;
+    }).join(" ");
+    const windowX=xval(p.hours),extensionX=xval(chartEnd);
+    const seriesClass=(id,data)=>"ts-series ts-series-"+id+(data.complete?"":" is-blocked");
+    const endpoint=(x,y)=>'<circle class="ts-series-end" cx="'+x+'" cy="'+y+'" r="3"/>';
+    let out='<svg viewBox="0 0 910 260" class="ts-chart" role="img" aria-label="Projected stat growth over '+p.hours+' hours with a one-hour visual extension">';
+    out+='<rect class="ts-extension" x="'+windowX+'" y="20" width="'+(extensionX-windowX)+'" height="190"/>';
     for(let i=0;i<5;i++){
       const val=bottom+(top-bottom)*i/4,y=yval(val),hr=p.hours*i/4;
-      out+='<line x1="80" y1="'+y+'" x2="880" y2="'+y+'" class="ts-gridline"/><text x="74" y="'+(y+4)+'" font-size="11" text-anchor="end">'+fmt(val)+'</text><text x="'+xval(hr)+'" y="243" font-size="11" text-anchor="middle">'+fmt(hr,1)+'h</text>';
+      out+='<line x1="80" y1="'+y+'" x2="'+extensionX+'" y2="'+y+'" class="ts-gridline"/><text x="74" y="'+(y+4)+'" font-size="11" text-anchor="end">'+fmt(val)+'</text><text x="'+xval(hr)+'" y="234" font-size="11" text-anchor="middle">'+fmt(hr,2)+'h</text>';
     }
-    out+='<line x1="'+xval(p.hours)+'" y1="20" x2="'+xval(p.hours)+'" y2="210" stroke="var(--border)" stroke-dasharray="3 4"/><text x="880" y="260" font-size="10" text-anchor="end">'+fmt(chartEnd,1)+'h</text>';
+    out+='<line class="ts-window-end" x1="'+windowX+'" y1="20" x2="'+windowX+'" y2="221"/><text x="'+extensionX+'" y="251" font-size="11" text-anchor="end">'+fmt(chartEnd,2)+'h</text>';
     for(const {id,data} of results){
-      const [color,dash]=styles[id],points=[{h:0,s:base},...data.series,{h:chartEnd,s:data.final}];
-      out+='<path d="'+path(points)+'" fill="none" stroke="'+color+'" stroke-dasharray="'+dash+'" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"'+(data.complete?'':' opacity=".55"')+'/>';
+      // The simulator coalesces events at the same time. Restore the pre-action
+      // value for the chart when an immediate train changes the first point.
+      const points=[...data.series,{h:chartEnd,s:data.final}];
+      if(points[0].s!==data.initial.stat)points.unshift({h:0,s:data.initial.stat});
+      out+='<g class="'+seriesClass(id,data)+'"><path class="ts-series-stroke" d="'+path(points)+'"/>'+endpoint(windowX,yval(data.final))+'</g>';
     }
-    return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg width="30" height="8" aria-hidden="true"><line x1="1" y1="4" x2="29" y2="4" stroke="'+styles[id][0]+'" stroke-dasharray="'+styles[id][1]+'" stroke-width="2.8" stroke-linecap="round"'+(data.complete?'':' opacity=".55"')+'/></svg> '+$(label)+(data.complete?"":" (blocked)")+'</span>').join("")+'</div>';
+    return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg class="'+seriesClass(id,data)+'" width="44" height="10" aria-hidden="true"><line class="ts-series-stroke" x1="2" y1="5" x2="42" y2="5"/>'+endpoint(35,5)+'</svg> '+$(label)+(data.complete?"":" (blocked)")+'</span>').join("")+'</div>';
   }
   function render(context){
     if(context)ctx=context;
@@ -468,12 +477,29 @@ const tornTrainSequence=(()=>{
     if(view.dataset.tsBound==="yes")return;
     view.dataset.tsBound="yes";
     view.addEventListener("toggle",event=>{const el=event.target;if(!el.isConnected)return;for(const [key,set] of [["tsQueue",openQueues],["tsTimeline",openTimelines]]){const id=el.dataset?.[key];if(id){if(el.open)set.add(id);else set.delete(id);if(key==="tsTimeline")savePlanPreferences();}}},true);
-    const rebuild=()=>{const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();const toggles=view.querySelector(".ts-template-toggles");if(toggles)toggles.outerHTML=templateButtons();};
+    const rowControl=(side,index,attribute,value)=>'[data-ts-side="'+side+'"][data-ts-index="'+index+'"][data-ts-'+attribute+'="'+value+'"]';
+    const rebuild=(focusTarget)=>{
+      const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();
+      const toggles=view.querySelector(".ts-template-toggles");if(toggles)toggles.outerHTML=templateButtons();
+      if(focusTarget)view.querySelector(focusTarget)?.focus({preventScroll:true});
+    };
     view.addEventListener("change",event=>{
       const el=event.target;
       if(el.matches("[data-ts-choice]")){const button=el.closest(".ts-add")?.querySelector('[data-ts-op="add"]');if(button)button.disabled=!Object.hasOwn(names,el.value);return;}
-      if(el.dataset.tsStartTime&&Object.hasOwn(startingTime,el.dataset.tsStartTime)){const m=el.value.trim().match(/^(\d{1,4}):([0-5]?\d):([0-5]?\d)$/);if(m){startingTime[el.dataset.tsStartTime]=Number(m[1])*3600+Number(m[2])*60+Number(m[3]);rebuild();}else{el.value=clock(startingTime[el.dataset.tsStartTime]);}return;}
-      if(el.dataset.tsStartEnergy&&Object.hasOwn(startingEnergy,el.dataset.tsStartEnergy)){startingEnergy[el.dataset.tsStartEnergy]=el.value==="zero"?"zero":"full";rebuild();return;}
+      const {tsStartTime,tsStartEnergy}=el.dataset;
+      if(tsStartTime&&Object.hasOwn(startingTime,tsStartTime)){
+        const time=el.value.trim().match(/^(\d{1,4}):([0-5]?\d):([0-5]?\d)$/);
+        if(time){
+          startingTime[tsStartTime]=Number(time[1])*3600+Number(time[2])*60+Number(time[3]);
+          rebuild(el===document.activeElement?'[data-ts-start-time="'+tsStartTime+'"]':null);
+        }else el.value=clock(startingTime[tsStartTime]);
+        return;
+      }
+      if(tsStartEnergy&&Object.hasOwn(startingEnergy,tsStartEnergy)){
+        startingEnergy[tsStartEnergy]=el.value==="zero"?"zero":"full";
+        rebuild(el===document.activeElement?'[data-ts-start-energy="'+tsStartEnergy+'"]':null);
+        return;
+      }
       if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
       const param=el.dataset.tsParam;
       if(param && !["startDrugMin","startBoosterMin","resetAfterSec","tornClockMin","boosterCapH","dvdHappy","xanaxCDMin","ecstasyCDMin","candyCDMultiplier","dvdCDMultiplier"].includes(param) && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
@@ -490,7 +516,7 @@ const tornTrainSequence=(()=>{
         if(edit==="qty"){a.max=false;a.qty=clamp(Math.floor(n(el.value,0)),0,a.type==="candy"?maxCandy(p):a.type==="dvd"?maxDvd(p):1);}
         if(edit==="candy-tier")a.candyHappy=el.value==="any"?"any":Number(el.value);
         if(edit==="minutes")a.minutes=clamp(el.value,0,10080);
-        rebuild();
+        rebuild(el===document.activeElement?rowControl(side,index,"edit",edit):null);
       }
     });
     view.addEventListener("click",event=>{
@@ -505,15 +531,21 @@ const tornTrainSequence=(()=>{
       const side=el.dataset.tsSide,op=el.dataset.tsOp,index=Number(el.dataset.tsIndex),list=steps[side];
       if(!list)return;
       if(side==="natural")naturalEdited=op!=="preset";
-      if(op==="max"&&list[index]){list[index].max=true;}
+      let focusTarget;
+      if(op==="max"&&list[index]){list[index].max=true;focusTarget=rowControl(side,index,"op",op);}
       else if(op==="preset")steps[side]=defaults[side]();
       else if(op==="add"){
         const select=view.querySelector('[data-ts-choice="'+side+'"]');
         if(select&&Object.hasOwn(names,select.value)&&list.length<40)list.push(make(select.value));else return;
-      }else if(op==="remove")list.splice(index,1);
-      else if(op==="up"&&index>0)[list[index-1],list[index]]=[list[index],list[index-1]];
-      else if(op==="down"&&index<list.length-1)[list[index+1],list[index]]=[list[index],list[index+1]];
-      rebuild();
+      }else if(op==="remove"){
+        list.splice(index,1);
+        focusTarget=list.length?rowControl(side,Math.min(index,list.length-1),"edit","type"):'[data-ts-choice="'+side+'"]';
+      }else if(op==="up"||op==="down"){
+        const target=index+(op==="up"?-1:1);
+        if(target>=0&&target<list.length)[list[target],list[index]]=[list[index],list[target]];
+        focusTarget=rowControl(side,Math.max(0,Math.min(target,list.length-1)),"op",op);
+      }
+      rebuild(el===document.activeElement?focusTarget:null);
     });
   }
   return {render,wire,simulate,steps,settings:p,loadLive,templateButtons};
