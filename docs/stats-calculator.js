@@ -55,6 +55,7 @@ const tornStatPlanner = (() => {
       return;
     }
     if (!force && state.currentPlayer===id && state.imported) return;
+    if(state.currentPlayer!==id || force) state.selectedGym=null;
     state.currentPlayer=id;
     const bars=rawBars(),stats=rawStats();
     if (bars) {
@@ -74,7 +75,7 @@ const tornStatPlanner = (() => {
       }
     }
     if(!bars || !stats) {state.imported=false;return;}
-    state.selectedGym=null; // Choose actual active gym from catalog after import.
+    // Null selection follows the API gym, including late arrivals and refreshes.
     state.imported=true;
     state.apiStamp=tornGuideApi.state.updated;
   }
@@ -101,18 +102,16 @@ const tornStatPlanner = (() => {
     });
     return normalized.length?normalized:fallback;
   }
+  function activeGym(all=gyms()) {
+    const g=api("gym"), info=g&&(g.gym||g);
+    const current=info&&(info.active_gym??g.active_gym??info.id??info.name);
+    const id=typeof current==="object"&&current?current.id:current;
+    const name=typeof current==="object"&&current?current.name:current;
+    return all.find(item=>(id!=null&&String(item.id)===String(id))||(name!=null&&item.name.toLowerCase()===String(name).toLowerCase()))||null;
+  }
   function selectedGym() {
     const all=gyms();
-    const g=api("gym");
-    const info=g&&(g.gym||g);
-    const current=info&&(info.active_gym!==undefined?info.active_gym:info.id!==undefined?info.id:null);
-    if(state.selectedGym===null && current!==null && current!==undefined) {
-      const id=typeof current==="object"?current.id:current;
-      const match=all.find(item=>String(item.id)===String(id)||String(item.name).toLowerCase()===String(id).toLowerCase());
-      if(match) state.selectedGym=String(match.id);
-    }
-    if(state.selectedGym===null) state.selectedGym=String(all[0].id);
-    return all.find(item=>String(item.id)===String(state.selectedGym))||all[0];
+    return all.find(item=>state.selectedGym!==null&&item.name===state.selectedGym)||activeGym(all)||all[0];
   }
   function perkCollections() {
     const p=api("perks");
@@ -241,20 +240,28 @@ const tornStatPlanner = (() => {
   function render() {
     hydrateFromApi();
     const gym=selectedGym();
-    const category=gymCategory(gym);
+    const active=activeGym();
     const available=tornGuideApi.isConnected();
-    const gymOptions=gyms().filter(g=>gymCategory(g)===category).map(g=>'<option value="'+esc(g.id)+'" '+(String(g.id)===String(gym.id)?"selected":"")+'>'+esc(g.name)+(g.offline?" (wiki dots)":"")+'</option>').join("");
-    let markup='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Battle stats</h1><p>Current battle stats across both training tools. Calc compares independent gym training simulations and reviews gym effects; Compare tests natural training against Happy Jump sequences.</p></header>';
-    markup+='<div class="tc-subbar"><nav class="tc-subnav" aria-label="Stats sections">'+
+    let markup='<h1 id="topic-title" tabindex="-1" class="sr-only">Battle stats</h1><div class="tc-subbar"><nav class="tc-subnav" aria-label="Stats sections">'+
       '<button type="button" data-tc-view="calc" class="tc-subtab '+(state.subpage==="calc"?"is-current":"")+'" aria-current="'+(state.subpage==="calc"?"page":"false")+'">Calc · Gym simulator</button>'+
       '<button type="button" data-tc-view="compare" class="tc-subtab '+(state.subpage==="compare"?"is-current":"")+'" aria-current="'+(state.subpage==="compare"?"page":"false")+'">Compare · Training strategies</button></nav>'+
       '<div class="tc-overview"><div class="tc-stat-overview">'+statNames.map(stat=>
       '<div class="tc-overview-item"><small title="'+readable[stat]+'">'+shorthand[stat]+'</small><strong>'+nice(state.statValues[stat])+'</strong></div>').join("")+'</div></div></div>';
     if(state.subpage==="calc"){
-    markup+='<section class="panel"><div class="panel-content tc-gym-picker"><div class="tc-gym-tiles" role="group" aria-label="Gym category">'+gymCategories.map((label,i)=>
-      '<button type="button" class="tc-gym-tile '+(i===category?"is-selected":"")+'" data-tc-category="'+i+'" aria-pressed="'+(i===category)+'">'+gymIcon(i)+'<span>'+label+'</span></button>').join("")+'</div>'+
-      '<div class="tc-gym-details"><label class="tc-field"><span>Gym</span><select data-tc="selectedGym">'+gymOptions+'</select></label>'+
+    const catalog=gyms();
+    const ordered=[...catalog].sort((a,b)=>{
+      const rank=g=>{const i=fallback.findIndex(x=>x.name.toLowerCase()===g.name.toLowerCase());return i<0?999:i;};
+      return rank(a)-rank(b);
+    });
+    markup+='<section class="panel"><div class="panel-content tc-gym-picker"><div class="tc-gym-board" role="group" aria-label="Select simulation gym">'+gymCategories.map((label,i)=>{
+      const list=ordered.filter(g=>gymCategory(g)===i);
+      return '<div class="tc-gym-group"><span class="tc-gym-group-label">'+label+'</span><div class="tc-gym-tiles">'+list.map(g=>
+        '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(i)+'<span>'+esc(g.name)+'</span></button>').join("")+
+        Array.from({length:Math.max(0,10-list.length)},()=>'<span class="tc-gym-empty" aria-hidden="true"></span>').join("")+'</div></div>';
+    }).join("")+'</div>'+
+      '<div class="tc-gym-details"><strong>'+esc(gym.name)+'</strong><span class="fine-print">'+(state.selectedGym!==null?'Manual simulation override':active?'Current API gym':'Demo / gym not reported')+'</span>'+
       '<div class="tc-status"><span><strong>'+nice(state.currentEnergy)+' / '+nice(state.maxEnergy)+'</strong> Energy</span><span><strong>'+nice(state.happy)+' / '+nice(state.maxHappy)+'</strong> Happy</span><span>'+gym.energy+' E/train</span></div>'+
+      '<button type="button" class="button secondary" data-tc-action="auto-gym" '+(state.selectedGym===null?'disabled':'')+'>Use current gym</button>'+
       '<button type="button" class="button secondary" data-tc-action="restore" '+(!available?"disabled":"")+'>Restore current API values</button></div></div></section>';
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
@@ -309,16 +316,12 @@ const tornStatPlanner = (() => {
         }
         return;
       }
-      const categoryButton=event.target.closest("[data-tc-category]");
-      if(categoryButton){
-        const category=Number(categoryButton.dataset.tcCategory);
-        const match=gyms().find(g=>gymCategory(g)===category);
-        if(match){state.selectedGym=String(match.id);view.innerHTML=render();}
-        return;
-      }
+      const gymButton=event.target.closest("[data-tc-gym]");
+      if(gymButton){state.selectedGym=gymButton.dataset.tcGym;view.innerHTML=render();return;}
       const pick=event.target.closest("[data-tc-pick]");
       const action=event.target.closest("[data-tc-action]");
       if(pick){state.compareStat=pick.dataset.tcPick;view.innerHTML=render();}
+      if(action&&action.dataset.tcAction==="auto-gym"){state.selectedGym=null;view.innerHTML=render();}
       if(action&&action.dataset.tcAction==="max"){state.trainMax=true;view.innerHTML=render();}
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
