@@ -201,15 +201,17 @@ const tornStatPlanner = (() => {
   function trainingCount(gym) {
     return state.trainMax?Math.floor(state.currentEnergy/gym.energy):Math.max(1,Math.min(10000,Math.floor(state.trainCount)));
   }
-  function gymIcon(category) {
-    const plates=[1,2,3,3][category];
-    let shapes='<path d="M6 16h20" stroke-width="2.5"/>';
-    for(let i=0;i<plates;i++){
-      const h=10+i*3;
-      shapes+='<rect x="'+(5+i*3)+'" y="'+(16-h/2)+'" width="2.5" height="'+h+'" rx="1"/><rect x="'+(24-i*3)+'" y="'+(16-h/2)+'" width="2.5" height="'+h+'" rx="1"/>';
-    }
-    if(category===3)shapes+='<path d="m16 1 1.5 3 3 .5-2.2 2 .5 3-2.8-1.5-2.8 1.5.5-3-2.2-2 3-.5Z"/>';
-    return '<svg viewBox="0 0 32 32" width="34" height="34" fill="none" stroke="currentColor" stroke-linejoin="round" aria-hidden="true">'+shapes+'</svg>';
+  function gymIcon(g) {
+    const i=fallback.findIndex(x=>x.name.toLowerCase()===g.name.toLowerCase());
+    const marks=["⚑","J","WW","✿","♟","⚝","D","G","⚔","▲","AA","C","◴","♥","LB","DB","♟","⚒","FT","CC","A","LR","E","G","B","FF","3K","MI","TR","E","SSL","FC"];
+    const colors=["#89c9ff","#df8b25","#619dc4","#32ac8e","#c0b9b5","#db8e93","#c2c4c7","#91a96b","#d0d5d7","#7eb395","#9bd5c0","#d1d2cf","#abb5c0","#84a8e9","#bc8cc7","#d86a43","#d99bb9","#c8d0c4"];
+    const mark=marks[i]||g.name.split(/\s+/).map(w=>w[0]).join("").slice(0,3);
+    return '<svg viewBox="0 0 32 32" width="34" height="34" aria-hidden="true"><text x="16" y="22" text-anchor="middle" font-family="Georgia,serif" font-weight="bold" font-size="'+(mark.length>2?11:mark.length>1?15:23)+'" fill="'+(colors[i]||"#b9c5cb")+'">'+esc(mark)+'</text></svg>';
+  }
+  function apiStatValue(stat) {
+    const raw=rawStats(),detail=raw&&raw[stat];
+    const value=typeof detail==="number"?detail:detail&&detail.value;
+    return value!==null&&value!==undefined&&Number.isFinite(Number(value))?Math.max(0,Number(value)):null;
   }
   function statPanel(stat,gym) {
     const eff=effectsFor(stat);
@@ -231,7 +233,7 @@ const tornStatPlanner = (() => {
       else bonuses+='<small class="tc-mod-detail">No individual combat modifiers reported.</small>';
     } else bonuses+='<small class="tc-mod-detail">Requires a connected API key with battle-stat access.</small>';
     return '<div class="tc-stat-col '+(disabled?"tc-disabled":"")+'"><div class="tc-stat-title">'+readable[stat]+'</div>'+
-      '<label class="tc-field"><span>Current stat</span><input data-tc-stat="'+stat+'" type="number" min="0" step="1" value="'+esc(state.statValues[stat])+'"></label>'+
+      '<div class="tc-field"><label for="tc-stat-'+stat+'">Current stat</label><div class="tc-stat-input-row"><input id="tc-stat-'+stat+'" data-tc-stat="'+stat+'" type="number" min="0" step="1" value="'+esc(state.statValues[stat])+'"><button type="button" class="tc-stat-reset" data-tc-reset="'+stat+'" title="Reset '+readable[stat]+' to current API value" aria-label="Reset '+readable[stat]+'" '+(apiStatValue(stat)===null?'disabled':'')+'><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.6-4.6L3 9m0-6v6h6"/><path d="M4 13a8 8 0 0 0 14.6 4.6L21 15m0 6v-6h-6"/></svg></button></div></div>'+
       '<div class="tc-stat-meta"><span>Gym dots</span><strong>'+(disabled?"Unavailable":nice(gym[stat],1))+'</strong></div>'+
       '<div class="tc-stat-meta"><span>Est. gain</span><strong>+'+nice(projected.stat-state.statValues[stat],2)+'</strong></div>'+
       '<div class="tc-stat-meta"><span>Est. final</span><strong>'+nice(projected.stat,2)+'</strong></div>'+
@@ -256,17 +258,14 @@ const tornStatPlanner = (() => {
     markup+='<section class="panel"><div class="panel-content tc-gym-picker"><div class="tc-gym-board" role="group" aria-label="Select simulation gym">'+gymCategories.map((label,i)=>{
       const list=ordered.filter(g=>gymCategory(g)===i);
       return '<div class="tc-gym-group"><span class="tc-gym-group-label">'+label+'</span><div class="tc-gym-tiles">'+list.map(g=>
-        '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(i)+'<span>'+esc(g.name)+'</span></button>').join("")+
+        '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(g)+'<span>'+esc(g.name)+'</span></button>').join("")+
         Array.from({length:Math.max(0,10-list.length)},()=>'<span class="tc-gym-empty" aria-hidden="true"></span>').join("")+'</div></div>';
     }).join("")+'</div>'+
-      '<div class="tc-gym-details"><strong>'+esc(gym.name)+'</strong><span class="fine-print">'+(state.selectedGym!==null?'Manual simulation override':active?'Current API gym':'Demo / gym not reported')+'</span>'+
-      '<div class="tc-status"><span><strong>'+nice(state.currentEnergy)+' / '+nice(state.maxEnergy)+'</strong> Energy</span><span><strong>'+nice(state.happy)+' / '+nice(state.maxHappy)+'</strong> Happy</span><span>'+gym.energy+' E/train</span></div>'+
-      '<button type="button" class="button secondary" data-tc-action="auto-gym" '+(state.selectedGym===null?'disabled':'')+'>Use current gym</button>'+
-      '<button type="button" class="button secondary" data-tc-action="restore" '+(!available?"disabled":"")+'>Restore current API values</button></div></div></section>';
+      '<div class="tc-gym-details"><strong>'+esc(gym.name)+'</strong><small>'+gym.energy+' E/train</small></div></div></section>';
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<section class="panel"><div class="panel-heading"><h2>Gym training simulator</h2></div><div class="panel-content">'+
-      '<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><small>'+nice(trainingCount(gym)*gym.energy)+' E per alternative'+(trainingCount(gym)*gym.energy>state.currentEnergy?' · exceeds current Energy (simulation only)':'')+'</small></div>'+
+      '<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button></div>'+
       '<div class="tc-stat-scroll"><div class="tc-four">'+statNames.map(stat=>statPanel(stat,gym)).join("")+'</div></div>'+
       '<p class="fine-print">Training gains use the current Happy level and average per-train Happy loss. Combat-only penalties (including some drug and merit effects) are listed separately and are not treated as gym-gain modifiers. Different stats have independent faction and education bonuses.</p></div></section>';
     }
@@ -317,7 +316,9 @@ const tornStatPlanner = (() => {
         return;
       }
       const gymButton=event.target.closest("[data-tc-gym]");
-      if(gymButton){state.selectedGym=gymButton.dataset.tcGym;view.innerHTML=render();return;}
+      if(gymButton){const active=activeGym();state.selectedGym=active&&active.name===gymButton.dataset.tcGym?null:gymButton.dataset.tcGym;view.innerHTML=render();return;}
+      const reset=event.target.closest("[data-tc-reset]");
+      if(reset){const stat=reset.dataset.tcReset,value=apiStatValue(stat);if(value!==null){state.statValues[stat]=value;view.innerHTML=render();}return;}
       const pick=event.target.closest("[data-tc-pick]");
       const action=event.target.closest("[data-tc-action]");
       if(pick){state.compareStat=pick.dataset.tcPick;view.innerHTML=render();}
