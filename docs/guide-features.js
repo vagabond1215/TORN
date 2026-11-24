@@ -672,7 +672,7 @@ function renderDashboard() {
 
 
 
-const stockView={sort:"default",query:"",filter:"all"};
+const stockView={sort:"default",query:"",filter:"all",expanded:new Set()};
 // Benefit requirements and reward names from the Torn stock market and Clairvoyant.
 // API definitions override fallback data. No personal holdings or prices are stored here.
 const stockFallback={
@@ -703,27 +703,56 @@ function stockRows(){
   const transactions=Array.isArray(h?.transactions)?h.transactions:Object.values(h?.transactions||{});
   const costs=transactions.map(t=>{const n=num(t.shares),p=num(t.bought_price??t.price??t.purchase_price);return n!=null&&p!=null?n*p:null;});
   const cost=shares===0?0:costs.length&&costs.every(x=>x!==null)&&transactions.reduce((sum,t)=>sum+(num(t.shares)||0),0)===shares?costs.reduce((sum,x)=>sum+x,0):null;
-  return {name:c.name||ticker,ticker,price,shares,value,req,freq,description,passive,tier,active,ready,days,nextShares,nextCost,blockCost,payout,daily,roi,nextRoi,cost,profit:cost!=null&&value!=null?value-cost:null};
+  // Only explicit collected dividend counts qualify for historical return.
+  // Holding age, progress and current benefit tier do not establish claims.
+  const countRaw=benefit?.collected_count??benefit?.times_collected??benefit?.payouts_collected??h?.dividends_collected;
+  const claimedRaw=num(countRaw),claimed=!passive&&claimedRaw!=null&&claimedRaw>=0&&Number.isInteger(claimedRaw)?claimedRaw:null;
+  const dividendTotal=claimed!=null&&payout!=null?claimed*payout:null;
+  const profit=cost!=null&&value!=null?value-cost:null;
+  const lifetimeRoi=dividendTotal!=null&&cost>0?dividendTotal/cost*100:null;
+  const combinedReturn=dividendTotal!=null&&profit!=null?dividendTotal+profit:null;
+  const combinedRoi=combinedReturn!=null&&cost>0?combinedReturn/cost*100:null;
+  return {name:c.name||ticker,ticker,price,shares,value,req,freq,description,passive,tier,active,ready,days,nextShares,nextCost,blockCost,payout,daily,roi,nextRoi,cost,profit,claimed,dividendTotal,lifetimeRoi,combinedReturn,combinedRoi};
+
  });
 }
 function renderStocksPanel(){
  const rows=stockRows(),money=v=>v==null?"—":"$"+formatNumber(Math.round(v)),number=v=>v==null?"—":formatNumber(v),percent=v=>v==null?"—":v.toFixed(1)+"%";
  const total=rows.filter(r=>r.shares>0),sum=key=>total.length&&total.every(r=>r[key]!=null)?total.reduce((n,r)=>n+r[key],0):null;
- const options=[["default","Active dividends, then value"],["name","Stock name"],["value","Holdings value"],["shares","Shares owned"],["price","Share price"],["roi","Annual ROI (first block)"],["nextRoi","Annual ROI (next block)"],["nextCost","Cost to next block"],["days","Days to payout"],["daily","Daily dividend value"]];
+ const options=[["default","Active dividends, then value"],["name","Stock name"],["value","Holdings value"],["shares","Shares owned"],["price","Share price"],["roi","Annual ROI (first block)"],["nextRoi","Annual ROI (next block)"],["nextCost","Cost to next block"],["days","Days to payout"],["daily","Daily dividend value"],["lifetimeRoi","Collected dividend ROI"],["combinedRoi","Combined total ROI"]];
  const q=stockView.query.toLowerCase(),filtered=rows.filter(r=>(r.name+" "+r.ticker).toLowerCase().includes(q)&&(stockView.filter==="all"||stockView.filter==="owned"&&r.shares>0||stockView.filter==="active"&&r.active||stockView.filter==="cash"&&!r.passive||stockView.filter==="passive"&&r.passive));
  const cmp=(a,b,k,asc=false)=>a[k]==null?(b[k]==null?0:1):b[k]==null?-1:asc?a[k]-b[k]:b[k]-a[k];
  filtered.sort((a,b)=>stockView.sort==="default"?Number(b.active&&!b.passive)-Number(a.active&&!a.passive)||Number(b.active)-Number(a.active)||cmp(a,b,"value")||a.name.localeCompare(b.name):stockView.sort==="name"?a.name.localeCompare(b.name):cmp(a,b,stockView.sort,["nextCost","days"].includes(stockView.sort))||a.name.localeCompare(b.name));
  let out='<section class="panel stock-market-panel"><div class="panel-heading"><h2>Stock Market</h2><span>Value: '+money(sum("value"))+' · Profit: '+money(sum("profit"))+'</span></div><div class="panel-content">';
  out+='<div class="stock-controls"><label>Search <input data-stock-query value="'+safe(stockView.query)+'" placeholder="Stock name or ticker"></label><label>Show <select data-stock-filter>'+[["all","All stocks"],["owned","Owned"],["active","Active benefits"],["cash","Payout benefits"],["passive","Passive benefits"]].map(([v,l])=>'<option value="'+v+'" '+(stockView.filter===v?"selected":"")+'>'+l+'</option>').join("")+'</select></label><label>Sort <select data-stock-sort>'+options.map(([v,l])=>'<option value="'+v+'" '+(stockView.sort===v?"selected":"")+'>'+l+'</option>').join("")+'</select></label><small>'+filtered.length+' of '+rows.length+' stocks</small></div>';
- out+='<div class="stock-table-scroll"><table class="stock-market-table"><thead><tr><th>Stock</th><th>Price</th><th>Owned / value</th><th>Dividend / benefit</th><th>Next benefit block</th><th>Annual ROI</th></tr></thead><tbody>';
+ out+='<div class="stock-table-scroll"><table class="stock-market-table"><thead><tr><th>Stock</th><th>Price</th><th>Owned / value</th><th>Dividend / benefit</th></tr></thead><tbody>';
  for(const r of filtered){
  const status=r.shares==null?"Holdings not loaded":!r.active?"Inactive":r.passive?"Benefit active":r.ready?"Collection ready":r.days!=null?"Ready in "+r.days+" days":"Payout timing unavailable";
- out+='<tr class="'+(r.active?"stock-active":"")+'"><td><span class="stock-ticker">'+safe(r.ticker)+'</span><strong>'+safe(r.name)+'</strong></td><td>'+(r.price!=null?"$"+r.price.toFixed(2):"—")+'</td><td><strong>'+money(r.value)+'</strong><small>'+number(r.shares)+' shares</small>'+(r.cost!=null&&r.shares>0?'<small>Invested '+money(r.cost)+'</small>':'')+'</td><td><strong>'+safe(r.description)+'</strong><small class="'+(r.active?"stock-benefit-active":"")+'">'+safe(status)+(r.active&&!r.passive?' · '+r.tier+' block'+(r.tier===1?'':'s'):'')+'</small>'+(r.freq>0?'<small>Every '+r.freq+' days · '+money(r.payout)+' / block</small>':'')+'</td><td><strong>'+money(r.nextCost)+'</strong><small>'+number(r.nextShares)+' shares remaining</small><small>First block '+money(r.blockCost)+'</small></td><td><strong>'+percent(r.roi)+'</strong><small>Next: '+percent(r.nextRoi)+'</small><small>'+money(r.daily)+' / day</small></td></tr>';
+ const expanded=stockView.expanded.has(r.ticker),profitClass=r.profit==null||r.profit===0?"stock-neutral":r.profit>0?"stock-positive":"stock-negative";
+ const rowId="stock-detail-"+r.ticker;
+ const ownedText=r.shares==null?"—":number(r.shares)+" shares"+(r.shares>0?" @ "+money(r.cost):"");
+ const field=(label,val,cls="")=>'<div class="stock-detail-pair"><span>'+safe(label)+'</span><strong class="'+cls+'">'+safe(val)+'</strong></div>';
+ out+='<tr class="stock-summary '+(r.active?"stock-active":"")+'" data-stock-row="'+safe(r.ticker)+'"><td><button type="button" class="stock-expand" data-stock-expand="'+safe(r.ticker)+'" aria-expanded="'+expanded+'" aria-controls="'+safe(rowId)+'"><span class="stock-chevron" aria-hidden="true">'+(expanded?"▾":"▸")+'</span><span><span class="stock-ticker">'+safe(r.ticker)+'</span><strong>'+safe(r.name)+'</strong></span></button></td><td>'+(r.price!=null?"$"+r.price.toFixed(2):"—")+'</td><td><strong>'+ownedText+'</strong><small class="stock-current-value '+profitClass+'" title="'+safe(r.profit==null?"Profit unavailable":"Unrealized profit: "+money(r.profit))+'">'+money(r.value)+'</small></td><td><strong>'+safe(r.description)+'</strong><small class="'+(r.active?"stock-benefit-active":"")+'">'+safe(status)+(r.active&&!r.passive?' · '+r.tier+' block'+(r.tier===1?'':'s'):'')+'</small>'+(r.freq>0?'<small>Every '+r.freq+' days · '+money(r.payout)+' / block</small>':'')+'</td></tr>';
+ out+='<tr id="'+safe(rowId)+'" class="stock-detail-row" '+(expanded?"":"hidden")+'><td colspan="4"><div class="stock-detail-grid"><section><h3>Next benefit block</h3>'+
+ (r.passive&&r.active?'<p class="fine-print">Passive benefit unlocked; no additional block.</p>':field("Additional shares",number(r.nextShares))+field("Additional cost",money(r.nextCost))+field("First block cost",money(r.blockCost)))+
+ '</section><section><h3>Annual dividend ROI</h3>'+field("First block",percent(r.roi))+field("Next block",percent(r.nextRoi))+field("Daily value / block",money(r.daily))+'</section><section><h3>Lifetime return</h3>'+
+ field("Unrealized profit",money(r.profit),profitClass)+(r.passive?'<p class="fine-print">Passive benefit; no recurring dividend.</p>':field("Collected payouts",number(r.claimed))+field("Dividend value (current MV)",money(r.dividendTotal))+field("Dividend ROI",percent(r.lifetimeRoi))+field("Total return incl. price",money(r.combinedReturn))+field("Total ROI",percent(r.combinedRoi))+(r.claimed==null?'<p class="fine-print">Collected payout history unavailable in holdings data.</p>':""))+'</section></div></td></tr>';
  }
  return out+'</tbody></table></div><p class="fine-print">Annual dividend ROI uses current share prices and 365 days, excluding stock price changes. Item rewards use cached Torn market values; passive or unpriced rewards are not assigned a cash ROI. Next block cost is the additional shares required, excluding fees.</p>'+sourceError("stocks")+sourceError("stockCatalog")+sourceError("itemCatalog")+'</div></section>';
 }
 function wireStocksPanel(view){
  if(view.dataset.stockBound==="1")return;view.dataset.stockBound="1";
+ view.addEventListener("click",event=>{
+ const row=event.target.closest("[data-stock-row]");
+ if(!row||!view.contains(row))return;
+ const ticker=row.dataset.stockRow,button=row.querySelector("[data-stock-expand]"),detail=row.nextElementSibling;
+ if(!button||!detail?.classList.contains("stock-detail-row"))return;
+ const expanded=!stockView.expanded.has(ticker);
+ if(expanded)stockView.expanded.add(ticker);else stockView.expanded.delete(ticker);
+ button.setAttribute("aria-expanded",String(expanded));
+ button.querySelector(".stock-chevron").textContent=expanded?"▾":"▸";
+ detail.hidden=!expanded;
+ });
  view.addEventListener("change",event=>{
  const el=event.target;
  if(el.matches("[data-stock-sort]"))stockView.sort=el.value;
