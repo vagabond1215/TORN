@@ -115,6 +115,7 @@ const tornJobsGuide=(()=>{
   const data=filtered();
   return '<div class="job-featured-grid">'+data.map(company=>'<article class="job-featured"><h3>'+esc(company.name)+'</h3><small>'+esc(company.styles.join(" · "))+'</small><p>'+relevant(company).map(x=>esc(perkText(x))).join("<br>")+'</p></article>').join("")+'</div>';
  }
+ const collapsedPanels=new Set();
  function render(){
   syncRoadmapStyle();
   let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Jobs & Careers</h1><p>Compare starting careers, permanent passives and all 39 player-owned company types.</p></header>';
@@ -125,6 +126,8 @@ const tornJobsGuide=(()=>{
    '<p><strong>New players:</strong> seek a player company that offers dependable daily training, realistic entry requirements and immediately useful stars. Ask about free training, wages, job points, addiction expectations and activity. Casino is a valid city-job stepping stone if company offers are poor.</p>'+
    '<p><strong>Permanent passives:</strong> plan Education → Medical → Law, adjusting the order to match your working stats. A training-friendly company may let you enter city careers at higher positions later. Finish Principal, Brain Surgeon and Federal Judge before settling into a long-term specialist job.</p>'+
    '<p><strong>Endgame:</strong> company specials usually require ongoing employment; permanent city-career perks remain after leaving. Owning a company is a business with overhead, personnel and advertising, not a beginner shortcut.</p></div></section>';
+  out+='<section class="panel"><div class="panel-heading"><h2>Before accepting a job</h2></div><div class="panel-content"><p>Check actual unlocked stars, daily training, wages, job-point generation, activity requirements and addiction limits. Compare current needs with long-term growth: a 7★ defense bonus may outperform a higher salary for a defense trainer, while business-class travel or mug protection may be more valuable for a merchant.</p>'+
+   '<p class="fine-print">Company perks checked against the <a href="https://wiki.torn.com/wiki/Company/Company_List" target="_blank" rel="noopener noreferrer">official 39-company catalog</a> in November 2026. Gameplay tags and recommendations are editorial.</p></div></section>';
   out+='<section class="panel"><div class="panel-heading"><h2>Six city jobs</h2></div><div class="panel-content"><div class="job-city-grid">'+city.map(c=>
    '<article class="job-city"><h3>'+esc(c[0])+'</h3><small>'+esc(c[1])+'</small><p>'+esc(c[2])+'</p><p><strong>Career result:</strong> '+esc(c[3])+'</p></article>'
   ).join("")+'</div><p class="fine-print"><a href="https://wiki.torn.com/wiki/Joblist" target="_blank" rel="noopener noreferrer">Official job requirements and rewards</a></p></div></section>';
@@ -134,12 +137,11 @@ const tornJobsGuide=(()=>{
    '<label class="job-check"><input type="checkbox" id="job-recommended" '+(recommendedOnly?"checked":"")+'>Featured only</label></div>'+
    '<div id="job-highlights">'+highlights()+'</div></div></section>';
   out+='<section class="panel"><div class="panel-heading"><h2>Complete company catalog</h2></div><div class="panel-content"><div id="job-results">'+results()+'</div></div></section>';
-  out+='<section class="panel"><div class="panel-heading"><h2>Before accepting a job</h2></div><div class="panel-content"><p>Check actual unlocked stars, daily training, wages, job-point generation, activity requirements and addiction limits. Compare current needs with long-term growth: a 7★ defense bonus may outperform a higher salary for a defense trainer, while business-class travel or mug protection may be more valuable for a merchant.</p>'+
-   '<p class="fine-print">Company perks checked against the <a href="https://wiki.torn.com/wiki/Company/Company_List" target="_blank" rel="noopener noreferrer">official 39-company catalog</a> in November 2026. Gameplay tags and recommendations are editorial.</p></div></section>';
-  return out;
+  return out.replace(/<section class="panel"><div class="panel-heading"><h2>(.*?)<\/h2><\/div>([\s\S]*?)<\/section>/g,(_,title,body)=>'<details class="panel job-section" data-job-panel="'+esc(title)+'" '+(collapsedPanels.has(title)?"":"open")+'><summary class="panel-heading"><h2>'+title+'</h2></summary>'+body+'</details>');
  }
  function wire(view){
   if(view.dataset.jobsBound)return;view.dataset.jobsBound="1";
+  view.addEventListener("toggle",e=>{const el=e.target;if(!el.matches?.("[data-job-panel]")||!el.isConnected)return;if(el.open)collapsedPanels.delete(el.dataset.jobPanel);else collapsedPanels.add(el.dataset.jobPanel);},true);
   const redraw=()=>{
    const a=view.querySelector("#job-results"),b=view.querySelector("#job-highlights");
    if(a)a.innerHTML=results();if(b)b.innerHTML=highlights();
