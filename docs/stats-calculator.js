@@ -29,7 +29,7 @@ const tornStatPlanner = (() => {
   const state = {
     gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"gym",
     statValues:{strength:1000,defense:1000,speed:1000,dexterity:1000},
-    trainCount:1, trainMax:false, calcCandyQty:0, calcCandyHappy:25,
+    trainCount:1, trainMax:false, calcCandyQty:0, calcCandyHappy:25, calcCandyMax:false,
     extra:{strength:0,defense:0,speed:0,dexterity:0},
     currentEnergy:150, maxEnergy:150, happy:1000, maxHappy:1000,
     compareStat:"strength",hours:32,regenMinutes:10,
@@ -200,9 +200,58 @@ const tornStatPlanner = (() => {
     }
     return {stat:after,happy,used:count*cost};
   }
+  // Base candy happiness: https://wiki.torn.com/wiki/Candy
+  const calcCandyTiers={"25":["Bag of Bon Bons","Bag of Chocolate Kisses","Box of Bon Bons","Box of Extra Strong Mints","Box of Sweet Hearts","Lollipop","Box of Chocolate Bars"],"35":["Big Box of Chocolate Bars"],"50":["Bag of Candy Kisses","Chocolate Egg"],"75":["Bag of Bloody Eyeballs","Bag of Tootsie Rolls"],"100":["Bag of Chocolate Truffles","Bag of Reindeer Droppings"],"150":["Bag of Humbugs","Bag of Sherbet","Jawbreaker","Pixie Sticks"],"250":["Birthday Cupcake"]};
+  const candyKey=v=>String(v??"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  function calcCandyStock(){
+    const inventory=tornGuideApi.state.inventory.Candy;
+    if(!Array.isArray(inventory)||tornGuideApi.state.inventoryErrors.Candy)return null;
+    const raw=payload("itemCatalog","items"),catalog=Array.isArray(raw)?raw:Object.entries(raw||{}).map(([id,x])=>({...x,id:x.id??id}));
+    const rows=new Map();
+    for(const x of inventory){
+      const item=catalog.find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id)||candyKey(i.name)===candyKey(x.name??x.item?.name));
+      const name=x.name??x.item?.name??item?.name;
+      if(!name)continue;
+      const tier=Object.keys(calcCandyTiers).find(k=>calcCandyTiers[k].some(v=>candyKey(v)===candyKey(name)));
+      const effect=JSON.stringify(item?.effect??item?.effects??"");
+      const happy=Number(tier??effect.match(/happiness\s+by\s+(\d+)/i)?.[1]??0);
+      const qty=Math.max(0,Math.floor(numeric(x.amount??x.quantity)));
+      if(!happy||!qty)continue;
+      const key=candyKey(name),old=rows.get(key);
+      if(old)old.qty+=qty;
+      else rows.set(key,{name,happy,qty,price:numeric(item?.market_value??item?.value?.market_price??item?.value?.market_value??item?.market_price,Infinity)});
+    }
+    return [...rows.values()].sort((a,b)=>b.happy-a.happy||a.price-b.price||a.name.localeCompare(b.name));
+  }
+  function calcCandyPlan(){
+    const stock=calcCandyStock(),any=state.calcCandyHappy==="any";
+    const eligible=(stock||[]).filter(x=>any||x.happy===state.calcCandyHappy);
+    const capacity=eligible.reduce((sum,x)=>sum+x.qty,0);
+    // MAX means maximum inventory available for the selected tier, not a
+    // guarantee that the entire amount fits within live booster cooldown.
+    const requested=state.calcCandyMax&&stock!==null?capacity:state.calcCandyQty;
+    let remaining=requested,happy=0;const used=[];
+    if(stock!==null){
+      for(const item of eligible){
+        const qty=Math.min(remaining,item.qty);if(!qty)continue;
+        used.push({...item,qty});remaining-=qty;happy+=qty*item.happy;
+        if(!remaining)break;
+      }
+    }else if(!any&&!state.calcCandyMax){happy=requested*state.calcCandyHappy;remaining=0;}
+    return {any,loaded:stock!==null,capacity,requested,remaining,happy,used};
+  }
+  function calcCandySummary(){
+    const p=calcCandyPlan();
+    if(!p.requested&&!p.any)return "";
+    const used=p.used.map(x=>esc(x.qty+"× "+x.name)).join(" · ");
+    const note=!p.loaded?(p.any?"Candy inventory unavailable; no candy simulated.":"Inventory unavailable; manual estimate."):p.remaining>0?p.remaining+" more requested than available.":"";
+    return '<div class="tc-candy-summary">'+(p.any&&used?'<span>'+used+'</span>':"")+
+      (p.happy?'<strong>+'+nice(p.happy)+' Happy</strong>':"")+(note?'<small>'+esc(note)+'</small>':"")+
+      (p.loaded&&p.requested===0&&p.any?'<small>Select a quantity or MAX.</small>':"")+'</div>';
+  }
   function singleStatSession(stat,energy,gym) {
     const start=state.statValues[stat];
-    return trainBlock(start,Math.min(99999,state.happy+state.calcCandyQty*state.calcCandyHappy),energy,gym,stat,effectsFor(stat).multiplier);
+    return trainBlock(start,Math.min(99999,state.happy+calcCandyPlan().happy),energy,gym,stat,effectsFor(stat).multiplier);
   }
   const shorthand={strength:"STR",defense:"DEF",speed:"SPD",dexterity:"DEX"};
   const gymCategories=["Lightweight","Middleweight","Heavyweight","Specialty"];
@@ -380,7 +429,7 @@ const tornStatPlanner = (() => {
     markup+=renderBuild(gym,active);
     }
     if(state.subpage==="calc"){
-    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><div class="tc-candy-control"><label for="tc-candy-qty">Candy:</label><input id="tc-candy-qty" type="number" data-tc="calcCandyQty" min="0" max="1000" step="1" value="'+state.calcCandyQty+'" title="Candy quantity (simulation only)"><select data-tc="calcCandyHappy" aria-label="Happiness per candy" title="Happiness per candy">'+[25,35,50,75,100,150].map(h=>'<option value="'+h+'" '+(state.calcCandyHappy===h?"selected":"")+'>'+h+' Happy</option>').join("")+'</select></div></div>'+'</div>';
+    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><div class="tc-candy-control"><label for="tc-candy-qty">Candy:</label><input id="tc-candy-qty" type="number" data-tc="calcCandyQty" min="0" max="1000000000" step="1" value="'+calcCandyPlan().requested+'" title="Candy quantity (simulation only)"><button type="button" class="button secondary '+(state.calcCandyMax?"is-selected":"")+'" data-tc-action="candy-max" aria-pressed="'+state.calcCandyMax+'" '+(!calcCandyPlan().loaded?"disabled":"")+' title="Maximum held candy of selected type (simulation)">MAX</button><select data-tc="calcCandyHappy" aria-label="Happiness per candy" title="Happiness per candy">'+["any",25,35,50,75,100,150,250].map(h=>'<option value="'+h+'" '+(state.calcCandyHappy===h?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select></div></div>'+'</div>'+calcCandySummary();
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<div class="panel-content tc-simulator-body">'+
@@ -413,8 +462,8 @@ const tornStatPlanner = (() => {
         const key=el.dataset.tc;
         if(key==="selectedGym") state.selectedGym=el.value;
         else if(key==="trainCount"){state.trainCount=Math.floor(clamp(el.value,1,10000));state.trainMax=false;}
-        else if(key==="calcCandyQty")state.calcCandyQty=Math.floor(clamp(el.value,0,1000));
-        else if(key==="calcCandyHappy"){const h=Number(el.value);if([25,35,50,75,100,150].includes(h))state.calcCandyHappy=h;}
+        else if(key==="calcCandyQty"){state.calcCandyQty=Math.floor(clamp(el.value,0,1000000000));state.calcCandyMax=false;}
+        else if(key==="calcCandyHappy"){const h=el.value==="any"?"any":Number(el.value);if(["any",25,35,50,75,100,150,250].includes(h))state.calcCandyHappy=h;}
         else if(Object.prototype.hasOwnProperty.call(state,key)) {
           let n=numeric(el.value,state[key]);
           const integerFields=["hours","regenMinutes","naturalXan","naturalEcstasy","naturalCandy","naturalRefill","jumpXan","jumpEcstasy","jumpCandy","jumpDvd","jumpRefill"];
@@ -449,6 +498,7 @@ const tornStatPlanner = (() => {
       const action=event.target.closest("[data-tc-action]");
       if(pick){state.compareStat=pick.dataset.tcPick;view.innerHTML=render();}
       if(action&&action.dataset.tcAction==="auto-gym"){state.selectedGym=null;view.innerHTML=render();}
+      if(action&&action.dataset.tcAction==="candy-max"){if(calcCandyPlan().loaded){state.calcCandyMax=true;state.calcCandyQty=calcCandyPlan().capacity;view.innerHTML=render();}return;}
       if(action&&action.dataset.tcAction==="max"){state.trainMax=true;view.innerHTML=render();}
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
