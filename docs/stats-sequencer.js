@@ -21,14 +21,7 @@ const tornTrainSequence=(()=>{
   const fmt=(v,d=0)=>Number(v).toLocaleString(undefined,{maximumFractionDigits:d});
   const clock=v=>{const s=Math.max(0,Math.round(v));return Math.floor(s/3600)+":"+String(Math.floor(s/60)%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");};
   let ctx=null,loadedPlayer=null;
-  const candyTiers={
-    25:["Bag of Bon Bons","Bag of Chocolate Kisses","Box of Chocolate Bars","Lollipop"],
-    35:["Birthday Cupcake"],
-    50:["Bag of Candy Kisses","Chocolate Egg"],
-    75:["Bag of Bloody Eyeballs","Bag of Tootsie Rolls"],
-    100:["Bag of Chocolate Truffles","Bag of Reindeer Droppings"],
-    150:["Bag of Humbugs","Bag of Sherbet","Jawbreaker"]
-  };
+  const candyTiers={"25":["Bag of Bon Bons","Bag of Chocolate Kisses","Box of Bon Bons","Box of Extra Strong Mints","Box of Sweet Hearts","Lollipop","Box of Chocolate Bars"],"35":["Big Box of Chocolate Bars"],"50":["Bag of Candy Kisses","Chocolate Egg"],"75":["Bag of Bloody Eyeballs","Bag of Tootsie Rolls"],"100":["Bag of Chocolate Truffles","Bag of Reindeer Droppings"],"150":["Bag of Humbugs","Bag of Sherbet","Jawbreaker","Pixie Sticks"],"250":["Birthday Cupcake"]};
   const keyName=value=>String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
   const positive=value=>value!=null&&Number.isFinite(Number(value))&&Number(value)>0?Number(value):null;
   function itemList(){
