@@ -28,7 +28,7 @@ const tornGuideApi=(()=>{
     checklist:["bars","merits","meritCatalog","job"],
     money:["money"],
     stocks:["stocks","stockCatalog","itemCatalog"],
-    education:["education","educationCatalog","merits","meritCatalog"],
+    education:["education","educationCatalog","merits","meritCatalog","stocks","stockCatalog"],
     inventory:[],
     racing:[], faction:[], attacking:[], war:[], tools:[]
   };
@@ -755,18 +755,68 @@ function renderInventoryPage(){
   return out+'</div>';
 }
 
+const educationView={open:new Set(),selected:null,filter:"all"};
+function educationModel(){
+ const root=tornGuideApi.state.data.education, data=payload("education","education"), catalog=payload("educationCatalog","education");
+ const groups=(Array.isArray(catalog)?catalog:Object.values(catalog||{})).filter(g=>g&&g.courses);
+ const list=g=>Array.isArray(g.courses)?g.courses:Object.values(g.courses||{});
+ const courses=groups.flatMap(list), current=data?.current??data?.course??root?.education_current;
+ const id=typeof current==="object"?current?.id??current?.course_id:current;
+ const completed=data?.completed??data?.completed_courses??data?.education_completed??root?.education_completed??root?.completed??root?.completed_courses;
+ const known=Array.isArray(completed);
+ const ids=new Set(known?completed.map(x=>String(typeof x==="object"?x.id??x.course_id:x)):[]);
+ const active=courses.find(c=>String(c.id)===String(id));
+ const deadline=tornTctClock.entries().find(e=>e.id==="education")?.at;
+ const perks=meritLevel("Education Length"), positions=heldWsuShares();
+ return {groups,list,courses,current,id,known,ids,active,deadline,perks,positions};
+}
+function educationDuration(seconds){
+ if(seconds==null||!Number.isFinite(Number(seconds)))return "Unavailable";
+ const m=Math.round(Number(seconds)/60);return Math.floor(m/1440)+"d "+Math.floor(m%1440/60)+"h "+m%60+"m";
+}
+function educationCourseDetail(c,m){
+ const values=v=>Array.isArray(v)?v:Object.values(v||{});
+ const text=v=>typeof v==="string"?v:v?.description??v?.name??v?.effect??"";
+ const benefit=c.effects??c.benefits??c.learning_outcomes??c.outcomes??c.effect;
+ const effects=typeof benefit==="string"?[benefit]:values(benefit).map(text).filter(Boolean);
+ const work=c.working_stats??c.work_stats??c.workingstats??c.stats??c.gains;
+ const workLabels={manual_labor:"Manual labor",manual:"Manual labor",intelligence:"Intelligence",endurance:"Endurance"};
+ const gains=work&&typeof work==="object"?Object.entries(work).map(([k,v])=>[workLabels[k]||k,typeof v==="object"?v?.value??v?.amount:v]).filter(([,v])=>Number.isFinite(Number(v))&&Number(v)>0):[];
+ const rawDuration=c.duration??c.length??c.time;
+ const duration=typeof rawDuration==="object"?rawDuration?.seconds??rawDuration?.base:rawDuration;
+ const cost=c.cost??c.price;
+ const req=c.prerequisites??c.requirements;
+ const prerequisites=values(req).map(v=>{const id=typeof v==="object"?v.id??v.course_id:v;return m.courses.find(x=>String(x.id)===String(id))?.name??text(v)??String(id);}).filter(Boolean);
+ return '<div class="edu-course-detail">'+(c.description?'<p>'+safe(c.description)+'</p>':'')+
+ '<div class="edu-detail-grid"><div><h4>Learning outcome</h4>'+(effects.length?effects.map(v=>'<p>'+safe(v)+'</p>').join(""):'<p class="fine-print">Not supplied by catalog.</p>')+
+ '</div><div><h4>Working stats gained</h4>'+(gains.length?gains.map(([k,v])=>'<div>'+safe(k)+' <strong>+'+formatNumber(v)+'</strong></div>').join(""):'<p class="fine-print">Not supplied by catalog.</p>')+
+ '</div><div><h4>Parameters</h4><div>Base length <strong>'+educationDuration(duration)+'</strong></div><div>Cost <strong>'+(cost!=null?"$"+formatNumber(cost):"Unavailable")+'</strong></div></div></div>'+
+ (prerequisites.length?'<p class="edu-prerequisites">Prerequisites: '+safe(prerequisites.join(", "))+'</p>':'')+'</div>';
+}
 function renderEducationPage(){
-  const data=payload("education","education"), catalog=payload("educationCatalog","education");
-  const groups=Array.isArray(catalog)?catalog:Object.values(catalog||{});
-  const courses=groups.flatMap(g=>Array.isArray(g?.courses)?g.courses:Object.values(g?.courses||{}));
-  const current=data?.current??data?.course;
-  const id=typeof current==="object"?current?.id:current;
-  const match=courses.find(c=>String(c.id)===String(id));
-  const name=current?.name||match?.name||match?.title||(id!=null?"Course #"+id:data?"None active":"Not loaded");
-  const completed=data?.completed??data?.completed_courses;
-  const completedIds=new Set(Array.isArray(completed)?completed.map(x=>String(typeof x==="object"?x.id:x)):[]);
-  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Education</h1><p>Courses and education progress.</p></header>';
-  out+='<section class="panel"><div class="panel-heading"><h2>Current education</h2></div><div class="panel-content">'+homeStatList([["Current course",name],["Education length merit",meritLevel("Education Length")==null?"Not loaded":meritLevel("Education Length")+"/10"],["Completed courses",Array.isArray(completed)?formatNumber(completed.length):"Not loaded"]])+sourceError("education")+'</div></section>';
-  for(const group of groups){if(!group||!group.courses)continue;const list=Array.isArray(group.courses)?group.courses:Object.values(group.courses);out+='<details class="home-expand-panel"><summary>'+safe(group.name||group.title||"Courses")+'</summary><div class="home-expand-body"><ul class="item-list">'+list.map(c=>'<li><span>'+safe(c.name||c.title||"Course #"+c.id)+'</span><strong>'+safe(completedIds.has(String(c.id))?"Completed":String(c.id)===String(id)?"In progress":"")+'</strong></li>').join("")+'</ul></div></details>';}
-  return out+sourceError("educationCatalog");
+ const m=educationModel(),name=m.current?.name??m.active?.name??(m.id!=null?"Course #"+m.id:"None active / not loaded");
+ let out='<section class="panel edu-panel"><div class="panel-heading"><h2>Education</h2><a href="https://www.torn.com/page.php?sid=education" target="_blank" rel="noopener noreferrer">Open Torn</a></div><div class="panel-content">'+
+ '<div class="edu-current"><strong>'+safe(name)+'</strong>'+(m.deadline?'<span data-edu-deadline="'+m.deadline+'">'+tornTctClock.formatDuration((m.deadline-Date.now())/1000)+'</span>':'')+
+ '<small>Education merit '+(m.perks==null?"—":m.perks+"/10")+' · WSU '+(m.positions==null?"Not loaded":m.positions>=1000000?"Active":"Inactive")+' · Completed '+(m.known?m.ids.size+"/"+m.courses.length:"Not loaded")+'</small></div>'+
+ '<div class="edu-filters"><label>Show <select data-edu-filter>'+[["all","All courses"],["remaining","Remaining"],["completed","Completed"]].map(([v,l])=>'<option value="'+v+'" '+(educationView.filter===v?"selected":"")+'>'+l+'</option>').join("")+'</select></label></div>';
+ for(const g of m.groups){
+ const courses=m.list(g),group=String(g.name??g.title??"Courses"),count=courses.filter(c=>m.ids.has(String(c.id))).length;
+ const shown=courses.filter(c=>!m.known||educationView.filter==="all"||(educationView.filter==="completed")===m.ids.has(String(c.id)));
+ if(!shown.length)continue;
+ const opened=educationView.open.has(group)||courses.some(c=>String(c.id)===String(m.id))&&!educationView.open.has("closed:"+group);
+ out+='<details class="edu-category" data-edu-group="'+safe(group)+'" '+(opened?"open":"")+'><summary><strong>'+safe(group)+'</strong><span>'+(m.known?count:"—")+'/'+courses.length+'</span></summary><div class="edu-courses">';
+ for(const c of shown){
+ const id=String(c.id),done=m.ids.has(id),active=id===String(m.id),selected=educationView.selected===id;
+ out+='<div class="edu-course '+(done?"is-completed":active?"is-active":"")+'"><button type="button" data-edu-course="'+safe(id)+'" aria-expanded="'+selected+'"><span>'+safe(c.code??c.course_code??"")+'</span><strong>'+safe(c.name??c.title??"Course "+id)+'</strong><small>'+(done?"Completed":active?"In progress":"")+'</small></button>'+(selected?educationCourseDetail(c,m):"")+'</div>';
+ }
+ out+='</div></details>';
+ }
+ return out+sourceError("education")+sourceError("educationCatalog")+'</div></section>';
+}
+function wireEducationPage(view){
+ if(view.dataset.eduBound==="1")return;view.dataset.eduBound="1";
+ const rebuild=()=>{if(location.hash==="#education")view.innerHTML=renderEducationPage();};
+ view.addEventListener("toggle",e=>{const el=e.target;if(!el.matches?.("[data-edu-group]")||!el.isConnected)return;const g=el.dataset.eduGroup;if(el.open){educationView.open.add(g);educationView.open.delete("closed:"+g);}else{educationView.open.delete(g);educationView.open.add("closed:"+g);}},true);
+ view.addEventListener("click",e=>{const el=e.target.closest("[data-edu-course]");if(!el||location.hash!=="#education")return;educationView.selected=educationView.selected===el.dataset.eduCourse?null:el.dataset.eduCourse;rebuild();});
+ view.addEventListener("change",e=>{if(location.hash!=="#education"||!e.target.matches("[data-edu-filter]"))return;educationView.filter=e.target.value;rebuild();});
 }
