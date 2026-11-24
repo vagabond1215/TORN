@@ -10,7 +10,7 @@ const tornStatPlanner = (() => {
   // Order: name, energy/train, STR/SPD/DEF/DEX dots.
   const fallback = [
     ["Premier Fitness",5,2,2,2,2],["Average Joes",5,2.4,2.4,2.8,2.4],
-    ["Woody's Workout",5,2.8,3.2,3.0,2.8],["Beach Bods",5,3.2,3.2,3.2,0],
+    ["Woody's Workout Club",5,2.8,3.2,3.0,2.8],["Beach Bods",5,3.2,3.2,3.2,0],
     ["Silver Gym",5,3.4,3.6,3.4,3.2],["Pour Femme",5,3.4,3.6,3.6,3.8],
     ["Davies Den",5,3.7,0,3.7,3.7],["Global Gym",5,4,4,4,4],
     ["Knuckle Heads",10,4.8,4.4,4,4.2],["Pioneer Fitness",10,4.4,4.5,4.8,4.4],
@@ -27,7 +27,7 @@ const tornStatPlanner = (() => {
     ["The Sports Science Lab",25,9,9,9,9],["Fight Club",10,10,10,10]
   ].map((g,i) => ({id:i+1,name:g[0],energy:g[1],strength:g[2],speed:g[3],defense:g[4],dexterity:g[5],offline:true}));
   const state = {
-    selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"calc",
+    gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"calc",
     statValues:{strength:1000,defense:1000,speed:1000,dexterity:1000},
     trainCount:1, trainMax:false,
     extra:{strength:0,defense:0,speed:0,dexterity:0},
@@ -79,6 +79,9 @@ const tornStatPlanner = (() => {
     state.imported=true;
     state.apiStamp=tornGuideApi.state.updated;
   }
+  const gymKey=name=>String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"").replace(/^the/,"").replace(/workoutclub$/,"workout");
+  const gymCosts=[10,100,250,500,1000,2500,5000,10000,50000,100000,250000,500000,1000000,2000000,3000000,5000000,7500000,10000000,15000000,20000000,30000000,50000000,75000000,100000000,50000000,50000000,100000000,100000000,100000000,100000000,500000000,2147483647];
+  function gymRank(g){return fallback.findIndex(x=>gymKey(x.name)===gymKey(g.name));}
   function gyms() {
     const source=api("gymCatalog");
     const raw=source && source.gyms;
@@ -86,8 +89,8 @@ const tornStatPlanner = (() => {
     const pairs=Array.isArray(raw)?raw.map((item,index)=>[String(item.id??index+1),item]):Object.entries(raw);
     const pick=(...values)=>values.find(value=>value!==null && value!==undefined && Number.isFinite(Number(value)));
     const normalized=pairs.filter(([key,item])=>item && typeof item==="object" && item.name).map(([key,item])=>{
-      const known=fallback.find(g=>g.name.toLowerCase()===String(item.name).toLowerCase());
-      const result={id:item.id??Number(key),name:String(item.name),energy:5,offline:false};
+      const known=fallback.find(g=>gymKey(g.name)===gymKey(item.name))||fallback.find(g=>String(g.id)===String(item.id??key));
+      const result={id:item.id??Number(key),name:String(item.name),energy:5,offline:false,category:item.category??item.type,price:pick(item.membership_cost,item.cost,item.price),rank:known?fallback.indexOf(known):-1};
       const cost=pick(item.energy_cost,item.energy_per_train,item.energy,item.cost_energy,known&&known.energy);
       result.energy=Math.max(1,numeric(cost,10));
       let needsFallback=false;
@@ -100,7 +103,9 @@ const tornStatPlanner = (() => {
       result.offline=needsFallback || cost===undefined;
       return result;
     });
-    return normalized.length?normalized:fallback;
+    // Merge rather than replace: partial API catalogs must not hide known gyms.
+    const merged=fallback.map((g,i)=>normalized.find(n=>n.rank===i)||g);
+    return merged.concat(normalized.filter(n=>n.rank<0));
   }
   function activeGym(all=gyms()) {
     const g=api("gym"), info=g&&(g.gym||g);
@@ -195,14 +200,16 @@ const tornStatPlanner = (() => {
   const shorthand={strength:"STR",defense:"DEF",speed:"SPD",dexterity:"DEX"};
   const gymCategories=["Lightweight","Middleweight","Heavyweight","Specialty"];
   function gymCategory(g) {
-    const index=fallback.findIndex(item=>item.name.toLowerCase()===g.name.toLowerCase());
-    return index<0?3:Math.min(3,Math.floor(index/8));
+    const index=g.rank>=0?g.rank:gymRank(g);
+    if(index>=0)return Math.min(3,Math.floor(index/8));
+    const type=String(g.category||"").toLowerCase();
+    return /light/.test(type)?0:/middle/.test(type)?1:/heavy/.test(type)?2:3;
   }
   function trainingCount(gym) {
     return state.trainMax?Math.floor(state.currentEnergy/gym.energy):Math.max(1,Math.min(10000,Math.floor(state.trainCount)));
   }
   function gymIcon(g) {
-    const i=fallback.findIndex(x=>x.name.toLowerCase()===g.name.toLowerCase());
+    const i=g.rank>=0?g.rank:gymRank(g);
     const marks=["⚑","J","WW","✿","♟","⚝","D","G","⚔","▲","AA","C","◴","♥","LB","DB","♟","⚒","FT","CC","A","LR","E","G","B","FF","3K","MI","TR","E","SSL","FC"];
     const colors=["#89c9ff","#df8b25","#619dc4","#32ac8e","#c0b9b5","#db8e93","#c2c4c7","#91a96b","#d0d5d7","#7eb395","#9bd5c0","#d1d2cf","#abb5c0","#84a8e9","#bc8cc7","#d86a43","#d99bb9","#c8d0c4"];
     const mark=marks[i]||g.name.split(/\s+/).map(w=>w[0]).join("").slice(0,3);
@@ -252,16 +259,18 @@ const tornStatPlanner = (() => {
     if(state.subpage==="calc"){
     const catalog=gyms();
     const ordered=[...catalog].sort((a,b)=>{
-      const rank=g=>{const i=fallback.findIndex(x=>x.name.toLowerCase()===g.name.toLowerCase());return i<0?999:i;};
+      const rank=g=>{const i=g.rank>=0?g.rank:gymRank(g);return i<0?999:i;};
       return rank(a)-rank(b);
     });
     markup+='<section class="panel"><div class="panel-content tc-gym-picker"><div class="tc-gym-board" role="group" aria-label="Select simulation gym">'+gymCategories.map((label,i)=>{
       const list=ordered.filter(g=>gymCategory(g)===i);
-      return '<div class="tc-gym-group"><span class="tc-gym-group-label">'+label+'</span><div class="tc-gym-tiles">'+list.map(g=>
+      return '<div class="tc-gym-group" role="group" aria-label="'+label+'"><div class="tc-gym-tiles">'+list.map(g=>
         '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(g)+'<span>'+esc(g.name)+'</span></button>').join("")+
         Array.from({length:Math.max(0,10-list.length)},()=>'<span class="tc-gym-empty" aria-hidden="true"></span>').join("")+'</div></div>';
     }).join("")+'</div>'+
-      '<div class="tc-gym-details"><strong>'+esc(gym.name)+'</strong><small>'+gym.energy+' E/train</small></div></div></section>';
+      '<details class="tc-gym-info" '+(state.gymInfoOpen?"open":"")+'><summary><strong>'+esc(gym.name)+'</strong><small>'+gym.energy+' E/train</small></summary><div class="tc-gym-info-body">'+
+      '<div class="tc-gym-info-meta"><span>'+esc(gymCategories[gymCategory(gym)])+'</span><span>Membership: '+(gym.price!=null?"$"+nice(Number(gym.price)):gymCosts[gym.rank>=0?gym.rank:gymRank(gym)]!=null?"$"+nice(gymCosts[gym.rank>=0?gym.rank:gymRank(gym)]):"Unavailable")+'</span></div>'+
+      '<div class="tc-gym-info-dots">'+statNames.map(stat=>'<div><span>'+shorthand[stat]+'</span><strong>'+(gym[stat]>0?nice(gym[stat],1):"Unavailable")+'</strong><meter min="0" max="10" value="'+Math.min(10,Math.max(0,numeric(gym[stat])))+'"></meter></div>').join("")+'</div></div></details></div></section>';
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<section class="panel"><div class="panel-heading"><h2>Gym training simulator</h2></div><div class="panel-content">'+
@@ -284,6 +293,7 @@ const tornStatPlanner = (() => {
     if (view.dataset.tcPlannerBound === "1") return;
     view.dataset.tcPlannerBound = "1";
     tornTrainSequence.wire(view);
+    view.addEventListener("toggle",event=>{if(event.target.matches?.(".tc-gym-info")&&event.target.isConnected)state.gymInfoOpen=event.target.open;},true);
     view.addEventListener("change",event=>{
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const el=event.target;
