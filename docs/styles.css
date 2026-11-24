@@ -1651,3 +1651,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-template-card[open]>.ts-template-header{padding-bottom:.5rem;border-bottom:1px solid var(--border)}
 .ts-template-card .ts-merged{margin:.25rem 0 0}
 @media(max-width:750px){.ts-template-header{grid-template-columns:repeat(3,minmax(0,1fr)) 16px;row-gap:.4rem}.ts-template-name{grid-column:1/4}.ts-template-chevron{grid-column:4;grid-row:1}.ts-title-metric:nth-child(5){grid-column:1}}
+
+/* Flush editable controls to the timeline row boundaries. */
+.ts-merged .ts-editable-row td{padding-top:0;padding-bottom:0}
+.ts-merged .ts-step,.ts-merged .ts-step>select[data-ts-edit="type"],.ts-merged .ts-step>.ts-arrows,.ts-merged .ts-arrows button{margin-block:0;padding-block:0}
+.ts-merged .ts-step>select[data-ts-edit="type"],.ts-merged .ts-arrows button{height:22px;min-height:0}
