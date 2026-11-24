@@ -15,7 +15,7 @@ const tornTrainSequence=(()=>{
   defaults.maxhappy=()=>[make("train"),...Array.from({length:4},()=>make("xanax")),make("waitDrug"),make("externalHappy"),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
   defaults.custom=()=>[make("train")];
   const templates=[["natural","NAT","Natural training"],["maxenergy","MAX E","Maximum Energy"],["mini","MINI","Mini jump"],["low","LOW#","Low-stat jump"],["jump","HJ","Happy jump"],["maxhappy","99k","99k Happy jump"],["custom","CUSTOM","Custom"]];
-  const startingEnergy=Object.fromEntries(templates.map(([id])=>[id,id==="natural"?"zero":"full"]));
+  const startingEnergy=Object.fromEntries(templates.map(([id])=>[id,["natural","jump","maxhappy"].includes(id)?"zero":"full"]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]);
   function templateButtons(){return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'</div>';}
