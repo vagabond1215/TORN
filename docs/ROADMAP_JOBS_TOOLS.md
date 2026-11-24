@@ -160,3 +160,10 @@ The Jobs page's current job and three working stats also use minimalist side-by-
 Racing now avoids purchasing a near-duplicate NSX Short Tarmac T2 build; see RACING_GUIDE.md for the two-car Short Turbo 3 tarmac/dirt setup and track-specific caveats.
 
 No new API polling was added for status or progress bars; Home adds only the cached workstats selection while viewing Home.
+
+
+## Home live bars and activity panel (November 24, 2026)
+
+Home Energy, Nerve and Happy bars now advance locally at the regeneration tick predicted from the API's v2 tick timing fields, without additional API polling; Life is also projected. Over-cap special Happy values are not automatically reset when perk status is unclear. The static API snapshot disclaimer was removed.
+
+A compact Bank, virus, travel & racing panel shows the cached investment value, profit and maturity. Update activity manually fetches only stale virus, travel, personal racing records, and race history selections. Home and the TCT dropdown reuse cached bank and flight deadlines, and the virus completion uses its absolute until timestamp. Last fetch times are visible. A legacy personalstats category error is corrected and removed from restored cache without suppressing other API errors.

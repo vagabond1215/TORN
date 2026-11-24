@@ -73,3 +73,44 @@ The Home page's existing nine **Activity and detailed reports** links are now ex
 ### Interface preferences and elapsed sync counter
 
 The tornGuidePreferences module stores theme, time-zone, external-link and contextual Quick Access preferences separately from the opt-in Torn API credential. The top-bar sync age updates locally once per second from tornGuideApi.state.updated. It does not force any API selections or additional polling. The exact refresh timestamp stays in the refresh icon tooltip using the preferred display time zone. The redundant Home identity and Last refreshed summary were removed.
+
+
+## November 24, 2026: live bar projection and Activity details
+
+### Passive bar regeneration between API refreshes
+
+Home now advances Energy, Nerve, Happy and Life locally from the last user/bars snapshot. The source fields are current, maximum, increment, interval, tick_time, and full_time. The guide records the bar selection fetch timestamp and projects the next +increment tick at its reported phase. The bar value, percentage and next-tick countdown update once per second without a Torn API request.
+
+Default fallback intervals are +5 Energy every 10 minutes (150-cap Donator/Subscriber) or 15 minutes (100-cap standard), +1 Nerve every five minutes, +5 Happy every 15 minutes, and the API-provided Life interval/increment. When the API provides differing intervals or increments, those values take precedence. If a manually shared bar snapshot lacks tick_time, a UTC-aligned approximation is marked as estimated in the tooltip. Refreshing the source supersedes the local projection.
+
+Passive projections cannot predict spending Energy or Nerve, consuming items, unexpected Happy changes, or special perks after the latest API pull. Over-cap Happy is left at its reported value until another snapshot instead of assuming that its quarter-hour reset is always active. The redundant static snapshot disclaimer was removed.
+
+### Corrected personalstats API error
+
+The old personalstats request lacked a required category. The endpoint now maps to user/personalstats?cat=popular, excluded from generic user multi-selection so the category parameter is retained. Home does not automatically request it. On cache restoration, legacy "Incorrect category" errors for personalstats are cleared while all unrelated failures remain visible.
+
+### Activity API budget and field mapping
+
+Bank: Home reuses cached user/money under its existing 15-minute TTL and displays city_bank amount, profit and until maturity without a separate bank request.
+
+Virus, Travel and Racing: Home's explicit Update activity button checks stale selections only: user/virus (15-minute TTL), user/travel (15-minute TTL), user/racingrecords (6-hour TTL), user/races (30-minute TTL). The coordinator batches selections when possible or falls back safely. This does not extend the routine Home refresh.
+
+Virus: the user/virus v2 response contains an item name and an absolute Unix until timestamp, which is now recognized by the TCT countdown panel.
+
+Travel: flight countdowns are anchored to a known arrival timestamp or remaining time at the travel selection's fetch timestamp when supplied.
+
+Racing: user/racingrecords gives track best-lap records, not the latest finishing position. User/races provides race history. A position is shown only when the most recent race includes a result with the current player's driver_id.
+
+Bank maturity and flight arrival appear in the TCT dropdown using cached values with no additional request. Home displays Money and Activity last-fetch dates to indicate freshness, and failures in one selection do not erase independent sections.
+
+### Source and access limitations
+
+Connected browser tab context exposed only rendered Torn website/guide data, not the underlying last authenticated HTTP response bodies. No API key or private data was sent to a proxy or committed. The updated guide presents live cached selections after the user explicitly loads them; absence of a selection is labeled Not loaded.
+
+Schema references:
+- https://neon0404.github.io/torn-client/types/UserBar.html
+- https://neon0404.github.io/torn-client/types/UserMoneyResponse.html
+- https://neon0404.github.io/torn-client/types/UserVirus.html
+- https://neon0404.github.io/torn-client/types/UserRacingRecordsResponse.html
+- https://neon0404.github.io/torn-client/types/UserRacesResponse.html
+- https://www.torn.com/swagger.php
