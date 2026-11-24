@@ -1578,3 +1578,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-queue{margin:.35rem 0}
 .ts-queue>summary{cursor:pointer;color:var(--accent-strong);font-size:.8rem;font-weight:700;padding:.25rem 0}
 .ts-queue[open]>summary{margin-bottom:.35rem}
+
+.ts-card-columns{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:.75rem;align-items:start}
+.ts-card-columns>.ts-queue,.ts-card-columns>.ts-log{min-width:0;margin:.35rem 0}
+.ts-card-columns>.ts-log>summary{padding:.25rem 0}
+.ts-card-columns .ts-log-scroller{overflow-x:auto;max-width:100%}
+@media(max-width:850px){.ts-card-columns{grid-template-columns:minmax(0,1fr)}}
