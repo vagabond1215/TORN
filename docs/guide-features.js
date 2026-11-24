@@ -658,8 +658,6 @@ function renderDashboard() {
       '<strong>'+safe(label)+'</strong><small>'+safe(tip)+'</small></button>';
   }
   result+='</div></div></details>';
-  result+='<details class="home-expand-panel"><summary>Data sources &amp; request budget</summary>'+
-    '<div class="home-expand-body">'+renderSourcesPanel()+'</div></details>';
   const issues=[...Object.entries(st.errors).map(([key,value])=>[key,value]),
     ...Object.entries(st.inventoryErrors).map(([key,value])=>["Inventory: "+key,value])];
   if(issues.length){
@@ -711,21 +709,6 @@ function renderInventoryPage(){
     out+='</section>';
   }
   return out+'</div>';
-}
-
-function renderSourcesPanel(){
-  const st=tornGuideApi.state;
-  const live=st.bridge && Date.now()-st.bridge.timestamp<90000;
-  const scriptUrl="https://vagabond1215.github.io/TORN/torn-companion.user.js";
-  let out='<section class="panel"><div class="panel-heading"><h2>Data sources and API budget</h2></div><div class="panel-content"><div class="source-status-grid">';
-  out+='<div><strong>Torn API v2</strong><small>Authoritative, page-specific and cached by selection</small><span>'+safe(st.requests)+' successful calls this visit</span></div>';
-  out+='<div><strong>Visible Torn page</strong><small>Manual Tampermonkey share; no background scraping</small><span>'+
-    (live?"Fresh "+safe(st.bridge.fields.join(", "))+" at "+safe(tornGuidePreferences.formatDate(st.bridge.timestamp)):"No fresh manual snapshot")+'</span></div>';
-  out+='<div><strong>External reports</strong><small>TornStats and Torn Report are optional, separate services</small><span>Not connected automatically</span></div>';
-  out+='</div><p class="fine-print">To share already visible Torn bars, <a href="'+safe(scriptUrl)+'" target="_blank" rel="noopener noreferrer">install the open-source companion userscript</a> in Tampermonkey. On a Torn page you are actively viewing, click <strong>Share bars with Torn Guide</strong>, then switch here within 90 seconds. No Torn API key or session cookie is exported.</p>';
-  out+='<p class="fine-print"><a href="https://www.tornstats.com/api" target="_blank" rel="noopener noreferrer">TornStats API</a> is available for separately authorized integrations, but this guide will not send a Full Access key to outside services. Browser CORS compatibility and permission scopes must be confirmed before enabling direct provider requests. <a href="https://torn.report/" target="_blank" rel="noopener noreferrer">Torn Report</a> remains available through its own authenticated site.</p>';
-  out+='</div></section>';
-  return out;
 }
 
 function renderEducationPage(){
