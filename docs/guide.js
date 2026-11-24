@@ -464,7 +464,7 @@ byId("remember-active").addEventListener("change",event=>{
   renderProfile();
 });
 window.addEventListener("torn-guide-sync",updateRefreshUI);
-setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornRightRail.tick();for(const el of document.querySelectorAll("[data-edu-deadline]"))el.textContent=tornTctClock.formatDuration((Number(el.dataset.eduDeadline)-Date.now())/1000);},1000); // local DOM updates only; no Torn API calls
+setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornRightRail.tick();updateInventoryAges();for(const el of document.querySelectorAll("[data-edu-deadline]"))el.textContent=tornTctClock.formatDuration((Number(el.dataset.eduDeadline)-Date.now())/1000);},1000); // local DOM updates only; no Torn API calls
 
 // The ellipsis is an unframed button; settings remain independent of API login.
 function syncSettingsControls(){
@@ -527,12 +527,12 @@ byId("topic-view").addEventListener("click",async event=>{
   const category=button.dataset.inventoryLoad;
   if(!tornGuideApi.inventoryTypes.includes(category))return;
   const alreadyLoaded=Object.hasOwn(tornGuideApi.state.inventory,category);
-  button.disabled=true;button.textContent="Loading…";
+  button.disabled=true;button.setAttribute("aria-busy","true");
   try{await tornGuideApi.loadInventory(category,alreadyLoaded);}
   catch(error){byId("refresh-status").textContent=String(error.message||error);}
   finally{
     // A successful request rerenders Inventory, replacing this button.
-    if(button.isConnected){button.disabled=false;button.textContent="Load category";}
+    if(button.isConnected){button.disabled=false;button.removeAttribute("aria-busy");}
   }
 });
 
