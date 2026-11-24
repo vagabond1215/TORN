@@ -791,6 +791,31 @@ function wireStocksPanel(view){
  });
 }
 const inventoryExpanded=new Set();
+let inventoryFilter="All";
+const inventoryIcons={"All":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 7h7l2 2h9v12H3zM3 7V4h7l2 3h8\"/></svg>","Temporary":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m5 8 11 11 4-4L9 4zM4 4l2-2m11 2 3 3\"/></svg>","Defensive":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z\"/></svg>","Clothing":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m8 3-6 4 3 5 3-2v11h8V10l3 2 3-5-6-4c-1 4-7 4-8 0z\"/></svg>","Medical":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 3h6v6h6v6h-6v6H9v-6H3V9h6z\"/></svg>","Drug":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 21V4m0 10-7-7 2 8-4 1 9 3 9-3-4-1 2-8-7 7\"/></svg>","Energy Drink":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"7\" y=\"3\" width=\"10\" height=\"18\" rx=\"2\"/><path d=\"m13 6-3 6h4l-3 6\"/></svg>","Alcohol":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 3h14l-2 9H7zM12 12v8m-5 0h10\"/></svg>","Candy":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m7 8 4-4 9 9-4 4zM7 8 2 6v7l5-1m9 5 1 5h6l-3-9\"/></svg>","Supply Pack":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m3 7 9-4 9 4v12l-9 3-9-3zM3 7l9 4 9-4M12 11v11\"/></svg>","Booster":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m12 3 7 8h-4v10H9V11H5z\"/></svg>","Enhancer":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m4 20 13-13 3 3L7 23zM5 3v5m-2-2h5m12-3v4m-2-2h4\"/></svg>","Tool":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m4 4 5 5m6 6 5 5M4 20 16 8m0 0-1-5 3 3 3-3v5l-5 3M3 3l4 1 2 4-2 2-4-2z\"/></svg>","Material":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m3 16 5-5 4 5-4 5zM12 16l4-5 5 5-5 5zM7 8l5-5 5 5-5 5z\"/></svg>","Other":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"5\" cy=\"12\" r=\"1\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/></svg>","Special":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m12 2 3 7 7 1-5 5 1 7-6-4-6 4 1-7-5-5 7-1z\"/></svg>","Flower":"<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 22v-9m0 5 5-3M12 18l-5-3\"/><circle cx=\"12\" cy=\"8\" r=\"3\"/><path d=\"M12 5c-5-8-11 3-3 4-6 5 4 10 5 2 8 1 7-9 1-7z\"/></svg>"};
+const inventoryRefreshIcon="<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 7v5h-5M20 12a8 8 0 1 0-2 6\"/></svg>";
+const inventorySearchIcon="<svg viewBox=\"0 0 24 24\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 15 5 6h4l2 9m2 0 2-9h4l2 9M9 9h6\"/><circle cx=\"7\" cy=\"16\" r=\"4\"/><circle cx=\"17\" cy=\"16\" r=\"4\"/><path d=\"M11 16h2\"/></svg>";
+function inventoryAge(stamp){
+  if(!stamp)return "—";
+  const mins=Math.max(0,Math.floor((Date.now()-stamp)/60000));
+  return mins<60?mins+"m":mins<6000?Math.floor(mins/60)+"h":Math.min(99,Math.floor(mins/1440))+"d";
+}
+function updateInventoryAges(){
+  document.querySelectorAll("[data-inventory-age]").forEach(el=>el.textContent=inventoryAge(Number(el.dataset.inventoryAge)));
+}
+function inventoryFilterBar(){
+  const preferred=["All","Temporary","Defensive","Clothing","Medical","Drug","Energy Drink","Alcohol","Candy","Supply Pack","Booster","Enhancer","Tool","Material","Flower","Special","Other"];
+  const cats=preferred.filter(cat=>cat==="All"||tornGuideApi.inventoryTypes.includes(cat));
+  for(const cat of tornGuideApi.inventoryTypes)if(!cats.includes(cat))cats.push(cat);
+  return '<nav class="inventory-filterbar" aria-label="Inventory categories">'+cats.map(cat=>'<button type="button" data-inventory-filter="'+safe(cat)+'" title="'+safe(cat)+'" aria-label="'+safe(cat)+'" aria-pressed="'+(cat===inventoryFilter)+'">'+(inventoryIcons[cat]??inventoryIcons.Other)+'</button>').join("")+'</nav>';
+}
+if(typeof document!=="undefined")document.addEventListener("click",event=>{
+  const button=event.target.closest?.("[data-inventory-filter]");
+  if(!button)return;
+  inventoryFilter=button.dataset.inventoryFilter;
+  document.querySelectorAll("[data-inventory-filter]").forEach(el=>el.setAttribute("aria-pressed",String(el.dataset.inventoryFilter===inventoryFilter)));
+  document.querySelectorAll("[data-inventory-category]").forEach(el=>el.hidden=inventoryFilter!=="All"&&el.dataset.inventoryCategory!==inventoryFilter);
+});
 let inventoryExpandedOwner=null;
 const weav3rBuyers=(()=>{
   const base="https://weav3r.dev";
@@ -926,10 +951,8 @@ function inventoryDetailRow(item,category,index){
   const qty=Number(item.amount??item.quantity);
   const validPrice=price!=null&&Number.isFinite(Number(price))&&Number(price)>0;
   const url=id?inventoryMarketplaceUrl(id):"";
-  return '<li class="inventory-detail-row" data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span>'+safe(name)+(item.equipped?' <small>(equipped)</small>':'')+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span><strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body"><p>'+safe(description)+'</p><dl><dt>Type</dt><dd>'+safe(category)+'</dd>'+(id?'<dt>Item ID</dt><dd>'+id+'</dd>':'')+'<dt>Effects</dt><dd>'+safe(effects||"No effect information available")+'</dd><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
-    '<div class="inventory-market-actions">'+(url?'<button type="button" class="button secondary" data-query-buyers'+
-    (weav3rBuyers.pending(id)?' disabled>Checking…':'>Query Buyers')+'</button>'+
-    '<a class="button secondary inventory-market-link" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Open Weav3r marketplace</a>':
+  return '<li class="inventory-detail-row" data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span>'+safe(name)+(item.equipped?' <small>(equipped)</small>':'')+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span>'+(id?'<button type="button" class="inventory-inline-search" data-query-buyers aria-label="Query Weav3r buyers for '+safe(name)+'" title="Query Weav3r buyers" '+(weav3rBuyers.pending(id)?'disabled aria-busy="true"':'')+'>'+inventorySearchIcon+'</button>':'')+'<strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body"><p>'+safe(description)+'</p><dl><dt>Type</dt><dd>'+safe(category)+'</dd>'+(id?'<dt>Item ID</dt><dd>'+id+'</dd>':'')+'<dt>Effects</dt><dd>'+safe(effects||"No effect information available")+'</dd><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
+    '<div class="inventory-market-actions">'+(url?'<a class="inventory-market-link" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Open Weav3r marketplace</a>':
     '<small>Item ID unavailable; marketplace search disabled.</small>')+'</div>'+
     (id?'<p class="inventory-buyer-status" role="status"></p><div class="inventory-buyer-results">'+inventoryBuyerResults(id,qty)+'</div>':"")+
     '</div></details></li>';
@@ -951,7 +974,9 @@ if(typeof document!=="undefined")document.addEventListener("toggle",event=>{
 if(typeof document!=="undefined")document.addEventListener("click",async event=>{
   const button=event.target.closest?.("[data-query-buyers]");
   if(!button)return;
+  event.preventDefault();
   const row=button.closest("[data-buyer-item]");
+  row.querySelector("[data-inventory-detail]").open=true;
   const id=Number(row.dataset.buyerItem);
   if(!id||weav3rBuyers.pending(id))return;
   const rows=()=>document.querySelectorAll('[data-buyer-item="'+id+'"]');
@@ -959,7 +984,8 @@ if(typeof document!=="undefined")document.addEventListener("click",async event=>
     for(const item of rows()){
       const control=item.querySelector("[data-query-buyers]");
       control.disabled=busy;
-      control.textContent=busy?"Checking…":"Query Buyers";
+      control.setAttribute("aria-busy",String(busy));
+      control.title=busy?"Checking buyers…":"Query Weav3r buyers";
       item.querySelector(".inventory-buyer-status").textContent=message;
     }
   };
@@ -975,17 +1001,14 @@ if(typeof document!=="undefined")document.addEventListener("click",async event=>
 });
 
 function renderInventoryPage(){
-  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Inventory</h1><p>Load only the item categories you need. Once loaded, each category is cached independently for 15 minutes. Expand an item for details and a manual Weav3r buyer check.</p></header>';
+  let out=inventoryFilterBar()+'<h1 id="topic-title" tabindex="-1" class="sr-only">Inventory</h1>';
   if(!tornGuideApi.isConnected())return out+'<section class="panel"><div class="panel-content">Connect your account to load inventory.</div></section>';
   const st=tornGuideApi.state;
   out+='<div class="inventory-grid">';
   for(const cat of tornGuideApi.inventoryTypes){
     const items=st.inventory[cat],stamp=Number(st.fetchedAt["inventory:"+cat])||0;
     const error=st.inventoryErrors[cat];
-    out+='<section class="inventory-panel"><h3>'+safe(cat)+(items?' ('+items.length+')':'')+'</h3>'+
-      '<div class="inventory-actions"><button type="button" class="button secondary" data-inventory-load="'+safe(cat)+'">'+(items?'Refresh category':'Load category')+'</button>';
-    if(stamp)out+='<small>Updated '+safe(tornGuidePreferences.formatDate(stamp))+'</small>';
-    out+='</div>';
+    out+='<section class="inventory-panel" data-inventory-category="'+safe(cat)+'" '+(inventoryFilter!=="All"&&inventoryFilter!==cat?'hidden':'')+'><div class="inventory-tile-head"><h3>'+safe(cat)+(items?' ('+items.length+')':'')+'</h3><span class="inventory-age" data-inventory-age="'+stamp+'" title="'+(stamp?'Updated '+safe(tornGuidePreferences.formatDate(stamp)):'Not loaded')+'">'+inventoryAge(stamp)+'</span><button type="button" class="inventory-refresh-icon" data-inventory-load="'+safe(cat)+'" aria-label="'+(items?'Refresh ':'Load ')+safe(cat)+'" title="'+(items?'Refresh category':'Load category')+'">'+inventoryRefreshIcon+'</button></div>';
     if(error)out+='<p class="api-error">'+safe(error)+'</p>';
     if(!items)out+='<p>Not requested yet.</p>';
     else if(!items.length)out+='<p>Nothing held.</p>';
