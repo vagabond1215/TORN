@@ -1668,3 +1668,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-row-editor .ts-booster-summary small{display:block}
 .ts-row-editor .ts-editor-wait{display:flex;gap:.5rem;align-items:center}
 .ts-row-editor .ts-editor-wait input{width:6rem}
+
+/* Book and perk lifecycle states, independent of selected UI controls. */
+.ts-perk-tile.is-active{background:#b5df4f;border-color:#111;color:#111}
+.ts-perk-tile.is-owned{background:#111;border-color:#b5df4f;color:#d3f47e}
+.ts-perk-tile.is-read{background:var(--surface);border-color:#d85b5b;color:var(--muted)}
+.ts-perk-tile.is-read>strong,.ts-perk-tile.is-read>small:last-child{color:#e16b6b}
+:root[data-theme="light"] .ts-perk-tile.is-read>strong,:root[data-theme="light"] .ts-perk-tile.is-read>small:last-child{color:#a92f35}
