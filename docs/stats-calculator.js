@@ -27,7 +27,7 @@ const tornStatPlanner = (() => {
     ["The Sports Science Lab",25,9,9,9,9]
   ].map((g,i) => ({id:i+1,name:g[0],energy:g[1],strength:g[2],speed:g[3],defense:g[4],dexterity:g[5],offline:true}));
   const state = {
-    gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"calc",
+    gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"gym",
     statValues:{strength:1000,defense:1000,speed:1000,dexterity:1000},
     trainCount:1, trainMax:false,
     extra:{strength:0,defense:0,speed:0,dexterity:0},
@@ -276,11 +276,12 @@ const tornStatPlanner = (() => {
     const active=activeGym();
     const available=tornGuideApi.isConnected();
     let markup='<h1 id="topic-title" tabindex="-1" class="sr-only">Battle stats</h1><div class="tc-subbar"><nav class="tc-subnav" aria-label="Stats sections">'+
-      '<button type="button" data-tc-view="calc" class="tc-subtab '+(state.subpage==="calc"?"is-current":"")+'" aria-current="'+(state.subpage==="calc"?"page":"false")+'">Calc · Gym simulator</button>'+
-      '<button type="button" data-tc-view="compare" class="tc-subtab '+(state.subpage==="compare"?"is-current":"")+'" aria-current="'+(state.subpage==="compare"?"page":"false")+'">Compare · Training strategies</button></nav>'+
+      '<button type="button" data-tc-view="gym" class="tc-subtab '+(state.subpage==="gym"?"is-current":"")+'" aria-current="'+(state.subpage==="gym"?"page":"false")+'">Gym</button>'+
+      '<button type="button" data-tc-view="calc" class="tc-subtab '+(state.subpage==="calc"?"is-current":"")+'" aria-current="'+(state.subpage==="calc"?"page":"false")+'">Calc</button>'+
+      '<button type="button" data-tc-view="compare" class="tc-subtab '+(state.subpage==="compare"?"is-current":"")+'" aria-current="'+(state.subpage==="compare"?"page":"false")+'">Plan</button></nav>'+
       '<div class="tc-overview"><div class="tc-stat-overview">'+statNames.map(stat=>
       '<div class="tc-overview-item"><small title="'+readable[stat]+'">'+shorthand[stat]+'</small><strong>'+nice(apiStatValue(stat)??state.statValues[stat])+'</strong></div>').join("")+'</div>'+effectiveOverview()+'</div></div>';
-    if(state.subpage==="calc"){
+    if(state.subpage==="gym"){
     const catalog=gyms();
     const ordered=[...catalog].sort((a,b)=>{
       const rank=g=>{const i=g.rank>=0?g.rank:gymRank(g);return i<0?999:i;};
@@ -292,7 +293,10 @@ const tornStatPlanner = (() => {
         '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(g)+'<span>'+esc(g.name)+'</span></button>').join("")+'</div></div>';
     }).join("")+'</div>'+
       '<details class="tc-gym-info" '+(state.gymInfoOpen?"open":"")+'><summary>'+gymInfoHeading(active||gym)+'</summary><div class="tc-gym-info-body">'+
-      gymDotRow(active||gym)+(active&&active.name!==gym.name?'<div class="tc-gym-alternate"><div class="tc-gym-comparison-heading">'+gymInfoHeading(gym)+'</div>'+gymDotRow(gym,active)+'</div>':'')+'</div></details></div>';
+      gymDotRow(active||gym)+(active&&active.name!==gym.name?'<div class="tc-gym-alternate"><div class="tc-gym-comparison-heading">'+gymInfoHeading(gym)+'</div>'+gymDotRow(gym,active)+'</div>':'')+'</div></details></div></section>';
+    }
+    if(state.subpage==="calc"){
+    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small></div>';
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<div class="panel-content tc-simulator-body">'+
@@ -303,7 +307,7 @@ const tornStatPlanner = (() => {
     if(state.subpage==="compare"){
       markup+='<div class="tc-compare-conditions">Using <strong>'+esc(gym.name)+'</strong> ('+nice(gym.energy)+' E/train), <strong>'+
         nice(state.currentEnergy)+' / '+nice(state.maxEnergy)+' Energy</strong> and <strong>'+
-        nice(state.happy)+' / '+nice(state.maxHappy)+' Happy</strong>. Change gym and editable stats on <button type="button" class="text-button" data-tc-view="calc">Calc</button>.</div>';
+        nice(state.happy)+' / '+nice(state.maxHappy)+' Happy</strong>. Change gym on <button type="button" class="text-button" data-tc-view="gym">Gym</button> or editable stats on <button type="button" class="text-button" data-tc-view="calc">Calc</button>.</div>';
     markup+='<section class="panel"><div class="panel-heading"><h2>Natural Energy vs. Happy Jump · Execution Timeline</h2></div><div class="panel-content">'+
       '<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+readable[stat]+'</button>').join("")+'</div>'+
       '<div class="tc-compare-intro">Choose a stat and edit each plan as a sequence of actions. Both use the same starting stat of '+nice(state.statValues[state.compareStat])+' and the same time window.</div>'+
@@ -343,7 +347,7 @@ const tornStatPlanner = (() => {
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const tab=event.target.closest("[data-tc-view]");
       if(tab){
-        if(tab.dataset.tcView==="calc" || tab.dataset.tcView==="compare"){
+        if(["gym","calc","compare"].includes(tab.dataset.tcView)){
           state.subpage=tab.dataset.tcView;
           view.innerHTML=render();
         }
