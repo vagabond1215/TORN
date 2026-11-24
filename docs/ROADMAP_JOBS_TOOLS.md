@@ -200,3 +200,14 @@ Left sidebar navigation links now have top and bottom padding **0.4125rem** rath
 The default Dark theme now uses a **neutral gunmetal gray** canvas (#30363A), brushed stainless-gray card gradients, a black header/sub-bar (#14191C), and lime-green interactive accents (#B5DF4F; brighter hover #D3F47E). Light and Follow system options remain available. Player bar category colors remain distinct to communicate their original Torn functions.
 
 The source and UI tests verified nested Net Worth fields, debt deductions, zero and nonzero groups, one-hour caching, large stat formatting, unchanged left-sidebar width, and no redundant API requests on route re-render. Live GitHub Pages pixel rendering remains unverified.
+
+
+## Three-column layout with a docked right overview (November 24, 2026)
+
+On desktop, the left navigation keeps its 205px width, the center content is flexible, and the right pane is 274px wide. Below 1120px the left column becomes 165px and right 248px. On narrower tablets, the right pane stacks beneath the center; on phones it becomes full-width. The desktop pane stays sticky with an internal scrollbar.
+
+Right pane order: Countdowns (virus, ranked war, travel, investment, education, organized crime and consumable cooldowns), Net Worth (category breakdown with calculated date only), Property (name and upkeep), Battle Stats, Working Stats. The latter three panels are no longer duplicated in the center Home page.
+
+The left disclosure retains Money, Level, Points, Merits and four regenerating bars, without Level XP or Account/API. The Home center retains account progression and quick actions; its standalone consumable cooldown panel was replaced with quick actions.
+
+Countdowns are local projections of previously loaded data; the rail only makes API requests after a user explicitly clicks Update. Simulated tests confirmed the nested property type/upkeep fields, no duplicate Home stat cards, no automatic timer fetch, on-demand combined timer selections and distinct ranked-war request, fresh-cache skips, route visibility, and a calculation date without the comma after the year. Live deployment has not been visually inspected.

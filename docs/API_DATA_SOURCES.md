@@ -135,3 +135,19 @@ Source of truth:
 - https://tornapi.tornplayground.eu/user/networth
 
 Tests use synthetic API responses, including a $9,999,999,999,999 total, nested assets/money/items data, debts, points value, hourly TTL, and no extra requests while re-rendering cached Home.
+
+
+## Docked character overview: cached timers and property upkeep (November 24, 2026)
+
+The guide now has a right-side panel below Quick Access on desktop. It is hidden until API-connected and while viewing Account/API. It displays cached data only:
+
+- Countdown rows: virus, ranked war, flight arrival, investment maturity, education, organized crime, and drug/booster/medical cooldowns. Local countdown ticks share the existing one-second guide clock and do not request data.
+- Net worth: the original hourly user/networth category breakdown, with only the calculated date/time in its footer. The comma following the four-digit year is removed.
+- Current property: the user/property response has nested property.property.name and an upkeep object with numeric property and staff amounts. The guide sums the two for current daily upkeep, and separately lists both components. Missing cost values are not invented.
+- Battle, working and job stats: reuse existing user/battlestats, user/workstats and user/job cached selections.
+
+The rail's Update button calls the manual railTimers selection set only when clicked: education, virus, cooldowns, organizedcrime, factionRankedWars, travel and money. Existing stale-data TTL, combined user selections and failure backoff apply. Racing, net worth, stocks and inventory are not refreshed by this button. Repeated clicks inside the TTL make zero requests.
+
+The Home Activity panel still offers its more detailed bank and racing information on manual refresh. No API keys or user values are written into the repository.
+
+Property schema: https://neon0404.github.io/torn-client/types/UserPropertyBasicDetails.html
