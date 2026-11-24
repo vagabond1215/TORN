@@ -841,7 +841,7 @@ function educationReduction(m){
  const parts=[["Merits",m.perks==null?null:Math.min(20,Math.max(0,Number(m.perks)*2))],["WSU stock",m.positions==null?null:m.positions>=1000000?10:0],["Principal career perk",principal===null?null:principal?10:0]];
  const known=parts.filter(([,v])=>v!==null&&Number.isFinite(v));
  const total=known.reduce((a,[,v])=>a+v,0);
- return {label:known.length?total+"%"+(known.length<parts.length?" (partial)":""):"Unavailable",tooltip:parts.map(([name,v])=>name+": "+(v===null?"Not loaded":v+"%")).join("\n")};
+ return {total,complete:known.length===parts.length,label:known.length?total+"%"+(known.length<parts.length?" (partial)":""):"Unavailable",tooltip:parts.map(([name,v])=>name+": "+(v===null?"Not loaded":v+"%")).join("\n")};
 }
 function educationDuration(seconds){
  if(seconds==null||!Number.isFinite(Number(seconds)))return "Unavailable";
@@ -874,9 +874,14 @@ function educationCourseDetail(c,m){
  const cost=numeric(apiCost)?apiCost:fallback.cost;
  const req=c.prerequisites??c.requirements;
  const prerequisites=values(req).map(v=>{const id=typeof v==="object"?v.id??v.course_id:v;return m.courses.find(x=>String(x.id)===String(id))?.name??text(v)??String(id);}).filter(Boolean);
+ const reduction=educationReduction(m);
+ const effective=numeric(duration)&&reduction.complete?Number(duration)*(1-reduction.total/100):null;
+ const pair=(label,value)=>'<span class="edu-inline-pair">'+safe(label)+' <strong>'+safe(value)+'</strong></span>';
+ const gainMap=new Map(gains);
+ const statValue=label=>gainMap.has(label)?"+"+formatNumber(gainMap.get(label)):workIsUsable||fallback.working_stats?"+0":"—";
  return '<div class="edu-course-detail">'+(c.description?'<p>'+safe(c.description)+'</p>':'')+
- '<div class="edu-detail-grid"><div><h4>Working stats gained</h4>'+(gains.length?gains.map(([k,v])=>'<div>'+safe(k)+' <strong>+'+formatNumber(v)+'</strong></div>').join(""):'<p class="fine-print">Not supplied by catalog.</p>')+
- '</div><div><h4>Parameters</h4><div>Base length <strong>'+educationDuration(duration)+'</strong></div><div>Cost <strong>'+(cost!=null?"$"+formatNumber(cost):"Unavailable")+'</strong></div></div></div>'+
+ '<div class="edu-inline-row">'+pair("Base length",educationDuration(duration))+pair("Effective length",educationDuration(effective))+pair("Cost",cost!=null?"$"+formatNumber(cost):"Unavailable")+'</div>'+
+ '<div class="edu-inline-row">'+["Manual labor","Intelligence","Endurance"].map(label=>pair(label,statValue(label))).join("")+'</div>'+
  (prerequisites.length?'<p class="edu-prerequisites">Prerequisites: '+safe(prerequisites.join(", "))+'</p>':'')+'</div>';
 }
 function renderEducationPage(){
