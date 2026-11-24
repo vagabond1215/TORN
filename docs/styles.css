@@ -1418,3 +1418,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .job-stat-ready{color:var(--accent-strong)}
 .job-stat-short{color:#ef8585}
 .job-stat-daily{color:var(--muted);font-size:.7rem;white-space:nowrap}
+
+.home-activities .panel-content{padding:.45rem .65rem}
+.home-activities .roadmap-styles{display:flex;flex-wrap:wrap;gap:.35rem}
+.home-activities .roadmap-style{position:relative;display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .6rem;border:1px solid var(--border);border-radius:3px;cursor:pointer;font-size:.75rem}
+.home-activities .roadmap-style:has(input:checked){background:#101311;color:var(--accent-strong);border-color:var(--accent)}
+.home-activities .roadmap-style input{width:.8rem;height:.8rem;margin:0;accent-color:var(--accent)}
