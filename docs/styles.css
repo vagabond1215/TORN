@@ -1171,3 +1171,19 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .guide-right-rail .rail-section[open]>.panel-heading .rail-section-title::before{transform:rotate(45deg)}
 .guide-right-rail .rail-section:not([open])>.panel-heading{border-bottom:0}
 .guide-right-rail .rail-section>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* Compact gym grid and selected-gym information drawer. */
+.tc-gym-board{row-gap:.25rem}
+.tc-gym-picker{padding-top:.45rem;padding-bottom:.45rem}
+.tc-gym-info{margin-top:.4rem;border-top:1px solid var(--border)}
+.tc-gym-info>summary{display:flex;align-items:center;gap:.6rem;padding:.45rem 0;cursor:pointer;list-style:none}
+.tc-gym-info>summary::-webkit-details-marker{display:none}
+.tc-gym-info>summary::before{content:"";width:.42rem;height:.42rem;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(-45deg)}
+.tc-gym-info[open]>summary::before{transform:rotate(45deg)}
+.tc-gym-info>summary small{color:var(--muted);font-size:.78rem}
+.tc-gym-info-body{padding:.3rem 0 .55rem}
+.tc-gym-info-meta{display:flex;flex-wrap:wrap;gap:.4rem 1rem;color:var(--muted);font-size:.78rem;margin-bottom:.55rem}
+.tc-gym-info-dots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem}
+.tc-gym-info-dots>div{display:grid;grid-template-columns:auto 1fr;gap:.25rem;font-size:.75rem}
+.tc-gym-info-dots strong{text-align:right}
+.tc-gym-info-dots meter{grid-column:1/-1;width:100%;height:.65rem;accent-color:var(--accent)}
