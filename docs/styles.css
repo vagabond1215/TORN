@@ -1355,3 +1355,14 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-candy-control{display:flex;align-items:center;gap:.35rem;margin-left:.4rem;padding-left:.65rem;border-left:1px solid var(--border)}
 .tc-selected-gym .tc-candy-control input{width:3.6rem}
 .tc-candy-control select{background:var(--canvas);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:.3rem .4rem;font:inherit;font-weight:400}
+
+/* Compact education heading and content-sized detail columns. */
+.edu-panel{width:100%;max-width:850px}
+.edu-panel>.edu-compact-heading{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+.edu-heading-status{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;cursor:help}
+.edu-heading-status h2{margin:0}
+.edu-heading-status .edu-active-course{font-size:.85rem}
+.edu-heading-status .edu-reduction,.edu-time-left{color:var(--accent-strong);font-size:.8rem;font-variant-numeric:tabular-nums}
+.edu-detail-grid{width:fit-content;max-width:100%;grid-template-columns:repeat(2,minmax(0,max-content));gap:.6rem 1.5rem}
+.edu-detail-grid>div>div{justify-content:flex-start;gap:.55rem}
+@media(max-width:600px){.edu-detail-grid{grid-template-columns:1fr}}
