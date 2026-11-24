@@ -186,26 +186,19 @@ const tornCrimeGuide = (() => {
     return '<li class="rec-pickpocket"><details><summary>Pickpocket targets · CS '+number(cs)+'</summary><table class="crime-table"><thead><tr><th>Target</th><th>Preferred state</th><th>Unique condition</th></tr></thead><tbody>'+pickTargets.filter(x=>x[1]<=maxTier).map(([name,tier,state,condition,needRazor,min])=>'<tr><td>'+esc(name)+'</td><td>'+esc(state)+'</td><td>'+esc(condition+(needRazor?" · Razor"+(razor===false?" missing":""):"")+(cs<min?" · CS "+min+" required":" · Collection unverified"))+'</td></tr>').join("")+'</tbody></table><small>Suggested difficulty bands; CE is hidden. Check the in-game unique star before attempting. <a href="https://wiki.torn.com/wiki/Pickpocketing" target="_blank" rel="noopener">Wiki</a></small></details></li>';
   }
   function adviceSections(count){
-    const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",risk=prefs.risk;
+    const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",completion=prefs.priority==="completion",risk=prefs.risk;
     const rows={merit:[],growth:[],consume:[],crime:[],education:[],money:[]};
     const add=(key,title,detail,link)=>rows[key].push(recItem(title,detail,link));
     const n=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
     for(const x of tornMeritGuide.recommendations())add("merit",x.name,x.detail+" · "+x.effort,x.link);
     if(!rows.merit.length)add("merit","Award shortlist unavailable","Open Merits to load the award catalog and compare unearned honors.","#merits");
-    const plan=tornStatPlanner.homeTrainingAdvice();
-    if(plan)add("growth","Train "+plan.stat,plan.detail,"#stats");
-    else add("growth","Review your build targets","Load current battle stats and select a build on Stats.","#stats");
-    if(prefs.weeklyBudget!==null){
-      const budget=prefs.weeklyBudget,x=market("Xanax"),e=market("Ecstasy"),d=market("Erotic DVD");
-      const cash=v=>"$"+Math.round(v).toLocaleString();
-      const options=[{name:"Natural training",cost:0,detail:"Natural Energy only; no paid consumables or points."}];
-      if(risk!=="low"&&x!==null){
-        options.push({name:"Xanax training",cost:21*x,detail:"Three Xanax per day, 21 per week; natural Energy included."});
-        if(e!==null&&d!==null)options.push({name:"Weekly happy jump",cost:4*x+5*d+e,detail:"One four-Xanax, five-eDVD, one-Ecstasy jump per week; natural training otherwise."});
-      }
-      const affordable=options.filter(o=>o.cost<=budget);
-      add("growth","Weekly training budget: "+cash(budget),affordable.map(o=>o.name+" "+cash(o.cost)+"/week").join(" · ")+". "+(risk==="low"?"Low risk: drug plans excluded. ":x===null?"Xanax price unavailable. ":"")+(risk!=="low"&&x!==null&&budget<21*x?"Budget covers up to "+Math.floor(budget/x)+" Xanax at cached prices. ":"")+"Consumable estimates only; candy and points refills not included. Compare gains in Plan.","#stats");
-    }
+    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,risk);
+    if(plan){
+      add("growth","Train "+plan.stat,plan.detail,"#stats");
+      const p=plan.program;
+      if(p)add("growth","Recommended program: "+p.label,"7-day estimated gain: +"+number(Math.round(p.gain))+" · "+number(p.used)+" E · $"+number(Math.round(p.money))+" / week · "+Object.entries(p.costs).filter(([,qty])=>qty>0).map(([type,qty])=>qty+" "+type).join(", ")+(prefs.weeklyBudget===null?" · Set a weekly budget to compare paid programs.":" · Budget $"+number(prefs.weeklyBudget))+" · Highest estimated gain among tested affordable programs; prices and cooldowns may change.","#stats");
+      else add("growth","Training program unavailable","Load current gym, bars and battle stats to compare weekly training programs.","#stats");
+    }else add("growth","Review your build targets","Load current battle stats and select a build on Stats.","#stats");
     const bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns");
     const energy=n(bars?.energy?.current),cap=n(bars?.energy?.maximum),happy=n(bars?.happy?.current),happyCap=n(bars?.happy?.maximum),nerve=n(bars?.nerve?.current);
     const drug=n(cd?.drug),booster=n(cd?.booster),xan=count("Xanax","Drug");
@@ -215,8 +208,8 @@ const tornCrimeGuide = (() => {
     }
     if(booster!==null&&booster<86400){
       const candy=tornStatPlanner.homeCandyAdvice();
-      if(candy&&growth&&happy!==null&&happyCap!==null&&happy<=happyCap)add("consume",candy.name+" · "+candy.qty+" held","Highest known happiness candy in stock; "+candy.happy+" base Happy. Check booster allowance and train before the next happiness reset.","#stats");
-      if(activities.some(x=>["Crime","OC"].includes(x))&&nerve!==null){
+      if(candy&&plan?.program?.costs.candy>0&&happy!==null&&happyCap!==null&&happy<=happyCap)add("growth",candy.name+" · "+candy.qty+" held","Highest known happiness candy in stock; "+candy.happy+" base Happy. Check booster allowance and train before the next happiness reset.","#stats");
+      if(completion&&nerve!==null){
         const alcohol=tornGuideApi.state.inventory.Alcohol;
         if(Array.isArray(alcohol)&&!tornGuideApi.state.inventoryErrors.Alcohol&&alcohol.some(x=>n(x.amount??x.quantity)>0))add("consume","Alcohol","Consider a nerve boost when there is room in your booster allowance; reserve enough for your planned training.","#crime");
       }
@@ -224,10 +217,11 @@ const tornCrimeGuide = (() => {
     if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
     const riskRank={"Starter":0,"Low":0,"Low–Medium":1,"Medium":1,"Variable":1,"Medium–High":2,"High":2};
     const maxRisk={low:0,medium:1,high:2}[risk];
-    const candidates=crimes.map(([name,r,detail],i)=>({name,r,detail,cs:skill(name),rank:riskRank[r]??2,i})).filter(x=>x.rank<=maxRisk&&x.cs!==null&&(!recIncomplete||x.cs<100));
-    candidates.sort((a,b)=>a.rank-b.rank||a.i-b.i);
+    const candidates=crimes.map(([name,r,detail],i)=>({name,r,detail,cs:skill(name),rank:riskRank[r]??2,i})).filter(x=>x.rank<=maxRisk&&x.cs!==null&&(completion||!recIncomplete||x.cs<100));
+    candidates.sort((a,b)=>completion?Number(a.cs>=100)-Number(b.cs>=100)||a.rank-b.rank||a.i-b.i:a.rank-b.rank||a.i-b.i);
     for(const c of candidates){
       add("crime",c.name+" · CS "+number(c.cs),c.r+" · "+(c.cs<100?number(100-c.cs)+" skill levels to 100":"Maximum skill"),"#crime");
+      if(completion){const ref=reference.find(x=>x[0]===c.name);if(ref)add("crime",c.name+" · Unique outcomes",ref[2]+" documented uniques; check uncollected stars and skill/tool requirements in Torn. Collection status is unverified.",wiki(c.name));}
       if(c.name==="Pickpocketing")rows.crime.push(pickpocketRows(c.cs,risk));
     }
     loadEducationPreference();
@@ -264,7 +258,7 @@ const tornCrimeGuide = (() => {
     if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
     if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
     if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>'<details class="rec-group" data-rec-group="'+id+'" open><summary>'+esc(label)+' ('+rows[id].length+')</summary>'+(id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+recIncomplete+'">&lt;100 only</button></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul></details>').join("");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>'<details class="rec-group" data-rec-group="'+id+'" open><summary>'+esc(label)+' ('+rows[id].length+')</summary>'+(id==="crime"&&!completion?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+recIncomplete+'">&lt;100 only</button></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul></details>').join("");
   }
   function recommendations(){
     loadOcFilters();loadRecFilters();
