@@ -647,6 +647,7 @@ function networthPanel(){
 }
 function renderDashboard() {
   let result='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Home dashboard</h1></header>';
+  result+=tornRoadmap.renderActivities();
   if(!tornGuideApi.isConnected()){
     return result+'<section class="panel"><div class="panel-content"><p>Connect your Torn API key below to show your in-game-style dashboard. Account data remains private to this browser.</p></div></section>';
   }
