@@ -759,12 +759,12 @@ const educationView={open:new Set(),selected:null,filter:"all"};
 function educationModel(){
  const root=tornGuideApi.state.data.education, data=payload("education","education"), catalog=payload("educationCatalog","education");
  const groups=(Array.isArray(catalog)?catalog:Object.values(catalog||{})).filter(g=>g&&g.courses);
- const list=g=>Array.isArray(g.courses)?g.courses:Object.values(g.courses||{});
+ const list=g=>(Array.isArray(g.courses)?g.courses:Object.entries(g.courses||{}).map(([key,c])=>({...c,id:c.id??c.course_id??key}))).map(c=>({...c,id:c.id??c.course_id??c.code}));
  const courses=groups.flatMap(list), current=data?.current??data?.course??root?.education_current;
  const id=typeof current==="object"?current?.id??current?.course_id:current;
- const completed=data?.completed??data?.completed_courses??data?.education_completed??root?.education_completed??root?.completed??root?.completed_courses;
- const known=Array.isArray(completed);
- const ids=new Set(known?completed.map(x=>String(typeof x==="object"?x.id??x.course_id:x)):[]);
+ const completed=data?.complete??data?.completed??data?.completed_courses??data?.education_completed??root?.education_completed??root?.completed??root?.completed_courses;
+ const known=completed!=null&&typeof completed==="object";
+ const ids=new Set(known?Object.values(completed).map(x=>String(typeof x==="object"?x.id??x.course_id:x)):[]);
  const active=courses.find(c=>String(c.id)===String(id));
  const deadline=tornTctClock.entries().find(e=>e.id==="education")?.at;
  const perks=meritLevel("Education Length"), positions=heldWsuShares();
@@ -777,14 +777,14 @@ function educationDuration(seconds){
 function educationCourseDetail(c,m){
  const values=v=>Array.isArray(v)?v:Object.values(v||{});
  const text=v=>typeof v==="string"?v:v?.description??v?.name??v?.effect??"";
- const benefit=c.effects??c.benefits??c.learning_outcomes??c.outcomes??c.effect;
+ const benefit=c.effects??c.benefits??c.learning_outcomes??c.outcomes??c.effect??c.results?.perks??c.results?.ability;
  const effects=typeof benefit==="string"?[benefit]:values(benefit).map(text).filter(Boolean);
- const work=c.working_stats??c.work_stats??c.workingstats??c.stats??c.gains;
+ const work=c.working_stats??c.work_stats??c.workingstats??c.stats??c.gains??c.results;
  const workLabels={manual_labor:"Manual labor",manual:"Manual labor",intelligence:"Intelligence",endurance:"Endurance"};
  const gains=work&&typeof work==="object"?Object.entries(work).map(([k,v])=>[workLabels[k]||k,typeof v==="object"?v?.value??v?.amount:v]).filter(([,v])=>Number.isFinite(Number(v))&&Number(v)>0):[];
  const rawDuration=c.duration??c.length??c.time;
  const duration=typeof rawDuration==="object"?rawDuration?.seconds??rawDuration?.base:rawDuration;
- const cost=c.cost??c.price;
+ const cost=c.cost??c.price??c.money_cost;
  const req=c.prerequisites??c.requirements;
  const prerequisites=values(req).map(v=>{const id=typeof v==="object"?v.id??v.course_id:v;return m.courses.find(x=>String(x.id)===String(id))?.name??text(v)??String(id);}).filter(Boolean);
  return '<div class="edu-course-detail">'+(c.description?'<p>'+safe(c.description)+'</p>':'')+
@@ -806,8 +806,8 @@ function renderEducationPage(){
  const opened=educationView.open.has(group)||courses.some(c=>String(c.id)===String(m.id))&&!educationView.open.has("closed:"+group);
  out+='<details class="edu-category" data-edu-group="'+safe(group)+'" '+(opened?"open":"")+'><summary><strong>'+safe(group)+'</strong><span>'+(m.known?count:"—")+'/'+courses.length+'</span></summary><div class="edu-courses">';
  for(const c of shown){
- const id=String(c.id),done=m.ids.has(id),active=id===String(m.id),selected=educationView.selected===id;
- out+='<div class="edu-course '+(done?"is-completed":active?"is-active":"")+'"><button type="button" data-edu-course="'+safe(id)+'" aria-expanded="'+selected+'"><span>'+safe(c.code??c.course_code??"")+'</span><strong>'+safe(c.name??c.title??"Course "+id)+'</strong><small>'+(done?"Completed":active?"In progress":"")+'</small></button>'+(selected?educationCourseDetail(c,m):"")+'</div>';
+ const id=String(c.id),done=m.ids.has(id),active=id===String(m.id),key=group+":"+String(c.code??c.id??c.name),selected=educationView.selected===key;
+ out+='<div class="edu-course '+(done?"is-completed":active?"is-active":"")+'"><button type="button" data-edu-course="'+safe(key)+'" aria-expanded="'+selected+'"><span>'+safe(c.code??c.course_code??"")+'</span><strong>'+safe(c.name??c.title??"Course "+id)+'</strong><small>'+(done?"Completed":active?"In progress":"")+'</small></button>'+(selected?educationCourseDetail(c,m):"")+'</div>';
  }
  out+='</div></details>';
  }
@@ -817,6 +817,6 @@ function wireEducationPage(view){
  if(view.dataset.eduBound==="1")return;view.dataset.eduBound="1";
  const rebuild=()=>{if(location.hash==="#education")view.innerHTML=renderEducationPage();};
  view.addEventListener("toggle",e=>{const el=e.target;if(!el.matches?.("[data-edu-group]")||!el.isConnected)return;const g=el.dataset.eduGroup;if(el.open){educationView.open.add(g);educationView.open.delete("closed:"+g);}else{educationView.open.delete(g);educationView.open.add("closed:"+g);}},true);
- view.addEventListener("click",e=>{const el=e.target.closest("[data-edu-course]");if(!el||location.hash!=="#education")return;educationView.selected=educationView.selected===el.dataset.eduCourse?null:el.dataset.eduCourse;rebuild();});
+ view.addEventListener("click",e=>{const el=e.target.closest("[data-edu-course]");if(!el||location.hash!=="#education")return;const group=el.closest("[data-edu-group]");if(group){educationView.open.add(group.dataset.eduGroup);educationView.open.delete("closed:"+group.dataset.eduGroup);}educationView.selected=educationView.selected===el.dataset.eduCourse?null:el.dataset.eduCourse;rebuild();});
  view.addEventListener("change",e=>{if(location.hash!=="#education"||!e.target.matches("[data-edu-filter]"))return;educationView.filter=e.target.value;rebuild();});
 }
