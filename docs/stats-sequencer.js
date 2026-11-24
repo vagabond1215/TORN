@@ -9,11 +9,11 @@ const tornTrainSequence=(()=>{
   const steps={natural:defaults.natural(),jump:defaults.jump()};
   // Booster quantities are immediate batches. They never hide several hours
   // of waiting between candy and training; users add separate Wait rows.
-  const maxCandy=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
-    Math.max(1,Math.round(1800*cfg.candyCDMultiplier))));
+  const maxCandy=cfg=>Math.max(1,Math.floor(cfg.boosterCapH*3600/
+    Math.max(1,Math.round(1800*cfg.candyCDMultiplier)))+1);
   const maxDvd=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
     Math.max(1,Math.round(21600*cfg.dvdCDMultiplier)))+1);
-  const p={hours:28,boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:25,dvdHappy:2500,autoWait:true,
+  const p={hours:28,boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:"any",autoWait:true,
     xanaxPrice:null,ecstasyPrice:null,candyPrice:null,dvdPrice:null,pointPrice:null};
   const $=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
   const n=(v,f=0)=>v===null||v===undefined||v===""||!Number.isFinite(Number(v))?f:Number(v);
@@ -48,7 +48,7 @@ const tornTrainSequence=(()=>{
   }
   function marketInputs(){
     const stock=candyStock();
-    if(stock.tiers.length&&!stock.tiers.includes(p.candyHappy))p.candyHappy=stock.tiers[stock.tiers.length-1];
+    
     p.xanaxPrice=priceFor("Xanax");p.ecstasyPrice=priceFor("Ecstasy");p.dvdPrice=priceFor("Erotic DVD");
     const points=payload("pointsCatalog","pointsmarket");
     const list=Array.isArray(points)?points:Object.values(points||{});
@@ -58,7 +58,7 @@ const tornTrainSequence=(()=>{
   }
   function candyPool(cfg){
     const stock=candyStock();
-    return stock.rows.filter(x=>x.happy<=cfg.candyHappy).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity)).map(x=>({...x}));
+    return stock.rows.filter(x=>cfg.candyHappy==="any"||x.happy===cfg.candyHappy).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity)).map(x=>({...x}));
   }
   function readCooldowns(){
     const data=tornGuideApi.state.data.cooldowns;
@@ -110,7 +110,11 @@ const tornTrainSequence=(()=>{
   }
   function simulate(list,overrides={}){
     const cfg={...p,hours:preparationHours(),...overrides},base=ctx.state.statValues[ctx.state.compareStat];
-    const pool=candyPool(cfg),stock=candyStock();
+    const stock=candyStock(),pool=stock.rows.map(x=>({...x})).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity));
+    const dvdInventory=tornGuideApi.state.inventory.Booster;
+    const dvdKnown=Array.isArray(dvdInventory)&&!tornGuideApi.state.inventoryErrors?.Booster;
+    const dvdHeld=dvdKnown?dvdInventory.filter(x=>keyName(x.name??x.item?.name??itemList().find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id))?.name)===keyName("Erotic DVD")).reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity))),0):null;
+    const rowInfo={};let rowCandy=null,rowUsed=null;
     let candyCost=0,candyGain=0,unknownCandyPrice=false;
     const gym=ctx.gym,stat=ctx.state.compareStat,limit=Math.floor(cfg.hours*3600);
     const rule=energyRules(cfg),eCap=rule.cap;
@@ -178,20 +182,22 @@ const tornTrainSequence=(()=>{
           // A fifth DVD may wait ONE SECOND at exactly 24h; eDVDs support
           // deliberate cooldown sequencing, unlike candy's instant batch.
           if(!waitFor(Math.max(0,v.booster-boosterLimit+1),"Booster cooldown"))return false;
-        }else if(v.booster>=boosterLimit){
+        }else if(v.booster===boosterLimit){
+          if(!waitFor(1,"Booster cooldown"))return false;
+        }else if(v.booster>boosterLimit){
           v.errors.push("Candy has reached the booster use threshold. Add a separate Wait for booster space and another Candy row; no hidden waiting occurs before training.");
           return false;
         }
         let candy=null;
         if(type==="candy"){
-          candy=pool.find(x=>x.qty>0);
+          candy=rowCandy.find(x=>x.qty>0);
           if(!candy){v.errors.push(stock.loaded?"Insufficient candy in inventory for the selected Max Happy tier.":"Candy inventory not loaded.");return false;}
-          candy.qty--;candyGain+=candy.happy;
+          candy.qty--;candyGain+=candy.happy;rowUsed[candy.name]=(rowUsed[candy.name]||0)+1;
           if(candy.price===null)unknownCandyPrice=true;else candyCost+=candy.price;
         }
         const secs=type==="dvd"?21600*cfg.dvdCDMultiplier:1800*cfg.candyCDMultiplier;
         v.booster+=Math.round(secs);
-        v.happy=Math.min(99999,v.happy+(type==="dvd"?cfg.dvdHappy:candy.happy));
+        v.happy=Math.min(99999,v.happy+(type==="dvd"?2500:candy.happy));
         v.costs[type]++;
       }
       return true;
@@ -199,7 +205,14 @@ const tornTrainSequence=(()=>{
     for(let i=0;i<list.length;i++){
       if(v.errors.length)break;
       const a=list[i],start=snap(),type=a.type;
-      const qty=Math.floor(clamp(a.qty,1,type==="candy"?maxCandy(cfg):type==="dvd"?maxDvd(cfg):1));
+      const isBooster=type==="candy"||type==="dvd",tier=a.candyHappy??cfg.candyHappy;
+      rowCandy=pool.filter(x=>tier==="any"||x.happy===tier);rowUsed={};
+      const itemCD=Math.max(1,Math.round(type==="dvd"?21600*cfg.dvdCDMultiplier:1800*cfg.candyCDMultiplier));
+      const allowance=v.booster>boosterLimit?0:Math.floor((boosterLimit-v.booster)/itemCD)+1;
+      const held=type==="candy"?(stock.loaded?rowCandy.reduce((sum,x)=>sum+x.qty,0):null):dvdKnown?Math.max(0,dvdHeld-v.costs.dvd):null;
+      const maximum=held===null?null:Math.min(held,allowance);
+      const qty=isBooster?(a.max?(maximum??0):Math.floor(clamp(a.qty,0,type==="candy"?maxCandy(cfg):maxDvd(cfg)))):1;
+      if(isBooster)rowInfo[i]={maximum,allowance,held,qty,used:rowUsed,tier,happy:0,dvdBefore:v.costs.dvd};
       if(["xanax","ecstasy","dvd","candy"].includes(type)){
         for(let k=0;k<qty;k++){
           if(!useItem(type))break;
@@ -218,6 +231,7 @@ const tornTrainSequence=(()=>{
         }
         if(!v.days.has(day)){v.days.add(day);v.energy=eCap;v.costs.refill++;checkin("Points refill filled Energy");}
       }else{v.errors.push("Unrecognized action: "+type);}
+      if(isBooster)rowInfo[i].happy=type==="dvd"?(v.costs.dvd-rowInfo[i].dvdBefore)*2500:Object.entries(rowUsed).reduce((sum,[name,q])=>sum+q*(pool.find(x=>x.name===name)?.happy??0),0);
       point();
       v.log.push({i:i+1,type,start,end:snap()});
       if(v.time>=limit && i<list.length-1 && list.slice(i+1).some(step=>["wait","waitDrug","waitBooster","xanax","ecstasy"].includes(step.type))){v.errors.push("The "+cfg.hours+"-hour window ended before all steps.");break;}
@@ -226,17 +240,15 @@ const tornTrainSequence=(()=>{
     point();
     const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice]];
     const missingPrice=unknownCandyPrice||prices.some(([qty,price])=>qty>0&&price==null);
-    return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,
+    return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,rowInfo,
       money:missingPrice?null:candyCost+prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0)};
   }
   function controls(){
     const fields=[
       
-      ["boosterCapH","Booster use threshold (hours)",1,72,1],
       ["xanaxCDMin","Xanax CD (360–480 min)",360,480,1],["ecstasyCDMin","Ecstasy CD (200–230 min)",200,230,1],
       ["candyCDMultiplier","Candy CD multiplier",0.1,3,0.05],
-      ["dvdCDMultiplier","eDVD CD multiplier",0.1,3,0.05],
-      ["dvdHappy","Happy per eDVD",0,10000,1]
+      ["dvdCDMultiplier","eDVD CD multiplier",0.1,3,0.05]
     ];
     const stock=candyStock(),pool=candyPool(p);
     const remaining=Math.max(0,Math.ceil((p.boosterCapH*3600-p.startBoosterMin*60)/Math.max(1,Math.round(1800*p.candyCDMultiplier))));
@@ -246,29 +258,25 @@ const tornTrainSequence=(()=>{
     return '<details class="ts-settings" open><summary>Time, cooldowns, effects, prices</summary>'+
       '<div class="ts-membership">Preparation window: <strong>'+fmt(p.hours,2)+'h</strong> · '+$(energyRules().label)+'</div><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
       '<label><span>'+$(label)+'</span><input type="number" data-ts-param="'+key+'" value="'+$(p[key])+'" min="'+min+'" max="'+max+'" step="'+step+'"></label>').join("")+
-      '<label><span>Max Happy</span><select data-ts-candy '+(!stock.tiers.length?"disabled":"")+'>'+(!stock.tiers.length?'<option>No available candy</option>':stock.tiers.map(t=>'<option value="'+t+'" '+(p.candyHappy===t?"selected":"")+'">'+t+' Happy</option>').join(""))+'</select></label>'+
-      '</div><div class="ts-candy-stock"><strong>'+(!stock.loaded?"Candy inventory not loaded":fmt(usable)+' usable candy · +'+fmt(totalHappy)+' Happy')+'</strong><small>'+pool.map(x=>$(x.name)+' ×'+fmt(x.qty)).join(" · ")+'</small></div>'+
+      '</div>'+
       '<div class="ts-market-prices"><span>Xanax '+priceText(p.xanaxPrice)+'</span><span>Ecstasy '+priceText(p.ecstasyPrice)+'</span><span>eDVD '+priceText(p.dvdPrice)+'</span><span>Point '+priceText(p.pointPrice)+'</span></div><div class="ts-bonus-presets"><span>Useful presets:</span>'+
-      '<button type="button" data-ts-bonus="baseline">24h base cap</button>'+
-      '<button type="button" data-ts-bonus="maxVoracity">48h faction cap</button>'+
       '<button type="button" data-ts-bonus="grocery">Grocery -10% candy CD</button>'+
       '<button type="button" data-ts-bonus="restaurant">Restaurant -25% candy CD</button>'+
       '<button type="button" data-ts-bonus="book">Book -50% candy CD</button>'+
-      '<button type="button" data-ts-bonus="adult">Adult Novelties 5,000 Happy/eDVD</button>'+
       '</div><label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label>'+
 
       '<p class="fine-print">Candy cooldown can be shortened by Grocery Store/Restaurant company perks and some books. The consumable-cooldown book does not shorten eDVD cooldown; keep its multiplier at 1 unless you have a specific applicable perk. Starting cooldowns follow the selected mode.</p></details>';
   }
-  function row(side,a,index){
+  function row(side,a,index,info){
     const types=Object.entries(names).map(([id,label])=>'<option value="'+id+'" '+(a.type===id?"selected":"")+'>'+$(label)+'</option>').join("");
-    const qty=["candy","dvd"].includes(a.type);
-    const wait=a.type==="wait";
-    const ceiling=a.type==="candy"?maxCandy(p):a.type==="dvd"?maxDvd(p):1;
-    return '<div class="ts-step"><span>'+(index+1)+'</span><select data-ts-side="'+side+'" data-ts-index="'+index+'" data-ts-edit="type">'+types+'</select>'+
-      (qty||wait?'<input type="number" min="'+(qty?1:0)+'" max="'+(qty?ceiling:10080)+'" step="'+(qty?1:.01)+'" value="'+(qty?a.qty:a.minutes)+'" data-ts-side="'+side+'" data-ts-index="'+index+'" data-ts-edit="'+(qty?"qty":"minutes")+'" aria-label="'+(qty?"Quantity":"Minutes")+'">':'<span></span>')+
-      '<div class="ts-arrows"><button type="button" title="Move up" data-ts-op="up" data-ts-side="'+side+'" data-ts-index="'+index+'">↑</button>'+
-      '<button type="button" title="Move down" data-ts-op="down" data-ts-side="'+side+'" data-ts-index="'+index+'">↓</button>'+
-      '<button type="button" title="Remove" data-ts-op="remove" data-ts-side="'+side+'" data-ts-index="'+index+'">×</button></div></div>';
+    const booster=["candy","dvd"].includes(a.type),wait=a.type==="wait";
+    const ceiling=a.type==="candy"?maxCandy(p):maxDvd(p);
+    const tier=a.candyHappy??p.candyHappy,attr=' data-ts-side="'+side+'" data-ts-index="'+index+'"';
+    const candyOptions=["any",...new Set([25,35,50,75,100,150,250,...candyStock().tiers])];
+    const detail=booster?'<div class="ts-booster-row"><label>'+(a.type==="candy"?"Candy:":"eDVD:")+'</label><input type="number" min="0" max="'+ceiling+'" step="1" value="'+(info?.qty??a.qty)+'"'+attr+' data-ts-edit="qty" aria-label="Quantity"><button type="button" class="button secondary" data-ts-op="max"'+attr+' aria-pressed="'+Boolean(a.max)+'" '+(info?.maximum==null?"disabled":"")+'>MAX</button>'+(a.type==="candy"?'<select'+attr+' data-ts-edit="candy-tier" aria-label="Candy happiness">'+candyOptions.map(h=>'<option value="'+h+'" '+(h===tier?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select>':'<small>2,500 Happy</small>')+'</div><div class="ts-booster-summary">'+(a.type==="candy"&&tier==="any"?Object.entries(info?.used??{}).map(([name,q])=>$(q+"× "+name)).join(" · "):"")+(info?.happy?' <strong>+'+fmt(info.happy)+' Happy</strong>':"")+(info?.held==null?' <small>Inventory or preceding step unavailable</small>':' <small>'+fmt(info.held)+' held · '+fmt(info.allowance)+' CD allowance'+(a.type==="dvd"&&info.qty>info.held?' · '+fmt(info.qty-info.held)+' to purchase':"")+'</small>')+'</div>':"";
+    return '<div class="ts-step"><span>'+(index+1)+'</span><select'+attr+' data-ts-edit="type">'+types+'</select>'+
+      (wait?'<input type="number" min="0" max="10080" step=".01" value="'+a.minutes+'"'+attr+' data-ts-edit="minutes" aria-label="Minutes">':'<span></span>')+
+      '<div class="ts-arrows"><button type="button" title="Move up" data-ts-op="up"'+attr+'>↑</button><button type="button" title="Move down" data-ts-op="down"'+attr+'>↓</button><button type="button" title="Remove" data-ts-op="remove"'+attr+'>×</button></div>'+detail+'</div>';
   }
   function log(data){
     return '<details class="ts-log"><summary>Execution timeline ('+data.log.length+' steps)</summary><div class="ts-log-scroller"><table><thead><tr><th>Step</th><th>Time</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th></tr></thead><tbody>'+
@@ -278,7 +286,7 @@ const tornTrainSequence=(()=>{
   function section(side){
     const data=simulate(steps[side]);
     const heading=side==="jump"?"Happy jump":"Natural energy";
-    return '<section class="ts-side"><h3>'+heading+'</h3><div class="ts-list">'+steps[side].map((a,i)=>row(side,a,i)).join("")+'</div>'+
+    return '<section class="ts-side"><h3>'+heading+'</h3><div class="ts-list">'+steps[side].map((a,i)=>row(side,a,i,data.rowInfo[i])).join("")+'</div>'+
       '<div class="ts-add"><select data-ts-choice="'+side+'">'+Object.entries(names).map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select>'+
       '<button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'">Add action</button>'+
       '<button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div>'+
@@ -313,7 +321,7 @@ const tornTrainSequence=(()=>{
     const rule=energyRules(p);
     const diff=b.gain-a.gain;
     const perks=activePerks();
-    return cooldownControls()+controls()+
+    return cooldownControls()+'<div class="ts-cooldown-mode"><strong>Max Booster CD:</strong>'+[24,48].map(h=>'<button type="button" class="button secondary" data-ts-cap="'+h+'" aria-pressed="'+(p.boosterCapH===h)+'">'+h+'h</button>').join("")+'</div>'+controls()+
       (perks.length?'<p class="fine-print">Possibly relevant current perks: '+perks.map($).join(" • ")+'</p>':"")+
       '<div class="ts-layout">'+section("natural")+section("jump")+'</div>'+
       '<div class="ts-outcomes"><h3>Same '+p.hours+'-hour window</h3><p>Natural: <strong>'+fmt(a.final,2)+'</strong> ('+fmt(a.used)+' E) · Jump: <strong>'+fmt(b.final,2)+'</strong> ('+fmt(b.used)+' E)</p>'+
@@ -329,7 +337,7 @@ const tornTrainSequence=(()=>{
       const el=event.target;
       if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
       const param=el.dataset.tsParam;
-      if(param && !["startDrugMin","startBoosterMin","resetAfterSec","tornClockMin"].includes(param) && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
+      if(param && !["startDrugMin","startBoosterMin","resetAfterSec","tornClockMin","boosterCapH","dvdHappy"].includes(param) && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
       if(el.hasAttribute("data-ts-auto")){p.autoWait=el.checked;rebuild();return;}
       if(el.hasAttribute("data-ts-status")){
         if(["auto","standard","donator","subscriber"].includes(el.value))p.energyStatus=el.value;
@@ -338,8 +346,9 @@ const tornTrainSequence=(()=>{
       const edit=el.dataset.tsEdit,side=el.dataset.tsSide,index=Number(el.dataset.tsIndex);
       if(edit&&steps[side]&&steps[side][index]){
         const a=steps[side][index];
-        if(edit==="type"){a.type=el.value;a.qty=1;a.minutes=0;}
-        if(edit==="qty")a.qty=clamp(Math.floor(n(el.value,1)),1,a.type==="candy"?maxCandy(p):a.type==="dvd"?maxDvd(p):1);
+        if(edit==="type"){a.type=el.value;a.qty=1;a.minutes=0;a.max=false;delete a.candyHappy;}
+        if(edit==="qty"){a.max=false;a.qty=clamp(Math.floor(n(el.value,0)),0,a.type==="candy"?maxCandy(p):a.type==="dvd"?maxDvd(p):1);}
+        if(edit==="candy-tier")a.candyHappy=el.value==="any"?"any":Number(el.value);
         if(edit==="minutes")a.minutes=clamp(el.value,0,10080);
         rebuild();
       }
@@ -347,6 +356,7 @@ const tornTrainSequence=(()=>{
     view.addEventListener("click",event=>{
       const mode=event.target.closest("[data-ts-cooldown-mode]");
       if(mode){useCurrentCooldowns=mode.dataset.tsCooldownMode==="current"&&cooldownsKnown;rebuild();return;}
+      const cap=event.target.closest("[data-ts-cap]");if(cap){p.boosterCapH=Number(cap.dataset.tsCap)===48?48:24;rebuild();return;}
       const bonus=event.target.closest("[data-ts-bonus]");
       if(bonus){
         if(bonus.dataset.tsBonus==="baseline")p.boosterCapH=24;
@@ -354,7 +364,6 @@ const tornTrainSequence=(()=>{
         if(bonus.dataset.tsBonus==="grocery")p.candyCDMultiplier=0.90;
         if(bonus.dataset.tsBonus==="restaurant")p.candyCDMultiplier=0.75;
         if(bonus.dataset.tsBonus==="book")p.candyCDMultiplier=0.50;
-        if(bonus.dataset.tsBonus==="adult")p.dvdHappy=5000;
         rebuild();
         return;
       }
@@ -363,7 +372,8 @@ const tornTrainSequence=(()=>{
       if(el.hasAttribute("data-ts-sync")){loadLive(true);rebuild();return;}
       const side=el.dataset.tsSide,op=el.dataset.tsOp,index=Number(el.dataset.tsIndex),list=steps[side];
       if(!list)return;
-      if(op==="preset")steps[side]=defaults[side]();
+      if(op==="max"&&list[index]){list[index].max=true;}
+      else if(op==="preset")steps[side]=defaults[side]();
       else if(op==="add"){
         const select=view.querySelector('[data-ts-choice="'+side+'"]');
         if(list.length<40)list.push(make(select?select.value:"train"));
