@@ -367,7 +367,7 @@ const tornTrainSequence=(()=>{
     const tier=a.candyHappy??p.candyHappy,attr=' data-ts-side="'+side+'" data-ts-index="'+index+'"';
     const candyOptions=["any",...new Set([25,35,50,75,100,150,250,...candyStock().tiers])];
     const detail=booster?'<div class="ts-booster-row"><label>'+(a.type==="candy"?"Candy:":"eDVD:")+'</label><input type="number" min="0" max="'+ceiling+'" step="1" value="'+(info?.qty??a.qty)+'"'+attr+' data-ts-edit="qty" aria-label="Quantity"><button type="button" class="button secondary" data-ts-op="max"'+attr+' aria-pressed="'+Boolean(a.max)+'" '+(info?.maximum==null?"disabled":"")+'>MAX</button>'+(a.type==="candy"?'<select'+attr+' data-ts-edit="candy-tier" aria-label="Candy happiness">'+candyOptions.map(h=>'<option value="'+h+'" '+(h===tier?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select>':'<small>2,500 Happy</small>')+'</div><div class="ts-booster-summary">'+(a.type==="candy"&&tier==="any"?Object.entries(info?.used??{}).map(([name,q])=>$(q+"× "+name)).join(" · "):"")+(info?.happy?' <strong>+'+fmt(info.happy)+' Happy</strong>':"")+(info?.held==null?' <small>Inventory or preceding step unavailable</small>':' <small>'+fmt(info.held)+' held · '+fmt(info.allowance)+' CD allowance'+(a.type==="dvd"&&info.qty>info.held?' · '+fmt(info.qty-info.held)+' to purchase':"")+'</small>')+'</div>':"";
-    return '<div class="ts-step"><select'+attr+' data-ts-edit="type">'+types+'</select>'+
+    return '<div class="ts-step"><select'+attr+' data-ts-edit="type" aria-label="Training action">'+types+'</select>'+
       (wait?'<input type="number" min="0" max="10080" step=".01" value="'+a.minutes+'"'+attr+' data-ts-edit="minutes" aria-label="Minutes">':'<span></span>')+
       '<div class="ts-arrows"><button type="button" title="Move up" data-ts-op="up"'+attr+'>↑</button><button type="button" title="Move down" data-ts-op="down"'+attr+'>↓</button><button type="button" title="Remove" data-ts-op="remove"'+attr+'>×</button></div>'+detail+'</div>';
   }
@@ -380,7 +380,17 @@ const tornTrainSequence=(()=>{
   }
   function mergedTimeline(side,data){
     const list=steps[side],byParent=new Map();
-    for(const e of data.log){const parent=e.parent??-1;if(!byParent.has(parent))byParent.set(parent,[]);byParent.get(parent).push(e);}
+    // A reset matters in the timeline only if the next happiness-changing
+    // action is a gym train, rather than another boost or reset.
+    const affectsHappy=e=>["xanax","ecstasy","candy","dvd","externalHappy","happyReset","train","checkin"].includes(e.type);
+    for(let j=0;j<data.log.length;j++){
+      const e=data.log[j];
+      if(e.type==="happyReset"){
+        const next=data.log.slice(j+1).find(affectsHappy);
+        if(!next||!["train","checkin"].includes(next.type))continue;
+      }
+      const parent=e.parent??-1;if(!byParent.has(parent))byParent.set(parent,[]);byParent.get(parent).push(e);
+    }
     let rows='<tr class="ts-initial"><td>0:00:00</td><td><div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div></td>'+timelineCells(data.initial)+'</tr>';
     rows+=(byParent.get(-1)||[]).map(dependencyRow).join("");
     list.forEach((action,i)=>{
