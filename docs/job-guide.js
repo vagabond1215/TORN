@@ -48,17 +48,23 @@ const tornJobsGuide=(()=>{
  function live(){
   const d=tornGuideApi.state.data;
   const j=d.job&&(d.job.job||d.job)||{},w=d.workstats&&(d.workstats.workstats||d.workstats)||{};
-  const entries=[
+  const jobRows=[
    ["Job / company",j.name||j.company_name||j.company?.name||j.type],
    ["Position",j.position||j.rank||j.title],
-   ["Company stars",j.company?.rating||j.rating||j.stars],
-   ["Manual Labor",w.manual_labor??w.manual??w.man],
+   ["Company stars",j.company?.rating??j.rating??j.stars]
+  ];
+  const statRows=[
+   ["Manual labor",w.manual_labor??w.manual??w.man],
    ["Intelligence",w.intelligence??w.intel??w.int],
    ["Endurance",w.endurance??w.end]
   ];
-  return '<section class="panel"><div class="panel-heading"><h2>Your current job</h2></div><div class="panel-content">'+
-   '<div class="metric-grid">'+entries.map(([label,value])=>'<div class="metric"><span class="metric-label">'+esc(label)+'</span><strong class="metric-value">'+esc(value==null?"Not yet loaded":value)+'</strong></div>').join("")+'</div>'+
-   '<p class="fine-print">Current job and working stats load only while this page is active, then follow their cache intervals. Company stars are shown only when the API actually provides them.</p></div></section>';
+  const list=rows=>'<dl class="home-stat-list">'+rows.map(([label,value])=>
+   '<div class="home-pair"><dt>'+esc(label)+'</dt><dd>'+esc(value==null?"Not yet loaded":value)+'</dd></div>').join("")+'</dl>';
+  return '<section class="panel"><div class="panel-heading"><h2>Your current job</h2></div>'+
+    '<div class="panel-content"><div class="job-live-columns">'+
+      '<div><h3>Job details</h3>'+list(jobRows)+'</div>'+
+      '<div><h3>Working stats</h3>'+list(statRows)+'</div>'+
+    '</div><p class="fine-print">Current job and working stats load only while needed, then follow their individual cache intervals. Company stars appear only when returned by Torn.</p></div></section>';
  }
  function details(company){
   const f=features.find(x=>x[0]===company.name);

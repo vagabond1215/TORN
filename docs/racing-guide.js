@@ -5,16 +5,16 @@ const tornRacingGuide=(()=>{
   const tracks=[
     ["Uptown","Tarmac","2.25","Lambrini Torobravo","TL3","Veloria LFA also competitive"],
     ["Withdrawal","Tarmac","3.40","Veloria LFA","TL3","The same LFA setup works on Speedway"],
-    ["Underdog","Tarmac","1.73","Edomondo NSX","TS2","Share this setup with Commerce and Sewage"],
+    ["Underdog","Tarmac","1.73","Edomondo NSX","TS3","Shared short-ratio T3 build; T2 offers only a small specialization advantage"],
     ["Parkland","Dirt","3.43","Edomondo NSX","DS3","Versatile first dirt car"],
     ["Docks","Tarmac","3.81","Volt GT","TL3","Lolo 458 and Veloria LFA are serviceable until then"],
-    ["Commerce","Tarmac","1.09","Edomondo NSX","TS2","Short and twisty; Stage 2 turbo"],
+    ["Commerce","Tarmac","1.09","Edomondo NSX","TS3","Use shared tarmac T3 NSX; dedicated T2 is optional"],
     ["Two Islands","Dirt","2.71","Edomondo NSX","DL3","Long-ratio dirt setup"],
     ["Industrial","Tarmac","1.35","Edomondo NSX","TS3","Same car as Vector and Meltdown"],
     ["Vector","Tarmac","1.16","Edomondo NSX","TS3","Same car as Industrial and Meltdown"],
     ["Mudpit","Dirt","1.06","Colina Tanprice","DL3","Class B car worth keeping for Class A"],
-    ["Hammerhead","Dirt","1.16","Edomondo NSX","DS2","Stage 2 suits tight turns"],
-    ["Sewage","Tarmac","1.50","Edomondo NSX","TS2","Same car as Underdog and Commerce"],
+    ["Hammerhead","Dirt","1.16","Edomondo NSX","DS3","Shared dirt T3 NSX; specialized dirt T2 is optional"],
+    ["Sewage","Tarmac","1.50","Edomondo NSX","TS3","Shared tarmac T3 NSX; skip near-duplicate T2 build"],
     ["Meltdown","Tarmac","1.20","Edomondo NSX","TS3","Same car as Industrial and Vector"],
     ["Speedway","Tarmac","0.90","Veloria LFA","TL3","High-speed tarmac; same setup as Withdrawal"],
     ["Stone Park","Dirt","2.08","Echo R8","DS3","Dirt NSX works while saving for this specialist"],
@@ -76,17 +76,16 @@ const tornRacingGuide=(()=>{
     }
     output+='</div><div id="rg-budget">'+scoreMarkup()+'</div></div></section>';
     output+='<section class="panel"><div class="panel-heading"><h2>Best cars and upgrade setup for all 16 tracks</h2></div><div class="panel-content">'+
-      '<p class="fine-print">These are fully upgraded Class A community preferences, not promises of winning against drivers with higher racing skill. For lower classes, use the one-car progression above. Tarmac uses Track Tyres, Paddle Shift Gearbox and Adjustable Coil-over Suspension; dirt uses Rally Tyres, Rally Gearbox and Group N Rally Suspension. Use Stage Three ECU Remap even on Turbo 2 builds.</p>'+
+      '<p class="fine-print">Practical shared Class A setups with minimal duplicate cars, not promises of winning against drivers with higher racing skill. A dedicated Turbo 2 can perform slightly better on some tighter tracks; this plan prioritizes versatility and racing-point efficiency. For lower classes, use the one-car progression above. Tarmac uses Track Tyres, Paddle Shift Gearbox and Adjustable Coil-over Suspension; dirt uses Rally Tyres, Rally Gearbox and Group N Rally Suspension. Use Stage Three ECU Remap even on Turbo 2 builds.</p>'+
       '<div class="rg-filter"><div role="group" aria-label="Track surface">'+["All","Tarmac","Dirt"].map(surface=>'<button type="button" data-rg-filter="'+surface+'" class="rg-filter-btn '+(config.filter===surface?"is-selected":"")+'">'+surface+'</button>').join("")+'</div>'+
       '<label class="rg-search">Find track or car<input type="search" data-rg-search placeholder="e.g. Docks, NSX, dirt" value="'+esc(config.search)+'"></label></div>'+
       '<div id="rg-tracks">'+tracksMarkup()+'</div></div></section>';
     output+='<section class="panel"><div class="panel-heading"><h2>First Class A cars to build</h2></div><div class="panel-content"><ol class="rg-build-order">'+
       '<li><strong>Lolo 458</strong>, Tarmac / Short / Turbo 3: a practical all-tarmac first car.</li>'+
       '<li><strong>Veloria LFA</strong>, Tarmac / Long / Turbo 3: Withdrawal, Speedway, and competitive on other faster tarmac tracks.</li>'+
-      '<li><strong>Edomondo NSX</strong>, Tarmac / Short / Turbo 3: Industrial, Vector, Meltdown.</li>'+
-      '<li><strong>Edomondo NSX</strong>, Tarmac / Short / Turbo 2: Underdog, Commerce, Sewage.</li>'+
-      '<li><strong>Edomondo NSX</strong>, Dirt / Short / Turbo 3: Parkland and a good stopgap for other dirt tracks.</li>'+
-      '<li>Only then add specialists for individual tracks; keep your Class B Colina Tanprice for Mudpit.</li></ol></div></section>';
+      '<li><strong>Edomondo NSX · Tarmac / Short / Turbo 3:</strong> one speed-focused setup for Industrial, Vector, Meltdown, Underdog, Commerce and Sewage. A second T2 NSX brings too little benefit to justify prioritizing it.</li>'+
+      '<li><strong>Edomondo NSX · Dirt / Short / Turbo 3:</strong> a separate NSX configured for dirt, primarily Parkland and a practical alternative on Hammerhead and other dirt tracks.</li>'+
+      '<li>Only then add specialists for individual tracks, such as a dirt Long-ratio NSX for Two Islands. Keep your Class B Colina Tanprice for Mudpit.</li></ol></div></section>';
     output+='<section class="panel"><div class="panel-heading"><h2>Racing habits and points efficiency</h2></div><div class="panel-content"><ul class="rg-tips">'+
       '<li><strong>Race frequently:</strong> official races award points and double racing-skill gains; custom races earn skill but no upgrade points.</li>'+
       '<li><strong>Skill matters:</strong> run long multi-driver custom races when not racing official events. Higher placements and more competitors help skill gain.</li>'+
