@@ -11,7 +11,7 @@ const tornGuideApi=(()=>{
   const inventoryTypes=["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical"];
   const mins=60*1000,hrs=60*mins,days=24*hrs;
   const TTL={
-    basic:days, bars:2*mins, cooldowns:2*mins, money:15*mins, networth:60*mins,
+    basic:days, profile:15*mins, bars:2*mins, cooldowns:2*mins, money:15*mins, networth:60*mins,
     battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
@@ -19,7 +19,7 @@ const tornGuideApi=(()=>{
   };
   const ROUTES={
     home:["bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
-    stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
+    stats:["profile","bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
     railTimers:["education","virus","itemCatalog","cooldowns","organizedcrime","factionRankedWars","travel","money"],
