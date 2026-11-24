@@ -197,7 +197,7 @@ const tornTrainSequence=(()=>{
   }
   function createEngine(overrides,planning=false){
     const cfg={...p,...overrides},base=ctx.state.statValues[ctx.state.compareStat];
-    const bliss=tornHappinessBook().active;
+    const bliss=tornHappinessBook().active; // Shared detection for default action generation and fixed-plan replay.
     const stock=candyStock(),pool=stock.rows.map(x=>({...x})).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity));
     const dvdInventory=tornGuideApi.state.inventory.Booster;
     const dvdKnown=Array.isArray(dvdInventory)&&!tornGuideApi.state.inventoryErrors?.Booster;
@@ -408,7 +408,9 @@ const tornTrainSequence=(()=>{
   }
   let cooldownEffects={tiles:[],sources:{candy:[],dvd:[]},known:false};
   function cooldownTiles(){
-    return '<div class="ts-perk-tiles" aria-label="Cooldown perk status">'+cooldownEffects.tiles.map(x=>'<div class="ts-perk-tile '+(x.active?"is-active":"")+'" title="'+$(x.source||x.detail)+'"><strong>'+$(x.label)+'</strong><small>'+$(x.detail)+'</small><small>'+ (x.active?"Active":cooldownEffects.known?"Not detected":"Unknown")+'</small></div>').join("")+'</div>';
+    const bliss=tornHappinessBook();
+    const tiles=[...cooldownEffects.tiles,{label:"Book · Ignorance Is Bliss",detail:"No Happy reset · 99,999 ceiling",source:bliss.source,active:bliss.active,known:bliss.known}];
+    return '<div class="ts-perk-tiles" aria-label="Training perk status">'+tiles.map(x=>'<div class="ts-perk-tile '+(x.active?"is-active":"")+'" title="'+$(x.source||x.detail)+'"><strong>'+$(x.label)+'</strong><small>'+$(x.detail)+'</small><small>'+ (x.active?"Active":(x.known??cooldownEffects.known)?"Not detected":"Unknown")+'</small></div>').join("")+'</div>';
   }
   function happinessStatus(){
     const book=tornHappinessBook();
