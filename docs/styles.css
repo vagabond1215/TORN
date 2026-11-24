@@ -1350,3 +1350,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .edu-detail-grid>div>div{display:flex;align-items:baseline;gap:.5rem;justify-content:space-between}
 .edu-detail-grid strong{display:inline;white-space:nowrap}
 @media(max-width:600px){.edu-course>button{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.edu-course>button .edu-course-name,.edu-course>button .edu-course-effect{flex-wrap:wrap}.edu-detail-grid{grid-template-columns:1fr}}
+
+.tc-selected-gym .tc-train-control{flex-wrap:wrap}
+.tc-candy-control{display:flex;align-items:center;gap:.35rem;margin-left:.4rem;padding-left:.65rem;border-left:1px solid var(--border)}
+.tc-selected-gym .tc-candy-control input{width:3.6rem}
+.tc-candy-control select{background:var(--canvas);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:.3rem .4rem;font:inherit;font-weight:400}
