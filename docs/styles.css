@@ -1496,3 +1496,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rec-type-toggles button{padding:.2rem .45rem;font-size:.7rem}
 .rec-advice li{grid-template-columns:minmax(0,1fr) max-content!important}
 .rec-advice a{color:var(--accent-strong);font-size:.72rem}
+
+.tc-total-bonus{margin-top:.4rem;border-top:1px solid var(--border)}
+.tc-total-bonus>summary{display:flex;align-items:center;gap:.35rem;cursor:pointer;list-style:none;padding:.4rem 0;font-size:.78rem;font-weight:700}
+.tc-total-bonus>summary::-webkit-details-marker{display:none}
+.tc-total-bonus>summary::before{content:"▸";color:var(--muted)}
+.tc-total-bonus[open]>summary::before{content:"▾"}
+.tc-total-bonus>summary strong{margin-left:auto;font-variant-numeric:tabular-nums}
+.tc-total-bonus .tc-gain-sources{margin-top:0}
