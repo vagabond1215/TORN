@@ -1110,3 +1110,37 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-gym-picker .tc-gym-details{margin-top:.8rem;display:flex;align-items:center;gap:.5rem .8rem;flex-wrap:wrap}
 .tc-gym-board{min-width:520px}
 .tc-gym-picker{overflow-x:auto}
+
+/* Compact continuous navigation: no floating button boxes. */
+:root{--guide-bar-height:35px}
+.topbar-inner{min-height:var(--guide-bar-height);padding-block:0;align-items:stretch;gap:0}
+.topbar-inner .torn-brand,.topbar-inner .top-refresh,.top-account .tct-button,.top-account .settings-toggle,.topbar-inner .menu-button,.top-account .top-identity,.quick-access .quick-link,#topic-view .tc-subbar .tc-subtab{
+  min-height:var(--guide-bar-height);height:var(--guide-bar-height);box-sizing:border-box;
+  border:0;border-radius:0;background:transparent;box-shadow:none;
+  transition:background .14s,box-shadow .14s,color .14s,filter .14s;
+}
+.topbar-inner .torn-brand{padding-inline:.3rem}
+.torn-brand .brand-mark{width:28px;height:28px;border:0;border-radius:0;background:transparent}
+.torn-brand .brand-mark img{inset:0;width:28px;height:28px}
+.topbar-inner .top-refresh{padding-block:0}
+.top-account{gap:0;align-items:stretch}
+.top-account .top-identity{padding-inline:.55rem}
+.top-account .profile-link{align-self:center}
+.top-account .tct-button{padding-block:0}
+.top-account .settings-toggle{padding-block:0}
+.topbar-inner .torn-brand:hover,.topbar-inner .top-refresh:not(:disabled):hover,.top-account .tct-button:hover,.top-account .tct-button[aria-expanded="true"],.top-account .settings-toggle:hover,.top-account .settings-toggle[aria-expanded="true"],.topbar-inner .menu-button:hover,.top-account .top-identity:hover,.quick-access .quick-link:hover,.quick-access .quick-link:focus-visible,#topic-view .tc-subbar .tc-subtab:hover,#topic-view .tc-subbar .tc-subtab.is-current{
+  background:color-mix(in srgb,var(--canvas) 65%,transparent);color:var(--accent-strong);
+  box-shadow:inset 1px 0 var(--border),inset -1px 0 var(--border),inset 0 2px 5px #0002;
+}
+.quick-access .quick-inner{min-height:var(--guide-bar-height);padding-block:0;gap:0}
+.quick-access .quick-links{gap:0;align-items:stretch}
+.quick-access .quick-link{width:36px;padding:0}
+.quick-access .quick-link:hover img,.quick-access .quick-link:hover svg{filter:drop-shadow(0 0 4px var(--accent))}
+#topic-view .tc-subbar{border-radius:0;background:var(--surface)}
+#topic-view .tc-subbar .tc-subnav{padding:0;gap:0;min-height:var(--guide-bar-height)}
+#topic-view .tc-subbar .tc-subtab{display:inline-flex;align-items:center;justify-content:center;padding:0 .8rem;color:var(--muted)}
+#topic-view .tc-subbar .tc-subtab.is-current{color:var(--accent-strong)}
+#topic-view .tc-subbar .tc-overview-item{min-height:var(--guide-bar-height);align-items:center;padding-block:0}
+.topbar-inner :is(a,button):focus-visible,.quick-access .quick-link:focus-visible,#topic-view .tc-subbar .tc-subtab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.settings-panel{top:100%}
+@media(max-width:650px){.topbar-inner{gap:0}.topbar-inner .menu-button{min-height:var(--guide-bar-height)}.top-account .top-identity{padding-inline:.2rem}.top-account .tct-button{padding-inline:.2rem}.topbar-inner .top-refresh{padding-inline:.2rem}}
