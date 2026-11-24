@@ -1690,3 +1690,21 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .home-budget input{width:8rem;min-height:28px;box-sizing:border-box;padding:.15rem .35rem;background:var(--canvas);border:1px solid var(--border);border-radius:3px;color:var(--text);font:inherit}
 .tc-selected-gym .tc-train-control .tc-happy-mode{box-sizing:border-box;height:32px;min-height:32px;min-width:62px;margin:0;padding-block:0}
 .tc-candy-control{flex-wrap:wrap}
+
+/* Expandable inventory */
+.inventory-detail-list { max-height:520px; }
+.item-list .inventory-detail-row { display:block; padding:.25rem 0; }
+.inventory-detail-row summary { display:flex; align-items:baseline; gap:.45rem; cursor:pointer; list-style:none; }
+.inventory-detail-row summary::-webkit-details-marker { display:none; }
+.inventory-detail-row summary::before { content:"▸"; color:var(--muted); flex:none; }
+.inventory-detail-row details[open] summary::before { content:"▾"; }
+.inventory-detail-row summary span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.inventory-detail-row summary:focus-visible { outline:2px solid var(--accent-strong); outline-offset:2px; }
+.inventory-detail-body { padding:.45rem .15rem .35rem .8rem; }
+.inventory-detail-body p { margin:.35rem 0; overflow-wrap:anywhere; }
+.inventory-detail-body dl { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:.25rem .45rem; margin:.5rem 0; font-size:.8rem; }
+.inventory-detail-body dt { color:var(--muted); }
+.inventory-detail-body dd { margin:0; overflow-wrap:anywhere; }
+.inventory-market-actions { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.55rem; }
+.inventory-market-link { text-decoration:none; white-space:normal; }
+.inventory-market-link span { font-weight:700; }
