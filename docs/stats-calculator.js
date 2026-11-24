@@ -326,7 +326,7 @@ const tornStatPlanner = (() => {
     let bonuses='<details class="tc-total-bonus" data-tc-bonus-stat="'+stat+'" '+(state.bonusOpen[stat]?"open":"")+'><summary><span>Total Bonus</span><strong class="'+(totalBonus<0?"tc-neg":totalBonus>0?"tc-pos":"")+'" title="'+(eff.sourceAvailable?"Combined training multiplier":"Partial estimate: API perks unavailable")+'">'+(totalBonus>=0?"+":"")+nice(totalBonus,2)+'%</strong></summary><div class="tc-gain-sources">';
     for(const group of eff.groups) {
       const label=group.group==="job"?"Job / workplace":group.group[0].toUpperCase()+group.group.slice(1);
-      bonuses+='<div class="tc-mod-row" title="'+esc(group.items.map(entry=>entry.text).join("\n"))+'"><span>'+esc(label)+'</span><strong class="'+(group.total<0?"tc-neg":group.total>0?"tc-pos":"")+'">'+(group.total>=0?"+":"")+nice(group.total,2)+'%</strong></div>';
+      bonuses+='<div class="tc-mod-row" title="'+esc([...group.items.map(entry=>entry.text),...(group.group==="book"&&tornHappinessBook().active?["Ignorance Is Bliss: active; indirect benefit through current Happiness, not a fixed percentage multiplier"]:[])].join("\n"))+'"><span>'+esc(label)+(group.group==="book"&&tornHappinessBook().active?' <small class="tc-pos">· Bliss active</small>':"")+'</span><strong class="'+(group.total<0?"tc-neg":group.total>0?"tc-pos":"")+'">'+(group.total>=0?"+":"")+nice(group.total,2)+'%</strong></div>';
     }
     bonuses+='</div>';
     bonuses+='<label class="tc-manual"><span>Custom gym-gain %</span><input type="number" min="-95" max="300" step="0.1" data-tc-extra="'+stat+'" value="'+esc(state.extra[stat])+'"></label>';
@@ -387,7 +387,7 @@ const tornStatPlanner = (() => {
     const active=activeGym(),book=row=>row.effects.groups.find(g=>g.group==="book")?.total||0;
     const next=rows.filter(x=>x.remaining>0).sort((a,b)=>a.progress-b.progress||book(b)-book(a)||b.effects.multiplier-a.effects.multiplier)[0];
     if(!next)return {stat:"your selected build",detail:"Current target reached; set the next milestone."};
-    return {stat:readable[next.stat],detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name:"")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")};
+    return {stat:readable[next.stat],detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name:"")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")+(tornHappinessBook().active?" · Ignorance Is Bliss active":"")};
   }
   function homeCandyAdvice(){return calcCandyStock()?.[0]||null;}
   function renderBuild(gym,active){
@@ -425,8 +425,9 @@ const tornStatPlanner = (() => {
       requirements.push([pairGyms[pair],own>=need,"Pair total "+nice(own)+" / "+nice(need)+" · Cha Cha's unlocked · $50m",catalog.find(g=>gymKey(g.name)===gymKey(pairGyms[pair]))]);
     }
     const activeBook=entries.flatMap(e=>e.eff.groups.filter(g=>g.group==="book").flatMap(g=>g.items.map(x=>({stat:e.stat,text:x.text}))));
-    const uniqueBooks=[...new Set(activeBook.map(x=>x.text))];
-    const reading=uniqueBooks.length?uniqueBooks.join(" · "):"No active gym-gain book identified in loaded perks.";
+    const bliss=tornHappinessBook();
+    const uniqueBooks=[...new Set([...activeBook.map(x=>x.text),...(bliss.active?["Ignorance Is Bliss · Elevated Happiness retained; affects all four stats"]:[])])];
+    const reading=uniqueBooks.length?uniqueBooks.join(" · "):(bliss.known?"No active growth book identified in loaded perks.":"Active book status unavailable.");
     const label=stat=>readable[stat];
     return '<section class="panel tc-build-panel"><div class="panel-heading"><h2>Train next: '+(priority?esc(label(priority.stat))+" to "+nice(targets[priority.i]):"Target reached")+'</h2></div><div class="panel-content">'+
       '<div class="tc-build-controls"><label>Build <select data-tc-build="choice">'+buildOptions.map(([id,name])=>'<option value="'+id+'" '+(buildChoice===id?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
@@ -434,9 +435,9 @@ const tornStatPlanner = (() => {
       '<div class="tc-build-ratio">'+entries.map(e=>'<span class="tc-build-segment tc-build-'+e.stat+'" style="flex:'+weights[e.i]+'" title="'+label(e.stat)+' '+nice(shares[e.i]*100,1)+'%">'+shorthand[e.stat]+' '+nice(shares[e.i]*100,1)+'%</span>').join("")+'</div>'+
       '<div class="tc-build-scroll"><table class="tc-build-table"><thead><tr><th>Stat</th><th>Current / %</th><th>Target / %</th><th>Remaining</th><th>Gain perks</th><th>Known gym</th><th>Est. E</th></tr></thead><tbody>'+
       entries.map(e=>'<tr><td><strong>'+shorthand[e.stat]+'</strong></td><td>'+nice(current[e.i])+' <small>'+nice(sum?current[e.i]/sum*100:0,1)+'%</small></td><td>'+nice(targets[e.i])+' <small>'+nice(shares[e.i]*100,1)+'%</small></td><td class="'+(e.delta?"":"tc-pos")+'">'+nice(e.delta)+'</td><td title="'+esc(e.eff.groups.flatMap(g=>g.items.map(x=>x.text)).join("\n"))+'">'+(e.eff.sourceAvailable?nice((e.eff.multiplier-1)*100,1)+"%":"—")+'</td><td>'+esc(e.best?.name??"Unknown")+'</td><td>'+nice(e.energy??NaN)+'</td></tr>').join("")+'</tbody></table></div>'+
-      (activeBook.length?'<div class="tc-build-recommend"><p>Active book: '+esc(reading)+'</p></div>':"")+
+      (uniqueBooks.length?'<div class="tc-build-recommend"><p>Active book: '+esc(reading)+'</p></div>':"")+
       (requirements.length?'<div class="tc-build-gyms">'+requirements.map(([name,met,desc,g])=>'<div><strong>'+esc(name)+'</strong><span class="'+(met?"tc-pos":"tc-neg")+'">'+(met?"Ratio met":"Ratio not met")+'</span><small>'+esc(desc)+' · '+(unlocked(g)?"Access reported":"Access not verified")+'</small></div>').join("")+'</div>':"")+
-      '<details class="tc-build-books"><summary>Books &amp; training priorities</summary><p>'+esc(reading)+'</p><div>'+statNames.map(stat=>'<div><strong>'+esc(bookNames[stat])+'</strong> · +30% '+label(stat)+' gym gains for 31 days</div>').join("")+'<div><strong>Get Hard Or Go Home</strong> · +20% all gym gains for 31 days</div><div><strong>Higher Daddy, Higher!</strong> · +20% energy regeneration for 31 days</div></div><p>Save unread books until you have a suitable gym, perks, supplies and time to use the entire duration. Ownership is not inferred.</p></details>'+
+      '<details class="tc-build-books"><summary>Books &amp; training priorities</summary><p>'+esc(reading)+'</p><div>'+statNames.map(stat=>'<div><strong>'+esc(bookNames[stat])+'</strong> · +30% '+label(stat)+' gym gains for 31 days</div>').join("")+'<div><strong>Get Hard Or Go Home</strong> · +20% all gym gains for 31 days</div><div><strong>Higher Daddy, Higher!</strong> · +20% energy regeneration for 31 days</div><div><strong>Ignorance Is Bliss</strong> · Happiness regenerates above normal maximum up to 99,999 for 31 days; benefits all four stats'+(bliss.active?' · <span class="tc-pos">Active</span>':"")+'</div></div><p>Save unread books until you have a suitable gym, perks, supplies and time to use the entire duration. Ownership is not inferred.</p></details>'+
       '<p class="fine-print">Targets are suggested buffered ratios. Estimated energy uses the current per-energy gain at current happiness in a reported gym; future growth, cooldowns and membership changes are not simulated. <a href="https://wiki.torn.com/wiki/Gym" target="_blank" rel="noopener noreferrer">Gym requirements</a> · <a href="https://www.torn.com/forums.php?f=61&p=threads&t=16132234" target="_blank" rel="noopener noreferrer">Hank / Baldr guide</a></p></div></section>';
   }
   function happinessStatus(){
