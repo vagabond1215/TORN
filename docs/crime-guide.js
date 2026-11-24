@@ -195,6 +195,17 @@ const tornCrimeGuide = (() => {
     const plan=tornStatPlanner.homeTrainingAdvice();
     if(plan)add("growth","Train "+plan.stat,plan.detail,"#stats");
     else add("growth","Review your build targets","Load current battle stats and select a build on Stats.","#stats");
+    if(prefs.weeklyBudget!==null){
+      const budget=prefs.weeklyBudget,x=market("Xanax"),e=market("Ecstasy"),d=market("Erotic DVD");
+      const cash=v=>"$"+Math.round(v).toLocaleString();
+      const options=[{name:"Natural training",cost:0,detail:"Natural Energy only; no paid consumables or points."}];
+      if(risk!=="low"&&x!==null){
+        options.push({name:"Xanax training",cost:21*x,detail:"Three Xanax per day, 21 per week; natural Energy included."});
+        if(e!==null&&d!==null)options.push({name:"Weekly happy jump",cost:4*x+5*d+e,detail:"One four-Xanax, five-eDVD, one-Ecstasy jump per week; natural training otherwise."});
+      }
+      const affordable=options.filter(o=>o.cost<=budget);
+      add("growth","Weekly training budget: "+cash(budget),affordable.map(o=>o.name+" "+cash(o.cost)+"/week").join(" · ")+". "+(risk==="low"?"Low risk: drug plans excluded. ":x===null?"Xanax price unavailable. ":"")+(risk!=="low"&&x!==null&&budget<21*x?"Budget covers up to "+Math.floor(budget/x)+" Xanax at cached prices. ":"")+"Consumable estimates only; candy and points refills not included. Compare gains in Plan.","#stats");
+    }
     const bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns");
     const energy=n(bars?.energy?.current),cap=n(bars?.energy?.maximum),happy=n(bars?.happy?.current),happyCap=n(bars?.happy?.maximum),nerve=n(bars?.nerve?.current);
     const drug=n(cd?.drug),booster=n(cd?.booster),xan=count("Xanax","Drug");
