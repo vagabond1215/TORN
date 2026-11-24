@@ -565,6 +565,17 @@ function updateHomeLiveBars(){
     if(fill)fill.style.width=current.percentage.toFixed(2)+"%";
     if(progress)progress.setAttribute("aria-valuenow",String(current.current));
   }
+
+  for(const time of root.querySelectorAll("[data-activity-deadline]")){
+    const target=Number(time.dataset.activityDeadline);
+    if(Number.isFinite(target)){
+      const remaining=Math.max(0,Math.ceil((target-Date.now())/1000));
+      const days=Math.floor(remaining/86400),hours=Math.floor(remaining%86400/3600),
+        minutes=Math.floor(remaining%3600/60),secs=remaining%60;
+      time.textContent=remaining?((days?days+"d ":"")+String(hours).padStart(2,"0")+":"+
+        String(minutes).padStart(2,"0")+":"+String(secs).padStart(2,"0")):"Ready";
+    }
+  }
 }
 
 function renderDashboard() {
@@ -641,6 +652,45 @@ function renderDashboard() {
        '<a href="#money">Money</a>'+
       '</div></div></section>'+
   '</div>';
+
+
+  // These are cached values only. User/virus, /travel and /racingrecords
+  // are fetched exclusively when the player explicitly updates this panel.
+  const bank=cash?.city_bank??null,virus=payload("virus","virus"),
+    travel=payload("travel","travel"),races=payload("racingrecords","racingrecords");
+  const unix=x=>{const v=Number(x);return Number.isFinite(v)&&v>1e9?(v>1e12?v:v*1000):null;};
+  const when=x=>{const value=unix(x);return value?tornGuidePreferences.formatDate(value):"Not available";};
+  const entry=(label,text,deadline)=>'<div class="home-pair"><dt>'+safe(label)+
+    '</dt><dd>'+(deadline?'<span data-activity-deadline="'+deadline+'">'+safe(text)+'</span>':safe(text))+'</dd></div>';
+  let bankSummary="No active deposit";
+  if(!cash)bankSummary="Not loaded";
+  else if(bank&&bank.amount!=null){
+    bankSummary="$"+formatNumber(bank.amount);
+    if(bank.profit!=null)bankSummary+=" · +$"+formatNumber(bank.profit)+" profit";
+  }
+  const vTime=virus?.until??virus?.ends_at??virus?.end,
+    vAt=unix(vTime);
+  const vName=virus?.item?.name||virus?.name||"Active virus";
+  const travelAt=unix(travel?.arrival??travel?.until??travel?.timestamp),
+    travelRemain=Number(travel?.time_left??travel?.remaining),
+    tripEnd=travelAt||(Number.isFinite(travelRemain)&&travelRemain>0&&st.fetchedAt.travel?
+      st.fetchedAt.travel+travelRemain*1000:null);
+  const destination=typeof travel?.destination==="string"?travel.destination:
+    travel?.destination?.name||travel?.to||"Flight";
+  const flight=travel?tripEnd?destination+" · countdown":travel?.status||"No active flight":"Not loaded";
+  const recordArray=Array.isArray(races)?races:
+    Array.isArray(races?.records)?races.records:null;
+  const recentRecords=recordArray?recordArray.length+" track records":"Not loaded";
+  result+='<section class="panel home-activity"><div class="panel-heading"><h2>Bank, virus, travel &amp; racing</h2>'+
+    '<button type="button" class="home-activity-refresh" data-home-activity-refresh title="Request only stale activity selections">Update activity</button>'+
+    '</div><div class="panel-content"><dl class="home-stat-list">'+
+      entry("Investment",bankSummary)+
+      entry("Bank maturity",bank?.until!=null?when(bank.until):"Not loaded")+
+      entry("Virus",virus?(vAt?vName+" · countdown":vName):"Not loaded",vAt)+
+      entry("Travel",flight,tripEnd)+
+      entry("Racing records",recentRecords)+
+    '</dl><p class="fine-print">Bank values are reused from Money. Virus, travel and personal racing records load only on request. Records are best laps, not the latest finishing position.</p>'+
+    '<span class="sr-only" id="home-activity-status" role="status"></span></div></section>';
 
   result+='<details class="home-expand-panel"><summary>Activity &amp; detailed reports</summary>'+
     '<div class="home-expand-body"><p class="fine-print">Reports open in a preview window when supported by the provider, with a new-tab fallback.</p><div class="report-links">';

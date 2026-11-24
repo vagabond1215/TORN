@@ -295,6 +295,19 @@ renderProfile();
 tornTctClock.init();
 renderRoute();
 window.addEventListener("hashchange", renderRoute);
+document.getElementById("topic-view").addEventListener("click",async event=>{
+  const btn=event.target.closest("[data-home-activity-refresh]");
+  if(!btn||!tornGuideApi.isConnected()||btn.disabled)return;
+  btn.disabled=true;btn.textContent="Updating…";
+  try{
+    await tornGuideApi.loadPage("activity");
+  }catch(error){
+    const status=document.getElementById("home-activity-status");
+    if(status)status.textContent=String(error.message||error);
+  }finally{
+    btn.disabled=false;btn.textContent="Update activity";
+  }
+});
 
 byId("profile-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -412,7 +425,7 @@ byId("remember-active").addEventListener("change",event=>{
   renderProfile();
 });
 window.addEventListener("torn-guide-sync",updateRefreshUI);
-setInterval(updateSyncCounter,1000); // local clock only; no Torn API calls
+setInterval(()=>{updateSyncCounter();updateHomeLiveBars();},1000); // local DOM updates only; no Torn API calls
 
 // The ellipsis is an unframed button; settings remain independent of API login.
 function syncSettingsControls(){

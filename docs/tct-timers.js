@@ -46,7 +46,7 @@ const tornTctClock=(()=>{
     if(!value||typeof value!=="object")return null;
     // API may supply either a Unix end timestamp or remaining seconds. Reject
     // small values in absolute-only fields; never guess a fake completion time.
-    for(const name of ["ends_at","end_at","completion_time","completed_at","finish_time","finish_at","ends","end","completion","finish"]){
+    for(const name of ["until","ends_at","end_at","completion_time","completed_at","finish_time","finish_at","ends","end","completion","finish"]){
       const timestamp=parseAbsolute(value[name]);
       if(timestamp!==null)return timestamp;
     }
