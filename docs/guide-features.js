@@ -756,7 +756,40 @@ function renderInventoryPage(){
   return out+'</div>';
 }
 
-const educationView={open:new Set(),selected:null,filter:"all"};
+const educationView={open:new Set(),selected:null,filter:"all",groupBy:"category",effect:"all"};
+// Effect paths are editorial groupings, not official degree requirements.
+// A course may contribute to more than one path.
+const educationPaths=[
+ ["Gym Perks","SPT1430 SPT2440 SPT2450 SPT2460 SPT2470 SPT3510",/gym gains|gym training/i],
+ ["Passive Battle Stats","CBT1780 CBT2790 HAF1103 HAF2104 HAF2105 HAF2106 HAF2107 HAF2108 HAF2109 MTH1220 MTH2240 MTH2250 MTH2260 MTH2320 PSY1630 PSY2640 PSY2650 PSY2660 PSY2670 DEF1700 DEF2710 DEF2730 DEF2740 DEF2750 DEF2760 SPT1430 SPT2490 SPT2500",/passive (?:battle|strength|speed|defen[cs]e|dexterity)|passive.*(?:strength|speed|defen[cs]e|dexterity)/i],
+ ["Company Perks","BUS1100 BUS2200 BUS2300 BUS2400 BUS2500 BUS2600 BUS2700 BUS2800 BUS2900 BUS2100 BUS2110 BUS2120 BUS3130 MTH1220 MTH2280 LAW1880 LAW2100",/company productivity|employee effectiveness|employee working|advertising effectiveness|product value|company size/i],
+ ["City Find Perks","HIS1140 HIS2150 HIS2180 HIS2190 HIS2200 PSY1630 PSY2680",/awareness|(?:coin|sculpture|quran|senet|amulet).*find/i],
+ ["Crime Perks","CMT1520 CMT2230 CMT2130 CMT2131 CMT2540 CMT2610 CMT2570 CMT2128 CMT2129 GEN1112 GEN2113 PSY1630 PSY2132 PSY3690",/crime|cracking|bootlegging|scamming|rig heat|overclock/i],
+ ["Attacking Perks","BIO1340 BIO2350 BIO2380 BIO2400 BIO2410 CBT1780 CBT2820 CBT2830 CBT2840 CBT2850 CBT2860 CBT2125 CBT3870 GEN1112 GEN2116 GEN2119 HAF1103 HAF3111 HIS1140 HIS2160 HIS2170 MTH1220 MTH2310 MTH3330 DEF1700 DEF2720 DEF3770",/weapon damage|weapon accuracy|weapon experience|critical hit|stealth|ammo conservation|melee damage|blade damage|kick attacks|fist-only|throat-hit|opponent escape/i],
+ ["Jail Perks","LAW1880 LAW2890 LAW2900 LAW2920 LAW2930 LAW2970 LAW2980 LAW2990 LAW3102",/jail|bail|busting/i],
+ ["Virus Perks","CMT1520 CMT2530 CMT2560 CMT2580 CMT2600",/virus coding/i],
+ ["Medical Perks","BIO1340 BIO2360 BIO2370 BIO2127 BIO3420 SPT1430 SPT2480",/medical item|blood withdrawal|transfusion|needle effectiveness|temporary-slot needles/i],
+ ["Other Perks","",null]
+];
+function educationCode(c){
+ return /study of pistols/i.test(c.name??c.title??"")?"CBT2840":String(c.code??c.course_code??"").replace(/\s/g,"").toUpperCase();
+}
+function educationEffectText(c){
+ const b=c.effects??c.benefits??c.learning_outcomes??c.outcomes??c.effect??c.results?.perks??c.results?.ability;
+ const values=typeof b==="string"?[b]:Array.isArray(b)?b:Object.values(b||{});
+ const effects=values.map(v=>typeof v==="string"?v:v?.description??v?.name??v?.effect??"").filter(Boolean);
+ return (effects.length?effects:(tornEducationReference[educationCode(c)]?.effects||[])).join(" · ");
+}
+function educationGroups(m){
+ if(educationView.groupBy==="category")return m.groups;
+ const grouped=educationPaths.slice(0,-1).map(([name,codes,pattern])=>{
+   const set=new Set(codes.split(" "));
+   return {name,courses:m.courses.filter(c=>set.has(educationCode(c))||pattern.test(educationEffectText(c)))};
+ });
+ const assigned=new Set(grouped.flatMap(g=>g.courses.map(educationCode)));
+ grouped.push({name:"Other Perks",courses:m.courses.filter(c=>!assigned.has(educationCode(c)))});
+ return grouped.filter(g=>educationView.effect==="all"||g.name===educationView.effect);
+}
 function educationModel(){
  const root=tornGuideApi.state.data.education, data=payload("education","education"), catalog=payload("educationCatalog","education");
  const groups=(Array.isArray(catalog)?catalog:Object.values(catalog||{})).filter(g=>g&&g.courses);
@@ -813,16 +846,18 @@ function renderEducationPage(){
  let out='<section class="panel edu-panel"><div class="panel-heading"><h2>Education</h2><a href="https://www.torn.com/page.php?sid=education" target="_blank" rel="noopener noreferrer">Open Torn</a></div><div class="panel-content">'+
  '<div class="edu-current"><strong>'+safe(name)+'</strong>'+(m.deadline?'<span data-edu-deadline="'+m.deadline+'">'+tornTctClock.formatDuration((m.deadline-Date.now())/1000)+'</span>':'')+
  '<small>Education merit '+(m.perks==null?"—":m.perks+"/10")+' · WSU '+(m.positions==null?"Not loaded":m.positions>=1000000?"Active":"Inactive")+' · Completed '+(m.known?m.ids.size+"/"+m.courses.length:"Not loaded")+'</small></div>'+
- '<div class="edu-filters"><label>Show <select data-edu-filter>'+[["all","All courses"],["remaining","Remaining"],["completed","Completed"]].map(([v,l])=>'<option value="'+v+'" '+(educationView.filter===v?"selected":"")+'>'+l+'</option>').join("")+'</select></label></div>';
- for(const g of m.groups){
+ '<div class="edu-filters"><label>Group by <select data-edu-groupby><option value="category" '+(educationView.groupBy==="category"?"selected":"")+'>Education category</option><option value="effect" '+(educationView.groupBy==="effect"?"selected":"")+'>Effect / perk</option></select></label>'+
+ (educationView.groupBy==="effect"?'<label>Education path <select data-edu-path><option value="all">All effects</option>'+educationPaths.map(([name])=>'<option value="'+safe(name)+'" '+(educationView.effect===name?"selected":"")+'>'+safe(name)+'</option>').join("")+'</select></label>':"")+
+ '<label>Show <select data-edu-filter>'+[["all","All courses"],["remaining","Remaining"],["completed","Completed"]].map(([v,l])=>'<option value="'+v+'" '+(educationView.filter===v?"selected":"")+'>'+l+'</option>').join("")+'</select></label></div>';
+ for(const g of educationGroups(m)){
  const courses=m.list(g),group=String(g.name??g.title??"Courses"),count=courses.filter(c=>m.ids.has(String(c.id))).length;
  const shown=courses.filter(c=>!m.known||educationView.filter==="all"||(educationView.filter==="completed")===m.ids.has(String(c.id)));
  if(!shown.length)continue;
- const opened=educationView.open.has(group)||courses.some(c=>String(c.id)===String(m.id))&&!educationView.open.has("closed:"+group);
+ const opened=educationView.open.has(group)||!educationView.open.has("closed:"+group)&&(educationView.groupBy==="effect"&&educationView.effect===group||courses.some(c=>String(c.id)===String(m.id)));
  out+='<details class="edu-category" data-edu-group="'+safe(group)+'" '+(opened?"open":"")+'><summary><strong>'+safe(group)+'</strong><span>'+(m.known?count:"—")+'/'+courses.length+'</span></summary><div class="edu-courses">';
  for(const c of shown){
  const id=String(c.id),done=m.ids.has(id),active=id===String(m.id),key=group+":"+String(c.code??c.id??c.name),selected=educationView.selected===key;
- out+='<div class="edu-course '+(done?"is-completed":active?"is-active":"")+'"><button type="button" data-edu-course="'+safe(key)+'" aria-expanded="'+selected+'"><span>'+safe(c.code??c.course_code??"")+'</span><strong>'+safe(c.name??c.title??"Course "+id)+'</strong><small>'+(done?"Completed":active?"In progress":"")+'</small></button>'+(selected?educationCourseDetail(c,m):"")+'</div>';
+ out+='<div class="edu-course '+(done?"is-completed":active?"is-active":"")+'"><button type="button" data-edu-course="'+safe(key)+'" aria-expanded="'+selected+'"><span>'+safe(c.code??c.course_code??"")+'</span><strong>'+safe(c.name??c.title??"Course "+id)+'</strong><small>'+(done?"Completed":active?"In progress":"")+'</small></button>'+(educationView.groupBy==="effect"&&educationEffectText(c)?'<div class="edu-effect-preview">'+safe(educationEffectText(c))+'</div>':"")+(selected?educationCourseDetail(c,m):"")+'</div>';
  }
  out+='</div></details>';
  }
@@ -833,5 +868,5 @@ function wireEducationPage(view){
  const rebuild=()=>{if(location.hash==="#education")view.innerHTML=renderEducationPage();};
  view.addEventListener("toggle",e=>{const el=e.target;if(!el.matches?.("[data-edu-group]")||!el.isConnected)return;const g=el.dataset.eduGroup;if(el.open){educationView.open.add(g);educationView.open.delete("closed:"+g);}else{educationView.open.delete(g);educationView.open.add("closed:"+g);}},true);
  view.addEventListener("click",e=>{const el=e.target.closest("[data-edu-course]");if(!el||location.hash!=="#education")return;const group=el.closest("[data-edu-group]");if(group){educationView.open.add(group.dataset.eduGroup);educationView.open.delete("closed:"+group.dataset.eduGroup);}educationView.selected=educationView.selected===el.dataset.eduCourse?null:el.dataset.eduCourse;rebuild();});
- view.addEventListener("change",e=>{if(location.hash!=="#education"||!e.target.matches("[data-edu-filter]"))return;educationView.filter=e.target.value;rebuild();});
+ view.addEventListener("change",e=>{if(location.hash!=="#education")return;const el=e.target;if(el.matches("[data-edu-filter]"))educationView.filter=el.value;else if(el.matches("[data-edu-groupby]")){educationView.groupBy=el.value;educationView.selected=null;}else if(el.matches("[data-edu-path]")){educationView.effect=el.value;educationView.open.add(el.value);educationView.open.delete("closed:"+el.value);educationView.selected=null;}else return;rebuild();});
 }
