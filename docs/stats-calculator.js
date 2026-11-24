@@ -24,7 +24,7 @@ const tornStatPlanner = (() => {
     ["Balboas Gym",25,0,0,7.5,7.5],["Frontline Fitness",25,7.5,7.5,0,0],
     ["Gym 3000",50,8,0,0,0],["Mr. Isoyamas",50,0,0,8,0],
     ["Total Rebound",50,0,8,0,0],["Elites",50,0,0,0,8],
-    ["The Sports Science Lab",25,9,9,9,9],["Fight Club",10,10,10,10]
+    ["The Sports Science Lab",25,9,9,9,9]
   ].map((g,i) => ({id:i+1,name:g[0],energy:g[1],strength:g[2],speed:g[3],defense:g[4],dexterity:g[5],offline:true}));
   const state = {
     gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"calc",
@@ -105,7 +105,7 @@ const tornStatPlanner = (() => {
     });
     // Merge rather than replace: partial API catalogs must not hide known gyms.
     const merged=fallback.map((g,i)=>normalized.find(n=>n.rank===i)||g);
-    return merged.concat(normalized.filter(n=>n.rank<0));
+    return merged.concat(normalized.filter(n=>n.rank<0&&!/^(unknown|fightclub)$/.test(gymKey(n.name))&&String(n.id)!=="32"));
   }
   function activeGym(all=gyms()) {
     const g=api("gym"), info=g&&(g.gym||g);
@@ -215,6 +215,16 @@ const tornStatPlanner = (() => {
     const mark=marks[i]||g.name.split(/\s+/).map(w=>w[0]).join("").slice(0,3);
     return '<svg viewBox="0 0 32 32" width="34" height="34" aria-hidden="true"><text x="16" y="22" text-anchor="middle" font-family="Georgia,serif" font-weight="bold" font-size="'+(mark.length>2?11:mark.length>1?15:23)+'" fill="'+(colors[i]||"#b9c5cb")+'">'+esc(mark)+'</text></svg>';
   }
+  function gymInfoHeading(g){
+    const price=g.price??gymCosts[g.rank>=0?g.rank:gymRank(g)];
+    return '<strong>'+esc(g.name)+'</strong><small>'+nice(g.energy)+'E</small><small>'+esc(gymCategories[gymCategory(g)])+'</small><small>Membership: '+(price!=null?"$"+nice(Number(price)):"Unavailable")+'</small>';
+  }
+  function gymDotRow(g,baseline=null){
+    return '<div class="tc-gym-info-dots">'+statNames.map(stat=>{
+      const value=numeric(g[stat]),delta=baseline?Math.round((value-numeric(baseline[stat]))*100)/100:0;
+      return '<div><span>'+shorthand[stat]+'</span><meter aria-label="'+readable[stat]+' gym dots" min="0" max="10" value="'+Math.min(10,Math.max(0,value))+'"></meter><strong>'+nice(value,1)+'</strong>'+(baseline?'<small class="tc-gym-delta '+(delta>0?'tc-pos':delta<0?'tc-neg':'')+'">'+(delta>0?'+':'')+nice(delta,1)+'</small>':'')+'</div>';
+    }).join("")+'</div>';
+  }
   function apiStatValue(stat) {
     const raw=rawStats(),detail=raw&&raw[stat];
     const value=typeof detail==="number"?detail:detail&&detail.value;
@@ -265,12 +275,10 @@ const tornStatPlanner = (() => {
     markup+='<section class="panel"><div class="panel-content tc-gym-picker"><div class="tc-gym-board" role="group" aria-label="Select simulation gym">'+gymCategories.map((label,i)=>{
       const list=ordered.filter(g=>gymCategory(g)===i);
       return '<div class="tc-gym-group" role="group" aria-label="'+label+'"><div class="tc-gym-tiles">'+list.map(g=>
-        '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(g)+'<span>'+esc(g.name)+'</span></button>').join("")+
-        Array.from({length:Math.max(0,10-list.length)},()=>'<span class="tc-gym-empty" aria-hidden="true"></span>').join("")+'</div></div>';
+        '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(g)+'<span>'+esc(g.name)+'</span></button>').join("")+'</div></div>';
     }).join("")+'</div>'+
-      '<details class="tc-gym-info" '+(state.gymInfoOpen?"open":"")+'><summary><strong>'+esc(gym.name)+'</strong><small>'+gym.energy+' E/train</small></summary><div class="tc-gym-info-body">'+
-      '<div class="tc-gym-info-meta"><span>'+esc(gymCategories[gymCategory(gym)])+'</span><span>Membership: '+(gym.price!=null?"$"+nice(Number(gym.price)):gymCosts[gym.rank>=0?gym.rank:gymRank(gym)]!=null?"$"+nice(gymCosts[gym.rank>=0?gym.rank:gymRank(gym)]):"Unavailable")+'</span></div>'+
-      '<div class="tc-gym-info-dots">'+statNames.map(stat=>'<div><span>'+shorthand[stat]+'</span><strong>'+(gym[stat]>0?nice(gym[stat],1):"Unavailable")+'</strong><meter min="0" max="10" value="'+Math.min(10,Math.max(0,numeric(gym[stat])))+'"></meter></div>').join("")+'</div></div></details></div></section>';
+      '<details class="tc-gym-info" '+(state.gymInfoOpen?"open":"")+'><summary>'+gymInfoHeading(active||gym)+'</summary><div class="tc-gym-info-body">'+
+      gymDotRow(active||gym)+(active&&active.name!==gym.name?'<div class="tc-gym-alternate"><div class="tc-gym-comparison-heading">'+gymInfoHeading(gym)+'</div>'+gymDotRow(gym,active)+'</div>':'')+'</div></details></div></section>';
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<section class="panel"><div class="panel-heading"><h2>Gym training simulator</h2></div><div class="panel-content">'+
@@ -326,7 +334,7 @@ const tornStatPlanner = (() => {
         return;
       }
       const gymButton=event.target.closest("[data-tc-gym]");
-      if(gymButton){const active=activeGym();state.selectedGym=active&&active.name===gymButton.dataset.tcGym?null:gymButton.dataset.tcGym;view.innerHTML=render();return;}
+      if(gymButton){const active=activeGym();state.selectedGym=active&&active.name===gymButton.dataset.tcGym?null:gymButton.dataset.tcGym;if(state.selectedGym!==null&&active)state.gymInfoOpen=true;view.innerHTML=render();return;}
       const reset=event.target.closest("[data-tc-reset]");
       if(reset){const stat=reset.dataset.tcReset,value=apiStatValue(stat);if(value!==null){state.statValues[stat]=value;view.innerHTML=render();}return;}
       const pick=event.target.closest("[data-tc-pick]");
