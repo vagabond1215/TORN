@@ -1591,7 +1591,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-merged table{min-width:700px;font-variant-numeric:tabular-nums}
 .ts-merged th:first-child{width:52%}
 .ts-merged td{vertical-align:top}
-.ts-merged td:not(:first-child){padding-top:.65rem}
+
 .ts-merged .ts-step{grid-template-columns:18px minmax(0,1fr) auto;gap:.3rem}
 .ts-merged .ts-step>span:nth-child(3):empty{display:none}
 .ts-merged .ts-step>input[data-ts-edit="minutes"]{grid-column:2}
@@ -1615,9 +1615,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-merged .ts-booster-row,.ts-merged .ts-booster-summary{grid-column:1/-1;white-space:normal}
 .ts-merged .ts-dependent td:first-child{padding-left:.3rem;white-space:nowrap}
 .ts-merged .ts-dependent td:nth-child(2){padding-left:1.25rem;white-space:normal}
-.ts-merged .ts-editable-row td:first-child{white-space:nowrap;padding-top:0}
-.ts-merged .ts-editable-row td:nth-child(2){white-space:normal;padding-top:0}
-.ts-merged .ts-initial td:nth-child(2){padding-top:.35rem}
+.ts-merged .ts-editable-row td:first-child{white-space:nowrap}
+.ts-merged .ts-editable-row td:nth-child(2){white-space:normal}
+
 
 /* Inline timeline controls, with a consistent baseline for ordinary rows. */
 .ts-merged th:nth-child(2){width:39%}
@@ -1682,3 +1682,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 #tc-sequencer .ts-merged .ts-editable-row>td:nth-child(2){padding-block:0}
 #tc-sequencer .ts-merged .ts-step{margin-block:0;padding-block:0;row-gap:0;align-items:center}
 #tc-sequencer .ts-merged .ts-step>select[data-ts-edit="type"],#tc-sequencer .ts-merged .ts-arrows button{box-sizing:border-box;height:21px;margin-block:0;padding-block:0;line-height:normal}
+
+/* Distinct series colors, scoped to the Plan chart. */
+:root{--ts-chart-maxenergy:#ffb347;--ts-chart-mini:#c5a2ff;--ts-chart-low:#78d8f0;--ts-chart-99k:#f58ac5;--ts-chart-custom:#b0b9c2}
+:root[data-theme="light"]{--ts-chart-maxenergy:#a85b00;--ts-chart-mini:#7036b5;--ts-chart-low:#087d9b;--ts-chart-99k:#b52a79;--ts-chart-custom:#64748b}
+#tc-sequencer .ts-merged table{border-collapse:collapse;border-spacing:0}
+#tc-sequencer .ts-merged tbody>tr>td{padding-top:0!important;padding-bottom:0!important;vertical-align:middle;height:22px;line-height:1.2}
+#tc-sequencer .ts-merged .ts-step,#tc-sequencer .ts-merged .ts-step>.ts-arrows{margin-block:0!important;padding-block:0!important;row-gap:0}
+#tc-sequencer .ts-merged .ts-step>select[data-ts-edit="type"],#tc-sequencer .ts-merged .ts-arrows button{box-sizing:border-box;height:21px;min-height:21px;margin-block:0!important;padding-block:0!important}
