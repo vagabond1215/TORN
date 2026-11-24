@@ -344,6 +344,19 @@ const tornStatPlanner = (() => {
     try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:build:"+owner));if(buildOptions.some(x=>x[0]===saved?.choice))buildChoice=saved.choice;buildTotal=clamp(saved?.total,0,1e15);}catch{}
   }
   function saveBuild(){try{localStorage.setItem("torn-city-guide:build:"+buildOwner,JSON.stringify({choice:buildChoice,total:buildTotal}));}catch{}}
+  function homeTrainingAdvice(){
+    loadBuild();
+    const actual=statNames.map(apiStatValue);
+    if(actual.some(x=>x===null))return null;
+    const option=buildOptions.find(x=>x[0]===buildChoice)||buildOptions[0],weights=option[2],sum=weights.reduce((a,b)=>a+b,0),shares=weights.map(x=>x/sum);
+    const total=Math.max(buildTotal||actual.reduce((a,b)=>a+b,0)*1.1,1,...actual.map((v,i)=>v/shares[i]));
+    const rows=statNames.map((stat,i)=>({stat,remaining:Math.max(0,Math.ceil(total*shares[i])-actual[i]),progress:actual[i]/Math.max(1,total*shares[i]),effects:effectsFor(stat)}));
+    const active=activeGym(),book=row=>row.effects.groups.find(g=>g.group==="book")?.total||0;
+    const next=rows.filter(x=>x.remaining>0).sort((a,b)=>a.progress-b.progress||book(b)-book(a)||b.effects.multiplier-a.effects.multiplier)[0];
+    if(!next)return {stat:"your selected build",detail:"Current target reached; set the next milestone."};
+    return {stat:readable[next.stat],detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name:"")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")};
+  }
+  function homeCandyAdvice(){return calcCandyStock()?.[0]||null;}
   function renderBuild(gym,active){
     loadBuild();
     const option=buildOptions.find(x=>x[0]===buildChoice)||buildOptions[0],weights=option[2],weightSum=weights.reduce((a,b)=>a+b,0),shares=weights.map(w=>w/weightSum);
@@ -503,7 +516,7 @@ const tornStatPlanner = (() => {
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
   }
-  return {render,wire,syncLiveBars,
+  return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,
     simulate:()=>({natural:tornTrainSequence.simulate(tornTrainSequence.steps.natural),jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump)}),
     state,internal:{oneTrain,trainBlock,percentage,gainPerks}};
 })();
