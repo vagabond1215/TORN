@@ -1671,3 +1671,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 #ts-plan-settings>.ts-settings-summary:before{content:none}
 #ts-plan-settings>.ts-settings-summary .ts-cooldown-mode{margin-left:auto}
 @media(max-width:700px){.ts-plan-toolbar .ts-template-toggles{flex-basis:100%}}
+
+.ts-merged :is(th,td):nth-child(3){text-align:right;font-variant-numeric:tabular-nums}
+.ts-merged .ts-start-time{width:5.5rem;max-width:100%;box-sizing:border-box;height:22px;padding:0 .15rem;margin:0;border:0;background:transparent;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
+.ts-merged .ts-start-time:hover{background:var(--canvas)}
+.ts-merged .ts-start-time:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
