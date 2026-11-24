@@ -19,8 +19,8 @@ const tornTrainSequence=(()=>{
   const startingEnergy=Object.fromEntries(templates.map(([id])=>[id,["natural","jump","maxhappy"].includes(id)?"zero":"full"]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openQueues=new Set(),openTimelines=new Set();
-  let naturalEdited=false;
-  function templateButtons(){return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'</div>';}
+  let naturalEdited=false,settingsOpen=false;
+  function templateButtons(){return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'<button type="button" class="tc-stat-tab ts-settings-toggle '+(settingsOpen?"is-selected":"")+'" data-ts-settings aria-expanded="'+settingsOpen+'" aria-controls="ts-plan-settings" title="Time, cooldowns, effects, prices"><span aria-hidden="true">⚙</span> Settings</button></div>';}
   function activeTemplates(){return templates.filter(([id])=>selected.has(id));}
   // Booster quantities are immediate batches. They never hide several hours
   // of waiting between candy and training; users add separate Wait rows.
@@ -354,11 +354,11 @@ const tornTrainSequence=(()=>{
   function controls(){
     const priceText=v=>v==null?"Unavailable":"$"+fmt(v);
     const effect=(label,minutes,source)=>'<span title="'+$(source.join("\n")|| (cooldownEffects.known?"No applicable reduction reported":"Perks unavailable; base cooldown assumed"))+'">'+label+' <strong>'+fmt(minutes,2)+'m</strong></span>';
-    return '<details class="ts-settings" open><summary class="ts-settings-summary"><span>Time, cooldowns, effects, prices</span>'+cooldownControls()+'</summary>'+
+    return '<div id="ts-plan-settings" class="ts-settings" '+(settingsOpen?"":"hidden")+'><div class="ts-settings-summary"><span>Time, cooldowns, effects, prices</span>'+cooldownControls()+'</div>'+
       '<div class="ts-membership">Preparation window: <strong>'+fmt(p.hours,2)+'h</strong> · '+$(energyRules().label)+'</div>'+
       '<div class="ts-market-prices ts-auto-cooldowns">'+effect("Xanax",p.xanaxCDMin,[])+effect("Ecstasy",p.ecstasyCDMin,[])+effect("Candy",30*p.candyCDMultiplier,cooldownEffects.sources.candy)+effect("eDVD",360*p.dvdCDMultiplier,cooldownEffects.sources.dvd)+'</div>'+cooldownTiles()+
       '<div class="ts-market-prices"><span>Xanax '+priceText(p.xanaxPrice)+'</span><span>Ecstasy '+priceText(p.ecstasyPrice)+'</span><span>eDVD '+priceText(p.dvdPrice)+'</span><span>Point '+priceText(p.pointPrice)+'</span></div>'+
-      '<label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label></details>';
+      '<label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label></div>';
   }
   function row(side,a,index,info){
     const types=(actionOptions.some(([id])=>id===a.type)?actionOptions:[...actionOptions,[a.type,names[a.type]]]).map(([id,label])=>'<option value="'+id+'" '+(a.type===id?"selected":"")+'>'+$(label)+'</option>').join("");
@@ -474,6 +474,7 @@ const tornTrainSequence=(()=>{
       }
     });
     view.addEventListener("click",event=>{
+      const settings=event.target.closest("[data-ts-settings]");if(settings){settingsOpen=!settingsOpen;settings.setAttribute("aria-expanded",String(settingsOpen));settings.classList.toggle("is-selected",settingsOpen);const panel=view.querySelector("#ts-plan-settings");if(panel)panel.hidden=!settingsOpen;return;}
       const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);rebuild();view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
       const mode=event.target.closest("[data-ts-cooldown-mode]");
       if(mode){event.preventDefault();if(mode.dataset.tsCooldownMode==="drug")liveDrug=!liveDrug;else liveBooster=!liveBooster;rebuild();return;}
