@@ -377,7 +377,8 @@ const tornTrainSequence=(()=>{
       log(data)+'</section>';
   }
   function chart(results){
-    const xval=hour=>80+hour/p.hours*800;
+    const chartEnd=p.hours+1;
+    const xval=hour=>80+hour/chartEnd*800;
     const bottom=Math.min(ctx.state.statValues[ctx.state.compareStat],...results.map(x=>x.data.final));
     const top=Math.max(bottom+1,...results.map(x=>x.data.final));
     const yval=val=>210-(val-bottom)/(top-bottom)*190;
@@ -388,7 +389,8 @@ const tornTrainSequence=(()=>{
       const val=bottom+(top-bottom)*i/4,y=yval(val),hr=p.hours*i/4;
       out+='<line x1="80" y1="'+y+'" x2="880" y2="'+y+'" class="ts-gridline"/><text x="74" y="'+(y+4)+'" font-size="11" text-anchor="end">'+fmt(val)+'</text><text x="'+xval(hr)+'" y="243" font-size="11" text-anchor="middle">'+fmt(hr,1)+'h</text>';
     }
-    for(const {id,data} of results){const [color,dash]=styles[id];out+='<path d="'+path(data.series)+'" fill="none" stroke="'+color+'" stroke-dasharray="'+(data.complete?dash:"2 4")+'" stroke-width="3"/>';}
+    out+='<line x1="'+xval(p.hours)+'" y1="20" x2="'+xval(p.hours)+'" y2="210" stroke="var(--border)" stroke-dasharray="3 4"/><text x="880" y="243" font-size="11" text-anchor="end">'+fmt(chartEnd,1)+'h</text>';
+    for(const {id,data} of results){const [color,dash]=styles[id];out+='<path d="'+path([...data.series,{h:chartEnd,s:data.final}])+'" fill="none" stroke="'+color+'" stroke-dasharray="'+(data.complete?dash:"2 4")+'" stroke-width="3"/>';}
     return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg width="26" height="8" aria-hidden="true"><line x1="0" y1="4" x2="26" y2="4" stroke="'+styles[id][0]+'" stroke-dasharray="'+(data.complete?styles[id][1]:"2 4")+'" stroke-width="3"/></svg> '+$(label)+(data.complete?"":" (blocked)")+'</span>').join("")+'</div>';
   }
   function render(context){
