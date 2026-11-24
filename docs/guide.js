@@ -222,7 +222,7 @@ function renderTopic(route) {
   if (route === "stats") { view.innerHTML = tornStatPlanner.render()+tornToolsGuide.contextLinks("stats"); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render()+tornToolsGuide.contextLinks("racing"); tornRacingGuide.wire(view); return; }
   if (route === "crime") { view.innerHTML = tornCrimeGuide.render()+tornToolsGuide.contextLinks("crime"); if(activeProfile)wireNotes("crime"); return; }
-  if (route === "education") { view.innerHTML = renderEducationPage(); return; }
+  if (route === "education") { view.innerHTML = renderEducationPage(); wireEducationPage(view); return; }
   if (route === "stocks") { view.innerHTML = '<h1 id="topic-title" tabindex="-1" class="sr-only">Stocks</h1>'+renderStocksPanel(); wireStocksPanel(view); return; }
   if (route === "inventory") { view.innerHTML = renderInventoryPage()+tornToolsGuide.contextLinks("inventory"); return; }
   if (route === "jobs") { view.innerHTML = tornJobsGuide.render(); tornJobsGuide.wire(view); return; }
@@ -461,7 +461,7 @@ byId("remember-active").addEventListener("change",event=>{
   renderProfile();
 });
 window.addEventListener("torn-guide-sync",updateRefreshUI);
-setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornRightRail.tick();},1000); // local DOM updates only; no Torn API calls
+setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornRightRail.tick();for(const el of document.querySelectorAll("[data-edu-deadline]"))el.textContent=tornTctClock.formatDuration((Number(el.dataset.eduDeadline)-Date.now())/1000);},1000); // local DOM updates only; no Torn API calls
 
 // The ellipsis is an unframed button; settings remain independent of API login.
 function syncSettingsControls(){
