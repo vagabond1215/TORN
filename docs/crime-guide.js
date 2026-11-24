@@ -145,30 +145,53 @@ const tornCrimeGuide = (() => {
     }catch{}
   }
   const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Stat growth"],["consume","Use consumables"],["crime","Crimes"],["education","Education"],["money","Money"]];
+  let recIncomplete=true;
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id));
   function loadRecFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
-    recOwner=owner;recEnabled=new Set(recommendationTypes.map(([id])=>id));
+    recOwner=owner;recIncomplete=true;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
     try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v))recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}
   }
   const recItem=(title,detail,link)=>'<li><div><strong>'+esc(title)+'</strong><small>'+esc(detail)+'</small></div>'+(link?'<a href="'+esc(link)+'">View</a>':"")+'</li>';
+  // Wiki target groups and unique conditions; recommended skill bands are
+  // conservative editorial estimates, not a measured success probability.
+  const pickTargets=[
+    ["Drunk Man",0,"Stumbling / distracted","Any",true,1],
+    ["Drunk Woman",0,"Stumbling / distracted","Any",true,1],
+    ["Elderly Man",0,"Walking","Walking",false,1],
+    ["Elderly Woman",0,"Walking","Walking",false,1],
+    ["Homeless Person",0,"Begging / loitering","Any",false,1],
+    ["Junkie",0,"Stumbling","Stumbling",false,1],
+    ["Young Man",0,"Distracted / on phone / music","Any",false,1],
+    ["Young Woman",0,"Distracted / on phone / music","Any",false,1],
+    ["Businessman",1,"Distracted / on phone","Any",false,1],
+    ["Businesswoman",1,"Distracted / on phone","Any",false,1],
+    ["Jogger",1,"Walking","Walking",true,1],
+    ["Laborer",1,"Walking","Walking",false,1],
+    ["Postal Worker",1,"Distracted","Distracted",false,1],
+    ["Student",1,"Distracted / music","Any",true,1],
+    ["Thug",1,"Loitering","Male, loitering",false,1],
+    ["Classy Lady",2,"On phone","On phone",false,1],
+    ["Cyclist",2,"Cycling","Cycling",true,100],
+    ["Gang Member",2,"Loitering","Loitering",true,1],
+    ["Rich Kid",2,"Listening to music","Listening to music",true,1],
+    ["Sex Worker",2,"Soliciting","Soliciting",false,1],
+    ["Mobster",3,"Walking","Walking",true,100],
+    ["Police Officer",3,"Running","Running",false,1]
+  ];
+  function pickpocketRows(cs,risk){
+    const maxTier=Math.min(risk==="low"?1:risk==="medium"?2:3,cs<35?0:cs<70?1:cs<100?2:3);
+    const razor=inventoryStatus("Cut-Throat Razor","Enhancer");
+    return '<li class="rec-pickpocket"><details><summary>Pickpocket targets · CS '+number(cs)+'</summary><table class="crime-table"><thead><tr><th>Target</th><th>Preferred state</th><th>Unique condition</th></tr></thead><tbody>'+pickTargets.filter(x=>x[1]<=maxTier).map(([name,tier,state,condition,needRazor,min])=>'<tr><td>'+esc(name)+'</td><td>'+esc(state)+'</td><td>'+esc(condition+(needRazor?" · Razor"+(razor===false?" missing":""):"")+(cs<min?" · CS "+min+" required":" · Collection unverified"))+'</td></tr>').join("")+'</tbody></table><small>Suggested difficulty bands; CE is hidden. Check the in-game unique star before attempting. <a href="https://wiki.torn.com/wiki/Pickpocketing" target="_blank" rel="noopener">Wiki</a></small></details></li>';
+  }
   function adviceSections(count){
     const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",risk=prefs.risk;
     const rows={merit:[],growth:[],consume:[],crime:[],education:[],money:[]};
     const add=(key,title,detail,link)=>rows[key].push(recItem(title,detail,link));
     const n=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
-    const merit=payload("merits","merits"),merits=n(merit?.available??merit?.unspent??merit?.merits_available);
-    const meritNames=["Education Length","Bank Interest",...(activities.some(x=>["Crime","OC"].includes(x))?["Crime Progression"]:[]),...(activities.some(x=>["War","Mug"].includes(x))?["Life Points","Critical Hit Rate"]:[])];
-    if(!growth)meritNames.reverse();
-    if(!growth){const i=meritNames.indexOf("Bank Interest");meritNames.splice(i,1);meritNames.unshift("Bank Interest");}
-    for(const name of meritNames){
-      const level=meritLevel(name);
-      if(level===null||level>=10)continue;
-      const cost=level+1;
-      add("merit",name+" · "+level+"/10","Next upgrade costs "+cost+" merits"+(merits===null?" · Available balance unknown":merits>=cost?" · Affordable":" · Save "+(cost-merits)+" more"),"#checklist");
-    }
-    if(!rows.merit.length)add("merit","Review merit upgrades","No incomplete preferred upgrade confirmed in cached data. Review education length, bank interest and activity-specific bonuses.","#checklist");
+    for(const x of tornMeritGuide.recommendations())add("merit",x.name,x.detail+" · "+x.effort,x.link);
+    if(!rows.merit.length)add("merit","Award shortlist unavailable","Open Merits to load the award catalog and compare unearned honors.","#merits");
     const plan=tornStatPlanner.homeTrainingAdvice();
     if(plan)add("growth","Train "+plan.stat,plan.detail,"#stats");
     else add("growth","Review your build targets","Load current battle stats and select a build on Stats.","#stats");
@@ -190,35 +213,47 @@ const tornCrimeGuide = (() => {
     if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
     const riskRank={"Starter":0,"Low":0,"Low–Medium":1,"Medium":1,"Variable":1,"Medium–High":2,"High":2};
     const maxRisk={low:0,medium:1,high:2}[risk];
-    const candidates=crimes.map(([name,r,detail])=>({name,r,detail,cs:skill(name),rank:riskRank[r]??2})).filter(x=>x.rank<=maxRisk&&x.cs!==null);
-    candidates.sort((a,b)=>growth?(Number(b.cs<100)-Number(a.cs<100)||b.cs-a.cs||a.rank-b.rank):(b.cs-a.cs||a.rank-b.rank));
-    for(const c of candidates.slice(0,3))add("crime",c.name+" · CS "+number(c.cs),c.r+" indicative difficulty · "+c.detail+(growth?" · Skill progression focus":" · Reliable skill preferred; profit not verified"),"#crime");
-    if(!rows.crime.length)add("crime","Search for Cash / Bootlegging","Begin with safer crimes if skill information is unavailable. Risk tiers are qualitative, not guaranteed success rates.","#crime");
+    const candidates=crimes.map(([name,r,detail],i)=>({name,r,detail,cs:skill(name),rank:riskRank[r]??2,i})).filter(x=>x.rank<=maxRisk&&x.cs!==null&&(!recIncomplete||x.cs<100));
+    candidates.sort((a,b)=>a.rank-b.rank||a.i-b.i);
+    for(const c of candidates){
+      add("crime",c.name+" · CS "+number(c.cs),c.r+" · "+(c.cs<100?number(100-c.cs)+" skill levels to 100":"Maximum skill"),"#crime");
+      if(c.name==="Pickpocketing")rows.crime.push(pickpocketRows(c.cs,risk));
+    }
+    loadEducationPreference();
     const m=educationModel();
     if(m.known&&m.courses.length){
       const groups=educationPaths.filter(([name])=>name!=="Other Perks");
-      const weights={"Gym Perks":growth?5:1,"Passive Battle Stats":activities.some(x=>["War","Mug"].includes(x))?4:1,"Company Perks":activities.includes("Business")?5:0,"Crime Perks":activities.some(x=>["Crime","OC"].includes(x))?5:1,"Jail Perks":activities.includes("Jail")?5:0,"Medical Perks":activities.includes("Revive")?5:0,"Attacking Perks":activities.some(x=>["War","Mug"].includes(x))?4:0};
+      const preferred=educationView.groupBy==="effect"&&educationView.effect!=="all"?educationView.effect:null;
+      const weights={"Gym Perks":growth?5:1,"Passive Battle Stats":activities.some(x=>["War","Mug"].includes(x))?4:1,"Company Perks":prefs.priority==="company"||activities.includes("Business")?5:0,"Crime Perks":activities.some(x=>["Crime","OC"].includes(x))?5:1,"Jail Perks":activities.includes("Jail")?5:0,"Medical Perks":activities.includes("Revive")?5:0,"Attacking Perks":activities.some(x=>["War","Mug"].includes(x))?4:0};
       const ranked=m.courses.filter(c=>!m.ids.has(String(c.id))&&String(c.id)!==String(m.id)).map(c=>{
         const effect=educationEffectText(c),code=educationCode(c);
         const req=c.prerequisites??c.requirements;
         const ids=Array.isArray(req)?req.map(x=>String(typeof x==="object"?x.id??x.course_id:x)):null;
         const unmet=ids&&ids.some(id=>!m.ids.has(id));
-        const score=groups.reduce((sum,[name,codes,pattern])=>sum+((codes.split(" ").includes(code)||pattern?.test(effect))?(weights[name]||0):0),0);
+        const matches=([name,codes,pattern])=>codes.split(" ").includes(code)||pattern?.test(effect);
+        const score=preferred?(preferred==="Other Perks"?Number(!groups.some(matches)):Number(groups.some(g=>g[0]===preferred&&matches(g)))*100):groups.reduce((sum,g)=>sum+(matches(g)?(weights[g[0]]||0):0),0);
         return {c,effect,score,unmet};
       }).filter(x=>!x.unmet&&x.score>0).sort((a,b)=>b.score-a.score);
       for(const x of ranked.slice(0,3))add("education",x.c.name??x.c.title??"Course",x.effect+" · Verify enrollment prerequisites in Torn","#education");
     }
     if(!rows.education.length)add("education",growth?"Prioritize Sports Science / education reductions":"Prioritize Business or useful income-related courses","Course completion or prerequisites may be unavailable. Open Education to compare available courses.","#education");
     const money=payload("money","money"),wallet=n(money?.wallet??money?.cash),bank=n(money?.city_bank?.amount??money?.city_bank),cayman=n(money?.cayman_bank?.amount??money?.cayman_bank);
-    add("money","Protect operating cash","Keep a reserve for "+(growth?"training, housing and education":"trading, travel and routine expenses")+(wallet===null?"":" · Wallet "+number(wallet)+" cash")+". Avoid carrying unnecessary cash.","#money");
-    if(bank===null||bank<2000000000)add("money","City bank",bank===null?"Check deposit balance, maturity and current interest before locking funds.":number(bank)+" invested · Compare the remaining ordinary bank capacity and available terms.","#money");
-    const holdings=stockRows().filter(x=>x.shares!==null&&x.nextCost>0&&x.nextRoi!=null).sort((a,b)=>b.nextRoi-a.nextRoi);
-    if(growth){const wsu=stockRows().find(x=>x.ticker==="WSU");if(wsu&&!wsu.active&&wsu.nextCost>0)add("money","WSU education block","Next benefit costs $"+number(Math.round(wsu.nextCost))+" · Permanent while held; compare opportunity cost.","#stocks");}
-    for(const stock of holdings.slice(0,risk==="low"?1:3))add("money",stock.ticker+" · next benefit block","$"+number(Math.round(stock.nextCost))+" additional cost · "+stock.nextRoi.toFixed(1)+"% estimated annual marginal dividend ROI; prices fluctuate.","#stocks");
-    if(!holdings.length)add("money","Stocks","Visit Stocks to load current prices and compare benefit-block costs and recurring payouts.","#stocks");
-    add("money","Cayman bank",(cayman===null?"":number(cayman)+" deposited · ")+"Compare liquidity needs and travel exposure; avoid making a trip solely for a small balance.","#money");
-    if(risk!=="low"&&activities.some(x=>["Trade","Travel"].includes(x)))add("money","Trading / contraband","Compare verified buy and sell prices, fees, liquidity, travel time and mugging exposure before committing capital. No live profit estimate available.","#money");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>'<details class="rec-group" data-rec-group="'+id+'" open><summary>'+esc(label)+' ('+rows[id].length+')</summary><ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul></details>').join("");
+    const stocks=stockRows(),company=prefs.priority==="company"||activities.includes("Business"),education=prefs.priority==="education";
+    const options=stocks.filter(x=>x.shares!==null&&x.nextCost>0&&(x.nextRoi!=null||["TCP","TGP","TCI","WSU"].includes(x.ticker))).map(x=>{
+      const strategic=(company&&["TCP","TGP"].includes(x.ticker)?100:0)+(education&&x.ticker==="WSU"?100:0)+(x.ticker==="TCI"?35:0)+(growth&&x.ticker==="WSU"?50:0);
+      const history=tornInvestmentHistory.get(x.ticker,x.price);
+      const timing=history?(history.year<=.15?45:history.month<=.15?25:history.month>=.85?-30:0):0;
+      return {...x,strategic,history,score:strategic+timing+Math.min(50,x.nextRoi??0)};
+    }).sort((a,b)=>b.score-a.score);
+    for(const stock of options.slice(0,5)){
+      const timing=stock.history?" · 30d "+Math.round(stock.history.month*100)+"% of range · 1y "+Math.round(stock.history.year*100)+"% of range":" · Historical price unavailable";
+      const action=stock.history?.month>=.85&&stock.strategic>=100?"Watch / wait for entry: ":"";
+      add("money",action+stock.ticker+" · "+stock.description,"$"+number(Math.round(stock.nextCost))+" to next block"+(stock.nextRoi==null?"":" · "+stock.nextRoi.toFixed(1)+"% annual marginal dividend ROI")+timing+(wallet!==null&&wallet<stock.nextCost?" · Not affordable from wallet alone":""),"#stocks");
+    }
+    if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
+    if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
+    if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>'<details class="rec-group" data-rec-group="'+id+'" open><summary>'+esc(label)+' ('+rows[id].length+')</summary>'+(id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+recIncomplete+'">&lt;100 only</button></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul></details>').join("");
   }
   function recommendations(){
     loadOcFilters();loadRecFilters();
@@ -323,8 +358,10 @@ const tornCrimeGuide = (() => {
       if(e.target.matches?.("[data-oc-optional]")&&e.target.isConnected)ocOpen=e.target.open;
     },true);
     view.addEventListener("click",e=>{
-      const btn=e.target.closest("[data-oc-band],[data-rec-type]");
+      const btn=e.target.closest("[data-oc-band],[data-rec-type],[data-rec-incomplete],[data-rec-history]");
       if(!btn||!btn.closest("[data-home-recommendations]"))return;
+      if(btn.hasAttribute("data-rec-incomplete")){recIncomplete=!recIncomplete;try{localStorage.setItem("torn-city-guide:crime-incomplete:"+recOwner,String(recIncomplete));}catch{}refreshRecommendations(view);return;}
+      if(btn.hasAttribute("data-rec-history")){btn.disabled=true;tornInvestmentHistory.refresh().finally(()=>{if(location.hash==="#home")refreshRecommendations(view);});return;}
       if(btn.dataset.recType){
         const id=btn.dataset.recType;
         if(recEnabled.has(id))recEnabled.delete(id);else recEnabled.add(id);
