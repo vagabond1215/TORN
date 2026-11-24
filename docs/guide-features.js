@@ -15,18 +15,20 @@ const tornGuideApi=(()=>{
     battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
-    gymCatalog:90*days, meritCatalog:30*days, stockCatalog:7*days
+    gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins
   };
   const ROUTES={
     home:["bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
     jobs:["job","workstats"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
-    railTimers:["education","virus","cooldowns","organizedcrime","factionRankedWars","travel","money"],
+    railTimers:["education","virus","itemCatalog","cooldowns","organizedcrime","factionRankedWars","travel","money"],
     activity:["virus","travel","racingrecords","races"],
     crime:["bars"],
     checklist:["bars","merits","meritCatalog","job"],
-    money:["money","stocks","stockCatalog"],
+    money:["money"],
+    stocks:["stocks","stockCatalog"],
+    education:["education","educationCatalog","merits","meritCatalog"],
     inventory:[],
     racing:[], faction:[], attacking:[], war:[], tools:[]
   };
@@ -194,6 +196,8 @@ const tornGuideApi=(()=>{
     if(key==="factionRankedWars")return "faction/rankedwars";
     if(key==="gymCatalog")return "torn/gyms";
     if(key==="stockCatalog")return "torn/stocks";
+    if(key==="educationCatalog")return "torn/education";
+    if(key==="itemCatalog")return "torn/items";
     if(key==="meritCatalog")return "torn/merits";
     return "user/"+key;
   }
@@ -646,93 +650,7 @@ function renderDashboard() {
   if(!tornGuideApi.isConnected()){
     return result+'<section class="panel"><div class="panel-content"><p>Connect your Torn API key below to show your in-game-style dashboard. Account data remains private to this browser.</p></div></section>';
   }
-  const st=tornGuideApi.state,bars=payload("bars","bars"),cooldowns=payload("cooldowns","cooldowns");
-  const battle=payload("battlestats","battlestats"),work=payload("workstats","workstats");
-  const cash=payload("money","money"),merits=payload("merits","merits");
-  const gym=payload("gym","gym"),job=payload("job","job"),property=payload("property","property");
-  const education=payload("education","education");
-  const statValue=(key)=>homeValue(battle?.[key]&&typeof battle[key]==="object"?battle[key].value:battle?.[key]);
-  const workValue=(...keys)=>{for(const key of keys)if(work?.[key]!=null)return homeValue(work[key]);return "Not available";};
-  const cdText=value=>{
-    const num=Number(value);
-    if(value==null||!Number.isFinite(num))return "Not loaded";
-    if(num<=0)return "Ready";
-    return (Math.floor(num/3600)?Math.floor(num/3600)+"h ":"")+
-      Math.floor(num%3600/60)+"m";
-  };
-  const visibleMoney=cash?.wallet!=null?"$"+formatNumber(cash.wallet):"Not available";
-  const currentJob=job?.name||job?.company_name||job?.position||"Not available";
-  const homeProperty=property?.name||property?.property?.name||"Not available";
-
-
-  result+='<div class="home-secondary-grid">'+
-    '<section class="panel"><div class="panel-heading"><h2>Account &amp; progress</h2></div>'+
-    '<div class="panel-content">'+homeStatList([
-      ["Current gym",gym?.name||"Not available"],
-      ["Bank",cash?.city_bank?.amount!=null?"$"+formatNumber(cash.city_bank.amount):"Not available"],
-      ["Education merit",meritLevel("Education Length")===null?"Not loaded":meritLevel("Education Length")+"/10"],
-      ["Bank merit",meritLevel("Bank Interest")===null?"Not loaded":meritLevel("Bank Interest")+"/10"],
-      ["Education",education?.current?"Course #"+education.current.id:education?"None active":"Not loaded"]
-    ])+'</div></section>'+
-    '<section class="panel"><div class="panel-heading"><h2>Quick actions</h2></div>'+
-    '<div class="panel-content"><div class="home-action-links">'+
-       '<a href="#stats">Train</a><a href="#crime">Crimes</a>'+
-       '<a href="#checklist">Checklist</a><a href="#inventory">Inventory</a>'+
-       '<a href="#money">Money</a>'+
-      '</div></div></section>'+
-  '</div>';
-
-
-  // These are cached values only. User/virus, /travel and /racingrecords
-  // are fetched exclusively when the player explicitly updates this panel.
-  const bank=cash?.city_bank??null,virus=payload("virus","virus"),
-    travel=payload("travel","travel"),races=payload("racingrecords","racingrecords"),raceHistory=payload("races","races");
-  const unix=x=>{const v=Number(x);return Number.isFinite(v)&&v>1e9?(v>1e12?v:v*1000):null;};
-  const when=x=>{const value=unix(x);return value?tornGuidePreferences.formatDate(value):"Not available";};
-  const entry=(label,text,deadline)=>'<div class="home-pair"><dt>'+safe(label)+
-    '</dt><dd>'+safe(text)+(deadline?
-      ' <span class="activity-countdown" data-activity-deadline="'+deadline+'"></span>':"")+
-    '</dd></div>';
-  let bankSummary="No active deposit";
-  if(!cash)bankSummary="Not loaded";
-  else if(bank&&bank.amount!=null){
-    bankSummary="$"+formatNumber(bank.amount);
-    if(bank.profit!=null)bankSummary+=" · +$"+formatNumber(bank.profit)+" profit";
-  }
-  const vTime=virus?.until??virus?.ends_at??virus?.end,
-    vAt=unix(vTime);
-  const vName=virus?.item?.name||virus?.name||"Active virus";
-  const travelAt=unix(travel?.arrival??travel?.until??travel?.timestamp),
-    travelRemain=Number(travel?.time_left??travel?.remaining),
-    tripEnd=travelAt||(Number.isFinite(travelRemain)&&travelRemain>0&&st.fetchedAt.travel?
-      st.fetchedAt.travel+travelRemain*1000:null);
-  const destination=typeof travel?.destination==="string"?travel.destination:
-    travel?.destination?.name||travel?.to||"Flight";
-  const flight=travel?tripEnd?destination:travel?.status||"No active flight":"Not loaded";
-  const recordArray=Array.isArray(races)?races:
-    Array.isArray(races?.records)?races.records:null;
-  const recentRecords=recordArray?recordArray.length+" track"+(recordArray.length===1?"":"s")+" with records":"Not loaded";
-  const history=Array.isArray(raceHistory)?raceHistory:[];
-  const latest=[...history].sort((a,b)=>
-    Number(b?.schedule?.end??b?.schedule?.start??0)-Number(a?.schedule?.end??a?.schedule?.start??0))[0];
-  const myResult=latest?.results?.find(x=>Number(x.driver_id)===Number(st.identity?.id));
-  const latestLabel=latest?(latest.title||"Race #"+latest.id)+
-    (myResult?.position!=null?" · place "+myResult.position:""):"Not loaded";
-  result+='<section class="panel home-activity"><div class="panel-heading"><h2>Bank, virus, travel &amp; racing</h2>'+
-    '<button type="button" class="home-activity-refresh" data-home-activity-refresh title="Request only stale activity selections">Update activity</button>'+
-    '</div><div class="panel-content"><dl class="home-stat-list">'+
-      entry("Investment",bankSummary)+
-      entry("Bank maturity",bank?.until!=null?when(bank.until):cash?"No active investment":"Not loaded")+
-      entry("Virus",virus?vName:"Not loaded",vAt)+
-      entry("Travel",flight,tripEnd)+
-      entry("Latest race",latestLabel)+
-      entry("Racing records",recentRecords)+
-    '</dl><p class="fine-print">Bank values reuse the cached Money response. Virus, travel and racing history load on request; records are personal best laps. Latest race placement is shown only when the API includes your own result.</p>'+
-    '<p class="fine-print">Last fetched: Money '+safe(st.fetchedAt.money?tornGuidePreferences.formatDate(st.fetchedAt.money):"not loaded")+
-    ' · Activity '+safe(Math.max(0,...["virus","travel","racingrecords","races"].map(k=>Number(st.fetchedAt[k])||0))?
-      tornGuidePreferences.formatDate(Math.max(...["virus","travel","racingrecords"].map(k=>Number(st.fetchedAt[k])||0))):"not loaded")+'</p>'+
-    '<span class="sr-only" id="home-activity-status" role="status"></span></div></section>';
-
+  const st=tornGuideApi.state;
   result+='<details class="home-expand-panel"><summary>Activity &amp; detailed reports</summary>'+
     '<div class="home-expand-body"><p class="fine-print">Reports open in a preview window when supported by the provider, with a new-tab fallback.</p><div class="report-links">';
   for(const [id,[label,,tip]] of Object.entries(tornReportCatalog)){
@@ -808,4 +726,20 @@ function renderSourcesPanel(){
   out+='<p class="fine-print"><a href="https://www.tornstats.com/api" target="_blank" rel="noopener noreferrer">TornStats API</a> is available for separately authorized integrations, but this guide will not send a Full Access key to outside services. Browser CORS compatibility and permission scopes must be confirmed before enabling direct provider requests. <a href="https://torn.report/" target="_blank" rel="noopener noreferrer">Torn Report</a> remains available through its own authenticated site.</p>';
   out+='</div></section>';
   return out;
+}
+
+function renderEducationPage(){
+  const data=payload("education","education"), catalog=payload("educationCatalog","education");
+  const groups=Array.isArray(catalog)?catalog:Object.values(catalog||{});
+  const courses=groups.flatMap(g=>Array.isArray(g?.courses)?g.courses:Object.values(g?.courses||{}));
+  const current=data?.current??data?.course;
+  const id=typeof current==="object"?current?.id:current;
+  const match=courses.find(c=>String(c.id)===String(id));
+  const name=current?.name||match?.name||match?.title||(id!=null?"Course #"+id:data?"None active":"Not loaded");
+  const completed=data?.completed??data?.completed_courses;
+  const completedIds=new Set(Array.isArray(completed)?completed.map(x=>String(typeof x==="object"?x.id:x)):[]);
+  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Education</h1><p>Courses and education progress.</p></header>';
+  out+='<section class="panel"><div class="panel-heading"><h2>Current education</h2></div><div class="panel-content">'+homeStatList([["Current course",name],["Education length merit",meritLevel("Education Length")==null?"Not loaded":meritLevel("Education Length")+"/10"],["Completed courses",Array.isArray(completed)?formatNumber(completed.length):"Not loaded"]])+sourceError("education")+'</div></section>';
+  for(const group of groups){if(!group||!group.courses)continue;const list=Array.isArray(group.courses)?group.courses:Object.values(group.courses);out+='<details class="home-expand-panel"><summary>'+safe(group.name||group.title||"Courses")+'</summary><div class="home-expand-body"><ul class="item-list">'+list.map(c=>'<li><span>'+safe(c.name||c.title||"Course #"+c.id)+'</span><strong>'+safe(completedIds.has(String(c.id))?"Completed":String(c.id)===String(id)?"In progress":"")+'</strong></li>').join("")+'</ul></div></details>';}
+  return out+sourceError("educationCatalog");
 }
