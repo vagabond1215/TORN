@@ -1250,3 +1250,15 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 #topic-view>.tc-subbar+.tc-calc-panel{margin-top:0}
 .tc-selected-gym{display:flex;align-items:center;gap:.6rem;padding:.45rem .75rem 0}
 .tc-selected-gym small{font-size:.78rem;color:var(--muted)}
+
+/* Right pane visibility switches in the global quick-access strip. */
+.rail-visibility-controls{display:flex;flex:0 0 auto;align-items:stretch;margin-left:auto;border-left:1px solid var(--border)}
+.rail-visibility-controls[hidden]{display:none}
+.quick-access .rail-visibility-toggle{display:grid;place-items:center;width:36px;height:var(--guide-bar-height);padding:0;border:0;border-radius:0;background:transparent;color:var(--muted);cursor:pointer;box-shadow:none}
+.quick-access .rail-visibility-toggle[aria-pressed="true"]{color:var(--accent-strong)}
+.quick-access .rail-visibility-toggle[aria-pressed="false"]{opacity:.5}
+.quick-access .rail-visibility-toggle:hover{opacity:1;color:var(--accent-strong);background:var(--raised);box-shadow:inset 1px 0 var(--border),inset -1px 0 var(--border)}
+.quick-access .rail-visibility-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media(min-width:901px){.layout:has(>.guide-right-rail[hidden]){grid-template-columns:205px minmax(0,1fr)}}
+@media(min-width:901px) and (max-width:1120px){.layout:has(>.guide-right-rail[hidden]){grid-template-columns:165px minmax(0,1fr)}}
+@media(max-width:650px){.quick-access .rail-visibility-toggle{width:30px}}
