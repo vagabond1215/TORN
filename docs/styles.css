@@ -1272,3 +1272,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-candy-stock small{color:var(--muted)}
 .ts-market-prices{color:var(--muted);border-top:1px solid var(--border)}
 .ts-settings-grid select{width:100%;background:var(--canvas);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.4rem}
+
+/* Keep the selected gym and universal training controls on one compact row. */
+.tc-selected-gym{flex-wrap:wrap;padding:.45rem .75rem .2rem}
+.tc-selected-gym .tc-train-control{margin:0 0 0 auto;gap:.4rem;flex-wrap:nowrap}
+.tc-selected-gym .tc-train-control input{width:4.5rem;padding:.3rem .45rem}
+.tc-selected-gym .tc-train-control button{padding:.3rem .65rem}
+@media(max-width:480px){.tc-selected-gym .tc-train-control{margin-left:0}}
