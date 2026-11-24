@@ -14,13 +14,59 @@ const tornTrainSequence=(()=>{
   const maxDvd=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
     Math.max(1,Math.round(21600*cfg.dvdCDMultiplier)))+1);
   const p={hours:32,regenMin:0,energyStatus:"auto",boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:25,dvdHappy:2500,autoWait:true,
-    xanaxPrice:850000,ecstasyPrice:40000,candyPrice:850,dvdPrice:4300000,pointPrice:30000};
+    xanaxPrice:null,ecstasyPrice:null,candyPrice:null,dvdPrice:null,pointPrice:null};
   const $=v=>String(v==null?"":v).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
   const n=(v,f=0)=>v===null||v===undefined||v===""||!Number.isFinite(Number(v))?f:Number(v);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,n(v,a)));
   const fmt=(v,d=0)=>Number(v).toLocaleString(undefined,{maximumFractionDigits:d});
   const clock=v=>{const s=Math.max(0,Math.round(v));return Math.floor(s/3600)+":"+String(Math.floor(s/60)%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");};
   let ctx=null,loadedPlayer=null;
+  const candyTiers={
+    25:["Bag of Bon Bons","Bag of Chocolate Kisses","Box of Chocolate Bars","Lollipop"],
+    35:["Birthday Cupcake"],
+    50:["Bag of Candy Kisses","Chocolate Egg"],
+    75:["Bag of Bloody Eyeballs","Bag of Tootsie Rolls"],
+    100:["Bag of Chocolate Truffles","Bag of Reindeer Droppings"],
+    150:["Bag of Humbugs","Bag of Sherbet","Jawbreaker"]
+  };
+  const keyName=value=>String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const positive=value=>value!=null&&Number.isFinite(Number(value))&&Number(value)>0?Number(value):null;
+  function itemList(){
+    const raw=payload("itemCatalog","items");
+    return Array.isArray(raw)?raw:Object.entries(raw||{}).map(([id,x])=>({...x,id:x.id??id}));
+  }
+  function marketPrice(item){
+    return positive(item?.market_value??item?.value?.market_price??item?.value?.market_value??item?.market_price);
+  }
+  function candyStock(){
+    const items=itemList(),inventory=tornGuideApi.state.inventory.Candy;
+    const rows=(inventory||[]).map(x=>{
+      const item=items.find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id)||keyName(i.name)===keyName(x.name??x.item?.name));
+      const name=x.name??x.item?.name??item?.name, tier=Object.keys(candyTiers).find(k=>candyTiers[k].some(v=>keyName(v)===keyName(name)));
+      const text=String(item?.effect??item?.description??"");
+      const matched=text.match(/(?:increases?|increased)\s+(?:your\s+)?happiness\s+by\s+(\d+)/i);
+      const happy=Number(tier??matched?.[1]??0);
+      return {name,happy,qty:Math.max(0,Math.floor(n(x.amount??x.quantity))),price:marketPrice(item)};
+    }).filter(x=>x.happy>0&&x.qty>0);
+    return {loaded:Array.isArray(inventory),rows,tiers:[...new Set(rows.map(x=>x.happy))].sort((a,b)=>a-b)};
+  }
+  function priceFor(name){
+    return marketPrice(itemList().find(i=>keyName(i.name)===keyName(name)));
+  }
+  function marketInputs(){
+    const stock=candyStock();
+    if(stock.tiers.length&&!stock.tiers.includes(p.candyHappy))p.candyHappy=stock.tiers[stock.tiers.length-1];
+    p.xanaxPrice=priceFor("Xanax");p.ecstasyPrice=priceFor("Ecstasy");p.dvdPrice=priceFor("Erotic DVD");
+    const points=payload("pointsCatalog","pointsmarket");
+    const list=Array.isArray(points)?points:Object.values(points||{});
+    const prices=list.map(x=>positive(x?.cost??x?.price??x?.cost_per_point)).filter(x=>x!==null);
+    p.pointPrice=prices.length?Math.min(...prices):null;
+    return stock;
+  }
+  function candyPool(cfg){
+    const stock=candyStock();
+    return stock.rows.filter(x=>x.happy<=cfg.candyHappy).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity)).map(x=>({...x}));
+  }
   function readCooldowns(){
     const data=tornGuideApi.state.data.cooldowns;
     const cd=data&&(data.cooldowns||data);
@@ -61,6 +107,8 @@ const tornTrainSequence=(()=>{
   }
   function simulate(list,overrides={}){
     const cfg={...p,...overrides},base=ctx.state.statValues[ctx.state.compareStat];
+    const pool=candyPool(cfg),stock=candyStock();
+    let candyCost=0,candyGain=0,unknownCandyPrice=false;
     const gym=ctx.gym,stat=ctx.state.compareStat,limit=Math.floor(cfg.hours*3600);
     const rule=energyRules(cfg),eCap=rule.cap;
     const boosterLimit=cfg.boosterCapH*3600;
@@ -131,9 +179,16 @@ const tornTrainSequence=(()=>{
           v.errors.push("Candy has reached the booster use threshold. Add a separate Wait for booster space and another Candy row; no hidden waiting occurs before training.");
           return false;
         }
+        let candy=null;
+        if(type==="candy"){
+          candy=pool.find(x=>x.qty>0);
+          if(!candy){v.errors.push(stock.loaded?"Insufficient candy in inventory for the selected Max Happy tier.":"Candy inventory not loaded.");return false;}
+          candy.qty--;candyGain+=candy.happy;
+          if(candy.price===null)unknownCandyPrice=true;else candyCost+=candy.price;
+        }
         const secs=type==="dvd"?21600*cfg.dvdCDMultiplier:1800*cfg.candyCDMultiplier;
         v.booster+=Math.round(secs);
-        v.happy=Math.min(99999,v.happy+(type==="dvd"?cfg.dvdHappy:cfg.candyHappy));
+        v.happy=Math.min(99999,v.happy+(type==="dvd"?cfg.dvdHappy:candy.happy));
         v.costs[type]++;
       }
       return true;
@@ -166,9 +221,10 @@ const tornTrainSequence=(()=>{
     }
     if(v.time<limit)advance(limit-v.time);
     point();
-    return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,
-      money:v.costs.xanax*cfg.xanaxPrice+v.costs.ecstasy*cfg.ecstasyPrice+
-        v.costs.candy*cfg.candyPrice+v.costs.dvd*cfg.dvdPrice+v.costs.refill*30*cfg.pointPrice};
+    const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice]];
+    const missingPrice=unknownCandyPrice||prices.some(([qty,price])=>qty>0&&price==null);
+    return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,
+      money:missingPrice?null:candyCost+prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0)};
   }
   function controls(){
     const fields=[
@@ -180,17 +236,22 @@ const tornTrainSequence=(()=>{
       ["tornClockMin","Torn minutes since midnight",0,1439,1],
       ["candyCDMultiplier","Candy CD multiplier",0.1,3,0.05],
       ["dvdCDMultiplier","eDVD CD multiplier",0.1,3,0.05],
-      ["candyHappy","Happy per candy",0,10000,1],["dvdHappy","Happy per eDVD",0,10000,1],
-      ["xanaxPrice","Xanax price",0,1e8,1000],["ecstasyPrice","Ecstasy price",0,1e8,1000],
-      ["candyPrice","Candy price",0,1e8,100],["dvdPrice","eDVD price",0,1e8,1000],["pointPrice","Point price",0,1e8,1000]
+      ["dvdHappy","Happy per eDVD",0,10000,1]
     ];
+    const stock=candyStock(),pool=candyPool(p);
+    const remaining=Math.max(0,Math.ceil((p.boosterCapH*3600-p.startBoosterMin*60)/Math.max(1,Math.round(1800*p.candyCDMultiplier))));
+    let capacity=remaining,totalHappy=0,usable=0;
+    for(const item of pool){const qty=Math.min(capacity,item.qty);capacity-=qty;usable+=qty;totalHappy+=qty*item.happy;}
+    const priceText=v=>v==null?"Unavailable":"$"+fmt(v);
     return '<details class="ts-settings" open><summary>Time, cooldowns, effects, prices</summary>'+
       '<label class="ts-membership">Energy account model <select data-ts-status>'+
         [['auto','Use current Torn Energy bar'],['standard','Standard (100 E)'],['donator','Donator (150 E)'],['subscriber','Subscriber (150 E)']].map(([key,text])=>
           '<option value="'+key+'" '+(p.energyStatus===key?'selected':'')+'>'+text+'</option>').join('')+
       '</select></label><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
       '<label><span>'+$(label)+'</span><input type="number" data-ts-param="'+key+'" value="'+$(p[key])+'" min="'+min+'" max="'+max+'" step="'+step+'"></label>').join("")+
-      '</div><div class="ts-bonus-presets"><span>Useful presets:</span>'+
+      '<label><span>Max Happy</span><select data-ts-candy '+(!stock.tiers.length?"disabled":"")+'>'+(!stock.tiers.length?'<option>No available candy</option>':stock.tiers.map(t=>'<option value="'+t+'" '+(p.candyHappy===t?"selected":"")+'">'+t+' Happy</option>').join(""))+'</select></label>'+
+      '</div><div class="ts-candy-stock"><strong>'+(!stock.loaded?"Candy inventory not loaded":fmt(usable)+' usable candy · +'+fmt(totalHappy)+' Happy')+'</strong><small>'+pool.map(x=>$(x.name)+' ×'+fmt(x.qty)).join(" · ")+'</small></div>'+
+      '<div class="ts-market-prices"><span>Xanax '+priceText(p.xanaxPrice)+'</span><span>Ecstasy '+priceText(p.ecstasyPrice)+'</span><span>eDVD '+priceText(p.dvdPrice)+'</span><span>Point '+priceText(p.pointPrice)+'</span></div><div class="ts-bonus-presets"><span>Useful presets:</span>'+
       '<button type="button" data-ts-bonus="baseline">24h base cap</button>'+
       '<button type="button" data-ts-bonus="maxVoracity">48h faction cap</button>'+
       '<button type="button" data-ts-bonus="grocery">Grocery -10% candy CD</button>'+
@@ -225,7 +286,7 @@ const tornTrainSequence=(()=>{
       '<button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'">Add action</button>'+
       '<button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div>'+
       (data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
-      '<p class="ts-stat">Final: '+(data.complete?fmt(data.final,2):"Blocked")+' <small>+'+fmt(data.gain,2)+' gain, '+fmt(data.used)+' E, $'+fmt(data.money)+'</small></p>'+
+      '<p class="ts-stat">Final: '+(data.complete?fmt(data.final,2):"Blocked")+' <small>+'+fmt(data.gain,2)+' gain, '+fmt(data.used)+' E, '+(data.money==null?"Cost unavailable":"$"+fmt(data.money))+'</small></p>'+
       log(data)+'</section>';
   }
   function chart(natural,jump){
@@ -249,15 +310,12 @@ const tornTrainSequence=(()=>{
     if(context)ctx=context;
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
     loadLive();
+    marketInputs();
     const a=simulate(steps.natural),b=simulate(steps.jump);
     const rule=energyRules(p);
     const diff=b.gain-a.gain;
     const perks=activePerks();
-    return '<div class="ts-account-summary"><strong>'+$(rule.label)+
-      '</strong> · Natural Energy cap '+fmt(rule.cap)+', +5 every '+fmt(rule.minutes)+' minutes. '+
-      '<span>'+$(nervePreview(p))+'</span></div>'+
-      '<p class="ts-intro">Auto-training now checks in only when Energy reaches its cap or drug cooldown expires, not on every +5 regeneration tick. Explicit Train actions always train immediately. Xanax and Ecstasy are one dose per action. Candy quantities are immediate with no hidden waiting before training. eDVDs can wait for the one-second threshold gap when using the fifth disc. Use a separate Wait and another Candy row when its booster cap blocks more candy. </p>'+
-      controls()+
+    return controls()+
       (perks.length?'<p class="fine-print">Possibly relevant current perks: '+perks.map($).join(" • ")+'</p>':"")+
       '<div class="ts-layout">'+section("natural")+section("jump")+'</div>'+
       '<div class="ts-outcomes"><h3>Same '+p.hours+'-hour window</h3><p>Natural: <strong>'+fmt(a.final,2)+'</strong> ('+fmt(a.used)+' E) · Jump: <strong>'+fmt(b.final,2)+'</strong> ('+fmt(b.used)+' E)</p>'+
@@ -271,6 +329,7 @@ const tornTrainSequence=(()=>{
     const rebuild=()=>{const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();};
     view.addEventListener("change",event=>{
       const el=event.target;
+      if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
       const param=el.dataset.tsParam;
       if(param && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
       if(el.hasAttribute("data-ts-auto")){p.autoWait=el.checked;rebuild();return;}
