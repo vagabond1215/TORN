@@ -18,7 +18,7 @@ const tornGuideApi=(()=>{
     gymCatalog:90*days, meritCatalog:30*days, stockCatalog:7*days
   };
   const ROUTES={
-    home:["bars","cooldowns","money","battlestats","gym","job","property","education","merits","meritCatalog"],
+    home:["bars","cooldowns","money","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
     stats:["bars","cooldowns","battlestats","gym","perks","gymCatalog"],
     jobs:["job","workstats"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],

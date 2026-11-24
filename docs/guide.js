@@ -146,10 +146,28 @@ function renderDirectory() {
   ).join("");
 }
 
+let lastApiConnectionError="";
+function updateApiStatus(){
+  const connected=tornGuideApi.isConnected(),status=byId("api-status"),state=tornGuideApi.state;
+  const failures=[
+    ...Object.entries(state.errors||{}).map(([name,reason])=>name+": "+String(reason)),
+    ...Object.entries(state.inventoryErrors||{}).map(([name,reason])=>"Inventory "+name+": "+String(reason))
+  ];
+  if(lastApiConnectionError&&!failures.length)failures.push(lastApiConnectionError);
+  const error=failures.length>0;
+  const kind=error?"error":connected?"ok":"idle";
+  status.className="api-status api-status-"+kind;
+  status.textContent=error?"×":connected?"✓":"·";
+  const label=error?("Torn API error: "+failures.join("; ")) :
+    connected?"Torn API connected; all requested sections healthy":"Torn API not connected";
+  status.title=label;
+  status.setAttribute("aria-label",label);
+}
 function renderProfile() {
   byId("profile-link").textContent = activeProfile
     ? activePlayerName+" [#"+activeProfile+"]" : "Connect API";
   byId("settings-signout").disabled=!tornGuideApi.isConnected();
+  updateApiStatus();
   byId("profile-summary").textContent = activeProfile
     ? "Connected as " + activePlayerName + ". " + (tornGuideApi.isRemembering()
       ? "This browser remembers your API key and last refreshed account data."
@@ -282,6 +300,7 @@ byId("profile-form").addEventListener("submit", async (event) => {
   button.disabled = true; feedback.textContent = "Connecting directly to Torn API…";
   try {
     const identity = await tornGuideApi.connect(input.value,byId("stay-logged-in").checked);
+    lastApiConnectionError="";
     input.value = "";
     activeProfile = String(identity.id);
     activePlayerName = identity.name;
@@ -298,12 +317,15 @@ byId("profile-form").addEventListener("submit", async (event) => {
       (tornGuideApi.state.storageWarning ? " " + tornGuideApi.state.storageWarning : "");
     updateRefreshUI();
   } catch (error) {
+    lastApiConnectionError=String(error.message||error||"Could not connect to Torn.");
     input.value = "";
-    feedback.textContent = error.message || "Could not connect to Torn.";
+    feedback.textContent = lastApiConnectionError;
+    updateApiStatus();
   } finally { button.disabled = false; }
 });
 
 function disconnectAccount() {
+  lastApiConnectionError="";
   tornGuideApi.disconnect();
   activeProfile = null; activePlayerName = "";
   write("active", null);
@@ -340,6 +362,7 @@ function updateSyncCounter(){
   top.setAttribute("aria-label",label);
 }
 function updateRefreshUI(){
+  updateApiStatus();
   const connected=tornGuideApi.isConnected();
   const busy=tornGuideApi.state.loading;
   const top=byId("refresh-top"),profile=byId("refresh-data");
