@@ -68,3 +68,8 @@ Sources:
 The Home page's existing nine **Activity and detailed reports** links are now explicit, allowlisted report-launch buttons. Clicking one opens a native in-page dialog with an iframe pointing to the matching Torn Report page, alongside **Open in new tab** and **Pop out window** controls. The external page is loaded **only on user interaction**, with a no-referrer policy, an iframe sandbox, and the iframe source removed when the dialog closes. It neither loads any report automatically nor sends the Torn Guide API key or cached Torn account data to the external provider.
 
 **Compatibility constraint:** Third-party sites control whether iframe embedding is permitted. Torn Report might send X-Frame-Options/CSP frame-ancestor restrictions, and some logged-in pages fail under third-party-cookie restrictions. An iframe refusing to load cannot be reliably detected from the guide's separate origin. For that reason, the dialog always displays the fallback link and pop-out option; it does not try to bypass the restriction, scrape the page, or proxy the authenticated content. Live frame compatibility was not verified.
+
+
+### Interface preferences and elapsed sync counter
+
+The tornGuidePreferences module stores theme, time-zone, external-link and contextual Quick Access preferences separately from the opt-in Torn API credential. The top-bar sync age updates locally once per second from tornGuideApi.state.updated. It does not force any API selections or additional polling. The exact refresh timestamp stays in the refresh icon tooltip using the preferred display time zone. The redundant Home identity and Last refreshed summary were removed.

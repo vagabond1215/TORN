@@ -123,3 +123,25 @@ The Tools directory retains 24 resources but prioritizes frequently used ones an
 - External credentials and live data are not shared among unrelated services.
 
 Validation covers script syntax and load order, gameplay-style defaults, pin/unpin, limit and persistence, contextual deduplication, and zero Torn API calls from loading or using the launcher. Live GitHub Pages deployment and provider authentication were not tested.
+
+
+## Compact top bar and UI preferences (November 23, 2026)
+
+The guide now uses a compact Torn favicon at upper left, directly linking to Torn. The Torn icon appears only there, not duplicated in Quick Access. The centered refresh control contains a circular-arrow icon and an elapsed clock since the last successful Torn API sync (MM:SS; HH:MM:SS after one hour). This counter updates locally once per second and does not poll Torn. Its tooltip announces the exact last sync, formatted using the chosen display time zone.
+
+At upper right, connected player Name [#ID] appears immediately before an unframed three-dot Settings button. The duplicate player identity and Last refreshed card on Home was removed.
+
+The settings menu offers:
+- Sign out, identical to the account disconnect: clears saved API credentials and account cache but preserves UI settings and checklist progress.
+- Theme: Dark (default), Light or Follow system.
+- Time zone: Browser local (default), TCT/UTC or selected common international zones. The TCT clock remains UTC regardless.
+- External link destination: New tab (default) or request a separate popup window. Browser behavior and popup blockers can override this preference.
+- Contextual Quick Access: Off by default. When enabled, only tools mapped to the current guide page appear in the icon row.
+
+Quick Access now includes all 11 launchable external sites by default, one representative URL per site, each as an icon-only link with a native hover tooltip and accessible label. The permanent Torn icon in the brand is not duplicated in the launcher. The Tools page lets users Hide or Show any eligible site, without the former four-pin limit; Show all launchable sites clears hidden choices. Contextual filtering happens after hidden-site preferences, so hidden sites do not reappear on other routes. Installers, wiki references and duplicate pages stay in the full Tools directory.
+
+Settings persist under localStorage key torn-city-guide:interface:v1. Hidden sites use torn-city-guide:quick-links:hidden:v2. The older four-pin storage value is ignored rather than imposing a legacy cap. Neither new key contains Torn API credentials.
+
+By default, external HTTP(S) links open in new tabs across the guide. If new-window mode is selected, the guide requests a separate window in response to the click. Internal hash navigation intentionally stays in the same guide tab so checklists, Stats Calc/Compare and other pages retain their state.
+
+Simulated integration checks covered script order and syntax, zero additional API calls for UI preference changes, all 11 unique domains, icon visibility, contextual mappings, link behavior, timezone formatting, signed-in name/ID, elapsed sync age, and sign-out. Live GitHub Pages rendering and actual popup behavior have not been independently tested.
