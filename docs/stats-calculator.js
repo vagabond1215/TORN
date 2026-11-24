@@ -270,6 +270,89 @@ const tornStatPlanner = (() => {
       return '<div class="tc-overview-item" '+(changed?'title="'+esc(tooltip)+'" tabindex="0"':'')+'><small>'+shorthand[stat]+'</small><strong class="'+(changed?(effect.total>0?"tc-pos":"tc-neg"):"")+'">'+(changed?nice(effective):"—")+'</strong></div>';
     }).join("")+'</div>';
   }
+  // Build targets are buffered planning ratios, not hard combat requirements.
+  const buildOptions=[
+    ["balanced","Balanced",[25,25,25,25],null,null],
+    ["hank-str","Hank's – Strength",[1.30,.20,1,1],"strength","defensive"],
+    ["hank-def","Hank's – Defense",[1,1.30,1,.20],"defense","offensive"],
+    ["hank-spd","Hank's – Speed",[.20,1,1.30,1],"speed","defensive"],
+    ["hank-dex","Hank's – Dexterity",[1,.20,1,1.30],"dexterity","offensive"],
+    ["pair-off","Two-stat – Str + Spd",[28,22,28,22],null,"offensive"],
+    ["pair-def","Two-stat – Def + Dex",[22,28,22,28],null,"defensive"],
+    ["baldr-str","Baldr's – Strength",[1.30,.90,1,.90],"strength","offensive"],
+    ["baldr-def","Baldr's – Defense",[.90,1.30,.90,1],"defense","defensive"],
+    ["baldr-spd","Baldr's – Speed",[1,.90,1.30,.90],"speed","offensive"],
+    ["baldr-dex","Baldr's – Dexterity",[.90,1,.90,1.30],"dexterity","defensive"]
+  ];
+  const singleGyms={strength:"Gym 3000",defense:"Mr. Isoyamas",speed:"Total Rebound",dexterity:"Elites"};
+  const pairGyms={offensive:"Frontline Fitness",defensive:"Balboas Gym"};
+  const bookNames={strength:"Gym Grunting - Shouting to Success",defense:"Self Defense In The Workplace",speed:"Speed 3 - The Rejected Script",dexterity:"Limbo Lovers 101"};
+  let buildOwner=null,buildChoice="balanced",buildTotal=0;
+  function loadBuild(){
+    const owner=String(tornGuideApi.state.identity?.id??"guest");
+    if(buildOwner===owner)return;
+    buildOwner=owner;buildChoice="balanced";buildTotal=0;
+    try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:build:"+owner));if(buildOptions.some(x=>x[0]===saved?.choice))buildChoice=saved.choice;buildTotal=clamp(saved?.total,0,1e15);}catch{}
+  }
+  function saveBuild(){try{localStorage.setItem("torn-city-guide:build:"+buildOwner,JSON.stringify({choice:buildChoice,total:buildTotal}));}catch{}}
+  function renderBuild(gym,active){
+    loadBuild();
+    const option=buildOptions.find(x=>x[0]===buildChoice)||buildOptions[0],weights=option[2],weightSum=weights.reduce((a,b)=>a+b,0),shares=weights.map(w=>w/weightSum);
+    const actual=statNames.map(stat=>apiStatValue(stat)),live=actual.every(v=>v!==null),current=actual.map((v,i)=>v??state.statValues[statNames[i]]),sum=current.reduce((a,b)=>a+b,0);
+    // Training cannot reduce existing stats: scale every target up until
+    // all four target values are at least their current raw values.
+    const minimum=Math.max(sum,...current.map((v,i)=>v/shares[i]));
+    const targetTotal=Math.max(minimum,buildTotal||sum*1.10,1);
+    const targets=shares.map(p=>Math.ceil(p*targetTotal));
+    const catalog=gyms(),info=api("gym"),data=info?.gym??info;
+    const known=data?.unlocked_gyms??info?.unlocked_gyms??data?.available_gyms??info?.available_gyms;
+    const gymIds=Array.isArray(known)?known.map(x=>String(typeof x==="object"?x.id??x.name:x)):null;
+    const unlocked=g=>Boolean(g&&(g.name===active?.name||gymIds?.includes(String(g.id))||gymIds?.includes(g.name)));
+    // Never assume the simulation selection is an owned gym.
+    const available=catalog.filter(unlocked);
+    const entries=statNames.map((stat,i)=>{
+      const eff=effectsFor(stat);
+      const best=[...available].filter(g=>g[stat]>0).sort((a,b)=>b[stat]-a[stat])[0];
+      const estimateGym=best||null,delta=Math.max(0,targets[i]-current[i]);
+      const gain=estimateGym?oneTrain(current[i],state.happy,estimateGym[stat],1,eff.multiplier,stat):null;
+      const energy=gain>0?Math.ceil(delta/gain):null;
+      return {stat,i,eff,best,delta,energy,progress:targets[i]>0?Math.min(1,current[i]/targets[i]):1};
+    });
+    const priority=[...entries].filter(e=>e.delta>0).sort((a,b)=>a.progress-b.progress||(b.eff.multiplier-a.eff.multiplier))[0];
+    const activities=typeof tornRoadmap!=="undefined"?tornRoadmap.selectedStyles():[];
+    const suggestions=[];
+    if(activities.some(x=>["War","Mug"].includes(x)))suggestions.push("War / mugging: keep both offensive stats useful; a neglected defensive stat is a deliberate vulnerability.");
+    if(activities.includes("Revive"))suggestions.push("Reviver: reserve energy for scheduled revives before planning training or a 31-day book.");
+    if(activities.some(x=>["Trade","Travel","Business","Money"].includes(x)))suggestions.push("Income activities: protect training funds and avoid wasting natural energy during long travel or downtime.");
+    if(activities.includes("Training"))suggestions.push("Growth: prioritize gym unlocks, relevant gain perks and uninterrupted energy use.");
+    if(!suggestions.length)suggestions.push("Balanced is a safe starting choice. Specialize only if the combat trade-offs fit your goals.");
+    const high=option[3],pair=option[4],requirements=[];
+    if(high){
+      const i=statNames.indexOf(high),other=Math.max(...current.filter((_,j)=>j!==i));
+      const need=Math.ceil(1.25*other);
+      requirements.push([singleGyms[high],current[i]>=need,readable[high]+" ≥ "+nice(need)+" · George's unlocked · $100m",catalog.find(g=>gymKey(g.name)===gymKey(singleGyms[high]))]);
+    }
+    if(pair){
+      const ids=pair==="offensive"?[0,2]:[1,3],own=ids.reduce((n,i)=>n+current[i],0),other=sum-own,need=Math.ceil(1.25*other);
+      requirements.push([pairGyms[pair],own>=need,"Pair total "+nice(own)+" / "+nice(need)+" · Cha Cha's unlocked · $50m",catalog.find(g=>gymKey(g.name)===gymKey(pairGyms[pair]))]);
+    }
+    const activeBook=entries.flatMap(e=>e.eff.groups.filter(g=>g.group==="book").flatMap(g=>g.items.map(x=>({stat:e.stat,text:x.text}))));
+    const uniqueBooks=[...new Set(activeBook.map(x=>x.text))];
+    const reading=uniqueBooks.length?uniqueBooks.join(" · "):"No active gym-gain book identified in loaded perks.";
+    const label=stat=>readable[stat];
+    return '<section class="panel tc-build-panel"><div class="panel-heading"><h2>Build guide</h2></div><div class="panel-content">'+
+      '<div class="tc-build-controls"><label>Build <select data-tc-build="choice">'+buildOptions.map(([id,name])=>'<option value="'+id+'" '+(buildChoice===id?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
+      '<label>Target total <input type="number" min="0" max="1000000000000000" step="any" data-tc-build="total" value="'+(buildTotal||"")+'" placeholder="'+Math.ceil(targetTotal)+'"></label><button class="button secondary" type="button" data-tc-build-reset>Auto</button><small>'+(!live?"Sample / simulated stats · ":"")+'Minimum feasible '+nice(Math.ceil(minimum))+'</small></div>'+
+      '<div class="tc-build-ratio">'+entries.map(e=>'<span class="tc-build-segment tc-build-'+e.stat+'" style="flex:'+weights[e.i]+'" title="'+label(e.stat)+' '+nice(shares[e.i]*100,1)+'%">'+shorthand[e.stat]+' '+nice(shares[e.i]*100,1)+'%</span>').join("")+'</div>'+
+      '<div class="tc-build-scroll"><table class="tc-build-table"><thead><tr><th>Stat</th><th>Current / %</th><th>Target / %</th><th>Remaining</th><th>Gain perks</th><th>Known gym</th><th>Est. E</th></tr></thead><tbody>'+
+      entries.map(e=>'<tr><td><strong>'+shorthand[e.stat]+'</strong></td><td>'+nice(current[e.i])+' <small>'+nice(sum?current[e.i]/sum*100:0,1)+'%</small></td><td>'+nice(targets[e.i])+' <small>'+nice(shares[e.i]*100,1)+'%</small></td><td class="'+(e.delta?"":"tc-pos")+'">'+nice(e.delta)+'</td><td title="'+esc(e.eff.groups.flatMap(g=>g.items.map(x=>x.text)).join("\n"))+'">'+(e.eff.sourceAvailable?nice((e.eff.multiplier-1)*100,1)+"%":"—")+'</td><td>'+esc(e.best?.name??"Unknown")+'</td><td>'+nice(e.energy??NaN)+'</td></tr>').join("")+'</tbody></table></div>'+
+      '<div class="tc-build-recommend"><strong>Train next: '+(priority?label(priority.stat):"Target reached")+'</strong>'+(priority?' · '+nice(priority.delta)+' remaining':"")+
+      (activeBook.length?'<p>Active book: '+esc(reading)+'. Favor applicable training while active, but preserve special-gym eligibility.</p>':'')+
+      '<p>'+esc(suggestions.join(" "))+'</p></div>'+
+      (requirements.length?'<div class="tc-build-gyms">'+requirements.map(([name,met,desc,g])=>'<div><strong>'+esc(name)+'</strong><span class="'+(met?"tc-pos":"tc-neg")+'">'+(met?"Ratio met":"Ratio not met")+'</span><small>'+esc(desc)+' · '+(unlocked(g)?"Access reported":"Access not verified")+'</small></div>').join("")+'</div>':"")+
+      '<details class="tc-build-books"><summary>Books &amp; training priorities</summary><p>'+esc(reading)+'</p><div>'+statNames.map(stat=>'<div><strong>'+esc(bookNames[stat])+'</strong> · +30% '+label(stat)+' gym gains for 31 days</div>').join("")+'<div><strong>Get Hard Or Go Home</strong> · +20% all gym gains for 31 days</div><div><strong>Higher Daddy, Higher!</strong> · +20% energy regeneration for 31 days</div></div><p>Save unread books until you have a suitable gym, perks, supplies and time to use the entire duration. Ownership is not inferred.</p></details>'+
+      '<p class="fine-print">Targets are suggested buffered ratios. Estimated energy uses the current per-energy gain at current happiness in a reported gym; future growth, cooldowns and membership changes are not simulated. <a href="https://wiki.torn.com/wiki/Gym" target="_blank" rel="noopener noreferrer">Gym requirements</a> · <a href="https://www.torn.com/forums.php?f=61&p=threads&t=16132234" target="_blank" rel="noopener noreferrer">Hank / Baldr guide</a></p></div></section>';
+  }
   function render() {
     hydrateFromApi();
     const gym=selectedGym();
@@ -294,6 +377,7 @@ const tornStatPlanner = (() => {
     }).join("")+'</div>'+
       '<details class="tc-gym-info" '+(state.gymInfoOpen?"open":"")+'><summary>'+gymInfoHeading(active||gym)+'</summary><div class="tc-gym-info-body">'+
       gymDotRow(active||gym)+(active&&active.name!==gym.name?'<div class="tc-gym-alternate"><div class="tc-gym-comparison-heading">'+gymInfoHeading(gym)+'</div>'+gymDotRow(gym,active)+'</div>':'')+'</div></details></div></section>';
+    markup+=renderBuild(gym,active);
     }
     if(state.subpage==="calc"){
     markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><div class="tc-candy-control"><label for="tc-candy-qty">Candy:</label><input id="tc-candy-qty" type="number" data-tc="calcCandyQty" min="0" max="1000" step="1" value="'+state.calcCandyQty+'" title="Candy quantity (simulation only)"><select data-tc="calcCandyHappy" aria-label="Happiness per candy" title="Happiness per candy">'+[25,35,50,75,100,150].map(h=>'<option value="'+h+'" '+(state.calcCandyHappy===h?"selected":"")+'>'+h+' Happy</option>').join("")+'</select></div></div>'+'</div>';
@@ -318,6 +402,12 @@ const tornStatPlanner = (() => {
     view.addEventListener("change",event=>{
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const el=event.target;
+      if(location.hash==="#stats"&&el.matches("[data-tc-build]")){
+        loadBuild();
+        if(el.dataset.tcBuild==="choice"&&buildOptions.some(x=>x[0]===el.value))buildChoice=el.value;
+        if(el.dataset.tcBuild==="total")buildTotal=clamp(el.value,0,1e15);
+        saveBuild();view.innerHTML=render();return;
+      }
       if(location.hash!=="#stats" || !el.matches("[data-tc],[data-tc-stat],[data-tc-extra]")) return;
       if(el.dataset.tc) {
         const key=el.dataset.tc;
@@ -342,6 +432,7 @@ const tornStatPlanner = (() => {
     view.addEventListener("click",event=>{
       if(location.hash!=="#stats") return;
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
+      if(event.target.closest("[data-tc-build-reset]")){loadBuild();buildTotal=0;saveBuild();view.innerHTML=render();return;}
       const tab=event.target.closest("[data-tc-view]");
       if(tab){
         if(["gym","calc","compare"].includes(tab.dataset.tcView)){
