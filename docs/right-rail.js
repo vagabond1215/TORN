@@ -4,6 +4,7 @@ const tornRightRail=(()=>{
     ["bank","Investment"],["education","Education"],["oc","Organized crime"],
     ["drug","Drug CD"],["booster","Booster CD"],["medical","Medical CD"]];
   let busy=false,initialized=false;
+  const collapsed=new Set();
   const host=()=>document.getElementById("guide-right-rail");
   function status(entry){
     if(!entry)return "Not loaded";
@@ -20,7 +21,7 @@ const tornRightRail=(()=>{
     return '<section class="panel rail-timers"><div class="panel-heading"><h2>Countdowns</h2>'+
       '<button type="button" data-rail-refresh title="Request stale countdown selections">Update</button></div>'+
       '<div class="panel-content"><dl class="rail-timer-list">'+
-      order.map(([id,label])=>'<div class="rail-timer-row" title="'+safe(entries.get(id)?.note||"Not loaded")+'">'+
+      order.map(([id,label])=>'<div class="rail-timer-row" title="'+safe(id==="virus"?virusTooltip():entries.get(id)?.note||"Not loaded")+'">'+
         '<dt>'+safe(label)+'</dt><dd data-rail-timer="'+id+'">'+
         safe(status(entries.get(id)))+'</dd></div>').join("")+
       '</dl><p class="rail-snapshot-note">Local countdowns · API update on request</p>'+
@@ -44,30 +45,28 @@ const tornRightRail=(()=>{
       (s?homePair("Staff","$"+formatNumber(staff)):"")+
       '</dl>'+sourceError("property")+'</div></section>';
   }
-  function statBlocks(){
-    const b=payload("battlestats","battlestats"),w=payload("workstats","workstats"),
-      job=payload("job","job");
-    const v=k=>homeValue(b?.[k]&&typeof b[k]==="object"?b[k].value:b?.[k]);
-    const wv=(...keys)=>{for(const k of keys)if(w?.[k]!=null)return homeValue(w[k]);return "Not available";};
-    const jobName=job?.name||job?.company_name||job?.position;
-    return '<section class="panel home-battle rail-stats"><div class="panel-heading"><h2>Battle stats <a href="#stats">Calc</a></h2></div>'+
-      '<div class="panel-content">'+homeStatList([
-        ["Strength",v("strength")],["Defense",v("defense")],["Speed",v("speed")],
-        ["Dexterity",v("dexterity")],["Total",v("total")]
-      ])+sourceError("battlestats")+'</div></section>'+
-      '<section class="panel home-work rail-stats"><div class="panel-heading"><h2>Working stats <a href="#jobs">Jobs</a></h2></div>'+
-      '<div class="panel-content">'+homeStatList([
-        ["Manual labor",wv("manual_labor","manual","man")],
-        ["Intelligence",wv("intelligence","intel","int")],
-        ["Endurance",wv("endurance","end")]
-      ])+(jobName?'<p class="home-subline">'+safe(jobName)+'</p>':"")+
-      sourceError("workstats")+'</div></section>';
+  function virusTooltip(){
+    const raw=payload("virus","virus"), v=raw?.coding??raw?.current??raw?.virus??raw;
+    if(!v)return "Not loaded";
+    const item=v.item??v, id=item.id??v.item_id??v.virus_id;
+    const name=item.name??v.name??(typeof v.type==="string"?v.type:null);
+    const catalog=payload("itemCatalog","items");
+    const list=Array.isArray(catalog)?catalog:Object.entries(catalog||{}).map(([key,value])=>({...value,id:value?.id??key}));
+    const match=list.find(x=>(id!=null&&String(x.id)===String(id))||(name&&String(x.name).toLowerCase()===String(name).toLowerCase()));
+    const label=match?.name??name;
+    const price=match?.market_value??match?.value?.market_price??match?.value?.market_value??match?.market_price??item.market_value;
+    return label?label+(price!=null&&Number.isFinite(Number(price))?" $"+formatNumber(price):" · Value unavailable"):"No active virus";
+  }
+  function collapsible(markup,key){
+    return markup.replace(/<section class="([^"]+)"><div class="panel-heading"><h2>(.*?)<\/h2>(.*?)<\/div>/,
+      (_,classes,title,actions)=>'<details class="'+classes+' rail-section" data-rail-section="'+key+'" '+(collapsed.has(key)?"":"open")+'><summary class="panel-heading"><span class="rail-section-title">'+title+'</span>'+actions+'</summary>')
+      .replace(/<\/section>$/,"</details>");
   }
   function render(route=(location.hash||"#home").slice(1)||"home"){
     const el=host();if(!el)return;
     el.hidden=!tornGuideApi.isConnected()||route==="profile";
     if(el.hidden){el.innerHTML="";return;}
-    el.innerHTML=clocks()+networthPanel()+property()+statBlocks();
+    el.innerHTML=collapsible(clocks(),"timers")+collapsible(networthPanel(),"networth")+collapsible(property(),"property");
   }
   function tick(){
     const el=host();if(!el||el.hidden)return;
@@ -88,9 +87,10 @@ const tornRightRail=(()=>{
   }
   function init(){
     if(initialized)return;initialized=true;
+    host()?.addEventListener("toggle",event=>{const section=event.target;if(!section.matches?.("details[data-rail-section]")||!section.isConnected)return; if(section.open)collapsed.delete(section.dataset.railSection);else collapsed.add(section.dataset.railSection);},true);
     host()?.addEventListener("click",event=>{
       const btn=event.target.closest("[data-rail-refresh]");
-      if(btn)load(btn);
+      if(btn){event.preventDefault();event.stopPropagation();load(btn);}
     });
   }
   return {init,render,tick,order};
