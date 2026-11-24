@@ -123,7 +123,7 @@ const tornTctClock=(()=>{
     const tripAt=arrive||remaining!==null?arrive||
       (Number(tornGuideApi.state.fetchedAt.travel||Date.now())+remaining*1000):null;
     list.push({id:"flight",title:"Travel arrival",at:tripAt&&tripAt>now?tripAt:null,
-      note:travel?"From cached user/travel":"Travel not loaded; use Home Activity refresh"});
+      note:travel?"From cached user/travel":"Travel not loaded; use Countdowns Update"});
 
     for(const [id,title,section] of [
       ["education","Education completion","education"],
@@ -147,14 +147,11 @@ const tornTctClock=(()=>{
   function renderRows(){
     const host=get("tct-countdowns");
     if(!host)return;
-    const data=entries();
-    const errors=["education","virus","cooldowns","organizedcrime","factionRankedWars"]
-      .filter(key=>tornGuideApi.state.errors[key]).map(key=>key+": "+tornGuideApi.state.errors[key]);
+    const data=entries().filter(item=>!tornRightRail.order.some(([id])=>id===item.id));
     host.innerHTML=data.map(item=>'<div class="tct-row" title="'+escape(item.note)+'">'+
       '<span>'+escape(item.title)+'<small>'+escape(item.note)+'</small></span>'+
       '<strong data-tct-id="'+escape(item.id)+'">'+(item.at?formatDuration((item.at-Date.now())/1000):"Not available")+
-      '</strong></div>').join("")+
-      (errors.length?'<p class="tct-api-error">'+escape("API unavailable: "+errors.join("; "))+'</p>':"");
+      '</strong></div>').join("");
     tick();
   }
   function tick(){
@@ -172,8 +169,7 @@ const tornTctClock=(()=>{
     if(!panel||!button)return;
     opened=Boolean(value);panel.hidden=!opened;
     button.setAttribute("aria-expanded",String(opened));
-    if(opened){renderRows();get("tct-manual-rw").value=manualRW&&manualRW>Date.now()
-      ?new Date(manualRW).toISOString().slice(0,16):"";}
+    if(opened)renderRows();
   }
   async function load(){
     if(busy)return;
@@ -205,8 +201,7 @@ const tornTctClock=(()=>{
     const button=get("tct-toggle");
     if(!button)return;
     button.addEventListener("click",()=>open(!opened));
-    get("tct-load").addEventListener("click",load);
-    get("tct-set-rw").addEventListener("click",saveManual);
+
     document.addEventListener("click",event=>{
       if(opened&&!event.target.closest("#tct-widget"))open(false);
     });
