@@ -174,3 +174,16 @@ A compact Bank, virus, travel & racing panel shows the cached investment value, 
 Quick Access now shows the websites' own favicon images instead of the previous generic hand-drawn symbols. Each of the eleven curated services loads a direct HTTPS favicon from its corresponding site origin, with the site name kept as a native hover tooltip and accessible link label. If a site moves or blocks its favicon, the browser tries a cached copy of that site's favicon and finally reveals the original SVG fallback. External icons use no-referrer image requests. No Torn API requests or user credentials are involved.
 
 All prior visibility and contextual filtering preferences remain unchanged. The toolbar preserves the current route when hiding or showing an icon. Browser-based integration tests covered all eleven direct favicon URLs, inaccessible-image fallback behavior, tooltip and label preservation, contextual filtering, hide/reset functionality, and absence of additional API requests. Origin favicon availability and pixel-perfect visual appearance still depend on the live provider websites.
+
+
+## Docked character sidebar (November 24, 2026)
+
+The existing left navigation column is **not widened**: it retains the original 205px desktop grid column, narrowing to 165px at the existing smaller-desktop breakpoint. The layout's top padding is removed so the left sidebar visibly joins the underside of the Quick Access sub-bar; the main content retains independent top spacing. On narrow/mobile screens, the existing Menu control still opens and closes the sidebar.
+
+The decorative Guide heading was removed. In its place, the top of the sidebar is a native, keyboard-accessible, collapsible **character name and [#ID]** summary with a right-hand chevron. The disclosure begins collapsed and remembers its open/closed state locally as a browser preference (torn-city-guide:v1:sidebar:expanded).
+
+When expanded, the panel shows cached Money, Level, Points and available Merits; the four Energy/Nerve/Happy/Life progress bars and next-tick counters; and Level XP with a slim progress bar **only if the API returned a supported percentage**. If experience is unavailable, the panel explicitly says Not available and does not invent a completion value. When not logged in, the summary offers a link to the account connection page instead.
+
+Home no longer renders the duplicate Information panel. Battle and Working Stats remain in the two-column Home layout, with mobile stacking. The existing bar projection from Torn API v2 tick fields is reused in the sidebar and continues to update once per second, even when browsing other pages. This is a local DOM update only and makes **zero additional API requests**. Rendering the sidebar uses already cached Home selections rather than fetching account data on every page.
+
+Automated tests covered disclosure persistence, guest/connected identity, cached Money/Level/Points/Merits, optional Level XP, four compact bars, removal of the Home duplicate, ticker updates off Home, unchanged column widths, and JS parsing. Live GitHub Pages visual dimensions remain to be checked in a real browser.
