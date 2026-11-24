@@ -48,13 +48,20 @@ const tornStatPlanner = (() => {
   const api=(name)=>tornGuideApi.state.data[name]||null;
   const rawStats=()=>{const p=api("battlestats");return p && p.battlestats?p.battlestats:null;};
   const rawBars=()=>{const p=api("bars");return p && p.bars?p.bars:null;};
+  function syncLiveBars(){
+    const bars=rawBars();
+    if(!bars)return;
+    if(bars.energy){state.currentEnergy=clamp(bars.energy.current,0,1000);state.maxEnergy=clamp(bars.energy.maximum,1,1000);}
+    if(bars.happy){state.happy=clamp(bars.happy.current,0,99999);state.maxHappy=clamp(bars.happy.maximum,1,99999);}
+    state.regenMinutes=state.maxEnergy>100?10:15;
+  }
   function hydrateFromApi(force=false) {
     const id=tornGuideApi.state.identity&&tornGuideApi.state.identity.id;
     if (!id) {
       if (state.currentPlayer!==null) { state.currentPlayer=null;state.imported=false;state.apiStamp=null;state.selectedGym=null; }
       return;
     }
-    if (!force && state.currentPlayer===id && state.imported) return;
+    if (!force && state.currentPlayer===id && state.imported) { syncLiveBars(); return; }
     if(state.currentPlayer!==id || force) state.selectedGym=null;
     state.currentPlayer=id;
     const bars=rawBars(),stats=rawStats();
@@ -354,7 +361,7 @@ const tornStatPlanner = (() => {
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
   }
-  return {render,wire,
+  return {render,wire,syncLiveBars,
     simulate:()=>({natural:tornTrainSequence.simulate(tornTrainSequence.steps.natural),jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump)}),
     state,internal:{oneTrain,trainBlock,percentage,gainPerks}};
 })();
