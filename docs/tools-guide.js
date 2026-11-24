@@ -159,9 +159,7 @@ const tornToolsGuide=(()=>{
     return '<a class="quick-link" href="'+esc(row[4])+'" target="_blank" rel="noopener noreferrer"'+
       ' title="'+esc(name)+'" aria-label="Open '+esc(name)+'" data-tooltip="'+esc(name)+'">'+siteIcon(name)+'</a>';
   }).join("");
-  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+
-   '<a class="quick-customize" href="#tools" title="Customize Quick Access" aria-label="Customize Quick Access">'+
-   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3m-3.4-6.6-2.2 2.2M8.6 15.4l-2.2 2.2m0-12L8.6 7.6m6.8 7.8 2.2 2.2"/><circle cx="12" cy="12" r="4"/></svg></a></div>';
+  return '<div class="quick-inner"><div class="quick-links">'+links+'</div></div>';
  }
  function updateBar(route){
   ensureIconHandler();
