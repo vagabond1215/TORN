@@ -8,7 +8,9 @@ const tornCompanyCatalog=[
     "name": "Adult Novelties",
     "styles": [
       "Training",
-      "Business"
+      "Money",
+      "War",
+      "Beginner"
     ],
     "specials": [
       {
@@ -48,7 +50,8 @@ const tornCompanyCatalog=[
     "name": "Amusement Park",
     "styles": [
       "Crime",
-      "War"
+      "War",
+      "Training"
     ],
     "specials": [
       {
@@ -88,7 +91,10 @@ const tornCompanyCatalog=[
     "name": "Candle Shop",
     "styles": [
       "Training",
-      "Beginner"
+      "Crime",
+      "Revive",
+      "Beginner",
+      "War"
     ],
     "specials": [
       {
@@ -128,7 +134,9 @@ const tornCompanyCatalog=[
     "name": "Car Dealership",
     "styles": [
       "Racing",
-      "Trade"
+      "Trade",
+      "Crime",
+      "War"
     ],
     "specials": [
       {
@@ -169,6 +177,7 @@ const tornCompanyCatalog=[
     "styles": [
       "Trade",
       "War",
+      "Mug",
       "Beginner"
     ],
     "specials": [
@@ -208,8 +217,9 @@ const tornCompanyCatalog=[
   {
     "name": "Cruise Line",
     "styles": [
+      "Travel",
       "Trade",
-      "Travel"
+      "Training"
     ],
     "specials": [
       {
@@ -249,7 +259,9 @@ const tornCompanyCatalog=[
     "name": "Cyber Cafe",
     "styles": [
       "Crime",
-      "Business"
+      "Business",
+      "Money",
+      "Mug"
     ],
     "specials": [
       {
@@ -289,7 +301,9 @@ const tornCompanyCatalog=[
     "name": "Detective Agency",
     "styles": [
       "Crime",
-      "Mug"
+      "Mug",
+      "Travel",
+      "War"
     ],
     "specials": [
       {
@@ -329,7 +343,10 @@ const tornCompanyCatalog=[
     "name": "Farm",
     "styles": [
       "Revive",
-      "Training"
+      "Training",
+      "Money",
+      "Travel",
+      "War"
     ],
     "specials": [
       {
@@ -368,7 +385,8 @@ const tornCompanyCatalog=[
   {
     "name": "Firework Stand",
     "styles": [
-      "Training",
+      "Crime",
+      "War",
       "Beginner"
     ],
     "specials": [
@@ -409,7 +427,8 @@ const tornCompanyCatalog=[
     "name": "Fitness Center",
     "styles": [
       "Training",
-      "War"
+      "War",
+      "Education"
     ],
     "specials": [
       {
@@ -450,7 +469,8 @@ const tornCompanyCatalog=[
     "styles": [
       "Trade",
       "Travel",
-      "Beginner"
+      "Beginner",
+      "Training"
     ],
     "specials": [
       {
@@ -489,8 +509,10 @@ const tornCompanyCatalog=[
   {
     "name": "Furniture Store",
     "styles": [
-      "Business",
-      "Trade"
+      "Training",
+      "Revive",
+      "Crime",
+      "War"
     ],
     "specials": [
       {
@@ -530,7 +552,10 @@ const tornCompanyCatalog=[
     "name": "Game Shop",
     "styles": [
       "Training",
-      "Beginner"
+      "Beginner",
+      "Crime",
+      "Revive",
+      "Money"
     ],
     "specials": [
       {
@@ -569,8 +594,7 @@ const tornCompanyCatalog=[
   {
     "name": "Gas Station",
     "styles": [
-      "War",
-      "Crime"
+      "War"
     ],
     "specials": [
       {
@@ -650,7 +674,10 @@ const tornCompanyCatalog=[
     "name": "Grocery Store",
     "styles": [
       "Training",
-      "Trade"
+      "Trade",
+      "Crime",
+      "Revive",
+      "Beginner"
     ],
     "specials": [
       {
@@ -728,8 +755,10 @@ const tornCompanyCatalog=[
   {
     "name": "Hair Salon",
     "styles": [
-      "Training",
-      "Education"
+      "Education",
+      "Mug",
+      "War",
+      "Beginner"
     ],
     "specials": [
       {
@@ -809,7 +838,8 @@ const tornCompanyCatalog=[
     "name": "Law Firm",
     "styles": [
       "Crime",
-      "War"
+      "War",
+      "Mug"
     ],
     "specials": [
       {
@@ -849,7 +879,9 @@ const tornCompanyCatalog=[
     "name": "Lingerie Store",
     "styles": [
       "Trade",
-      "War"
+      "Travel",
+      "War",
+      "Money"
     ],
     "specials": [
       {
@@ -889,7 +921,9 @@ const tornCompanyCatalog=[
     "name": "Logistics Management",
     "styles": [
       "Trade",
-      "Business"
+      "Business",
+      "Travel",
+      "War"
     ],
     "specials": [
       {
@@ -928,8 +962,10 @@ const tornCompanyCatalog=[
   {
     "name": "Meat Warehouse",
     "styles": [
+      "Crime",
       "War",
-      "Trade"
+      "Travel",
+      "Money"
     ],
     "specials": [
       {
@@ -968,7 +1004,8 @@ const tornCompanyCatalog=[
   {
     "name": "Mechanic Shop",
     "styles": [
-      "Racing"
+      "Racing",
+      "Trade"
     ],
     "specials": [
       {
@@ -1007,8 +1044,11 @@ const tornCompanyCatalog=[
   {
     "name": "Mining Corporation",
     "styles": [
-      "Business",
-      "Money"
+      "Crime",
+      "War",
+      "Training",
+      "Money",
+      "Business"
     ],
     "specials": [
       {
@@ -1048,7 +1088,8 @@ const tornCompanyCatalog=[
     "name": "Music Store",
     "styles": [
       "Training",
-      "War"
+      "War",
+      "Mug"
     ],
     "specials": [
       {
@@ -1088,7 +1129,8 @@ const tornCompanyCatalog=[
     "name": "Nightclub",
     "styles": [
       "Crime",
-      "Money"
+      "Training",
+      "Education"
     ],
     "specials": [
       {
@@ -1128,7 +1170,8 @@ const tornCompanyCatalog=[
     "name": "Oil Rig",
     "styles": [
       "Money",
-      "Training"
+      "Business",
+      "War"
     ],
     "specials": [
       {
@@ -1207,8 +1250,10 @@ const tornCompanyCatalog=[
   {
     "name": "Property Broker",
     "styles": [
+      "Money",
       "Business",
-      "Money"
+      "Trade",
+      "Training"
     ],
     "specials": [
       {
@@ -1248,7 +1293,9 @@ const tornCompanyCatalog=[
     "name": "Pub",
     "styles": [
       "Crime",
-      "Training"
+      "Training",
+      "War",
+      "Revive"
     ],
     "specials": [
       {
@@ -1288,7 +1335,9 @@ const tornCompanyCatalog=[
     "name": "Restaurant",
     "styles": [
       "Training",
-      "War"
+      "War",
+      "Crime",
+      "Revive"
     ],
     "specials": [
       {
@@ -1328,7 +1377,8 @@ const tornCompanyCatalog=[
     "name": "Software Corporation",
     "styles": [
       "Crime",
-      "Business"
+      "Business",
+      "Money"
     ],
     "specials": [
       {
@@ -1368,7 +1418,8 @@ const tornCompanyCatalog=[
     "name": "Sweet Shop",
     "styles": [
       "Training",
-      "Beginner"
+      "Beginner",
+      "Trade"
     ],
     "specials": [
       {
@@ -1408,7 +1459,10 @@ const tornCompanyCatalog=[
     "name": "Television Network",
     "styles": [
       "Business",
-      "Money"
+      "Money",
+      "War",
+      "Mug",
+      "Trade"
     ],
     "specials": [
       {
@@ -1447,8 +1501,10 @@ const tornCompanyCatalog=[
   {
     "name": "Theater",
     "styles": [
-      "Training",
-      "Business"
+      "Travel",
+      "War",
+      "Mug",
+      "Crime"
     ],
     "specials": [
       {
@@ -1488,7 +1544,9 @@ const tornCompanyCatalog=[
     "name": "Toy Shop",
     "styles": [
       "Trade",
-      "Travel"
+      "Travel",
+      "Training",
+      "Beginner"
     ],
     "specials": [
       {
@@ -1528,7 +1586,10 @@ const tornCompanyCatalog=[
     "name": "Zoo",
     "styles": [
       "Crime",
-      "War"
+      "War",
+      "Travel",
+      "Money",
+      "Training"
     ],
     "specials": [
       {
