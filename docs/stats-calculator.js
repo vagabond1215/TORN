@@ -334,7 +334,7 @@ const tornStatPlanner = (() => {
     const projected=singleStatSession(stat,energy,gym);
     const baseline=trainBlock(start,state.maxHappy,energy,gym,stat,eff.multiplier);
     const baseGain=baseline.stat-start,estimatedGain=projected.stat-start;
-    const happyGain=baseGain>0?(estimatedGain/baseGain-1)*100:null;
+    const happyGain=baseGain>0?((estimatedGain-baseGain)/baseGain)*100:null;
     const disabled=!gym[stat];
     const totalBonus=(eff.multiplier-1)*100;
     let bonuses='<details class="tc-total-bonus" data-tc-bonus-stat="'+stat+'" '+(state.bonusOpen[stat]?"open":"")+'><summary><span>Total Bonus</span><strong class="'+(totalBonus<0?"tc-neg":totalBonus>0?"tc-pos":"")+'" title="'+(eff.sourceAvailable?"Combined training multiplier":"Partial estimate: API perks unavailable")+'">'+(totalBonus>=0?"+":"")+nice(totalBonus,2)+'%</strong></summary><div class="tc-gain-sources">';
@@ -350,7 +350,7 @@ const tornStatPlanner = (() => {
       '<div class="tc-stat-meta"><span>Gym dots</span><strong>'+(disabled?"Unavailable":nice(gym[stat],1))+'</strong></div>'+
       '<div class="tc-stat-meta" title="Same gym, Energy, starting stat and perks at normal maximum Happiness ('+nice(state.maxHappy)+')"><span>Base gain</span><strong>'+(disabled?"Unavailable":"+"+nice(baseGain,2))+'</strong></div>'+
       '<div class="tc-stat-meta"><span>Est. gain</span><strong>+'+nice(estimatedGain,2)+'</strong></div>'+
-      '<div class="tc-stat-meta" title="Percentage change in estimated gain compared with normal maximum Happiness"><span>Happy Gain</span><strong class="'+(happyGain>0?"tc-pos":happyGain<0?"tc-neg":"")+'">'+(happyGain===null?"—":(happyGain>0?"+":"")+nice(happyGain,2)+"%")+'</strong></div>'+
+      '<div class="tc-stat-meta" title="Additional battle-stat growth due to Happiness alone: (Est. gain minus Base gain) divided by Base gain, times 100. Gym, Energy, starting stat and perks are unchanged."><span>Happy Growth</span><strong class="'+(happyGain>0?"tc-pos":happyGain<0?"tc-neg":"")+'">'+(happyGain===null?"—":(happyGain>0?"+":"")+nice(happyGain,2)+"%")+'</strong></div>'+
       '<div class="tc-stat-meta"><span>Est. final</span><strong>'+nice(projected.stat,2)+'</strong></div>'+
       bonuses+'</div>';
   }
