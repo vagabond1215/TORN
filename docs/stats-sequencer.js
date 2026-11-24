@@ -318,13 +318,13 @@ const tornTrainSequence=(()=>{
     let out='<svg viewBox="0 0 910 260" class="ts-chart" role="img" aria-label="Projected stat growth over '+p.hours+' hours">';
     for(let i=0;i<5;i++){
       const val=bottom+(top-bottom)*i/4,y=yval(val);
-      out+='<line x1="80" y1="'+y+'" x2="880" y2="'+y+'" stroke="#41463a"/><text x="74" y="'+(y+4)+'" fill="#c9c4a8" font-size="11" text-anchor="end">'+fmt(val)+'</text>';
+      out+='<line x1="80" y1="'+y+'" x2="880" y2="'+y+'" class="ts-gridline" stroke="var(--border)"/><text x="74" y="'+(y+4)+'" fill="var(--text)" font-size="11" text-anchor="end">'+fmt(val)+'</text>';
       const hr=p.hours*i/4;
-      out+='<text x="'+xval(hr)+'" y="243" font-size="11" text-anchor="middle" fill="#c9c4a8">'+fmt(hr,1)+'h</text>';
+      out+='<text x="'+xval(hr)+'" y="243" font-size="11" text-anchor="middle" fill="var(--text)">'+fmt(hr,1)+'h</text>';
     }
-    out+='<path d="'+path(natural.series)+'" fill="none" stroke="#78b5db" stroke-width="3"/>';
-    if(jump.complete)out+='<path d="'+path(jump.series)+'" fill="none" stroke="#dfc379" stroke-width="3"/>';
-    return out+'</svg><p class="ts-legend">Blue: Natural training · Gold: Happy jump</p>';
+    out+='<path d="'+path(natural.series)+'" fill="none" class="ts-natural-line" stroke="var(--text)" stroke-width="3"/>';
+    if(jump.complete)out+='<path d="'+path(jump.series)+'" fill="none" class="ts-jump-line" stroke="var(--accent)" stroke-width="3"/>';
+    return out+'</svg><p class="ts-legend">Neutral: Natural training · Lime: Happy jump</p>';
   }
   function render(context){
     if(context)ctx=context;
