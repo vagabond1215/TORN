@@ -330,7 +330,11 @@ const tornStatPlanner = (() => {
   }
   function statPanel(stat,gym) {
     const eff=effectsFor(stat);
-    const projected=singleStatSession(stat,trainingCount(gym)*gym.energy,gym);
+    const energy=trainingCount(gym)*gym.energy,start=state.statValues[stat];
+    const projected=singleStatSession(stat,energy,gym);
+    const baseline=trainBlock(start,state.maxHappy,energy,gym,stat,eff.multiplier);
+    const baseGain=baseline.stat-start,estimatedGain=projected.stat-start;
+    const happyGain=baseGain>0?(estimatedGain/baseGain-1)*100:null;
     const disabled=!gym[stat];
     const totalBonus=(eff.multiplier-1)*100;
     let bonuses='<details class="tc-total-bonus" data-tc-bonus-stat="'+stat+'" '+(state.bonusOpen[stat]?"open":"")+'><summary><span>Total Bonus</span><strong class="'+(totalBonus<0?"tc-neg":totalBonus>0?"tc-pos":"")+'" title="'+(eff.sourceAvailable?"Combined training multiplier":"Partial estimate: API perks unavailable")+'">'+(totalBonus>=0?"+":"")+nice(totalBonus,2)+'%</strong></summary><div class="tc-gain-sources">';
@@ -344,7 +348,9 @@ const tornStatPlanner = (() => {
     return '<div class="tc-stat-col '+(disabled?"tc-disabled":"")+'"><div class="tc-stat-title">'+readable[stat]+'</div>'+
       '<div class="tc-field"><label for="tc-stat-'+stat+'">Current stat</label><div class="tc-stat-input-row"><input id="tc-stat-'+stat+'" data-tc-stat="'+stat+'" type="number" min="0" step="1" value="'+esc(state.statValues[stat])+'"><button type="button" class="tc-stat-reset" data-tc-reset="'+stat+'" title="Reset '+readable[stat]+' to current API value" aria-label="Reset '+readable[stat]+'" '+(apiStatValue(stat)===null?'disabled':'')+'><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.6-4.6L3 9m0-6v6h6"/><path d="M4 13a8 8 0 0 0 14.6 4.6L21 15m0 6v-6h-6"/></svg></button></div></div>'+
       '<div class="tc-stat-meta"><span>Gym dots</span><strong>'+(disabled?"Unavailable":nice(gym[stat],1))+'</strong></div>'+
-      '<div class="tc-stat-meta"><span>Est. gain</span><strong>+'+nice(projected.stat-state.statValues[stat],2)+'</strong></div>'+
+      '<div class="tc-stat-meta" title="Same gym, Energy, starting stat and perks at normal maximum Happiness ('+nice(state.maxHappy)+')"><span>Base gain</span><strong>'+(disabled?"Unavailable":"+"+nice(baseGain,2))+'</strong></div>'+
+      '<div class="tc-stat-meta"><span>Est. gain</span><strong>+'+nice(estimatedGain,2)+'</strong></div>'+
+      '<div class="tc-stat-meta" title="Percentage change in estimated gain compared with normal maximum Happiness"><span>Happy Gain</span><strong class="'+(happyGain>0?"tc-pos":happyGain<0?"tc-neg":"")+'">'+(happyGain===null?"—":(happyGain>0?"+":"")+nice(happyGain,2)+"%")+'</strong></div>'+
       '<div class="tc-stat-meta"><span>Est. final</span><strong>'+nice(projected.stat,2)+'</strong></div>'+
       bonuses+'</div>';
   }
