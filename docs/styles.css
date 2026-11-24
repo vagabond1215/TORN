@@ -147,6 +147,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .metric small { color:var(--muted); font-size:.78rem; }
 .api-error { color:#f0b3ab; overflow-wrap:anywhere; font-size:.85rem; margin-top:.5rem; }
 .inventory-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(235px,1fr)); gap:.75rem; margin-top:.9rem; }
+@media (orientation:landscape) { .inventory-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); } }
 .inventory-panel { background:var(--raised); border:1px solid var(--border); padding:.85rem; border-radius:8px; min-width:0; }
 .inventory-panel h3 { margin:0 0 .65rem; font-size:1rem; color:var(--accent-strong); }
 .inventory-panel p { font-size:.84rem; color:var(--muted); }
