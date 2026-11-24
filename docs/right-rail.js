@@ -24,7 +24,7 @@ const tornRightRail=(()=>{
       order.map(([id,label])=>'<div class="rail-timer-row" title="'+safe(id==="virus"?virusTooltip():entries.get(id)?.note||"Not loaded")+'">'+
         '<dt>'+safe(label)+'</dt><dd data-rail-timer="'+id+'">'+
         safe(status(entries.get(id)))+'</dd></div>').join("")+
-      '</dl><p class="rail-snapshot-note">Local countdowns · API update on request</p>'+
+      '</dl>'+
       '<span id="rail-refresh-status" class="sr-only" role="status"></span></div></section>';
   }
   function property(){
@@ -37,12 +37,15 @@ const tornRightRail=(()=>{
     const base=Number(upkeep?.property),staff=Number(upkeep?.staff);
     const b=upkeep?.property!=null&&Number.isFinite(base);
     const s=upkeep?.staff!=null&&Number.isFinite(staff);
-    const total=b||s?((b?base:0)+(s?staff:0)):null;
+    const total=b&&s?base+staff:null;
+    const due=upkeep?.total??upkeep?.due??upkeep?.outstanding??p?.upkeep_due;
+    const currentTotal=due!=null&&Number.isFinite(Number(due))?Number(due):null;
     return '<section class="panel rail-property"><div class="panel-heading"><h2>Property</h2></div>'+
       '<div class="panel-content"><p class="rail-property-name">'+safe(name)+'</p>'+
       '<dl class="home-stat-list">'+homePair("Daily upkeep",total==null?"Not available":"$"+formatNumber(total))+
       (b?homePair("Property","$"+formatNumber(base)):"")+
       (s?homePair("Staff","$"+formatNumber(staff)):"")+
+      homePair("Current total upkeep",currentTotal==null?"Not available":"$"+formatNumber(currentTotal))+
       '</dl>'+sourceError("property")+'</div></section>';
   }
   function virusTooltip(){
