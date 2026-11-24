@@ -1656,8 +1656,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-build-books .ts-perk-tile small{max-width:23rem}
 
 /* Configurable actions: top-layer popup, never an expanded table row. */
-.ts-merged .ts-step{max-width:calc(15rem + 89px)}
-.ts-merged .ts-arrows .ts-row-gear{display:inline-flex;align-items:center;justify-content:center}
+.ts-merged .ts-step{width:100%;max-width:calc(15rem + 89px);grid-template-columns:minmax(0,1fr) 89px;column-gap:0}
+.ts-merged .ts-step>.ts-arrows{box-sizing:border-box;width:89px;display:grid;grid-template-columns:repeat(4,22px)}
+.ts-merged .ts-arrows>button,.ts-merged .ts-arrows>.ts-gear-spacer{box-sizing:border-box;width:22px;min-width:22px;max-width:22px;padding:0;margin:0}
+.ts-merged .ts-arrows .ts-row-gear{display:flex;align-items:center;justify-content:center}
+.ts-merged .ts-row-gear svg{display:block;flex:none;width:14px;height:14px;pointer-events:none}
 .ts-merged .ts-gear-spacer{width:22px;flex:0 0 22px;height:var(--ts-inline-control-height)}
 .ts-merged .ts-gear-spacer+button{border-left:1px solid var(--border)}
 .ts-row-editor[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box;width:330px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;padding:.65rem;background:var(--raised);color:var(--text);border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 22px #0005;font-size:.78rem;white-space:normal}
