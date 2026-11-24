@@ -204,7 +204,7 @@ const tornTrainSequence=(()=>{
         v.time=next;v.drug=Math.max(0,v.drug-passed);v.booster=Math.max(0,v.booster-passed);
         if(next===eTick){if(v.energy<eCap)v.energy=Math.min(eCap,v.energy+5);else v.lostRegen+=5;}
         if(next===hTick){v.happy=v.happy>ctx.state.maxHappy?ctx.state.maxHappy:Math.min(ctx.state.maxHappy,v.happy+5);}
-        if(v.auto && (priorDrug>0&&v.drug===0 || next===eTick&&v.energy>=eCap))
+        if(v.auto && (priorDrug>0&&v.drug===0 || next===eTick&&(cfg.naturalOnly?v.energy>=gymCost:v.energy>=eCap)))
           checkin(priorDrug>0&&v.drug===0?"Drug cooldown expired":"Energy bar filled");
         if(next===hTick||next===until||next%3600===0)point();
       }
@@ -263,8 +263,9 @@ const tornTrainSequence=(()=>{
       const isBooster=type==="candy"||type==="dvd",tier=a.candyHappy??cfg.candyHappy;
       rowCandy=pool.filter(x=>tier==="any"||x.happy===tier);rowUsed={};
       const itemCD=Math.max(1,Math.round(type==="dvd"?21600*cfg.dvdCDMultiplier:1800*cfg.candyCDMultiplier));
-      const allowance=v.booster>boosterLimit?0:Math.floor((boosterLimit-v.booster)/itemCD)+1;
+      let allowance=v.booster>boosterLimit?0:Math.floor((boosterLimit-v.booster)/itemCD)+1;
       const held=type==="candy"?(stock.loaded?rowCandy.reduce((sum,x)=>sum+x.qty,0):null):dvdKnown?Math.max(0,dvdHeld-v.costs.dvd):null;
+      if(isBooster&&allowance===0&&cfg.startBoosterMin*60>v.time&&v.costs.candy+v.costs.dvd===0&&(a.max?held>0:a.qty>0)){const delay=v.booster-boosterLimit+1;if(!waitFor(delay,"Booster cooldown"))break;allowance=Math.floor((boosterLimit-v.booster)/itemCD)+1;}
       const maximum=held===null?null:Math.min(held,allowance);
       const baselineAllowance=Math.floor(boosterLimit/itemCD)+1;
       if(isBooster&&cfg.startBoosterMin*60>v.time&&v.costs.candy+v.costs.dvd===0&&allowance<baselineAllowance&&(a.max?held!=null&&held>allowance:a.qty>allowance)){
@@ -272,7 +273,7 @@ const tornTrainSequence=(()=>{
         if(allowance>0)notices.push({index:i,critical:false,text:(type==="candy"?"Candy":"eDVD")+" CD "+clock(v.booster)+" · "+Math.min(allowance,target)+" / "+target+" possible"});
         else notices.push({index:i,critical:true,text:"DELAY "+clock(Math.max(1,v.booster-boosterLimit+1))+" · Booster CD"});
       }
-      const qty=isBooster?(a.max?(maximum??0):Math.floor(clamp(a.qty,0,type==="candy"?maxCandy(cfg):maxDvd(cfg)))):1;
+      const qty=isBooster?(a.max?(maximum??0):Math.floor(clamp(a.qty,0,allowance))):1;
       if(isBooster)rowInfo[i]={maximum,allowance,held,qty,used:rowUsed,tier,happy:0,dvdBefore:v.costs.dvd};
       if(isBooster&&a.max&&maximum===null){v.errors.push("MAX requires loaded inventory.");break;}
       if(["xanax","ecstasy","dvd","candy"].includes(type)){
@@ -297,7 +298,7 @@ const tornTrainSequence=(()=>{
       if(isBooster)rowInfo[i].happy=type==="dvd"?(v.costs.dvd-rowInfo[i].dvdBefore)*2500:Object.entries(rowUsed).reduce((sum,[name,q])=>sum+q*(pool.find(x=>x.name===name)?.happy??0),0);
       point();
       v.log.push({i:i+1,type,start,end:snap()});
-      if(v.time>=limit && i<list.length-1 && list.slice(i+1).some(step=>["wait","waitDrug","waitBooster","xanax","ecstasy"].includes(step.type))){v.errors.push("The "+cfg.hours+"-hour window ended before all steps.");break;}
+      if(v.time>=limit && i<list.length-1 && list.slice(i+1).some(step=>step.type==="wait"&&step.minutes>0||step.type==="waitDrug"&&v.drug>0||step.type==="waitBooster"&&v.booster>=boosterLimit||["xanax","ecstasy"].includes(step.type)&&v.drug>0)){v.errors.push("The "+cfg.hours+"-hour window ended before all steps.");break;}
     }
     // Natural and mini profiles continue using available drug cycles and daily
     // refills through the common comparison window, without modifying their rows.
@@ -305,7 +306,6 @@ const tornTrainSequence=(()=>{
       v.auto=true;
       while(v.time<limit){
         const day=Math.floor((cfg.tornClockMin*60+v.time)/86400);
-        
         if(v.drug===0){const start=snap();train();useItem("xanax");train();v.log.push({i:"•",type:"xanax",reason:"Available drug cycle",start,end:snap()});}
         const midnight=(day+1)*86400-cfg.tornClockMin*60-v.time;
         advance(Math.min(limit-v.time,v.drug||Infinity,Math.max(1,midnight)));
