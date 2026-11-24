@@ -490,6 +490,15 @@ function homeValue(v){
 /* Torn API v2 supplies current, maximum, increment, interval, tick_time
  * (seconds until next tick), and full_time. Preserve its actual tick phase
  * between cached pulls; never initiate an API request for animation. */
+// Shared active-book detection; use only the current account's active perks.
+function tornHappinessBook(){
+  const state=tornGuideApi.state,raw=state.data.perks,perks=raw?.perks??raw;
+  const books=perks&&Object.entries(perks).filter(([key])=>/^book(?:_?perks)?$/i.test(key));
+  const known=Array.isArray(books)&&books.some(([,items])=>Array.isArray(items));
+  const entries=(books||[]).flatMap(([,items])=>Array.isArray(items)?items:[]).map(item=>typeof item==="string"?item:[item?.name,item?.effect,item?.description].filter(Boolean).join(" "));
+  const source=entries.find(t=>/ignorance\s+is\s+bliss|happiness\s+can\s+regenerate\s+above\s+maximum/i.test(t));
+  return {active:!!source,known,source:source??null};
+}
 function tornBarProjection(name,bar,at,now=Date.now()){
   const rawCurrent=Number(bar?.current),max=Number(bar?.maximum);
   if(!bar||!Number.isFinite(rawCurrent)||!Number.isFinite(max)||max<=0)return null;
@@ -524,7 +533,11 @@ function tornBarProjection(name,bar,at,now=Date.now()){
   // identified in the tooltip and replaced by the next real API bar snapshot.
   if(first===null)first=(interval-((stamp/1000)%interval))%interval||interval;
   const ticks=elapsed<first?0:1+Math.floor((elapsed-first)/interval);
-  const current=rawCurrent>=max?rawCurrent:Math.min(max,rawCurrent+ticks*step);
+  const bliss=name==="happy"&&tornHappinessBook().active;
+  const ceiling=bliss?99999:max;
+  // Preserve observed over-cap values until a newer snapshot arrives unless
+  // the active book confirms over-cap regeneration.
+  const current=bliss?Math.min(ceiling,rawCurrent+ticks*step):rawCurrent>=max?rawCurrent:Math.min(max,rawCurrent+ticks*step);
   const until=current>=max?0:Math.max(0,first+ticks*interval-elapsed);
   return {current,maximum:max,percentage:Math.max(0,Math.min(100,current/max*100)),
     until,phaseSource,estimated:phaseSource!=="API",
