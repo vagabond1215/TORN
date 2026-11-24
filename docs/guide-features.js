@@ -491,6 +491,17 @@ function homeValue(v){
  * (seconds until next tick), and full_time. Preserve its actual tick phase
  * between cached pulls; never initiate an API request for animation. */
 // Shared active-book detection; use only the current account's active perks.
+// Book ownership/read state is only asserted from explicit cached evidence.
+function tornBookTileStatus(name,active=false){
+  if(active)return "active";
+  const state=tornGuideApi.state,normalize=v=>String(v??"").toLowerCase().replace(/^book\s*:\s*/,"").replace(/[^a-z0-9]/g,"");
+  const key=normalize(name),matches=item=>normalize(item?.name??item?.item?.name??item)===key;
+  const rows=Object.values(state.inventory||{}).filter(Array.isArray).flat();
+  const item=rows.find(matches);
+  if(item&&(item.read===true||item.is_read===true||item.status==="read"))return "read";
+  if(item&&Number(item.amount??item.quantity)>0)return "owned";
+  return "";
+}
 function tornHappinessBook(){
   const state=tornGuideApi.state,raw=state.data.perks,perks=raw?.perks??raw;
   const books=perks&&Object.entries(perks).filter(([key])=>/^book(?:_?perks)?$/i.test(key));
