@@ -28,7 +28,7 @@ const tornGuideApi=(()=>{
     checklist:["bars","merits","meritCatalog","job"],
     money:["money"],
     stocks:["stocks","stockCatalog","itemCatalog"],
-    education:["education","educationCatalog","merits","meritCatalog","stocks","stockCatalog"],
+    education:["education","educationCatalog","merits","meritCatalog","stocks","stockCatalog","perks"],
     inventory:[],
     racing:[], faction:[], attacking:[], war:[], tools:[]
   };
@@ -804,6 +804,16 @@ function educationModel(){
  const perks=meritLevel("Education Length"), positions=heldWsuShares();
  return {groups,list,courses,current,id,known,ids,active,deadline,perks,positions};
 }
+function educationReduction(m){
+ const p=payload("perks","perks");
+ const job=p?.job??p?.job_perks;
+ const entries=Array.isArray(job)?job:[];
+ const principal=Array.isArray(job)?entries.some(x=>/education|course/i.test(typeof x==="string"?x:x?.description??x?.effect??x?.name??"")&&/10\s*%/.test(typeof x==="string"?x:x?.description??x?.effect??x?.name??"")):null;
+ const parts=[["Merits",m.perks==null?null:Math.min(20,Math.max(0,Number(m.perks)*2))],["WSU stock",m.positions==null?null:m.positions>=1000000?10:0],["Principal career perk",principal===null?null:principal?10:0]];
+ const known=parts.filter(([,v])=>v!==null&&Number.isFinite(v));
+ const total=known.reduce((a,[,v])=>a+v,0);
+ return {label:known.length?total+"%"+(known.length<parts.length?" (partial)":""):"Unavailable",tooltip:parts.map(([name,v])=>name+": "+(v===null?"Not loaded":v+"%")).join("\n")+"\nAdditive reductions apply to future courses."};
+}
 function educationDuration(seconds){
  if(seconds==null||!Number.isFinite(Number(seconds)))return "Unavailable";
  const m=Math.round(Number(seconds)/60);return Math.floor(m/1440)+"d "+Math.floor(m%1440/60)+"h "+m%60+"m";
@@ -836,14 +846,13 @@ function educationCourseDetail(c,m){
  const req=c.prerequisites??c.requirements;
  const prerequisites=values(req).map(v=>{const id=typeof v==="object"?v.id??v.course_id:v;return m.courses.find(x=>String(x.id)===String(id))?.name??text(v)??String(id);}).filter(Boolean);
  return '<div class="edu-course-detail">'+(c.description?'<p>'+safe(c.description)+'</p>':'')+
- '<div class="edu-detail-grid"><div><h4>Learning outcome</h4>'+(effects.length?effects.map(v=>'<p>'+safe(v)+'</p>').join(""):fallback.source?'<p>No additional permanent effect listed.</p>':'<p class="fine-print">Not supplied by catalog.</p>')+
- '</div><div><h4>Working stats gained</h4>'+(gains.length?gains.map(([k,v])=>'<div>'+safe(k)+' <strong>+'+formatNumber(v)+'</strong></div>').join(""):'<p class="fine-print">Not supplied by catalog.</p>')+
+ '<div class="edu-detail-grid"><div><h4>Working stats gained</h4>'+(gains.length?gains.map(([k,v])=>'<div>'+safe(k)+' <strong>+'+formatNumber(v)+'</strong></div>').join(""):'<p class="fine-print">Not supplied by catalog.</p>')+
  '</div><div><h4>Parameters</h4><div>Base length <strong>'+educationDuration(duration)+'</strong></div><div>Cost <strong>'+(cost!=null?"$"+formatNumber(cost):"Unavailable")+'</strong></div></div></div>'+
- (prerequisites.length?'<p class="edu-prerequisites">Prerequisites: '+safe(prerequisites.join(", "))+'</p>':'')+(fallback.source?'<p class="fine-print">'+(fromWiki?"Missing catalog fields supplemented by ":"Reference: ")+'<a href="'+safe(fallback.source)+'" target="_blank" rel="noopener noreferrer">Torn Wiki</a></p>':'')+'</div>';
+ (prerequisites.length?'<p class="edu-prerequisites">Prerequisites: '+safe(prerequisites.join(", "))+'</p>':'')+'</div>';
 }
 function renderEducationPage(){
- const m=educationModel(),name=m.current?.name??m.active?.name??(m.id!=null?"Course #"+m.id:"None active / not loaded");
- let out='<section class="panel edu-panel"><div class="panel-heading"><h2>Education</h2><a href="https://www.torn.com/page.php?sid=education" target="_blank" rel="noopener noreferrer">Open Torn</a></div><div class="panel-content">'+
+ const m=educationModel(),reduction=educationReduction(m),name=m.current?.name??m.active?.name??(m.id!=null?"Course #"+m.id:"None active / not loaded");
+ let out='<section class="panel edu-panel"><div class="panel-heading"><h2>Education</h2><div class="edu-heading-links"><span class="edu-reduction" tabindex="0" title="'+safe(reduction.tooltip)+'">Education Reduction: <strong>'+safe(reduction.label)+'</strong></span><a href="https://wiki.torn.com/wiki/Education" target="_blank" rel="noopener noreferrer">Wiki</a><a href="https://www.torn.com/page.php?sid=education" target="_blank" rel="noopener noreferrer">Open Torn</a></div></div><div class="panel-content">'+
  '<div class="edu-current"><strong>'+safe(name)+'</strong>'+(m.deadline?'<span data-edu-deadline="'+m.deadline+'">'+tornTctClock.formatDuration((m.deadline-Date.now())/1000)+'</span>':'')+
  '<small>Education merit '+(m.perks==null?"—":m.perks+"/10")+' · WSU '+(m.positions==null?"Not loaded":m.positions>=1000000?"Active":"Inactive")+' · Completed '+(m.known?m.ids.size+"/"+m.courses.length:"Not loaded")+'</small></div>'+
  '<div class="edu-filters"><label>Group by <select data-edu-groupby><option value="category" '+(educationView.groupBy==="category"?"selected":"")+'>Education category</option><option value="effect" '+(educationView.groupBy==="effect"?"selected":"")+'>Effect / perk</option></select></label>'+
@@ -857,7 +866,7 @@ function renderEducationPage(){
  out+='<details class="edu-category" data-edu-group="'+safe(group)+'" '+(opened?"open":"")+'><summary><strong>'+safe(group)+'</strong><span>'+(m.known?count:"—")+'/'+courses.length+'</span></summary><div class="edu-courses">';
  for(const c of shown){
  const id=String(c.id),done=m.ids.has(id),active=id===String(m.id),key=group+":"+String(c.code??c.id??c.name),selected=educationView.selected===key;
- out+='<div class="edu-course '+(done?"is-completed":active?"is-active":"")+'"><button type="button" data-edu-course="'+safe(key)+'" aria-expanded="'+selected+'"><span>'+safe(c.code??c.course_code??"")+'</span><strong>'+safe(c.name??c.title??"Course "+id)+'</strong><small>'+(done?"Completed":active?"In progress":"")+'</small></button>'+(educationView.groupBy==="effect"&&educationEffectText(c)?'<div class="edu-effect-preview">'+safe(educationEffectText(c))+'</div>':"")+(selected?educationCourseDetail(c,m):"")+'</div>';
+ out+='<div class="edu-course '+(done?"is-completed":active?"is-active":"")+'"><button type="button" data-edu-course="'+safe(key)+'" aria-expanded="'+selected+'"><span class="edu-course-name"><span>'+safe(c.code??c.course_code??"")+'</span><strong>'+safe(c.name??c.title??"Course "+id)+'</strong></span><span class="edu-course-effect"><span>'+safe(educationEffectText(c))+'</span><small>'+(done?"Completed":active?"In progress":"")+'</small></span></button>'+(selected?educationCourseDetail(c,m):"")+'</div>';
  }
  out+='</div></details>';
  }
