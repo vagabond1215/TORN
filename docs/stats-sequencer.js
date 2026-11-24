@@ -21,7 +21,22 @@ const tornTrainSequence=(()=>{
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openQueues=new Set(),openTimelines=new Set();
   let naturalEdited=false,settingsOpen=false;
-  function templateButtons(){return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'<button type="button" class="tc-stat-tab ts-settings-toggle '+(settingsOpen?"is-selected":"")+'" data-ts-settings aria-expanded="'+settingsOpen+'" aria-controls="ts-plan-settings" title="Time, cooldowns, effects, prices"><span aria-hidden="true">⚙</span> Settings</button></div>';}
+  let planPreferenceOwner;
+  function loadPlanPreferences(){
+    const owner=String(tornGuideApi.state.identity?.id??"guest");
+    if(planPreferenceOwner===owner)return;
+    planPreferenceOwner=owner;
+    let saved=null;try{saved=JSON.parse(localStorage.getItem("torn-city-guide:plan-view:"+owner));}catch{}
+    const valid=new Set(templates.map(([id])=>id));
+    selected.clear();openTimelines.clear();
+    for(const id of (Array.isArray(saved?.selected)?saved.selected:["natural","jump"]))if(valid.has(id))selected.add(id);
+    for(const id of (Array.isArray(saved?.expanded)?saved.expanded:[]))if(valid.has(id))openTimelines.add(id);
+  }
+  function savePlanPreferences(){
+    if(planPreferenceOwner===undefined)return;
+    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines]}));}catch{}
+  }
+  function templateButtons(){loadPlanPreferences();return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'<button type="button" class="tc-stat-tab ts-settings-toggle '+(settingsOpen?"is-selected":"")+'" data-ts-settings aria-expanded="'+settingsOpen+'" aria-controls="ts-plan-settings" title="Time, cooldowns, effects, prices"><span aria-hidden="true">⚙</span> Settings</button></div>';}
   function activeTemplates(){return templates.filter(([id])=>selected.has(id));}
   // Booster quantities are immediate batches. They never hide several hours
   // of waiting between candy and training; users add separate Wait rows.
@@ -439,7 +454,7 @@ const tornTrainSequence=(()=>{
   function render(context){
     if(context)ctx=context;
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
-    loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
+    loadPlanPreferences();loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
     p.hours=preparationHours();
     if(!naturalEdited)steps.natural=Array.from({length:Math.floor(p.hours/5)+(startingEnergy.natural==="full"?1:0)},()=>make("train"));
     const results=activeTemplates().map(([id,short,label])=>({id,label,data:simulate(steps[id],{hours:p.hours,startEnergy:startingEnergy[id],naturalOnly:id==="natural",repeatTraining:["maxenergy","mini","low"].includes(id)})}));
@@ -449,7 +464,7 @@ const tornTrainSequence=(()=>{
   function wire(view){
     if(view.dataset.tsBound==="yes")return;
     view.dataset.tsBound="yes";
-    view.addEventListener("toggle",event=>{const el=event.target;if(!el.isConnected)return;for(const [key,set] of [["tsQueue",openQueues],["tsTimeline",openTimelines]]){const id=el.dataset?.[key];if(id){if(el.open)set.add(id);else set.delete(id);}}},true);
+    view.addEventListener("toggle",event=>{const el=event.target;if(!el.isConnected)return;for(const [key,set] of [["tsQueue",openQueues],["tsTimeline",openTimelines]]){const id=el.dataset?.[key];if(id){if(el.open)set.add(id);else set.delete(id);if(key==="tsTimeline")savePlanPreferences();}}},true);
     const rebuild=()=>{const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();const toggles=view.querySelector(".ts-template-toggles");if(toggles)toggles.outerHTML=templateButtons();};
     view.addEventListener("change",event=>{
       const el=event.target;
@@ -477,7 +492,7 @@ const tornTrainSequence=(()=>{
     });
     view.addEventListener("click",event=>{
       const settings=event.target.closest("[data-ts-settings]");if(settings){settingsOpen=!settingsOpen;settings.setAttribute("aria-expanded",String(settingsOpen));settings.classList.toggle("is-selected",settingsOpen);const panel=view.querySelector("#ts-plan-settings");if(panel)panel.hidden=!settingsOpen;return;}
-      const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);rebuild();view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
+      const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);savePlanPreferences();rebuild();view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
       const mode=event.target.closest("[data-ts-cooldown-mode]");
       if(mode){event.preventDefault();if(mode.dataset.tsCooldownMode==="drug")liveDrug=!liveDrug;else liveBooster=!liveBooster;rebuild();return;}
       const cap=event.target.closest("[data-ts-cap]");if(cap){event.preventDefault();if(apiBoosterCap===null)manualBoosterCap=manualBoosterCap===24?48:24;rebuild();return;}
