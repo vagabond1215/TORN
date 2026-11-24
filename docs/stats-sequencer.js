@@ -244,25 +244,43 @@ const tornTrainSequence=(()=>{
     return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,rowInfo,
       money:missingPrice?null:candyCost+prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0)};
   }
+  function applyCooldownPerks(){
+    p.xanaxCDMin=420;p.ecstasyCDMin=215;
+    const raw=tornGuideApi.state.data.perks,collections=raw?.perks??raw;
+    const sources={candy:[],dvd:[]};
+    let candy=1,dvd=1;
+    const seen=new Set();
+    for(const [group,entries] of Object.entries(collections||{})){
+      if(!Array.isArray(entries))continue;
+      for(const item of entries){
+        const text=typeof item==="string"?item:[item?.name,item?.effect,item?.description].filter(Boolean).join(" ");
+        if(!text||seen.has(text.toLowerCase()))continue;
+        seen.add(text.toLowerCase());
+        const named=/self control is for losers/i.test(text)?50:/professional metabolism/i.test(text)?25:/fast metabolism/i.test(text)?10:null;
+        const percent=text.match(/(\d+(?:\.\d+)?)\s*%/);
+        const reduction=named??(percent?Number(percent[1]):null);
+        const explicit=/cooldown/i.test(text)&&/reduc|decreas|shorten|less|minus|[-−]\s*\d/i.test(text);
+        if(reduction===null||reduction<=0||reduction>=100||(!named&&!explicit))continue;
+        const candyMatch=named!==null||/\b(?:candy|candies|consumables?)\b/i.test(text);
+        const dvdMatch=/\b(?:eDVDs?|erotic DVDs?)\b/i.test(text);
+        const general=/\b(?:all|every)\s+booster/i.test(text)&&!(/max(?:imum)?|limit|capacity|cap\b/i.test(text));
+        if(candyMatch||general){candy*=1-reduction/100;sources.candy.push(text);}
+        if(dvdMatch||general){dvd*=1-reduction/100;sources.dvd.push(text);}
+      }
+    }
+    p.candyCDMultiplier=candy;p.dvdCDMultiplier=dvd;
+    return {sources,known:!!collections};
+  }
+  let cooldownEffects={sources:{candy:[],dvd:[]},known:false};
   function controls(){
-    const fields=[
-      
-      ["xanaxCDMin","Xanax CD (360–480 min)",360,480,1],["ecstasyCDMin","Ecstasy CD (200–230 min)",200,230,1],
-      ["candyCDMultiplier","Candy CD multiplier",0.1,3,0.05],
-      ["dvdCDMultiplier","eDVD CD multiplier",0.1,3,0.05]
-    ];
     const priceText=v=>v==null?"Unavailable":"$"+fmt(v);
-    return '<details class="ts-settings" open><summary>Time, cooldowns, effects, prices</summary>'+
-      '<div class="ts-membership">Preparation window: <strong>'+fmt(p.hours,2)+'h</strong> · '+$(energyRules().label)+'</div><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
-      '<label><span>'+$(label)+'</span><input type="number" data-ts-param="'+key+'" value="'+$(p[key])+'" min="'+min+'" max="'+max+'" step="'+step+'"></label>').join("")+
-      '</div>'+
-      '<div class="ts-market-prices"><span>Xanax '+priceText(p.xanaxPrice)+'</span><span>Ecstasy '+priceText(p.ecstasyPrice)+'</span><span>eDVD '+priceText(p.dvdPrice)+'</span><span>Point '+priceText(p.pointPrice)+'</span></div><div class="ts-bonus-presets"><span>Useful presets:</span>'+
-      '<button type="button" data-ts-bonus="grocery">Grocery -10% candy CD</button>'+
-      '<button type="button" data-ts-bonus="restaurant">Restaurant -25% candy CD</button>'+
-      '<button type="button" data-ts-bonus="book">Book -50% candy CD</button>'+
-      '</div><label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label>'+
-
-      '<p class="fine-print">Candy cooldown can be shortened by Grocery Store/Restaurant company perks and some books. The consumable-cooldown book does not shorten eDVD cooldown; keep its multiplier at 1 unless you have a specific applicable perk. Starting cooldowns follow the selected mode.</p></details>';
+    const effect=(label,minutes,source)=>'<span title="'+$(source.join("\n")|| (cooldownEffects.known?"No applicable reduction reported":"Perks unavailable; base cooldown assumed"))+'">'+label+' <strong>'+fmt(minutes,2)+'m</strong></span>';
+    return '<details class="ts-settings" open><summary class="ts-settings-summary"><span>Time, cooldowns, effects, prices</span>'+cooldownControls()+'</summary>'+
+      '<div class="ts-membership">Preparation window: <strong>'+fmt(p.hours,2)+'h</strong> · '+$(energyRules().label)+'</div>'+
+      '<div class="ts-cooldown-mode"><strong>Max Booster CD:</strong>'+[24,48].map(h=>'<button type="button" class="button secondary" data-ts-cap="'+h+'" aria-pressed="'+(p.boosterCapH===h)+'">'+h+'h</button>').join("")+'</div>'+
+      '<div class="ts-market-prices ts-auto-cooldowns">'+effect("Xanax",p.xanaxCDMin,[])+effect("Ecstasy",p.ecstasyCDMin,[])+effect("Candy",30*p.candyCDMultiplier,cooldownEffects.sources.candy)+effect("eDVD",360*p.dvdCDMultiplier,cooldownEffects.sources.dvd)+'</div>'+
+      '<div class="ts-market-prices"><span>Xanax '+priceText(p.xanaxPrice)+'</span><span>Ecstasy '+priceText(p.ecstasyPrice)+'</span><span>eDVD '+priceText(p.dvdPrice)+'</span><span>Point '+priceText(p.pointPrice)+'</span></div>'+
+      '<label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label></details>';
   }
   function row(side,a,index,info){
     const types=Object.entries(names).map(([id,label])=>'<option value="'+id+'" '+(a.type===id?"selected":"")+'>'+$(label)+'</option>').join("");
@@ -313,13 +331,13 @@ const tornTrainSequence=(()=>{
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
     loadLive();
     marketInputs();
+    cooldownEffects=applyCooldownPerks();
     p.hours=preparationHours();
     const a=simulate(steps.natural),b=simulate(steps.jump);
     const rule=energyRules(p);
     const diff=b.gain-a.gain;
     const perks=activePerks();
-    return cooldownControls()+'<div class="ts-cooldown-mode"><strong>Max Booster CD:</strong>'+[24,48].map(h=>'<button type="button" class="button secondary" data-ts-cap="'+h+'" aria-pressed="'+(p.boosterCapH===h)+'">'+h+'h</button>').join("")+'</div>'+controls()+
-      (perks.length?'<p class="fine-print">Possibly relevant current perks: '+perks.map($).join(" • ")+'</p>':"")+
+    return controls()+
       '<div class="ts-layout">'+section("natural")+section("jump")+'</div>'+
       '<div class="ts-outcomes"><h3>Same '+p.hours+'-hour window</h3><p>Natural: <strong>'+fmt(a.final,2)+'</strong> ('+fmt(a.used)+' E) · Jump: <strong>'+fmt(b.final,2)+'</strong> ('+fmt(b.used)+' E)</p>'+
       '<p><strong>'+(!a.complete||!b.complete?"Review blocked timeline steps":(diff>=0?"Jump exceeds natural by +"+fmt(diff,2):"Natural exceeds jump by +"+fmt(-diff,2)))+'</strong></p>'+
@@ -334,7 +352,7 @@ const tornTrainSequence=(()=>{
       const el=event.target;
       if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
       const param=el.dataset.tsParam;
-      if(param && !["startDrugMin","startBoosterMin","resetAfterSec","tornClockMin","boosterCapH","dvdHappy"].includes(param) && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
+      if(param && !["startDrugMin","startBoosterMin","resetAfterSec","tornClockMin","boosterCapH","dvdHappy","xanaxCDMin","ecstasyCDMin","candyCDMultiplier","dvdCDMultiplier"].includes(param) && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
       if(el.hasAttribute("data-ts-auto")){p.autoWait=el.checked;rebuild();return;}
       if(el.hasAttribute("data-ts-status")){
         if(["auto","standard","donator","subscriber"].includes(el.value))p.energyStatus=el.value;
@@ -352,18 +370,8 @@ const tornTrainSequence=(()=>{
     });
     view.addEventListener("click",event=>{
       const mode=event.target.closest("[data-ts-cooldown-mode]");
-      if(mode){useCurrentCooldowns=mode.dataset.tsCooldownMode==="current"&&cooldownsKnown;rebuild();return;}
+      if(mode){event.preventDefault();useCurrentCooldowns=mode.dataset.tsCooldownMode==="current"&&cooldownsKnown;rebuild();return;}
       const cap=event.target.closest("[data-ts-cap]");if(cap){p.boosterCapH=Number(cap.dataset.tsCap)===48?48:24;rebuild();return;}
-      const bonus=event.target.closest("[data-ts-bonus]");
-      if(bonus){
-        if(bonus.dataset.tsBonus==="baseline")p.boosterCapH=24;
-        if(bonus.dataset.tsBonus==="maxVoracity")p.boosterCapH=48;
-        if(bonus.dataset.tsBonus==="grocery")p.candyCDMultiplier=0.90;
-        if(bonus.dataset.tsBonus==="restaurant")p.candyCDMultiplier=0.75;
-        if(bonus.dataset.tsBonus==="book")p.candyCDMultiplier=0.50;
-        rebuild();
-        return;
-      }
       const el=event.target.closest("[data-ts-op],[data-ts-sync]");
       if(!el)return;
       if(el.hasAttribute("data-ts-sync")){loadLive(true);rebuild();return;}
