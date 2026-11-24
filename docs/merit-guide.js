@@ -34,8 +34,10 @@ const tornMeritGuide=(()=>{
      const ids=new Set((known?raw:[]).map(x=>String(typeof x==="object"?x.id??x.honor_id??x.medal_id:x)));
      for(const x of arr(catalog?.[type]??catalog)){
        if(!x?.name||x.id==null)continue;
+       const category=typeof x.type==="object"?x.type?.name:x.type??x.category??type;
+       if(type==="honors"&&(/^(default|defaults|default honors?)$/i.test(String(category).trim())||/\bdefault honor bar\b/i.test(String(x.description??x.requirement??""))))continue;
        const version=x.crimes_version;if(version===1||String(version)==="1")continue;
-       result.push({type,id:String(x.id),name:x.name,description:x.description??x.requirement??"",category:typeof x.type==="object"?x.type?.name:x.type??x.category??type,done:known?ids.has(String(x.id)):null});
+       result.push({type,id:String(x.id),name:x.name,description:x.description??x.requirement??"",category,done:known?ids.has(String(x.id)):null});
      }
    }
    return result;
