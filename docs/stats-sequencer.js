@@ -11,7 +11,7 @@ const tornTrainSequence=(()=>{
   // of waiting between candy and training; users add separate Wait rows.
   const maxCandy=cfg=>Math.max(1,Math.floor(cfg.boosterCapH*3600/
     Math.max(1,Math.round(1800*cfg.candyCDMultiplier)))+1);
-  const maxDvd=cfg=>Math.max(1,Math.ceil(cfg.boosterCapH*3600/
+  const maxDvd=cfg=>Math.max(1,Math.floor(cfg.boosterCapH*3600/
     Math.max(1,Math.round(21600*cfg.dvdCDMultiplier)))+1);
   const p={hours:28,boosterCapH:24,startDrugMin:0,startBoosterMin:0,xanaxCDMin:420,ecstasyCDMin:215,resetAfterSec:600,tornClockMin:720,candyCDMultiplier:1,dvdCDMultiplier:1,candyHappy:"any",autoWait:true,
     xanaxPrice:null,ecstasyPrice:null,candyPrice:null,dvdPrice:null,pointPrice:null};
@@ -33,7 +33,7 @@ const tornTrainSequence=(()=>{
   }
   function candyStock(){
     const items=itemList(),inventory=tornGuideApi.state.inventory.Candy;
-    const rows=(inventory||[]).map(x=>{
+    const rows=(Array.isArray(inventory)&&!tornGuideApi.state.inventoryErrors?.Candy?inventory:[]).map(x=>{
       const item=items.find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id)||keyName(i.name)===keyName(x.name??x.item?.name));
       const name=x.name??x.item?.name??item?.name, tier=Object.keys(candyTiers).find(k=>candyTiers[k].some(v=>keyName(v)===keyName(name)));
       const text=String(item?.effect??item?.description??"");
@@ -41,7 +41,7 @@ const tornTrainSequence=(()=>{
       const happy=Number(tier??matched?.[1]??0);
       return {name,happy,qty:Math.max(0,Math.floor(n(x.amount??x.quantity))),price:marketPrice(item)};
     }).filter(x=>x.happy>0&&x.qty>0);
-    return {loaded:Array.isArray(inventory),rows,tiers:[...new Set(rows.map(x=>x.happy))].sort((a,b)=>a-b)};
+    return {loaded:Array.isArray(inventory)&&!tornGuideApi.state.inventoryErrors?.Candy,rows,tiers:[...new Set(rows.map(x=>x.happy))].sort((a,b)=>a-b)};
   }
   function priceFor(name){
     return marketPrice(itemList().find(i=>keyName(i.name)===keyName(name)));
@@ -213,6 +213,7 @@ const tornTrainSequence=(()=>{
       const maximum=held===null?null:Math.min(held,allowance);
       const qty=isBooster?(a.max?(maximum??0):Math.floor(clamp(a.qty,0,type==="candy"?maxCandy(cfg):maxDvd(cfg)))):1;
       if(isBooster)rowInfo[i]={maximum,allowance,held,qty,used:rowUsed,tier,happy:0,dvdBefore:v.costs.dvd};
+      if(isBooster&&a.max&&maximum===null){v.errors.push("MAX requires loaded inventory.");break;}
       if(["xanax","ecstasy","dvd","candy"].includes(type)){
         for(let k=0;k<qty;k++){
           if(!useItem(type))break;
@@ -250,10 +251,6 @@ const tornTrainSequence=(()=>{
       ["candyCDMultiplier","Candy CD multiplier",0.1,3,0.05],
       ["dvdCDMultiplier","eDVD CD multiplier",0.1,3,0.05]
     ];
-    const stock=candyStock(),pool=candyPool(p);
-    const remaining=Math.max(0,Math.ceil((p.boosterCapH*3600-p.startBoosterMin*60)/Math.max(1,Math.round(1800*p.candyCDMultiplier))));
-    let capacity=remaining,totalHappy=0,usable=0;
-    for(const item of pool){const qty=Math.min(capacity,item.qty);capacity-=qty;usable+=qty;totalHappy+=qty*item.happy;}
     const priceText=v=>v==null?"Unavailable":"$"+fmt(v);
     return '<details class="ts-settings" open><summary>Time, cooldowns, effects, prices</summary>'+
       '<div class="ts-membership">Preparation window: <strong>'+fmt(p.hours,2)+'h</strong> · '+$(energyRules().label)+'</div><div class="ts-settings-grid">'+fields.map(([key,label,min,max,step])=>
