@@ -1,6 +1,6 @@
 "use strict";
 const tornTrainSequence=(()=>{
-  const names={xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train available Energy",refill:"Points energy refill",wait:"Wait minutes",waitDrug:"Wait for drug cooldown",waitBooster:"Wait for booster space",autoOn:"Train at full E / drug ready ON",autoOff:"Automatic check-ins OFF",checkin:"Scheduled gym check-in"};
+  const names={externalHappy:"Arrange external Happy to 50,000",xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train available Energy",refill:"Points energy refill",wait:"Wait minutes",waitDrug:"Wait for drug cooldown",waitBooster:"Wait for booster space",autoOn:"Train at full E / drug ready ON",autoOff:"Automatic check-ins OFF",checkin:"Scheduled gym check-in"};
   const make=(type,qty=1,minutes=0)=>({type,qty,minutes});
   const defaults={
     natural:()=>[make("xanax"),make("candy",2),make("train"),make("refill"),make("train"),make("autoOn"),make("waitDrug"),make("xanax")],
@@ -8,12 +8,14 @@ const tornTrainSequence=(()=>{
   };
   const maxAction=type=>({...make(type),max:true});
   defaults.natural=()=>[make("train"),make("autoOn")];
-  defaults.mini=()=>[make("train"),make("xanax"),maxAction("candy"),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
+  defaults.maxenergy=()=>[make("xanax"),maxAction("candy"),make("train"),make("refill"),make("train"),make("autoOn")];
+  defaults.mini=()=>[make("xanax"),make("waitDrug"),maxAction("candy"),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
+  defaults.low=()=>[maxAction("candy"),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
   defaults.jump=()=>[make("train"),...Array.from({length:4},()=>make("xanax")),make("waitDrug"),make("dvd",5),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
-  // 99k is a target template: DVDs alone do not guarantee 99,999 Happy.
-  defaults.maxhappy=()=>[make("train"),...Array.from({length:4},()=>make("xanax")),make("waitDrug"),maxAction("dvd"),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
+  defaults.maxhappy=()=>[make("train"),...Array.from({length:4},()=>make("xanax")),make("waitDrug"),make("externalHappy"),make("ecstasy"),make("train"),make("refill"),make("train"),make("autoOn")];
   defaults.custom=()=>[make("train")];
-  const templates=[["natural","NAT","Natural training"],["mini","MINI","Mini jump"],["jump","HJ","Happy jump"],["maxhappy","99k","99k Happy jump"],["custom","CUSTOM","Custom"]];
+  const templates=[["natural","NAT","Natural training"],["maxenergy","MAX E","Maximum Energy"],["mini","MINI","Mini jump"],["low","LOW#","Low-stat jump"],["jump","HJ","Happy jump"],["maxhappy","99k","99k Happy jump"],["custom","CUSTOM","Custom"]];
+  const startingEnergy=Object.fromEntries(templates.map(([id])=>[id,id==="natural"?"zero":"full"]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]);
   function templateButtons(){return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'</div>';}
@@ -163,7 +165,7 @@ const tornTrainSequence=(()=>{
     const dvdInventory=tornGuideApi.state.inventory.Booster;
     const dvdKnown=Array.isArray(dvdInventory)&&!tornGuideApi.state.inventoryErrors?.Booster;
     const dvdHeld=dvdKnown?dvdInventory.filter(x=>keyName(x.name??x.item?.name??itemList().find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id))?.name)===keyName("Erotic DVD")).reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity))),0):null;
-    const rowInfo={};let rowCandy=null,rowUsed=null;
+    const rowInfo={},notices=[];let rowCandy=null,rowUsed=null;
     let candyCost=0,candyGain=0,unknownCandyPrice=false;
     const gym=ctx.gym,stat=ctx.state.compareStat,limit=Math.floor(cfg.hours*3600);
     const rule=energyRules(cfg),eCap=rule.cap;
@@ -171,8 +173,7 @@ const tornTrainSequence=(()=>{
     const regenTime=rule.minutes*60;
     const gymCost=Math.max(1,Math.floor(gym.energy));
     const mult=ctx.effectsFor(stat).multiplier;
-    const initialE=rule.mode==="auto"?ctx.state.currentEnergy:
-      Math.min(ctx.state.currentEnergy,eCap);
+    const initialE=cfg.startEnergy==="zero"?0:cfg.startEnergy==="full"?eCap:Math.min(ctx.state.currentEnergy,eCap);
     const v={time:0,stat:base,energy:initialE,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),auto:false,
       costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0,warnings:[]};
     const snap=()=>({time:v.time,energy:v.energy,happy:v.happy,drug:v.drug,booster:v.booster,stat:v.stat});
@@ -208,8 +209,10 @@ const tornTrainSequence=(()=>{
         if(next===hTick||next===until||next%3600===0)point();
       }
     }
+    let rowIndex=-1;
     function waitFor(seconds,label){
       if(seconds<=0)return true;
+      if((label==="Drug cooldown"&&cfg.startDrugMin*60>v.time&&v.costs.xanax+v.costs.ecstasy===0)||(label==="Booster cooldown"&&cfg.startBoosterMin*60>v.time&&v.costs.candy+v.costs.dvd===0))notices.push({index:rowIndex,critical:true,text:"DELAY "+clock(seconds)+" · "+label});
       if(!cfg.autoWait){v.errors.push(label+" blocked ("+clock(seconds)+" left).");return false;}
       const target=v.time+Math.ceil(seconds);
       advance(seconds);
@@ -255,6 +258,7 @@ const tornTrainSequence=(()=>{
     }
     for(let i=0;i<list.length;i++){
       if(v.errors.length)break;
+      rowIndex=i;
       const a=list[i],start=snap(),type=a.type;
       const isBooster=type==="candy"||type==="dvd",tier=a.candyHappy??cfg.candyHappy;
       rowCandy=pool.filter(x=>tier==="any"||x.happy===tier);rowUsed={};
@@ -262,6 +266,12 @@ const tornTrainSequence=(()=>{
       const allowance=v.booster>boosterLimit?0:Math.floor((boosterLimit-v.booster)/itemCD)+1;
       const held=type==="candy"?(stock.loaded?rowCandy.reduce((sum,x)=>sum+x.qty,0):null):dvdKnown?Math.max(0,dvdHeld-v.costs.dvd):null;
       const maximum=held===null?null:Math.min(held,allowance);
+      const baselineAllowance=Math.floor(boosterLimit/itemCD)+1;
+      if(isBooster&&cfg.startBoosterMin*60>v.time&&v.costs.candy+v.costs.dvd===0&&allowance<baselineAllowance&&(a.max?held!=null&&held>allowance:a.qty>allowance)){
+        const target=a.max?Math.min(held,baselineAllowance):a.qty;
+        if(allowance>0)notices.push({index:i,critical:false,text:(type==="candy"?"Candy":"eDVD")+" CD "+clock(v.booster)+" · "+Math.min(allowance,target)+" / "+target+" possible"});
+        else notices.push({index:i,critical:true,text:"DELAY "+clock(Math.max(1,v.booster-boosterLimit+1))+" · Booster CD"});
+      }
       const qty=isBooster?(a.max?(maximum??0):Math.floor(clamp(a.qty,0,type==="candy"?maxCandy(cfg):maxDvd(cfg)))):1;
       if(isBooster)rowInfo[i]={maximum,allowance,held,qty,used:rowUsed,tier,happy:0,dvdBefore:v.costs.dvd};
       if(isBooster&&a.max&&maximum===null){v.errors.push("MAX requires loaded inventory.");break;}
@@ -269,9 +279,10 @@ const tornTrainSequence=(()=>{
         for(let k=0;k<qty;k++){
           if(!useItem(type))break;
         }
-      }else if(type==="train")train();
+      }else if(type==="externalHappy"){v.happy=Math.max(v.happy,50000);if(!v.warnings.includes("99k assumes a separately arranged external happiness source; its cost is not included."))v.warnings.push("99k assumes a separately arranged external happiness source; its cost is not included.");}
+      else if(type==="train")train();
       else if(type==="wait")advance(n(a.minutes)*60);
-      else if(type==="waitDrug")advance(v.drug);
+      else if(type==="waitDrug"){if(cfg.startDrugMin*60>v.time&&v.costs.xanax+v.costs.ecstasy===0&&v.drug>0)notices.push({index:i,critical:true,text:"DELAY "+clock(v.drug)+" · Drug CD"});advance(v.drug);}
       else if(type==="waitBooster")advance(Math.max(0,v.booster-boosterLimit+1));
       else if(type==="autoOn"){v.auto=true;if(v.energy>=eCap)checkin("Energy already full");}
       else if(type==="autoOff")v.auto=false;
@@ -294,7 +305,7 @@ const tornTrainSequence=(()=>{
       v.auto=true;
       while(v.time<limit){
         const day=Math.floor((cfg.tornClockMin*60+v.time)/86400);
-        if(!v.days.has(day)){const start=snap();train();v.days.add(day);v.energy=eCap;v.costs.refill++;train();v.log.push({i:"•",type:"refill",reason:"Daily refill",start,end:snap()});}
+        
         if(v.drug===0){const start=snap();train();useItem("xanax");train();v.log.push({i:"•",type:"xanax",reason:"Available drug cycle",start,end:snap()});}
         const midnight=(day+1)*86400-cfg.tornClockMin*60-v.time;
         advance(Math.min(limit-v.time,v.drug||Infinity,Math.max(1,midnight)));
@@ -302,11 +313,12 @@ const tornTrainSequence=(()=>{
       train();
     }
     if(v.time<limit)advance(limit-v.time);
+    if(cfg.naturalOnly)train();
     point();
     const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice]];
     const missingPrice=unknownCandyPrice||prices.some(([qty,price])=>qty>0&&price==null);
-    return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,rowInfo,
-      money:missingPrice?null:candyCost+prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0)};
+    return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,rowInfo,notices,
+      money:missingPrice||list.some(x=>x.type==="externalHappy")?null:candyCost+prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0)};
   }
   function applyCooldownPerks(){
     p.xanaxCDMin=420;p.ecstasyCDMin=215;
@@ -356,11 +368,11 @@ const tornTrainSequence=(()=>{
   }
   function section(side,data){
     const heading=templates.find(x=>x[0]===side)?.[2]??side;
-    return '<section class="ts-side"><h3>'+heading+' <small>'+fmt(p.hours,2)+'h</small></h3><div class="ts-list">'+steps[side].map((a,i)=>row(side,a,i,data.rowInfo[i])).join("")+'</div>'+
+    return '<section class="ts-side"><h3>'+heading+' <small>'+fmt(p.hours,2)+'h</small></h3><div class="ts-list">'+'<div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div>'+steps[side].map((a,i)=>data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,a,i,data.rowInfo[i])).join("")+'</div>'+
       '<div class="ts-add"><select data-ts-choice="'+side+'">'+Object.entries(names).map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select>'+
       '<button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'">Add action</button>'+
       '<button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div>'+
-      (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
+      (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join("; ")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
       '<p class="ts-stat">Final: '+(data.complete?fmt(data.final,2):"Blocked")+' <small>+'+fmt(data.gain,2)+' gain, '+fmt(data.used)+' E, '+(data.money==null?"Cost unavailable":"$"+fmt(data.money))+'</small></p>'+
       log(data)+'</section>';
   }
@@ -370,7 +382,7 @@ const tornTrainSequence=(()=>{
     const top=Math.max(bottom+1,...results.map(x=>x.data.final));
     const yval=val=>210-(val-bottom)/(top-bottom)*190;
     const path=serie=>serie.map((v,i)=>(i?"L":"M")+xval(v.h).toFixed(1)+","+yval(v.s).toFixed(1)).join(" ");
-    const styles={natural:["var(--text)",""],mini:["var(--text)","7 4"],jump:["var(--accent)",""],maxhappy:["var(--accent)","8 4"],custom:["var(--muted)","2 4"]};
+    const styles={maxenergy:["var(--muted)","10 4"],low:["var(--accent)","2 5"],natural:["var(--text)",""],mini:["var(--text)","7 4"],jump:["var(--accent)",""],maxhappy:["var(--accent)","8 4"],custom:["var(--muted)","2 4"]};
     let out='<svg viewBox="0 0 910 260" class="ts-chart" role="img" aria-label="Projected stat growth over '+p.hours+' hours">';
     for(let i=0;i<5;i++){
       const val=bottom+(top-bottom)*i/4,y=yval(val),hr=p.hours*i/4;
@@ -384,7 +396,7 @@ const tornTrainSequence=(()=>{
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
     loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
     p.hours=preparationHours();
-    const results=activeTemplates().map(([id,short,label])=>({id,label,data:simulate(steps[id],{hours:p.hours,repeatTraining:id==="natural"||id==="mini"})}));
+    const results=activeTemplates().map(([id,short,label])=>({id,label,data:simulate(steps[id],{hours:p.hours,startEnergy:startingEnergy[id],naturalOnly:id==="natural",repeatTraining:["maxenergy","mini","low"].includes(id)})}));
     return controls()+(results.length?'<div class="ts-layout" data-template-count="'+results.length+'">'+results.map(x=>section(x.id,x.data)).join("")+'</div><div class="ts-outcomes"><h3>Same '+fmt(p.hours,2)+'-hour window</h3><div class="ts-comparison-results">'+results.map(({label,data})=>'<span>'+$(label)+': <strong>'+(data.complete?fmt(data.final,2):"Blocked")+'</strong> ('+fmt(data.used)+' E)</span>').join("")+'</div>'+chart(results)+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. Happiness resets on Torn quarter-hours. Points refills are limited to one per Torn day.</p>';
   }
@@ -394,6 +406,7 @@ const tornTrainSequence=(()=>{
     const rebuild=()=>{const root=view.querySelector("#tc-sequencer");if(root)root.innerHTML=render();const toggles=view.querySelector(".ts-template-toggles");if(toggles)toggles.outerHTML=templateButtons();};
     view.addEventListener("change",event=>{
       const el=event.target;
+      if(el.dataset.tsStartEnergy&&Object.hasOwn(startingEnergy,el.dataset.tsStartEnergy)){startingEnergy[el.dataset.tsStartEnergy]=el.value==="zero"?"zero":"full";rebuild();return;}
       if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
       const param=el.dataset.tsParam;
       if(param && !["startDrugMin","startBoosterMin","resetAfterSec","tornClockMin","boosterCapH","dvdHappy","xanaxCDMin","ecstasyCDMin","candyCDMultiplier","dvdCDMultiplier"].includes(param) && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
