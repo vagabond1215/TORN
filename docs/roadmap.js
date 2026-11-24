@@ -95,7 +95,7 @@ const tornRoadmap=(()=>{
  };
  let selected=null,selectedFor=null;
  const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
- const activityOptions=[["War","War"],["Mug","Mugging"],["Trade","Trading"],["Travel","Travel"],["Training","Growth"],["Revive","Reviver"],["Jail","Jail break / busting"],["Business","Business"],["Crime","Crime"],["OC","Organized crimes"],["Racing","Racing"],["Money","Investing"],["Education","Education"],["Merits","Merit hunting"]];
+ const activityOptions=[["War","War"],["Mug","Mugging"],["Trade","Trading"],["Travel","Travel"],["Training","Gym training"],["Revive","Reviver"],["Jail","Jail break / busting"],["Business","Business"],["Crime","Crime"],["OC","Organized crimes"],["Racing","Racing"],["Money","Investing"],["Education","Education"],["Merits","Merit hunting"]];
  const styleOptions=activityOptions.map(([id])=>id);
  const activityLabels=Object.fromEntries(activityOptions);
  Object.assign(branches,{
@@ -115,18 +115,33 @@ const tornRoadmap=(()=>{
   selected=Array.isArray(data)?[...new Set(data.filter(x=>styleOptions.includes(x)))]:[];
   return selected;
  }
+ function preferences(){
+  let data={};
+  try{data=JSON.parse(read(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences")||"{}")||{};}catch{}
+  return {priority:["growth","money"].includes(data.priority)?data.priority:"growth",risk:["low","medium","high"].includes(data.risk)?data.risk:"low"};
+ }
  function renderActivities(){
-  return '<section class="panel home-activities"><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div></div></section>';
+  const p=preferences();
+  const radio=(name,opts,value)=>'<div class="roadmap-styles">'+opts.map(([id,label])=>'<label class="roadmap-style"><input type="radio" name="home-'+name+'" data-home-pref="'+name+'" value="'+id+'" '+(value===id?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div>';
+  return '<section class="panel home-activities"><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div><div class="home-pref-row"><strong>Priority</strong>'+radio("priority",[["growth","Growth"],["money","Money"]],p.priority)+'</div><div class="home-pref-row"><strong>Acceptable Risk</strong>'+radio("risk",[["low","Low"],["medium","Medium"],["high","High"]],p.risk)+'</div></div></section>';
  }
  function wireActivities(view){
   if(view.dataset.activitiesBound==="1")return;
   view.dataset.activitiesBound="1";
   view.addEventListener("change",event=>{
    const el=event.target,value=el.dataset.roadmapStyle;
-   if(!styleOptions.includes(value))return;
-   selected=selectedStyles().filter(x=>x!==value);
-   if(el.checked)selected.push(value);
-   write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
+   if(!el.closest(".home-activities"))return;
+   if(styleOptions.includes(value)){
+    selected=selectedStyles().filter(x=>x!==value);
+    if(el.checked)selected.push(value);
+    write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
+   }else if(el.dataset.homePref&&el.checked){
+    const p=preferences(),key=el.dataset.homePref;
+    if(key==="priority"&&["growth","money"].includes(el.value)||key==="risk"&&["low","medium","high"].includes(el.value)){
+     p[key]=el.value;write(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences",JSON.stringify(p));
+    }
+   }else return;
+   tornCrimeGuide.refreshRecommendations(view);
   });
  }
  function all(){
@@ -210,5 +225,5 @@ const tornRoadmap=(()=>{
    }
   });
  }
- return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities};
+ return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities,preferences};
 })();
