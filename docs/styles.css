@@ -1572,3 +1572,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 }
 .ts-booster-row button[data-ts-op="max"],
 .tc-selected-gym .tc-train-control :is(button[data-tc-action="max"],button[data-tc-action="candy-max"]){padding-block:0}
+
+/* Training plans: full-width cards, independently collapsible queues. */
+#tc-sequencer .ts-layout{grid-template-columns:minmax(0,1fr)}
+.ts-queue{margin:.35rem 0}
+.ts-queue>summary{cursor:pointer;color:var(--accent-strong);font-size:.8rem;font-weight:700;padding:.25rem 0}
+.ts-queue[open]>summary{margin-bottom:.35rem}
