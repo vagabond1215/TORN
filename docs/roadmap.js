@@ -95,22 +95,45 @@ const tornRoadmap=(()=>{
  };
  let selected=null,selectedFor=null;
  const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
- const styleOptions=["Balanced","Training","Trade","Mug","Business","War","Revive","Crime","Racing"];
+ const activityOptions=[["War","War"],["Mug","Mugging"],["Trade","Trading"],["Travel","Travel"],["Training","Growth"],["Revive","Reviver"],["Jail","Jail break / busting"],["Business","Business"],["Crime","Crime"],["OC","Organized crimes"],["Racing","Racing"],["Money","Investing"],["Education","Education"],["Merits","Merit hunting"]];
+ const styleOptions=activityOptions.map(([id])=>id);
+ const activityLabels=Object.fromEntries(activityOptions);
+ Object.assign(branches,{
+  Travel:[["travel-plan","Plan profitable travel routes","Compare travel time, item prices and carrying capacity.","travel"]],
+  Jail:[["jail-bust","Develop busting and jail-release capability","Review Law education, relevant merits and job specials.","job"]],
+  OC:[["oc-roles","Prepare organized crime roles","Coordinate with your faction and check required items and scheduling.","crime"]],
+  Money:[["invest-plan","Compare bank and stock investments","Balance liquidity, recurring returns and training expenses.","stocks"]],
+  Education:[["education-focus","Prioritize useful education effects","Use education paths and reduce future course durations.","education"]],
+  Merits:[["merit-focus","Track attainable awards and merits","Prioritize awards that fit your normal activity.","award"]]
+ });
  function selectedStyles(){
   const owner=activeProfile||"guest";
   if(selectedFor!==owner){selectedFor=owner;selected=null;}
   if(selected)return selected;
   let data;
-  try{data=JSON.parse(read(activeProfile?activeKey("playstyle:selection"):"playstyle:guest")||'["Balanced"]');}catch{data=["Balanced"];}
-  selected=Array.isArray(data)?data.filter(x=>styleOptions.includes(x)):[];
-  if(!selected.length)selected=["Balanced"];
+  try{data=JSON.parse(read(activeProfile?activeKey("playstyle:selection"):"playstyle:guest")||"[]");}catch{data=[];}
+  selected=Array.isArray(data)?[...new Set(data.filter(x=>styleOptions.includes(x)))]:[];
   return selected;
+ }
+ function renderActivities(){
+  return '<section class="panel home-activities"><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div></div></section>';
+ }
+ function wireActivities(view){
+  if(view.dataset.activitiesBound==="1")return;
+  view.dataset.activitiesBound="1";
+  view.addEventListener("change",event=>{
+   const el=event.target,value=el.dataset.roadmapStyle;
+   if(!styleOptions.includes(value))return;
+   selected=selectedStyles().filter(x=>x!==value);
+   if(el.checked)selected.push(value);
+   write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
+  });
  }
  function all(){
   const common=core.flatMap(([stage,...items])=>items.map(([id,title,detail,source])=>({stage,id,title,detail,source:official[source]})));
   const styles=selectedStyles().filter(x=>x!=="Balanced");
   for(const style of styles)for(const [id,title,detail,source] of branches[style])
-   common.push({stage:style+" specialization",id,title,detail,source:official[source]});
+   common.push({stage:(activityLabels[style]||style)+" specialization",id,title,detail,source:official[source]});
   return common;
  }
  function verified(id){
@@ -146,9 +169,6 @@ const tornRoadmap=(()=>{
   out+='<section class="panel"><div class="panel-heading"><h2>Daily essentials</h2></div><div class="panel-content"><p id="task-progress" role="status"></p>'+
    '<div class="checklist">'+Object.entries(tasks).map(([id,label])=>'<label><input type="checkbox" name="'+esc(id)+'" '+(!activeProfile?"disabled":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div>'+
    '<p class="fine-print">Daily items use your existing checklist. Reopen or uncheck when a new day begins.</p></div></section>';
-  out+='<section class="panel"><div class="panel-heading"><h2>How do you like to play?</h2></div><div class="panel-content"><p>Choose one or several specializations. Core steps are always shown, and selected branches add relevant long-term goals.</p>'+
-   '<div class="roadmap-styles">'+styleOptions.map(style=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(style)+'" '+(selectedStyles().includes(style)?"checked":"")+'><span>'+esc(style)+'</span></label>').join("")+'</div>'+
-   '<p class="fine-print">Company recommendations are suggestions rather than mandatory career commitments. Changing your style does not delete checklist progress.</p></div></section>';
   out+='<section class="panel roadmap-summary"><div class="panel-content"><strong id="roadmap-progress">'+done+' of '+entries.length+' current milestones complete</strong><div class="roadmap-bar"><span style="width:'+Math.round(done/entries.length*100)+'%"></span></div></div></section>';
   const stages=[...new Set(entries.map(x=>x.stage))];
   for(const [index,stage] of stages.entries()){
@@ -177,18 +197,7 @@ const tornRoadmap=(()=>{
   view.dataset.roadmapBound="1";
   view.addEventListener("change",event=>{
    const el=event.target;
-   if(el.dataset.roadmapStyle){
-    const value=el.dataset.roadmapStyle;
-    if(value==="Balanced"&&el.checked)selected=["Balanced"];
-    else{
-      selected=selectedStyles().filter(x=>x!==value&&x!=="Balanced");
-      if(el.checked)selected.push(value);
-      if(!selected.length)selected=["Balanced"];
-    }
-    write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
-    view.innerHTML=render();
-    setupDaily(view);
-   }else if(el.dataset.roadmapStep){
+   if(el.dataset.roadmapStep){
     write(stepKey(el.dataset.roadmapStep),el.checked?"done":null);
     const entries=all(),count=entries.filter(step=>checked(step.id)).length;
     const progress=view.querySelector("#roadmap-progress");
@@ -201,5 +210,5 @@ const tornRoadmap=(()=>{
    }
   });
  }
- return {render,wire,core,branches,selectedStyles,all,styleOptions};
+ return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities};
 })();
