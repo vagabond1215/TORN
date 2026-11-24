@@ -155,4 +155,6 @@ Property schema: https://neon0404.github.io/torn-client/types/UserPropertyBasicD
 
 ## Inventory details and manual Weav3r searches
 
-Inventory uses the cached Torn item catalog (15-minute TTL) for descriptions, effects and market values. Expanding an item makes no new request. Item matching prefers a matching catalog ID and name, then a unique exact name. Unresolved IDs disable external search. Manual Weav3r search opens https://weav3r.dev/dashboard?tab=marketplace&intent=sell&item=ITEM_ID without sharing a key or inventory quantity. No automated marketplace polling or trades. Public pricelist buyers and anonymous marketplace orders are separate; anonymous identities remain hidden until matched through Weav3r. A future per-item API query and green confirmed-buyer indicator require a documented buyer endpoint, permission and CORS verification.
+Inventory uses the cached Torn item catalog (15-minute TTL) for descriptions, effects and market values. Expanding an item makes no request. Item matching prefers a matching catalog ID and name, then a unique exact name. Unresolved IDs disable marketplace controls.
+
+**Query Buyers** sends one anonymous GET to Weav3r’s documented trader endpoint for the selected item. It sends only the item ID and result controls. Public pricelist quotes are cached locally with the check time and shown with unknown quantity. The manual marketplace link opens the item on Weav3r, where anonymous buy orders can be checked independently. See [the Weav3r audit](WEAV3R_INTEGRATION.md) for schemas, limits, and validation.

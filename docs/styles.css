@@ -1699,7 +1699,13 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-detail-row summary::-webkit-details-marker { display:none; }
 .inventory-detail-row summary::before { content:"▸"; color:var(--muted); flex:none; }
 .inventory-detail-row details[open] summary::before { content:"▾"; }
-.inventory-detail-row summary span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.inventory-detail-row summary > span:first-of-type { min-width:0; overflow-wrap:anywhere; }
+.inventory-detail-row summary > strong { margin-inline-start:auto; flex:none; }
+.inventory-buyer-badge:empty, .inventory-buyer-status:empty { display:none; }
+.inventory-buyer-icon { display:inline-block; padding:0 .3rem; color:#147638; background:#e4f5e8; border-radius:.25rem; font-weight:700; }
+.inventory-buyer-results { overflow-wrap:anywhere; }
+.inventory-buyer-results details summary { display:list-item; list-style:revert; }
+.inventory-buyer-results details summary::before { content:none; }
 .inventory-detail-row summary:focus-visible { outline:2px solid var(--accent-strong); outline-offset:2px; }
 .inventory-detail-body { padding:.45rem .15rem .35rem .8rem; }
 .inventory-detail-body p { margin:.35rem 0; overflow-wrap:anywhere; }
@@ -1708,4 +1714,3 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-detail-body dd { margin:0; overflow-wrap:anywhere; }
 .inventory-market-actions { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.55rem; }
 .inventory-market-link { text-decoration:none; white-space:normal; }
-.inventory-market-link span { font-weight:700; }

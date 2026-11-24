@@ -1,5 +1,5 @@
 "use strict";
-/* Page-scoped Torn API coordinator. All network calls are explicit GETs to Torn API v2.
+/* Page-scoped Torn API coordinator. The Torn coordinator sends explicit GETs to Torn API v2.
  * Credential lives in memory, or opt-in browser localStorage only. No external API
  * receives the Torn key. The optional passive Torn-page bridge reads only allowlisted status bars.
  */
@@ -792,6 +792,115 @@ function wireStocksPanel(view){
 }
 const inventoryExpanded=new Set();
 let inventoryExpandedOwner=null;
+const weav3rBuyers=(()=>{
+  const base="https://weav3r.dev";
+  const freshness=5*60*1000;
+  const storageKey=id=>"torn-city-guide:weav3r-buyers:v1:"+id;
+  const results=new Map(), pending=new Map();
+  let retryAt=0;
+
+  function normalize(rows){
+    return rows.filter(row=>Number.isSafeInteger(row?.player_id)&&row.player_id>0&&
+      typeof row.player_name==="string"&&row.player_name.trim()&&
+      Number.isSafeInteger(row.price)&&row.price>0)
+      .sort((a,b)=>b.price-a.price)
+      .filter((row,index,sorted)=>sorted.findIndex(other=>other.player_id===row.player_id)===index)
+      .map(({player_id,player_name,price,last_action,last_trade,pricelist_updated,sponsored})=>
+        ({player_id,player_name,price,last_action,last_trade,pricelist_updated,sponsored}));
+  }
+
+  function read(id){
+    if(!results.has(id)){
+      let result=null;
+      try{
+        const cached=JSON.parse(localStorage.getItem(storageKey(id)));
+        if(Number.isFinite(cached?.checkedAt)&&cached.checkedAt>0&&cached.checkedAt<=Date.now()&&Array.isArray(cached.traders)){
+          result={...cached,traders:normalize(cached.traders)};
+        }
+      }catch{}
+      results.set(id,result);
+    }
+    return results.get(id);
+  }
+
+  async function load(id){
+    if(Date.now()<retryAt)throw new Error("Weav3r rate limit. Try again in "+Math.ceil((retryAt-Date.now())/1000)+" seconds.");
+    let response;
+    try{
+      response=await fetch(base+"/api/marketplace/"+id+"/traders?limit=10&sort=price",{
+        credentials:"omit",referrerPolicy:"no-referrer",signal:AbortSignal.timeout(10000)
+      });
+    }catch{
+      throw new Error("Can't reach Weav3r. The request may have timed out or been blocked by your browser or network.");
+    }
+    if(response.status===429){
+      const header=response.headers.get("Retry-After"), seconds=Number(header);
+      const until=header&&(Number.isFinite(seconds)?Date.now()+seconds*1000:Date.parse(header));
+      retryAt=until>Date.now()?until:Date.now()+60000;
+      throw new Error("Weav3r rate limit. Try again in "+Math.ceil((retryAt-Date.now())/1000)+" seconds.");
+    }
+    if(response.status===401||response.status===403)throw new Error("Weav3r denied the public request. Open Weav3r to check buyers.");
+    if(!response.ok)throw new Error("Weav3r lookup failed (HTTP "+response.status+").");
+    const data=await response.json().catch(()=>null);
+    if(data?.item_id!==id||!Array.isArray(data.traders))throw new Error("Weav3r returned an unexpected buyer response.");
+    const traders=normalize(data.traders);
+    if(data.traders.length&&!traders.length)throw new Error("Weav3r returned an unexpected buyer response.");
+    const result={checkedAt:Date.now(),generatedAt:data.generated_at,traders};
+    results.set(id,result);
+    try{localStorage.setItem(storageKey(id),JSON.stringify(result));}catch{}
+    return result;
+  }
+
+  function query(id){
+    if(!Number.isSafeInteger(id)||id<=0)throw new Error("Item ID unavailable.");
+    if(!pending.has(id))pending.set(id,load(id).finally(()=>pending.delete(id)));
+    return pending.get(id);
+  }
+
+  function stale(result){
+    const source=Number.isSafeInteger(result.generatedAt)&&result.generatedAt>0?result.generatedAt*1000:result.checkedAt;
+    return Date.now()-Math.min(result.checkedAt,source)>=freshness;
+  }
+
+  return {base,query,read,stale,pending:id=>pending.has(id)};
+})();
+
+function inventoryMarketplaceUrl(id){
+  return weav3rBuyers.base+"/dashboard?tab=marketplace&intent=sell&item="+id;
+}
+
+function inventoryBuyerIcon(id){
+  const result=id&&weav3rBuyers.read(id);
+  if(!result?.traders.length||weav3rBuyers.stale(result))return "";
+  return '<a class="inventory-buyer-icon" href="'+safe(inventoryMarketplaceUrl(id))+
+    '" target="_blank" rel="noopener noreferrer" aria-label="Open Weav3r buyer listings" title="Pricelist buyers found on last check">$</a>';
+}
+
+function inventoryBuyerResults(id,qty){
+  const result=weav3rBuyers.read(id);
+  if(!result)return "";
+  const stamp=safe(tornGuidePreferences.formatDate(result.checkedAt));
+  const timing='<p class="fine-print">'+(weav3rBuyers.stale(result)?"Stale result · ":"")+"Last checked "+stamp+"</p>";
+  const [best,...more]=result.traders;
+  if(!best)return timing+'<p>No active pricelist buyers returned. Check Weav3r for anonymous buy orders.</p>';
+  const buyer=row=>{
+    const list=weav3rBuyers.base+"/pricelist/"+row.player_id;
+    const trade="https://www.torn.com/trade.php#step=start&userID="+row.player_id;
+    const activity=[["Last active",row.last_action],["Last trade",row.last_trade],["Pricelist updated",row.pricelist_updated]]
+      .filter(([,time])=>Number.isSafeInteger(time)&&time>0)
+      .map(([label,time])=>label+" "+safe(tornGuidePreferences.formatDate(time*1000))).join(" · ");
+    return '<p><strong>'+safe(row.player_name)+'</strong> · $'+formatNumber(row.price)+' each'+
+      (row.sponsored===1?' · Sponsored':'')+'<br><a href="'+list+'" target="_blank" rel="noopener noreferrer">Pricelist</a>'+
+      ' · <a href="'+trade+'" target="_blank" rel="noopener noreferrer">Open Torn trade page</a>'+
+      (activity?'<br><small>'+activity+'</small>':'')+'</p>';
+  };
+  const proceeds=qty>0&&Number.isSafeInteger(best.price*qty)?
+    '<p>Potential stack proceeds <strong>$'+formatNumber(best.price*qty)+'</strong> if the buyer takes all '+formatNumber(qty)+'.</p>':"";
+  return timing+'<p><strong>Highest advertised pricelist price</strong></p>'+buyer(best)+proceeds+
+    '<p class="fine-print">Requested quantity is unknown. Confirm capacity and any bulk terms on the trader’s pricelist.</p>'+
+    (more.length?'<details><summary>More pricelist buyers ('+more.length+')</summary>'+more.map(buyer).join("")+'</details>':"");
+}
+
 function inventoryDetailRow(item,category,index){
   const owner=tornGuideApi.state.identity?.id??null;
   if(owner!==inventoryExpandedOwner){inventoryExpanded.clear();inventoryExpandedOwner=owner;}
@@ -816,17 +925,57 @@ function inventoryDetailRow(item,category,index){
   const price=info.market_value??info.value?.market_price??info.value?.market_value??info.market_price;
   const qty=Number(item.amount??item.quantity);
   const validPrice=price!=null&&Number.isFinite(Number(price))&&Number(price)>0;
-  const url=id?"https://weav3r.dev/dashboard?tab=marketplace&intent=sell&item="+id:"";
-  return '<li class="inventory-detail-row"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span>'+safe(name)+(item.equipped?' <small>(equipped)</small>':'')+'</span><strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body"><p>'+safe(description)+'</p><dl><dt>Type</dt><dd>'+safe(category)+'</dd>'+(id?'<dt>Item ID</dt><dd>'+id+'</dd>':'')+'<dt>Effects</dt><dd>'+safe(effects||"No effect information available")+'</dd><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+'<div class="inventory-market-actions">'+(url?'<a class="button secondary inventory-market-link" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">$</span> Search Weav3r buyers</a>':'<small>Item ID unavailable; marketplace search disabled.</small>')+'</div><p class="fine-print">Manual search opens Weav3r; no buyer demand is verified in the guide.</p></div></details></li>';
+  const url=id?inventoryMarketplaceUrl(id):"";
+  return '<li class="inventory-detail-row" data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span>'+safe(name)+(item.equipped?' <small>(equipped)</small>':'')+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span><strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body"><p>'+safe(description)+'</p><dl><dt>Type</dt><dd>'+safe(category)+'</dd>'+(id?'<dt>Item ID</dt><dd>'+id+'</dd>':'')+'<dt>Effects</dt><dd>'+safe(effects||"No effect information available")+'</dd><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
+    '<div class="inventory-market-actions">'+(url?'<button type="button" class="button secondary" data-query-buyers'+
+    (weav3rBuyers.pending(id)?' disabled>Checking…':'>Query Buyers')+'</button>'+
+    '<a class="button secondary inventory-market-link" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Open Weav3r marketplace</a>':
+    '<small>Item ID unavailable; marketplace search disabled.</small>')+'</div>'+
+    (id?'<p class="inventory-buyer-status" role="status"></p><div class="inventory-buyer-results">'+inventoryBuyerResults(id,qty)+'</div>':"")+
+    '</div></details></li>';
 }
 if(typeof document!=="undefined")document.addEventListener("toggle",event=>{
   const el=event.target,key=el.dataset?.inventoryDetail;
   if(!key||!el.isConnected)return;
-  if(el.open)inventoryExpanded.add(key);else inventoryExpanded.delete(key);
+  if(!el.open){inventoryExpanded.delete(key);return;}
+  inventoryExpanded.add(key);
+  const row=el.closest("[data-buyer-item]");
+  const id=Number(row.dataset.buyerItem);
+  const result=id&&weav3rBuyers.read(id);
+  if(result&&weav3rBuyers.stale(result)){
+    row.querySelector(".inventory-buyer-badge").textContent="";
+    row.querySelector(".inventory-buyer-results").innerHTML=inventoryBuyerResults(id,Number(row.dataset.buyerQty));
+  }
 },true);
 
+if(typeof document!=="undefined")document.addEventListener("click",async event=>{
+  const button=event.target.closest?.("[data-query-buyers]");
+  if(!button)return;
+  const row=button.closest("[data-buyer-item]");
+  const id=Number(row.dataset.buyerItem);
+  if(!id||weav3rBuyers.pending(id))return;
+  const rows=()=>document.querySelectorAll('[data-buyer-item="'+id+'"]');
+  const setStatus=(message,busy)=>{
+    for(const item of rows()){
+      const control=item.querySelector("[data-query-buyers]");
+      control.disabled=busy;
+      control.textContent=busy?"Checking…":"Query Buyers";
+      item.querySelector(".inventory-buyer-status").textContent=message;
+    }
+  };
+  setStatus("Checking active pricelists…",true);
+  let message="Pricelist check complete.";
+  try{await weav3rBuyers.query(id);}
+  catch(error){message=error.message;}
+  for(const item of rows()){
+    item.querySelector(".inventory-buyer-badge").innerHTML=inventoryBuyerIcon(id);
+    item.querySelector(".inventory-buyer-results").innerHTML=inventoryBuyerResults(id,Number(item.dataset.buyerQty));
+  }
+  setStatus(message,false);
+});
+
 function renderInventoryPage(){
-  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Inventory</h1><p>Load only the item categories you need. Once loaded, each category is cached independently for 15 minutes. Expand items for cached details and manual buyer searches.</p></header>';
+  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Inventory</h1><p>Load only the item categories you need. Once loaded, each category is cached independently for 15 minutes. Expand an item for details and a manual Weav3r buyer check.</p></header>';
   if(!tornGuideApi.isConnected())return out+'<section class="panel"><div class="panel-content">Connect your account to load inventory.</div></section>';
   const st=tornGuideApi.state;
   out+='<div class="inventory-grid">';
