@@ -29,7 +29,7 @@ const tornStatPlanner = (() => {
   const state = {
     bonusOpen:{}, gymInfoOpen:false, selectedGym:null, currentPlayer:null, imported:false, apiStamp:null, subpage:"gym",
     statValues:{strength:1000,defense:1000,speed:1000,dexterity:1000},
-    trainCount:1, trainMax:false, calcCandyQty:0, calcCandyHappy:25, calcCandyMax:false,calcHappyMode:"current",
+    trainCount:1, trainMax:false, trainFull:false, calcCandyQty:0, calcCandyHappy:25, calcCandyMax:false,calcHappyMode:"current",
     extra:{strength:0,defense:0,speed:0,dexterity:0},
     currentEnergy:150, maxEnergy:150, happy:1000, maxHappy:1000,
     compareStat:"strength",hours:32,regenMinutes:10,
@@ -297,7 +297,13 @@ const tornStatPlanner = (() => {
     const type=String(g.category||"").toLowerCase();
     return /light/.test(type)?0:/middle/.test(type)?1:/heavy/.test(type)?2:3;
   }
+  function fullJumpEnergy(){
+    const profile=api("profile"),status=String((profile?.profile??profile)?.donator_status??"").toLowerCase();
+    const premium=/donator|subscriber/.test(status)||(!/standard|non.?donator|none/.test(status)&&state.maxEnergy>=150);
+    return 1000+(premium?150:100);
+  }
   function trainingCount(gym) {
+    if(state.trainFull)return Math.floor(1000/gym.energy)+Math.floor((fullJumpEnergy()-1000)/gym.energy);
     return state.trainMax?Math.floor(state.currentEnergy/gym.energy):Math.max(1,Math.min(10000,Math.floor(state.trainCount)));
   }
   function gymIcon(g) {
@@ -480,7 +486,7 @@ const tornStatPlanner = (() => {
     markup+=renderBuild(gym,active);
     }
     if(state.subpage==="calc"){
-    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><div class="tc-candy-control"><label for="tc-candy-qty">Candy:</label><input id="tc-candy-qty" type="number" data-tc="calcCandyQty" min="0" max="1000000000" step="1" value="'+calcCandyPlan().requested+'" title="Candy quantity (simulation only)"><button type="button" class="button secondary '+(state.calcCandyMax?"is-selected":"")+'" data-tc-action="candy-max" aria-pressed="'+state.calcCandyMax+'" '+(!calcCandyPlan().loaded||calcCandyPlan().cooldown.allowed===null?"disabled":"")+' title="Maximum candy within inventory and booster cooldown (simulation)">MAX</button><select data-tc="calcCandyHappy" aria-label="Happiness per candy" title="Happiness per candy">'+["any",25,35,50,75,100,150,250].map(h=>'<option value="'+h+'" '+(state.calcCandyHappy===h?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select><button type="button" class="button secondary tc-happy-mode '+(state.calcHappyMode!=="current"?"is-selected":"")+'" data-tc-action="happy-mode" title="Cycle Happiness: Current, HJ, 99k">'+({current:"Current",hj:"HJ","99k":"99k"}[state.calcHappyMode])+'</button></div></div>'+'</div>'+happinessStatus()+calcCandySummary();
+    markup+='<section class="panel tc-calc-panel"><div class="tc-selected-gym"><button type="button" class="text-button" data-tc-view="gym" title="Change simulation gym">'+esc(gym.name)+'</button><small>'+nice(gym.energy)+'E</small>'+'<div class="tc-train-control"><label for="tc-train-count">Train:</label><input id="tc-train-count" data-tc="trainCount" type="number" min="1" max="10000" step="1" value="'+trainingCount(gym)+'"><button type="button" class="button secondary '+(state.trainMax?"is-selected":"")+'" data-tc-action="max" aria-pressed="'+state.trainMax+'">MAX</button><button type="button" class="button secondary '+(state.trainFull?"is-selected":"")+'" data-tc-action="full" aria-pressed="'+state.trainFull+'" title="Full jump: '+fullJumpEnergy()+' E (1,000 E stack plus points refill)">FULL</button><div class="tc-candy-control"><label for="tc-candy-qty">Candy:</label><input id="tc-candy-qty" type="number" data-tc="calcCandyQty" min="0" max="1000000000" step="1" value="'+calcCandyPlan().requested+'" title="Candy quantity (simulation only)"><button type="button" class="button secondary '+(state.calcCandyMax?"is-selected":"")+'" data-tc-action="candy-max" aria-pressed="'+state.calcCandyMax+'" '+(!calcCandyPlan().loaded||calcCandyPlan().cooldown.allowed===null?"disabled":"")+' title="Maximum candy within inventory and booster cooldown (simulation)">MAX</button><select data-tc="calcCandyHappy" aria-label="Happiness per candy" title="Happiness per candy">'+["any",25,35,50,75,100,150,250].map(h=>'<option value="'+h+'" '+(state.calcCandyHappy===h?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select><button type="button" class="button secondary tc-happy-mode '+(state.calcHappyMode!=="current"?"is-selected":"")+'" data-tc-action="happy-mode" title="Cycle Happiness: Current, HJ, 99k">'+({current:"Current",hj:"HJ","99k":"99k"}[state.calcHappyMode])+'</button></div></div>'+'</div>'+happinessStatus()+calcCandySummary();
     if(!available) markup+='<div class="tc-notice">Connect your <a href="#profile">Torn account</a> to load real battle stats, live energy/happiness, gym membership and active perks. Sample values are displayed until then.</div>';
     else if(!api("battlestats")||!api("perks"))markup+='<div class="tc-notice">Some API selections are missing. Values and modifiers not provided by Torn will be marked as unavailable or treated as zero in estimates.</div>';
     markup+='<div class="panel-content tc-simulator-body">'+
@@ -512,7 +518,7 @@ const tornStatPlanner = (() => {
       if(el.dataset.tc) {
         const key=el.dataset.tc;
         if(key==="selectedGym") state.selectedGym=el.value;
-        else if(key==="trainCount"){state.trainCount=Math.floor(clamp(el.value,1,10000));state.trainMax=false;}
+        else if(key==="trainCount"){state.trainCount=Math.floor(clamp(el.value,1,10000));state.trainMax=false;state.trainFull=false;}
         else if(key==="calcCandyQty"){state.calcCandyQty=Math.floor(clamp(el.value,0,1000000000));state.calcCandyMax=false;}
         else if(key==="calcCandyHappy"){const h=el.value==="any"?"any":Number(el.value);if(["any",25,35,50,75,100,150,250].includes(h))state.calcCandyHappy=h;}
         else if(Object.prototype.hasOwnProperty.call(state,key)) {
@@ -551,7 +557,8 @@ const tornStatPlanner = (() => {
       if(action&&action.dataset.tcAction==="auto-gym"){state.selectedGym=null;view.innerHTML=render();}
       if(action&&action.dataset.tcAction==="happy-mode"){state.calcHappyMode=({current:"hj",hj:"99k","99k":"current"})[state.calcHappyMode];view.innerHTML=render();return;}
       if(action&&action.dataset.tcAction==="candy-max"){if(calcCandyPlan().loaded&&calcCandyPlan().cooldown.allowed!==null){state.calcCandyMax=true;state.calcCandyQty=calcCandyPlan().capacity;view.innerHTML=render();}return;}
-      if(action&&action.dataset.tcAction==="max"){state.trainMax=true;view.innerHTML=render();}
+      if(action&&action.dataset.tcAction==="max"){state.trainMax=true;state.trainFull=false;view.innerHTML=render();}
+      if(action&&action.dataset.tcAction==="full"){state.trainFull=true;state.trainMax=false;view.innerHTML=render();return;}
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
   }
