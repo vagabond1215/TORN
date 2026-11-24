@@ -20,7 +20,7 @@ const tornTrainSequence=(()=>{
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,n(v,a)));
   const fmt=(v,d=0)=>Number(v).toLocaleString(undefined,{maximumFractionDigits:d});
   const clock=v=>{const s=Math.max(0,Math.round(v));return Math.floor(s/3600)+":"+String(Math.floor(s/60)%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");};
-  let ctx=null,loadedPlayer=null;
+  let ctx=null,loadedPlayer=null,useCurrentCooldowns=false,cooldownsKnown=false;
   const candyTiers={"25":["Bag of Bon Bons","Bag of Chocolate Kisses","Box of Bon Bons","Box of Extra Strong Mints","Box of Sweet Hearts","Lollipop","Box of Chocolate Bars"],"35":["Big Box of Chocolate Bars"],"50":["Bag of Candy Kisses","Chocolate Egg"],"75":["Bag of Bloody Eyeballs","Bag of Tootsie Rolls"],"100":["Bag of Chocolate Truffles","Bag of Reindeer Droppings"],"150":["Bag of Humbugs","Bag of Sherbet","Jawbreaker","Pixie Sticks"],"250":["Birthday Cupcake"]};
   const keyName=value=>String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
   const positive=value=>value!=null&&Number.isFinite(Number(value))&&Number(value)>0?Number(value):null;
@@ -66,14 +66,20 @@ const tornTrainSequence=(()=>{
     return cd && typeof cd==="object"?{drug:n(cd.drug)/60,booster:n(cd.booster)/60}:null;
   }
   function loadLive(force=false){
-    const id=tornGuideApi.state.identity&&tornGuideApi.state.identity.id;
-    if(!force && loadedPlayer===id)return;
-    loadedPlayer=id||null;
+    const id=tornGuideApi.state.identity?.id??null;
+    if(loadedPlayer!==id){loadedPlayer=id;useCurrentCooldowns=false;}
     const cd=readCooldowns();
-    if(cd){p.startDrugMin=cd.drug;p.startBoosterMin=cd.booster;}
+    cooldownsKnown=cd!==null;
+    const stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns);
+    const elapsed=Number.isFinite(stamp)&&stamp>0?Math.max(0,(Date.now()-stamp)/60000):0;
+    p.startDrugMin=useCurrentCooldowns&&cd?Math.max(0,cd.drug-elapsed):0;
+    p.startBoosterMin=useCurrentCooldowns&&cd?Math.max(0,cd.booster-elapsed):0;
     const now=new Date();
-    p.tornClockMin=now.getUTCHours()*60+now.getUTCMinutes();
+    p.tornClockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
     p.resetAfterSec=900-(now.getUTCMinutes()%15*60+now.getUTCSeconds());
+  }
+  function cooldownControls(){
+    return '<div class="ts-cooldown-mode"><strong>Starting cooldowns:</strong><button type="button" class="button secondary '+(!useCurrentCooldowns?"is-selected":"")+'" data-ts-cooldown-mode="zero" aria-pressed="'+(!useCurrentCooldowns)+'">Use 0</button><button type="button" class="button secondary '+(useCurrentCooldowns?"is-selected":"")+'" data-ts-cooldown-mode="current" aria-pressed="'+useCurrentCooldowns+'" '+(!cooldownsKnown?"disabled":"")+'>Use current</button><small>Drug '+fmt(p.startDrugMin,1)+'m · Booster '+fmt(p.startBoosterMin,1)+'m</small><small title="Fixed Torn quarter-hour schedule">Next Happy reset: '+String(Math.floor(p.resetAfterSec/60)).padStart(2,"0")+':'+String(p.resetAfterSec%60).padStart(2,"0")+'</small></div>';
   }
   function activePerks(){
     const val=tornGuideApi.state.data.perks;
@@ -227,10 +233,7 @@ const tornTrainSequence=(()=>{
     const fields=[
       
       ["boosterCapH","Booster use threshold (hours)",1,72,1],
-      ["startDrugMin","Starting drug CD (min)",0,20000,1],["startBoosterMin","Starting booster CD (min)",0,20000,1],
       ["xanaxCDMin","Xanax CD (360–480 min)",360,480,1],["ecstasyCDMin","Ecstasy CD (200–230 min)",200,230,1],
-      ["resetAfterSec","Next Happy reset in (seconds)",1,900,1],
-      ["tornClockMin","Torn minutes since midnight",0,1439,1],
       ["candyCDMultiplier","Candy CD multiplier",0.1,3,0.05],
       ["dvdCDMultiplier","eDVD CD multiplier",0.1,3,0.05],
       ["dvdHappy","Happy per eDVD",0,10000,1]
@@ -253,8 +256,8 @@ const tornTrainSequence=(()=>{
       '<button type="button" data-ts-bonus="book">Book -50% candy CD</button>'+
       '<button type="button" data-ts-bonus="adult">Adult Novelties 5,000 Happy/eDVD</button>'+
       '</div><label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label>'+
-      '<button type="button" class="button secondary" data-ts-sync>Re-import live cooldowns</button>'+
-      '<p class="fine-print">Candy cooldown can be shortened by Grocery Store/Restaurant company perks and some books. The consumable-cooldown book does not shorten eDVD cooldown; keep its multiplier at 1 unless you have a specific applicable perk. Starting cooldowns come from the Torn API when present.</p></details>';
+
+      '<p class="fine-print">Candy cooldown can be shortened by Grocery Store/Restaurant company perks and some books. The consumable-cooldown book does not shorten eDVD cooldown; keep its multiplier at 1 unless you have a specific applicable perk. Starting cooldowns follow the selected mode.</p></details>';
   }
   function row(side,a,index){
     const types=Object.entries(names).map(([id,label])=>'<option value="'+id+'" '+(a.type===id?"selected":"")+'>'+$(label)+'</option>').join("");
@@ -310,7 +313,7 @@ const tornTrainSequence=(()=>{
     const rule=energyRules(p);
     const diff=b.gain-a.gain;
     const perks=activePerks();
-    return controls()+
+    return cooldownControls()+controls()+
       (perks.length?'<p class="fine-print">Possibly relevant current perks: '+perks.map($).join(" • ")+'</p>':"")+
       '<div class="ts-layout">'+section("natural")+section("jump")+'</div>'+
       '<div class="ts-outcomes"><h3>Same '+p.hours+'-hour window</h3><p>Natural: <strong>'+fmt(a.final,2)+'</strong> ('+fmt(a.used)+' E) · Jump: <strong>'+fmt(b.final,2)+'</strong> ('+fmt(b.used)+' E)</p>'+
@@ -326,7 +329,7 @@ const tornTrainSequence=(()=>{
       const el=event.target;
       if(el.matches("[data-ts-candy]")){p.candyHappy=Number(el.value);rebuild();return;}
       const param=el.dataset.tsParam;
-      if(param && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
+      if(param && !["startDrugMin","startBoosterMin","resetAfterSec","tornClockMin"].includes(param) && Object.hasOwn(p,param)){p[param]=clamp(el.value,Number(el.min),Number(el.max));rebuild();return;}
       if(el.hasAttribute("data-ts-auto")){p.autoWait=el.checked;rebuild();return;}
       if(el.hasAttribute("data-ts-status")){
         if(["auto","standard","donator","subscriber"].includes(el.value))p.energyStatus=el.value;
@@ -342,6 +345,8 @@ const tornTrainSequence=(()=>{
       }
     });
     view.addEventListener("click",event=>{
+      const mode=event.target.closest("[data-ts-cooldown-mode]");
+      if(mode){useCurrentCooldowns=mode.dataset.tsCooldownMode==="current"&&cooldownsKnown;rebuild();return;}
       const bonus=event.target.closest("[data-ts-bonus]");
       if(bonus){
         if(bonus.dataset.tsBonus==="baseline")p.boosterCapH=24;
