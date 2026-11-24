@@ -1656,3 +1656,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-merged .ts-editable-row td{padding-top:0;padding-bottom:0}
 .ts-merged .ts-step,.ts-merged .ts-step>select[data-ts-edit="type"],.ts-merged .ts-step>.ts-arrows,.ts-merged .ts-arrows button{margin-block:0;padding-block:0}
 .ts-merged .ts-step>select[data-ts-edit="type"],.ts-merged .ts-arrows button{height:22px;min-height:0}
+
+.ts-merged .ts-row-gain,.ts-merged .ts-row-stat,.ts-merged th:nth-last-child(-n+2){text-align:right;font-variant-numeric:tabular-nums}
+.ts-merged .ts-row-gain.is-positive{color:var(--accent-strong);font-weight:650}
+.ts-merged table{min-width:820px}
+.ts-merged th:nth-child(2){width:32%}
