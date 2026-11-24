@@ -1606,7 +1606,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-dependency-mark{color:var(--accent);font-weight:bold;margin-right:.25rem}
 .ts-merged :is(.ts-row-gain,.ts-row-stat,th:nth-last-child(-n+2)),.ts-merged :is(th,td):nth-child(3){text-align:right}
 .ts-merged .ts-row-gain.is-positive{color:var(--accent-strong);font-weight:650}
-.ts-merged .ts-step{display:grid;grid-template-columns:minmax(0,15rem) auto;justify-content:start;align-items:center;margin:0;padding:0}
+.ts-merged .ts-step{display:grid;grid-template-columns:minmax(0,1fr) max-content;max-width:calc(15rem + 67px);align-items:center;margin:0;padding:0}
 .ts-merged .ts-step>input[data-ts-edit="minutes"]{grid-column:1;margin:.15rem 0}
 .ts-merged .ts-step>.ts-arrows{display:flex;align-items:center;grid-column:2;grid-row:1;margin:0;padding:0;border-left:1px solid var(--border)}
 .ts-merged input.ts-start-time[data-ts-start-time],.ts-merged .ts-start-energy>select,
