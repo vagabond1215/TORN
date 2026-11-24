@@ -684,7 +684,7 @@ function stockRows(){
  const num=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
  return list.map(c=>{
   const h=owned.find(x=>Number(x.id)===Number(c.id)),ticker=String(c.acronym||"").toUpperCase(),f=stockFallback[ticker]||[],b=c.benefit||{};
-  const price=num(c.current_price??c.price),shares=holdings==null?null:num(h?.shares??0),value=price!=null&&shares!=null?price*shares:null;
+  const price=[c.market?.price,c.current_price,c.price].map(num).find(v=>v!=null&&v>0)??null,shares=holdings==null?null:num(h?.shares??0),value=price!=null&&shares!=null?price*shares:null;
   const req=num(b.requirement??b.shares??f[0]),freq=num(b.frequency??f[1]),description=typeof b.description==="string"?b.description:typeof b.name==="string"?b.name:f[2]||"Benefit unavailable";
   const passive=String(b.type||"").toLowerCase()==="passive"||freq===0;
   const tier=req>0&&shares!=null?Math.max(0,Math.floor(Math.log2(shares/req+1))):0;
