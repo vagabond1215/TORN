@@ -223,7 +223,7 @@ function renderTopic(route) {
   if (route === "racing") { view.innerHTML = tornRacingGuide.render()+tornToolsGuide.contextLinks("racing"); tornRacingGuide.wire(view); return; }
   if (route === "crime") { view.innerHTML = tornCrimeGuide.render()+tornToolsGuide.contextLinks("crime"); if(activeProfile)wireNotes("crime"); return; }
   if (route === "education") { view.innerHTML = renderEducationPage(); return; }
-  if (route === "stocks") { view.innerHTML = '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Stocks</h1><p>Stock holdings and benefits.</p></header>'+renderStocksPanel(); return; }
+  if (route === "stocks") { view.innerHTML = '<h1 id="topic-title" tabindex="-1" class="sr-only">Stocks</h1>'+renderStocksPanel(); wireStocksPanel(view); return; }
   if (route === "inventory") { view.innerHTML = renderInventoryPage()+tornToolsGuide.contextLinks("inventory"); return; }
   if (route === "jobs") { view.innerHTML = tornJobsGuide.render(); tornJobsGuide.wire(view); return; }
   if (route === "tools") { view.innerHTML = tornToolsGuide.render(); tornToolsGuide.wire(view); return; }
