@@ -240,7 +240,22 @@ const tornCrimeGuide = (() => {
     const n=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
     for(const x of tornMeritGuide.recommendations())add("merit",x.name,x.detail+" · "+x.effort,x.link);
     if(!rows.merit.length)add("merit","Award shortlist unavailable","Open Merits to load the award catalog and compare unearned honors.","#merits");
-    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,risk);
+    const iconData=payload("icons","icons");
+    const iconFresh=iconData&&!tornGuideApi.state.errors?.icons&&Date.now()-Number(tornGuideApi.state.fetchedAt?.icons||0)<15*60000;
+    const iconTexts=iconFresh?Object.values(iconData).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")):[];
+    const addictionDebuff=iconTexts.filter(x=>/addict/i.test(x)).map(x=>{const m=x.match(/(?:reduced by|reduction of|[-−])\s*(\d+(?:\.\d+)?)\s*%/i);return m?Number(m[1]):null;}).filter(x=>x!==null);
+    const highAddiction=addictionDebuff.some(x=>x>=5);
+    const edu=educationModel(),enrolled=Boolean((edu.id!=null&&edu.id!==0&&edu.id!=="0"&&edu.id!=="")||(Number(edu.deadline)>Date.now()));
+    const perks=payload("perks","perks"),jobPerks=Object.entries(perks||{}).filter(([key])=>/job|company/i.test(key)).flatMap(([,v])=>Array.isArray(v)?v:[]).map(x=>typeof x==="string"?x:[x?.name,x?.description,x?.effect].filter(Boolean).join(" "));
+    const protectedEducation=jobPerks.some(x=>/\bRestraint\b|education is unaffected by drug addiction|education.*immune.*addiction/i.test(x));
+    const educationRisk=enrolled&&highAddiction&&!protectedEducation;
+    const blockDrugs=highAddiction&&(!enrolled||!protectedEducation);
+    if(educationRisk){
+      const detail="Active education course · addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Avoid all drugs until addiction is reduced. Course dismissal can occur at 5%; restarting loses progress.";
+      add("consume","Protect education · avoid all drugs",detail,"#education");
+      add("education","Education dismissal risk",detail,"#education");
+    }else if(enrolled&&highAddiction&&protectedEducation)add("consume","Education protected by Restraint","The active job perk protects enrollment, but addiction still affects other gameplay; consider rehabilitation.","#education");
+    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,risk,{blockDrugs});
     if(plan){
       add("growth","Train "+plan.stat,plan.detail,"#stats");
       const p=plan.program;
@@ -250,18 +265,13 @@ const tornCrimeGuide = (() => {
     const bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns");
     const energy=n(bars?.energy?.current),cap=n(bars?.energy?.maximum),happy=n(bars?.happy?.current),happyCap=n(bars?.happy?.maximum),nerve=n(bars?.nerve?.current);
     const drug=n(cd?.drug),booster=n(cd?.booster);
-    const iconData=payload("icons","icons");
-    const iconFresh=iconData&&!tornGuideApi.state.errors?.icons&&Date.now()-Number(tornGuideApi.state.fetchedAt?.icons||0)<15*60000;
-    const iconTexts=iconFresh?Object.values(iconData).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")):[];
-    const addictionDebuff=iconTexts.filter(x=>/addict/i.test(x)).map(x=>{const m=x.match(/(?:reduced by|reduction of|[-−])\s*(\d+(?:\.\d+)?)\s*%/i);return m?Number(m[1]):null;}).filter(x=>x!==null);
-    const highAddiction=addictionDebuff.some(x=>x>=5);
     const program=plan?.program, costs=program?.costs??{};
-    if(highAddiction)add("consume","High addiction · consider rehabilitation","Addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Pause drug use until addiction is reduced; review your training schedule.","#stats");
+    if(highAddiction&&!educationRisk&&!protectedEducation)add("consume","High addiction · consider rehabilitation","Addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Pause drug use until addiction is reduced; review your training schedule.","#stats");
     if(growth){
       if(program){
         const items=[["Xanax","xanax","Drug"],["Ecstasy","ecstasy","Drug"],["Erotic DVD","dvd","Booster"],["Candy","candy","Candy"],["Points refill","refill",null]];
         for(const [name,key,cat] of items){
-          if(!(costs[key]>0)||highAddiction&&cat==="Drug")continue;
+          if(!(costs[key]>0)||blockDrugs&&cat==="Drug")continue;
           const held=cat&&key!=="candy"?count(name,cat):null;
           const status=cat==="Drug"?(drug===0?"Drug cooldown clear; follow the plan sequence, not simply the cooldown.":drug==null?"Check drug cooldown.":"Wait for drug cooldown and the planned action."):cat==="Booster"||key==="candy"?"Reserve booster allowance for the planned training action.":"Use only at the scheduled refill step.";
           add("consume",name+" · "+number(costs[key])+" / week"+(held!=null?" · "+number(held)+" held":""),program.label+" · "+status,"#stats");
@@ -272,7 +282,7 @@ const tornCrimeGuide = (() => {
       const nerveRoom=nerve!=null&&n(bars?.nerve?.maximum)!=null&&nerve<n(bars.nerve.maximum);
       const crimeActivity=completion||activities.some(x=>["Crime","OC"].includes(x));
       const marijuana=count("Cannabis","Drug");
-      if(!highAddiction&&drug===0&&marijuana>0&&(crimeActivity||completion)&&nerveRoom)add("consume","Cannabis · "+number(marijuana)+" held","Consider the in-game Nerve effect for crime activity when there is room; check the drug cooldown and any scheduled training or war.","#crime");
+      if(!blockDrugs&&drug===0&&marijuana>0&&(crimeActivity||completion)&&nerveRoom)add("consume","Cannabis · "+number(marijuana)+" held","Consider the in-game Nerve effect for crime activity when there is room; check the drug cooldown and any scheduled training or war.","#crime");
       const alcohol=tornGuideApi.state.inventory.Alcohol;
       if(crimeActivity&&nerveRoom&&booster!==null&&booster<86400&&Array.isArray(alcohol)&&!tornGuideApi.state.inventoryErrors?.Alcohol&&alcohol.some(x=>n(x.amount??x.quantity)>0))add("consume","Alcohol","Consider a Nerve boost for crime activity; reserve booster allowance for scheduled training if needed.","#crime");
     }
