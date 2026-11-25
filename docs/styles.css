@@ -2024,3 +2024,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-session-controls button{padding:.35rem .65rem;border:1px solid var(--border);border-radius:4px;background:var(--raised);color:var(--text);font:inherit;cursor:pointer}
 .growth-session-controls button:is([data-growth-session="start"],[data-growth-session="done"]):not(:disabled){border-color:var(--accent);color:var(--accent-strong)}
 .growth-session-controls button:disabled{opacity:.5;cursor:not-allowed}
+
+.growth-settings-gear{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:3px;background:transparent;color:var(--accent-strong);cursor:pointer}
+.growth-settings-gear:hover,.growth-settings-gear:focus-visible{background:var(--raised);outline:1px solid var(--accent)}
+.growth-settings-panel{display:grid;gap:.35rem;padding:.5rem;border:1px solid var(--border);border-radius:4px;margin-bottom:.4rem;font-size:.78rem}
+.growth-settings-panel label{display:flex;align-items:center;gap:.4rem;cursor:pointer}
+.growth-settings-panel input{accent-color:var(--accent)}
+.growth-settings-panel small{color:var(--muted)}
+.growth-warning button{font:inherit;color:var(--accent-strong);background:transparent;border:1px solid var(--border);border-radius:3px;cursor:pointer;padding:.15rem .3rem}
