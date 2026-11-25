@@ -407,6 +407,19 @@ const tornStatPlanner = (() => {
     const bars=rawBars(),programs=budget!=null&&active&&bars?.energy&&bars?.happy&&active[next.stat]>0?tornTrainSequence.weeklyPrograms({state:{...state,statValues:Object.fromEntries(statNames.map((stat,i)=>[stat,actual[i]])),compareStat:next.stat,currentEnergy:Number(bars.energy.current),maxEnergy:Number(bars.energy.maximum),happy:Number(bars.happy.current),maxHappy:Number(bars.happy.maximum)},gym:active,trainBlock,effectsFor},budget,risk,options):[];
     return {stat:readable[next.stat],statKey:next.stat,build:option[1],remaining:next.remaining,gym:active?{name:active.name,energy:active.energy}:null,stats:rows.map((row,i)=>({key:row.stat,label:shorthand[row.stat],current:actual[i],target:Math.ceil(total*shares[i]),progress:row.progress})),perks:next.effects.groups.filter(g=>g.total!==0).map(g=>({group:g.group,total:g.total,items:g.items})),modifier:next.effects.sourceAvailable?(next.effects.multiplier-1)*100:null,bliss:tornHappinessBook().active,happy:bars?.happy?.current??null,maxHappy:bars?.happy?.maximum??null,program:programs[0]??null,detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name:"")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")+(tornHappinessBook().active?" · Ignorance Is Bliss active":"")};
   }
+  function replayTrainingSession(session,options={}){
+    const stat=session.statKey??statNames.find(x=>readable[x]===session.stat),gym=activeGym(),bars=rawBars(),st=tornGuideApi.state;
+    if(!stat||!gym||!(gym[stat]>0)||!bars?.energy||!bars?.happy)return {error:"Current gym, stat or bars unavailable"};
+    if(session.gym?.name&&session.gym.name!==gym.name)return {error:"Gym changed; stop and select a new plan"};
+    const actual=statNames.map(apiStatValue);
+    if(actual.some(x=>x===null))return {error:"Battle stats unavailable"};
+    const last=session.lastConfirmed??session.started;
+    const stamp=k=>st.bridge?.fields?.includes(k)&&st.bridge.timestamp>Number(st.fetchedAt?.bars||0)?st.bridge.timestamp:Number(st.fetchedAt?.bars||0);
+    if(stamp("energy")<last||stamp("happy")<last||Number(st.fetchedAt?.cooldowns||0)<last||Number(st.fetchedAt?.battlestats||0)<last)return {error:"Waiting for a fresh post-action Energy, Happy, cooldown and stat snapshot"};
+    const energy=tornBarProjection("energy",bars.energy,stamp("energy")),happy=tornBarProjection("happy",bars.happy,stamp("happy"));
+    if(!energy||!happy)return {error:"Energy or happiness unavailable"};
+    return tornTrainSequence.replayRemaining({state:{...state,statValues:Object.fromEntries(statNames.map((key,i)=>[key,actual[i]])),compareStat:stat,currentEnergy:energy.current,maxEnergy:energy.maximum,happy:happy.current,maxHappy:happy.maximum},gym,trainBlock,effectsFor},session,options);
+  }
   function homeCandyAdvice(){return calcCandyStock()?.[0]||null;}
   function renderBuild(gym,active){
     loadBuild();
@@ -572,7 +585,7 @@ const tornStatPlanner = (() => {
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
   }
-  return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,
+  return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,replayTrainingSession,
     simulate:()=>({natural:tornTrainSequence.simulate(tornTrainSequence.steps.natural),jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump)}),
     state,internal:{oneTrain,trainBlock,percentage,gainPerks}};
 })();
