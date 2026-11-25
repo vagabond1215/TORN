@@ -331,7 +331,7 @@ const tornTrainSequence=(()=>{
       point();
       const executed=!v.errors.length&&!cutoff,end=snap();
       actionStates[i]={start,end,executed};
-      if(executed)v.log.push({i:i+1,type,parent:i,editable:true,start,end});
+      if(executed)v.log.push({i:i+1,type,parent:i,editable:true,start,end,quantity:isBooster?(type==="candy"?Object.values(rowUsed).reduce((sum,q)=>sum+q,0):v.costs.dvd-rowInfo[i].dvdBefore):1});
       return executed;
     }
     function tornDay(){return Math.floor((cfg.tornClockMin*60+v.time)/86400);}
@@ -409,7 +409,7 @@ const tornTrainSequence=(()=>{
           const result=engine.finish(executed);
           if(!result.complete||result.money==null||result.money>cash||executed.length!==actions.length*cycles)continue;
           if(id!=="natural"&&result.costs.xanax+result.costs.ecstasy+result.costs.dvd+result.costs.candy+result.costs.refill===0)continue;
-          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan"};
+          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan",execution:result.log.filter(x=>x.type!=="happyReset").map(x=>({type:x.type,at:x.start.time,end:x.end.time,quantity:x.quantity??1,energy:x.type==="train"?Math.max(0,x.start.energy-x.end.energy):null,reason:x.reason??null}))};
           if(!best||candidate.gain>best.gain||candidate.gain===best.gain&&candidate.money<best.money)best=candidate;
         }
         if(best)results.push(best);
