@@ -36,9 +36,10 @@
       window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...snapshot,companionVersion:"2.3.0",bridgeAt:Date.now()})}));
     };
     window.addEventListener("torn-guide-request-snapshot",shareMarket);
-    GM_addValueChangeListener(marketKey,shareMarket);
+    GM_addValueChangeListener(marketKey,()=>{if(document.visibilityState==="visible")shareMarket();});
     setTimeout(shareMarket,1200);
     window.addEventListener("focus",shareMarket);
+    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")shareMarket();});
     window.addEventListener("torn-guide-request-snapshot",share);
     GM_addValueChangeListener(key,()=>share());
     if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",share,{once:true});
@@ -121,7 +122,7 @@
   const active=()=>document.visibilityState==="visible"&&document.hasFocus();
   const maxStored=2500,maxQueue=12000;
   let routeKey="",route=null,queue=new Set(),cards=new WeakMap(),owners=new WeakMap(),seen=new WeakMap(),boundaries=new WeakSet();
-  let workTimer=null,flushTimer=null,dirty=false,lastFlush=0,lastCapture=null,stored=null,metrics=null;
+  let workTimer=null,flushTimer=null,dirty=false,lastFlush=0,lastCapture=null,stored=null,metrics=null,initialScanPending=false;
   function freshMetrics(){return {buttons:0,rendered:0,matched:0,ranked:0,accepted:0,complete:0,duplicates:0,added:0,processed:0,batches:0,maxBatchMs:0,queued:0,dropped:0};}
   function rowKey(row){return row.uid?"uid:"+row.uid:row.fingerprint;}
   function readStore(){
@@ -178,8 +179,8 @@
     const card=locateCard(button,name);if(!card||!rendered(card))return;
     metrics.matched++;
     const text=card.innerText||"",previous=seen.get(button);
-    if(previous?.text===text&&previous?.label===label)return;
-    seen.set(button,{text,label});
+    // A forced recheck can reveal newly added tooltip attributes even if text is unchanged.
+    seen.set(button,{label});
     const row=parseRankedCard(text,name,price,route);if(!row)return;
     metrics.ranked++;
     if(!row.complete){
@@ -234,13 +235,15 @@
   function resetMarket(){
     if(!active())return;
     const next=marketRoute(),hash=location.hash;
-    if(hash===routeKey&&route){kick();return;}
+    if(hash===routeKey&&route&&!initialScanPending){kick();return;}
     if(dirty)flush();
     routeKey=hash;route=next;queue.clear();cards=new WeakMap();owners=new WeakMap();seen=new WeakMap();boundaries=new WeakSet();metrics=freshMetrics();
+    initialScanPending=Boolean(route);
     if(!route)return;
     // Initial scan once per manually selected route. Subsequent work uses mutations.
     setTimeout(()=>{
-      if(!active()||!route||location.hash!==hash||routeKey!==hash)return;
+      if(!active()||!route||location.hash!==hash||routeKey!==hash||!initialScanPending)return;
+      initialScanPending=false;
       for(const button of document.querySelectorAll(buySelector)){metrics.buttons++;enqueue(button);}
       scheduleFlush();kick();
     },600);
@@ -252,8 +255,9 @@
     return null;
   }
   function marketMutations(records){
-    if(!active())return;
+    if(!active()||!marketRoute())return;
     if(location.hash!==routeKey||!route){resetMarket();return;}
+    if(initialScanPending)return;
     if(!marketRoute())return;
     for(const r of records){
       if(r.type==="attributes"){
@@ -303,10 +307,12 @@
   }
   function schedule(){
     if(document.visibilityState!=="visible"||pending!==null)return;
-    pending=setTimeout(publish,Math.max(250,2000-(Date.now()-lastRead)));
+    pending=setTimeout(publish,Math.max(250,15000-(Date.now()-lastRead)));
   }
   const observer=new MutationObserver(schedule);
-  if(document.body)observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+  // The sidebar timer is independent of market scrolling and chat mutations.
+  const sidebar=document.querySelector("#sidebar")||document.querySelector("#sidebar-wrapper");
+  if(sidebar)observer.observe(sidebar,{childList:true,subtree:true,characterData:true});
   window.addEventListener("focus",schedule);
   window.addEventListener("pageshow",schedule);
   window.addEventListener("hashchange",schedule);
