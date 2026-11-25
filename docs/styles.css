@@ -2019,3 +2019,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-next-step:not([data-growth-due]) .growth-next-clock{color:var(--muted)}
 .growth-next-step>span{font-size:.8rem;font-weight:650}
 :root[data-theme="light"] .growth-next-step[data-ready="false"][data-growth-due] .growth-next-clock{color:#a65c00}
+
+.growth-session-controls{display:flex;flex-wrap:wrap;justify-content:center;gap:.35rem}
+.growth-session-controls button{padding:.35rem .65rem;border:1px solid var(--border);border-radius:4px;background:var(--raised);color:var(--text);font:inherit;cursor:pointer}
+.growth-session-controls button:is([data-growth-session="start"],[data-growth-session="done"]):not(:disabled){border-color:var(--accent);color:var(--accent-strong)}
+.growth-session-controls button:disabled{opacity:.5;cursor:not-allowed}
