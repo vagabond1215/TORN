@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Guide - Passive Visible Status Bridge
 // @namespace    https://vagabond1215.github.io/TORN/
-// @version      2.5.0
+// @version      2.5.1
 // @description  Synchronize visible status bars and ranked market observations to your local Torn City Guide. Read-only, no API key or network calls.
 // @match        https://www.torn.com/*
 // @match        https://torn.com/*
@@ -44,10 +44,10 @@
       const meta=GM_getValue(archiveMeta,null);
       if(!meta?.buckets){
         const packet=GM_getValue(marketKey,null);
-        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.5.0",bridgeAt:Date.now()})}));
+        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.5.1",bridgeAt:Date.now()})}));
         return;
       }
-      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.5.0",bridgeAt:Date.now(),buckets:meta.buckets})}));
+      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.5.1",bridgeAt:Date.now(),buckets:meta.buckets})}));
       if(transferTimer!==null)clearTimeout(transferTimer);
       const pending=Object.entries(meta.buckets).filter(([id,rev])=>force||sent.get(id)!==rev);
       const next=()=>{
@@ -142,7 +142,7 @@
     const complete=quality!==null&&bonuses.length>0&& (armor!==null||damage!==null&&accuracy!==null);
     const rate=text.match(/Rate of Fire\s*:\s*(\d+)\s*[-–]\s*(\d+)/i),ammo=text.match(/Ammo\s*:\s*(\d+)\s*[x×]\s*(\d+)/i);
     const stats={};for(const [k,v] of Object.entries({quality,damage,accuracy,armor}))if(v!==null)stats[k]=v;
-    return {name,category:route.category,rarity,price,stats,bonuses,complete,rate:rate?[Number(rate[1]),Number(rate[2])]:null,ammo:ammo?[Number(ammo[1]),Number(ammo[2])]:null};
+    return {name,category:route.category,rarity,rarityVerified:!!explicit,price,stats,bonuses,complete,rate:rate?[Number(rate[1]),Number(rate[2])]:null,ammo:ammo?[Number(ammo[1]),Number(ammo[2])]:null};
   }
   // Incremental market collector: no periodic full-page market scan.
   const buySelector='button[aria-label^="Buy item "]';
@@ -165,7 +165,7 @@
     return best;
   }
   function samplePanel(name,price,text,row){
-    const labels=Array.from(text.matchAll(/(?:^|\n)\s*(Damage|Accuracy|Armor|Quality|Bonus(?:es)?|Rate of Fire|Ammo|Coverage|Stealth|Caliber)\s*:\s*([^\n]+(?:\n\s*[^\n:]+)?)/gi),m=>({label:m[1],value:m[2].trim().slice(0,100)}));
+    const labels=Array.from(text.matchAll(/(?:^|\n)[ \t]*(Damage|Accuracy|Armor|Quality|Bonus(?:es)?|Rate of Fire|Ammo|Coverage|Stealth|Caliber)[ \t]*:[\s]*([^\n]+)/gi),m=>({label:m[1],value:m[2].trim().slice(0,100)}));
     // Keep only recognized equipment labels, never arbitrary panel text or player data.
     const clean=labels.map(x=>({label:x.label,value:x.value.split("\n")[0].trim()}));
     panelSamples.push({name,price,at:Date.now(),quality:row?.stats?.quality??null,bonusCount:row?.bonuses?.length??0,labels:clean});if(panelSamples.length>12)panelSamples.shift();
@@ -180,10 +180,10 @@
     for(const row of updates){
       if(!archiveValid(row,stamp))continue;
       const k=rowKey(row),old=map.get(k);
-      if(!old||row.complete&&!old.complete||row.complete===old.complete&&row.at>=old.at)map.set(k,row);
+      if(!old||row.complete&&!old.complete||row.complete===old.complete&&row.at>=old.at){if(!old)metrics.persistedAdded++;else if(row.complete&&!old.complete)metrics.enriched++;map.set(k,row);}else if(old.complete&&!row.complete){map.set(k,{...old,at:Math.max(old.at,row.at)});}
     }
     const rows=Array.from(map.values()).sort((a,b)=>Number(b.complete)-Number(a.complete)||b.at-a.at).slice(0,bucketLimit);
-    metrics.persistedAdded+=Math.max(0,rows.length-(prior?.rows?.length??0));
+
     const revision=stamp+"-"+Math.random().toString(36).slice(2,10);
     GM_setValue(archivePrefix+id,{revision,rows});
     return revision;
@@ -242,16 +242,18 @@
     if(!Number.isSafeInteger(price)||price<=0)return;
     const card=locateCard(button,name);if(!card||!rendered(card))return;
     metrics.matched++;
-    let text=card.innerText||"";
+    const cardText=card.innerText||"";let text=cardText;
     const explicitRarity=/(?:^|\n)\s*(Y\s*ellow|O\s*range|R\s*ed)\s*(?:\n|$)/i.exec(text);
     const prior=priorButtons.has(button);
-    if(!explicitRarity&&(Date.now()<transitionUntil||prior)){metrics.transitionSkipped++;return;}
-    if(explicitRarity&&route.rarity&&explicitRarity[1].replace(/\s/g,"").toLowerCase()!==route.rarity){metrics.transitionSkipped++;return;}
+
     const target=manualTarget;
     if(target?.button===button&&target.hash===routeKey&&Date.now()-target.at<15000){
       const panel=panelFor(name);
       if(panel){text+="\n"+panel.text;metrics.panels++;}
     }
+    const combinedRarity=/(?:^|\n)\s*(Y\s*ellow|O\s*range|R\s*ed)\s*(?:\n|$)/i.exec(text);
+    if(!combinedRarity&&(Date.now()<transitionUntil||prior)){metrics.transitionSkipped++;return;}
+    if(combinedRarity&&route.rarity&&combinedRarity[1].replace(/\s/g,"").toLowerCase()!==route.rarity){metrics.transitionSkipped++;return;}
     const previous=seen.get(button);
     // A forced recheck can reveal newly added tooltip attributes even if text is unchanged.
     seen.set(button,{label});
@@ -259,9 +261,9 @@
     if(manualTarget?.button===button&&/Quality\s*:/i.test(text))samplePanel(name,price,text,row);
     metrics.ranked++;
     if(!row.complete){
-      const nums=text.split(/\n/).map(x=>x.trim()).filter(x=>/^\d{1,3}\.\d{2}$/.test(x)).map(Number);
-      if(["Armor","Defensive"].includes(route.category)){if(nums.length===1)row.stats.armor=nums[0];}
-      else if(nums.length===2){row.stats.damage=nums[0];row.stats.accuracy=nums[1];}
+      const nums=cardText.split(/\n/).map(x=>x.trim()).filter(x=>/^\d{1,3}\.\d{2}$/.test(x)).map(Number);
+      if(["Armor","Defensive"].includes(route.category)){if(nums.length===1&&row.stats.armor==null)row.stats.armor=nums[0];}
+      else if(nums.length===2){if(row.stats.damage==null)row.stats.damage=nums[0];if(row.stats.accuracy==null)row.stats.accuracy=nums[1];}
       // Only explicit, rendered card-local labels qualify. No hidden app state,
       // network interception, arbitrary data attributes, or generic page text.
       const hints=[];
@@ -279,16 +281,17 @@
       // An explicitly expanded row is the only proven complete bonus signature.
       // Tooltip-only bonuses can be partial; retain them but do not mark complete.
     }
+    row.complete=row.stats.quality!=null&&row.bonuses.length>0&&(row.stats.armor!=null||row.stats.damage!=null&&row.stats.accuracy!=null)&&/Bonus(?:es)?\s*:/i.test(text)&&/Quality\s*:/i.test(text);
     const uid=card.getAttribute("data-uid")||card.getAttribute("data-item-uid");
     if(uid&&/^[1-9]\d*$/.test(uid))row.uid=uid;
     if(!Object.keys(row.stats).length) return;
     row.fingerprint=archiveId(row);
     row.at=Date.now();lastCapture=row.at;metrics.accepted++;if(row.complete)metrics.complete++;
     const map=readStore(),k=rowKey(row),prev=map.get(k);
-    if(prev){metrics.duplicates++;if(prev.complete&&!row.complete)return;if(!prev.complete&&row.complete)metrics.enriched++;}
+    if(prev){metrics.duplicates++;if(prev.complete&&!row.complete)return;}
     else metrics.added++;
-    map.set(k,row);
-    if(map.size>=1000)flush();
+    map.set(k,row);dirty=true;
+    if(row.complete||map.size>=1000)flush();
   }
   function runBatch(){
     workTimer=null;
