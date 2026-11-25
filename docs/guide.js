@@ -541,7 +541,7 @@ byId("topic-view").addEventListener("click",async event=>{
 // the preview iframe works. Never proxy, frame-bust or fetch Torn Report privately.
 let activeReport=null;
 const reportDialog=byId("report-dialog"),reportFrame=byId("report-frame");
-byId("topic-view").addEventListener("click",event=>{
+document.addEventListener("click",event=>{
   const button=event.target.closest("[data-report]");
   if(!button)return;
   const record=tornReportCatalog[button.dataset.report];
