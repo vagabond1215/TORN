@@ -369,7 +369,7 @@ const tornTrainSequence=(()=>{
       const now=new Date(),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(Date.now()-stamp)/60000):0;
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
       Object.assign(p,{startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
-      if(budget==null)return [];
+      if(budget==null&&!options.naturalOnly)return [];
       const cash=Math.max(0,Number(budget)||0),excludeOwned=options.excludeOwned!==false;
       const owned=(name,cat)=>{
         const list=tornGuideApi.state.inventory[cat];
@@ -384,7 +384,7 @@ const tornTrainSequence=(()=>{
         const prices=[[Math.max(0,result.costs.xanax-held.xanax),p.xanaxPrice],[Math.max(0,result.costs.ecstasy-held.ecstasy),p.ecstasyPrice],[Math.max(0,result.costs.dvd-held.dvd),p.dvdPrice],[result.costs.refill*30,p.pointPrice]];
         return prices.some(([qty,price])=>qty>0&&price==null)?null:prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0);
       }
-      const candidates=templates.filter(([id])=>id!=="custom"||editedPlans.has(id));
+      const candidates=templates.filter(([id])=>options.naturalOnly?id==="natural":id!=="custom"||editedPlans.has(id));
       // Match the Plan comparison preparation window, including saved jump actions.
       let blockHours=24;
       for(const [id] of candidates.filter(([id])=>id==="jump"||id==="maxhappy")){
@@ -406,7 +406,7 @@ const tornTrainSequence=(()=>{
         if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
       }
       for(const [id,short,label] of candidates){
-        const actions=(editedPlans.has(id)?steps[id]:defaultActions(id)).map(x=>({...x}));
+        const actions=(options.naturalOnly?[]:editedPlans.has(id)?steps[id]:defaultActions(id)).map(x=>({...x}));
         // External happiness has no verified price, so cannot establish affordability.
         if(actions.some(x=>x.type==="externalHappy"||options.blockDrugs&&["xanax","ecstasy"].includes(x.type)))continue;
         const maxCycles=id==="natural"?1:Math.max(1,Math.floor(168/blockHours));
