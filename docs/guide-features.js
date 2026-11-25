@@ -285,8 +285,8 @@ const tornGuideApi=(()=>{
     const d=packet.diagnostic;
     if(typeof packet.companionVersion==="string"&&/^\d+\.\d+\.\d+$/.test(packet.companionVersion))passiveRwBridge={version:packet.companionVersion,at:now()};
     if(d&&Number.isFinite(d.at)&&d.at<=now()+5000&&["Primary","Secondary","Melee","Armor","Defensive"].includes(d.category)){
-      const counts={};for(const k of ["buttons","rendered","matched","ranked","accepted","complete","duplicates","added","processed","batches","maxBatchMs","queued","dropped"])counts[k]=Number.isSafeInteger(d[k])&&d[k]>=0&&d[k]<=100000?d[k]:null;
-      passiveRwDiagnostic={...counts,at:d.at,lastCapture:Number.isFinite(d.lastCapture)&&d.lastCapture<=now()+5000?d.lastCapture:null,category:d.category,rarity:["yellow","orange","red"].includes(d.rarity)?d.rarity:null,mode:d.mode==="incremental"?"incremental":null};
+      const counts={};for(const k of ["buttons","rendered","matched","ranked","accepted","complete","duplicates","added","processed","batches","maxBatchMs","queued","dropped","transitionSkipped","panels","enriched","persistedAdded"])counts[k]=Number.isSafeInteger(d[k])&&d[k]>=0&&d[k]<=100000?d[k]:null;
+      passiveRwDiagnostic={...counts,at:d.at,lastCapture:Number.isFinite(d.lastCapture)&&d.lastCapture<=now()+5000?d.lastCapture:null,category:d.category,rarity:["yellow","orange","red"].includes(d.rarity)?d.rarity:null,mode:d.mode==="incremental"?"incremental":null,panelSamples:Array.isArray(d.panelSamples)?d.panelSamples.slice(-12).filter(s=>s&&typeof s.name==="string"&&s.name.length<=120&&Number.isSafeInteger(s.price)&&s.price>0).map(s=>({name:s.name,price:s.price,at:Number.isFinite(s.at)?s.at:null,quality:Number.isFinite(s.quality)?s.quality:null,bonusCount:Number.isSafeInteger(s.bonusCount)?s.bonusCount:0,labels:Array.isArray(s.labels)?s.labels.slice(0,30).filter(l=>l&&/^(Damage|Accuracy|Armor|Quality|Bonus(?:es)?|Rate of Fire|Ammo|Coverage|Stealth|Caliber)$/i.test(l.label)&&typeof l.value==="string").map(l=>({label:l.label,value:l.value.slice(0,100)})):[]})):[]};
     }
     if(packet.version===2&&packet.kind==="meta"){
       if(packet.buckets&&typeof packet.buckets==="object"){
@@ -322,14 +322,22 @@ const tornGuideApi=(()=>{
     try{localStorage.setItem(passiveRwKey,next);}catch{}
     return true;
   }
-  function passiveRwReport(){return {version:2,bridge:passiveRwBridge,diagnostic:passiveRwDiagnostic,archive:{loaded:passiveBuckets.size,expected:archiveExpected?Object.keys(archiveExpected).length:null,error:archiveStorageError},rows:archivedRows()};}
+  function rarityConflicts(rows){
+    const groups=new Map(),conflicts=new Set();
+    for(const x of rows){const k=JSON.stringify([x.name,x.price,x.stats?.damage??null,x.stats?.accuracy??null,x.stats?.armor??null]);const g=groups.get(k)??new Set();g.add(x.rarity);groups.set(k,g);}
+    for(const [k,g] of groups)if(g.size>1)conflicts.add(k);
+    return conflicts;
+  }
+  const conflictKey=x=>JSON.stringify([x.name,x.price,x.stats?.damage??null,x.stats?.accuracy??null,x.stats?.armor??null]);
+  function passiveRwReport(){const rows=archivedRows(),conflicts=rarityConflicts(rows);return {version:2,bridge:passiveRwBridge,diagnostic:passiveRwDiagnostic,archive:{loaded:passiveBuckets.size,expected:archiveExpected?Object.keys(archiveExpected).length:null,error:archiveStorageError,conflictingGroups:conflicts.size},rows:rows.map(x=>conflicts.has(conflictKey(x))?{...x,rarityConflict:true}:x)};}
   function readPassiveRwMarket(id,rarity){
     const raw=state.data.itemCatalog;
     const items=raw?.items??raw?.data?.items??raw?.payload?.items;
     const catalog=Array.isArray(items)?items:Object.entries(items||{}).map(([id,x])=>({...x,id:x.id??id}));
     const name=catalog.find(x=>Number(x.id)===id)?.name;
     if(!name)return null;
-    const observations=(passiveModelIndex().get(String(name).toLowerCase()+"|"+rarity)??[]).filter(x=>retainRw(x)&&now()-x.at<=24*hrs);
+    const index=passiveModelIndex(),all=["yellow","orange","red"].flatMap(r=>index.get(String(name).toLowerCase()+"|"+r)??[]),conflicts=rarityConflicts(all);
+    const observations=(index.get(String(name).toLowerCase()+"|"+rarity)??[]).filter(x=>retainRw(x)&&now()-x.at<=24*hrs&&!conflicts.has(conflictKey(x)));
     if(!observations.length)return null;
     const rows=[],seen=new Set();
     for(const x of observations.filter(x=>x.complete).sort((a,b)=>b.at-a.at)){
@@ -1241,9 +1249,9 @@ function inventoryRwDiagnosticsBody(){
   const count=(label,value)=>'<div><small>'+safe(label)+'</small><strong>'+safe(value??"—")+'</strong></div>';
   const stamp=v=>v?new Date(v).toLocaleString():"Not recorded";
   const byRarity=["yellow","orange","red"].map(r=>count(r[0].toUpperCase()+r.slice(1),rows.filter(x=>x.rarity===r).length)).join("");
-  const scan=d?'<p class="fine-print">Last scan: '+safe(d.category)+' · '+safe(d.rarity??"unfiltered")+' · '+safe(stamp(d.at))+'</p><div class="rw-diagnostic-counts">'+count("Buy buttons",d.buttons)+count("Rendered",d.rendered)+count("Matched cards",d.matched)+count("Ranked",d.ranked)+count("Accepted",d.accepted)+count("Full details",d.complete)+count("Duplicates",d.duplicates)+count("New records",d.added)+(d.mode==="incremental"?count("Processed cards",d.processed)+count("Pending cards",d.queued)+count("Batches",d.batches)+count("Longest batch",d.maxBatchMs==null?null:d.maxBatchMs+" ms")+count("Queue overflow",d.dropped):"")+'</div>':'<p class="fine-print">No scan diagnostics received. Install companion 2.4.0 and focus an equipment market page.</p>';
+  const scan=d?'<p class="fine-print">Last scan: '+safe(d.category)+' · '+safe(d.rarity??"unfiltered")+' · '+safe(stamp(d.at))+'</p><div class="rw-diagnostic-counts">'+count("Buy buttons",d.buttons)+count("Rendered",d.rendered)+count("Matched cards",d.matched)+count("Ranked",d.ranked)+count("Accepted",d.accepted)+count("Full details",d.complete)+count("Duplicates",d.duplicates)+count("New records",d.added)+(d.mode==="incremental"?count("Processed cards",d.processed)+count("Pending cards",d.queued)+count("Batches",d.batches)+count("Longest batch",d.maxBatchMs==null?null:d.maxBatchMs+" ms")+count("Queue overflow",d.dropped)+count("Transition skips",d.transitionSkipped)+count("Expanded panels",d.panels)+count("Enriched in batch",d.enriched)+count("Archive growth",d.persistedAdded):"")+'</div>':'<p class="fine-print">No scan diagnostics received. Install companion 2.5.0 and focus an equipment market page.</p>';
   return '<div class="rw-diagnostic-actions"><span role="status">'+safe(bridge?"Companion "+bridge.version+" connected · "+stamp(bridge.at):"No live companion handshake yet")+'</span><button type="button" class="button secondary" data-rw-sync>Sync local data</button><button type="button" class="button secondary" data-rw-export>Export JSON</button></div>'+
-    '<div class="rw-diagnostic-counts">'+count("Stored observations",rows.length)+count("Complete",full)+count("Partial",rows.length-full)+count("Models",models.size)+count("Fresh ≤24h",rows.filter(x=>Date.now()-x.at<=86400000).length)+count("Older observations",rows.filter(x=>Date.now()-x.at>86400000).length)+byRarity+'</div>'+
+    '<div class="rw-diagnostic-counts">'+count("Stored observations",rows.length)+count("Complete",full)+count("Partial",rows.length-full)+count("Models",models.size)+count("Fresh ≤24h",rows.filter(x=>Date.now()-x.at<=86400000).length)+count("Older observations",rows.filter(x=>Date.now()-x.at>86400000).length)+count("Conflicting rarity groups",archive.conflictingGroups)+byRarity+'</div>'+
     '<p class="fine-print">Last successful capture: '+safe(stamp(d?.lastCapture??(rows.length?Math.max(...rows.map(r=>r.at)):null)))+'</p>'+scan+
     (models.size?'<div class="rw-diagnostic-table"><table><thead><tr><th>Equipment</th><th>All</th><th>Full</th><th>Yellow</th><th>Orange</th><th>Red</th></tr></thead><tbody>'+Array.from(models.values()).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name)).map(x=>'<tr><td>'+safe(x.name)+'</td>'+["total","full","yellow","orange","red"].map(k=>'<td>'+x[k]+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>':"")+
     '<p class="fine-print">Archive shards: '+safe(archive.loaded)+' / '+safe(archive.expected??"—")+(archive.error?' · '+safe(archive.error):"")+'. Local asking-price observations: 24h valuation freshness, 30-day partial and 90-day complete retention, up to 102,400 records across 128 shards (800 each). Older observations are not confirmed sales. No Torn API requests.</p>';
