@@ -464,8 +464,9 @@ const tornTrainSequence=(()=>{
         }
         if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
       }
-      function runProgram(id,actions,cycles,hours){
+      function runProgram(id,actions,cycles,hours,captureCycle=false){
         const engine=createEngine({...cfg,hours,midnightJump:midnightJumps.has(id)}),v=engine.state,executed=[];
+        let cycle=null;
         for(let week=0;week<hours/168&&!v.errors.length;week++){
           const weekEnd=Math.min(engine.limit,(week+1)*604800);
           for(let k=0;k<cycles&&!v.errors.length&&v.time<weekEnd;k++){
@@ -477,12 +478,16 @@ const tornTrainSequence=(()=>{
             }else if(startingEnergy[id]==="full"&&v.energy<energyRules().cap)engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false);
             if(!engine.run(actions))break;
             executed.push(...actions);
+            if(captureCycle&&id!=="natural"&&!cycle){
+              const first=engine.finish(executed,{tail:false});
+              cycle={length:first.log.filter(step=>step.type!=="happyReset").length,spend:cashCost(first)};
+            }
             if(v.time<end)naturalUntil(engine,end);
             else if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
           }
           if(!v.errors.length)naturalUntil(engine,weekEnd);
         }
-        return {result:engine.finish(executed),executed};
+        return {result:engine.finish(executed),executed,cycle};
       }
       const templatesById=new Map();
       for(const [id,short,label] of candidates){
@@ -505,6 +510,15 @@ const tornTrainSequence=(()=>{
       results.sort((a,b)=>b.gain-a.gain||a.cashCost-b.cashCost);
       const selected=results[0];
       if(selected){
+        if(selected.id==="natural"){
+          const train=selected.execution.findIndex(step=>step.type==="train"&&step.energy>0);
+          selected.cycleExecution=train<0?[]:selected.execution.slice(0,train+1);
+          selected.cycleSpend=0;
+        }else{
+          const {cycle}=runProgram(selected.id,templatesById.get(selected.id),selected.cycles,168,true);
+          selected.cycleExecution=cycle?selected.execution.slice(0,cycle.length):selected.execution;
+          selected.cycleSpend=cycle?.spend??null;
+        }
         const forecastDays=options.restockForecastDays;
         const horizons=[...new Set([1,7,28,...(Number.isInteger(forecastDays)&&forecastDays>=1&&forecastDays<=28?[forecastDays]:[])])];
         const periods=horizons.map(days=>{

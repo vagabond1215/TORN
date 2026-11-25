@@ -13,12 +13,13 @@ const tornGuideApi=(()=>{
   const TTL={
     basic:days, profile:15*mins, bars:2*mins, cooldowns:2*mins, icons:15*mins, money:15*mins, networth:60*mins,
     missions:5*mins, jobpoints:15*mins, skills:15*mins, battlestats:15*mins, gym:30*mins, perks:60*mins,
-    education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
+    education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionWars:5*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
     honors:24*hrs,medals:24*hrs,honorCatalog:30*days,medalCatalog:30*days,gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog","missions"],
+    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog","missions","factionWars"],
+    energy:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars"],
     stats:["profile","bars","cooldowns","refills","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
@@ -194,6 +195,7 @@ const tornGuideApi=(()=>{
   function endpoint(key){
     if(key==="refills")return "user?selections=refills&legacy=refills";
     if(key==="personalstats")return "user/personalstats?cat=popular";
+    if(key==="factionWars")return "faction/wars";
     if(key==="factionRankedWars")return "faction/rankedwars";
     if(key==="gymCatalog")return "torn/gyms";
     if(key==="stockCatalog")return "torn/stocks";
@@ -508,13 +510,13 @@ const tornGuideApi=(()=>{
     const names=(ROUTES[route]||ROUTES.home).filter(name=>stale(name,force));
     const cats=route==="inventory"
       ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))
-      :route==="stats"?["Candy"]:route==="home"?["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"]:route==="crime"?["Tool","Enhancer","Material"]:[];
+      :route==="energy"?["Candy","Drug","Booster"]:route==="stats"?["Candy"]:route==="home"?["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"]:route==="crime"?["Tool","Enhancer","Material"]:[];
     const selectedCats=cats.filter(cat=>inventoryTypes.includes(cat)&&stale("inventory:"+cat,force));
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();
     let succeeded=0,failures=0;
-    const userNames=names.filter(name=>!name.endsWith("Catalog") && !["factionRankedWars","personalstats"].includes(name));
-    const otherNames=names.filter(name=>name.endsWith("Catalog") || ["factionRankedWars","personalstats"].includes(name));
+    const userNames=names.filter(name=>!name.endsWith("Catalog") && !["factionWars","factionRankedWars","personalstats"].includes(name));
+    const otherNames=names.filter(name=>name.endsWith("Catalog") || ["factionWars","factionRankedWars","personalstats"].includes(name));
     const jobs=[];
     if(userNames.length>=2 && batchMode!=="unsupported"){
       jobs.push({

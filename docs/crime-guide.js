@@ -227,7 +227,7 @@ const tornCrimeGuide = (() => {
     });
     dialog.showModal();
   }
-  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Stat growth"],["consume","Use & Collect"],["crime","Crimes"],["education","Education"],["money","Money"]];
+  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Energy"],["consume","Use & Collect"],["crime","Crimes"],["education","Education"],["money","Money"]];
   let recIncomplete=true,recUniques=false,collectView="ready";
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id)),recExpanded=new Set();
   function loadRecFilters(){
@@ -238,8 +238,29 @@ const tornCrimeGuide = (() => {
   }
   let growthSettingsOpen=false;
   function excludeOwned(){try{return localStorage.getItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"))!=="false";}catch{return true;}}
-  const growthGear='<button type="button" class="growth-settings-gear" data-growth-settings aria-label="Stat growth settings" title="Stat growth settings"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>';
-  function growthSettings(){return growthSettingsOpen?'<div class="growth-settings-panel"><label><input type="checkbox" data-growth-exclude-owned '+(excludeOwned()?"checked":"")+'> Inventory value not counted toward budget</label><small>Only additional purchases count when enabled. Points refills remain priced; unverified inventory is not credited.</small></div>':"";}
+  const growthGear='<button type="button" class="growth-settings-gear" data-growth-settings aria-label="Energy settings" title="Energy settings"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>';
+  function energyWarSettings(){
+    const defaults={mode:"scheduled",adjustment:60,lead:2};
+    try{
+      const data=JSON.parse(localStorage.getItem("torn-city-guide:energy-war:"+recOwner));
+      if(!data)return defaults;
+      const bounded=(value,min,max,fallback)=>Number.isInteger(value)?Math.max(min,Math.min(max,value)):fallback;
+      return {mode:["off","scheduled","faction"].includes(data.mode)?data.mode:defaults.mode,
+        adjustment:bounded(data.adjustment,-120,120,60),lead:bounded(data.lead,0,120,2)};
+    }catch{return defaults;}
+  }
+  function growthSettings(){
+    if(!growthSettingsOpen)return "";
+    const war=energyWarSettings();
+    return '<div class="growth-settings-panel"><label><input type="checkbox" data-growth-exclude-owned '+(excludeOwned()?"checked":"")+'> Inventory value not counted toward budget</label>'+
+      '<small>Only additional purchases count when enabled. Points refills remain priced; unverified inventory is not credited.</small>'+
+      '<label>War mode <select data-energy-war="mode">'+[["scheduled","Scheduled ranked wars"],["faction","Only wars with a published mode"],["off","Off"]]
+        .map(([id,label])=>'<option value="'+id+'" '+(war.mode===id?"selected":"")+'>'+label+'</option>').join("")+'</select></label>'+
+      '<label>Xanax cooldown adjustment (minutes) <input type="number" min="-120" max="120" step="1" value="'+war.adjustment+'" data-energy-war="adjustment"></label>'+
+      '<label>Clear cooldown before war (minutes) <input type="number" min="0" max="120" step="1" value="'+war.lead+'" data-energy-war="lead"></label>'+
+      '<small>Adjustment applies to a 7-hour Xanax estimate. Default +60 allows 8 hours per dose.</small></div>';
+  }
+
   const recTileStart=(id,label)=>'<details class="rec-tile" data-rec-group="'+esc(id)+'" '+(recExpanded.has(id)?"open":"")+'><summary class="rec-tile-heading"><span>'+esc(label)+'</span>'+(id==="growth"?growthGear:id==="restock"?'<button type="button" class="restock-settings-button" data-restock-settings aria-haspopup="dialog">Minimums</button>':"")+'</summary><div class="rec-tile-body">';
   const recTileEnd='</div></details>';
   const recItem=(title,detail,link)=>'<li><div><strong>'+esc(title)+'</strong><small>'+esc(detail)+'</small></div>'+(link?'<a href="'+esc(link)+'">View</a>':"")+'</li>';
@@ -345,11 +366,44 @@ const tornCrimeGuide = (() => {
     const educationRisk=enrolled&&highAddiction&&!protectedEducation;
     const blockDrugs=highAddiction&&(!enrolled||!protectedEducation);
     const session=loadTrainingSession();
-    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth"});
-    return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan};
+    const budget=prefs.weeklyBudget==null?null:Math.max(0,prefs.weeklyBudget-trainingSpend().reduce((sum,entry)=>sum+entry.cost,0));
+    const plan=tornStatPlanner.homeTrainingAdvice(budget,prefs.risk,{blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth"});
+    return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan,budget,avoidWarDrugs:blockDrugs||prefs.odRisk==="low"};
   }
   let growthTab="summary";
   let sessionOwner=null,trainingSession=null,trainingDraft=null;
+  const trainingSpendKey=()=> "torn-city-guide:training-spend:"+sessionOwner;
+  function trainingSpend(now=Date.now()){
+    try{
+      const saved=JSON.parse(localStorage.getItem(trainingSpendKey()));
+      return Array.isArray(saved)?saved.filter(entry=>Number.isFinite(entry?.at)&&entry.at>now-7*86400000&&Number.isFinite(entry.cost)&&entry.cost>=0):[];
+    }catch{return [];}
+  }
+  function accountForCycle(session){
+    if(!(session.cycleSpend>0))return;
+    const entries=trainingSpend();
+    if(entries.some(entry=>entry.started===session.started))return;
+    entries.push({started:session.started,at:Date.now(),cost:session.cycleSpend});
+    localStorage.setItem(trainingSpendKey(),JSON.stringify(entries));
+  }
+  async function reviewNextCycle(view,session){
+    if(recoveryBusy)return;
+    const owner=sessionOwner,requested=Date.now();
+    recoveryBusy=true;recovery=null;recoveryMessage="Cycle complete · updating the next recommendation…";
+    refreshRecommendations(view);
+    try{
+      await tornGuideApi.loadPage("energy",true);
+      if(loadTrainingSession()!==session||sessionOwner!==owner)return;
+      const state=tornGuideApi.state,stamps=state.fetchedAt;
+      if(["bars","cooldowns","battlestats"].some(key=>(stamps?.[key]??0)<requested||state.errors?.[key])){
+        recoveryMessage="Fresh training data unavailable. Refresh to plan the next cycle.";return;
+      }
+      accountForCycle(session);
+      trainingSession=null;saveTrainingSession();
+      recoveryMessage="Readiness updated.";readinessExpires=Date.now()+3500;
+    }catch(error){recoveryMessage="Could not review the next cycle: "+String(error.message??error);}
+    finally{recoveryBusy=false;if(view.isConnected)refreshRecommendations(view);}
+  }
   function loadTrainingSession(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(sessionOwner!==owner){sessionOwner=owner;trainingSession=null;try{const x=JSON.parse(localStorage.getItem("torn-city-guide:training-session:"+owner));if(x?.version===1&&Array.isArray(x.actions)&&x.actions.length<=2000&&Number.isFinite(x.started)&&Number.isInteger(x.index)&&x.index>=0&&x.index<=x.actions.length)trainingSession=x;}catch{}}
@@ -427,7 +481,7 @@ const tornCrimeGuide = (() => {
     const remaining=drug==null?null:Math.max(0,Number(typeof drug==="object"?drug.remaining??drug.time_left:drug)-(Date.now()-Number(st.fetchedAt?.cooldowns||Date.now()))/1000);
     if(!program||!projected)return {ready:false,label:"Load training and Energy data",due:null};
     const e=projected.current,cap=projected.maximum,cost=Number(plan.gym?.energy)||10;
-    const first=program.execution.find(actionable),startsZero=program.startEnergy==="zero"&&program.id!=="natural";
+    const first=(program.cycleExecution??program.execution).find(actionable),startsZero=program.startEnergy==="zero"&&program.id!=="natural";
     if(blockDrugs&&program.drugRisk)return {ready:false,label:"Drug restriction active",due:null};
     if(startsZero){
       if(remaining===null)return {ready:false,label:"Check drug cooldown",due:null};
@@ -481,7 +535,7 @@ const tornCrimeGuide = (() => {
     if(session){
       const step=session.actions[session.index];
       heading="Active plan · "+session.label;
-      if(!step){heading="Training session complete";label="All actions confirmed";controls='<button type="button" data-growth-session="stop">Finish</button>';}
+      if(!step){heading="Training cycle complete";label="All cycle actions confirmed";controls='<button type="button" data-growth-session="review" '+(recoveryBusy?"disabled":"")+'>Plan next cycle</button>';}
       else if(training.blockDrugs&&session.drugRisk){label="Drug restriction active · cancel and replan";}
       else {due=sessionSchedule(session)[session.index]?.due??Date.now();label=(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done" '+(due>Date.now()?"disabled":"")+'>Mark done</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;}
     }else{heading="";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button>';}
@@ -495,7 +549,7 @@ const tornCrimeGuide = (() => {
     if(!session)return "";
     const rows=sessionSchedule(session),pending=session.actions.slice(session.index),costs={};
     for(const x of pending)if(["xanax","ecstasy","candy","dvd","refill"].includes(x.type))costs[x.type]=(costs[x.type]||0)+(x.quantity??1);
-    return '<div class="growth-replay"><strong class="growth-accent">'+esc(session.label.startsWith("LOW#")?"Low Stat Jump Training Program":session.label)+'</strong><small>'+session.index+' / '+session.actions.length+' steps confirmed</small><small>Estimated completion: <span data-growth-finish>'+esc(sessionTime(rows.at(-1)?.due))+'</span></small><small>'+Object.entries(costs).map(([name,q])=>esc(q+" "+name)).join(" · ")+'</small><small>Program locked. Only scheduled times adjust.</small></div>';
+    return '<div class="growth-replay"><strong class="growth-accent">'+esc(session.label.startsWith("LOW#")?"Low Stat Jump Training Program":session.label)+'</strong><small>'+session.index+' / '+session.actions.length+' steps confirmed</small><small>Estimated completion: <span data-growth-finish>'+esc(sessionTime(rows.at(-1)?.due))+'</span></small><small>'+Object.entries(costs).map(([name,q])=>esc(q+" "+name)).join(" · ")+'</small><small>Cycle locked. The next program is selected after this cycle.</small></div>';
   }
   function growthPeriodSummary(periods,fmt,confirmed){
     const estimates=tornTrainSequence.periodPurchases(periods??[1,7,28].map(days=>({days})),confirmed);
@@ -548,10 +602,72 @@ const tornCrimeGuide = (() => {
       return '<li><time>'+esc(clock(step.at))+'</time><span>'+esc(label)+'</span></li>';
     }).join("");
   }
+  function rankedWar(now){
+    const state=tornGuideApi.state;
+    if(state.errors?.factionWars)return null;
+    const war=payload("factionWars","wars")?.ranked;
+    const start=Number(war?.start)*1000,end=Number(war?.end)*1000;
+    if(!Number.isFinite(start)||start<=0||end>0&&end<=now||Number(war?.winner)>0)return null;
+    const mode=typeof war.template?.mode==="string"?war.template.mode:null;
+    return {start,mode};
+  }
+  function warStackAdvice(war,settings,live,held,avoidDrugs,now){
+    const interval=(420+settings.adjustment)*60000;
+    const desiredClear=war.start-settings.lead*60000;
+    const nominalFirst=desiredClear-4*interval;
+    const stocked=held==null?4:Math.min(4,held);
+    const preserveWindow=5*3600000;
+    const first=live?.energy>live?.cap&&now>=nominalFirst?nominalFirst:
+      avoidDrugs||stocked===0?war.start-preserveWindow:desiredClear-stocked*interval;
+    if(now>=war.start)return {first,due:null,label:"War started · use Energy as needed"};
+    if(!live||live.drug===null)return {first,due:first>now?first:null,label:"Refresh to verify Energy and drug cooldown"};
+    const stacked=live.energy>live.cap?Math.min(4,Math.floor(live.energy/250)):0;
+    if(stacked===4)return {first,due:live.drug>0?now+live.drug*1000:war.start,label:live.drug>0?"Hold 1,000 E · drug cooldown":"Hold 1,000 E for war"};
+    if(avoidDrugs)return {first,due:war.start,label:"Preserve Energy · drug use excluded by Focus or account restrictions"};
+    if(held===null)return {first,due:first>now?first:null,label:"Refresh to verify Xanax inventory"};
+    const ready=now+live.drug*1000,remaining=4-stacked;
+    const ifNeeded=Math.max(0,Math.floor((war.start-ready)/interval));
+    const doses=Math.min(remaining,held,ifNeeded);
+    if(!doses)return {first,due:war.start,label:held===0?"No Xanax on hand · preserve Energy for war":"Preserve Energy · another dose would clear after war starts"};
+    const due=Math.max(ready,desiredClear-doses*interval);
+    const action=stacked===0&&live.energy>0?"Spend to 0 E, then take Xanax":"Take Xanax";
+    const detail=doses<remaining?" · "+doses+" of "+remaining+" remaining doses fit":" · dose "+(stacked+1)+" of 4";
+    return {first,due,label:(due>now?"Wait, then ":"")+action+detail};
+  }
+  function energyWarAdvice(training,now=Date.now()){
+    const settings=energyWarSettings(),war=rankedWar(now);
+    if(settings.mode==="off"||!war||settings.mode==="faction"&&!war.mode)return null;
+    const state=tornGuideApi.state,inventory=state.inventory.Drug;
+    const catalog=payload("itemCatalog","items"),items=Array.isArray(catalog)?catalog:Object.values(catalog||{});
+    const xanax=items.find(item=>normalize(item.name)==="xanax");
+    const held=Array.isArray(inventory)&&!state.inventoryErrors?.Drug?inventory.reduce((sum,item)=>{
+      const id=item.id??item.item_id??item.item?.id;
+      return normalize(item.name??item.item?.name)==="xanax"||xanax&&id!=null&&String(id)===String(xanax.id)?
+        sum+Math.max(0,Number(item.quantity??item.amount)||0):sum;
+    },0):null;
+    const advice=warStackAdvice(war,settings,recoverySnapshot(),held,training.avoidWarDrugs,now);
+    const session=loadTrainingSession();
+    const cycleEnd=now+((training.plan?.program?.cycleExecution??[]).at(-1)?.end??0)*1000;
+    const active=now>=advice.first||!session&&cycleEnd>advice.first;
+    return {...war,...advice,active};
+  }
+  function warCounter(advice){
+    return '<div class="growth-next-step" data-war-counter><div class="growth-counter-actions">'+
+      '<button type="button" data-growth-session="war-refresh" aria-label="Refresh war preparation" title="Refresh war preparation" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button></div>'+
+      '<small>Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+
+      (advice.mode?" · "+esc(advice.mode):"")+'</small><strong class="growth-next-clock" data-war-clock>'+
+      esc(advice.due&&advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
+      '</strong><span data-war-step>'+esc(advice.label)+'</span>'+recoveryPanel(null,{})+'</div>';
+  }
+  let warTraining=null;
   function growthCard(training,prefs){
     const activeSession=loadTrainingSession();
     const p=training.plan;
-    const setup=growthSettings()+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
+    let setup=growthSettings()+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
+    warTraining=training;
+    const war=energyWarAdvice(training);
+    if(war?.active)return '<div class="growth-card">'+setup+warCounter(war)+'</div>';
+    if(war)setup+='<small data-war-switch="'+war.first+'">Ranked war starts '+esc(new Date(war.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(war.mode?" · "+esc(war.mode):"")+'</small>';
     if(activeSession&&!p?.stats){const fmt=v=>v==null?"Unavailable":number(Math.round(v));const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",refill:"Points refill"};return '<div class="growth-card">'+setup+sessionPanel(p??{},training,names,fmt)+replayPanel(activeSession,fmt)+growthPeriodSummary(activeSession.periods,fmt,activeSession.actions.slice(0,activeSession.index))+'<div class="growth-execution"><ol>'+sessionSteps(activeSession,names,fmt)+'</ol></div></div>';}
     if(p?.needsBuild)return setup+'<div class="growth-warning">Choose a stat build before receiving training recommendations. <a href="#stats">Select build</a></div>';
     if(!p?.stats)return setup+'<p class="fine-print">'+esc(p?.detail??"Load battle stats and choose a build in Stats.")+'</p><a href="#stats">View Stats</a>';
@@ -562,7 +678,7 @@ const tornCrimeGuide = (() => {
     if(p.bliss)chips.push('<span class="growth-perk">Ignorance Is Bliss</span>');
     if(training.educationRisk)chips.push('<span class="growth-warning">Education risk · no drugs</span>');
     const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",train:"Train "+p.stat,refill:"Points refill",wait:"Wait",autoWait:"Wait",externalHappy:"External happiness"};
-    const execution=plannedSteps(prog?.execution??[],names,fmt);
+    const execution=plannedSteps(prog?.cycleExecution??prog?.execution??[],names,fmt);
     const timer=sessionPanel(p,training,names,fmt);
     const statLabel=activeSession?(p.stats.find(s=>s.key===activeSession.statKey)?.label??activeSession.stat):p.stats.find(s=>s.key===p.statKey)?.label??p.stat;
     const gymName=activeSession?.gym?.name??p.gym?.name,article=gymName==="Gun Shop"?"the ":"";
@@ -575,7 +691,7 @@ const tornCrimeGuide = (() => {
     const session=loadTrainingSession();
     const steps=session?'<div class="growth-execution"><small>Confirmed times and adjusted estimates (local time).</small><ol>'+sessionSteps(session,names,fmt)+'</ol></div>':prog?'<div class="growth-execution"><small>Elapsed time from simulation start. Follow live cooldowns; estimates may change.</small><ol>'+execution+'</ol></div>':'<p class="fine-print">No training steps available.</p>';
     const tabs=[["summary","Summary",summary+perkChips],["steps","Steps",steps],["build","Build",build]];
-    const tabbar='<div class="growth-tabs" role="tablist" aria-label="Stat growth details">'+tabs.map(([id,label])=>'<button type="button" role="tab" id="growth-tab-'+id+'" aria-controls="growth-panel-'+id+'" aria-selected="'+(growthTab===id)+'" tabindex="'+(growthTab===id?"0":"-1")+'" data-growth-tab="'+id+'">'+label+'</button>').join("")+'</div>';
+    const tabbar='<div class="growth-tabs" role="tablist" aria-label="Energy details">'+tabs.map(([id,label])=>'<button type="button" role="tab" id="growth-tab-'+id+'" aria-controls="growth-panel-'+id+'" aria-selected="'+(growthTab===id)+'" tabindex="'+(growthTab===id?"0":"-1")+'" data-growth-tab="'+id+'">'+label+'</button>').join("")+'</div>';
     const panels=tabs.map(([id,,body])=>'<div class="growth-tab-panel" role="tabpanel" id="growth-panel-'+id+'" aria-labelledby="growth-tab-'+id+'" '+(growthTab===id?"":"hidden")+'>'+body+'</div>').join("");
     return '<div class="growth-card">'+setup+instruction+timer+tabbar+panels+'</div>';
   }
@@ -592,6 +708,18 @@ const tornCrimeGuide = (() => {
       const timing=warning.querySelector("[data-growth-bar-timing]");
       const value=remaining===null?"":tornTctClock.formatDuration(remaining)+" until full";
       if(timing.textContent!==value)timing.textContent=value;
+    }
+    const warPanel=document.querySelector("[data-war-counter]"),warSwitch=document.querySelector("[data-war-switch]");
+    if(warPanel&&warTraining&&!warPanel.closest("[hidden]")){
+      const war=energyWarAdvice(warTraining);
+      if(war?.active){
+        const clock=warPanel.querySelector("[data-war-clock]"),step=warPanel.querySelector("[data-war-step]");
+        const value=war.due&&war.due>Date.now()?tornTctClock.formatDuration((war.due-Date.now())/1000):"Ready";
+        if(clock.textContent!==value)clock.textContent=value;
+        if(step.textContent!==war.label)step.textContent=war.label;
+      }else refreshRecommendations(document.getElementById("topic-view"));
+    }else if(warSwitch&&Number(warSwitch.dataset.warSwitch)<=Date.now()){
+      refreshRecommendations(document.getElementById("topic-view"));
     }
     const el=document.querySelector("[data-growth-due]");if(!el||el.closest("[hidden]"))return;
     const session=loadTrainingSession();if(session&&session.index<session.actions.length){const rows=sessionSchedule(session);el.dataset.growthDue=String(rows[session.index].due);const finish=document.querySelector("[data-growth-finish]");if(finish)finish.textContent=sessionTime(rows.at(-1)?.due);for(const row of document.querySelectorAll("[data-session-row]")){const x=rows[Number(row.dataset.sessionRow)],t=row.querySelector("[data-session-time]");if(x&&t){const value=sessionTime(x.due);if(t.textContent!==value)t.textContent=value;}}}
@@ -1010,6 +1138,17 @@ const tornCrimeGuide = (() => {
       }
     },true);
     view.addEventListener("change",e=>{if(e.target.matches("[data-growth-exclude-owned]")){try{localStorage.setItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"),String(e.target.checked));}catch{}refreshRecommendations(view);}});
+    view.addEventListener("change",event=>{
+      const key=event.target.dataset.energyWar;
+      if(!key)return;
+      const settings=energyWarSettings();
+      if(key==="mode")settings.mode=event.target.value;
+      else if(event.target.value!==""&&event.target.validity.valid)settings[key]=Number(event.target.value);
+      else {event.target.value=settings[key];return;}
+      try{localStorage.setItem("torn-city-guide:energy-war:"+recOwner,JSON.stringify(settings));}catch{}
+      refreshRecommendations(view);
+      view.querySelector('[data-energy-war="'+key+'"]')?.focus();
+    });
     function selectGrowthTab(id,focus=false){
       if(!["summary","steps","build"].includes(id))return;
       growthTab=id;try{localStorage.setItem("torn-city-guide:growth-tab:"+recOwner,id);}catch{}
@@ -1040,8 +1179,18 @@ const tornCrimeGuide = (() => {
       if(e.target.closest("[data-growth-budget]")){if(!tornRoadmap.activitiesOpen())tornRoadmap.toggleActivities();document.querySelector('#home-activities [data-home-pref="weeklyBudget"]')?.focus();return;}
       const sessionButton=e.target.closest("[data-growth-session]");
       if(sessionButton&&!sessionButton.disabled){const action=sessionButton.dataset.growthSession,session=loadTrainingSession();
+      if(action==="war-refresh"&&!recoveryBusy){
+        recoveryBusy=true;recovery=null;recoveryMessage="Refreshing war and Energy data…";
+        refreshRecommendations(view);
+        tornGuideApi.loadPage("energy",true).then(()=>{
+          recoveryMessage="Readiness updated.";readinessExpires=Date.now()+3500;
+        }).catch(error=>{recoveryMessage="Refresh failed: "+String(error.message??error);})
+          .finally(()=>{recoveryBusy=false;if(view.isConnected)refreshRecommendations(view);});
+        return;
+      }
+      if((action==="review"||action==="refresh")&&session&&session.index>=session.actions.length){void reviewNextCycle(view,session);return;}
       if(action==="refresh"&&!recoveryBusy){recoveryBusy=true;recovery=null;recoveryMessage="Refreshing Energy, Happiness and cooldowns…";const owner=sessionOwner,started=session?.started,index=session?.index,requested=Date.now();refreshRecommendations(view);(async()=>{try{
-        await tornGuideApi.loadPage("stats",true);
+        await tornGuideApi.loadPage("energy",true);
         const current=loadTrainingSession(),st=tornGuideApi.state;
         if(sessionOwner!==owner||current?.started!==started||current?.index!==index)return;
         const live=recoverySnapshot();
@@ -1058,9 +1207,10 @@ const tornCrimeGuide = (() => {
           if(recovery.live.drug!=null)session.drugUntil=recovery.live.at+recovery.live.drug*1000;
           if(recovery.live.booster!=null)session.boosterUntil=recovery.live.at+recovery.live.booster*1000;
           saveTrainingSession();recovery=null;recoveryMessage="Resumed within the same training program.";
+          if(session.index>=session.actions.length){void reviewNextCycle(view,session);return;}
         }refreshRecommendations(view);return;}
       
-      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recovery=null;recoveryMessage="";trainingSession={version:1,label:prog.label,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,periods:prog.periods,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:sessionActions(prog.execution),notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recovery=null;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next&&!next.midnightRefill?now+Math.max(0,next.at-old.at)*1000:0;saveTrainingSession();}else if(action==="stop"){trainingSession=null;recovery=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
+      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recovery=null;recoveryMessage="";trainingSession={version:1,label:prog.label,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,periods:prog.periods,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:sessionActions(prog.cycleExecution??prog.execution),cycleSpend:prog.cycleSpend,notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recovery=null;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next&&!next.midnightRefill?now+Math.max(0,next.at-old.at)*1000:0;saveTrainingSession();if(session.index>=session.actions.length){void reviewNextCycle(view,session);return;}}else if(action==="stop"){trainingSession=null;recovery=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
       const btn=e.target.closest("[data-rec-type],[data-rec-incomplete],[data-rec-uniques],[data-rec-history],[data-rec-crime-load]");
       if(!btn||!btn.closest("[data-home-recommendations]"))return;
       if(btn.hasAttribute("data-rec-crime-load")){
