@@ -393,7 +393,7 @@ const tornStatPlanner = (() => {
     try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:build:"+owner));if(buildOptions.some(x=>x[0]===saved?.choice))buildChoice=saved.choice;buildTotal=clamp(saved?.total,0,1e15);}catch{}
   }
   function saveBuild(){try{localStorage.setItem("torn-city-guide:build:"+buildOwner,JSON.stringify({choice:buildChoice,total:buildTotal}));}catch{}}
-  function homeTrainingAdvice(budget,risk){
+  function homeTrainingAdvice(budget,risk,options={}){
     loadBuild();
     const actual=statNames.map(apiStatValue);
     if(actual.some(x=>x===null))return null;
@@ -403,7 +403,7 @@ const tornStatPlanner = (() => {
     const active=activeGym(),book=row=>row.effects.groups.find(g=>g.group==="book")?.total||0;
     const next=rows.filter(x=>x.remaining>0).sort((a,b)=>a.progress-b.progress||book(b)-book(a)||b.effects.multiplier-a.effects.multiplier)[0];
     if(!next)return {stat:"your selected build",detail:"Current target reached; set the next milestone."};
-    const bars=rawBars(),programs=active&&bars?.energy&&bars?.happy&&active[next.stat]>0?tornTrainSequence.weeklyPrograms({state:{...state,statValues:Object.fromEntries(statNames.map((stat,i)=>[stat,actual[i]])),compareStat:next.stat,currentEnergy:Number(bars.energy.current),maxEnergy:Number(bars.energy.maximum),happy:Number(bars.happy.current),maxHappy:Number(bars.happy.maximum)},gym:active,trainBlock,effectsFor},budget,risk):[];
+    const bars=rawBars(),programs=active&&bars?.energy&&bars?.happy&&active[next.stat]>0?tornTrainSequence.weeklyPrograms({state:{...state,statValues:Object.fromEntries(statNames.map((stat,i)=>[stat,actual[i]])),compareStat:next.stat,currentEnergy:Number(bars.energy.current),maxEnergy:Number(bars.energy.maximum),happy:Number(bars.happy.current),maxHappy:Number(bars.happy.maximum)},gym:active,trainBlock,effectsFor},budget,risk,options):[];
     return {stat:readable[next.stat],program:programs[0]??null,detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name:"")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")+(tornHappinessBook().active?" · Ignorance Is Bliss active":"")};
   }
   function homeCandyAdvice(){return calcCandyStock()?.[0]||null;}
