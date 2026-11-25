@@ -2012,3 +2012,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ongoing-item:hover,.ongoing-item:focus-visible{background:var(--raised);outline:1px solid var(--accent);outline-offset:-1px}
 :root[data-theme="light"] .ongoing-item:is([data-status="idle"],[data-status="review"]){color:#a65c00}
 @media(max-width:600px){.checklist-ongoing-title{display:none}.ongoing-item{justify-content:flex-start}}
+
+.growth-next-step{display:grid;justify-items:center;text-align:center;gap:.2rem;padding:.65rem .4rem;border:1px solid var(--border);border-radius:5px;background:var(--canvas)}
+.growth-next-step .growth-next-clock{font-size:clamp(1.5rem,3vw,2.15rem);font-weight:750;line-height:1.15;font-variant-numeric:tabular-nums;color:#f0ad45}
+.growth-next-step[data-ready="true"] .growth-next-clock{color:var(--accent-strong)}
+.growth-next-step:not([data-growth-due]) .growth-next-clock{color:var(--muted)}
+.growth-next-step>span{font-size:.8rem;font-weight:650}
+:root[data-theme="light"] .growth-next-step[data-ready="false"][data-growth-due] .growth-next-clock{color:#a65c00}
