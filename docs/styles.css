@@ -1752,11 +1752,15 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
   *::-webkit-scrollbar-track,*::-webkit-scrollbar-corner{background:transparent}
   *::-webkit-scrollbar-thumb{background:var(--scroll-thumb);background-clip:padding-box;border:2px solid transparent;border-radius:8px}
   *::-webkit-scrollbar-thumb:hover{background-color:var(--scroll-hover)}
-  *::-webkit-scrollbar-button{display:block;width:10px;height:10px;background-color:var(--scroll-arrow);background-clip:content-box;border:2px solid transparent}
-  *::-webkit-scrollbar-button:vertical:decrement{clip-path:polygon(50% 18%,90% 78%,10% 78%)}
-  *::-webkit-scrollbar-button:vertical:increment{clip-path:polygon(10% 22%,90% 22%,50% 82%)}
-  *::-webkit-scrollbar-button:horizontal:decrement{clip-path:polygon(18% 50%,78% 10%,78% 90%)}
-  *::-webkit-scrollbar-button:horizontal:increment{clip-path:polygon(22% 10%,82% 50%,22% 90%)}
+  *::-webkit-scrollbar-button{display:none;width:0;height:0;background:transparent;border:0}
+  *::-webkit-scrollbar-button:single-button:vertical:decrement:start,
+  *::-webkit-scrollbar-button:single-button:vertical:increment:end,
+  *::-webkit-scrollbar-button:single-button:horizontal:decrement:start,
+  *::-webkit-scrollbar-button:single-button:horizontal:increment:end{display:block;width:10px;height:10px;background-color:transparent;background-repeat:no-repeat;background-position:center;background-size:8px 8px}
+  *::-webkit-scrollbar-button:single-button:vertical:decrement:start{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath fill='%23949fa5' d='M5%202%20L9%207%20H1%20Z'/%3E%3C/svg%3E")}
+  *::-webkit-scrollbar-button:single-button:vertical:increment:end{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath fill='%23949fa5' d='M1%203%20H9%20L5%208%20Z'/%3E%3C/svg%3E")}
+  *::-webkit-scrollbar-button:single-button:horizontal:decrement:start{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath fill='%23949fa5' d='M2%205%20L7%201%20V9%20Z'/%3E%3C/svg%3E")}
+  *::-webkit-scrollbar-button:single-button:horizontal:increment:end{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath fill='%23949fa5' d='M3%201%20L8%205%20L3%209%20Z'/%3E%3C/svg%3E")}
   *::-webkit-scrollbar-button:double-button{display:none}
 }
 .inventory-panel>.inventory-detail-list{margin-inline-end:calc(-.85rem + 2px);padding-inline-end:calc(.85rem - 2px)}
@@ -1819,3 +1823,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-detail-row > details[open] > .inventory-detail-body{
   padding:.45rem .55rem .55rem;
 }
+
+/* Compact responsive equipment stat pairs; each label stays with its value. */
+.inventory-detail-body .inventory-gear-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:.25rem .65rem;margin:.4rem 0}
+.inventory-gear-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);align-items:baseline;gap:.4rem;padding:.18rem .3rem;border-bottom:1px solid var(--border);min-width:0}
+.inventory-gear-pair dd{font-variant-numeric:tabular-nums}
+.inventory-item-effects{border-top:1px solid var(--border);margin-top:.45rem;padding-top:.4rem}
+.inventory-item-effects h4{font-size:.83rem;color:var(--accent-strong);margin:0 0 .25rem}
