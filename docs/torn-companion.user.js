@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Guide - Passive Visible Status Bridge
 // @namespace    https://vagabond1215.github.io/TORN/
-// @version      2.4.0
+// @version      2.5.0
 // @description  Synchronize visible status bars and ranked market observations to your local Torn City Guide. Read-only, no API key or network calls.
 // @match        https://www.torn.com/*
 // @match        https://torn.com/*
@@ -18,7 +18,9 @@
   const archivePrefix="torn-city-guide:passive-rw:v2:",archiveMeta=archivePrefix+"meta",bucketCount=128,bucketLimit=800;
   const archiveAge=row=>(row.complete?90:30)*86400000;
   const archiveValid=(row,stamp=Date.now())=>row&&Number.isFinite(row.at)&&row.at<=stamp+5000&&stamp-row.at<archiveAge(row);
-  const archiveId=row=>row.uid?"uid:"+row.uid:row.fingerprint||JSON.stringify([row.name,row.rarity,row.price,row.stats,row.bonuses]);
+  // Keep the same key when an observation gains quality or bonus details.
+  const archiveId=row=>row.uid?"uid:"+row.uid:JSON.stringify([row.name,row.rarity,row.price,row.stats?.damage??null,row.stats?.accuracy??null,row.stats?.armor??null]);
+  const observationKey=row=>JSON.stringify([row.name,row.price,row.stats?.damage??null,row.stats?.accuracy??null,row.stats?.armor??null]);
   function bucketOf(id){let h=2166136261;for(let i=0;i<id.length;i++)h=Math.imul(h^id.charCodeAt(i),16777619);return (h>>>0)%bucketCount;}
   const guideOrigin="https://vagabond1215.github.io";
   const refreshAge=60*1000;
@@ -42,10 +44,10 @@
       const meta=GM_getValue(archiveMeta,null);
       if(!meta?.buckets){
         const packet=GM_getValue(marketKey,null);
-        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.4.0",bridgeAt:Date.now()})}));
+        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.5.0",bridgeAt:Date.now()})}));
         return;
       }
-      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.4.0",bridgeAt:Date.now(),buckets:meta.buckets})}));
+      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.5.0",bridgeAt:Date.now(),buckets:meta.buckets})}));
       if(transferTimer!==null)clearTimeout(transferTimer);
       const pending=Object.entries(meta.buckets).filter(([id,rev])=>force||sent.get(id)!==rev);
       const next=()=>{
@@ -148,8 +150,28 @@
   const active=()=>document.visibilityState==="visible"&&document.hasFocus();
   const maxQueue=12000;
   let routeKey="",route=null,queue=new Set(),cards=new WeakMap(),owners=new WeakMap(),seen=new WeakMap(),boundaries=new WeakSet();
+  let priorButtons=new WeakSet(),transitionUntil=0,previousRarity=null,stableLabels=new WeakMap(),panelSamples=[],manualTarget=null;
+  const closeSelector='button[aria-label^="Close item info for "]';
+  function panelFor(name){
+    const matches=Array.from(document.querySelectorAll(closeSelector)).filter(b=>rendered(b)&&b.getAttribute("aria-label")==="Close item info for "+name);
+    if(matches.length!==1)return null;
+    let best=null;
+    for(let el=matches[0].parentElement,depth=0;el&&depth<9;el=el.parentElement,depth++){
+      if(el.querySelectorAll(buySelector).length>1||el.querySelectorAll(closeSelector).length>1)break;
+      const t=el.innerText||"";
+      if(t.length>6000)break;
+      if(/Quality\s*:/i.test(t)&&/Bonus(?:es)?\s*:/i.test(t)){best={el,text:t};break;}
+    }
+    return best;
+  }
+  function samplePanel(name,price,text,row){
+    const labels=Array.from(text.matchAll(/(?:^|\n)\s*(Damage|Accuracy|Armor|Quality|Bonus(?:es)?|Rate of Fire|Ammo|Coverage|Stealth|Caliber)\s*:\s*([^\n]+(?:\n\s*[^\n:]+)?)/gi),m=>({label:m[1],value:m[2].trim().slice(0,100)}));
+    // Keep only recognized equipment labels, never arbitrary panel text or player data.
+    const clean=labels.map(x=>({label:x.label,value:x.value.split("\n")[0].trim()}));
+    panelSamples.push({name,price,at:Date.now(),quality:row?.stats?.quality??null,bonusCount:row?.bonuses?.length??0,labels:clean});if(panelSamples.length>12)panelSamples.shift();
+  }
   let workTimer=null,flushTimer=null,dirty=false,lastFlush=0,lastCapture=null,stored=new Map(),metrics=null,initialScanPending=false;
-  function freshMetrics(){return {buttons:0,rendered:0,matched:0,ranked:0,accepted:0,complete:0,duplicates:0,added:0,processed:0,batches:0,maxBatchMs:0,queued:0,dropped:0};}
+  function freshMetrics(){return {buttons:0,rendered:0,matched:0,ranked:0,accepted:0,complete:0,duplicates:0,added:0,processed:0,batches:0,maxBatchMs:0,queued:0,dropped:0,transitionSkipped:0,panels:0,enriched:0,persistedAdded:0};}
   function rowKey(row){return archiveId(row);}
   function readStore(){return stored;}
   function mergeBucket(id,updates,stamp){
@@ -161,6 +183,7 @@
       if(!old||row.complete&&!old.complete||row.complete===old.complete&&row.at>=old.at)map.set(k,row);
     }
     const rows=Array.from(map.values()).sort((a,b)=>Number(b.complete)-Number(a.complete)||b.at-a.at).slice(0,bucketLimit);
+    metrics.persistedAdded+=Math.max(0,rows.length-(prior?.rows?.length??0));
     const revision=stamp+"-"+Math.random().toString(36).slice(2,10);
     GM_setValue(archivePrefix+id,{revision,rows});
     return revision;
@@ -170,14 +193,20 @@
     if(!dirty||!metrics||!route)return;
     const stamp=Date.now(),old=GM_getValue(archiveMeta,null),buckets={...(old?.buckets??{})},groups=new Map();
     const add=row=>{if(!archiveValid(row,stamp))return;const id=bucketOf(rowKey(row));if(!groups.has(id))groups.set(id,[]);groups.get(id).push(row);};
-    if(!old?.migrated){const legacy=GM_getValue(marketKey,null);for(const row of legacy?.rows??[])add(row);}
+    if(!old?.identityV25){
+      // Rebucket once using the enrichment-compatible identity; keep legacy backup.
+      const previous=[];for(const id of Object.keys(old?.buckets??{})){const part=GM_getValue(archivePrefix+id,null);for(const row of part?.rows??[])previous.push(row);}
+      if(!previous.length){const legacy=GM_getValue(marketKey,null);for(const row of legacy?.rows??[])previous.push(row);}
+      for(const row of previous)add(row);
+      for(let id=0;id<bucketCount;id++)if(!groups.has(id))groups.set(id,[]);
+    }
     for(const row of stored.values())add(row);
     // Stale shards are pruned during normal writes; rotate one additional shard per flush.
     const sweep=Number.isInteger(old?.sweep)?old.sweep%bucketCount:0;
     if(buckets[sweep]&&!groups.has(sweep))groups.set(sweep,[]);
-    for(const [id,rows] of groups)buckets[id]=mergeBucket(id,rows,stamp);
-    const diagnostic={...metrics,at:stamp,lastCapture,category:route.category,rarity:route.rarity,queued:queue.size,mode:"incremental"};
-    GM_setValue(archiveMeta,{version:2,migrated:true,buckets,sweep:(sweep+1)%bucketCount,diagnostic});
+    for(const [id,rows] of groups){if(!old?.identityV25)GM_setValue(archivePrefix+id,{rows:[]});buckets[id]=mergeBucket(id,rows,stamp);}
+    const diagnostic={...metrics,at:stamp,lastCapture,category:route.category,rarity:route.rarity,queued:queue.size,mode:"incremental",panelSamples:panelSamples.slice(),identityVersion:25};
+    GM_setValue(archiveMeta,{version:2,migrated:true,identityV25:true,buckets,sweep:(sweep+1)%bucketCount,diagnostic});
     stored.clear();lastFlush=stamp;dirty=false;
   }
   function scheduleFlush(){
@@ -213,10 +242,21 @@
     if(!Number.isSafeInteger(price)||price<=0)return;
     const card=locateCard(button,name);if(!card||!rendered(card))return;
     metrics.matched++;
-    const text=card.innerText||"",previous=seen.get(button);
+    let text=card.innerText||"";
+    const explicitRarity=/(?:^|\n)\s*(Y\s*ellow|O\s*range|R\s*ed)\s*(?:\n|$)/i.exec(text);
+    const prior=priorButtons.has(button);
+    if(!explicitRarity&&(Date.now()<transitionUntil||prior)){metrics.transitionSkipped++;return;}
+    if(explicitRarity&&route.rarity&&explicitRarity[1].replace(/\s/g,"").toLowerCase()!==route.rarity){metrics.transitionSkipped++;return;}
+    const target=manualTarget;
+    if(target?.button===button&&target.hash===routeKey&&Date.now()-target.at<15000){
+      const panel=panelFor(name);
+      if(panel){text+="\n"+panel.text;metrics.panels++;}
+    }
+    const previous=seen.get(button);
     // A forced recheck can reveal newly added tooltip attributes even if text is unchanged.
     seen.set(button,{label});
     const row=parseRankedCard(text,name,price,route);if(!row)return;
+    if(manualTarget?.button===button&&/Quality\s*:/i.test(text))samplePanel(name,price,text,row);
     metrics.ranked++;
     if(!row.complete){
       const nums=text.split(/\n/).map(x=>x.trim()).filter(x=>/^\d{1,3}\.\d{2}$/.test(x)).map(Number);
@@ -242,10 +282,10 @@
     const uid=card.getAttribute("data-uid")||card.getAttribute("data-item-uid");
     if(uid&&/^[1-9]\d*$/.test(uid))row.uid=uid;
     if(!Object.keys(row.stats).length) return;
-    row.fingerprint=JSON.stringify([name,row.rarity,price,row.stats,row.bonuses]);
+    row.fingerprint=archiveId(row);
     row.at=Date.now();lastCapture=row.at;metrics.accepted++;if(row.complete)metrics.complete++;
     const map=readStore(),k=rowKey(row),prev=map.get(k);
-    if(prev){metrics.duplicates++;if(prev.complete&&!row.complete)return;}
+    if(prev){metrics.duplicates++;if(prev.complete&&!row.complete)return;if(!prev.complete&&row.complete)metrics.enriched++;}
     else metrics.added++;
     map.set(k,row);
     if(map.size>=1000)flush();
@@ -268,7 +308,11 @@
     const next=marketRoute(),hash=location.hash;
     if(hash===routeKey&&route&&!initialScanPending){kick();return;}
     if(dirty)flush();
-    routeKey=hash;route=next;queue.clear();cards=new WeakMap();owners=new WeakMap();seen=new WeakMap();boundaries=new WeakSet();metrics=freshMetrics();
+    const changedRarity=route&&next&&(route.rarity!==next.rarity||route.category!==next.category);
+    priorButtons=new WeakSet();
+    if(changedRarity){for(const button of document.querySelectorAll(buySelector))if(seen.has(button))priorButtons.add(button);}
+    transitionUntil=changedRarity?Date.now()+1800:0;
+    routeKey=hash;route=next;queue.clear();cards=new WeakMap();owners=new WeakMap();seen=new WeakMap();boundaries=new WeakSet();metrics=freshMetrics();manualTarget=null;
     initialScanPending=Boolean(route);
     if(!route)return;
     // Initial scan once per manually selected route. Subsequent work uses mutations.
@@ -277,7 +321,7 @@
       initialScanPending=false;
       for(const button of document.querySelectorAll(buySelector)){metrics.buttons++;enqueue(button);}
       scheduleFlush();kick();
-    },600);
+    },changedRarity?2200:600);
   }
   function ownerOf(node){
     for(let el=node?.nodeType===1?node:node?.parentElement,depth=0;el&&depth<12;el=el.parentElement,depth++){
@@ -292,7 +336,7 @@
     if(!marketRoute())return;
     for(const r of records){
       if(r.type==="attributes"){
-        if(r.target.matches?.(buySelector)){enqueue(r.target,true);continue;}
+        if(r.target.matches?.(buySelector)){priorButtons.delete(r.target);enqueue(r.target,true);continue;}
         const b=ownerOf(r.target);if(b)enqueue(b,true);
       }else{
         const b=ownerOf(r.target);if(b)enqueue(b,true);
@@ -307,9 +351,13 @@
   }
   // Explicit user expansions may change card content without replacing the buy button.
   document.addEventListener("click",event=>{
-    if(!active()||!marketRoute()||!event.target.closest?.(infoSelector))return;
-    const button=ownerOf(event.target);
-    if(button)setTimeout(()=>{if(active()){enqueue(button,true);kick();}},350);
+    if(!active()||!marketRoute())return;
+    const clicked=event.target.closest?.(infoSelector+","+buySelector);if(!clicked)return;
+    let button=clicked.matches(buySelector)?clicked:ownerOf(clicked);
+    if(!button){for(let el=clicked.parentElement,depth=0;el&&depth<9;el=el.parentElement,depth++){const candidates=el.querySelectorAll(buySelector);if(candidates.length===1){button=candidates[0];break;}if(candidates.length>1)break;}}
+    if(!button)return;
+    manualTarget={button,hash:routeKey,at:Date.now()};
+    for(const delay of [350,900,1800])setTimeout(()=>{if(active()&&manualTarget?.button===button&&manualTarget.hash===routeKey){enqueue(button,true);kick();}},delay);
   },true);
   const marketObserver=new MutationObserver(marketMutations);
   if(document.body)marketObserver.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:["aria-label","title","aria-expanded"]});
