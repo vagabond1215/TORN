@@ -1156,7 +1156,7 @@ const inventoryStatIcons={
   coverage:'<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.15"><circle cx="8" cy="2.8" r="1.8"/><path d="m4 6 4-1 4 1 1 4-3 .5V15H6v-4.5L3 10Z"/></svg>'
 };
 function inventoryGearTitle(uid,category,name,equipped,info={}){
-  const gear=tornGuideApi.readGear(uid).item;
+  const read=tornGuideApi.readGear(uid),gear=read.item;
   const rarity=String(gear?.rarity??"").toLowerCase();
   const ranked=["yellow","orange","red"].includes(rarity);
   const stats=gear?.stats??{};
@@ -1168,9 +1168,14 @@ function inventoryGearTitle(uid,category,name,equipped,info={}){
   const coverageLabel=Array.isArray(coverage)?coverage.map(x=>x.name+" "+x.value+"%").join(" · "):"Coverage unavailable";
   const field=(label,value,icon)=>value==null?"":'<span class="inventory-title-stat" title="'+safe(label)+'"'+(icon?' aria-label="'+safe(label+": "+value)+'"':"")+'>'+(inventoryStatIcons[icon]??"")+safe(value)+'</span>';
   const bonuses=Array.isArray(gear?.bonuses)?gear.bonuses:[];
-  return '<span class="inventory-title-content'+(ranked?" rarity-"+rarity:"")+'"><span class="inventory-title-name">'+safe(name)+(equipped?inventoryEquippedIcon:"")+'</span>'+
-    field("Quality",quality===null?"—%":quality+"%")+'<span class="inventory-title-combat">'+(category==="Defensive"?field("Armor rating",armor??"—","armor")+field("Coverage · "+coverageLabel,coverageText,"coverage"):field("Damage",damage??"—","damage")+field("Accuracy",accuracy??"—","accuracy"))+'</span>'+
-    bonuses.map(b=>field(b.description||"Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join("")+'</span>';
+  const bonusText=bonuses.map(b=>field(b.description||"Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join("");
+  const modText=(Array.isArray(read.mods)?read.mods:[]).map(m=>{
+    const name=typeof m==="string"?m:m?.name??m?.title;
+    return name?'<span class="inventory-title-mod" title="'+safe((typeof m==="object"&&m?.description)||"Attached mod")+'">'+safe(name)+'</span>':"";
+  }).filter(Boolean).join('<span class="inventory-title-mod-separator" aria-hidden="true">·</span>');
+  return '<span class="inventory-title-content'+(ranked?" rarity-"+rarity:"")+'"><span class="inventory-title-main"><span class="inventory-title-name">'+safe(name)+(equipped?inventoryEquippedIcon:"")+'</span>'+
+    field("Quality",quality===null?"—%":quality+"%")+'</span><span class="inventory-title-combat">'+(category==="Defensive"?field("Armor rating",armor??"—","armor")+field("Coverage · "+coverageLabel,coverageText,"coverage"):field("Damage",damage??"—","damage")+field("Accuracy",accuracy??"—","accuracy"))+'</span>'+
+    (bonusText||modText?'<span class="inventory-title-secondary">'+bonusText+(modText?'<span class="inventory-title-mods" aria-label="Attached mods">'+modText+'</span>':"")+'</span>':"")+'</span>';
 }
 function weaponEndurance(min,max,mag,magazines){
   if(![min,max,mag,magazines].every(Number.isSafeInteger)||min<1||max<min||max>500||mag<1||mag>1000||magazines<1||magazines>20)return null;
@@ -1264,9 +1269,9 @@ function inventoryGearMarkup(uid,category,info,equipped){
   const mods=read.mods;
   const modStamp=read.modsAt?'<small>Mods checked '+safe(tornGuidePreferences.formatDate(read.modsAt))+'</small>':"";
   const ammoStamp=read.ammo&&read.ammoAt?'<small>Ammo snapshot '+safe(tornGuidePreferences.formatDate(read.ammoAt))+'</small>':"";
-  const modList=mods===null||mods===undefined?"Not loaded":mods.length?mods.map(m=>safe(m.name??m.title??"Unknown mod")).join(" · "):"None attached";
+  const modList=mods===null||mods===undefined?"Not loaded":mods.length?mods.filter(m=>!(typeof m==="string"?m:m?.name??m?.title)).map(()=>"Unknown mod").join(" · "):"None attached";
   return '<section class="inventory-gear"><h4>Equipment attributes</h4>'+(rows?'<dl class="inventory-gear-grid">'+rows+'</dl>':"")+(endurance?'<p class="fine-print">Base endurance assumes '+mags+' magazine(s), full ammunition and no ammo-saving effects or mods.</p>':"")+(unique?(bonusList?'<div class="inventory-gear-bonuses"><strong>Bonus effects</strong>'+bonusList+'</div>':""):'<p class="fine-print">Individual attributes not loaded.</p>')+
-    (weapon?'<div class="inventory-gear-mods"><strong>Attached mods</strong><p>'+modList+'</p>'+modStamp+ammoStamp+(Array.isArray(meta.mods)?'<small>'+meta.mods.length+' compatible mod types in catalog</small>':"")+'</div>':"")+
+    (weapon?'<div class="inventory-gear-mods"><strong>Attached mods</strong>'+(modList?'<p>'+modList+'</p>':"")+modStamp+ammoStamp+(Array.isArray(meta.mods)?'<small>'+meta.mods.length+' compatible mod types in catalog</small>':"")+'</div>':"")+
     (uid?'<button type="button" class="button secondary" data-load-gear>'+ (unique?"Refresh mods / equipment":"Load equipment details")+'</button>':'<p class="fine-print">Unique item ID unavailable.</p>')+'<p role="status" class="inventory-gear-status"></p></section>';
 }
 if(typeof document!=="undefined")document.addEventListener("click",async event=>{
