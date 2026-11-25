@@ -244,24 +244,39 @@ const tornCrimeGuide = (() => {
     if(plan){
       add("growth","Train "+plan.stat,plan.detail,"#stats");
       const p=plan.program;
-      if(p)add("growth","Recommended program: "+p.label,"7-day estimated gain: +"+number(Math.round(p.gain))+" · "+number(p.used)+" E · $"+number(Math.round(p.money))+" / week · "+Object.entries(p.costs).filter(([,qty])=>qty>0).map(([type,qty])=>qty+" "+type).join(", ")+(prefs.weeklyBudget===null?" · Set a weekly budget to compare paid programs.":" · Budget $"+number(prefs.weeklyBudget))+(p.cycles>0?" · "+p.cycles+" plan cycle"+(p.cycles===1?"":"s")+" × "+number(p.blockHours)+"h; natural training between/after cycles":"")+(p.drugRisk&&risk==="low"?" · Drug use conflicts with low-risk preference; overdose and addiction not modeled.":"")+" · Highest estimated gain among affordable Stats → Plan templates; prices and cooldowns may change.","#stats");
+      if(p)add("growth","Recommended program: "+p.label,"7-day estimated gain: +"+number(Math.round(p.gain))+" · "+number(p.used)+" E · $"+number(Math.round(p.money))+" / week · "+Object.entries(p.costs).filter(([,qty])=>qty>0).map(([type,qty])=>qty+" "+type).join(", ")+(prefs.weeklyBudget===null?" · Set a weekly budget to compare paid programs.":" · Budget $"+number(prefs.weeklyBudget))+(p.cycles>0?" · "+p.cycles+" plan cycle"+(p.cycles===1?"":"s")+" × "+number(p.blockHours)+"h; natural training between/after cycles":"")+" · Highest estimated gain among affordable Stats → Plan templates; prices and cooldowns may change.","#stats");
       else add("growth","Training program unavailable","Load current gym, bars and battle stats to compare weekly training programs.","#stats");
     }else add("growth","Review your build targets","Load current battle stats and select a build on Stats.","#stats");
     const bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns");
     const energy=n(bars?.energy?.current),cap=n(bars?.energy?.maximum),happy=n(bars?.happy?.current),happyCap=n(bars?.happy?.maximum),nerve=n(bars?.nerve?.current);
-    const drug=n(cd?.drug),booster=n(cd?.booster),xan=count("Xanax","Drug");
-    if(xan>0&&drug===0&&energy!==null&&cap!==null){
-      if(energy<=cap&&growth&&risk!=="low")add("consume","Xanax · "+xan+" held","Drug cooldown clear. Consider +250 Energy for training; overdose and addiction risk remain. Avoid interrupting a planned stack.","#stats");
-      else if(risk==="low")add("consume","Preserve Xanax","Low risk selected; avoid routine drug recommendations. Train natural Energy first.","#stats");
+    const drug=n(cd?.drug),booster=n(cd?.booster);
+    const iconData=payload("icons","icons");
+    const iconFresh=iconData&&!tornGuideApi.state.errors?.icons&&Date.now()-Number(tornGuideApi.state.fetchedAt?.icons||0)<15*60000;
+    const iconTexts=iconFresh?Object.values(iconData).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")):[];
+    const addictionDebuff=iconTexts.filter(x=>/addict/i.test(x)).map(x=>{const m=x.match(/(?:reduced by|reduction of|[-−])\s*(\d+(?:\.\d+)?)\s*%/i);return m?Number(m[1]):null;}).filter(x=>x!==null);
+    const highAddiction=addictionDebuff.some(x=>x>=5);
+    const program=plan?.program, costs=program?.costs??{};
+    if(highAddiction)add("consume","High addiction · consider rehabilitation","Addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Pause drug use until addiction is reduced; review your training schedule.","#stats");
+    if(growth){
+      if(program){
+        const items=[["Xanax","xanax","Drug"],["Ecstasy","ecstasy","Drug"],["Erotic DVD","dvd","Booster"],["Candy","candy","Candy"],["Points refill","refill",null]];
+        for(const [name,key,cat] of items){
+          if(!(costs[key]>0)||highAddiction&&cat==="Drug")continue;
+          const held=cat&&key!=="candy"?count(name,cat):null;
+          const status=cat==="Drug"?(drug===0?"Drug cooldown clear; follow the plan sequence, not simply the cooldown.":drug==null?"Check drug cooldown.":"Wait for drug cooldown and the planned action."):cat==="Booster"||key==="candy"?"Reserve booster allowance for the planned training action.":"Use only at the scheduled refill step.";
+          add("consume",name+" · "+number(costs[key])+" / week"+(held!=null?" · "+number(held)+" held":""),program.label+" · "+status,"#stats");
+        }
+        if(!Object.values(costs).some(x=>x>0))add("consume","Natural training","No paid consumables required by the recommended plan.","#stats");
+      }else add("consume","Training plan required","Load the Stats plan comparison before choosing training consumables.","#stats");
+    }else{
+      const nerveRoom=nerve!=null&&n(bars?.nerve?.maximum)!=null&&nerve<n(bars.nerve.maximum);
+      const crimeActivity=completion||activities.some(x=>["Crime","OC"].includes(x));
+      const marijuana=count("Cannabis","Drug");
+      if(!highAddiction&&drug===0&&marijuana>0&&(crimeActivity||completion)&&nerveRoom)add("consume","Cannabis · "+number(marijuana)+" held","Consider the in-game Nerve effect for crime activity when there is room; check the drug cooldown and any scheduled training or war.","#crime");
+      const alcohol=tornGuideApi.state.inventory.Alcohol;
+      if(crimeActivity&&nerveRoom&&booster!==null&&booster<86400&&Array.isArray(alcohol)&&!tornGuideApi.state.inventoryErrors?.Alcohol&&alcohol.some(x=>n(x.amount??x.quantity)>0))add("consume","Alcohol","Consider a Nerve boost for crime activity; reserve booster allowance for scheduled training if needed.","#crime");
     }
-    if(booster!==null&&booster<86400){
-      const candy=tornStatPlanner.homeCandyAdvice();
-      if(candy&&plan?.program?.costs.candy>0&&happy!==null&&happyCap!==null&&happy<=happyCap)add("growth",candy.name+" · "+candy.qty+" held","Highest known happiness candy in stock; "+candy.happy+" base Happy. Check booster allowance and train before the next happiness reset.","#stats");
-      if(completion&&nerve!==null){
-        const alcohol=tornGuideApi.state.inventory.Alcohol;
-        if(Array.isArray(alcohol)&&!tornGuideApi.state.inventoryErrors.Alcohol&&alcohol.some(x=>n(x.amount??x.quantity)>0))add("consume","Alcohol","Consider a nerve boost when there is room in your booster allowance; reserve enough for your planned training.","#crime");
-      }
-    }
+    if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
     if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
     rows.crime.push(crimeRecommendation(risk,completion));
     loadEducationPreference();
