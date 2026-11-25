@@ -339,6 +339,35 @@ const tornCrimeGuide = (() => {
     if(first?.type==="xanax"&&remaining>0)return {ready:false,label:"Wait for Xanax cooldown",due:Date.now()+remaining*1000};
     return {ready:true,label:"Ready to start "+program.label,due:null};
   }
+  let recoveryBusy=false,recovery=null,recoveryMessage="";
+  function recoverySnapshot(){
+    const st=tornGuideApi.state,bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns"),at=Number(st.fetchedAt?.cooldowns||0),now=Date.now(),barAt=Math.max(Number(st.fetchedAt?.bars||0),Number(st.bridge?.timestamp||0));
+    const E=tornBarProjection("energy",bars?.energy,barAt,now),H=tornBarProjection("happy",bars?.happy,barAt,now);
+    const cooldown=k=>{const x=cd?.[k],v=Number(typeof x==="object"?x?.remaining??x?.time_left:x);return x!=null&&Number.isFinite(v)&&v>=0?Math.max(0,v-(now-at)/1000):null;};
+    if(!E||!H||!at||!barAt||st.errors?.bars||st.errors?.cooldowns)return null;
+    return {energy:E.current,cap:E.maximum,happy:H.current,maxHappy:H.maximum,drug:cooldown("drug"),booster:cooldown("booster"),at:now};
+  }
+  function recoveryMatches(session,live){
+    const out=[],from=session.index,actions=session.actions;
+    for(let i=from;i<=Math.min(actions.length,from+20);i++){
+      const s=i===from?actions[i]?.before:actions[i-1]?.after;
+      if(!s)continue;
+      const {energy:e,happy:h,drug:d,booster:b}=s;
+      if(![e,h,d,b].every(Number.isFinite))continue;
+      const ed=e>live.cap?Math.abs(e-live.energy):live.energy>=e&&live.energy<=live.cap?0:Math.abs(e-live.energy);
+      const hd=h>live.maxHappy&&live.happy===live.maxHappy?0:Math.abs(h-live.happy);
+      const score=ed/25+hd/Math.max(100,live.maxHappy*.15)+(live.drug==null?0:Math.max(0,live.drug-d)/600)+(live.booster==null?0:Math.max(0,live.booster-b)/1800)+(i-from)*.12;
+      out.push({index:i,score});
+    }
+    return out.sort((a,b)=>a.score-b.score||a.index-b.index).slice(0,3);
+  }
+  function recoveryPanel(session,names){
+    if(!recovery||recovery.owner!==sessionOwner||recovery.started!==session?.started||recovery.index!==session?.index)return recoveryMessage?'<small role="status">'+esc(recoveryMessage)+'</small>':"";
+    const live=recovery.live,options=Array.from({length:session.actions.length-session.index+1},(_,i)=>session.index+i);
+    const label=i=>i===session.actions.length?"All steps completed":("Step "+(i+1)+" · "+(session.actions[i].type==="train"?"Train "+session.stat:names[session.actions[i].type]??session.actions[i].type));
+    const best=recovery.matches[0]?.index;
+    return '<div class="growth-recovery"><small>Current: '+live.energy+' E · '+live.happy+' Happy · Drug '+(live.drug==null?"unknown":tornTctClock.formatDuration(live.drug))+' · Booster '+(live.booster==null?"unknown":tornTctClock.formatDuration(live.booster))+'</small><label>Continue from <select data-growth-resume>'+options.map(i=>'<option value="'+i+'" '+(i===session.index?"selected":"")+'>'+esc(label(i)+(i===best&&i!==session.index?" (suggested match)":""))+'</option>').join("")+'</select></label><small>'+(best==null?"No saved checkpoints; select your position manually.":"Confirm earlier actions only if you actually performed them. Similar states may match multiple steps.")+'</small><button type="button" data-growth-session="resume">Continue here</button></div>';
+  }
   function sessionPanel(plan,training,names,fmt){
     const session=loadTrainingSession(),program=plan.program;
     const prep=prepState(plan,training.blockDrugs);
@@ -349,9 +378,9 @@ const tornCrimeGuide = (() => {
       heading="Active plan · "+session.label;
       if(!step){heading="Training session complete";label="All actions confirmed";controls='<button type="button" data-growth-session="stop">Finish</button>';}
       else if(training.blockDrugs&&session.drugRisk){label="Drug restriction active · stop and replan";controls='<button type="button" data-growth-session="stop">Stop plan</button>';}
-      else {due=sessionSchedule(session)[session.index]?.due??Date.now();label=(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done" '+(due>Date.now()?"disabled":"")+'>Mark done</button><button type="button" data-growth-session="stop">Stop plan</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;}
-    }else{heading="";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button><button type="button" data-growth-session="refresh">Check readiness</button>';}
-    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+(heading?'<small>'+esc(heading)+'</small>':'')+'<strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span>'+esc(label)+'</span><div class="growth-session-controls">'+controls+'</div>'+(session?'<small>Confirm completed actions manually; no in-game actions are automated.</small>':'')+'</div>';
+      else {due=sessionSchedule(session)[session.index]?.due??Date.now();label=(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done" '+(due>Date.now()?"disabled":"")+'>Mark done</button><button type="button" data-growth-session="stop">Stop plan</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;controls+='<button type="button" data-growth-session="refresh" '+(recoveryBusy?"disabled":"")+'>'+(recoveryBusy?"Refreshing…":"Continue / Refresh")+'</button>';}
+    }else{heading="";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button><button type="button" data-growth-session="refresh">Refresh</button>';}
+    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+(heading?'<small>'+esc(heading)+'</small>':'')+'<strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span>'+esc(label)+'</span><div class="growth-session-controls">'+controls+'</div>'+recoveryPanel(session,names)+'</div>';
   }
   function replayPanel(session,fmt){
     if(!session)return "";
@@ -659,7 +688,27 @@ const tornCrimeGuide = (() => {
       if(e.target.closest("[data-growth-budget]")){if(!tornRoadmap.activitiesOpen())tornRoadmap.toggleActivities();view.querySelector('[data-home-pref="weeklyBudget"]')?.focus();return;}
       const sessionButton=e.target.closest("[data-growth-session]");
       if(sessionButton){const action=sessionButton.dataset.growthSession,session=loadTrainingSession();
-      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;trainingSession={version:1,label:prog.label,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:prog.execution.filter(actionable),notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next?now+Math.max(0,next.at-old.at)*1000:0;saveTrainingSession();}else if(action==="stop"){trainingSession=null;saveTrainingSession();}refreshRecommendations(view);return;}
+      if(action==="refresh"&&!recoveryBusy){recoveryBusy=true;recovery=null;recoveryMessage="Refreshing Energy, Happiness and cooldowns…";const owner=sessionOwner,started=session?.started,index=session?.index,requested=Date.now();refreshRecommendations(view);(async()=>{try{
+        await tornGuideApi.loadPage("stats",true);
+        const current=loadTrainingSession(),st=tornGuideApi.state;
+        if(sessionOwner!==owner||current?.started!==started||current?.index!==index)return;
+        const live=recoverySnapshot();
+        if(!live||Number(st.fetchedAt?.cooldowns||0)<requested||Math.max(Number(st.fetchedAt?.bars||0),Number(st.bridge?.timestamp||0))<requested){recoveryMessage="Fresh account data unavailable. Try Refresh again.";return;}
+        if(current){recovery={owner,started,index,live,matches:recoveryMatches(current,live)};recoveryMessage="Review the matching position in your existing program.";}
+        else recoveryMessage="Readiness updated.";
+      }catch(error){recoveryMessage="Refresh failed: "+String(error.message??error);}finally{recoveryBusy=false;if(view.isConnected)refreshRecommendations(view);}})();return;}
+      if(action==="resume"&&session&&recovery?.owner===sessionOwner&&recovery.started===session.started&&recovery.index===session.index){
+        const select=view.querySelector("[data-growth-resume]"),i=Number(select?.value);
+        if(select&&Number.isInteger(i)&&i>=session.index&&i<=session.actions.length){
+          session.completed??={};session.recovered??={};
+          for(let k=session.index;k<i;k++){session.completed[k]=null;session.recovered[k]=true;if(session.actions[k].type==="refill")session.refillDay=Math.floor(Date.now()/86400000);}
+          session.index=i;session.lastConfirmed=recovery.live.at;session.notBefore=Date.now();
+          if(recovery.live.drug!=null)session.drugUntil=recovery.live.at+recovery.live.drug*1000;
+          if(recovery.live.booster!=null)session.boosterUntil=recovery.live.at+recovery.live.booster*1000;
+          saveTrainingSession();recovery=null;recoveryMessage="Resumed within the same training program.";
+        }refreshRecommendations(view);return;}
+      
+      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recovery=null;recoveryMessage="";trainingSession={version:1,label:prog.label,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:prog.execution.filter(actionable),notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recovery=null;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next?now+Math.max(0,next.at-old.at)*1000:0;saveTrainingSession();}else if(action==="stop"){trainingSession=null;recovery=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
       const btn=e.target.closest("[data-oc-band],[data-rec-type],[data-rec-incomplete],[data-rec-uniques],[data-rec-history],[data-rec-crime-load]");
       if(!btn||!btn.closest("[data-home-recommendations]"))return;
       if(btn.hasAttribute("data-rec-crime-load")){
