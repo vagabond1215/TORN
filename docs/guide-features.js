@@ -11,14 +11,14 @@ const tornGuideApi=(()=>{
   const inventoryTypes=["Primary","Secondary","Melee","Temporary","Defensive","Clothing","Medical","Drug","Energy Drink","Alcohol","Candy","Supply Pack","Booster","Enhancer","Tool","Material","Jewelry","Flower","Plushie","Car","Book","Special","Other","Artifact","Collectible"];
   const mins=60*1000,hrs=60*mins,days=24*hrs;
   const TTL={
-    basic:days, profile:15*mins, bars:2*mins, cooldowns:2*mins, money:15*mins, networth:60*mins,
+    basic:days, profile:15*mins, bars:2*mins, cooldowns:2*mins, icons:15*mins, money:15*mins, networth:60*mins,
     jobpoints:15*mins, skills:15*mins, battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
     honors:24*hrs,medals:24*hrs,honorCatalog:30*days,medalCatalog:30*days,gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["profile","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
+    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
     stats:["profile","bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
