@@ -225,14 +225,15 @@ const tornGuideApi=(()=>{
   }
   const staticPath=path=>/^torn\/[1-9]\d*\/itemdetails$/.test(path);
   const dailyPath=path=>path==="user/equipment"||path==="user/itemmods";
+  const crimePath=path=>/^user\/(?:[1-9]|1[0-3])\/crimes$/.test(path);
   function gearRecord(path){
     gearAccount();
-    return gearCache.get(epoch+":"+path)??(staticPath(path)||dailyPath(path)?gearStored[path]:null);
+    return gearCache.get(epoch+":"+path)??(staticPath(path)||dailyPath(path)||crimePath(path)?gearStored[path]:null);
   }
   function gearRead(path,allowStale=false){
     const record=gearRecord(path);
     if(!record||!Number.isFinite(record.at)||record.at>now())return null;
-    const ttl=staticPath(path)?Infinity:dailyPath(path)?24*hrs:15*mins;
+    const ttl=staticPath(path)?Infinity:crimePath(path)?hrs:dailyPath(path)?24*hrs:15*mins;
     return allowStale||now()-record.at<ttl?record.data:null;
   }
   async function gearRequest(path,force=false){
@@ -246,7 +247,7 @@ const tornGuideApi=(()=>{
       const record={at:now(),data};
       if(gearCache.size>=300)gearCache.delete(gearCache.keys().next().value);
       gearCache.set(cacheKey,record);
-      if(staticPath(path)||dailyPath(path)){
+      if(staticPath(path)||dailyPath(path)||crimePath(path)){
         gearStored[path]=record;
         const keys=Object.keys(gearStored).filter(staticPath).sort((a,b)=>gearStored[a].at-gearStored[b].at);
         while(keys.length>500)delete gearStored[keys.shift()];
@@ -383,7 +384,26 @@ const tornGuideApi=(()=>{
     })().finally(()=>rwPending.delete(key));
     rwPending.set(key,task);return task;
   }
-  function readCrimeProgress(id){return Number.isInteger(id)&&id>=1&&id<=13?gearRead("user/"+id+"/crimes"):null;}
+  function readCrimeProgress(id){return Number.isInteger(id)&&id>=1&&id<=13?gearRead("user/"+id+"/crimes",true):null;}
+  const crimeRetry=new Map();
+  let crimeRefreshTask=null;
+  function refreshCrimeProgress(){
+    if(!secret||document.visibilityState!=="visible"||!["home","crime"].includes(routeName()))return Promise.resolve(false);
+    if(crimeRefreshTask)return crimeRefreshTask;
+    const owner=epoch;
+    crimeRefreshTask=(async()=>{
+      let changed=false;
+      for(let id=1;id<=13;id++){
+        if(owner!==epoch||document.visibilityState!=="visible"||!["home","crime"].includes(routeName()))break;
+        const path="user/"+id+"/crimes",key=owner+":"+id;
+        if(gearRead(path)||now()-(crimeRetry.get(key)||0)<15*mins)continue;
+        try{await gearRequest(path);changed=true;crimeRetry.delete(key);}catch{crimeRetry.set(key,now());}
+      }
+      if(changed&&owner===epoch&&["home","crime"].includes(routeName())&&typeof renderRoute==="function")renderRoute();
+      return changed;
+    })().finally(()=>{crimeRefreshTask=null;});
+    return crimeRefreshTask;
+  }
   async function loadCrimeProgress(id){if(!Number.isInteger(id)||id<1||id>13)throw Error("Invalid crime ID.");return gearRequest("user/"+id+"/crimes",true);}
   function readGear(uid){
     uid=gearUid(uid);if(!uid)return {};
@@ -553,7 +573,7 @@ const tornGuideApi=(()=>{
       if(opts.force||opts.category||route!==inFlight.route)queued={route,force:Boolean(opts.force),category:opts.category||null};
       return inFlight.promise;
     }
-    const promise=batch(route,Boolean(opts.force),opts.category||null).finally(()=>{
+    const promise=batch(route,Boolean(opts.force),opts.category||null).then(result=>{if(["home","crime"].includes(route))refreshCrimeProgress().catch(()=>{});return result;}).finally(()=>{
       inFlight=null;
       if(queued){
         const next=queued;queued=null;
@@ -574,7 +594,7 @@ const tornGuideApi=(()=>{
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,passiveRwReport,readCrimeProgress,loadCrimeProgress,
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,passiveRwReport,readCrimeProgress,loadCrimeProgress,refreshCrimeProgress,
     disconnect,restore,setRemember,isRemembering:()=>remember,
     isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
