@@ -1907,3 +1907,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
 .inventory-grid>.inventory-panel{width:100%;max-width:560px;min-width:0;box-sizing:border-box}
 #topic-view:has(> .inventory-filterbar [data-inventory-filter]:not([data-inventory-filter="All"])[aria-pressed="true"]) > .inventory-grid > .inventory-panel{max-width:640px}
+
+/* Independent recommendation tile heights; normal grid is the fallback. */
+.rec-tile-grid.rec-masonry{grid-auto-rows:1px;grid-auto-flow:row dense;row-gap:0;align-items:start}
+.rec-tile-grid.rec-masonry>.rec-tile{align-self:start;min-height:0}
