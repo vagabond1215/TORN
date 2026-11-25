@@ -159,13 +159,16 @@ const tornToolsGuide=(()=>{
     return '<a class="quick-link" href="'+esc(row[4])+'" target="_blank" rel="noopener noreferrer"'+
       ' title="'+esc(name)+'" aria-label="Open '+esc(name)+'" data-tooltip="'+esc(name)+'">'+siteIcon(name)+'</a>';
   }).join("");
-  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+tornRightRail.controls()+'</div>';
+  const rail=tornRightRail.controls();
+  const open=tornRoadmap.activitiesOpen();
+  const gear=context==="home"?'<button type="button" class="rail-visibility-toggle" data-home-activities-toggle aria-controls="home-activities" aria-label="Playstyle and recommendation settings" title="Playstyle and recommendation settings" aria-pressed="'+open+'" aria-expanded="'+open+'"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M10 3h4l.6 2.4 2 .9 2.2-1.2 2.8 2.8-1.2 2.2.9 2L23 12l-1.7 2.9-.9 2 1.2 2.2-2.8 2.8-2.2-1.2-2 .9L14 23h-4l-.6-2.4-2-.9-2.2 1.2-2.8-2.8 1.2-2.2-.9-2L1 12l2.7-1.9.9-2-1.2-2.2L6.2 3.1l2.2 1.2 1.6-1.3z" transform="translate(1 1) scale(.91)"/></svg></button>':"";
+  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+ (gear?'<div class="home-settings-toggle-wrap">'+gear+'</div>':"")+rail+'</div>';
  }
  function updateBar(route){
   ensureIconHandler();
   if(route)currentBarRoute=route;
   const host=typeof document!=="undefined"&&document.getElementById("tool-quickbar");
-  if(host)host.innerHTML=quickLinks(currentBarRoute);
+  if(host){host.innerHTML=quickLinks(currentBarRoute);host.querySelector("[data-home-activities-toggle]")?.addEventListener("click",()=>tornRoadmap.toggleActivities());}
  }
  // Contextual page suggestions are deliberately suppressed: when enabled,
  // the global icon bar already reflects the current page, without duplicate rows.
