@@ -19,7 +19,7 @@ const tornGuideApi=(()=>{
   };
   const ROUTES={
     home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog"],
-    stats:["profile","bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
+    stats:["profile","bars","cooldowns","refills","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
     railTimers:["education","virus","itemCatalog","cooldowns","organizedcrime","factionRankedWars","travel","money"],
@@ -192,6 +192,7 @@ const tornGuideApi=(()=>{
     return true;
   }
   function endpoint(key){
+    if(key==="refills")return "user?selections=refills&legacy=refills";
     if(key==="personalstats")return "user/personalstats?cat=popular";
     if(key==="factionRankedWars")return "faction/rankedwars";
     if(key==="gymCatalog")return "torn/gyms";
@@ -518,7 +519,7 @@ const tornGuideApi=(()=>{
     if(userNames.length>=2 && batchMode!=="unsupported"){
       jobs.push({
         name:"multiUser",names:userNames,
-        run:()=>request("user?selections="+encodeURIComponent(userNames.join(",")),currentKey)
+        run:()=>request("user?selections="+encodeURIComponent(userNames.join(","))+(userNames.includes("refills")?"&legacy=refills":""),currentKey)
       });
     }else for(const name of userNames)jobs.push({name,run:()=>request(endpoint(name),currentKey)});
     for(const name of otherNames)jobs.push({name,run:()=>request(endpoint(name),currentKey)});

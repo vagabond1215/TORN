@@ -350,14 +350,15 @@ const tornCrimeGuide = (() => {
     const cdEnd=key=>{const v=cd?.[key],n=Number(typeof v==="object"?v?.remaining??v?.time_left:v);return cdAt>=last&&v!=null&&Number.isFinite(n)&&n>=0?cdAt+n*1000:0;};
     let drugEnd=Math.max(cdEnd("drug"),session.drugUntil||0),boosterEnd=Math.max(cdEnd("booster"),session.boosterUntil||0),energy=e?.current??null,energyAt=now;
     const cap=e?.maximum??session.maxEnergy??150,cost=session.gym?.energy??10;
-    let refillDay=session.refillDay??null,previousAt=session.index>0?actions[session.index-1].at:0,previousDue=last;
+    let refillDay=tornTrainSequence.energyRefillUsedToday(now)?Math.floor(now/86400000):session.refillDay??null,previousAt=session.index>0?actions[session.index-1].at:0,previousDue=last;
     const rows=[];
     for(let i=0;i<actions.length;i++){
       const x=actions[i];if(i<session.index){rows.push({step:x,done:true,due:done[i]??null});continue;}
-      let due=Math.max(now,previousDue+Math.max(0,x.at-previousAt)*1000,i===session.index?session.notBefore||0:0);
+      let due=Math.max(now,previousDue+(x.midnightRefill?0:Math.max(0,x.at-previousAt)*1000),i===session.index?session.notBefore||0:0);
       if(["xanax","ecstasy"].includes(x.type))due=Math.max(due,drugEnd);
       const isBooster=["candy","dvd"].includes(x.type),unit=x.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600,qty=x.quantity??1;
       if(isBooster)due=Math.max(due,boosterEnd-(timing.boosterCap??86400)*1000+Math.max(0,qty-1)*unit*1000);
+      if(x.midnightRefill&&refillDay===null)due=Math.max(due,(Math.floor(previousDue/86400000)+1)*86400000);
       if(x.type==="refill"&&refillDay!==null)due=Math.max(due,(refillDay+1)*86400000);
       if(energy!==null){
         const regen=t=>{if(energy<cap){const first=energyAt===now?Math.max(0,e.until)*1000:e.interval*1000;const elapsed=t-energyAt;if(elapsed>=first)energy=Math.min(cap,energy+(1+Math.floor((elapsed-first)/(e.interval*1000)))*e.step);}energyAt=t;};
@@ -376,8 +377,29 @@ const tornCrimeGuide = (() => {
     return rows;
   }
   const sessionTime=at=>at==null?"Confirmed":new Date(at).toLocaleString(undefined,{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+  function sessionActions(execution){
+    const actions=[];
+    let waits=[];
+    for(const step of execution){
+      if(["wait","autoWait"].includes(step.type)&&Number.isFinite(step.end)&&step.end>step.at){
+        waits.push({reason:step.reason,duration:step.end-step.at,end:step.end});
+      }else if(actionable(step)){
+        actions.push(waits.length?{...step,waitsBefore:waits}:step);
+        waits=[];
+      }
+    }
+    return actions;
+  }
+  function sessionWaitText(wait,due,actionAt,live){
+    const remaining=live?Math.min(wait.duration,Math.max(0,(due-Date.now())/1000-(actionAt-wait.end))):wait.duration;
+    return tornTrainSequence.waitTitle(wait.reason??"")+" "+tornTctClock.formatDuration(remaining);
+  }
   function sessionSteps(session,names,fmt){
-    return sessionSchedule(session).map(({step:x,done,due},i)=>'<li data-session-row="'+i+'" class="'+(done?"growth-step-done":i===session.index?"growth-step-next":"")+'"><time data-session-time>'+esc(sessionTime(due))+'</time><span>'+(done?"✓ ":"")+esc(x.type==="train"?"Train "+session.stat:names[x.type]??x.type)+(["candy","dvd"].includes(x.type)?" × "+fmt(x.quantity):"")+(i===session.index?" · Next":"")+'</span></li>').join("");
+    return sessionSchedule(session).map(({step:x,done,due},i)=>{
+      const waits=(x.waitsBefore??[]).map((wait,j)=>'<li class="growth-session-wait"><time></time><span data-session-wait="'+i+'" data-wait-index="'+j+'">'+
+        esc(sessionWaitText(wait,due,x.at,i===session.index))+'</span></li>').join("");
+      return waits+'<li data-session-row="'+i+'" class="'+(done?"growth-step-done":i===session.index?"growth-step-next":"")+'"><time data-session-time>'+esc(sessionTime(due))+'</time><span>'+(done?"✓ ":"")+esc(x.type==="train"?"Train "+session.stat:names[x.type]??x.type)+(["candy","dvd"].includes(x.type)?" × "+fmt(x.quantity):"")+(i===session.index?" · Next":"")+'</span></li>';
+    }).join("");
   }
   function prepState(plan,blockDrugs){
     const program=plan?.program,raw=payload("bars","bars"),st=tornGuideApi.state;
@@ -492,13 +514,12 @@ const tornCrimeGuide = (() => {
       const wait=["wait","autoWait"].includes(step.type);
       const duration=wait&&Number.isFinite(step.end)&&Number.isFinite(step.at)?Math.max(0,step.end-step.at):null;
       let label=names[step.type]??step.type;
-      if(wait&&/^Drug cooldown/i.test(step.reason??"")){
-        label="Wait - Drug Cooldown"+(duration===null?"":" "+tornTctClock.formatDuration(duration));
+      if(wait){
+        label=tornTrainSequence.waitTitle(step.reason??"")+(duration===null?"":" "+tornTctClock.formatDuration(duration));
       }else{
         if(step.type==="train")label+=" · "+fmt(step.energy)+" E";
         if(["candy","dvd"].includes(step.type))label+=" × "+fmt(step.quantity);
         if(step.reason)label+=" · "+step.reason;
-        if(duration!==null)label+=" · "+fmt(duration/60)+" min";
       }
       return '<li><time>'+esc(clock(step.at))+'</time><span>'+esc(label)+'</span></li>';
     }).join("");
@@ -545,6 +566,16 @@ const tornCrimeGuide = (() => {
     }
     const el=document.querySelector("[data-growth-due]");if(!el||el.closest("[hidden]"))return;
     const session=loadTrainingSession();if(session&&session.index<session.actions.length){const rows=sessionSchedule(session);el.dataset.growthDue=String(rows[session.index].due);const finish=document.querySelector("[data-growth-finish]");if(finish)finish.textContent=sessionTime(rows.at(-1)?.due);for(const row of document.querySelectorAll("[data-session-row]")){const x=rows[Number(row.dataset.sessionRow)],t=row.querySelector("[data-session-time]");if(x&&t){const value=sessionTime(x.due);if(t.textContent!==value)t.textContent=value;}}}
+    if(session&&session.index<session.actions.length){
+      const action=session.actions[session.index],due=Number(el.dataset.growthDue);
+      for(const span of document.querySelectorAll('[data-session-wait="'+session.index+'"]')){
+        const wait=action.waitsBefore?.[Number(span.dataset.waitIndex)];
+        if(wait){
+          const value=sessionWaitText(wait,due,action.at,true);
+          if(span.textContent!==value)span.textContent=value;
+        }
+      }
+    }
     const remaining=(Number(el.dataset.growthDue)-Date.now())/1000;
     if(!Number.isFinite(remaining))return;
     const ready=remaining<=0;el.dataset.ready=String(ready);
@@ -928,7 +959,7 @@ const tornCrimeGuide = (() => {
           saveTrainingSession();recovery=null;recoveryMessage="Resumed within the same training program.";
         }refreshRecommendations(view);return;}
       
-      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recovery=null;recoveryMessage="";trainingSession={version:1,label:prog.label,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,periods:prog.periods,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:prog.execution.filter(actionable),notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recovery=null;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next?now+Math.max(0,next.at-old.at)*1000:0;saveTrainingSession();}else if(action==="stop"){trainingSession=null;recovery=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
+      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recovery=null;recoveryMessage="";trainingSession={version:1,label:prog.label,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,periods:prog.periods,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:sessionActions(prog.execution),notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recovery=null;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next&&!next.midnightRefill?now+Math.max(0,next.at-old.at)*1000:0;saveTrainingSession();}else if(action==="stop"){trainingSession=null;recovery=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
       const btn=e.target.closest("[data-rec-type],[data-rec-incomplete],[data-rec-uniques],[data-rec-history],[data-rec-crime-load]");
       if(!btn||!btn.closest("[data-home-recommendations]"))return;
       if(btn.hasAttribute("data-rec-crime-load")){
