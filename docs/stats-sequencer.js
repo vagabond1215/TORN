@@ -214,6 +214,7 @@ const tornTrainSequence=(()=>{
     const v={time:0,stat:base,energy:initialE,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),
       costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0,warnings:[]};
     const snap=()=>({time:v.time,energy:v.energy,happy:v.happy,drug:v.drug,booster:v.booster,stat:v.stat});
+    if(cfg.refillUsedToday)v.days.add(Math.floor(cfg.tornClockMin*60/86400));
     const initial=snap();
     const canTrain=n(gym[stat])>0&&gymCost<=eCap;
     const nextEnergyTick=()=>(Math.floor(v.time/regenTime)+1)*regenTime;
@@ -343,11 +344,13 @@ const tornTrainSequence=(()=>{
       }
       return true;
     }
-    function finish(list){
+    function finish(list,{tail=true}={}){
       rowIndex=list.length;
-      advance(limit-v.time);
-      const start=snap();
-      if(train()>0)v.log.push({i:"•",type:"train",parent:rowIndex,reason:"End of comparison · remaining Energy",start,end:snap()});
+      if(tail){
+        advance(limit-v.time);
+        const start=snap();
+        if(train()>0)v.log.push({i:"•",type:"train",parent:rowIndex,reason:"End of comparison · remaining Energy",start,end:snap()});
+      }
       point();
       if(cutoff)v.warnings.push("The "+cfg.hours+"-hour window ended before all actions could run.");
       const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice]];
@@ -433,6 +436,51 @@ const tornTrainSequence=(()=>{
         if(best)results.push(best);
       }
       return results.sort((a,b)=>b.gain-a.gain||a.cashCost-b.cashCost);
+    }finally{ctx=previous;Object.assign(p,old);}
+  }
+  // Re-simulate the unconfirmed suffix only, using the current account snapshot.
+  // Preserve the strategy/order; proposals never mutate the saved session.
+  function replayRemaining(context,session,options={}){
+    const previous=ctx,old={...p};
+    try{
+      ctx=context;loadPlanPreferences();marketInputs();applyCooldownPerks();
+      const now=new Date(),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(now-stamp)/60000):0;
+      if(cd?.drug==null||cd?.booster==null)return {error:"Cooldown data unavailable"};
+      const remaining=session.actions.slice(session.index);
+      if(!remaining.length)return {actions:[],gain:0,money:0,cashCost:0,used:0,generatedAt:now.getTime()};
+      if(options.blockDrugs&&remaining.some(x=>["xanax","ecstasy"].includes(x.type)))return {error:"Drug restriction active"};
+      const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
+      const drugMin=Math.max(0,cd.drug-elapsed,((session.drugUntil||0)-now)/60000),boosterMin=Math.max(0,cd.booster-elapsed,((session.boosterUntil||0)-now)/60000);
+      const cfg={hours:Math.min(336,Math.max(24,((remaining.at(-1)?.at??0)-(remaining[0]?.at??0))/3600+48)),startEnergy:"current",autoWait:true,startDrugMin:drugMin,startBoosterMin:boosterMin,boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),refillUsedToday:session.refillDay===Math.floor(now/86400000)};
+      const engine=createEngine(cfg),v=engine.state,executed=[];
+      for(let i=0;i<remaining.length;i++){
+        const row=remaining[i],next=remaining[i+1],type=row.type;
+        if(!Object.hasOwn(names,type))return {error:"Unsupported remaining action: "+type};
+        // Preserve intentional non-cooldown spacing, but let live CD state determine drug readiness.
+        const prev=remaining[i-1];
+        if(prev&&!["xanax","ecstasy","candy","dvd","refill"].includes(type)&&type!=="train")engine.advance(Math.max(0,row.at-prev.at));
+        if(type==="train"){
+          const wanted=Math.min(context.state.maxEnergy,Math.max(engine.gymCost,Number(row.energy)||engine.gymCost));
+          if(next?.type==="xanax"&&Number(next.at)===Number(row.at))engine.advance(v.drug);
+          if(v.energy<wanted)engine.advance(Math.max(0,Math.ceil((wanted-v.energy)/5))*energyRules().minutes*60);
+        }
+        if(type==="refill"&&v.energy>=context.state.maxEnergy)continue; // no benefit from refilling full energy
+        const a=make(type,Math.max(1,Math.floor(Number(row.quantity)||1)));
+        if(type==="candy")a.candyHappy="any";
+        if(!engine.execute(a,i,{beforeEcstasy:next?.type==="ecstasy",beforeXanax:next?.type==="xanax"}))return {error:v.errors[0]??"Remaining plan exceeds simulation window"};
+        executed.push(a);
+      }
+      const result=engine.finish(executed,{tail:false});
+      if(!result.complete)return {error:result.errors[0]??"Remaining simulation incomplete"};
+      const owned=(name,cat)=>{
+        const list=tornGuideApi.state.inventory[cat];if(!Array.isArray(list)||tornGuideApi.state.inventoryErrors?.[cat])return 0;
+        const items=itemList();
+        return list.filter(x=>keyName(x.name??x.item?.name??items.find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id))?.name)===keyName(name)).reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity))),0);
+      };
+      const prices=[[Math.max(0,result.costs.xanax-owned("Xanax","Drug")),p.xanaxPrice],[Math.max(0,result.costs.ecstasy-owned("Ecstasy","Drug")),p.ecstasyPrice],[Math.max(0,result.costs.dvd-owned("Erotic DVD","Booster")),p.dvdPrice],[result.costs.refill*30,p.pointPrice]];
+      const cashCost=options.excludeOwned===false?result.money:prices.some(([q,price])=>q>0&&price==null)?null:prices.reduce((s,[q,price])=>s+q*(price??0),0);
+      const actions=result.log.filter(x=>!["autoWait","happyReset","wait"].includes(x.type)).map(x=>({type:x.type,at:x.start.time,quantity:x.quantity??1,energy:x.type==="train"?Math.max(0,x.start.energy-x.end.energy):null,happy:x.end.happy,gain:Math.max(0,x.end.stat-x.start.stat)})).filter(x=>x.type!=="train"||x.energy>0).filter(x=>!["candy","dvd"].includes(x.type)||x.quantity>0);
+      return {actions,gain:result.gain,money:result.money,cashCost,used:result.used,costs:result.costs,generatedAt:now.getTime(),finalHappy:v.happy};
     }finally{ctx=previous;Object.assign(p,old);}
   }
   function simulate(list,overrides={}){
@@ -700,5 +748,5 @@ const tornTrainSequence=(()=>{
       rebuild(el===document.activeElement?focusTarget:null);
     });
   }
-  return {render,wire,simulate,weeklyPrograms,steps,settings:p,loadLive,templateButtons};
+  return {render,wire,simulate,weeklyPrograms,replayRemaining,steps,settings:p,loadLive,templateButtons};
 })();
