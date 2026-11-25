@@ -2032,3 +2032,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-settings-panel input{accent-color:var(--accent)}
 .growth-settings-panel small{color:var(--muted)}
 .growth-warning button{font:inherit;color:var(--accent-strong);background:transparent;border:1px solid var(--border);border-radius:3px;cursor:pointer;padding:.15rem .3rem}
+
+.growth-instruction{text-align:center;font-size:.9rem;line-height:1.4;padding:.2rem 0;overflow-wrap:anywhere}
+.growth-build-content{display:grid;gap:.45rem;padding:.4rem 0 .1rem}
+.growth-build-details>summary{cursor:pointer;overflow-wrap:anywhere}
