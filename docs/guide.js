@@ -464,7 +464,7 @@ byId("remember-active").addEventListener("change",event=>{
   renderProfile();
 });
 window.addEventListener("torn-guide-sync",updateRefreshUI);
-setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornRightRail.tick();updateInventoryAges();for(const el of document.querySelectorAll("[data-edu-deadline]"))el.textContent=tornTctClock.formatDuration((Number(el.dataset.eduDeadline)-Date.now())/1000);},1000); // local DOM updates only; no Torn API calls
+setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornRightRail.tick();tornRoadmap.tickOngoing();updateInventoryAges();for(const el of document.querySelectorAll("[data-edu-deadline]"))el.textContent=tornTctClock.formatDuration((Number(el.dataset.eduDeadline)-Date.now())/1000);},1000); // local DOM updates only; no Torn API calls
 
 // The ellipsis is an unframed button; settings remain independent of API login.
 function syncSettingsControls(){
