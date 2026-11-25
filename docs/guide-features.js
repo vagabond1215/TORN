@@ -204,6 +204,49 @@ const tornGuideApi=(()=>{
     if(key==="meritCatalog")return "torn/merits";
     return "user/"+key;
   }
+  // On-demand equipment reads use the connected key only against Torn.
+  const gearCache=new Map(),gearPending=new Map();
+  function gearUid(v){return (typeof v==="string"&&/^[1-9]\d*$/.test(v)||Number.isSafeInteger(v)&&v>0)?String(v):null;}
+  function gearRead(path){
+    const cacheKey=epoch+":"+path,record=gearCache.get(cacheKey);
+    return record&&now()-record.at<15*mins?record.data:null;
+  }
+  async function gearRequest(path,force=false){
+    if(!secret)throw Error("Connect Torn API first.");
+    const accountEpoch=epoch,cacheKey=epoch+":"+path,existing=gearRead(path);
+    if(!force&&existing)return existing;
+    if(gearPending.has(cacheKey))return gearPending.get(cacheKey);
+    const task=request(path,secret).then(data=>{
+      if(accountEpoch!==epoch)throw Error("Account changed; reload equipment.");
+      if(gearCache.size>=300)gearCache.delete(gearCache.keys().next().value);
+      gearCache.set(cacheKey,{at:now(),data});return data;
+    }).finally(()=>gearPending.delete(cacheKey));
+    gearPending.set(cacheKey,task);return task;
+  }
+  function readGear(uid){
+    uid=gearUid(uid);if(!uid)return {};
+    const equipment=gearRead("user/equipment"),mods=gearRead("user/itemmods"),detail=gearRead("torn/"+uid+"/itemdetails")?.itemdetails;
+    const equipped=Array.isArray(equipment?.equipment)?equipment.equipment.find(x=>gearUid(x.uid)===uid):null;
+    const unique=(Array.isArray(detail)?detail:[detail]).find(x=>gearUid(x?.uid)===uid);
+    const attached=Array.isArray(equipped?.mods)?equipped.mods:Array.isArray(mods?.itemmods)?mods.itemmods.filter(x=>x.equipped&&gearUid(x.equipped_item_uid)===uid):null;
+    return {item:equipped??unique??null,mods:attached,ammo:equipped?.ammo??null};
+  }
+  async function loadGear(uid,equipped,weapon,force=false){
+    uid=gearUid(uid);if(!uid)throw Error("Unique item identifier unavailable.");
+    const errors=[];
+    if(equipped){
+      try{await gearRequest("user/equipment",force);}catch(e){errors.push(e.message);}
+    }
+    if(!readGear(uid).item||!equipped&&force){
+      try{await gearRequest("torn/"+uid+"/itemdetails",force);}catch(e){errors.push(e.message);}
+    }
+    if(weapon&&readGear(uid).mods===null){
+      try{await gearRequest("user/itemmods",force);}catch(e){errors.push(e.message);}
+    }else if(weapon&&!equipped&&force){
+      try{await gearRequest("user/itemmods",true);}catch(e){errors.push(e.message);}
+    }
+    return {data:readGear(uid),errors};
+  }
   async function fetchInventory(cat,key){
     const list=[];let total=null;
     for(let offset=0;offset<2500;offset+=250){
@@ -322,7 +365,7 @@ const tornGuideApi=(()=>{
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,
     disconnect,restore,setRemember,isRemembering:()=>remember,
     isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
@@ -940,6 +983,46 @@ function inventoryBuyerResults(id,qty){
     (more.length?'<details><summary>More pricelist buyers ('+more.length+')</summary>'+more.map(buyer).join("")+'</details>':"");
 }
 
+function inventoryGearMarkup(uid,category,info,equipped){
+  const weapon=["Primary","Secondary","Melee"].includes(category),armor=category==="Defensive";
+  if(!weapon&&!armor)return "";
+  const meta=info.details??{},ammo=meta.ammo,rate=ammo?.rate_of_fire;
+  const pair=(label,value)=>value==null||value===""?"":"<dt>"+safe(label)+"</dt><dd>"+safe(value)+"</dd>";
+  const num=(value,suffix="")=>typeof value==="number"&&Number.isFinite(value)?value.toLocaleString(undefined,{maximumFractionDigits:2})+suffix:null;
+  const read=tornGuideApi.readGear(uid),unique=read.item,stats=unique?.stats??{};
+  const rarity=["yellow","orange","red"].includes(unique?.rarity)?unique.rarity:null;
+  const bonuses=Array.isArray(unique?.bonuses)?unique.bonuses:null;
+  const rows=pair("Class",unique?.sub_type??info.sub_type??meta.category)+
+    (weapon?pair("Damage",num(stats.damage))+pair("Accuracy",num(stats.accuracy))+pair("Stealth",num(meta.stealth_level))+pair("Caliber / ammo",ammo?.name)+pair("Magazine rounds",num(ammo?.magazine_rounds))+pair("Rate of fire",rate?.minimum!=null&&rate?.maximum!=null?rate.minimum+"–"+rate.maximum:null)+pair("Current ammo",read.ammo?read.ammo.name+" · "+read.ammo.type+" · "+read.ammo.quantity:null):pair("Armor rating",num(stats.armor)))+
+    pair("Quality",num(stats.quality,"%"))+pair("Rarity",rarity)+
+    (armor&&Array.isArray(meta.coverage)?pair("Coverage",meta.coverage.map(x=>x.name+" "+x.value+"%").join(" · ")):"")+
+    pair("Circulation",num(info.circulation));
+  const bonusList=bonuses===null?"Not loaded":bonuses.length?bonuses.map(b=>'<div><strong>'+safe(b.title)+(typeof b.value==="number"?" · "+safe(b.value):"")+'</strong><small>'+safe(b.description??"")+'</small></div>').join(""):"None";
+  const mods=read.mods;
+  const modList=mods===null||mods===undefined?"Not loaded":mods.length?mods.map(m=>safe(m.name??m.title??"Unknown mod")).join(" · "):"None attached";
+  return '<section class="inventory-gear"><h4>Equipment attributes</h4>'+(rows?'<dl>'+rows+'</dl>':"")+(unique?'<div class="inventory-gear-bonuses '+(rarity?"rarity-"+rarity:"")+'"><strong>Ranked bonuses</strong>'+bonusList+'</div>':'<p class="fine-print">Individual attributes not loaded.</p>')+
+    (weapon?'<div class="inventory-gear-mods"><strong>Attached mods</strong><p>'+modList+'</p>'+(Array.isArray(meta.mods)?'<small>'+meta.mods.length+' compatible mod types in catalog</small>':"")+'</div>':"")+
+    (uid?'<button type="button" class="button secondary" data-load-gear>'+ (unique?"Refresh equipment details":"Load equipment details")+'</button>':'<p class="fine-print">Unique item ID unavailable.</p>')+'<p role="status" class="inventory-gear-status"></p></section>';
+}
+if(typeof document!=="undefined")document.addEventListener("click",async event=>{
+  const button=event.target.closest?.("[data-load-gear]");if(!button)return;
+  const row=button.closest(".inventory-detail-row"),uid=row.dataset.gearUid,category=row.dataset.gearCategory,owner=tornGuideApi.state.identity?.id;
+  if(!uid)return;
+  button.disabled=true;button.textContent="Loading…";
+  try{
+    const result=await tornGuideApi.loadGear(uid,row.dataset.gearEquipped==="true",["Primary","Secondary","Melee"].includes(category),true);
+    if(tornGuideApi.state.identity?.id!==owner)return;
+    for(const target of document.querySelectorAll("[data-gear-uid]")){
+      const panel=target.querySelector(".inventory-gear");if(!panel)continue;
+      const raw=payload("itemCatalog","items"),catalog=Array.isArray(raw)?raw:Object.entries(raw||{}).map(([id,x])=>({...x,id:x.id??id}));
+      const info=catalog.find(x=>String(x.id)===target.dataset.buyerItem)??{};
+      panel.outerHTML=inventoryGearMarkup(target.dataset.gearUid,target.dataset.gearCategory,info,target.dataset.gearEquipped==="true");
+      if(target.dataset.gearUid===uid)target.querySelector(".inventory-gear-status").textContent=result.errors.join(" · ");
+    }
+  }catch(error){if(row.isConnected)row.querySelector(".inventory-gear-status").textContent=error.message;}
+  finally{if(button.isConnected){button.disabled=false;button.textContent="Load equipment details";}}
+});
+
 function inventoryDetailRow(item,category,index){
   const owner=tornGuideApi.state.identity?.id??null;
   if(owner!==inventoryExpandedOwner){inventoryExpanded.clear();inventoryTabs.clear();inventoryExpandedOwner=owner;}
@@ -965,9 +1048,11 @@ function inventoryDetailRow(item,category,index){
   const qty=Number(item.amount??item.quantity);
   const validPrice=price!=null&&Number.isFinite(Number(price))&&Number(price)>0;
   const url=id?inventoryMarketplaceUrl(id):"";
+  const uid=tornGuideApi.gearUid(item.uid??item.unique_id);
+  const gear=["Primary","Secondary","Melee","Defensive"].includes(category);
   const tab=inventoryTabs.get(rowKey)??"details";
   const tabbar='<div class="inventory-item-tabs" role="group" aria-label="Item information">'+["details","market"].map(t=>'<button type="button" data-inventory-tab="'+t+'" aria-pressed="'+(tab===t)+'">'+(t==="details"?"Details":"Market")+'</button>').join("")+'</div>';
-  return '<li class="inventory-detail-row" data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span>'+safe(name)+(item.equipped?inventoryEquippedIcon:'')+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span>'+(id?'<button type="button" class="inventory-inline-search" data-query-buyers aria-label="Query Weav3r buyers for '+safe(name)+'" title="Query Weav3r buyers" '+(weav3rBuyers.pending(id)?'disabled aria-busy="true"':'')+'>'+inventorySearchIcon+'</button>':'')+'<strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body">'+tabbar+'<div data-inventory-tab-panel="details" '+(tab!=="details"?"hidden":"")+'><p>'+safe(description)+'</p><dl><dt>Type</dt><dd>'+safe(category)+'</dd>'+(id?'<dt>Item ID</dt><dd>'+id+'</dd>':'')+'<dt>Effects</dt><dd>'+safe(effects||"No effect information available")+'</dd></dl></div><div data-inventory-tab-panel="market" '+(tab!=="market"?"hidden":"")+'><dl><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
+  return '<li class="inventory-detail-row" '+(gear?'data-gear-uid="'+safe(uid??"")+'" data-gear-category="'+safe(category)+'" data-gear-equipped="'+Boolean(item.equipped)+'" ':"")+'data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span>'+safe(name)+(item.equipped?inventoryEquippedIcon:'')+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span>'+(id?'<button type="button" class="inventory-inline-search" data-query-buyers aria-label="Query Weav3r buyers for '+safe(name)+'" title="Query Weav3r buyers" '+(weav3rBuyers.pending(id)?'disabled aria-busy="true"':'')+'>'+inventorySearchIcon+'</button>':'')+'<strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body">'+tabbar+'<div data-inventory-tab-panel="details" '+(tab!=="details"?"hidden":"")+'><p>'+safe(description)+'</p><dl><dt>Type</dt><dd>'+safe(category)+'</dd>'+(id?'<dt>Item ID</dt><dd>'+id+'</dd>':'')+'<dt>Effects</dt><dd>'+safe(effects||"No effect information available")+'</dd></dl>'+inventoryGearMarkup(uid,category,info,item.equipped)+'</div><div data-inventory-tab-panel="market" '+(tab!=="market"?"hidden":"")+'><dl><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
     '<div class="inventory-market-actions">'+(url?'<a class="inventory-market-link" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Open Weav3r marketplace</a>':
     '<small>Item ID unavailable; marketplace search disabled.</small>')+'</div>'+
     (id?'<p class="inventory-buyer-status" role="status"></p><div class="inventory-buyer-results">'+inventoryBuyerResults(id,qty)+'</div>':"")+
