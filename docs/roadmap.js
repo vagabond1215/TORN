@@ -197,9 +197,54 @@ const tornRoadmap=(()=>{
   return !!(legacy && autoDone(legacy));
  }
  function checked(id){return verified(id)||read(stepKey(id))==="done";}
+ // Ongoing commitments are independent of manually checked daily tasks.
+ const ongoingIcons={
+ education:"M2 9l10-5 10 5-10 5z M6 11v6l6 3 6-3v-6",
+ bank:"M2 8l10-5 10 5z M4 10v8m5-8v8m6-8v8m5-8v8M2 21h20",
+ racing:"M3 16v-5l3-5h12l3 5v5z M3 16v3m18-3v3M3 11h18",
+ job:"M3 7h18v14H3z M8 7V3h8v4 M3 12h18",
+ oc:"M12 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6 M4 21v-3a8 8 0 0 1 16 0v3",
+ virus:"M4 5h16v14H4z M8 9l3 3-3 3m5 0h3"
+ };
+ function ongoingActivities(){
+  const st=tornGuideApi.state,now=Date.now(),timers=new Map(tornTctClock.entries().map(x=>[x.id,x]));
+  const loaded=k=>Boolean(st.data[k]&&!st.errors[k]),time=k=>timers.get(k)?.at??null;
+  const explicit=v=>v!=null&&v!==""&&v!==0&&v!=="0";
+  const result=[];
+  const add=(id,label,state,detail,link,deadline=null)=>result.push({id,label,state,detail,link,deadline});
+  const edu=educationModel(),eduAt=time("education");
+  add("education","Education",eduAt>now?"active":!loaded("education")?"unknown":explicit(edu.id)?"review":edu.known&&edu.courses.length>0&&edu.courses.every(x=>edu.ids.has(String(x.id)))?"complete":"idle",eduAt>now?(edu.active?.name??edu.current?.name??"Course in progress"):!loaded("education")?"Status unavailable":explicit(edu.id)?"Check course status":edu.known&&edu.courses.length>0&&edu.courses.every(x=>edu.ids.has(String(x.id)))?"All listed courses completed":"Review available courses","#education",eduAt);
+  const bank=payload("money","money")?.city_bank,bankAt=time("bank");
+  add("bank","Bank investment",bankAt>now?"active":!loaded("money")||!bank?"unknown":Number(bank.amount)>0?"review":"idle",bankAt>now?(Number(bank.amount)>0?"$"+Number(bank.amount).toLocaleString()+" invested":"Investment in progress"):!loaded("money")||!bank?"Status unavailable":Number(bank.amount)>0?"Check maturity / reinvest":"No active investment","#money",bankAt);
+  const profile=payload("profile","profile"),icons=payload("icons","icons"),iconText=loaded("icons")?Object.values(icons||{}).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")).join(" "):"";
+  const raceActive=/\b(?:currently racing|in a race|race in progress|waiting for (?:a |the )?race|racing in|entered a race)\b/i.test(iconText)||/^(racing|in a race)$/i.test(String(profile?.status?.state??""));
+  add("racing","Racing",raceActive?"active":"unknown",raceActive?"Race or entry detected":"Check current race in Torn","#racing");
+  const rawJob=payload("job","job"),job=rawJob?.job??rawJob;
+  const employed=explicit(job?.name??job?.position??job?.company?.name??job?.company_name)&&!/^(none|unemployed|no job)$/i.test(String(job?.name??job?.position??job?.company?.name??job?.company_name));
+  add("job","Employment",!loaded("job")?"unknown":employed?"active":job?.name==="None"||job?.position==="Unemployed"?"idle":"review",!loaded("job")?"Status unavailable":employed?String(job?.company?.name??job?.company_name??job?.name??job?.position):"Check employment","#jobs");
+  const oc=payload("organizedcrime","organizedcrime"),ocAt=time("oc");
+  add("oc","Organized crime",ocAt>now?"active":!loaded("organizedcrime")?"unknown":explicit(oc?.id??oc?.crime?.id)?"review":"idle",ocAt>now?(oc?.name??oc?.crime?.name??"Assigned crime"):!loaded("organizedcrime")?"Status unavailable":explicit(oc?.id??oc?.crime?.id)?"Check readiness":"Review faction assignments","#crime",ocAt);
+  const virus=payload("virus","virus"),virusAt=time("virus");
+  add("virus","Virus coding",virusAt>now?"active":!loaded("virus")?"unknown":"idle",virusAt>now?"Programming in progress":!loaded("virus")?"Status unavailable":"Optional passive activity","https://www.torn.com/pc.php",virusAt);
+  return result;
+ }
+ function renderOngoing(){
+  const labels={active:"Active",idle:"Idle",unknown:"Unverified",review:"Review",complete:"Complete"};
+  return '<section class="checklist-ongoing" aria-label="Ongoing activities"><div class="checklist-ongoing-title">Ongoing</div><div class="checklist-ongoing-items">'+ongoingActivities().map(x=>'<a class="ongoing-item" data-ongoing="'+x.id+'" data-status="'+x.state+'" href="'+esc(x.link)+'" '+(x.link.startsWith("https:")?'target="_blank" rel="noopener noreferrer"':"")+' title="'+esc(x.label+" · "+x.detail)+'"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+ongoingIcons[x.id]+'"/></svg><span><strong>'+esc(x.label)+'</strong><small data-ongoing-status>'+esc(labels[x.state])+(x.deadline> Date.now()?" · "+tornTctClock.formatDuration((x.deadline-Date.now())/1000):"")+'</small></span></a>').join("")+'</div></section>';
+ }
+ function tickOngoing(){
+  const host=document.querySelector(".checklist-ongoing");if(!host||host.closest("[hidden]"))return;
+  const labels={active:"Active",idle:"Idle",unknown:"Unverified",review:"Review",complete:"Complete"};
+  for(const x of ongoingActivities()){
+   const el=host.querySelector('[data-ongoing="'+x.id+'"]');if(!el)continue;
+   el.dataset.status=x.state;el.title=x.label+" · "+x.detail;
+   const status=el.querySelector("[data-ongoing-status]"),value=labels[x.state]+(x.deadline>Date.now()?" · "+tornTctClock.formatDuration((x.deadline-Date.now())/1000):"");
+   if(status.textContent!==value)status.textContent=value;
+  }
+ }
  function render(){
   const entries=all(),done=entries.filter(s=>checked(s.id)).length;
-  let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Checklist & beginner roadmap</h1>'+
+  let out=renderOngoing()+'<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Checklist & beginner roadmap</h1>'+
    '<p>A practical step-by-step progression from the first session to a sustainable midgame, with optional routes for your preferred gameplay style. Your existing Quickstart progress is retained.</p></header>';
   out+='<section class="panel"><div class="panel-heading"><h2>Daily essentials</h2></div><div class="panel-content"><p id="task-progress" role="status"></p>'+
    '<div class="checklist">'+Object.entries(tasks).map(([id,label])=>'<label><input type="checkbox" name="'+esc(id)+'" '+(!activeProfile?"disabled":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div>'+
@@ -245,5 +290,5 @@ const tornRoadmap=(()=>{
    }
   });
  }
- return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities,preferences,activitiesOpen,toggleActivities};
+ return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities,preferences,activitiesOpen,toggleActivities,tickOngoing};
 })();
