@@ -265,8 +265,8 @@ const tornGuideApi=(()=>{
     const d=packet.diagnostic;
     if(typeof packet.companionVersion==="string"&&/^\d+\.\d+\.\d+$/.test(packet.companionVersion))passiveRwBridge={version:packet.companionVersion,at:now()};
     if(d&&Number.isFinite(d.at)&&d.at<=now()+5000&&["Primary","Secondary","Melee","Armor","Defensive"].includes(d.category)){
-      const counts={};for(const k of ["buttons","rendered","matched","ranked","accepted","complete","duplicates","added"])counts[k]=Number.isSafeInteger(d[k])&&d[k]>=0&&d[k]<=100000?d[k]:null;
-      passiveRwDiagnostic={...counts,at:d.at,lastCapture:Number.isFinite(d.lastCapture)&&d.lastCapture<=now()+5000?d.lastCapture:null,category:d.category,rarity:["yellow","orange","red"].includes(d.rarity)?d.rarity:null};
+      const counts={};for(const k of ["buttons","rendered","matched","ranked","accepted","complete","duplicates","added","processed","batches","maxBatchMs","queued","dropped"])counts[k]=Number.isSafeInteger(d[k])&&d[k]>=0&&d[k]<=100000?d[k]:null;
+      passiveRwDiagnostic={...counts,at:d.at,lastCapture:Number.isFinite(d.lastCapture)&&d.lastCapture<=now()+5000?d.lastCapture:null,category:d.category,rarity:["yellow","orange","red"].includes(d.rarity)?d.rarity:null,mode:d.mode==="incremental"?"incremental":null};
     }
     const clean=[];
     for(const x of packet.rows.slice(0,2500)){
@@ -1201,12 +1201,12 @@ function inventoryRwDiagnosticsBody(){
   const count=(label,value)=>'<div><small>'+safe(label)+'</small><strong>'+safe(value??"—")+'</strong></div>';
   const stamp=v=>v?new Date(v).toLocaleString():"Not recorded";
   const byRarity=["yellow","orange","red"].map(r=>count(r[0].toUpperCase()+r.slice(1),rows.filter(x=>x.rarity===r).length)).join("");
-  const scan=d?'<p class="fine-print">Last scan: '+safe(d.category)+' · '+safe(d.rarity??"unfiltered")+' · '+safe(stamp(d.at))+'</p><div class="rw-diagnostic-counts">'+count("Buy buttons",d.buttons)+count("Rendered",d.rendered)+count("Matched cards",d.matched)+count("Ranked",d.ranked)+count("Accepted",d.accepted)+count("Full details",d.complete)+count("Duplicates",d.duplicates)+count("New records",d.added)+'</div>':'<p class="fine-print">No scan diagnostics received. Install companion 2.2.0 and focus an equipment market page.</p>';
+  const scan=d?'<p class="fine-print">Last scan: '+safe(d.category)+' · '+safe(d.rarity??"unfiltered")+' · '+safe(stamp(d.at))+'</p><div class="rw-diagnostic-counts">'+count("Buy buttons",d.buttons)+count("Rendered",d.rendered)+count("Matched cards",d.matched)+count("Ranked",d.ranked)+count("Accepted",d.accepted)+count("Full details",d.complete)+count("Duplicates",d.duplicates)+count("New records",d.added)+(d.mode==="incremental"?count("Processed cards",d.processed)+count("Pending cards",d.queued)+count("Batches",d.batches)+count("Longest batch",d.maxBatchMs==null?null:d.maxBatchMs+" ms")+count("Queue overflow",d.dropped):"")+'</div>':'<p class="fine-print">No scan diagnostics received. Install companion 2.3.0 and focus an equipment market page.</p>';
   return '<div class="rw-diagnostic-actions"><span role="status">'+safe(bridge?"Companion "+bridge.version+" connected · "+stamp(bridge.at):"No live companion handshake yet")+'</span><button type="button" class="button secondary" data-rw-sync>Sync local data</button><button type="button" class="button secondary" data-rw-export>Export JSON</button></div>'+
     '<div class="rw-diagnostic-counts">'+count("Stored observations",rows.length)+count("Complete",full)+count("Partial",rows.length-full)+count("Models",models.size)+byRarity+'</div>'+
     '<p class="fine-print">Last successful capture: '+safe(stamp(d?.lastCapture??(rows.length?Math.max(...rows.map(r=>r.at)):null)))+'</p>'+scan+
     (models.size?'<div class="rw-diagnostic-table"><table><thead><tr><th>Equipment</th><th>All</th><th>Full</th><th>Yellow</th><th>Orange</th><th>Red</th></tr></thead><tbody>'+Array.from(models.values()).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name)).map(x=>'<tr><td>'+safe(x.name)+'</td>'+["total","full","yellow","orange","red"].map(k=>'<td>'+x[k]+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>':"")+
-    '<p class="fine-print">Local observations only; 72-hour retention, 2,500-record limit. Duplicate count refers to the last scan, not lifetime. No Torn API requests.</p>';
+    '<p class="fine-print">Local observations only; 72-hour retention, 2,500-record limit. Incremental counters cover the current market view; older scripts report the last scan. No Torn API requests.</p>';
 }
 function inventoryRwDiagnostics(){
   return '<details class="rw-diagnostic-panel"><summary>Passive RW market diagnostics</summary><div data-rw-diagnostics>'+inventoryRwDiagnosticsBody()+'</div></details>';
