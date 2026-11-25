@@ -158,3 +158,8 @@ Property schema: https://neon0404.github.io/torn-client/types/UserPropertyBasicD
 Inventory uses the cached Torn item catalog (15-minute TTL) for descriptions, effects and market values. Expanding an item makes no request. Item matching prefers a matching catalog ID and name, then a unique exact name. Unresolved IDs disable marketplace controls.
 
 **Query Buyers** sends one anonymous GET to Weav3r’s documented trader endpoint for the selected item. It sends only the item ID and result controls. Public pricelist quotes are cached locally with the check time and shown with unknown quantity. The manual marketplace link opens the item on Weav3r, where anonymous buy orders can be checked independently. See [the Weav3r audit](WEAV3R_INTEGRATION.md) for schemas, limits, and validation.
+
+
+## On-demand individual equipment details
+
+Inventory Details displays catalog metadata (weapon category, stealth, magazine, rate of fire, armor coverage and circulation) when supplied. Manual Load equipment details reads `user/equipment` for equipped gear, `torn/{uid}/itemdetails` for individual gear, and `user/itemmods` when attachment data is missing. UID matches are exact and unsafe numeric IDs are rejected. The itemdetails decoder accepts both documented single-object and array responses (array-only from January 2027). Results are session-local, account-epoch scoped, cached for 15 minutes, and concurrent identical requests are deduplicated. No extra Home requests or third-party key sharing. Mod IDs in the catalog indicate compatibility, not installed mods or available slots. Source: https://www.torn.com/swagger/openapi.json . Live authenticated testing pending.
