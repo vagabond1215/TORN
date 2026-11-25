@@ -149,6 +149,20 @@ const tornToolsGuide=(()=>{
   document.addEventListener("error",iconError,true);
   iconHandlerBound=true;
  }
+ const reportDefaults=["energy","nerve","education","drugs","racing","uniques","trains","oc","travel","crimes"];
+ let reportOpenFallback=true,reportEdit=false;
+ function reportPrefs(){
+   let open=reportOpenFallback,pins=reportDefaults;
+   try{open=localStorage.getItem("torn-city-guide:reports-open")!=="false";const saved=JSON.parse(localStorage.getItem("torn-city-guide:report-pins")||"null");if(Array.isArray(saved))pins=saved.filter(id=>Object.hasOwn(tornReportCatalog,id));}catch{}
+   return {open,pins};
+ }
+ function reportIcon(d){return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+esc(d)+'"/></svg>';}
+ function reportStrip(){
+   const {open,pins}=reportPrefs(),version=tornGuideApi.crimeVersion?.()??null;
+   const available=Object.entries(tornReportCatalog).filter(([id])=>id!=="crimes"||version!==2).filter(([id])=>id!=="uniques"||version!==1);
+   const buttons=available.filter(([id])=>pins.includes(id)).map(([id,[label,,tip,d]])=>'<button class="report-icon" type="button" data-report="'+esc(id)+'" aria-label="'+esc(label)+'" title="'+esc(tip)+'">'+reportIcon(d)+'</button>').join("");
+   return '<section id="torn-reports-strip" class="torn-reports-strip" '+(open?"":"hidden")+' aria-label="Torn Reports"><div class="quick-inner report-inner"><strong>Torn Reports</strong><div class="report-icon-list">'+buttons+'</div><button class="report-icon" type="button" data-report-customize aria-expanded="'+reportEdit+'" title="Customize report buttons" aria-label="Customize report buttons">'+reportIcon("M4 6h16M4 12h16M4 18h16 M8 3v6m8 0v6m-6 0v6")+'</button></div>'+(reportEdit?'<div class="quick-inner report-customize">'+available.map(([id,[label,,,d]])=>'<label title="'+esc(label)+'"><input type="checkbox" data-report-pin="'+esc(id)+'" '+(pins.includes(id)?"checked":"")+'>'+reportIcon(d)+'<span>'+esc(label)+'</span></label>').join("")+'</div>':"")+'</section>';
+ }
  function quickLinks(route){
   const context=route||(typeof location!=="undefined"?(location.hash||"#home").slice(1):"home");
   const contextual=typeof tornGuidePreferences!=="undefined"&&tornGuidePreferences.get("contextualQuickAccess");
@@ -160,15 +174,16 @@ const tornToolsGuide=(()=>{
       ' title="'+esc(name)+'" aria-label="Open '+esc(name)+'" data-tooltip="'+esc(name)+'">'+siteIcon(name)+'</a>';
   }).join("");
   const rail=tornRightRail.controls();
+  const reportToggle=context==="home"?'<button type="button" class="rail-visibility-toggle" data-report-toggle aria-controls="torn-reports-strip" aria-label="Torn Reports" title="Torn Reports" aria-pressed="'+reportPrefs().open+'">'+reportIcon("M4 3h16v18H4z M8 16v-4m4 4V8m4 8v-6")+'</button>':"";
   const open=tornRoadmap.activitiesOpen();
   const gear=context==="home"?'<button type="button" class="rail-visibility-toggle" data-home-activities-toggle aria-controls="home-activities" aria-label="Playstyle and recommendation settings" title="Playstyle and recommendation settings" aria-pressed="'+open+'" aria-expanded="'+open+'"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>':"";
-  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+ (gear?'<div class="home-settings-toggle-wrap">'+gear+'</div>':"")+rail+'</div>';
+  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+ (gear?'<div class="home-settings-toggle-wrap">'+reportToggle+gear+'</div>':"")+rail+'</div>'+(context==="home"?reportStrip():"");
  }
  function updateBar(route){
   ensureIconHandler();
   if(route)currentBarRoute=route;
   const host=typeof document!=="undefined"&&document.getElementById("tool-quickbar");
-  if(host){host.innerHTML=quickLinks(currentBarRoute);host.querySelector("[data-home-activities-toggle]")?.addEventListener("click",()=>tornRoadmap.toggleActivities());}
+  if(host){host.innerHTML=quickLinks(currentBarRoute);host.querySelector("[data-home-activities-toggle]")?.addEventListener("click",()=>tornRoadmap.toggleActivities());host.querySelector("[data-report-toggle]")?.addEventListener("click",()=>{reportOpenFallback=!reportPrefs().open;try{localStorage.setItem("torn-city-guide:reports-open",String(reportOpenFallback));}catch{}updateBar();});host.querySelector("[data-report-customize]")?.addEventListener("click",()=>{reportEdit=!reportEdit;updateBar();});for(const el of host.querySelectorAll("[data-report-pin]"))el.addEventListener("change",()=>{const pins=new Set(reportPrefs().pins);if(el.checked)pins.add(el.dataset.reportPin);else pins.delete(el.dataset.reportPin);try{localStorage.setItem("torn-city-guide:report-pins",JSON.stringify([...pins]));}catch{}updateBar();});}
  }
  // Contextual page suggestions are deliberately suppressed: when enabled,
  // the global icon bar already reflects the current page, without duplicate rows.
