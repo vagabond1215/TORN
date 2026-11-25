@@ -223,6 +223,8 @@ const tornGuideApi=(()=>{
     }).finally(()=>gearPending.delete(cacheKey));
     gearPending.set(cacheKey,task);return task;
   }
+  function readCrimeProgress(id){return Number.isInteger(id)&&id>=1&&id<=13?gearRead("user/"+id+"/crimes"):null;}
+  async function loadCrimeProgress(id){if(!Number.isInteger(id)||id<1||id>13)throw Error("Invalid crime ID.");return gearRequest("user/"+id+"/crimes",true);}
   function readGear(uid){
     uid=gearUid(uid);if(!uid)return {};
     const equipment=gearRead("user/equipment"),mods=gearRead("user/itemmods"),detail=gearRead("torn/"+uid+"/itemdetails")?.itemdetails;
@@ -365,7 +367,7 @@ const tornGuideApi=(()=>{
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,readCrimeProgress,loadCrimeProgress,
     disconnect,restore,setRemember,isRemembering:()=>remember,
     isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
