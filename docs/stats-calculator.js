@@ -385,16 +385,17 @@ const tornStatPlanner = (() => {
   const singleGyms={strength:"Gym 3000",defense:"Mr. Isoyamas",speed:"Total Rebound",dexterity:"Elites"};
   const pairGyms={offensive:"Frontline Fitness",defensive:"Balboas Gym"};
   const bookNames={strength:"Gym Grunting - Shouting to Success",defense:"Self Defense In The Workplace",speed:"Speed 3 - The Rejected Script",dexterity:"Limbo Lovers 101"};
-  let buildOwner=null,buildChoice="balanced",buildTotal=0;
+  let buildOwner=null,buildChoice="",buildTotal=0;
   function loadBuild(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(buildOwner===owner)return;
-    buildOwner=owner;buildChoice="balanced";buildTotal=0;
+    buildOwner=owner;buildChoice="";buildTotal=0;
     try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:build:"+owner));if(buildOptions.some(x=>x[0]===saved?.choice))buildChoice=saved.choice;buildTotal=clamp(saved?.total,0,1e15);}catch{}
   }
   function saveBuild(){try{localStorage.setItem("torn-city-guide:build:"+buildOwner,JSON.stringify({choice:buildChoice,total:buildTotal}));}catch{}}
   function homeTrainingAdvice(budget,risk,options={}){
     loadBuild();
+    if(!buildChoice)return {needsBuild:true,detail:"Select a stat build in Stats → Gym."};
     const actual=statNames.map(apiStatValue);
     if(actual.some(x=>x===null))return null;
     const option=buildOptions.find(x=>x[0]===buildChoice)||buildOptions[0],weights=option[2],sum=weights.reduce((a,b)=>a+b,0),shares=weights.map(x=>x/sum);
@@ -403,12 +404,13 @@ const tornStatPlanner = (() => {
     const active=activeGym(),book=row=>row.effects.groups.find(g=>g.group==="book")?.total||0;
     const next=rows.filter(x=>x.remaining>0).sort((a,b)=>a.progress-b.progress||book(b)-book(a)||b.effects.multiplier-a.effects.multiplier)[0];
     if(!next)return {stat:"your selected build",detail:"Current target reached; set the next milestone."};
-    const bars=rawBars(),programs=active&&bars?.energy&&bars?.happy&&active[next.stat]>0?tornTrainSequence.weeklyPrograms({state:{...state,statValues:Object.fromEntries(statNames.map((stat,i)=>[stat,actual[i]])),compareStat:next.stat,currentEnergy:Number(bars.energy.current),maxEnergy:Number(bars.energy.maximum),happy:Number(bars.happy.current),maxHappy:Number(bars.happy.maximum)},gym:active,trainBlock,effectsFor},budget,risk,options):[];
+    const bars=rawBars(),programs=budget!=null&&active&&bars?.energy&&bars?.happy&&active[next.stat]>0?tornTrainSequence.weeklyPrograms({state:{...state,statValues:Object.fromEntries(statNames.map((stat,i)=>[stat,actual[i]])),compareStat:next.stat,currentEnergy:Number(bars.energy.current),maxEnergy:Number(bars.energy.maximum),happy:Number(bars.happy.current),maxHappy:Number(bars.happy.maximum)},gym:active,trainBlock,effectsFor},budget,risk,options):[];
     return {stat:readable[next.stat],statKey:next.stat,build:option[1],remaining:next.remaining,gym:active?{name:active.name,energy:active.energy}:null,stats:rows.map((row,i)=>({key:row.stat,label:shorthand[row.stat],current:actual[i],target:Math.ceil(total*shares[i]),progress:row.progress})),perks:next.effects.groups.filter(g=>g.total!==0).map(g=>({group:g.group,total:g.total,items:g.items})),modifier:next.effects.sourceAvailable?(next.effects.multiplier-1)*100:null,bliss:tornHappinessBook().active,happy:bars?.happy?.current??null,maxHappy:bars?.happy?.maximum??null,program:programs[0]??null,detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name:"")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")+(tornHappinessBook().active?" · Ignorance Is Bliss active":"")};
   }
   function homeCandyAdvice(){return calcCandyStock()?.[0]||null;}
   function renderBuild(gym,active){
     loadBuild();
+    if(!buildChoice)return '<section class="panel tc-build-panel"><div class="panel-heading"><h2>Select a stat build</h2></div><div class="panel-content"><p>Choose your preferred build to enable stat growth recommendations.</p><div class="tc-build-controls"><label>Build <select data-tc-build="choice"><option value="" selected>Select a build</option>'+buildOptions.map(([id,name])=>'<option value="'+id+'">'+esc(name)+'</option>').join("")+'</select></label></div></div></section>';
     const option=buildOptions.find(x=>x[0]===buildChoice)||buildOptions[0],weights=option[2],weightSum=weights.reduce((a,b)=>a+b,0),shares=weights.map(w=>w/weightSum);
     const actual=statNames.map(stat=>apiStatValue(stat)),live=actual.every(v=>v!==null),current=actual.map((v,i)=>v??state.statValues[statNames[i]]),sum=current.reduce((a,b)=>a+b,0);
     // Training cannot reduce existing stats: scale every target up until
@@ -447,7 +449,7 @@ const tornStatPlanner = (() => {
     const reading=uniqueBooks.length?uniqueBooks.join(" · "):(bliss.known?"No active growth book identified in loaded perks.":"Active book status unavailable.");
     const label=stat=>readable[stat];
     return '<section class="panel tc-build-panel"><div class="panel-heading"><h2>Train next: '+(priority?esc(label(priority.stat))+" to "+nice(targets[priority.i]):"Target reached")+'</h2></div><div class="panel-content">'+
-      '<div class="tc-build-controls"><label>Build <select data-tc-build="choice">'+buildOptions.map(([id,name])=>'<option value="'+id+'" '+(buildChoice===id?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
+      '<div class="tc-build-controls"><label>Build <select data-tc-build="choice"><option value="">Select a build</option>'+buildOptions.map(([id,name])=>'<option value="'+id+'" '+(buildChoice===id?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
       '<label>Target total <input type="number" min="0" max="1000000000000000" step="any" data-tc-build="total" value="'+(buildTotal||"")+'" placeholder="'+Math.ceil(targetTotal)+'"></label><button class="button secondary" type="button" data-tc-build-reset>Auto</button><small>'+(!live?"Sample / simulated stats · ":"")+'Minimum feasible '+nice(Math.ceil(minimum))+'</small></div>'+
       '<div class="tc-build-ratio">'+entries.map(e=>'<span class="tc-build-segment tc-build-'+e.stat+'" style="flex:'+weights[e.i]+'" title="'+label(e.stat)+' '+nice(shares[e.i]*100,1)+'%">'+shorthand[e.stat]+' '+nice(shares[e.i]*100,1)+'%</span>').join("")+'</div>'+
       '<div class="tc-build-scroll"><table class="tc-build-table"><thead><tr><th>Stat</th><th>Current / %</th><th>Target / %</th><th>Remaining</th><th>Gain perks</th><th>Known gym</th><th>Est. E</th></tr></thead><tbody>'+
@@ -518,7 +520,7 @@ const tornStatPlanner = (() => {
       const el=event.target;
       if(location.hash==="#stats"&&el.matches("[data-tc-build]")){
         loadBuild();
-        if(el.dataset.tcBuild==="choice"&&buildOptions.some(x=>x[0]===el.value))buildChoice=el.value;
+        if(el.dataset.tcBuild==="choice"&&(el.value===""||buildOptions.some(x=>x[0]===el.value)))buildChoice=el.value;
         if(el.dataset.tcBuild==="total")buildTotal=clamp(el.value,0,1e15);
         saveBuild();view.innerHTML=render();return;
       }
