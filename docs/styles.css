@@ -1849,3 +1849,18 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-weav3r-icon{display:inline-grid;place-items:center;width:24px;height:24px;flex:none;color:var(--muted);text-decoration:none}
 .inventory-weav3r-icon:hover,.inventory-weav3r-icon:focus-visible{color:var(--accent-strong)}
 .inventory-market-qty{color:var(--muted)}
+
+/* Passive market capture diagnostics */
+.rw-diagnostic-panel{margin:.4rem 0 .65rem;padding:.45rem .65rem;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
+.rw-diagnostic-panel>summary{cursor:pointer;font-weight:600;font-size:.85rem}
+.rw-diagnostic-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;margin:.5rem 0;font-size:.78rem}
+.rw-diagnostic-actions>span{margin-inline-end:auto;color:var(--muted)}
+.rw-diagnostic-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,105px),1fr));gap:.3rem;margin:.5rem 0}
+.rw-diagnostic-counts>div{display:grid;gap:.15rem;border:1px solid var(--border);border-radius:4px;padding:.35rem .45rem}
+.rw-diagnostic-counts small{color:var(--muted);font-size:.72rem}
+.rw-diagnostic-counts strong{font-variant-numeric:tabular-nums;font-size:1rem}
+.rw-diagnostic-table{max-height:300px;overflow:auto;margin:.5rem 0}
+.rw-diagnostic-table table{width:100%;border-collapse:collapse;font-size:.78rem}
+.rw-diagnostic-table th,.rw-diagnostic-table td{padding:.3rem .45rem;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+.rw-diagnostic-table th:first-child,.rw-diagnostic-table td:first-child{text-align:left}
+.rw-diagnostic-table th{position:sticky;top:0;background:var(--surface)}
