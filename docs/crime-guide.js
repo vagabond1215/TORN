@@ -503,13 +503,14 @@ const tornCrimeGuide = (() => {
       const amount=Math.max(0,Math.min(held,Math.floor(room/unit),Math.floor(safeWindow/unit),Math.ceil(n(bars.nerve.maximum)-nerve)));
       if(amount>0)add("consume","Alcohol · up to "+number(amount),number(held)+" held · "+(nextBooster?"Cooldown clears before the next training booster at "+sessionTime(nextBooster.due):"No remaining candy or DVD steps")+" · Conservative cooldown allowance.","#crime");
     }
-    const refillRaw=payload("refills","refills"),refillStamp=Number(tornGuideApi.state.fetchedAt?.refills||0),moneyData=payload("money","money"),points=n(moneyData?.points??moneyData?.points?.current),free=n(refillRaw?.special_count??refillRaw?.special_refills_available);
-    const sameDay=refillStamp>0&&Math.floor(refillStamp/86400000)===Math.floor(now/86400000)&&!tornGuideApi.state.errors?.refills;
-    const used=sameDay&&typeof refillRaw?.nerve_refill_used==="boolean"?refillRaw.nerve_refill_used:null;
-    if(nerveRoom&&crimeActivity&&nerve<=Math.floor(n(bars.nerve.maximum)*.2)){
-      if(sameDay&&free>0)add("consume","Nerve refill · free refill available","Use a free refill when ready to commit crimes; verify the selected bar.","https://www.torn.com/points.php");
-      else if(used===false&&points>=30)add("consume","Nerve refill · 30 points","Daily refill unused · restore up to "+number(n(bars.nerve.maximum)-nerve)+" Nerve. Check remaining points before use.","https://www.torn.com/points.php");
-      else if(used!==true&&(points===null||points>=30))add("consume","Check daily Nerve refill","Refill low Nerve for 30 points if unused today; confirm availability in Points Building.","https://www.torn.com/points.php");
+    const refill=payload("refills","refills");
+    const refillStamp=Number(tornGuideApi.state.fetchedAt?.refills||0);
+    const pointsBalance=payload("money","money")?.points;
+    const points=n(pointsBalance?.current??pointsBalance);
+    const currentRefillStatus=refillStamp>0&&Math.floor(refillStamp/86400000)===Math.floor(now/86400000)&&!tornGuideApi.state.errors?.refills;
+    if(nerveRoom&&nerve<=Math.floor(n(bars.nerve.maximum)*.2)&&
+      !(currentRefillStatus&&refill?.nerve_refill_used===true)&&(points===null||points>=30)){
+      rows.crime.push('<li><a href="https://www.torn.com/page.php?sid=points">Refill Nerve with Points</a></li>');
     }
     if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
     if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
