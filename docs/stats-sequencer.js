@@ -357,62 +357,62 @@ const tornTrainSequence=(()=>{
     }
     return {state:v,limit,gymCost,canTrain,fullEnergyDelay,advance,execute,run,finish};
   }
-  // Forecast a common week without changing saved Plan settings or actions.
+  // Home recommendations replay the same saved/default Plan templates with
+  // one continuous weekly engine; no independent strategy definitions.
   function weeklyPrograms(context,budget,risk){
     const previous=ctx,old={...p};
     try{
-      ctx=context;marketInputs();applyCooldownPerks();
+      ctx=context;loadPlanPreferences();marketInputs();applyCooldownPerks();
       const now=new Date(),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(Date.now()-stamp)/60000):0;
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
-      const cfg={hours:168,startEnergy:"current",startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??24,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true};
-      const cash=budget==null?0:Math.max(0,budget),prices={xanax:p.xanaxPrice,ecstasy:p.ecstasyPrice,dvd:p.dvdPrice,refill:p.pointPrice==null?null:30*p.pointPrice};
-      const stock=candyStock().rows,tiers=[...new Set(stock.map(x=>x.happy))].filter(t=>stock.filter(x=>x.happy===t).every(x=>x.price>0));
-      const defs=[["natural","NAT"],["refill","NAT + refills"],...tiers.flatMap(t=>[["candy","Candy + natural",t],["candy-refill","Candy + refills",t]])];
-      if(risk!=="low")defs.push(["maxenergy","MAX E"],["maxenergy-refill","MAX E + refills"],["jump","HJ"],["jump-refill","HJ + refills"],...tiers.flatMap(t=>[["maxenergy-candy","MAX E + candy",t],["mini","MINI",t],["low","LOW#",t],["mini-refill","MINI + refills",t],["low-refill","LOW# + refills",t]]));
-      const results=[];
-      for(const [id,label,tier] of defs){
-        const engine=createEngine(cfg),v=engine.state,list=[];
-        let spent=0,stack=0,jumps=0,candyLeft=stock.filter(x=>x.happy===tier).reduce((a,x)=>a+x.qty,0);
-        const candyPrice=tier?Math.max(...stock.filter(x=>x.happy===tier).map(x=>x.price)):Infinity;
-        const refill=id.includes("refill"),jump=id.startsWith("jump"),drug=id.startsWith("maxenergy"),mini=id.startsWith("mini"),low=id.startsWith("low");
-        const can=(type,qty=1)=>prices[type]!=null&&spent+prices[type]*qty<=cash;
-        const act=(type,qty=1,extra={})=>{const a={...make(type,qty),...extra};list.push(a);return engine.execute(a,list.length-1);};
-        const buy=type=>{if(!can(type))return false;spent+=prices[type];return act(type);};
-        const train=()=>{if(v.energy>=engine.gymCost)act("train");};
-        const jumpCost=prices.xanax!=null&&prices.dvd!=null&&prices.ecstasy!=null?4*prices.xanax+5*prices.dvd+prices.ecstasy:Infinity;
-        const candyBoost=reserve=>{
-          if(!tier||!candyLeft||v.booster>cfg.boosterCapH*3600)return 0;
-          const allowance=Math.floor((cfg.boosterCapH*3600-v.booster)/(1800*p.candyCDMultiplier))+1;
-          const qty=Math.min(candyLeft,allowance,Math.max(0,Math.floor((cash-spent-reserve)/candyPrice)));
-          if(qty>0){act("candy",qty,{candyHappy:tier});spent+=qty*candyPrice;candyLeft-=qty;}return qty;
-        };
-        while(v.time<engine.limit&&!v.errors.length){
-          const before=v.time,day=Math.floor((clockMin*60+v.time)/86400);
-          if(jump&&stack===0&&v.drug===0&&spent+jumpCost<=cash&&engine.limit-v.time>=4*p.xanaxCDMin*60&&v.booster<=Math.max(0,cfg.boosterCapH*3600-4*21600)){
-            train();buy("xanax");stack=1;
-          }else if(jump&&stack>0&&v.drug===0){
-            if(stack<4){buy("xanax");stack++;}
-            else{spent+=5*prices.dvd;act("dvd",5);buy("ecstasy");train();stack=0;jumps++;}
-          }
-          if(!stack){
-            if(drug&&v.drug===0&&can("xanax")){train();buy("xanax");}
-            if(mini&&v.drug===0&&v.energy<=energyRules().cap&&candyLeft&&prices.xanax!=null&&prices.ecstasy!=null&&spent+prices.xanax+prices.ecstasy+candyPrice<=cash&&engine.limit-v.time>p.xanaxCDMin*60&&v.booster<=cfg.boosterCapH*3600){train();buy("xanax");stack=-1;}
-            if(!stack){
-              if(low&&v.drug===0&&v.energy>=energyRules().cap&&can("ecstasy")&&candyBoost(prices.ecstasy)>0){buy("ecstasy");train();}
-              else if(!mini&&!low&&v.energy>=energyRules().cap&&candyBoost(0)>0)train();
-              if(v.energy>=energyRules().cap)train();
-              if(refill&&!v.days.has(day)&&can("refill")){train();buy("refill");train();}
-            }
-          }else if(mini&&stack===-1&&v.drug===0){
-            if(can("ecstasy")&&candyBoost(prices.ecstasy)>0)buy("ecstasy");train();stack=0;
-          }
-          const nextDay=(day+1)*86400-clockMin*60-v.time;
-          const delay=Math.min(engine.limit-v.time,stack?Infinity:engine.fullEnergyDelay()||Infinity,v.drug||Infinity,v.booster>cfg.boosterCapH*3600?v.booster-cfg.boosterCapH*3600:Infinity,nextDay>0?nextDay:Infinity);
-          if(!Number.isFinite(delay)||delay<=0)break;
-          engine.advance(Math.max(1,delay));if(v.time<=before)break;
+      Object.assign(p,{startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
+      const cash=budget==null?0:Math.max(0,Number(budget)||0);
+      const candidates=templates.filter(([id])=>id!=="custom"||editedPlans.has(id));
+      // Match the Plan comparison preparation window, including saved jump actions.
+      let blockHours=24;
+      for(const [id] of candidates.filter(([id])=>id==="jump"||id==="maxhappy")){
+        const engine=createEngine({hours:Infinity,startEnergy:startingEnergy[id],autoWait:true},true);
+        engine.run(editedPlans.has(id)?steps[id]:defaults[id]());
+        blockHours=Math.max(blockHours,Math.ceil(engine.state.time/36)/100);
+      }
+      if(!Number.isFinite(blockHours)||blockHours>168)blockHours=168;
+      p.hours=blockHours;
+      const cfg={hours:168,startEnergy:"current",autoWait:true},results=[];
+      function naturalUntil(engine,end){
+        const v=engine.state;
+        while(v.time<end&&!v.errors.length){
+          if(v.energy>=energyRules().cap)engine.execute(make("train"),0);
+          const delay=Math.min(end-v.time,engine.fullEnergyDelay()||end-v.time);
+          if(delay<=0)break;
+          engine.advance(delay);
         }
-        const result=engine.finish(list);
-        if(result.complete&&result.money!=null&&result.money<=cash&&(!jump||jumps>0)&&(!mini&&!low||result.costs.ecstasy>0)&&(!tier||result.costs.candy>0)&&(!drug||result.costs.xanax>0)&&(!refill||result.costs.refill>0))results.push({id,label:tier?label+" ("+tier+" Happy candy)":label,gain:result.gain,money:result.money,used:result.used,costs:result.costs});
+        if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
+      }
+      for(const [id,short,label] of candidates){
+        const actions=(editedPlans.has(id)?steps[id]:defaultActions(id)).map(x=>({...x}));
+        // External happiness has no verified price, so cannot establish affordability.
+        if(actions.some(x=>x.type==="externalHappy"))continue;
+        const maxCycles=id==="natural"?1:Math.max(1,Math.floor(168/blockHours));
+        let best=null;
+        for(let cycles=1;cycles<=maxCycles;cycles++){
+          const engine=createEngine(cfg),v=engine.state,executed=[];
+          for(let k=0;k<cycles&&!v.errors.length&&v.time<engine.limit;k++){
+            const end=Math.min(engine.limit,Math.round((k+1)*blockHours*3600));
+            // No free energy or cooldown reset between repetitions.
+            if(startingEnergy[id]==="zero"&&v.energy>=engine.gymCost)engine.execute(make("train"),0);
+            if(!engine.run(actions))break;
+            executed.push(...actions);
+            if(v.time<end)naturalUntil(engine,end);
+            else if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
+          }
+          if(!v.errors.length)naturalUntil(engine,engine.limit);
+          const result=engine.finish(executed);
+          if(!result.complete||result.money==null||result.money>cash||executed.length!==actions.length*cycles)continue;
+          if(id!=="natural"&&result.costs.xanax+result.costs.ecstasy+result.costs.dvd+result.costs.candy+result.costs.refill===0)continue;
+          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan"};
+          if(!best||candidate.gain>best.gain||candidate.gain===best.gain&&candidate.money<best.money)best=candidate;
+        }
+        if(best)results.push(best);
       }
       return results.sort((a,b)=>b.gain-a.gain||a.money-b.money);
     }finally{ctx=previous;Object.assign(p,old);}
