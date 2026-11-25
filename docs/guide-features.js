@@ -1255,31 +1255,54 @@ function inventoryGearMarkup(uid,category,info,equipped){
   const weapon=["Primary","Secondary","Melee"].includes(category),armor=category==="Defensive";
   if(!weapon&&!armor)return "";
   const meta=info.details??{},ammo=meta.ammo,rate=ammo?.rate_of_fire;
-  const pair=(label,value)=>value==null||value===""?"":'<div class="inventory-gear-pair"><dt>'+safe(label)+"</dt><dd>"+safe(value)+"</dd></div>";
+  const pair=(label,value,wide=false,tip="")=>'<div class="inventory-gear-pair'+(wide?' inventory-gear-wide':'')+'"'+(tip?' title="'+safe(tip)+'"':'')+'><dt>'+safe(label)+'</dt><dd>'+safe(value??"—")+'</dd></div>';
   const num=(value,suffix="")=>typeof value==="number"&&Number.isFinite(value)?value.toLocaleString(undefined,{maximumFractionDigits:2})+suffix:null;
   const read=tornGuideApi.readGear(uid),unique=read.item;
-  const rarity=["yellow","orange","red"].includes(unique?.rarity)?unique.rarity:null;
-  const bonuses=Array.isArray(unique?.bonuses)?unique.bonuses:null;
-  const mags=bonuses?.some(b=>String(b.title).toLowerCase()==="specialist")?1:3;
-  const endurance=weaponEndurance(rate?.minimum,rate?.maximum,ammo?.magazine_rounds,mags);
-  const rows=pair("Class",unique?.sub_type??info.sub_type??meta.category)+
-    (weapon?pair("Stealth",num(meta.stealth_level))+pair("Caliber / ammo",ammo?.name)+pair("Magazine rounds",num(ammo?.magazine_rounds))+pair("Rate of fire",rate?.minimum!=null&&rate?.maximum!=null?rate.minimum+"–"+rate.maximum:null)+pair("Current ammo",read.ammo?read.ammo.name+" · "+read.ammo.type+" · "+read.ammo.quantity:null):"")+
-    (endurance?pair("Base attacks / mag",endurance.expected.toFixed(2)+" ("+endurance.min+"–"+endurance.max+")")+pair("Base attacks / total",endurance.total.toFixed(2))+pair("Base reloads",String(endurance.reloads))+pair("Base firing efficiency",(endurance.efficiency*100).toFixed(1)+"%"):"");
-  const bonusList=(bonuses??[]).filter(b=>typeof b.description==="string"&&b.description.trim()).map(b=>'<small>'+safe(b.description)+'</small>').join("");
-  const mods=read.mods;
-  const modStamp=read.modsAt?'<small>Mods checked '+safe(tornGuidePreferences.formatDate(read.modsAt))+'</small>':"";
-  const ammoStamp=read.ammo&&read.ammoAt?'<small>Ammo snapshot '+safe(tornGuidePreferences.formatDate(read.ammoAt))+'</small>':"";
-  const modList=mods===null||mods===undefined?"Not loaded":mods.length?mods.filter(m=>!(typeof m==="string"?m:m?.name??m?.title)).map(()=>"Unknown mod").join(" · "):"None attached";
-  return '<section class="inventory-gear"><h4>Equipment attributes</h4>'+(rows?'<dl class="inventory-gear-grid">'+rows+'</dl>':"")+(endurance?'<p class="fine-print">Base endurance assumes '+mags+' magazine(s), full ammunition and no ammo-saving effects or mods.</p>':"")+(unique?(bonusList?'<div class="inventory-gear-bonuses"><strong>Bonus effects</strong>'+bonusList+'</div>':""):'<p class="fine-print">Individual attributes not loaded.</p>')+
-    (weapon?'<div class="inventory-gear-mods"><strong>Attached mods</strong>'+(modList?'<p>'+modList+'</p>':"")+modStamp+ammoStamp+(Array.isArray(meta.mods)?'<small>'+meta.mods.length+' compatible mod types in catalog</small>':"")+'</div>':"")+
-    (uid?'<button type="button" class="button secondary" data-load-gear>'+ (unique?"Refresh mods / equipment":"Load equipment details")+'</button>':'<p class="fine-print">Unique item ID unavailable.</p>')+'<p role="status" class="inventory-gear-status"></p></section>';
+  const bonuses=Array.isArray(unique?.bonuses)?unique.bonuses:[];
+  const modNames=(Array.isArray(read.mods)?read.mods:[]).map(m=>String(typeof m==="string"?m:m?.name??m?.title??"").trim().toLowerCase());
+  const specialist=bonuses.some(b=>String(b.title??b.name).toLowerCase()==="specialist");
+  const extra=modNames.some(n=>/^extra (?:mags|magazines|clips) x2$/.test(n))?2:modNames.some(n=>/^extra (?:mag|magazine|clip)$/.test(n))?1:0;
+  const perks=payload("perks","perks");
+  const jobPerks=perks?.job??perks?.job_perks;
+  const bandolier=Array.isArray(jobPerks)&&jobPerks.some(p=>{
+    const t=typeof p==="string"?p:[p?.name,p?.effect,p?.description].filter(Boolean).join(" ");
+    return /\bbandolier\b|\b(?:one|1|\+1|an) extra (?:clip|magazine)\b|\+1\s+(?:clip|magazine)\b/i.test(t);
+  });
+  const mags=specialist?1:3+extra+(bandolier?1:0);
+  const reloadDelta=mags-3;
+  const magBase=ammo?.magazine_rounds;
+  const extended=modNames.includes("high capacity mags")?.3:modNames.includes("extended mags")?.2:0;
+  const dual=/\bdual\b/i.test(String(info.name??unique?.name??""));
+  const mag=Number.isSafeInteger(magBase)?Math.floor(magBase*(1+extended*(dual?.5:1))):null;
+  const endurance=weaponEndurance(rate?.minimum,rate?.maximum,mag,mags);
+  const type=String(read.ammo?.type??"").toLowerCase().replace(/[_-]/g," ");
+  const specialAmmo=/tracer/.test(type)?"Tracer":/hollow\s*point/.test(type)?"Hollow Point":/piercing/.test(type)?"Piercing":/incendiary/.test(type)?"Incendiary":"";
+  const caliber=ammo?.name??read.ammo?.name;
+  const ammoLabel=caliber?[caliber,specialAmmo].filter(Boolean).join(" · "):specialAmmo||null;
+  const formatDelta=n=>n>0?" +"+n:n<0?" −"+Math.abs(n):"";
+  const className=unique?.sub_type??info.sub_type??meta.category;
+  let rows=pair("Class",className,!weapon);
+  if(weapon)rows+=pair("Stealth",num(meta.stealth_level));
+  if(weapon&&ammo){
+    rows+=pair("Ammo",ammoLabel,true)+
+      pair("Magazine rounds",num(mag),false,extended?"Includes known magazine-size mod.":"")+
+      pair("Rate of fire",rate?.minimum!=null&&rate?.maximum!=null?rate.minimum+"–"+rate.maximum:null);
+    if(endurance)rows+=pair("Attacks / mag",endurance.min+"–"+endurance.max,false,"Range at full magazine using base rate of fire.")+
+      pair("Avg Attacks",endurance.total.toFixed(2),false,"Expected firing attacks across all magazines; excludes reload turns and unmodeled ammo conservation.")+
+      pair("Reloads","2"+formatDelta(reloadDelta),false,"Base reloads plus known magazine adjustments: "+(specialist?"Specialist":([extra?extra+" extra mod magazine(s)":"",bandolier?"Bandolier":" integral base magazines"].filter(Boolean).join("; "))))+
+      pair("Efficiency",(endurance.efficiency*100).toFixed(1)+"%",false,"Expected firing turns divided by firing plus reload turns; excludes unmodeled ammo conservation.");
+  }
+  return '<section class="inventory-gear"><h4>Equipment attributes</h4><dl class="inventory-gear-grid">'+rows+'</dl>'+
+    (!unique?'<p class="fine-print">Individual attributes not loaded.</p>':"")+
+    (!uid?'<p class="fine-print">Unique item ID unavailable.</p>':"")+'<p role="status" class="inventory-gear-status"></p></section>';
 }
 if(typeof document!=="undefined")document.addEventListener("click",async event=>{
   const button=event.target.closest?.("[data-load-gear]");if(!button)return;
   const row=button.closest(".inventory-detail-row"),uid=row.dataset.gearUid,category=row.dataset.gearCategory,owner=tornGuideApi.state.identity?.id;
   if(!uid)return;
-  button.disabled=true;button.textContent="Loading…";
+  button.disabled=true;button.setAttribute("aria-busy","true");
   try{
+    inventorySelectTab(row,"details");
     const result=await tornGuideApi.loadGear(uid,row.dataset.gearEquipped==="true",["Primary","Secondary","Melee"].includes(category),true);
     if(tornGuideApi.state.identity?.id!==owner)return;
     for(const target of document.querySelectorAll("[data-gear-uid]")){
@@ -1293,7 +1316,7 @@ if(typeof document!=="undefined")document.addEventListener("click",async event=>
       if(target.dataset.gearUid===uid)target.querySelector(".inventory-gear-status").textContent=result.errors.join(" · ");
     }
   }catch(error){if(row.isConnected)row.querySelector(".inventory-gear-status").textContent=error.message;}
-  finally{if(button.isConnected){button.disabled=false;button.textContent="Load equipment details";}}
+  finally{if(button.isConnected){button.disabled=false;button.removeAttribute("aria-busy");}}
 });
 
 function inventoryDetailRow(item,category,index){
@@ -1324,7 +1347,7 @@ function inventoryDetailRow(item,category,index){
   const uid=tornGuideApi.gearUid(item.uid??item.unique_id);
   const gear=["Primary","Secondary","Melee","Defensive"].includes(category);
   const tab=inventoryTabs.get(rowKey)??"details";
-  const tabbar='<div class="inventory-item-tabs" role="group" aria-label="Item information">'+["details","market"].map(t=>'<button type="button" data-inventory-tab="'+t+'" aria-pressed="'+(tab===t)+'">'+(t==="details"?"Details":"Market")+'</button>').join("")+'</div>';
+  const tabbar='<div class="inventory-item-tabs" role="group" aria-label="Item information">'+["details","market"].map(t=>'<button type="button" data-inventory-tab="'+t+'" aria-pressed="'+(tab===t)+'">'+(t==="details"?"Details":"Market")+'</button>').join("")+(gear&&uid?'<button type="button" class="inventory-gear-refresh inventory-refresh-icon" data-load-gear aria-label="Refresh equipment details" title="Refresh equipment / mods / ammo">'+inventoryRefreshIcon+'</button>':"")+'</div>';
   return '<li class="inventory-detail-row" '+(gear?'data-gear-uid="'+safe(uid??"")+'" data-gear-category="'+safe(category)+'" data-gear-equipped="'+Boolean(item.equipped)+'" ':"")+'data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span class="inventory-row-title" data-title-name="'+safe(name)+'" data-title-equipped="'+Boolean(item.equipped)+'">'+(gear?inventoryGearTitle(uid,category,name,item.equipped,info):safe(name)+(item.equipped?inventoryEquippedIcon:""))+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span>'+(id?'<button type="button" class="inventory-inline-search" data-query-buyers aria-label="Query Weav3r buyers for '+safe(name)+'" title="Query Weav3r buyers" '+(weav3rBuyers.pending(id)?'disabled aria-busy="true"':'')+'>'+inventorySearchIcon+'</button>':'')+'<strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body">'+tabbar+'<div data-inventory-tab-panel="details" '+(tab!=="details"?"hidden":"")+'><p>'+safe(description)+'</p>'+inventoryGearMarkup(uid,category,info,item.equipped)+(effects?'<section class="inventory-item-effects"><h4>Effects</h4><p>'+safe(effects)+'</p></section>':"")+'</div><div data-inventory-tab-panel="market" '+(tab!=="market"?"hidden":"")+'><div class="inventory-market-summary">'+(url?'<a class="inventory-weav3r-icon" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" aria-label="Open Weav3r marketplace" title="Open Weav3r marketplace"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 6 5 12 5-8 5 8 5-12M7 6l5 7 5-7"/></svg></a>':'')+'<span title="Market value per item">MV: '+(validPrice?'$'+safe(formatNumber(Number(price))):'Unavailable')+'</span><span class="inventory-market-qty">× '+(Number.isFinite(qty)&&qty>=0?safe(formatNumber(qty)):'—')+'</span><strong class="inventory-market-gross" title="Estimated gross stack value">'+(validPrice&&Number.isFinite(qty)&&qty>=0?'$'+safe(formatNumber(Number(price)*qty)):'—')+'</strong></div>'+(info.circulation!=null&&Number.isFinite(Number(info.circulation))?'<p class="fine-print">Circulation: '+safe(formatNumber(Number(info.circulation)))+'</p>':'')+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
     (gear&&id?'<div class="inventory-rw-slot">'+inventoryRwMarket(uid,id)+'</div>':"")+
     (id?'<p class="inventory-buyer-status" role="status"></p><div class="inventory-buyer-results">'+inventoryBuyerResults(id,qty)+'</div>':"")+
