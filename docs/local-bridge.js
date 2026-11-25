@@ -12,15 +12,20 @@ const tornGuideLocalBridge=(()=>{
     if(place)place.textContent=lastStatus;
   }
   window.addEventListener("torn-guide-local-snapshot",accept);
+  let rwRenderTimer=null,rwChanged=false;
   window.addEventListener("torn-guide-rw-snapshot",event=>{
     let packet;try{packet=typeof event.detail==="string"?JSON.parse(event.detail):event.detail;}catch{return;}
     const changed=tornGuideApi.acceptRwSnapshot(packet);
-    refreshRwDiagnostics();
-    if(!changed)return;
-    for(const row of document.querySelectorAll("[data-gear-uid]")){
-      const slot=row.querySelector(".inventory-rw-slot");
-      if(slot)slot.innerHTML=inventoryRwMarket(row.dataset.gearUid,Number(row.dataset.buyerItem));
-    }
+    rwChanged=rwChanged||changed;
+    if(rwRenderTimer!==null)clearTimeout(rwRenderTimer);
+    rwRenderTimer=setTimeout(()=>{
+      rwRenderTimer=null;refreshRwDiagnostics();
+      if(!rwChanged)return;rwChanged=false;
+      for(const row of document.querySelectorAll("[data-gear-uid]")){
+        const slot=row.querySelector(".inventory-rw-slot");
+        if(slot)slot.innerHTML=inventoryRwMarket(row.dataset.gearUid,Number(row.dataset.buyerItem));
+      }
+    },350);
   });
   function request(){
     window.dispatchEvent(new Event("torn-guide-request-snapshot"));
