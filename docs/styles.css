@@ -1893,3 +1893,17 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-gear-pair dt,.inventory-gear-pair dd{min-width:0;overflow-wrap:anywhere}
 .inventory-gear-wide{grid-template-columns:minmax(0,1fr) minmax(0,3fr)}
 #topic-view .inventory-item-tabs .inventory-gear-refresh{margin-inline-start:auto;align-self:center;padding:0;width:26px;height:26px;min-height:0}
+
+/* Wide desktop shell: aligned header, launcher and workspace; compact rails remain bounded. */
+@media(min-width:1400px){
+  :root{--guide-desktop-width:100%;--guide-desktop-gutter:clamp(16px,1.5vw,40px);--guide-left-width:clamp(205px,13vw,280px);--guide-right-width:clamp(274px,17vw,360px)}
+  .layout,.topbar-inner,.quick-access .quick-inner{width:100%;max-width:var(--guide-desktop-width);box-sizing:border-box;padding-inline:var(--guide-desktop-gutter)}
+  .layout{grid-template-columns:var(--guide-left-width) minmax(0,1fr) var(--guide-right-width)}
+  .layout:has(>.guide-right-rail[hidden]){grid-template-columns:var(--guide-left-width) minmax(0,1fr)}
+  .guide-right-rail{width:100%}
+}
+/* Auto-repeat counts tracks using its fixed maximum, so use a flexible
+   maximum for placement and cap each panel instead. */
+.inventory-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.inventory-grid>.inventory-panel{width:100%;max-width:560px;min-width:0;box-sizing:border-box}
+#topic-view:has(> .inventory-filterbar [data-inventory-filter]:not([data-inventory-filter="All"])[aria-pressed="true"]) > .inventory-grid > .inventory-panel{max-width:640px}
