@@ -262,7 +262,7 @@ const tornCrimeGuide = (() => {
     const educationRisk=enrolled&&highAddiction&&!protectedEducation;
     const blockDrugs=highAddiction&&(!enrolled||!protectedEducation);
     const session=loadTrainingSession();
-    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs,excludeOwned:excludeOwned(),skipPrograms:!!session});
+    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs,excludeOwned:excludeOwned(),skipPrograms:!!session,naturalOnly:prefs.priority!=="growth"});
     return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan};
   }
   let growthTab="summary";
@@ -391,7 +391,7 @@ const tornCrimeGuide = (() => {
   function growthCard(training,prefs){
     const activeSession=loadTrainingSession();
     const p=training.plan;
-    const setup=growthSettings()+(prefs.weeklyBudget==null?'<div class="growth-warning">Set a weekly training budget in Playstyle settings. <button type="button" data-growth-budget>Set budget</button></div>':"");
+    const setup=growthSettings()+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Playstyle settings. <button type="button" data-growth-budget>Set budget</button></div>':"");
     if(activeSession&&!p?.stats){const fmt=v=>v==null?"Unavailable":number(Math.round(v));const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",refill:"Points refill"};return '<div class="growth-card">'+setup+sessionPanel(p??{},training,names,fmt)+replayPanel(activeSession,fmt)+'<div class="growth-execution"><ol>'+sessionSteps(activeSession,names,fmt)+'</ol></div></div>';}
     if(p?.needsBuild)return setup+'<div class="growth-warning">Choose a stat build before receiving training recommendations. <a href="#stats">Select build</a></div>';
     if(!p?.stats)return setup+'<p class="fine-print">'+esc(p?.detail??"Load battle stats and choose a build in Stats.")+'</p><a href="#stats">View Stats</a>';
@@ -482,6 +482,14 @@ const tornCrimeGuide = (() => {
       const safeWindow=!session&&nextBooster?0:window;
       const amount=Math.max(0,Math.min(held,Math.floor(room/unit),Math.floor(safeWindow/unit),Math.ceil(n(bars.nerve.maximum)-nerve)));
       if(amount>0)add("consume","Alcohol · up to "+number(amount),number(held)+" held · "+(nextBooster?"Cooldown clears before the next training booster at "+sessionTime(nextBooster.due):"No remaining candy or DVD steps")+" · Conservative cooldown allowance.","#crime");
+    }
+    const refillRaw=payload("refills","refills"),refillStamp=Number(tornGuideApi.state.fetchedAt?.refills||0),moneyData=payload("money","money"),points=n(moneyData?.points??moneyData?.points?.current),free=n(refillRaw?.special_count??refillRaw?.special_refills_available);
+    const sameDay=refillStamp>0&&Math.floor(refillStamp/86400000)===Math.floor(now/86400000)&&!tornGuideApi.state.errors?.refills;
+    const used=sameDay&&typeof refillRaw?.nerve_refill_used==="boolean"?refillRaw.nerve_refill_used:null;
+    if(nerveRoom&&crimeActivity&&nerve<=Math.floor(n(bars.nerve.maximum)*.2)){
+      if(sameDay&&free>0)add("consume","Nerve refill · free refill available","Use a free refill when ready to commit crimes; verify the selected bar.","https://www.torn.com/points.php");
+      else if(used===false&&points>=30)add("consume","Nerve refill · 30 points","Daily refill unused · restore up to "+number(n(bars.nerve.maximum)-nerve)+" Nerve. Check remaining points before use.","https://www.torn.com/points.php");
+      else if(used!==true&&(points===null||points>=30))add("consume","Check daily Nerve refill","Refill low Nerve for 30 points if unused today; confirm availability in Points Building.","https://www.torn.com/points.php");
     }
     if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
     if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
