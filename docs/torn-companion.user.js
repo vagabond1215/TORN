@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Guide - Passive Visible Status Bridge
 // @namespace    https://vagabond1215.github.io/TORN/
-// @version      2.2.0
+// @version      2.3.0
 // @description  Synchronize visible status bars and ranked market observations to your local Torn City Guide. Read-only, no API key or network calls.
 // @match        https://www.torn.com/*
 // @match        https://torn.com/*
@@ -33,7 +33,7 @@
     const shareMarket=()=>{
       const packet=GM_getValue(marketKey,null);
       const snapshot=packet?.version===1&&Array.isArray(packet.rows)?packet:{version:1,rows:[]};
-      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...snapshot,companionVersion:"2.2.0",bridgeAt:Date.now()})}));
+      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...snapshot,companionVersion:"2.3.0",bridgeAt:Date.now()})}));
     };
     window.addEventListener("torn-guide-request-snapshot",shareMarket);
     GM_addValueChangeListener(marketKey,shareMarket);
@@ -115,60 +115,175 @@
     const stats={};for(const [k,v] of Object.entries({quality,damage,accuracy,armor}))if(v!==null)stats[k]=v;
     return {name,category:route.category,rarity,price,stats,bonuses,complete,rate:rate?[Number(rate[1]),Number(rate[2])]:null,ammo:ammo?[Number(ammo[1]),Number(ammo[2])]:null};
   }
-  function collectMarket(){
-    if(document.visibilityState!=="visible"||!document.hasFocus())return;
-    const route=marketRoute();if(!route)return;
-    const rows=[],buttons=Array.from(document.querySelectorAll('button[aria-label^="Buy item "]'));
-    let renderedCount=0,matchedCards=0,rankedCards=0;
-    for(const button of buttons){
-      if(!rendered(button))continue;
-      renderedCount++;
-      const m=button.getAttribute("aria-label").match(/^Buy item (.+), \$([\d,]+), 1 in total\.$/);
-      if(!m)continue;
-      const name=m[1],price=Number(m[2].replace(/,/g,""));
-      if(!Number.isSafeInteger(price)||price<=0)continue;
-      // Find a bounded listing ancestor, never collect surrounding market or chat.
-      let card=button.parentElement,best=null;
-      for(let depth=0;card&&depth<9;depth++,card=card.parentElement){
-        if(card.querySelectorAll('button[aria-label^="Buy item "]').length!==1)break;
-        const info=Array.from(card.querySelectorAll('button[aria-label^="View info for item "]')).some(b=>b.getAttribute("aria-label")==="View info for item "+name+".");
-        if(info)best=card;
-      }
-      if(!best||!rendered(best))continue;
-      matchedCards++;
-      const text=best.innerText||"";
-      const row=parseRankedCard(text,name,price,route);if(!row)continue;
-      rankedCards++;
-      // Collapsed weapon cards expose two standalone numeric stats. Do not guess
-      // when the row contains extra ambiguous numbers.
-      if(!row.complete&&route.category!=="Armor"&&route.category!=="Defensive"){
-        const numbers=text.split(/\n/).map(x=>x.trim()).filter(x=>/^\d{1,3}\.\d{2}$/.test(x)).map(Number);
-        if(numbers.length===2){row.stats.damage=numbers[0];row.stats.accuracy=numbers[1];}
-      }
-      const uid=best.getAttribute("data-uid")||best.getAttribute("data-item-uid");
-      if(uid&&/^[1-9]\d*$/.test(uid))row.uid=uid;
-      if(!row.complete&&!Object.keys(row.stats).length)continue;
-      // Without a real UID, fingerprint conservatively; identical records count once.
-      row.fingerprint=JSON.stringify([name,row.rarity,price,row.stats,row.bonuses]);
-      row.at=Date.now();rows.push(row);
+  // Incremental market collector: no periodic full-page market scan.
+  const buySelector='button[aria-label^="Buy item "]';
+  const infoSelector='button[aria-label^="View info for item "]';
+  const active=()=>document.visibilityState==="visible"&&document.hasFocus();
+  const maxStored=2500,maxQueue=12000;
+  let routeKey="",route=null,queue=new Set(),cards=new WeakMap(),owners=new WeakMap(),seen=new WeakMap(),boundaries=new WeakSet();
+  let workTimer=null,flushTimer=null,dirty=false,lastFlush=0,lastCapture=null,stored=null,metrics=null;
+  function freshMetrics(){return {buttons:0,rendered:0,matched:0,ranked:0,accepted:0,complete:0,duplicates:0,added:0,processed:0,batches:0,maxBatchMs:0,queued:0,dropped:0};}
+  function rowKey(row){return row.uid?"uid:"+row.uid:row.fingerprint;}
+  function readStore(){
+    if(stored)return stored;
+    const p=GM_getValue(marketKey,null);
+    stored=new Map();lastCapture=p?.diagnostic?.lastCapture??null;
+    for(const r of Array.isArray(p?.rows)?p.rows:[])if(r&&Number.isFinite(r.at)&&Date.now()-r.at<marketTTL&&rowKey(r))stored.set(rowKey(r),r);
+    return stored;
+  }
+  function flush(){
+    if(flushTimer!==null){clearTimeout(flushTimer);flushTimer=null;}
+    if(!dirty||!metrics||!route)return;
+    // Merge the latest persisted records once per write, not once per card.
+    const prior=GM_getValue(marketKey,null),stamp=Date.now(),map=new Map();
+    for(const r of Array.isArray(prior?.rows)?prior.rows:[])if(r&&stamp-r.at<marketTTL&&rowKey(r))map.set(rowKey(r),r);
+    for(const [k,r] of readStore()){const old=map.get(k);if(stamp-r.at<marketTTL&&(!old||r.complete&&!old.complete||r.complete===old.complete&&r.at>=old.at))map.set(k,r);}
+    const rows=Array.from(map.values()).sort((a,b)=>Number(b.complete)-Number(a.complete)||b.at-a.at).slice(0,maxStored);
+    stored=new Map(rows.map(r=>[rowKey(r),r]));
+    const diagnostic={...metrics,at:stamp,lastCapture,category:route.category,rarity:route.rarity,queued:queue.size,mode:"incremental"};
+    GM_setValue(marketKey,{version:1,diagnostic,rows});
+    lastFlush=stamp;dirty=false;
+  }
+  function scheduleFlush(){
+    dirty=true;
+    if(flushTimer===null)flushTimer=setTimeout(flush,Math.max(1000,30000-(Date.now()-lastFlush)));
+  }
+  function enqueue(button,force=false){
+    if(!button?.isConnected||!button.matches(buySelector))return;
+    if(!force&&seen.has(button))return;
+    if(queue.size>=maxQueue&&!queue.has(button)){metrics.dropped++;return;}
+    queue.add(button);
+  }
+  function locateCard(button,name){
+    const cached=cards.get(button);
+    if(cached?.isConnected&&cached.contains(button))return cached;
+    let best=null;
+    for(let el=button.parentElement,depth=0;el&&depth<9;el=el.parentElement,depth++){
+      if(boundaries.has(el))break;
+      const buttons=el.querySelectorAll(buySelector);
+      if(buttons.length!==1){boundaries.add(el);break;}
+      if(Array.from(el.querySelectorAll(infoSelector)).some(b=>b.getAttribute("aria-label")==="View info for item "+name+"."))best=el;
     }
-    const old=GM_getValue(marketKey,null),merged=new Map();
-    const stamp=Date.now();
-    for(const row of Array.isArray(old?.rows)?old.rows:[])if(Date.now()-row.at<marketTTL)merged.set(row.uid?"uid:"+row.uid:row.fingerprint,row);
-    let changed=false,duplicates=0,added=0;
-    for(const row of rows){
-      const key=row.uid?"uid:"+row.uid:row.fingerprint,prev=merged.get(key);
-      if(prev)duplicates++;else added++;
-      if(prev?.complete&&!row.complete)continue;
-      if(!prev||stamp-prev.at>=60000||prev.complete!==row.complete){merged.set(key,row);changed=true;}
+    if(best){cards.set(button,best);owners.set(best,button);}
+    return best;
+  }
+  function process(button){
+    metrics.processed++;
+    if(!button.isConnected||!rendered(button))return;
+    metrics.rendered++;
+    const label=button.getAttribute("aria-label")||"",m=label.match(/^Buy item (.+), \$([\d,]+), 1 in total\.$/);
+    if(!m)return;
+    const name=m[1],price=Number(m[2].replace(/,/g,""));
+    if(!Number.isSafeInteger(price)||price<=0)return;
+    const card=locateCard(button,name);if(!card||!rendered(card))return;
+    metrics.matched++;
+    const text=card.innerText||"",previous=seen.get(button);
+    if(previous?.text===text&&previous?.label===label)return;
+    seen.set(button,{text,label});
+    const row=parseRankedCard(text,name,price,route);if(!row)return;
+    metrics.ranked++;
+    if(!row.complete){
+      const nums=text.split(/\n/).map(x=>x.trim()).filter(x=>/^\d{1,3}\.\d{2}$/.test(x)).map(Number);
+      if(["Armor","Defensive"].includes(route.category)){if(nums.length===1)row.stats.armor=nums[0];}
+      else if(nums.length===2){row.stats.damage=nums[0];row.stats.accuracy=nums[1];}
+      // Only explicit, rendered card-local labels qualify. No hidden app state,
+      // network interception, arbitrary data attributes, or generic page text.
+      const hints=[];
+      for(const el of card.querySelectorAll("[title],[aria-label]")){
+        if(!rendered(el))continue;
+        for(const attr of ["title","aria-label"]){
+          const value=el.getAttribute(attr)||"";
+          if(/^(?:Quality|Bonus(?:es)?)\s*:/i.test(value)&&value.length<=180)hints.push(value);
+        }
+      }
+      if(hints.length){
+        const extra=parseRankedCard(text+"\n"+Array.from(new Set(hints)).join("\n"),name,price,route);
+        if(extra){Object.assign(row.stats,extra.stats);if(extra.bonuses.length)row.bonuses=extra.bonuses;}
+      }
+      // An explicitly expanded row is the only proven complete bonus signature.
+      // Tooltip-only bonuses can be partial; retain them but do not mark complete.
     }
-    const diagnostic={at:stamp,lastCapture:rows.length?stamp:(old?.diagnostic?.lastCapture??null),category:route.category,rarity:route.rarity,buttons:buttons.length,rendered:renderedCount,matched:matchedCards,ranked:rankedCards,accepted:rows.length,complete:rows.filter(r=>r.complete).length,duplicates,added};
-    const prior=old?.diagnostic;
-    const signature=d=>JSON.stringify([d?.category,d?.rarity,d?.buttons,d?.rendered,d?.matched,d?.ranked,d?.accepted,d?.complete]);
-    if(changed||!prior||signature(prior)!==signature(diagnostic)||stamp-prior.at>=60000){
-      GM_setValue(marketKey,{version:1,diagnostic,rows:Array.from(merged.values()).sort((a,b)=>b.at-a.at).slice(0,2500)});
+    const uid=card.getAttribute("data-uid")||card.getAttribute("data-item-uid");
+    if(uid&&/^[1-9]\d*$/.test(uid))row.uid=uid;
+    if(!Object.keys(row.stats).length) return;
+    row.fingerprint=JSON.stringify([name,row.rarity,price,row.stats,row.bonuses]);
+    row.at=Date.now();lastCapture=row.at;metrics.accepted++;if(row.complete)metrics.complete++;
+    const map=readStore(),k=rowKey(row),prev=map.get(k);
+    if(prev){metrics.duplicates++;if(prev.complete&&!row.complete)return;}
+    else metrics.added++;
+    map.set(k,row);
+    // Bound transient memory even when loading a very long market page.
+    if(map.size>maxStored+500){
+      const keep=Array.from(map.values()).sort((a,b)=>Number(b.complete)-Number(a.complete)||b.at-a.at).slice(0,maxStored);
+      stored=new Map(keep.map(r=>[rowKey(r),r]));
     }
   }
+  function runBatch(){
+    workTimer=null;
+    if(!active()||!route||location.hash!==routeKey)return;
+    const start=performance.now();let n=0;
+    while(queue.size&&n<24&&performance.now()-start<8){
+      const button=queue.values().next().value;queue.delete(button);
+      try{process(button);}catch{}n++;
+    }
+    metrics.batches++;metrics.maxBatchMs=Math.max(metrics.maxBatchMs,Math.round(performance.now()-start));metrics.queued=queue.size;
+    scheduleFlush();
+    if(queue.size)kick();
+  }
+  function kick(){if(workTimer===null&&queue.size&&active())workTimer=setTimeout(runBatch,40);}
+  function resetMarket(){
+    if(!active())return;
+    const next=marketRoute(),hash=location.hash;
+    if(hash===routeKey&&route){kick();return;}
+    if(dirty)flush();
+    routeKey=hash;route=next;queue.clear();cards=new WeakMap();owners=new WeakMap();seen=new WeakMap();boundaries=new WeakSet();metrics=freshMetrics();
+    if(!route)return;
+    // Initial scan once per manually selected route. Subsequent work uses mutations.
+    setTimeout(()=>{
+      if(!active()||!route||location.hash!==hash||routeKey!==hash)return;
+      for(const button of document.querySelectorAll(buySelector)){metrics.buttons++;enqueue(button);}
+      scheduleFlush();kick();
+    },600);
+  }
+  function ownerOf(node){
+    for(let el=node?.nodeType===1?node:node?.parentElement,depth=0;el&&depth<12;el=el.parentElement,depth++){
+      const b=owners.get(el);if(b)return b;
+    }
+    return null;
+  }
+  function marketMutations(records){
+    if(!active())return;
+    if(location.hash!==routeKey||!route){resetMarket();return;}
+    if(!marketRoute())return;
+    for(const r of records){
+      if(r.type==="attributes"){
+        if(r.target.matches?.(buySelector)){enqueue(r.target,true);continue;}
+        const b=ownerOf(r.target);if(b)enqueue(b,true);
+      }else{
+        const b=ownerOf(r.target);if(b)enqueue(b,true);
+        for(const node of r.addedNodes??[]){
+          if(node.nodeType!==1)continue;
+          if(node.matches(buySelector)){metrics.buttons++;enqueue(node);}
+          for(const button of node.querySelectorAll(buySelector)){metrics.buttons++;enqueue(button);}
+        }
+      }
+    }
+    kick();
+  }
+  // Explicit user expansions may change card content without replacing the buy button.
+  document.addEventListener("click",event=>{
+    if(!active()||!marketRoute()||!event.target.closest?.(infoSelector))return;
+    const button=ownerOf(event.target);
+    if(button)setTimeout(()=>{if(active()){enqueue(button,true);kick();}},350);
+  },true);
+  const marketObserver=new MutationObserver(marketMutations);
+  if(document.body)marketObserver.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:["aria-label","title","aria-expanded"]});
+  window.addEventListener("focus",resetMarket);
+  window.addEventListener("hashchange",resetMarket);
+  window.addEventListener("blur",()=>{if(dirty)flush();});
+  document.addEventListener("visibilitychange",()=>{if(active())resetMarket();else if(dirty)flush();});
+  window.addEventListener("pagehide",()=>{if(dirty)flush();});
+  resetMarket();
   // Observe already loaded pages. Never open tabs, refresh Torn, click controls,
   // issue requests, collect credentials, chat, or unrelated page contents.
   let pending=null, lastRead=0;
@@ -176,7 +291,6 @@
     pending=null;
     if(document.visibilityState!=="visible")return;
     lastRead=Date.now();
-    try{collectMarket();}catch{}
     try{
       const packet=extract(),previous=GM_getValue(key,null);
       // Require a complete bar set so an intermediate DOM render cannot
