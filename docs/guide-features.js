@@ -1030,17 +1030,21 @@ function inventoryBuyerResults(id,qty){
     (more.length?'<details><summary>More pricelist buyers ('+more.length+')</summary>'+more.map(buyer).join("")+'</details>':"");
 }
 
-function inventoryGearTitle(uid,category,name,equipped){
+function inventoryGearTitle(uid,category,name,equipped,info={}){
   const gear=tornGuideApi.readGear(uid).item;
   const rarity=String(gear?.rarity??"").toLowerCase();
   const ranked=["yellow","orange","red"].includes(rarity);
   const stats=gear?.stats??{};
   const num=v=>typeof v==="number"&&Number.isFinite(v)?v.toFixed(2):null;
   const quality=num(stats.quality),damage=num(stats.damage),accuracy=num(stats.accuracy),armor=num(stats.armor);
+  const coverage=info.details?.coverage;
+  const values=Array.isArray(coverage)?coverage.map(x=>x?.value):[];
+  const coverageText=values.length===1&&typeof values[0]==="number"&&Number.isFinite(values[0])?values[0]+"%":values.length>1&&values.every(v=>typeof v==="number"&&Number.isFinite(v))?values.map(v=>v+"%").join(", "):"—";
+  const coverageLabel=Array.isArray(coverage)?coverage.map(x=>x.name+" "+x.value+"%").join(" · "):"Coverage unavailable";
   const field=(label,value)=>value==null?"":'<span class="inventory-title-stat" title="'+safe(label)+'">'+safe(value)+'</span>';
   const bonuses=Array.isArray(gear?.bonuses)?gear.bonuses:[];
   return '<span class="inventory-title-content'+(ranked?" rarity-"+rarity:"")+'"><span class="inventory-title-name">'+safe(name)+(equipped?inventoryEquippedIcon:"")+'</span>'+
-    (ranked?field("Quality",quality===null?null:quality+"%")+(category==="Defensive"?field("Armor rating",armor===null?null:"ARM "+armor):field("Damage | Accuracy",damage!==null||accuracy!==null?"DMG "+(damage??"—")+" | ACC "+(accuracy??"—"):null))+
+    (ranked?field("Quality",quality===null?null:quality+"%")+(category==="Defensive"?field("Armor rating / Coverage · "+coverageLabel,armor===null?null:"ARMOR "+armor+" / "+coverageText):field("Damage | Accuracy",damage!==null||accuracy!==null?"DMG "+(damage??"—")+" | ACC "+(accuracy??"—"):null))+
     bonuses.map(b=>field("Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join(""):"")+'</span>';
 }
 function inventoryGearMarkup(uid,category,info,equipped){
@@ -1079,7 +1083,7 @@ if(typeof document!=="undefined")document.addEventListener("click",async event=>
       const info=catalog.find(x=>String(x.id)===target.dataset.buyerItem)??{};
       panel.outerHTML=inventoryGearMarkup(target.dataset.gearUid,target.dataset.gearCategory,info,target.dataset.gearEquipped==="true");
       const title=target.querySelector(".inventory-row-title");
-      if(title)title.innerHTML=inventoryGearTitle(target.dataset.gearUid,target.dataset.gearCategory,title.dataset.titleName,title.dataset.titleEquipped==="true");
+      if(title)title.innerHTML=inventoryGearTitle(target.dataset.gearUid,target.dataset.gearCategory,title.dataset.titleName,title.dataset.titleEquipped==="true",info);
       if(target.dataset.gearUid===uid)target.querySelector(".inventory-gear-status").textContent=result.errors.join(" · ");
     }
   }catch(error){if(row.isConnected)row.querySelector(".inventory-gear-status").textContent=error.message;}
@@ -1115,7 +1119,7 @@ function inventoryDetailRow(item,category,index){
   const gear=["Primary","Secondary","Melee","Defensive"].includes(category);
   const tab=inventoryTabs.get(rowKey)??"details";
   const tabbar='<div class="inventory-item-tabs" role="group" aria-label="Item information">'+["details","market"].map(t=>'<button type="button" data-inventory-tab="'+t+'" aria-pressed="'+(tab===t)+'">'+(t==="details"?"Details":"Market")+'</button>').join("")+'</div>';
-  return '<li class="inventory-detail-row" '+(gear?'data-gear-uid="'+safe(uid??"")+'" data-gear-category="'+safe(category)+'" data-gear-equipped="'+Boolean(item.equipped)+'" ':"")+'data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span class="inventory-row-title" data-title-name="'+safe(name)+'" data-title-equipped="'+Boolean(item.equipped)+'">'+(gear?inventoryGearTitle(uid,category,name,item.equipped):safe(name)+(item.equipped?inventoryEquippedIcon:""))+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span>'+(id?'<button type="button" class="inventory-inline-search" data-query-buyers aria-label="Query Weav3r buyers for '+safe(name)+'" title="Query Weav3r buyers" '+(weav3rBuyers.pending(id)?'disabled aria-busy="true"':'')+'>'+inventorySearchIcon+'</button>':'')+'<strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body">'+tabbar+'<div data-inventory-tab-panel="details" '+(tab!=="details"?"hidden":"")+'><p>'+safe(description)+'</p>'+inventoryGearMarkup(uid,category,info,item.equipped)+(effects?'<section class="inventory-item-effects"><h4>Effects</h4><p>'+safe(effects)+'</p></section>':"")+'</div><div data-inventory-tab-panel="market" '+(tab!=="market"?"hidden":"")+'><dl><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+(info.circulation!=null&&Number.isFinite(Number(info.circulation))?'<dt>Circulation</dt><dd>'+safe(formatNumber(Number(info.circulation)))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
+  return '<li class="inventory-detail-row" '+(gear?'data-gear-uid="'+safe(uid??"")+'" data-gear-category="'+safe(category)+'" data-gear-equipped="'+Boolean(item.equipped)+'" ':"")+'data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span class="inventory-row-title" data-title-name="'+safe(name)+'" data-title-equipped="'+Boolean(item.equipped)+'">'+(gear?inventoryGearTitle(uid,category,name,item.equipped,info):safe(name)+(item.equipped?inventoryEquippedIcon:""))+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span>'+(id?'<button type="button" class="inventory-inline-search" data-query-buyers aria-label="Query Weav3r buyers for '+safe(name)+'" title="Query Weav3r buyers" '+(weav3rBuyers.pending(id)?'disabled aria-busy="true"':'')+'>'+inventorySearchIcon+'</button>':'')+'<strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body">'+tabbar+'<div data-inventory-tab-panel="details" '+(tab!=="details"?"hidden":"")+'><p>'+safe(description)+'</p>'+inventoryGearMarkup(uid,category,info,item.equipped)+(effects?'<section class="inventory-item-effects"><h4>Effects</h4><p>'+safe(effects)+'</p></section>':"")+'</div><div data-inventory-tab-panel="market" '+(tab!=="market"?"hidden":"")+'><dl><dt>Market value</dt><dd>'+(validPrice?'$'+safe(formatNumber(Number(price)))+' each':'Unavailable')+'</dd>'+(validPrice&&Number.isFinite(qty)&&qty>=0?'<dt>Estimated stack value</dt><dd>$'+safe(formatNumber(Number(price)*qty))+'</dd>':'')+(info.circulation!=null&&Number.isFinite(Number(info.circulation))?'<dt>Circulation</dt><dd>'+safe(formatNumber(Number(info.circulation)))+'</dd>':'')+'</dl>'+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
     '<div class="inventory-market-actions">'+(url?'<a class="inventory-market-link" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Open Weav3r marketplace</a>':
     '<small>Item ID unavailable; marketplace search disabled.</small>')+'</div>'+
     (id?'<p class="inventory-buyer-status" role="status"></p><div class="inventory-buyer-results">'+inventoryBuyerResults(id,qty)+'</div>':"")+
