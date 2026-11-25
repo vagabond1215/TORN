@@ -1768,3 +1768,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 #topic-view .inventory-item-tabs button[aria-pressed="true"]{background:transparent;color:var(--accent-strong);box-shadow:inset 0 -2px var(--accent-strong)}
 #topic-view .inventory-item-tabs button:hover{color:var(--accent-strong)}
 .inventory-detail-body [data-inventory-tab-panel][hidden]{display:none!important}
+
+.inventory-gear{border-top:1px solid var(--border);padding-top:.45rem;margin-top:.4rem}
+.inventory-gear h4{margin:0 0 .3rem;font-size:.83rem;color:var(--accent-strong)}
+.inventory-gear-bonuses,.inventory-gear-mods{margin:.5rem 0;display:grid;gap:.25rem}
+.inventory-gear-bonuses small{display:block;color:var(--muted);font-weight:normal}
+.inventory-gear-bonuses.rarity-yellow{color:#d4b645}.inventory-gear-bonuses.rarity-orange{color:#df9245}.inventory-gear-bonuses.rarity-red{color:#eb7777}
+.inventory-gear-status:empty{display:none}
