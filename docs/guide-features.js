@@ -258,10 +258,16 @@ const tornGuideApi=(()=>{
   }
   const rwCache=new Map(),rwPending=new Map();
   const passiveRwKey="torn-city-guide:passive-rw:v1";
-  let passiveRw=[];
+  let passiveRw=[],passiveRwDiagnostic=null,passiveRwBridge=null;
   try{const saved=JSON.parse(localStorage.getItem(passiveRwKey)||"[]");if(Array.isArray(saved))passiveRw=saved;}catch{}
   function acceptRwSnapshot(packet){
     if(packet?.version!==1||!Array.isArray(packet.rows))return false;
+    const d=packet.diagnostic;
+    if(typeof packet.companionVersion==="string"&&/^\d+\.\d+\.\d+$/.test(packet.companionVersion))passiveRwBridge={version:packet.companionVersion,at:now()};
+    if(d&&Number.isFinite(d.at)&&d.at<=now()+5000&&["Primary","Secondary","Melee","Armor","Defensive"].includes(d.category)){
+      const counts={};for(const k of ["buttons","rendered","matched","ranked","accepted","complete","duplicates","added"])counts[k]=Number.isSafeInteger(d[k])&&d[k]>=0&&d[k]<=100000?d[k]:null;
+      passiveRwDiagnostic={...counts,at:d.at,lastCapture:Number.isFinite(d.lastCapture)&&d.lastCapture<=now()+5000?d.lastCapture:null,category:d.category,rarity:["yellow","orange","red"].includes(d.rarity)?d.rarity:null};
+    }
     const clean=[];
     for(const x of packet.rows.slice(0,2500)){
       if(!x||typeof x.name!=="string"||!x.name.trim()||x.name.length>120||
@@ -272,7 +278,8 @@ const tornGuideApi=(()=>{
       const bonuses=Array.isArray(x.bonuses)?x.bonuses.slice(0,3).filter(b=>b&&typeof b.title==="string"&&/^[A-Za-z][A-Za-z '-]{0,40}$/.test(b.title)&&Number.isFinite(b.value)&&b.value>=0&&b.value<=10000).map(b=>({title:b.title,value:b.value})):[];
       const complete=x.complete===true&&Number.isFinite(stats.quality)&&bonuses.length>0&&bonuses.length===x.bonuses?.length&&(Number.isFinite(stats.armor)||Number.isFinite(stats.damage)&&Number.isFinite(stats.accuracy));
       const uid=gearUid(x.uid);
-      clean.push({name:x.name,category:x.category,rarity:x.rarity,price:x.price,stats,bonuses,complete,uid,at:x.at});
+      const pair=(v,max)=>Array.isArray(v)&&v.length===2&&v.every(n=>Number.isSafeInteger(n)&&n>0&&n<=max)?v.slice():null;
+      clean.push({name:x.name,category:x.category,rarity:x.rarity,price:x.price,stats,bonuses,complete,uid,at:x.at,rate:pair(x.rate,500),ammo:pair(x.ammo,1000)});
     }
     const next=JSON.stringify(clean);
     if(next===JSON.stringify(passiveRw))return false;
@@ -280,6 +287,7 @@ const tornGuideApi=(()=>{
     try{localStorage.setItem(passiveRwKey,next);}catch{}
     return true;
   }
+  function passiveRwReport(){return {version:1,bridge:passiveRwBridge,diagnostic:passiveRwDiagnostic,rows:passiveRw.filter(x=>now()-x.at<=72*hrs&&x.at<=now()+5000)};}
   function readPassiveRwMarket(id,rarity){
     const raw=state.data.itemCatalog;
     const items=raw?.items??raw?.data?.items??raw?.payload?.items;
@@ -523,7 +531,7 @@ const tornGuideApi=(()=>{
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,readCrimeProgress,loadCrimeProgress,
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,passiveRwReport,readCrimeProgress,loadCrimeProgress,
     disconnect,restore,setRemember,isRemembering:()=>remember,
     isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
@@ -1180,6 +1188,32 @@ function rwComparableEstimate(gear,rows,uid){
   for(const x of weighted){running+=x.w;median=x.price;if(running>=half)break;}
   return {count:selected.length,rows:selected,estimate:median,low:quantile(.25),high:quantile(.75),confidence:close.length>=5?"Higher match":close.length>=3?"Moderate match":"Low match"};
 }
+function inventoryRwDiagnosticsBody(){
+  const {rows,bridge,diagnostic:d}=tornGuideApi.passiveRwReport();
+  const full=rows.filter(x=>x.complete).length,models=new Map();
+  for(const x of rows){const key=x.name,entry=models.get(key)??{name:key,total:0,full:0,yellow:0,orange:0,red:0};entry.total++;if(x.complete)entry.full++;entry[x.rarity]++;models.set(key,entry);}
+  const count=(label,value)=>'<div><small>'+safe(label)+'</small><strong>'+safe(value??"—")+'</strong></div>';
+  const stamp=v=>v?new Date(v).toLocaleString():"Not recorded";
+  const byRarity=["yellow","orange","red"].map(r=>count(r[0].toUpperCase()+r.slice(1),rows.filter(x=>x.rarity===r).length)).join("");
+  const scan=d?'<p class="fine-print">Last scan: '+safe(d.category)+' · '+safe(d.rarity??"unfiltered")+' · '+safe(stamp(d.at))+'</p><div class="rw-diagnostic-counts">'+count("Buy buttons",d.buttons)+count("Rendered",d.rendered)+count("Matched cards",d.matched)+count("Ranked",d.ranked)+count("Accepted",d.accepted)+count("Full details",d.complete)+count("Duplicates",d.duplicates)+count("New records",d.added)+'</div>':'<p class="fine-print">No scan diagnostics received. Install companion 2.2.0 and focus an equipment market page.</p>';
+  return '<div class="rw-diagnostic-actions"><span role="status">'+safe(bridge?"Companion "+bridge.version+" connected · "+stamp(bridge.at):"No live companion handshake yet")+'</span><button type="button" class="button secondary" data-rw-sync>Sync local data</button><button type="button" class="button secondary" data-rw-export>Export JSON</button></div>'+
+    '<div class="rw-diagnostic-counts">'+count("Stored observations",rows.length)+count("Complete",full)+count("Partial",rows.length-full)+count("Models",models.size)+byRarity+'</div>'+
+    '<p class="fine-print">Last successful capture: '+safe(stamp(d?.lastCapture??(rows.length?Math.max(...rows.map(r=>r.at)):null)))+'</p>'+scan+
+    (models.size?'<div class="rw-diagnostic-table"><table><thead><tr><th>Equipment</th><th>All</th><th>Full</th><th>Yellow</th><th>Orange</th><th>Red</th></tr></thead><tbody>'+Array.from(models.values()).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name)).map(x=>'<tr><td>'+safe(x.name)+'</td>'+["total","full","yellow","orange","red"].map(k=>'<td>'+x[k]+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>':"")+
+    '<p class="fine-print">Local observations only; 72-hour retention, 2,500-record limit. Duplicate count refers to the last scan, not lifetime. No Torn API requests.</p>';
+}
+function inventoryRwDiagnostics(){
+  return '<details class="rw-diagnostic-panel"><summary>Passive RW market diagnostics</summary><div data-rw-diagnostics>'+inventoryRwDiagnosticsBody()+'</div></details>';
+}
+function refreshRwDiagnostics(){
+  for(const el of document.querySelectorAll("[data-rw-diagnostics]"))el.innerHTML=inventoryRwDiagnosticsBody();
+}
+if(typeof document!=="undefined")document.addEventListener("click",event=>{
+  if(event.target.closest?.("[data-rw-sync]"))window.dispatchEvent(new Event("torn-guide-request-snapshot"));
+  if(!event.target.closest?.("[data-rw-export]"))return;
+  const report=tornGuideApi.passiveRwReport(),url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:"application/json"}));
+  const link=document.createElement("a");link.href=url;link.download="torn-rw-observations-"+new Date().toISOString().slice(0,10)+".json";document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
 function inventoryRwMarket(uid,id){
   const gear=tornGuideApi.readGear(uid).item,rarity=gear?.rarity;
   if(!id||!["yellow","orange","red"].includes(rarity))return "";
@@ -1332,7 +1366,7 @@ if(typeof document!=="undefined")document.addEventListener("click",async event=>
 });
 
 function renderInventoryPage(){
-  let out=inventoryFilterBar()+'<h1 id="topic-title" tabindex="-1" class="sr-only">Inventory</h1>';
+  let out=inventoryFilterBar()+'<h1 id="topic-title" tabindex="-1" class="sr-only">Inventory</h1>'+inventoryRwDiagnostics();
   if(!tornGuideApi.isConnected())return out+'<section class="panel"><div class="panel-content">Connect your account to load inventory.</div></section>';
   const st=tornGuideApi.state;
   out+='<div class="inventory-grid">';
