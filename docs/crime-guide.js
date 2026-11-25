@@ -244,7 +244,7 @@ const tornCrimeGuide = (() => {
     if(plan){
       add("growth","Train "+plan.stat,plan.detail,"#stats");
       const p=plan.program;
-      if(p)add("growth","Recommended program: "+p.label,"7-day estimated gain: +"+number(Math.round(p.gain))+" · "+number(p.used)+" E · $"+number(Math.round(p.money))+" / week · "+Object.entries(p.costs).filter(([,qty])=>qty>0).map(([type,qty])=>qty+" "+type).join(", ")+(prefs.weeklyBudget===null?" · Set a weekly budget to compare paid programs.":" · Budget $"+number(prefs.weeklyBudget))+" · Highest estimated gain among tested affordable programs; prices and cooldowns may change.","#stats");
+      if(p)add("growth","Recommended program: "+p.label,"7-day estimated gain: +"+number(Math.round(p.gain))+" · "+number(p.used)+" E · $"+number(Math.round(p.money))+" / week · "+Object.entries(p.costs).filter(([,qty])=>qty>0).map(([type,qty])=>qty+" "+type).join(", ")+(prefs.weeklyBudget===null?" · Set a weekly budget to compare paid programs.":" · Budget $"+number(prefs.weeklyBudget))+(p.cycles>0?" · "+p.cycles+" plan cycle"+(p.cycles===1?"":"s")+" × "+number(p.blockHours)+"h; natural training between/after cycles":"")+(p.drugRisk&&risk==="low"?" · Drug use conflicts with low-risk preference; overdose and addiction not modeled.":"")+" · Highest estimated gain among affordable Stats → Plan templates; prices and cooldowns may change.","#stats");
       else add("growth","Training program unavailable","Load current gym, bars and battle stats to compare weekly training programs.","#stats");
     }else add("growth","Review your build targets","Load current battle stats and select a build on Stats.","#stats");
     const bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns");
