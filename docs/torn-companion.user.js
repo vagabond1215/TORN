@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Guide - Passive Visible Status Bridge
 // @namespace    https://vagabond1215.github.io/TORN/
-// @version      2.1.0
+// @version      2.2.0
 // @description  Synchronize visible status bars and ranked market observations to your local Torn City Guide. Read-only, no API key or network calls.
 // @match        https://www.torn.com/*
 // @match        https://torn.com/*
@@ -32,7 +32,8 @@
     };
     const shareMarket=()=>{
       const packet=GM_getValue(marketKey,null);
-      if(packet?.version===1&&Array.isArray(packet.rows))window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify(packet)}));
+      const snapshot=packet?.version===1&&Array.isArray(packet.rows)?packet:{version:1,rows:[]};
+      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...snapshot,companionVersion:"2.2.0",bridgeAt:Date.now()})}));
     };
     window.addEventListener("torn-guide-request-snapshot",shareMarket);
     GM_addValueChangeListener(marketKey,shareMarket);
@@ -117,9 +118,11 @@
   function collectMarket(){
     if(document.visibilityState!=="visible"||!document.hasFocus())return;
     const route=marketRoute();if(!route)return;
-    const rows=[];
-    for(const button of document.querySelectorAll('button[aria-label^="Buy item "]')){
+    const rows=[],buttons=Array.from(document.querySelectorAll('button[aria-label^="Buy item "]'));
+    let renderedCount=0,matchedCards=0,rankedCards=0;
+    for(const button of buttons){
       if(!rendered(button))continue;
+      renderedCount++;
       const m=button.getAttribute("aria-label").match(/^Buy item (.+), \$([\d,]+), 1 in total\.$/);
       if(!m)continue;
       const name=m[1],price=Number(m[2].replace(/,/g,""));
@@ -132,8 +135,10 @@
         if(info)best=card;
       }
       if(!best||!rendered(best))continue;
+      matchedCards++;
       const text=best.innerText||"";
       const row=parseRankedCard(text,name,price,route);if(!row)continue;
+      rankedCards++;
       // Collapsed weapon cards expose two standalone numeric stats. Do not guess
       // when the row contains extra ambiguous numbers.
       if(!row.complete&&route.category!=="Armor"&&route.category!=="Defensive"){
@@ -147,16 +152,22 @@
       row.fingerprint=JSON.stringify([name,row.rarity,price,row.stats,row.bonuses]);
       row.at=Date.now();rows.push(row);
     }
-    if(!rows.length)return;
     const old=GM_getValue(marketKey,null),merged=new Map();
+    const stamp=Date.now();
     for(const row of Array.isArray(old?.rows)?old.rows:[])if(Date.now()-row.at<marketTTL)merged.set(row.uid?"uid:"+row.uid:row.fingerprint,row);
-    let changed=false;
+    let changed=false,duplicates=0,added=0;
     for(const row of rows){
       const key=row.uid?"uid:"+row.uid:row.fingerprint,prev=merged.get(key);
+      if(prev)duplicates++;else added++;
       if(prev?.complete&&!row.complete)continue;
-      if(!prev||Date.now()-prev.at>=60000||prev.complete!==row.complete){merged.set(key,row);changed=true;}
+      if(!prev||stamp-prev.at>=60000||prev.complete!==row.complete){merged.set(key,row);changed=true;}
     }
-    if(changed)GM_setValue(marketKey,{version:1,rows:Array.from(merged.values()).sort((a,b)=>b.at-a.at).slice(0,2500)});
+    const diagnostic={at:stamp,lastCapture:rows.length?stamp:(old?.diagnostic?.lastCapture??null),category:route.category,rarity:route.rarity,buttons:buttons.length,rendered:renderedCount,matched:matchedCards,ranked:rankedCards,accepted:rows.length,complete:rows.filter(r=>r.complete).length,duplicates,added};
+    const prior=old?.diagnostic;
+    const signature=d=>JSON.stringify([d?.category,d?.rarity,d?.buttons,d?.rendered,d?.matched,d?.ranked,d?.accepted,d?.complete]);
+    if(changed||!prior||signature(prior)!==signature(diagnostic)||stamp-prior.at>=60000){
+      GM_setValue(marketKey,{version:1,diagnostic,rows:Array.from(merged.values()).sort((a,b)=>b.at-a.at).slice(0,2500)});
+    }
   }
   // Observe already loaded pages. Never open tabs, refresh Torn, click controls,
   // issue requests, collect credentials, chat, or unrelated page contents.
