@@ -423,6 +423,33 @@ const tornCrimeGuide = (() => {
     return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
 
+  // Keep independent tile heights while retaining the existing priority order.
+  let recMasonryObserver=null,recMasonryGrid=null,recMasonryFrame=0;
+  function layoutRecommendations(view){
+    const grid=view.querySelector(".rec-tile-grid");
+    if(grid===recMasonryGrid&&grid?.isConnected)return;
+    recMasonryObserver?.disconnect();
+    if(recMasonryFrame)cancelAnimationFrame(recMasonryFrame);
+    recMasonryFrame=0;recMasonryGrid=grid;
+    if(!grid||typeof ResizeObserver==="undefined")return;
+    const tiles=[...grid.querySelectorAll(":scope > .rec-tile")];
+    if(!tiles.length)return;
+    const pack=()=>{
+      if(!grid.isConnected)return;
+      const gap=parseFloat(getComputedStyle(grid).columnGap)||10;
+      const heights=tiles.map(tile=>Math.ceil(tile.getBoundingClientRect().height+gap));
+      if(heights.some(h=>h<=gap))return;
+      for(let i=0;i<tiles.length;i++){
+        const span="span "+heights[i];
+        if(tiles[i].style.gridRowEnd!==span)tiles[i].style.gridRowEnd=span;
+      }
+      grid.classList.add("rec-masonry");
+    };
+    const schedule=()=>{if(!recMasonryFrame)recMasonryFrame=requestAnimationFrame(()=>{recMasonryFrame=0;pack();});};
+    recMasonryObserver=new ResizeObserver(schedule);
+    for(const tile of tiles)recMasonryObserver.observe(tile);
+    pack();
+  }
   function refreshRecommendations(view){
     const panel=view.querySelector("[data-home-recommendations]");if(!panel)return;
     const opened=[...panel.querySelectorAll(".rec-group")].map(el=>[el.querySelector("summary")?.textContent?.replace(/ \(\d+\)$/,""),el.open]);
@@ -432,8 +459,10 @@ const tornCrimeGuide = (() => {
       const name=el.querySelector("summary")?.textContent?.replace(/ \(\d+\)$/,"");
       const prior=opened.find(([key])=>key===name);if(prior)el.open=prior[1];
     }
+    layoutRecommendations(view);
   }
   function wireRecommendations(view){
+    layoutRecommendations(view);
     if(view.dataset.ocRecommendationsBound==="1")return;
     view.dataset.ocRecommendationsBound="1";
     view.addEventListener("toggle",e=>{
