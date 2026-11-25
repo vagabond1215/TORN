@@ -150,7 +150,7 @@ const tornCrimeGuide = (() => {
   function loadRecFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
-    recOwner=owner;recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
+    recOwner=owner;growthExecutionOpen=false;try{growthExecutionOpen=localStorage.getItem("torn-city-guide:growth-execution:"+owner)==="true";}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
     try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v))recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}
   }
   const recTileStart=(id,label)=>'<details class="rec-tile" data-rec-group="'+esc(id)+'" '+(recExpanded.has(id)?"open":"")+'><summary class="rec-tile-heading"><span>'+esc(label)+'</span></summary><div class="rec-tile-body">';
@@ -260,6 +260,22 @@ const tornCrimeGuide = (() => {
     const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs});
     return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan};
   }
+  let growthExecutionOpen=false;
+  function growthCard(training,prefs){
+    const p=training.plan;
+    if(!p?.stats)return '<p class="fine-print">'+esc(p?.detail??"Load battle stats and choose a build in Stats.")+'</p><a href="#stats">View Stats</a>';
+    const prog=p.program,fmt=v=>number(Math.round(v)),perc=v=>Number.isFinite(v)?v.toFixed(1)+"%":"Unavailable";
+    const max=Math.max(1,...p.stats.map(s=>s.target));
+    const stats=p.stats.map(s=>'<div class="growth-stat '+(s.key===p.statKey?"is-target":"")+'"><div class="growth-stat-label"><strong>'+esc(s.label)+'</strong><span>'+fmt(s.current)+' / '+fmt(s.target)+'</span></div><div class="growth-stat-track" title="Current '+fmt(s.current)+'; build target '+fmt(s.target)+'"><span class="growth-target-bar" style="width:'+Math.min(100,s.target/max*100)+'%"></span><span class="growth-current-bar" style="width:'+Math.min(100,s.current/max*100)+'%"></span></div></div>').join("");
+    const chips=p.perks.map(x=>'<span class="growth-perk" title="'+esc(x.items.map(y=>y.text).join("; "))+'">'+esc(x.group==="book"?"Book active":x.group.charAt(0).toUpperCase()+x.group.slice(1))+' '+(x.total>0?"+":"")+perc(x.total)+'</span>');
+    if(p.bliss)chips.push('<span class="growth-perk">Ignorance Is Bliss</span>');
+    if(p.happy!=null&&p.maxHappy!=null&&Number(p.happy)<Number(p.maxHappy))chips.push('<span class="growth-warning" title="'+esc(fmt(p.happy)+" / "+fmt(p.maxHappy))+'">Low Happy</span>');
+    if(training.educationRisk)chips.push('<span class="growth-warning">Education risk · no drugs</span>');
+    const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",train:"Train "+p.stat,refill:"Points refill",wait:"Wait",autoWait:"Wait",externalHappy:"External happiness"};
+    const clock=t=>Number.isFinite(t)?(Math.floor(t/86400)>0?"D"+(Math.floor(t/86400)+1)+" · ":"")+Math.floor(t%86400/3600)+"h "+Math.floor(t%3600/60)+"m":"";
+    const execution=(prog?.execution??[]).filter(x=>x.type!=="train"||x.energy>0).filter(x=>!["candy","dvd"].includes(x.type)||x.quantity>0).map(x=>'<li><time>'+esc(clock(x.at))+'</time><span>'+esc(names[x.type]??x.type)+(x.type==="train"?" · "+fmt(x.energy)+" E":["candy","dvd"].includes(x.type)?" × "+fmt(x.quantity):"")+(x.reason?" · "+esc(x.reason):"")+(["wait","autoWait"].includes(x.type)&&Number.isFinite(x.end)&&Number.isFinite(x.at)?" · "+fmt((x.end-x.at)/60)+" min":"")+'</span></li>').join("");
+    return '<div class="growth-card"><div class="growth-row"><strong>Current stats</strong><a href="#stats">View</a></div><div class="growth-build">'+esc(p.build)+'</div>'+stats+'<small class="growth-legend">Solid: current · muted: build target · shared scale</small><div class="growth-metrics"><div><small>Train</small><strong class="growth-accent">'+esc(p.stat)+'</strong></div><div><small>Current gym</small><strong>'+esc(p.gym?.name??"Unavailable")+'</strong></div><div><small>E / train</small><strong>'+esc(p.gym?.energy??"—")+'</strong></div></div><small>'+fmt(p.remaining)+' remaining to build target · '+perc(p.modifier)+' modeled gain modifier</small>'+(chips.length?'<div class="growth-perks">'+chips.join("")+'</div>':"")+(prog?'<div class="growth-plan"><strong class="growth-accent">'+esc(prog.label)+'</strong><div class="growth-metrics"><div><small>7-day gain</small><strong class="growth-accent">+'+fmt(prog.gain)+'</strong></div><div><small>Weekly cost</small><strong>$'+fmt(prog.money)+'</strong></div><div><small>Energy</small><strong>'+fmt(prog.used)+' E</strong></div></div><small>'+fmt(prog.cycles)+' cycles · '+esc(prog.blockHours)+'h window · '+(prefs.weeklyBudget==null?"Budget not set":"Budget $"+fmt(prefs.weeklyBudget))+'</small><details class="rec-group growth-execution" data-growth-execution '+(growthExecutionOpen?"open":"")+'><summary>Execution list</summary><small>Elapsed time from simulation start. Follow live cooldowns; estimates may change.</small><ol>'+execution+'</ol></details></div>':'<p class="fine-print">No affordable training plan available. Review Stats and budget.</p>')+'</div>';
+  }
   function adviceSections(count,trainingRecommendation){
     const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",completion=prefs.priority==="completion",risk=prefs.risk;
     const rows={merit:[],growth:[],consume:[],crime:[],education:[],money:[]};
@@ -273,12 +289,6 @@ const tornCrimeGuide = (() => {
       add("consume","Protect education · avoid all drugs",detail,"#education");
       add("education","Education dismissal risk",detail,"#education");
     }else if(enrolled&&highAddiction&&protectedEducation)add("consume","Education protected by Restraint","The active job perk protects enrollment, but addiction still affects other gameplay; consider rehabilitation.","#education");
-    if(plan){
-      add("growth","Train "+plan.stat,plan.detail,"#stats");
-      const p=plan.program;
-      if(p)add("growth","Recommended program: "+p.label,"7-day estimated gain: +"+number(Math.round(p.gain))+" · "+number(p.used)+" E · $"+number(Math.round(p.money))+" / week · "+Object.entries(p.costs).filter(([,qty])=>qty>0).map(([type,qty])=>qty+" "+type).join(", ")+(prefs.weeklyBudget===null?" · Set a weekly budget to compare paid programs.":" · Budget $"+number(prefs.weeklyBudget))+(p.cycles>0?" · "+p.cycles+" plan cycle"+(p.cycles===1?"":"s")+" × "+number(p.blockHours)+"h; natural training between/after cycles":"")+" · Highest estimated gain among affordable Stats → Plan templates; prices and cooldowns may change.","#stats");
-      else add("growth","Training program unavailable","Load current gym, bars and battle stats to compare weekly training programs.","#stats");
-    }else add("growth","Review your build targets","Load current battle stats and select a build on Stats.","#stats");
     const bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns");
     const energy=n(bars?.energy?.current),cap=n(bars?.energy?.maximum),happy=n(bars?.happy?.current),happyCap=n(bars?.happy?.maximum),nerve=n(bars?.nerve?.current);
     const drug=n(cd?.drug),booster=n(cd?.booster);
@@ -349,7 +359,7 @@ const tornCrimeGuide = (() => {
     if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
     if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
     if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label)+(id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'+recTileEnd).join("");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label)+(id==="growth"?growthCard(trainingRecommendation,prefs):((id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'))+recTileEnd).join("");
   }
 
   function recommendations(){
@@ -509,6 +519,7 @@ const tornCrimeGuide = (() => {
         if(e.target.open)recExpanded.add(id);else recExpanded.delete(id);
         try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}
       }
+      if(e.target.matches?.("[data-growth-execution]")){growthExecutionOpen=e.target.open;try{localStorage.setItem("torn-city-guide:growth-execution:"+recOwner,String(growthExecutionOpen));}catch{}}
       if(e.target.matches?.("[data-oc-optional]"))ocOpen=e.target.open;
     },true);
     view.addEventListener("click",e=>{
