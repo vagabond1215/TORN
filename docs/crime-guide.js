@@ -209,6 +209,7 @@ const tornCrimeGuide = (() => {
     return null;
   }
   function crimeRecommendation(risk,completion){
+    if(tornGuideApi.crimeVersion?.()===1)return '<li><div><strong>Crimes 1.0 detected</strong><small>Use the legacy crime report; Crimes 2.0 skill and unique recommendations do not apply.</small><a href="https://torn.report/crimes" target="_blank" rel="noopener noreferrer">Old Crimes report</a></div></li>';
     const riskRank={"Starter":0,"Low":0,"Low–Medium":1,"Medium":1,"Variable":1,"Medium–High":2,"High":2};
     const maxRisk={low:0,medium:1,high:2}[risk]??0;
     const all=crimes.map(([name,r,detail],i)=>{const progress=crimeProgress(name),cs=skill(name)??(Number.isFinite(progress?.skill)?progress.skill:null),total=reference.find(x=>x[0]===name)?.[2]??0;return {name,r,detail,i,cs,rank:riskRank[r]??2,total,progress,uniqueCount:Array.isArray(progress?.uniques)?new Set(progress.uniques.map(u=>u.id)).size:null};});
@@ -537,6 +538,7 @@ const tornCrimeGuide = (() => {
   }
 
   function render(){
+    if(tornGuideApi.crimeVersion?.()===1)return '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Crimes 1.0</h1><p>Legacy crime system detected. Crimes 2.0 guidance and unique tracking are not applicable.</p></header><section class="panel"><div class="panel-content"><a href="https://torn.report/crimes" target="_blank" rel="noopener noreferrer">Old Crimes report</a> · <a href="https://wiki.torn.com/wiki/Crimes_1.0" target="_blank" rel="noopener noreferrer">Legacy crime reference</a></div></section>';
     const bars=tornGuideApi.state.data.bars;
     const nerve=bars && bars.bars && bars.bars.nerve;
     let out='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Crimes 2.0</h1><p>Build crime experience safely, raise your natural nerve bar, and unlock more reliable advanced crimes.</p></header>';
