@@ -143,14 +143,15 @@ const tornCrimeGuide = (() => {
   ];
   const ocLevelBands=[[1,2],[3,4],[5,6],[7,8],[9,10]];
   let ocEnabled=new Set(ocLevelBands.map(([lo])=>lo));
-  let ocOwner=null,ocOpen=false,restockRules=new Map();
+  let ocOwner=null,restockTab="urgent",restockForecastDays=7,restockRules=new Map();
   const restockSettingsKey=owner=>"torn-city-guide:restock-settings:"+owner;
   function loadOcFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(owner===ocOwner)return;
-    ocOwner=owner;ocOpen=false;restockRules=new Map();ocEnabled=new Set(ocLevelBands.map(([lo])=>lo));
+    ocOwner=owner;restockTab="urgent";restockForecastDays=7;restockRules=new Map();ocEnabled=new Set(ocLevelBands.map(([lo])=>lo));
     try{
       const settings=JSON.parse(localStorage.getItem(restockSettingsKey(owner)));
+      if(Number.isInteger(settings?.forecastDays)&&settings.forecastDays>=1&&settings.forecastDays<=28)restockForecastDays=settings.forecastDays;
       if(Array.isArray(settings?.items)){
         for(const rule of settings.items){
           if(typeof rule?.key==="string"&&typeof rule.monitored==="boolean"&&
@@ -175,7 +176,7 @@ const tornCrimeGuide = (() => {
     }).join("");
     return '<template data-restock-dialog><dialog class="restock-settings-dialog" aria-labelledby="restock-settings-title"><form>'+
       '<header><h2 id="restock-settings-title">Restock settings</h2><button type="button" data-restock-close aria-label="Close">×</button></header>'+
-      '<div class="restock-settings-content"><fieldset><legend>Optional OC difficulty</legend><div class="rec-oc-filters">'+
+       '<div class="restock-settings-content"><label class="restock-forecast">Urgent forecast (days) <input name="forecastDays" type="number" min="1" max="28" step="1" required value="'+restockForecastDays+'"></label><fieldset><legend>Optional OC difficulty</legend><div class="rec-oc-filters">'+
       ocLevelBands.map(([lo,hi])=>'<label><input type="checkbox" name="ocBand" value="'+lo+'" '+(ocEnabled.has(lo)?"checked":"")+'> '+lo+'–'+hi+'</label>').join("")+
       '</div></fieldset><p class="fine-print">Leave a minimum blank to use the suggested quantity. Training and assigned OC requirements are always checked.</p>'+groups+
       '</div><footer><span role="status" data-restock-status></span><button type="submit">Save settings</button></footer></form></dialog></template>';
@@ -208,10 +209,11 @@ const tornCrimeGuide = (() => {
         if(minimum===null&&monitored===(row.dataset.defaultMonitor==="true"))items.delete(key);
         else items.set(key,{key,monitored,minimum});
       }
-      const bands=new Set(new FormData(event.currentTarget).getAll("ocBand").map(Number));
-      try{localStorage.setItem(restockSettingsKey(owner),JSON.stringify({items:[...items.values()],ocBands:[...bands]}));}
+      const values=new FormData(event.currentTarget);
+      const bands=new Set(values.getAll("ocBand").map(Number)),forecastDays=Number(values.get("forecastDays"));
+      try{localStorage.setItem(restockSettingsKey(owner),JSON.stringify({items:[...items.values()],ocBands:[...bands],forecastDays}));}
       catch{dialog.querySelector("[data-restock-status]").textContent="Settings could not be saved.";return;}
-      restockRules=items;ocEnabled=bands;
+      restockRules=items;ocEnabled=bands;restockForecastDays=forecastDays;
       dialog.close();
       refreshRecommendations(view);
     });
@@ -335,7 +337,7 @@ const tornCrimeGuide = (() => {
     const educationRisk=enrolled&&highAddiction&&!protectedEducation;
     const blockDrugs=highAddiction&&(!enrolled||!protectedEducation);
     const session=loadTrainingSession();
-    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs,excludeOwned:excludeOwned(),skipPrograms:!!session,naturalOnly:prefs.priority!=="growth"});
+    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs,excludeOwned:excludeOwned(),skipPrograms:!!session,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth"});
     return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan};
   }
   let growthTab="summary";
@@ -754,7 +756,7 @@ const tornCrimeGuide = (() => {
     const ready=cat=>Array.isArray(st.inventory[cat])&&!st.inventoryErrors[cat];
     const qty=x=>Math.max(0,Number(x.amount??x.quantity??0)||0);
     const category=x=>{const t=x?.type?.name??x?.type??x?.category?.name??x?.category;return typeof t==="string"?t:null;};
-    const matches=(x,name)=>normalize(x.name??x.item?.name??itemsById.get(String(x.id??x.item_id))?.name)===normalize(name);
+    const matches=(x,name)=>normalize(x.name??x.item?.name??itemsById.get(String(x.id??x.item_id??x.item?.id))?.name)===normalize(name);
     function count(name,hint){
       const cat=category(itemsByName.get(normalize(name)))||hint;
       // Search all fetched categories for positive holdings first; missing stock
@@ -765,7 +767,17 @@ const tornCrimeGuide = (() => {
       return owned||null;
     }
     const prefs=tornRoadmap.preferences(),trainingRecommendation=trainingRecommendationContext(prefs);
-    const program=trainingRecommendation.plan?.program,planCosts=program?.costs??{};
+    const program=trainingRecommendation.plan?.program,session=loadTrainingSession(),now=Date.now();
+    const planCosts=session?{}:program?.restockCosts??{};
+    if(session&&!(session.drugRisk&&trainingRecommendation.blockDrugs)){
+      const end=now+restockForecastDays*86400000;
+      for(const {step,done,due} of sessionSchedule(session,now)){
+        if(!done&&due<=end&&["xanax","ecstasy","dvd","candy","alcohol","refill"].includes(step.type)){
+          planCosts[step.type]=(planCosts[step.type]??0)+(step.quantity??1);
+        }
+      }
+    }
+    const trainingSource=(session?.label??program?.label??"Training plan")+" · "+restockForecastDays+"-day forecast";
     const buckets={training:new Map(),current:new Map(),stock:new Map(),crime:new Map(),oc:new Map()};
     const settingsCategories=new Map(), activeOptional=new Set(), rowCategories=new Map();
     function setting(name,hint,target=0,aggregate=false){
@@ -847,7 +859,7 @@ const tornCrimeGuide = (() => {
     // The selected weekly program is the same object used by growth and consumable advice.
     const trainingItems=[["Xanax","Drug","xanax"],["Ecstasy","Drug","ecstasy"],["Erotic DVD","Booster","dvd"]];
     for(const [name,cat,key] of trainingItems){
-      if(planCosts[key]>0&&!(cat==="Drug"&&trainingRecommendation.blockDrugs))add("training",name,cat,planCosts[key],program.label+" · 7-day requirement");
+      if(planCosts[key]>0&&!(cat==="Drug"&&trainingRecommendation.blockDrugs))add("training",name,cat,planCosts[key],trainingSource);
     }
     const categoryDefaults=[["Candy",50],["Alcohol",25],["Energy Drink",5]];
     const categoryReserve=(bucket,cat,target,reason,custom=false)=>{
@@ -861,16 +873,13 @@ const tornCrimeGuide = (() => {
       const owned=st.inventory[cat].reduce((n,x)=>n+qty(x),0);
       if(owned<target)buckets[bucket].set(cat,{item:cat+" (any type)",owned,target,reasons:[reason],price:null,level:99});
     };
-    if(planCosts.candy>0)categoryReserve("training","Candy",planCosts.candy,program.label+" · 7-day requirement; match planned happiness tier");
-    if(planCosts.alcohol>0)categoryReserve("training","Alcohol",planCosts.alcohol,program.label+" · 7-day requirement");
+    if(planCosts.candy>0)categoryReserve("training","Candy",planCosts.candy,trainingSource+" · Match planned happiness tier");
+    if(planCosts.alcohol>0)categoryReserve("training","Alcohol",planCosts.alcohol,trainingSource);
     for(const [name,cat,target] of reserveDefaults){
       if(cat==="Drug"&&trainingRecommendation.blockDrugs)continue;
-      if(program&&trainingItems.some(([n])=>normalize(n)===normalize(name)))continue;
       add("stock",name,cat,target,"Optional reserve");
     }
     for(const [cat,target] of categoryDefaults){
-      if(cat==="Candy"&&program)continue;
-      if(cat==="Alcohol"&&planCosts.alcohol>0)continue;
       categoryReserve("stock",cat,target,"Optional category reserve");
     }
     for(const group of settingsCategories.values())for(const item of group.values()){
@@ -880,22 +889,53 @@ const tornCrimeGuide = (() => {
       if(item.aggregate)categoryReserve("stock",item.category,rule.minimum??1,"Custom minimum",true);
       else add("stock",item.name,item.category,rule?.minimum??(item.target||1),rule?"Custom minimum":"Default reserve",undefined,true);
     }
-    // Avoid duplicate shopping rows while retaining every relevant use.
-    const seen=new Map();
-    for(const group of Object.values(buckets))for(const [key,x] of group){
-      if(!seen.has(key)){seen.set(key,x);continue;}
-      const first=seen.get(key);first.target=Math.max(first.target,x.target);first.reasons=[...new Set([...first.reasons,...x.reasons])];group.delete(key);
+    if(planCosts.refill>0){
+      const money=payload("money","money"),balance=money?.points?.current??money?.points;
+      const owned=balance==null||st.errors?.money?null:Number(balance),target=planCosts.refill*30;
+      if(Number.isFinite(owned)&&owned>=0&&owned<target){
+        const raw=payload("pointsCatalog","pointsmarket");
+        const prices=Object.values(raw||{}).map(x=>Number(x?.cost??x?.price??x?.cost_per_point)).filter(x=>Number.isFinite(x)&&x>0);
+        buckets.training.set("points",{item:"Points",owned,target,price:prices.length?Math.min(...prices):null,reasons:[trainingSource],level:99});
+      }
     }
-    const rows=group=>[...group.values()].sort((a,b)=>a.level-b.level||a.item.localeCompare(b.item)).map(x=>{
-      const missing=x.target-x.owned;
-      return '<li><div><strong>'+esc(x.item)+'</strong><small>'+esc(x.reasons.join(" · "))+'</small></div><span title="Owned / suggested reserve">'+number(x.owned)+' / '+number(x.target)+'</span><span>+'+number(missing)+(x.price===null?"":" · $"+number(missing*x.price))+'</span></li>';
-    }).join("");
-    const section=(label,group,open=false)=>group.size?'<details class="rec-group" '+(open?"open":"")+'><summary>'+esc(label)+' ('+group.size+')</summary><ul class="crime-recommendations">'+rows(group)+'</ul></details>':"";
-    const optional='<details class="rec-group" data-oc-optional '+(ocOpen?"open":"")+'><summary>Optional OC supplies by difficulty ('+buckets.oc.size+')</summary>'+(buckets.oc.size?'<ul class="crime-recommendations">'+rows(buckets.oc)+'</ul>':'<p class="fine-print">'+(ocEnabled.size?"No additional shortages identified for selected levels.":"Select a difficulty range in Minimums.")+'</p>')+'</details>';
-    const total=[...Object.values(buckets)].reduce((n,g)=>n+g.size,0);
+    for(const [key,optional] of buckets.oc){
+      const assigned=buckets.current.get(key);
+      if(!assigned)continue;
+      assigned.target=Math.max(assigned.target,optional.target);
+      assigned.reasons.push(...optional.reasons.filter(reason=>!assigned.reasons.includes(reason)));
+      buckets.oc.delete(key);
+    }
+    // Allocate only incremental purchases as targets rise across tabs.
+    // Keep the training forecast separate from crime, OC and elective stock.
+    const covered=new Map();
+    for(const group of [buckets.training,buckets.current,buckets.crime,buckets.oc,buckets.stock]){
+      for(const [key,item] of group){
+        const previous=covered.get(key)??item.owned;
+        if(previous>=item.target){group.delete(key);continue;}
+        item.missing=item.target-previous;
+        covered.set(key,item.target);
+      }
+    }
+    const moneyValue=value=>value==null?"—":"$"+number(value);
+    const rows=items=>items.map(x=>'<li class="restock-row"><div class="restock-line">'+
+      '<strong>'+esc(x.item)+'</strong><span title="Quantity to buy">× '+number(x.missing)+'</span>'+
+      '<span title="Market value per unit" aria-label="Market value '+moneyValue(x.price)+'">'+moneyValue(x.price)+'</span>'+
+      '<span title="Total purchase cost" aria-label="Total '+moneyValue(x.price===null?null:x.missing*x.price)+'">'+moneyValue(x.price===null?null:x.missing*x.price)+'</span></div>'+
+      '<div class="restock-line restock-source"><small>'+esc(x.reasons.join(" · "))+'</small><span title="Current / needed">'+number(x.owned)+'/'+number(x.target)+'</span></div></li>').join("");
+    const sorted=group=>[...group.values()].sort((a,b)=>a.level-b.level||a.item.localeCompare(b.item));
+    const tabs=[
+      ["urgent","Urgent",sorted(buckets.training),"No training shortages within "+restockForecastDays+" days."],
+      ["crime","Crime",sorted(buckets.crime),"No crime shortages identified."],
+      ["oc","OC",[...sorted(buckets.current),...sorted(buckets.oc)],"No OC shortages identified."],
+      ["reserves","Reserves",sorted(buckets.stock),"No reserve shortages identified."]
+    ];
+    const tabbar='<div class="restock-tabs" role="group" aria-label="Restock categories">'+tabs.map(([key,label])=>
+      '<button type="button" data-restock-tab="'+key+'" aria-controls="restock-panel-'+key+'" aria-pressed="'+(restockTab===key)+'">'+label+'</button>').join("")+'</div>';
+    const panels=tabs.map(([key,,items,empty])=>'<div class="restock-tab-panel" id="restock-panel-'+key+'" data-restock-panel="'+key+'" '+(restockTab===key?"":"hidden")+'>'+
+      (items.length?'<ul class="crime-recommendations">'+rows(items)+'</ul>':'<p class="fine-print">'+esc(empty)+'</p>')+'</div>').join("");
     const pending=tornGuideApi.inventoryTypes.filter(c=>c!=="Book"&&!ready(c));
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
-    const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+section("Training plan shortages",buckets.training,true)+section("Assigned OC requirements",buckets.current,true)+section("Optional stock reserves",buckets.stock,false)+section("Crime equipment & materials",buckets.crime,true)+optional+(!total?'<p>No shortages identified in loaded inventory.</p>':"")+(pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
+    const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
     const priority=tornRoadmap.preferences().priority,first={growth:["growth","consume"],completion:["crime","merit"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
     return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
@@ -951,7 +991,6 @@ const tornCrimeGuide = (() => {
         if(e.target.open)recExpanded.add(id);else recExpanded.delete(id);
         try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}
       }
-      if(e.target.matches?.("[data-oc-optional]"))ocOpen=e.target.open;
     },true);
     view.addEventListener("change",e=>{if(e.target.matches("[data-growth-exclude-owned]")){try{localStorage.setItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"),String(e.target.checked));}catch{}refreshRecommendations(view);}});
     function selectGrowthTab(id,focus=false){
@@ -962,6 +1001,13 @@ const tornCrimeGuide = (() => {
     }
     view.addEventListener("keydown",e=>{const btn=e.target.closest("[data-growth-tab]");if(!btn)return;const ids=["summary","steps","build"],i=ids.indexOf(btn.dataset.growthTab);let next;if(e.key==="ArrowRight")next=ids[(i+1)%3];else if(e.key==="ArrowLeft")next=ids[(i+2)%3];else if(e.key==="Home")next=ids[0];else if(e.key==="End")next=ids[2];else return;e.preventDefault();selectGrowthTab(next,true);});
     view.addEventListener("click",e=>{
+      const restockChoice=e.target.closest("[data-restock-tab]");
+      if(restockChoice){
+        restockTab=restockChoice.dataset.restockTab;
+        for(const button of view.querySelectorAll("[data-restock-tab]"))button.setAttribute("aria-pressed",String(button.dataset.restockTab===restockTab));
+        for(const panel of view.querySelectorAll("[data-restock-panel]"))panel.hidden=panel.dataset.restockPanel!==restockTab;
+        return;
+      }
       const restockButton=e.target.closest("[data-restock-settings]");
       if(restockButton){e.preventDefault();openRestockSettings(view,restockButton);return;}
       const collectButton=e.target.closest("[data-collect-view]");

@@ -512,11 +512,15 @@ const tornTrainSequence=(()=>{
       results.sort((a,b)=>b.gain-a.gain||a.cashCost-b.cashCost);
       const selected=results[0];
       if(selected){
-        selected.periods=[1,7,28].map(days=>{
+        const forecastDays=options.restockForecastDays;
+        const horizons=[...new Set([1,7,28,...(Number.isInteger(forecastDays)&&forecastDays>=1&&forecastDays<=28?[forecastDays]:[])])];
+        const periods=horizons.map(days=>{
           const result=days===7?selected:runProgram(selected.id,templatesById.get(selected.id),selected.cycles,days*24).result;
+          if(days===forecastDays)selected.restockCosts=result.costs;
           return {days,gain:result.complete===false?null:result.gain,value:result.complete===false?null:result.money,
             energy:result.complete===false?null:result.used,costs:result.complete===false?null:result.costs};
         });
+        selected.periods=periods.filter(period=>[1,7,28].includes(period.days));
       }
       return results;
     }finally{ctx=previous;Object.assign(p,old);}
