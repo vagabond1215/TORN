@@ -1149,6 +1149,12 @@ function inventoryBuyerResults(id,qty){
     (more.length?'<details><summary>More pricelist buyers ('+more.length+')</summary>'+more.map(buyer).join("")+'</details>':"");
 }
 
+const inventoryStatIcons={
+  damage:'<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"><path d="m8 1 1.5 4 3.7-2.1-1.1 4.1 3.2 1-3.2 1.2 1.1 4-3.7-2L8 15l-1.5-3.8-3.7 2 1.1-4L.7 8l3.2-1-1.1-4.1 3.7 2.1Z"/><path d="m6.4 8 1.6-1.6L9.6 8 8 9.6Z"/></svg>',
+  accuracy:'<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.15"><circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="2"/><path d="M8 0v5m0 6v5M0 8h5m6 0h5"/></svg>',
+  armor:'<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"><path d="M8 1 14 3v4c0 3.7-2.2 6-6 8-3.8-2-6-4.3-6-8V3Z"/><path d="M8 4v7"/></svg>',
+  coverage:'<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.15"><circle cx="8" cy="2.8" r="1.8"/><path d="m4 6 4-1 4 1 1 4-3 .5V15H6v-4.5L3 10Z"/></svg>'
+};
 function inventoryGearTitle(uid,category,name,equipped,info={}){
   const gear=tornGuideApi.readGear(uid).item;
   const rarity=String(gear?.rarity??"").toLowerCase();
@@ -1160,10 +1166,10 @@ function inventoryGearTitle(uid,category,name,equipped,info={}){
   const values=Array.isArray(coverage)?coverage.map(x=>x?.value):[];
   const coverageText=values.length===1&&typeof values[0]==="number"&&Number.isFinite(values[0])?values[0]+"%":values.length>1&&values.every(v=>typeof v==="number"&&Number.isFinite(v))?values.map(v=>v+"%").join(", "):"—";
   const coverageLabel=Array.isArray(coverage)?coverage.map(x=>x.name+" "+x.value+"%").join(" · "):"Coverage unavailable";
-  const field=(label,value)=>value==null?"":'<span class="inventory-title-stat" title="'+safe(label)+'">'+safe(value)+'</span>';
+  const field=(label,value,icon)=>value==null?"":'<span class="inventory-title-stat" title="'+safe(label)+'"'+(icon?' aria-label="'+safe(label+": "+value)+'"':"")+'>'+(inventoryStatIcons[icon]??"")+safe(value)+'</span>';
   const bonuses=Array.isArray(gear?.bonuses)?gear.bonuses:[];
   return '<span class="inventory-title-content'+(ranked?" rarity-"+rarity:"")+'"><span class="inventory-title-name">'+safe(name)+(equipped?inventoryEquippedIcon:"")+'</span>'+
-    field("Quality",quality===null?"—%":quality+"%")+(category==="Defensive"?field("Armor rating / Coverage · "+coverageLabel,"ARMOR "+(armor??"—")+" / "+coverageText):field("Damage | Accuracy","DMG "+(damage??"—")+" | ACC "+(accuracy??"—")))+
+    field("Quality",quality===null?"—%":quality+"%")+'<span class="inventory-title-combat">'+(category==="Defensive"?field("Armor rating",armor??"—","armor")+field("Coverage · "+coverageLabel,coverageText,"coverage"):field("Damage",damage??"—","damage")+field("Accuracy",accuracy??"—","accuracy"))+'</span>'+
     bonuses.map(b=>field(b.description||"Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join("")+'</span>';
 }
 function weaponEndurance(min,max,mag,magazines){
@@ -1246,22 +1252,20 @@ function inventoryGearMarkup(uid,category,info,equipped){
   const meta=info.details??{},ammo=meta.ammo,rate=ammo?.rate_of_fire;
   const pair=(label,value)=>value==null||value===""?"":'<div class="inventory-gear-pair"><dt>'+safe(label)+"</dt><dd>"+safe(value)+"</dd></div>";
   const num=(value,suffix="")=>typeof value==="number"&&Number.isFinite(value)?value.toLocaleString(undefined,{maximumFractionDigits:2})+suffix:null;
-  const read=tornGuideApi.readGear(uid),unique=read.item,stats=unique?.stats??{};
+  const read=tornGuideApi.readGear(uid),unique=read.item;
   const rarity=["yellow","orange","red"].includes(unique?.rarity)?unique.rarity:null;
   const bonuses=Array.isArray(unique?.bonuses)?unique.bonuses:null;
   const mags=bonuses?.some(b=>String(b.title).toLowerCase()==="specialist")?1:3;
   const endurance=weaponEndurance(rate?.minimum,rate?.maximum,ammo?.magazine_rounds,mags);
   const rows=pair("Class",unique?.sub_type??info.sub_type??meta.category)+
-    (weapon?pair("Damage",num(stats.damage))+pair("Accuracy",num(stats.accuracy))+pair("Stealth",num(meta.stealth_level))+pair("Caliber / ammo",ammo?.name)+pair("Magazine rounds",num(ammo?.magazine_rounds))+pair("Rate of fire",rate?.minimum!=null&&rate?.maximum!=null?rate.minimum+"–"+rate.maximum:null)+pair("Current ammo",read.ammo?read.ammo.name+" · "+read.ammo.type+" · "+read.ammo.quantity:null):pair("Armor rating",num(stats.armor)))+
-    (endurance?pair("Base attacks / mag",endurance.expected.toFixed(2)+" ("+endurance.min+"–"+endurance.max+")")+pair("Base attacks / total",endurance.total.toFixed(2))+pair("Base reloads",String(endurance.reloads))+pair("Base firing efficiency",(endurance.efficiency*100).toFixed(1)+"%"):"")+
-    pair("Quality",num(stats.quality,"%"))+pair("Rarity",rarity)+
-    (armor&&Array.isArray(meta.coverage)?pair("Coverage",meta.coverage.map(x=>x.name+" "+x.value+"%").join(" · ")):"");
-  const bonusList=bonuses===null?"Not loaded":bonuses.length?bonuses.map(b=>'<div><strong>'+safe(b.title)+(typeof b.value==="number"?" · "+safe(b.value):"")+'</strong><small>'+safe(b.description??"")+'</small></div>').join(""):"None";
+    (weapon?pair("Stealth",num(meta.stealth_level))+pair("Caliber / ammo",ammo?.name)+pair("Magazine rounds",num(ammo?.magazine_rounds))+pair("Rate of fire",rate?.minimum!=null&&rate?.maximum!=null?rate.minimum+"–"+rate.maximum:null)+pair("Current ammo",read.ammo?read.ammo.name+" · "+read.ammo.type+" · "+read.ammo.quantity:null):"")+
+    (endurance?pair("Base attacks / mag",endurance.expected.toFixed(2)+" ("+endurance.min+"–"+endurance.max+")")+pair("Base attacks / total",endurance.total.toFixed(2))+pair("Base reloads",String(endurance.reloads))+pair("Base firing efficiency",(endurance.efficiency*100).toFixed(1)+"%"):"");
+  const bonusList=(bonuses??[]).filter(b=>typeof b.description==="string"&&b.description.trim()).map(b=>'<small>'+safe(b.description)+'</small>').join("");
   const mods=read.mods;
   const modStamp=read.modsAt?'<small>Mods checked '+safe(tornGuidePreferences.formatDate(read.modsAt))+'</small>':"";
   const ammoStamp=read.ammo&&read.ammoAt?'<small>Ammo snapshot '+safe(tornGuidePreferences.formatDate(read.ammoAt))+'</small>':"";
   const modList=mods===null||mods===undefined?"Not loaded":mods.length?mods.map(m=>safe(m.name??m.title??"Unknown mod")).join(" · "):"None attached";
-  return '<section class="inventory-gear"><h4>Equipment attributes</h4>'+(rows?'<dl class="inventory-gear-grid">'+rows+'</dl>':"")+(endurance?'<p class="fine-print">Base endurance assumes '+mags+' magazine(s), full ammunition and no ammo-saving effects or mods.</p>':"")+(unique?'<div class="inventory-gear-bonuses '+(rarity?"rarity-"+rarity:"")+'"><strong>Ranked bonuses</strong>'+bonusList+'</div>':'<p class="fine-print">Individual attributes not loaded.</p>')+
+  return '<section class="inventory-gear"><h4>Equipment attributes</h4>'+(rows?'<dl class="inventory-gear-grid">'+rows+'</dl>':"")+(endurance?'<p class="fine-print">Base endurance assumes '+mags+' magazine(s), full ammunition and no ammo-saving effects or mods.</p>':"")+(unique?(bonusList?'<div class="inventory-gear-bonuses"><strong>Bonus effects</strong>'+bonusList+'</div>':""):'<p class="fine-print">Individual attributes not loaded.</p>')+
     (weapon?'<div class="inventory-gear-mods"><strong>Attached mods</strong><p>'+modList+'</p>'+modStamp+ammoStamp+(Array.isArray(meta.mods)?'<small>'+meta.mods.length+' compatible mod types in catalog</small>':"")+'</div>':"")+
     (uid?'<button type="button" class="button secondary" data-load-gear>'+ (unique?"Refresh mods / equipment":"Load equipment details")+'</button>':'<p class="fine-print">Unique item ID unavailable.</p>')+'<p role="status" class="inventory-gear-status"></p></section>';
 }
