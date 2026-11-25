@@ -65,8 +65,8 @@ const tornGuideApi=(()=>{
   }
   function setRemember(on){
     if(!secret||!state.identity)return false;
-    if(!on){remember=false;clearSaved(state.identity.id);state.cached=false;announce();return false;}
-    remember=true;save();announce();return remember;
+    if(!on){remember=false;clearGear(state.identity.id);clearSaved(state.identity.id);state.cached=false;announce();return false;}
+    remember=true;save();persistGear();announce();return remember;
   }
   function restore(){
     let record;
@@ -206,10 +206,34 @@ const tornGuideApi=(()=>{
   }
   // On-demand equipment reads use the connected key only against Torn.
   const gearCache=new Map(),gearPending=new Map();
+  const gearAttempts=new Map();
+  const gearKey=id=>"torn-city-guide:equipment:v2:"+id;
+  let gearOwner=null,gearStored={};
   function gearUid(v){return (typeof v==="string"&&/^[1-9]\d*$/.test(v)||Number.isSafeInteger(v)&&v>0)?String(v):null;}
-  function gearRead(path){
-    const cacheKey=epoch+":"+path,record=gearCache.get(cacheKey);
-    return record&&now()-record.at<15*mins?record.data:null;
+  function gearAccount(){
+    const id=state.identity?.id??null;
+    if(gearOwner!==id){gearOwner=id;gearStored={};if(id&&remember)try{const v=JSON.parse(localStorage.getItem(gearKey(id))||"{}");if(v&&typeof v==="object"&&!Array.isArray(v))gearStored=v;}catch{}}
+    return id;
+  }
+  function persistGear(){
+    const id=gearAccount();if(!id||!remember)return;
+    try{localStorage.setItem(gearKey(id),JSON.stringify(gearStored));}catch{}
+  }
+  function clearGear(id){
+    if(id)try{localStorage.removeItem(gearKey(id));}catch{}
+    gearOwner=null;gearStored={};gearCache.clear();gearAttempts.clear();
+  }
+  const staticPath=path=>/^torn\/[1-9]\d*\/itemdetails$/.test(path);
+  const dailyPath=path=>path==="user/equipment"||path==="user/itemmods";
+  function gearRecord(path){
+    gearAccount();
+    return gearCache.get(epoch+":"+path)??(staticPath(path)||dailyPath(path)?gearStored[path]:null);
+  }
+  function gearRead(path,allowStale=false){
+    const record=gearRecord(path);
+    if(!record||!Number.isFinite(record.at)||record.at>now())return null;
+    const ttl=staticPath(path)?Infinity:dailyPath(path)?24*hrs:15*mins;
+    return allowStale||now()-record.at<ttl?record.data:null;
   }
   async function gearRequest(path,force=false){
     if(!secret)throw Error("Connect Torn API first.");
@@ -218,8 +242,17 @@ const tornGuideApi=(()=>{
     if(gearPending.has(cacheKey))return gearPending.get(cacheKey);
     const task=request(path,secret).then(data=>{
       if(accountEpoch!==epoch)throw Error("Account changed; reload equipment.");
+      gearAccount();
+      const record={at:now(),data};
       if(gearCache.size>=300)gearCache.delete(gearCache.keys().next().value);
-      gearCache.set(cacheKey,{at:now(),data});return data;
+      gearCache.set(cacheKey,record);
+      if(staticPath(path)||dailyPath(path)){
+        gearStored[path]=record;
+        const keys=Object.keys(gearStored).filter(staticPath).sort((a,b)=>gearStored[a].at-gearStored[b].at);
+        while(keys.length>500)delete gearStored[keys.shift()];
+        persistGear();
+      }
+      return data;
     }).finally(()=>gearPending.delete(cacheKey));
     gearPending.set(cacheKey,task);return task;
   }
@@ -227,11 +260,15 @@ const tornGuideApi=(()=>{
   async function loadCrimeProgress(id){if(!Number.isInteger(id)||id<1||id>13)throw Error("Invalid crime ID.");return gearRequest("user/"+id+"/crimes",true);}
   function readGear(uid){
     uid=gearUid(uid);if(!uid)return {};
-    const equipment=gearRead("user/equipment"),mods=gearRead("user/itemmods"),detail=gearRead("torn/"+uid+"/itemdetails")?.itemdetails;
+    const equipment=gearRead("user/equipment",true),mods=gearRead("user/itemmods",true),detail=gearRead("torn/"+uid+"/itemdetails")?.itemdetails;
     const equipped=Array.isArray(equipment?.equipment)?equipment.equipment.find(x=>gearUid(x.uid)===uid):null;
     const unique=(Array.isArray(detail)?detail:[detail]).find(x=>gearUid(x?.uid)===uid);
-    const attached=Array.isArray(equipped?.mods)?equipped.mods:Array.isArray(mods?.itemmods)?mods.itemmods.filter(x=>x.equipped&&gearUid(x.equipped_item_uid)===uid):null;
-    return {item:equipped??unique??null,mods:attached,ammo:equipped?.ammo??null};
+    const equipmentAt=gearRecord("user/equipment")?.at??0,modsAt=gearRecord("user/itemmods")?.at??0;
+    const fromMods=Array.isArray(mods?.itemmods)?mods.itemmods.filter(x=>x.equipped&&gearUid(x.equipped_item_uid)===uid):null;
+    const fromEquipment=Array.isArray(equipped?.mods)?equipped.mods:null;
+    const preferMods=fromMods!==null&&(fromEquipment===null||modsAt>=equipmentAt);
+    const attached=preferMods?fromMods:fromEquipment;
+    return {item:unique??equipped??null,mods:attached,ammo:equipped?.ammo??null,ammoAt:equipmentAt,modsAt:attached===null?0:preferMods?modsAt:equipmentAt};
   }
   async function loadGear(uid,equipped,weapon,force=false){
     uid=gearUid(uid);if(!uid)throw Error("Unique item identifier unavailable.");
@@ -239,15 +276,23 @@ const tornGuideApi=(()=>{
     if(equipped){
       try{await gearRequest("user/equipment",force);}catch(e){errors.push(e.message);}
     }
-    if(!readGear(uid).item||!equipped&&force){
-      try{await gearRequest("torn/"+uid+"/itemdetails",force);}catch(e){errors.push(e.message);}
+    // Store immutable UID data separately; never persist equipment snapshots as immutable stats.
+    if(!gearRead("torn/"+uid+"/itemdetails")){
+      try{await gearRequest("torn/"+uid+"/itemdetails");}catch(e){errors.push(e.message);}
     }
-    if(weapon&&readGear(uid).mods===null){
+    if(weapon&&(force||!gearRead("user/itemmods"))){
       try{await gearRequest("user/itemmods",force);}catch(e){errors.push(e.message);}
-    }else if(weapon&&!equipped&&force){
-      try{await gearRequest("user/itemmods",true);}catch(e){errors.push(e.message);}
     }
     return {data:readGear(uid),errors};
+  }
+  async function checkGearDaily(){
+    if(!secret||routeName()!=="inventory")return;
+    const known=Object.entries(state.inventory).some(([cat,items])=>["Primary","Secondary","Melee"].includes(cat)&&Array.isArray(items)&&items.some(x=>gearUid(x.uid??x.unique_id)));
+    if(!known||gearRead("user/itemmods"))return;
+    const key=epoch+":daily-mods";
+    if(now()-(gearAttempts.get(key)??0)<15*mins)return;
+    gearAttempts.set(key,now());
+    try{await gearRequest("user/itemmods");announce();}catch{}
   }
   async function fetchInventory(cat,key){
     const list=[];let total=null;
@@ -361,13 +406,13 @@ const tornGuideApi=(()=>{
   function disconnect(){
     const id=state.identity&&state.identity.id;
     epoch++;secret=null;remember=false;stopTimer();queued=null;
-    clearSaved(id);
+    clearSaved(id);clearGear(id);
     state.identity=null;state.data={};state.inventory={};state.errors={};
     state.inventoryErrors={};state.fetchedAt={};state.failedAt={};
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,readCrimeProgress,loadCrimeProgress,
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readCrimeProgress,loadCrimeProgress,
     disconnect,restore,setRemember,isRemembering:()=>remember,
     isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
@@ -1001,10 +1046,12 @@ function inventoryGearMarkup(uid,category,info,equipped){
     pair("Circulation",num(info.circulation));
   const bonusList=bonuses===null?"Not loaded":bonuses.length?bonuses.map(b=>'<div><strong>'+safe(b.title)+(typeof b.value==="number"?" · "+safe(b.value):"")+'</strong><small>'+safe(b.description??"")+'</small></div>').join(""):"None";
   const mods=read.mods;
+  const modStamp=read.modsAt?'<small>Mods checked '+safe(tornGuidePreferences.formatDate(read.modsAt))+'</small>':"";
+  const ammoStamp=read.ammo&&read.ammoAt?'<small>Ammo snapshot '+safe(tornGuidePreferences.formatDate(read.ammoAt))+'</small>':"";
   const modList=mods===null||mods===undefined?"Not loaded":mods.length?mods.map(m=>safe(m.name??m.title??"Unknown mod")).join(" · "):"None attached";
   return '<section class="inventory-gear"><h4>Equipment attributes</h4>'+(rows?'<dl>'+rows+'</dl>':"")+(unique?'<div class="inventory-gear-bonuses '+(rarity?"rarity-"+rarity:"")+'"><strong>Ranked bonuses</strong>'+bonusList+'</div>':'<p class="fine-print">Individual attributes not loaded.</p>')+
-    (weapon?'<div class="inventory-gear-mods"><strong>Attached mods</strong><p>'+modList+'</p>'+(Array.isArray(meta.mods)?'<small>'+meta.mods.length+' compatible mod types in catalog</small>':"")+'</div>':"")+
-    (uid?'<button type="button" class="button secondary" data-load-gear>'+ (unique?"Refresh equipment details":"Load equipment details")+'</button>':'<p class="fine-print">Unique item ID unavailable.</p>')+'<p role="status" class="inventory-gear-status"></p></section>';
+    (weapon?'<div class="inventory-gear-mods"><strong>Attached mods</strong><p>'+modList+'</p>'+modStamp+ammoStamp+(Array.isArray(meta.mods)?'<small>'+meta.mods.length+' compatible mod types in catalog</small>':"")+'</div>':"")+
+    (uid?'<button type="button" class="button secondary" data-load-gear>'+ (unique?"Refresh mods / equipment":"Load equipment details")+'</button>':'<p class="fine-print">Unique item ID unavailable.</p>')+'<p role="status" class="inventory-gear-status"></p></section>';
 }
 if(typeof document!=="undefined")document.addEventListener("click",async event=>{
   const button=event.target.closest?.("[data-load-gear]");if(!button)return;
