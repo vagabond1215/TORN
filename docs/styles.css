@@ -1938,3 +1938,15 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 :root[data-theme="light"] .tc-low-happy,:root[data-theme="light"] .home-risk-icon.risk-medium{color:#a65c00}
 :root[data-theme="light"] .home-risk-icon.risk-high{color:#bd2525}
 :root[data-theme="light"] .home-risk-icon.risk-low{color:#527b16}
+
+/* Collapsible recommendation cards retain compact centered headers. */
+.rec-tile:is(details){padding:0;overflow:hidden}
+.rec-tile>.rec-tile-heading{position:relative;display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:34px;padding:.35rem 1.6rem;text-align:center;list-style:none;cursor:pointer;background:color-mix(in srgb,var(--surface) 70%,var(--canvas));color:var(--accent-strong);font-size:.9rem;font-weight:700}
+.rec-tile>.rec-tile-heading::-webkit-details-marker{display:none}
+.rec-tile>.rec-tile-heading::before{content:"";position:absolute;left:.75rem;top:50%;width:.36rem;height:.36rem;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-50%) rotate(-45deg)}
+.rec-tile[open]>.rec-tile-heading::before{transform:translateY(-65%) rotate(45deg)}
+.rec-tile[open]>.rec-tile-heading{border-bottom:1px solid var(--border)}
+.rec-tile>.rec-tile-heading:hover{background:var(--surface)}
+.rec-tile>.rec-tile-heading:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.rec-tile>.rec-tile-body{padding:.55rem .7rem .7rem;min-width:0}
+.rec-tile:not([open])>.rec-tile-body{display:none}
