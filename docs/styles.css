@@ -1790,3 +1790,32 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rec-tile .rec-advice>li{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:start;gap:.4rem;border:1px solid var(--border);border-radius:4px;padding:.45rem;margin:.35rem 0}
 .rec-tile .rec-pickpocket{display:block!important}.rec-tile .rec-pickpocket .crime-table-scroll{margin-top:.4rem}
 .rec-crime-actions{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.4rem}
+
+/* Single-category inventory: use available viewport height instead of the All-view list cap. */
+#topic-view:has(> .inventory-filterbar [data-inventory-filter]:not([data-inventory-filter="All"])[aria-pressed="true"]) > .inventory-grid {
+  grid-template-columns:minmax(0,1fr);
+  align-items:stretch;
+}
+#topic-view:has(> .inventory-filterbar [data-inventory-filter]:not([data-inventory-filter="All"])[aria-pressed="true"]) > .inventory-grid > .inventory-panel:not([hidden]){
+  display:flex;flex-direction:column;
+  min-height:max(280px,calc(100dvh - 4 * var(--guide-bar-height,35px) - 2rem));
+}
+#topic-view:has(> .inventory-filterbar [data-inventory-filter]:not([data-inventory-filter="All"])[aria-pressed="true"]) > .inventory-grid > .inventory-panel > .inventory-detail-list{
+  max-height:none;flex:1;align-content:start;overflow:visible;
+  margin-inline-end:0;padding-inline-end:0;
+}
+/* Highlight the entire expanded item, including its title and selected tab. */
+.inventory-detail-list > .inventory-detail-row:has(> details[open]){
+  border:0;margin-block:3px;
+}
+.inventory-detail-row > details[open]{
+  border:1px solid var(--border);border-radius:5px;
+  background:var(--surface);overflow:hidden;
+  box-shadow:inset 2px 0 var(--accent-strong);
+}
+.inventory-detail-row > details[open] > summary{
+  padding:.2rem .45rem;border-bottom:1px solid var(--border);
+}
+.inventory-detail-row > details[open] > .inventory-detail-body{
+  padding:.45rem .55rem .55rem;
+}
