@@ -259,21 +259,51 @@ const tornGuideApi=(()=>{
   const rwCache=new Map(),rwPending=new Map();
   const passiveRwKey="torn-city-guide:passive-rw:v1";
   let passiveRw=[],passiveRwDiagnostic=null,passiveRwBridge=null;
+  const passiveBuckets=new Map(),passiveRevisions=new Map();
+  let passiveIndex=null,archiveExpected=null,archiveStorageError=null;
+  const retainRw=x=>x&&Number.isFinite(x.at)&&x.at<=now()+5000&&now()-x.at< (x.complete?90:30)*days;
+  const rwDb=typeof indexedDB==="undefined"?Promise.resolve(null):new Promise(resolve=>{
+    try{const req=indexedDB.open("torn-guide-rw-archive",1);
+      req.onupgradeneeded=()=>req.result.createObjectStore("buckets");
+      req.onsuccess=()=>resolve(req.result);req.onerror=()=>{archiveStorageError="Local archive unavailable";resolve(null);};
+      req.onblocked=()=>{archiveStorageError="Local archive upgrade blocked";resolve(null);};
+    }catch{archiveStorageError="Local archive unavailable";resolve(null);}
+  });
+  function archiveWrite(id,revision,rows){
+    rwDb.then(db=>{if(!db)return;try{const tx=db.transaction("buckets","readwrite");tx.objectStore("buckets").put({revision,rows},id);tx.onerror=()=>{archiveStorageError="Local archive write failed";};}catch{archiveStorageError="Local archive write failed";}});
+  }
+  rwDb.then(db=>{if(!db)return;try{const req=db.transaction("buckets","readonly").objectStore("buckets").openCursor();
+    req.onsuccess=()=>{const cursor=req.result;if(cursor){const id=cursor.key,part=cursor.value;if(!passiveBuckets.has(id)&&(!archiveExpected||Object.hasOwn(archiveExpected,id))&&Array.isArray(part?.rows)){passiveBuckets.set(id,part.rows.filter(retainRw));passiveRevisions.set(id,part.revision);passiveIndex=null;}cursor.continue();}else if(typeof refreshRwDiagnostics==="function")refreshRwDiagnostics();};
+  }catch{archiveStorageError="Local archive read failed";}});
+  function archivedRows(){return (passiveBuckets.size?Array.from(passiveBuckets.values()).flat():passiveRw).filter(retainRw);}
+  function passiveModelIndex(){if(!passiveIndex){passiveIndex=new Map();for(const x of archivedRows()){const k=x.name.toLowerCase()+"|"+x.rarity;if(!passiveIndex.has(k))passiveIndex.set(k,[]);passiveIndex.get(k).push(x);}}return passiveIndex;}
+
   try{const saved=JSON.parse(localStorage.getItem(passiveRwKey)||"[]");if(Array.isArray(saved))passiveRw=saved;}catch{}
   function acceptRwSnapshot(packet){
-    if(packet?.version!==1||!Array.isArray(packet.rows))return false;
+    if(!packet||![1,2].includes(packet.version))return false;
+    if(packet.version===2&&!["meta","bucket"].includes(packet.kind))return false;
     const d=packet.diagnostic;
     if(typeof packet.companionVersion==="string"&&/^\d+\.\d+\.\d+$/.test(packet.companionVersion))passiveRwBridge={version:packet.companionVersion,at:now()};
     if(d&&Number.isFinite(d.at)&&d.at<=now()+5000&&["Primary","Secondary","Melee","Armor","Defensive"].includes(d.category)){
       const counts={};for(const k of ["buttons","rendered","matched","ranked","accepted","complete","duplicates","added","processed","batches","maxBatchMs","queued","dropped"])counts[k]=Number.isSafeInteger(d[k])&&d[k]>=0&&d[k]<=100000?d[k]:null;
       passiveRwDiagnostic={...counts,at:d.at,lastCapture:Number.isFinite(d.lastCapture)&&d.lastCapture<=now()+5000?d.lastCapture:null,category:d.category,rarity:["yellow","orange","red"].includes(d.rarity)?d.rarity:null,mode:d.mode==="incremental"?"incremental":null};
     }
+    if(packet.version===2&&packet.kind==="meta"){
+      if(packet.buckets&&typeof packet.buckets==="object"){
+        archiveExpected=Object.fromEntries(Object.entries(packet.buckets).filter(([k,v])=>/^\d+$/.test(k)&&Number(k)<128&&typeof v==="string"));
+        for(const id of passiveBuckets.keys())if(!Object.hasOwn(archiveExpected,id)){passiveBuckets.delete(id);passiveRevisions.delete(id);passiveIndex=null;}
+      }
+      return false;
+    }
+    if(!Array.isArray(packet.rows))return false;
+    if(packet.version===2&&(!Number.isInteger(packet.bucket)||packet.bucket<0||packet.bucket>=128||typeof packet.revision!=="string"))return false;
+    if(packet.version===2&&passiveRevisions.get(packet.bucket)===packet.revision)return false;
     const clean=[];
-    for(const x of packet.rows.slice(0,2500)){
+    for(const x of packet.rows.slice(0,packet.version===2?800:2500)){
       if(!x||typeof x.name!=="string"||!x.name.trim()||x.name.length>120||
         !["Primary","Secondary","Melee","Armor","Defensive"].includes(x.category)||
         !["yellow","orange","red"].includes(x.rarity)||!Number.isSafeInteger(x.price)||x.price<=0||
-        !Number.isFinite(x.at)||x.at>now()+5000||now()-x.at>72*hrs)continue;
+        !Number.isFinite(x.at)||x.at>now()+5000||now()-x.at>(x.complete===true?90:30)*days)continue;
       const stats={};for(const k of ["quality","damage","accuracy","armor"]){const n=x.stats?.[k];if(typeof n==="number"&&Number.isFinite(n)&&n>=0&&n<=10000)stats[k]=n;}
       const bonuses=Array.isArray(x.bonuses)?x.bonuses.slice(0,3).filter(b=>b&&typeof b.title==="string"&&/^[A-Za-z][A-Za-z '-]{0,40}$/.test(b.title)&&Number.isFinite(b.value)&&b.value>=0&&b.value<=10000).map(b=>({title:b.title,value:b.value})):[];
       const complete=x.complete===true&&Number.isFinite(stats.quality)&&bonuses.length>0&&bonuses.length===x.bonuses?.length&&(Number.isFinite(stats.armor)||Number.isFinite(stats.damage)&&Number.isFinite(stats.accuracy));
@@ -281,20 +311,25 @@ const tornGuideApi=(()=>{
       const pair=(v,max)=>Array.isArray(v)&&v.length===2&&v.every(n=>Number.isSafeInteger(n)&&n>0&&n<=max)?v.slice():null;
       clean.push({name:x.name,category:x.category,rarity:x.rarity,price:x.price,stats,bonuses,complete,uid,at:x.at,rate:pair(x.rate,500),ammo:pair(x.ammo,1000)});
     }
+    if(packet.version===2){
+      passiveBuckets.set(packet.bucket,clean);passiveRevisions.set(packet.bucket,packet.revision);passiveIndex=null;
+      archiveWrite(packet.bucket,packet.revision,clean);return true;
+    }
+    if(passiveBuckets.size)return false;
     const next=JSON.stringify(clean);
     if(next===JSON.stringify(passiveRw))return false;
-    passiveRw=clean;
+    passiveRw=clean;passiveIndex=null;
     try{localStorage.setItem(passiveRwKey,next);}catch{}
     return true;
   }
-  function passiveRwReport(){return {version:1,bridge:passiveRwBridge,diagnostic:passiveRwDiagnostic,rows:passiveRw.filter(x=>now()-x.at<=72*hrs&&x.at<=now()+5000)};}
+  function passiveRwReport(){return {version:2,bridge:passiveRwBridge,diagnostic:passiveRwDiagnostic,archive:{loaded:passiveBuckets.size,expected:archiveExpected?Object.keys(archiveExpected).length:null,error:archiveStorageError},rows:archivedRows()};}
   function readPassiveRwMarket(id,rarity){
     const raw=state.data.itemCatalog;
     const items=raw?.items??raw?.data?.items??raw?.payload?.items;
     const catalog=Array.isArray(items)?items:Object.entries(items||{}).map(([id,x])=>({...x,id:x.id??id}));
     const name=catalog.find(x=>Number(x.id)===id)?.name;
     if(!name)return null;
-    const observations=passiveRw.filter(x=>x.name.toLowerCase()===String(name).toLowerCase()&&x.rarity===rarity&&now()-x.at<=72*hrs);
+    const observations=(passiveModelIndex().get(String(name).toLowerCase()+"|"+rarity)??[]).filter(x=>retainRw(x)&&now()-x.at<=24*hrs);
     if(!observations.length)return null;
     const rows=[],seen=new Set();
     for(const x of observations.filter(x=>x.complete).sort((a,b)=>b.at-a.at)){
@@ -1200,18 +1235,18 @@ function rwComparableEstimate(gear,rows,uid){
   return {count:selected.length,rows:selected,estimate:median,low:quantile(.25),high:quantile(.75),confidence:close.length>=5?"Higher match":close.length>=3?"Moderate match":"Low match"};
 }
 function inventoryRwDiagnosticsBody(){
-  const {rows,bridge,diagnostic:d}=tornGuideApi.passiveRwReport();
+  const {rows,bridge,diagnostic:d,archive}=tornGuideApi.passiveRwReport();
   const full=rows.filter(x=>x.complete).length,models=new Map();
   for(const x of rows){const key=x.name,entry=models.get(key)??{name:key,total:0,full:0,yellow:0,orange:0,red:0};entry.total++;if(x.complete)entry.full++;entry[x.rarity]++;models.set(key,entry);}
   const count=(label,value)=>'<div><small>'+safe(label)+'</small><strong>'+safe(value??"—")+'</strong></div>';
   const stamp=v=>v?new Date(v).toLocaleString():"Not recorded";
   const byRarity=["yellow","orange","red"].map(r=>count(r[0].toUpperCase()+r.slice(1),rows.filter(x=>x.rarity===r).length)).join("");
-  const scan=d?'<p class="fine-print">Last scan: '+safe(d.category)+' · '+safe(d.rarity??"unfiltered")+' · '+safe(stamp(d.at))+'</p><div class="rw-diagnostic-counts">'+count("Buy buttons",d.buttons)+count("Rendered",d.rendered)+count("Matched cards",d.matched)+count("Ranked",d.ranked)+count("Accepted",d.accepted)+count("Full details",d.complete)+count("Duplicates",d.duplicates)+count("New records",d.added)+(d.mode==="incremental"?count("Processed cards",d.processed)+count("Pending cards",d.queued)+count("Batches",d.batches)+count("Longest batch",d.maxBatchMs==null?null:d.maxBatchMs+" ms")+count("Queue overflow",d.dropped):"")+'</div>':'<p class="fine-print">No scan diagnostics received. Install companion 2.3.0 and focus an equipment market page.</p>';
+  const scan=d?'<p class="fine-print">Last scan: '+safe(d.category)+' · '+safe(d.rarity??"unfiltered")+' · '+safe(stamp(d.at))+'</p><div class="rw-diagnostic-counts">'+count("Buy buttons",d.buttons)+count("Rendered",d.rendered)+count("Matched cards",d.matched)+count("Ranked",d.ranked)+count("Accepted",d.accepted)+count("Full details",d.complete)+count("Duplicates",d.duplicates)+count("New records",d.added)+(d.mode==="incremental"?count("Processed cards",d.processed)+count("Pending cards",d.queued)+count("Batches",d.batches)+count("Longest batch",d.maxBatchMs==null?null:d.maxBatchMs+" ms")+count("Queue overflow",d.dropped):"")+'</div>':'<p class="fine-print">No scan diagnostics received. Install companion 2.4.0 and focus an equipment market page.</p>';
   return '<div class="rw-diagnostic-actions"><span role="status">'+safe(bridge?"Companion "+bridge.version+" connected · "+stamp(bridge.at):"No live companion handshake yet")+'</span><button type="button" class="button secondary" data-rw-sync>Sync local data</button><button type="button" class="button secondary" data-rw-export>Export JSON</button></div>'+
-    '<div class="rw-diagnostic-counts">'+count("Stored observations",rows.length)+count("Complete",full)+count("Partial",rows.length-full)+count("Models",models.size)+byRarity+'</div>'+
+    '<div class="rw-diagnostic-counts">'+count("Stored observations",rows.length)+count("Complete",full)+count("Partial",rows.length-full)+count("Models",models.size)+count("Fresh ≤24h",rows.filter(x=>Date.now()-x.at<=86400000).length)+count("Older observations",rows.filter(x=>Date.now()-x.at>86400000).length)+byRarity+'</div>'+
     '<p class="fine-print">Last successful capture: '+safe(stamp(d?.lastCapture??(rows.length?Math.max(...rows.map(r=>r.at)):null)))+'</p>'+scan+
     (models.size?'<div class="rw-diagnostic-table"><table><thead><tr><th>Equipment</th><th>All</th><th>Full</th><th>Yellow</th><th>Orange</th><th>Red</th></tr></thead><tbody>'+Array.from(models.values()).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name)).map(x=>'<tr><td>'+safe(x.name)+'</td>'+["total","full","yellow","orange","red"].map(k=>'<td>'+x[k]+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>':"")+
-    '<p class="fine-print">Local observations only; 72-hour retention, 2,500-record limit. Incremental counters cover the current market view; older scripts report the last scan. No Torn API requests.</p>';
+    '<p class="fine-print">Archive shards: '+safe(archive.loaded)+' / '+safe(archive.expected??"—")+(archive.error?' · '+safe(archive.error):"")+'. Local asking-price observations: 24h valuation freshness, 30-day partial and 90-day complete retention, up to 102,400 records across 128 shards (800 each). Older observations are not confirmed sales. No Torn API requests.</p>';
 }
 function inventoryRwDiagnostics(){
   return '<details class="rw-diagnostic-panel"><summary>Passive RW market diagnostics</summary><div data-rw-diagnostics>'+inventoryRwDiagnosticsBody()+'</div></details>';
