@@ -18,7 +18,7 @@ const tornGuideApi=(()=>{
     honors:24*hrs,medals:24*hrs,honorCatalog:30*days,medalCatalog:30*days,gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
+    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog"],
     stats:["profile","bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
@@ -1179,13 +1179,16 @@ function stockRows(){
  const list=Array.isArray(catalog)?catalog:Object.values(catalog||{}),owned=Array.isArray(holdings)?holdings:Object.values(holdings||{}),itemList=Array.isArray(items)?items:Object.values(items||{});
  const num=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
  return list.map(c=>{
-  const h=owned.find(x=>Number(x.id)===Number(c.id)),ticker=String(c.acronym||"").toUpperCase(),f=stockFallback[ticker]||[],b=c.benefit||{};
+  const h=owned.find(x=>Number(x.id)===Number(c.id)),ticker=String(c.acronym||"").toUpperCase(),f=stockFallback[ticker]||[],b=c.bonus??c.benefit??{};
   const price=[c.market?.price,c.current_price,c.price].map(num).find(v=>v!=null&&v>0)??null,shares=holdings==null?null:num(h?.shares??0),value=price!=null&&shares!=null?price*shares:null;
   const req=num(b.requirement??b.shares??f[0]),freq=num(b.frequency??f[1]),description=typeof b.description==="string"?b.description:typeof b.name==="string"?b.name:f[2]||"Benefit unavailable";
-  const passive=String(b.type||"").toLowerCase()==="passive"||freq===0;
+  const passive=b.passive===true||String(b.type||"").toLowerCase()==="passive"||freq===0;
   const tier=req>0&&shares!=null?Math.max(0,Math.floor(Math.log2(shares/req+1))):0;
-  const active=shares!=null&&req>0&&shares>=req,benefit=h?.dividend??h?.benefit;
-  const ready=benefit?.ready===true||Number(benefit?.ready)>0;
+  const active=shares!=null&&req>0&&shares>=req,benefit=h?.bonus??h?.dividend??h?.benefit;
+  const availability=benefit?.available??benefit?.ready;
+  const readyCount=num(availability);
+  const ready=availability===true||readyCount>0;
+  const waiting=availability===false||readyCount===0;
   const progress=num(benefit?.progress),cycle=num(benefit?.frequency??freq);
   const days=active&&!passive?(ready?0:progress!=null&&cycle>0?Math.max(0,cycle-progress):null):null;
   const nextShares=req>0&&shares!=null&&!(passive&&active)?Math.max(0,req*(2**(tier+1)-1)-shares):null;
@@ -1208,7 +1211,7 @@ function stockRows(){
   const lifetimeRoi=dividendTotal!=null&&cost>0?dividendTotal/cost*100:null;
   const combinedReturn=dividendTotal!=null&&profit!=null?dividendTotal+profit:null;
   const combinedRoi=combinedReturn!=null&&cost>0?combinedReturn/cost*100:null;
-  return {name:c.name||ticker,ticker,price,shares,value,req,freq,description,passive,tier,active,ready,days,nextShares,nextCost,blockCost,payout,daily,roi,nextRoi,cost,profit,claimed,dividendTotal,lifetimeRoi,combinedReturn,combinedRoi};
+  return {name:c.name||ticker,ticker,price,shares,value,req,freq,description,passive,tier,active,ready,waiting,days,nextShares,nextCost,blockCost,payout,daily,roi,nextRoi,cost,profit,claimed,dividendTotal,lifetimeRoi,combinedReturn,combinedRoi};
 
  });
 }

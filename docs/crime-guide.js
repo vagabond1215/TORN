@@ -208,13 +208,13 @@ const tornCrimeGuide = (() => {
     });
     dialog.showModal();
   }
-  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Stat growth"],["consume","Use consumables"],["crime","Crimes"],["education","Education"],["money","Money"]];
-  let recIncomplete=true,recUniques=false;
+  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Stat growth"],["consume","Use & Collect"],["crime","Crimes"],["education","Education"],["money","Money"]];
+  let recIncomplete=true,recUniques=false,collectView="ready";
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id)),recExpanded=new Set();
   function loadRecFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
-    recOwner=owner;growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
+    recOwner=owner;collectView="ready";growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
     try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v))recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}
   }
   let growthSettingsOpen=false;
@@ -469,6 +469,22 @@ const tornCrimeGuide = (() => {
         '<span>'+ (energy==null?"—":fmt(energy)+" E")+'</span></div>';
     }).join("")+'</div>';
   }
+  function happyTimeUntilFull(){
+    const state=tornGuideApi.state,bars=payload("bars","bars"),bridge=state.bridge;
+    const snapshot=state.fetchedAt?.bars;
+    const bridgeAt=bridge?.fields?.includes("happy")&&bridge.timestamp>Number(snapshot||0)?bridge.timestamp:null;
+    if((!snapshot||state.errors?.bars)&&!bridgeAt)return null;
+    const happy=tornBarProjection("happy",bars?.happy,bridgeAt??snapshot);
+    if(!happy||happy.current>=happy.maximum)return null;
+    return happy.until+(Math.ceil((happy.maximum-happy.current)/happy.step)-1)*happy.interval;
+  }
+  function lowHappyWarning(){
+    const remaining=happyTimeUntilFull();
+    return '<span class="growth-low-happy" data-growth-low-happy tabindex="0" aria-label="Low Happy" aria-describedby="growth-happy-timing" '+(remaining===null?"hidden":"")+'>'+
+      '<span class="growth-happy-icon" aria-hidden="true">🍬</span>'+
+      '<span class="growth-happy-tooltip" role="tooltip"><strong>Low Happy</strong>'+
+      '<span id="growth-happy-timing">'+(remaining===null?"":tornTctClock.formatDuration(remaining)+" until full")+'</span></span></span>';
+  }
   function growthCard(training,prefs){
     const activeSession=loadTrainingSession();
     const p=training.plan;
@@ -481,7 +497,7 @@ const tornCrimeGuide = (() => {
     const stats=p.stats.map(s=>'<div class="growth-stat '+(s.key===p.statKey?"is-target":"")+'"><div class="growth-stat-label"><strong>'+esc(s.label)+'</strong><span>'+fmt(s.current)+' / '+fmt(s.target)+'</span></div><div class="growth-stat-track" title="Current '+fmt(s.current)+'; build target '+fmt(s.target)+'"><span class="growth-target-bar" style="width:'+Math.min(100,s.target/max*100)+'%"></span><span class="growth-current-bar" style="width:'+Math.min(100,s.current/max*100)+'%"></span></div></div>').join("");
     const chips=p.perks.map(x=>'<span class="growth-perk" title="'+esc(x.items.map(y=>y.text).join("; "))+'">'+esc(x.group==="book"?"Book active":x.group.charAt(0).toUpperCase()+x.group.slice(1))+' '+(x.total>0?"+":"")+perc(x.total)+'</span>');
     if(p.bliss)chips.push('<span class="growth-perk">Ignorance Is Bliss</span>');
-    if(p.happy!=null&&p.maxHappy!=null&&Number(p.happy)<Number(p.maxHappy))chips.push('<span class="growth-warning" title="'+esc(fmt(p.happy)+" / "+fmt(p.maxHappy))+'">Low Happy</span>');
+    chips.push(lowHappyWarning());
     if(training.educationRisk)chips.push('<span class="growth-warning">Education risk · no drugs</span>');
     const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",train:"Train "+p.stat,refill:"Points refill",wait:"Wait",autoWait:"Wait",externalHappy:"External happiness"};
     const clock=t=>Number.isFinite(t)?(Math.floor(t/86400)>0?"D"+(Math.floor(t/86400)+1)+" · ":"")+Math.floor(t%86400/3600)+"h "+Math.floor(t%3600/60)+"m":"";
@@ -503,6 +519,14 @@ const tornCrimeGuide = (() => {
     return '<div class="growth-card">'+setup+instruction+timer+tabbar+panels+'</div>';
   }
   function tickGrowth(){
+    const warning=document.querySelector("[data-growth-low-happy]");
+    if(warning&&!warning.parentElement.closest("[hidden]")){
+      const remaining=happyTimeUntilFull();
+      warning.hidden=remaining===null;
+      const timing=warning.querySelector("#growth-happy-timing");
+      const value=remaining===null?"":tornTctClock.formatDuration(remaining)+" until full";
+      if(timing.textContent!==value)timing.textContent=value;
+    }
     const el=document.querySelector("[data-growth-due]");if(!el||el.closest("[hidden]"))return;
     const session=loadTrainingSession();if(session&&session.index<session.actions.length){const rows=sessionSchedule(session);el.dataset.growthDue=String(rows[session.index].due);const finish=document.querySelector("[data-growth-finish]");if(finish)finish.textContent=sessionTime(rows.at(-1)?.due);for(const row of document.querySelectorAll("[data-session-row]")){const x=rows[Number(row.dataset.sessionRow)],t=row.querySelector("[data-session-time]");if(x&&t){const value=sessionTime(x.due);if(t.textContent!==value)t.textContent=value;}}}
     const remaining=(Number(el.dataset.growthDue)-Date.now())/1000;
@@ -511,6 +535,24 @@ const tornCrimeGuide = (() => {
     const clock=el.querySelector("[data-growth-clock]"),value=ready?"Ready":tornTctClock.formatDuration(remaining);
     if(clock&&clock.textContent!==value)clock.textContent=value;
     const done=el.querySelector('[data-growth-session="done"]');if(done)done.disabled=!ready;
+  }
+  function useAndCollect(readyItems,stocks){
+    const ready=[...readyItems],upcoming=[];
+    for(const stock of stocks.filter(x=>x.active&&!x.passive&&x.freq>0&&x.description.trim()&&x.description!=="Benefit unavailable")
+      .sort((a,b)=>(a.days??Infinity)-(b.days??Infinity)||a.ticker.localeCompare(b.ticker))){
+      const title=stock.ticker+" dividend",reward=stock.description;
+      if(stock.ready)ready.push(recItem("Collect "+title,reward,"#stocks"));
+      else if(stock.waiting||stock.days>0){
+        const days=Math.ceil(stock.days);
+        const timing=days>0?"Ready in "+days+" day"+(days===1?"":"s"):"Payout timing unavailable";
+        upcoming.push(recItem(title,reward+" · "+timing,"#stocks"));
+      }
+    }
+    const views=[["ready","Ready",ready,"Nothing ready to use or collect."],["upcoming","Upcoming",upcoming,"No upcoming collections found."]];
+    const controls='<div class="rec-oc-filters" role="group" aria-label="Use and collect status">'+views.map(([key,label])=>
+      '<button type="button" class="rec-oc-toggle" data-collect-view="'+key+'" aria-pressed="'+(collectView===key)+'">'+label+'</button>').join("")+'</div>';
+    return controls+views.map(([key,,items,empty])=>'<div data-collect-panel="'+key+'" '+(collectView===key?"":"hidden")+'>'+
+      (items.length?'<ul class="crime-recommendations rec-advice">'+items.join("")+'</ul>':'<p class="fine-print">'+empty+'</p>')+'</div>').join("");
   }
   function adviceSections(count,trainingRecommendation){
     const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",completion=prefs.priority==="completion",risk=prefs.risk;
@@ -577,7 +619,6 @@ const tornCrimeGuide = (() => {
       rows.crime.push('<li><a href="https://www.torn.com/page.php?sid=points">Refill Nerve with Points</a></li>');
     }
     if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
-    if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
     rows.crime.push(crimeRecommendation("low",completion));
     loadEducationPreference();
     const m=educationModel();
@@ -598,7 +639,7 @@ const tornCrimeGuide = (() => {
     }
     if(!rows.education.length)add("education",growth?"Prioritize Sports Science / education reductions":"Prioritize Business or useful income-related courses","Course completion or prerequisites may be unavailable. Open Education to compare available courses.","#education");
     const money=payload("money","money"),wallet=n(money?.wallet??money?.cash),bank=n(money?.city_bank?.amount??money?.city_bank),cayman=n(money?.cayman_bank?.amount??money?.cayman_bank);
-    const stocks=stockRows(),company=prefs.priority==="company"||activities.includes("Business"),education=prefs.priority==="education";
+    const stocks=stockRows(),collectionStocks=tornGuideApi.state.errors?.stocks?[]:stocks,company=prefs.priority==="company"||activities.includes("Business"),education=prefs.priority==="education";
     const financialRisk={
       low:{travel:"Prefer short trips, carry only the purchase amount, and keep spare cash protected.",trade:"Prefer small transactions and trusted counterparties; avoid holding large sale proceeds in your wallet.",mug:"Prefer targets with well-understood combat and retaliation risk; account for Energy opportunity cost.",gamble:"Avoid gambling as an income strategy; preserve training and investment funds."},
       medium:{travel:"Compare profit per hour on short and longer routes; limit carried cash to planned purchases.",trade:"Consider moderately sized trades with verified prices, safe settlement and a predefined exposure limit.",mug:"Compare likely net proceeds with Energy, medical costs and retaliation risk; avoid uncertain targets.",gamble:"Treat gambling only as entertainment with a separate fixed loss limit; never use essential funds."},
@@ -622,7 +663,7 @@ const tornCrimeGuide = (() => {
     if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
     if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
     if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label)+(id==="growth"?growthCard(trainingRecommendation,prefs):((id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'))+recTileEnd).join("");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'))+recTileEnd).join("");
   }
 
   function recommendations(){
@@ -838,6 +879,13 @@ const tornCrimeGuide = (() => {
     view.addEventListener("click",e=>{
       const restockButton=e.target.closest("[data-restock-settings]");
       if(restockButton){e.preventDefault();openRestockSettings(view,restockButton);return;}
+      const collectButton=e.target.closest("[data-collect-view]");
+      if(collectButton){
+        collectView=collectButton.dataset.collectView;
+        for(const button of view.querySelectorAll("[data-collect-view]"))button.setAttribute("aria-pressed",String(button.dataset.collectView===collectView));
+        for(const panel of view.querySelectorAll("[data-collect-panel]"))panel.hidden=panel.dataset.collectPanel!==collectView;
+        return;
+      }
       const tab=e.target.closest("[data-growth-tab]");if(tab){selectGrowthTab(tab.dataset.growthTab,true);return;}
       const gear=e.target.closest("[data-growth-settings]");
       if(gear){e.preventDefault();e.stopPropagation();growthSettingsOpen=!growthSettingsOpen;recExpanded.add("growth");try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}refreshRecommendations(view);return;}
