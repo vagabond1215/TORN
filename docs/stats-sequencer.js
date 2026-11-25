@@ -359,7 +359,7 @@ const tornTrainSequence=(()=>{
   }
   // Home recommendations replay the same saved/default Plan templates with
   // one continuous weekly engine; no independent strategy definitions.
-  function weeklyPrograms(context,budget,risk){
+  function weeklyPrograms(context,budget,risk,options={}){
     const previous=ctx,old={...p};
     try{
       ctx=context;loadPlanPreferences();marketInputs();applyCooldownPerks();
@@ -391,7 +391,7 @@ const tornTrainSequence=(()=>{
       for(const [id,short,label] of candidates){
         const actions=(editedPlans.has(id)?steps[id]:defaultActions(id)).map(x=>({...x}));
         // External happiness has no verified price, so cannot establish affordability.
-        if(actions.some(x=>x.type==="externalHappy"))continue;
+        if(actions.some(x=>x.type==="externalHappy"||options.blockDrugs&&["xanax","ecstasy"].includes(x.type)))continue;
         const maxCycles=id==="natural"?1:Math.max(1,Math.floor(168/blockHours));
         let best=null;
         for(let cycles=1;cycles<=maxCycles;cycles++){
