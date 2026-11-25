@@ -2048,3 +2048,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-execution .growth-step-done{opacity:.65}
 .growth-execution .growth-step-next{color:var(--accent-strong);font-weight:700}
 .growth-execution li[data-session-row]{grid-template-columns:minmax(6rem,auto) minmax(0,1fr)}
+
+.growth-replay{display:grid;gap:.4rem;padding:.35rem 0}
+.growth-replay button{padding:.4rem .6rem;border:1px solid var(--border);border-radius:4px;background:var(--raised);color:var(--accent-strong);font:inherit;cursor:pointer}
+.growth-replay button:disabled{opacity:.5;cursor:not-allowed}
