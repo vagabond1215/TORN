@@ -12,13 +12,13 @@ const tornGuideApi=(()=>{
   const mins=60*1000,hrs=60*mins,days=24*hrs;
   const TTL={
     basic:days, profile:15*mins, bars:2*mins, cooldowns:2*mins, icons:15*mins, money:15*mins, networth:60*mins,
-    jobpoints:15*mins, skills:15*mins, battlestats:15*mins, gym:30*mins, perks:60*mins,
+    missions:5*mins, jobpoints:15*mins, skills:15*mins, battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
     stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
     honors:24*hrs,medals:24*hrs,honorCatalog:30*days,medalCatalog:30*days,gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog"],
+    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog","missions"],
     stats:["profile","bars","cooldowns","refills","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
@@ -1150,7 +1150,6 @@ function networthPanel(){
 }
 function renderDashboard() {
   let result='<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Home dashboard</h1></header>';
-  result+=tornRoadmap.renderActivities();
   if(!tornGuideApi.isConnected()){
     return result+'<section class="panel"><div class="panel-content"><p>Connect your Torn API key below to show your in-game-style dashboard. Account data remains private to this browser.</p></div></section>';
   }

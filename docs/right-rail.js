@@ -81,12 +81,28 @@ const tornRightRail=(()=>{
       (_,classes,title,actions)=>'<details class="'+classes+' rail-section" data-rail-section="'+key+'" '+(collapsed.has(key)?"":"open")+'><summary class="panel-heading"><span class="rail-section-title">'+title+'</span>'+actions+'</summary>')
       .replace(/<\/section>$/,"</details>");
   }
-  function render(route=(location.hash||"#home").slice(1)||"home"){
+  function render(route=tornGuideApi.routeName()){
     const el=host();if(!el)return;
     syncControls(route);
-    el.hidden=!tornGuideApi.isConnected()||route==="profile"||sections.every(([id])=>hiddenSections.has(id));
-    if(el.hidden){el.innerHTML="";return;}
-    el.innerHTML=[["timers",clocks],["networth",networthPanel],["property",property]].filter(([id])=>!hiddenSections.has(id)).map(([id,fn])=>collapsible(fn(),id)).join("");
+    const connected=tornGuideApi.isConnected();
+    const showFocus=route==="home"&&tornRoadmap.activitiesOpen();
+    const showSections=connected&&route!=="profile"&&sections.some(([id])=>!hiddenSections.has(id));
+    el.hidden=!showFocus&&!showSections;
+    let focus=el.querySelector("#home-activities");
+    const owner=String(tornGuideApi.state.identity?.id??"guest");
+    if(focus&&(!showFocus||focus.dataset.focusOwner!==owner)){focus.remove();focus=null;}
+    if(showFocus&&!focus){
+      el.insertAdjacentHTML("afterbegin",tornRoadmap.renderActivities());
+      el.querySelector("#home-activities").dataset.focusOwner=owner;
+    }
+    let content=el.querySelector("[data-rail-content]");
+    if(!content){
+      content=document.createElement("div");content.dataset.railContent="";
+      el.append(content);
+    }
+    content.hidden=!showSections;
+    content.innerHTML=showSections?[["timers",clocks],["networth",networthPanel],["property",property]]
+      .filter(([id])=>!hiddenSections.has(id)).map(([id,fn])=>collapsible(fn(),id)).join(""):"";
   }
   function tick(){
     const el=host();if(!el||el.hidden)return;
@@ -114,6 +130,7 @@ const tornRightRail=(()=>{
       try{localStorage.setItem(sectionKey,JSON.stringify([...hiddenSections]));}catch{}
       render();
     });
+    tornRoadmap.wireActivities(host());
     host()?.addEventListener("toggle",event=>{const section=event.target;if(!section.matches?.("details[data-rail-section]")||!section.isConnected)return; if(section.open)collapsed.delete(section.dataset.railSection);else collapsed.add(section.dataset.railSection);},true);
     host()?.addEventListener("click",event=>{
       const btn=event.target.closest("[data-rail-refresh]");

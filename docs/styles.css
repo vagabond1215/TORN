@@ -1252,12 +1252,13 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .tc-selected-gym small{font-size:.78rem;color:var(--muted)}
 
 /* Right pane visibility switches in the global quick-access strip. */
-.rail-visibility-controls{display:flex;flex:0 0 auto;align-items:stretch;margin-left:auto;border-left:1px solid var(--border)}
+.rail-visibility-controls{display:flex;flex:0 0 auto;align-items:stretch;margin-left:auto}
 .rail-visibility-controls[hidden]{display:none}
 .quick-access .rail-visibility-toggle{display:grid;place-items:center;width:36px;height:var(--guide-bar-height);padding:0;border:0;border-radius:0;background:transparent;color:var(--muted);cursor:pointer;box-shadow:none}
 .quick-access .rail-visibility-toggle[aria-pressed="true"]{color:var(--accent-strong)}
 .quick-access .rail-visibility-toggle[aria-pressed="false"]{opacity:.5}
-.quick-access .rail-visibility-toggle:hover{opacity:1;color:var(--accent-strong);background:var(--raised);box-shadow:inset 1px 0 var(--border),inset -1px 0 var(--border)}
+.quick-access .rail-visibility-toggle:hover{opacity:1;color:var(--accent-strong);background:var(--raised)}
+.quick-access .quick-link:is(:hover,:focus-visible){box-shadow:none}
 .quick-access .rail-visibility-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 @media(min-width:901px){.layout:has(>.guide-right-rail[hidden]){grid-template-columns:205px minmax(0,1fr)}}
 @media(min-width:901px) and (max-width:1120px){.layout:has(>.guide-right-rail[hidden]){grid-template-columns:165px minmax(0,1fr)}}
@@ -1916,10 +1917,14 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rec-tile>h3{display:flex;align-items:center;justify-content:center;text-align:center;min-height:34px;margin:-.7rem -.7rem .5rem;padding:.35rem .7rem;box-sizing:border-box;background:color-mix(in srgb,var(--surface) 70%,var(--canvas));border-bottom:1px solid var(--border);border-radius:5px 5px 0 0}
 .home-activities>.panel-heading{display:flex;align-items:center;justify-content:center;text-align:center;min-height:34px;padding:.35rem .65rem;background:color-mix(in srgb,var(--surface) 70%,var(--canvas))}
 .home-activities>.panel-heading h2{margin:0;font-size:.9rem}
-.layout>main:has(>#topic-view:not([hidden])>.home-activities){padding-top:0}
-#topic-view>.home-activities{margin-top:0;border-top:0;border-radius:0 0 6px 6px}
-#topic-view>.home-activities[hidden]{display:none!important}
-.home-settings-toggle-wrap{display:flex;align-items:stretch;flex:0 0 auto;border-left:1px solid var(--border)}
+.guide-right-rail>.home-activities{margin:0;border:0;border-radius:0}
+.guide-right-rail>.home-activities+[data-rail-content]:not([hidden]){border-top:1px solid var(--border)}
+.guide-right-rail .home-activities>.panel-content>.roadmap-styles,.guide-right-rail .home-priority-choices{display:grid;grid-template-columns:minmax(0,1fr)}
+.guide-right-rail .home-activities .roadmap-style{justify-content:flex-start}
+.guide-right-rail .home-activities .home-priority-choices .roadmap-style{width:auto;min-width:0}
+.guide-right-rail .home-pref-row,.guide-right-rail .home-pref-group{display:grid;align-items:start}
+.guide-right-rail .home-budget input{max-width:100%}
+.home-settings-toggle-wrap{display:flex;align-items:stretch;flex:0 0 auto}
 .home-settings-toggle-wrap+.rail-visibility-controls{margin-left:0}
 .home-activities .home-priority-choices .roadmap-style{width:96px;min-width:96px}
 .home-activities .home-risk-choices .roadmap-style{width:40px;min-width:40px;position:relative}
@@ -2012,15 +2017,15 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-purchases{display:none;position:absolute;z-index:2;bottom:calc(100% + .15rem);left:50%;transform:translateX(-50%);width:max-content;max-width:min(12rem,62vw);padding:.4rem .5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;box-shadow:0 2px 7px #0005;text-align:left}
 .growth-cost:hover .growth-purchases,.growth-cost:focus .growth-purchases{display:block}
 .growth-perks{display:flex;flex-wrap:wrap;gap:.3rem}
-.growth-low-happy{position:absolute;top:.5rem;left:.5rem;display:inline-flex;align-items:center;color:#f0ad45;cursor:help}
-.growth-low-happy[hidden]{display:none}
-.growth-happy-icon{position:relative;isolation:isolate;display:grid;place-items:end center;width:1.65rem;height:1.5rem;padding-bottom:.14rem;box-sizing:border-box;font-size:.76rem;line-height:1}
-.growth-happy-icon::before,.growth-happy-icon::after{content:"";position:absolute;inset:0;clip-path:polygon(50% 0,100% 100%,0 100%);background:currentColor;z-index:-1}
-.growth-happy-icon::after{inset:.19rem .17rem .1rem;background:var(--canvas)}
-.growth-happy-tooltip{display:none;position:absolute;z-index:2;top:calc(100% + .25rem);left:0;width:max-content;padding:.4rem .5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;box-shadow:0 2px 7px #0005}
-.growth-happy-tooltip span{font-variant-numeric:tabular-nums}
-.growth-low-happy:is(:hover,:focus) .growth-happy-tooltip{display:grid;gap:.15rem}
-:root[data-theme="light"] .growth-low-happy{color:#a65c00}
+.growth-bar-warning{position:relative;display:inline-flex;align-items:center;color:#f0ad45;cursor:help}
+.growth-bar-warning[hidden]{display:none}
+.growth-warning-icon{position:relative;isolation:isolate;display:grid;place-items:end center;width:1.65rem;height:1.5rem;padding-bottom:.14rem;box-sizing:border-box;font-size:.76rem;line-height:1}
+.growth-warning-icon::before,.growth-warning-icon::after{content:"";position:absolute;inset:0;clip-path:polygon(50% 0,100% 100%,0 100%);background:currentColor;z-index:-1}
+.growth-warning-icon::after{inset:.19rem .17rem .1rem;background:var(--canvas)}
+.growth-bar-tooltip{display:none;position:absolute;z-index:2;top:calc(100% + .25rem);left:0;width:max-content;padding:.4rem .5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;box-shadow:0 2px 7px #0005}
+.growth-bar-tooltip span{font-variant-numeric:tabular-nums}
+.growth-bar-warning:is(:hover,:focus) .growth-bar-tooltip{display:grid;gap:.15rem}
+:root[data-theme="light"] .growth-bar-warning{color:#a65c00}
 .growth-perk,.growth-warning{border:1px solid var(--border);border-radius:4px;padding:.25rem .4rem;font-size:.72rem}
 .growth-perk{color:var(--accent-strong)}
 .growth-warning{color:#f0ad45;border-color:#ad813f}
@@ -2050,7 +2055,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-next-step .growth-next-clock{font-size:clamp(1.5rem,3vw,2.15rem);font-weight:750;line-height:1.15;font-variant-numeric:tabular-nums;color:#f0ad45}
 .growth-next-step[data-ready="true"] .growth-next-clock{color:var(--accent-strong)}
 .growth-next-step:not([data-growth-due]) .growth-next-clock{color:var(--muted)}
-.growth-next-step>span:not(.growth-low-happy){font-size:.9rem;font-weight:650}
+.growth-next-step>span:not(.growth-bar-warning){font-size:.9rem;font-weight:650}
 :root[data-theme="light"] .growth-next-step[data-ready="false"][data-growth-due] .growth-next-clock{color:#a65c00}
 
 .growth-counter-actions{position:absolute;top:.3rem;right:.3rem;display:flex;gap:.1rem}
@@ -2060,7 +2065,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-counter-actions button:disabled{opacity:.35;cursor:default}
 .growth-counter-actions button:not(:disabled):is(:hover,:focus-visible){background:var(--raised)}
 .growth-next-step>small{box-sizing:border-box;width:100%;padding-inline:3.2rem}
-.growth-session-controls{display:flex;flex-wrap:wrap;justify-content:center;gap:.35rem}
+.growth-session-controls:not(:has(> :not([hidden]))){display:none}
+.growth-session-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.35rem}
 .growth-session-controls button{padding:.35rem .65rem;border:1px solid var(--border);border-radius:4px;background:var(--raised);color:var(--text);font:inherit;cursor:pointer}
 .growth-session-controls button:is([data-growth-session="start"],[data-growth-session="done"]):not(:disabled){border-color:var(--accent);color:var(--accent-strong)}
 .growth-session-controls button:disabled{opacity:.5;cursor:not-allowed}
