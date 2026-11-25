@@ -233,13 +233,7 @@ const tornCrimeGuide = (() => {
     });
     return '<li class="rec-pickpocket"><div><strong>Recommended targets</strong><small>'+ (maxTier===0?"Easy targets only":maxTier===1?"Easy and moderate targets":maxTier===2?"Up to difficult targets":"All difficulty bands")+'</small><div class="crime-table-scroll"><table class="crime-table"><thead><tr><th>Target</th><th>Preferred state</th><th>Unique condition</th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div><small>'+(avoided.length?"Avoid for unique hunting: "+esc(avoided.join(", "))+". ":"")+'Unmapped unique rewards remain unverified. Check the star and live success conditions in Torn. <a href="https://wiki.torn.com/wiki/Pickpocketing" target="_blank" rel="noopener">Wiki</a></small></div></li>';
   }
-  function adviceSections(count){
-    const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",completion=prefs.priority==="completion",risk=prefs.risk;
-    const rows={merit:[],growth:[],consume:[],crime:[],education:[],money:[]};
-    const add=(key,title,detail,link)=>rows[key].push(recItem(title,detail,link));
-    const n=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
-    for(const x of tornMeritGuide.recommendations())add("merit",x.name,x.detail+" · "+x.effort,x.link);
-    if(!rows.merit.length)add("merit","Award shortlist unavailable","Open Merits to load the award catalog and compare unearned honors.","#merits");
+  function trainingRecommendationContext(prefs){
     const iconData=payload("icons","icons");
     const iconFresh=iconData&&!tornGuideApi.state.errors?.icons&&Date.now()-Number(tornGuideApi.state.fetchedAt?.icons||0)<15*60000;
     const iconTexts=iconFresh?Object.values(iconData).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")):[];
@@ -250,12 +244,22 @@ const tornCrimeGuide = (() => {
     const protectedEducation=jobPerks.some(x=>/\bRestraint\b|education is unaffected by drug addiction|education.*immune.*addiction/i.test(x));
     const educationRisk=enrolled&&highAddiction&&!protectedEducation;
     const blockDrugs=highAddiction&&(!enrolled||!protectedEducation);
+    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs});
+    return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan};
+  }
+  function adviceSections(count,trainingRecommendation){
+    const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",completion=prefs.priority==="completion",risk=prefs.risk;
+    const rows={merit:[],growth:[],consume:[],crime:[],education:[],money:[]};
+    const add=(key,title,detail,link)=>rows[key].push(recItem(title,detail,link));
+    const n=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
+    for(const x of tornMeritGuide.recommendations())add("merit",x.name,x.detail+" · "+x.effort,x.link);
+    if(!rows.merit.length)add("merit","Award shortlist unavailable","Open Merits to load the award catalog and compare unearned honors.","#merits");
+    const {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan}=trainingRecommendation;
     if(educationRisk){
       const detail="Active education course · addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Avoid all drugs until addiction is reduced. Course dismissal can occur at 5%; restarting loses progress.";
       add("consume","Protect education · avoid all drugs",detail,"#education");
       add("education","Education dismissal risk",detail,"#education");
     }else if(enrolled&&highAddiction&&protectedEducation)add("consume","Education protected by Restraint","The active job perk protects enrollment, but addiction still affects other gameplay; consider rehabilitation.","#education");
-    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,risk,{blockDrugs});
     if(plan){
       add("growth","Train "+plan.stat,plan.detail,"#stats");
       const p=plan.program;
@@ -354,7 +358,9 @@ const tornCrimeGuide = (() => {
       const owned=all.filter(x=>matches(x,name)).reduce((n,x)=>n+qty(x),0);
       return owned||null;
     }
-    const buckets={current:new Map(),stock:new Map(),crime:new Map(),oc:new Map()};
+    const prefs=tornRoadmap.preferences(),trainingRecommendation=trainingRecommendationContext(prefs);
+    const program=trainingRecommendation.plan?.program,planCosts=program?.costs??{};
+    const buckets={training:new Map(),current:new Map(),stock:new Map(),crime:new Map(),oc:new Map()};
     function add(bucket,item,hint,target,reason,level){
       const n=count(item,hint);
       if(n===null||n>=target)return;
@@ -396,11 +402,27 @@ const tornCrimeGuide = (() => {
       for(const item of tools.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · reusable",level);
       for(const item of materials.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · consumed",level);
     }
-    for(const [name,cat,target] of reserveDefaults)add("stock",name,cat,target,"Suggested reserve");
-    for(const [cat,target] of [["Candy",50],["Alcohol",25],["Energy Drink",5]]){
-      if(!ready(cat))continue;
+    // The selected weekly program is the same object used by growth and consumable advice.
+    const trainingItems=[["Xanax","Drug","xanax"],["Ecstasy","Drug","ecstasy"],["Erotic DVD","Booster","dvd"]];
+    for(const [name,cat,key] of trainingItems){
+      if(planCosts[key]>0&&!(cat==="Drug"&&trainingRecommendation.blockDrugs))add("training",name,cat,planCosts[key],program.label+" · 7-day requirement");
+    }
+    const categoryReserve=(bucket,cat,target,reason)=>{
+      if(!ready(cat)||!(target>0))return;
       const owned=st.inventory[cat].reduce((n,x)=>n+qty(x),0);
-      if(owned<target)buckets.stock.set(cat,{item:cat+" (any type)",owned,target,reasons:["Suggested category reserve"],price:null,level:99});
+      if(owned<target)buckets[bucket].set(cat,{item:cat+" (any type)",owned,target,reasons:[reason],price:null,level:99});
+    };
+    if(planCosts.candy>0)categoryReserve("training","Candy",planCosts.candy,program.label+" · 7-day requirement; match planned happiness tier");
+    if(planCosts.alcohol>0)categoryReserve("training","Alcohol",planCosts.alcohol,program.label+" · 7-day requirement");
+    for(const [name,cat,target] of reserveDefaults){
+      if(cat==="Drug"&&trainingRecommendation.blockDrugs)continue;
+      if(program&&trainingItems.some(([n])=>normalize(n)===normalize(name)))continue;
+      add("stock",name,cat,target,"Optional reserve");
+    }
+    for(const [cat,target] of [["Candy",50],["Alcohol",25],["Energy Drink",5]]){
+      if(cat==="Candy"&&program)continue;
+      if(cat==="Alcohol"&&planCosts.alcohol>0)continue;
+      categoryReserve("stock",cat,target,"Optional category reserve");
     }
     // Avoid duplicate shopping rows while retaining every relevant use.
     const seen=new Map();
@@ -418,9 +440,9 @@ const tornCrimeGuide = (() => {
     const total=[...Object.values(buckets)].reduce((n,g)=>n+g.size,0);
     const pending=tornGuideApi.inventoryTypes.filter(c=>!ready(c));
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
-    const restock=recEnabled.has("restock")?'<section class="rec-tile" data-rec-group="restock"><h3>Restock</h3>'+section("Assigned OC requirements",buckets.current,true)+section("Low consumable reserves",buckets.stock,true)+section("Crime equipment & materials",buckets.crime,true)+optional+(!total?'<p>No shortages identified in loaded inventory.</p>':"")+(pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+'</section>':"";
+    const restock=recEnabled.has("restock")?'<section class="rec-tile" data-rec-group="restock"><h3>Restock</h3>'+section("Training plan shortages",buckets.training,true)+section("Assigned OC requirements",buckets.current,true)+section("Optional consumable reserves",buckets.stock,false)+section("Crime equipment & materials",buckets.crime,true)+optional+(!total?'<p>No shortages identified in loaded inventory.</p>':"")+(pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+'</section>':"";
     const priority=tornRoadmap.preferences().priority,first={growth:["growth","consume"],completion:["crime","merit"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
-    return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
+    return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
 
   // Keep independent tile heights while retaining the existing priority order.
