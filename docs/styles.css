@@ -1741,3 +1741,22 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-detail-row>details>summary:focus-visible{outline-offset:-2px}
 .inventory-detail-row>details>summary>.inventory-buyer-badge:not(:empty){flex:none}
 .inventory-detail-row>details>summary .inventory-buyer-icon{background:transparent;color:#36a865;padding:0 .15rem}
+
+/* Consistent unobtrusive, theme-aware scrollbars throughout the guide. */
+:root{--scroll-thumb:#89949a;--scroll-hover:#b1bdc3;--scroll-arrow:#a6b2b8}
+:root[data-theme="light"],[data-theme="light"]{--scroll-thumb:#92999d;--scroll-hover:#666f75;--scroll-arrow:#626c72}
+*{scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent}
+@supports selector(::-webkit-scrollbar){
+  *{scrollbar-width:auto;scrollbar-color:auto}
+  *::-webkit-scrollbar{width:10px;height:10px;background:transparent}
+  *::-webkit-scrollbar-track,*::-webkit-scrollbar-corner{background:transparent}
+  *::-webkit-scrollbar-thumb{background:var(--scroll-thumb);background-clip:padding-box;border:2px solid transparent;border-radius:8px}
+  *::-webkit-scrollbar-thumb:hover{background-color:var(--scroll-hover)}
+  *::-webkit-scrollbar-button{display:block;width:10px;height:10px;background-color:var(--scroll-arrow);background-clip:content-box;border:2px solid transparent}
+  *::-webkit-scrollbar-button:vertical:decrement{clip-path:polygon(50% 18%,90% 78%,10% 78%)}
+  *::-webkit-scrollbar-button:vertical:increment{clip-path:polygon(10% 22%,90% 22%,50% 82%)}
+  *::-webkit-scrollbar-button:horizontal:decrement{clip-path:polygon(18% 50%,78% 10%,78% 90%)}
+  *::-webkit-scrollbar-button:horizontal:increment{clip-path:polygon(22% 10%,82% 50%,22% 90%)}
+  *::-webkit-scrollbar-button:double-button{display:none}
+}
+.inventory-panel>.inventory-detail-list{margin-inline-end:calc(-.85rem + 2px);padding-inline-end:calc(.85rem - 2px)}
