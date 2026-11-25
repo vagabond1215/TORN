@@ -261,6 +261,52 @@ const tornCrimeGuide = (() => {
     return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan};
   }
   let growthExecutionOpen=false;
+  let sessionOwner=null,trainingSession=null,trainingDraft=null;
+  function loadTrainingSession(){
+    const owner=String(tornGuideApi.state.identity?.id??"guest");
+    if(sessionOwner!==owner){sessionOwner=owner;trainingSession=null;try{const x=JSON.parse(localStorage.getItem("torn-city-guide:training-session:"+owner));if(x?.version===1&&Array.isArray(x.actions)&&x.actions.length<=2000&&Number.isFinite(x.started)&&Number.isInteger(x.index)&&x.index>=0&&x.index<=x.actions.length)trainingSession=x;}catch{}}
+    return trainingSession;
+  }
+  function saveTrainingSession(){try{const key="torn-city-guide:training-session:"+sessionOwner;if(trainingSession)localStorage.setItem(key,JSON.stringify(trainingSession));else localStorage.removeItem(key);}catch{}}
+  const actionable=x=>Number.isFinite(x.at)&&x.at>=0&&!["wait","autoWait","happyReset"].includes(x.type)&&(x.type!=="train"||x.energy>0)&&(!["candy","dvd"].includes(x.type)||x.quantity>0);
+  function prepState(plan,blockDrugs){
+    const program=plan?.program,raw=payload("bars","bars"),st=tornGuideApi.state;
+    const projected=tornBarProjection("energy",raw?.energy,st.fetchedAt?.bars);
+    const cd=payload("cooldowns","cooldowns"),drug=cd?.drug;
+    const remaining=drug==null?null:Math.max(0,Number(typeof drug==="object"?drug.remaining??drug.time_left:drug)-(Date.now()-Number(st.fetchedAt?.cooldowns||Date.now()))/1000);
+    if(!program||!projected)return {ready:false,label:"Load training and Energy data",due:null};
+    const e=projected.current,cap=projected.maximum,cost=Number(plan.gym?.energy)||10;
+    const first=program.execution.find(actionable),startsZero=program.startEnergy==="zero"&&program.id!=="natural";
+    if(blockDrugs&&program.drugRisk)return {ready:false,label:"Drug restriction active",due:null};
+    if(startsZero){
+      if(remaining===null)return {ready:false,label:"Check drug cooldown",due:null};
+      const alreadyStacked=e>=cap+250;
+      if(alreadyStacked)return {ready:false,label:"Existing Energy stack detected · review before starting",due:null};
+      // For a zero-E jump, spend natural energy as close to the first Xanax as possible.
+      let wait=remaining;
+      if(e>0&&e%cost!==0&&e<cap){let n=1;while(n<=cost&&Math.min(cap,e+n*projected.step)%cost!==0)n++;if(n<=cost)wait=Math.max(wait,projected.until+(n-1)*projected.interval);}
+      if(wait>0)return {ready:false,label:e>0?"Wait, then train to 0 E and take Xanax":"Wait for first Xanax",due:Date.now()+wait*1000};
+      if(e>0)return {ready:false,label:"Train "+plan.stat+" · "+Math.floor(e/cost)*cost+" E, then start at 0 E and take Xanax",due:null};
+      return {ready:true,label:"Ready to begin Xanax stack",due:null};
+    }
+    if(program.id!=="natural"&&e<cap){const wait=projected.until+Math.max(0,Math.ceil((cap-e)/projected.step)-1)*projected.interval;return {ready:false,label:"Regenerate to "+cap+" E ("+e+" / "+cap+")",due:Date.now()+wait*1000};}
+    if(first?.type==="xanax"&&remaining>0)return {ready:false,label:"Wait for Xanax cooldown",due:Date.now()+remaining*1000};
+    return {ready:true,label:"Ready to start "+program.label,due:null};
+  }
+  function sessionPanel(plan,training,names,fmt){
+    const session=loadTrainingSession(),program=plan.program;
+    const prep=prepState(plan,training.blockDrugs);
+    trainingDraft={plan,training,prep,owner:sessionOwner};
+    let label,heading,due=null,controls="";
+    if(session){
+      const step=session.actions[session.index];
+      heading="Active plan · "+session.label;
+      if(!step){heading="Training session complete";label="All actions confirmed";controls='<button type="button" data-growth-session="stop">Finish</button>';}
+      else if(training.blockDrugs&&session.drugRisk){label="Drug restriction active · stop and replan";controls='<button type="button" data-growth-session="stop">Stop plan</button>';}
+      else {due=Math.max(session.started+step.at*1000,session.notBefore||0);label=(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done" '+(due>Date.now()?"disabled":"")+'>Mark done</button><button type="button" data-growth-session="stop">Stop plan</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;}
+    }else{heading="Preparation · not started";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button><button type="button" data-growth-session="refresh">Check readiness</button>';}
+    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'"><small>'+esc(heading)+'</small><strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span>'+esc(label)+'</span><div class="growth-session-controls">'+controls+'</div><small>'+(session?"Confirm completed actions manually; no in-game actions are automated.":"Countdown is preparation only until Start is pressed.")+'</small></div>';
+  }
   function growthCard(training,prefs){
     const p=training.plan;
     if(!p?.stats)return '<p class="fine-print">'+esc(p?.detail??"Load battle stats and choose a build in Stats.")+'</p><a href="#stats">View Stats</a>';
@@ -274,11 +320,7 @@ const tornCrimeGuide = (() => {
     const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",train:"Train "+p.stat,refill:"Points refill",wait:"Wait",autoWait:"Wait",externalHappy:"External happiness"};
     const clock=t=>Number.isFinite(t)?(Math.floor(t/86400)>0?"D"+(Math.floor(t/86400)+1)+" · ":"")+Math.floor(t%86400/3600)+"h "+Math.floor(t%3600/60)+"m":"";
     const execution=(prog?.execution??[]).filter(x=>x.type!=="train"||x.energy>0).filter(x=>!["candy","dvd"].includes(x.type)||x.quantity>0).map(x=>'<li><time>'+esc(clock(x.at))+'</time><span>'+esc(names[x.type]??x.type)+(x.type==="train"?" · "+fmt(x.energy)+" E":["candy","dvd"].includes(x.type)?" × "+fmt(x.quantity):"")+(x.reason?" · "+esc(x.reason):"")+(["wait","autoWait"].includes(x.type)&&Number.isFinite(x.end)&&Number.isFinite(x.at)?" · "+fmt((x.end-x.at)/60)+" min":"")+'</span></li>').join("");
-    // First actionable event only; never infer that a player performed a step.
-    const next=(prog?.execution??[]).find(x=>Number.isFinite(x.at)&&x.at>=0&&!["wait","autoWait","happyReset"].includes(x.type)&&(x.type!=="train"||x.energy>0)&&(!["candy","dvd"].includes(x.type)||x.quantity>0));
-    const nextLabel=next?(names[next.type]??next.type)+(next.type==="train"?" · "+fmt(next.energy)+" E":["candy","dvd"].includes(next.type)?" × "+fmt(next.quantity):""):"No scheduled action";
-    const due=next?Date.now()+next.at*1000:null;
-    const timer='<div class="growth-next-step" '+(due!==null?'data-growth-due="'+due+'"':"")+' data-ready="'+(due!==null&&due<=Date.now())+'"><small>Next step · estimated</small><strong class="growth-next-clock" data-growth-clock>'+esc(due===null?"—":due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span>'+esc(nextLabel)+'</span></div>';
+    const timer=sessionPanel(p,training,names,fmt);
     return '<div class="growth-card">'+timer+'<div class="growth-row"><strong>Current stats</strong><a href="#stats">View</a></div><div class="growth-build">'+esc(p.build)+'</div>'+stats+'<small class="growth-legend">Solid: current · muted: build target · shared scale</small><div class="growth-metrics"><div><small>Train</small><strong class="growth-accent">'+esc(p.stat)+'</strong></div><div><small>Current gym</small><strong>'+esc(p.gym?.name??"Unavailable")+'</strong></div><div><small>E / train</small><strong>'+esc(p.gym?.energy??"—")+'</strong></div></div><small>'+fmt(p.remaining)+' remaining to build target · '+perc(p.modifier)+' modeled gain modifier</small>'+(chips.length?'<div class="growth-perks">'+chips.join("")+'</div>':"")+(prog?'<div class="growth-plan"><strong class="growth-accent">'+esc(prog.label)+'</strong><div class="growth-metrics"><div><small>7-day gain</small><strong class="growth-accent">+'+fmt(prog.gain)+'</strong></div><div><small>Weekly cost</small><strong>$'+fmt(prog.money)+'</strong></div><div><small>Energy</small><strong>'+fmt(prog.used)+' E</strong></div></div><small>'+fmt(prog.cycles)+' cycles · '+esc(prog.blockHours)+'h window · '+(prefs.weeklyBudget==null?"Budget not set":"Budget $"+fmt(prefs.weeklyBudget))+'</small><details class="rec-group growth-execution" data-growth-execution '+(growthExecutionOpen?"open":"")+'><summary>Execution list</summary><small>Elapsed time from simulation start. Follow live cooldowns; estimates may change.</small><ol>'+execution+'</ol></details></div>':'<p class="fine-print">No affordable training plan available. Review Stats and budget.</p>')+'</div>';
   }
   function tickGrowth(){
@@ -288,6 +330,7 @@ const tornCrimeGuide = (() => {
     const ready=remaining<=0;el.dataset.ready=String(ready);
     const clock=el.querySelector("[data-growth-clock]"),value=ready?"Ready":tornTctClock.formatDuration(remaining);
     if(clock&&clock.textContent!==value)clock.textContent=value;
+    const done=el.querySelector('[data-growth-session="done"]');if(done)done.disabled=!ready;
   }
   function adviceSections(count,trainingRecommendation){
     const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",completion=prefs.priority==="completion",risk=prefs.risk;
@@ -536,6 +579,8 @@ const tornCrimeGuide = (() => {
       if(e.target.matches?.("[data-oc-optional]"))ocOpen=e.target.open;
     },true);
     view.addEventListener("click",e=>{
+      const sessionButton=e.target.closest("[data-growth-session]");
+      if(sessionButton){const action=sessionButton.dataset.growthSession,session=loadTrainingSession();if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;trainingSession={version:1,label:prog.label,stat:p.stat,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:prog.execution.filter(actionable),notBefore:0};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1];session.index++;session.notBefore=next?Date.now()+Math.max(0,next.at-old.at)*1000:0;saveTrainingSession();}else if(action==="stop"){trainingSession=null;saveTrainingSession();}refreshRecommendations(view);return;}
       const btn=e.target.closest("[data-oc-band],[data-rec-type],[data-rec-incomplete],[data-rec-uniques],[data-rec-history],[data-rec-crime-load]");
       if(!btn||!btn.closest("[data-home-recommendations]"))return;
       if(btn.hasAttribute("data-rec-crime-load")){
