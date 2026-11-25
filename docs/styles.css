@@ -1885,3 +1885,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 /* Reserve a consistent buyer indicator slot for equipment rows so stats do not jump. */
 .inventory-detail-row[data-gear-category]>details>summary>.inventory-buyer-badge{display:inline-flex;justify-content:center;width:1.05rem;flex:none}
 .inventory-detail-row[data-gear-category]>details>summary>.inventory-buyer-badge:empty{visibility:hidden}
+
+/* Explicit paired equipment rows and inline refresh control. */
+.inventory-detail-body .inventory-gear-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem .55rem}
+.inventory-gear-wide{grid-column:1/-1}
+.inventory-gear-pair{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:.3rem}
+.inventory-gear-pair dt,.inventory-gear-pair dd{min-width:0;overflow-wrap:anywhere}
+.inventory-gear-wide{grid-template-columns:minmax(0,1fr) minmax(0,3fr)}
+#topic-view .inventory-item-tabs .inventory-gear-refresh{margin-inline-start:auto;align-self:center;padding:0;width:26px;height:26px;min-height:0}
