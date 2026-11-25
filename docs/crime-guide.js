@@ -485,6 +485,24 @@ const tornCrimeGuide = (() => {
       '<span class="growth-happy-tooltip" role="tooltip"><strong>Low Happy</strong>'+
       '<span id="growth-happy-timing">'+(remaining===null?"":tornTctClock.formatDuration(remaining)+" until full")+'</span></span></span>';
   }
+  function plannedSteps(execution,names,fmt){
+    const clock=t=>Number.isFinite(t)?(Math.floor(t/86400)>0?"D"+(Math.floor(t/86400)+1)+" · ":"")+Math.floor(t%86400/3600)+"h "+Math.floor(t%3600/60)+"m":"";
+    return execution.filter(step=>(step.type!=="train"||step.energy>0)&&
+      (!["candy","dvd"].includes(step.type)||step.quantity>0)).map(step=>{
+      const wait=["wait","autoWait"].includes(step.type);
+      const duration=wait&&Number.isFinite(step.end)&&Number.isFinite(step.at)?Math.max(0,step.end-step.at):null;
+      let label=names[step.type]??step.type;
+      if(wait&&/^Drug cooldown/i.test(step.reason??"")){
+        label="Wait - Drug Cooldown"+(duration===null?"":" "+tornTctClock.formatDuration(duration));
+      }else{
+        if(step.type==="train")label+=" · "+fmt(step.energy)+" E";
+        if(["candy","dvd"].includes(step.type))label+=" × "+fmt(step.quantity);
+        if(step.reason)label+=" · "+step.reason;
+        if(duration!==null)label+=" · "+fmt(duration/60)+" min";
+      }
+      return '<li><time>'+esc(clock(step.at))+'</time><span>'+esc(label)+'</span></li>';
+    }).join("");
+  }
   function growthCard(training,prefs){
     const activeSession=loadTrainingSession();
     const p=training.plan;
@@ -499,8 +517,7 @@ const tornCrimeGuide = (() => {
     if(p.bliss)chips.push('<span class="growth-perk">Ignorance Is Bliss</span>');
     if(training.educationRisk)chips.push('<span class="growth-warning">Education risk · no drugs</span>');
     const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",train:"Train "+p.stat,refill:"Points refill",wait:"Wait",autoWait:"Wait",externalHappy:"External happiness"};
-    const clock=t=>Number.isFinite(t)?(Math.floor(t/86400)>0?"D"+(Math.floor(t/86400)+1)+" · ":"")+Math.floor(t%86400/3600)+"h "+Math.floor(t%3600/60)+"m":"";
-    const execution=(prog?.execution??[]).filter(x=>x.type!=="train"||x.energy>0).filter(x=>!["candy","dvd"].includes(x.type)||x.quantity>0).map(x=>'<li><time>'+esc(clock(x.at))+'</time><span>'+esc(names[x.type]??x.type)+(x.type==="train"?" · "+fmt(x.energy)+" E":["candy","dvd"].includes(x.type)?" × "+fmt(x.quantity):"")+(x.reason?" · "+esc(x.reason):"")+(["wait","autoWait"].includes(x.type)&&Number.isFinite(x.end)&&Number.isFinite(x.at)?" · "+fmt((x.end-x.at)/60)+" min":"")+'</span></li>').join("");
+    const execution=plannedSteps(prog?.execution??[],names,fmt);
     const timer=sessionPanel(p,training,names,fmt);
     const statLabel=activeSession?(p.stats.find(s=>s.key===activeSession.statKey)?.label??activeSession.stat):p.stats.find(s=>s.key===p.statKey)?.label??p.stat;
     const gymName=activeSession?.gym?.name??p.gym?.name,article=gymName==="Gun Shop"?"the ":"";
