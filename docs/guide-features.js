@@ -739,15 +739,204 @@ function inventoryMarkup() {
   return result;
 }
 const tornReportCatalog=Object.freeze({
-  energy:["Energy","https://torn.report/energy","Energy use & recovery"],
-  nerve:["Nerve","https://torn.report/nerve","Crime nerve history"],
-  education:["Education","https://torn.report/education","Courses and education benefits"],
-  drugs:["Drugs","https://torn.report/drugs","Drug use history"],
-  racing:["Racing","https://torn.report/racing","Races and performance"],
-  uniques:["Crime uniques","https://torn.report/uniques","Unique crime outcomes"],
-  trains:["Trains received","https://torn.report/trains","Workplace training history"],
-  oc:["Organized crimes","https://torn.report/oc","Faction crime participation"],
-  travel:["Travel","https://torn.report/travel","Travel activity and trips"]
+  "energy": [
+    "Energy",
+    "https://torn.report/energy",
+    "Energy",
+    "M13 2 4 14h7l-1 8 10-12h-7z"
+  ],
+  "nerve": [
+    "Nerve",
+    "https://torn.report/nerve",
+    "Nerve",
+    "M12 3 3 8v8l9 5 9-5V8z M3 8l9 5 9-5"
+  ],
+  "education": [
+    "Education",
+    "https://torn.report/education",
+    "Education",
+    "M2 9l10-5 10 5-10 5z M6 11v6l6 3 6-3v-6"
+  ],
+  "drugs": [
+    "Drugs",
+    "https://torn.report/drugs",
+    "Drugs",
+    "M8 4a5 5 0 0 1 7 7l-6 6a5 5 0 0 1-7-7z M5 7l7 7"
+  ],
+  "racing": [
+    "Racing",
+    "https://torn.report/racing",
+    "Racing",
+    "M3 16v-5l3-5h12l3 5v5z M3 16v3m18-3v3M3 11h18"
+  ],
+  "uniques": [
+    "Crime Uniques",
+    "https://torn.report/uniques",
+    "Crime Uniques",
+    "M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"
+  ],
+  "trains": [
+    "Trains Received",
+    "https://torn.report/trains",
+    "Trains Received",
+    "M3 9h3v6H3z M18 9h3v6h-3z M6 12h12"
+  ],
+  "oc": [
+    "Organized Crimes",
+    "https://torn.report/oc",
+    "Organized Crimes",
+    "M12 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6 M4 21v-3a8 8 0 0 1 16 0v3 M2 11l3 2m17-2-3 2"
+  ],
+  "travel": [
+    "Travel",
+    "https://torn.report/travel",
+    "Travel",
+    "M2 12l9-2 5-8 2 1-2 8 6 4v2l-7-2-4 6-2-1 2-6-9 1z"
+  ],
+  "crimes": [
+    "Old Crimes",
+    "https://torn.report/crimes",
+    "Old Crimes",
+    "M4 4h16v16H4z M8 8h8m-8 4h8m-8 4h5"
+  ],
+  "bomb": [
+    "Dirty Bomb",
+    "https://torn.report/bomb",
+    "Dirty Bomb",
+    "M12 6a8 8 0 1 0 8 8 8 8 0 0 0-8-8 M15 7l3-4 3 1"
+  ],
+  "hunting": [
+    "Hunting",
+    "https://torn.report/hunting",
+    "Hunting",
+    "M12 2v5m0 10v5M2 12h5m10 0h5 M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14"
+  ],
+  "mug": [
+    "Mug",
+    "https://torn.report/mug",
+    "Mug",
+    "M4 8h16v12H4z M8 8V4h8v4 M9 14h6"
+  ],
+  "poker": [
+    "Poker",
+    "https://torn.report/poker",
+    "Poker",
+    "M5 2h14v20H5z M12 7l4 5-4 5-4-5z"
+  ],
+  "presspass": [
+    "Press Pass",
+    "https://torn.report/presspass",
+    "Press Pass",
+    "M4 3h16v18H4z M8 7h8m-8 4h8m-8 4h5"
+  ],
+  "slots": [
+    "Slots",
+    "https://torn.report/slots",
+    "Slots",
+    "M3 4h18v16H3z M8 4v16m8-16v16 M5 12h2m3 0h4m3 0h2"
+  ],
+  "wheel": [
+    "Spin the Wheel",
+    "https://torn.report/wheel",
+    "Spin the Wheel",
+    "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18 M12 3v18M3 12h18"
+  ],
+  "bazaar": [
+    "Bazaar",
+    "https://torn.report/bazaar",
+    "Bazaar",
+    "M3 9l3-6h12l3 6v3H3z M5 12v9h14v-9"
+  ],
+  "city": [
+    "City Finds",
+    "https://torn.report/city",
+    "City Finds",
+    "M3 21V9h6v12m0-18h6v18m0-11h6v11"
+  ],
+  "dump": [
+    "Dump Search",
+    "https://torn.report/dump",
+    "Dump Search",
+    "M3 6h18M6 6l1 15h10l1-15 M9 6V3h6v3"
+  ],
+  "imarket": [
+    "Item Market",
+    "https://torn.report/imarket",
+    "Item Market",
+    "M3 3h2l3 12h11l2-8H6 M9 20h1m7 0h1"
+  ],
+  "shops": [
+    "Shop Sales",
+    "https://torn.report/shops/sales",
+    "Shop Sales",
+    "M3 9l3-6h12l3 6v3H3z M5 12v9h14v-9 M9 16h6"
+  ],
+  "itemstats": [
+    "Item Stats",
+    "https://torn.report/itemstats",
+    "Item Stats",
+    "M4 20V4m0 16h16M8 16v-5m5 5V7m5 9v-8"
+  ],
+  "loot": [
+    "Loot",
+    "https://torn.report/loot",
+    "Loot",
+    "M3 8h18v13H3z M3 12h18M9 8V4h6v4"
+  ],
+  "pack": [
+    "Supply Packs",
+    "https://torn.report/pack",
+    "Supply Packs",
+    "M3 7l9-4 9 4v14H3z M3 7l9 5 9-5 M12 12v9"
+  ],
+  "christmas": [
+    "Christmas Town",
+    "https://torn.report/christmas",
+    "Christmas Town",
+    "M12 2l-6 8h3l-5 7h16l-5-7h3z M12 17v5"
+  ],
+  "dollarsales": [
+    "Dollar Sales",
+    "https://torn.report/dollarsales",
+    "Dollar Sales",
+    "M12 2v20 M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H7"
+  ],
+  "easter": [
+    "Easter Eggs",
+    "https://torn.report/easter",
+    "Easter Eggs",
+    "M12 2c-4 0-8 8-8 13a8 8 0 0 0 16 0c0-5-4-13-8-13z"
+  ],
+  "npc": [
+    "Seasonal NPCs",
+    "https://torn.report/npc",
+    "Seasonal NPCs",
+    "M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M4 21v-2a8 8 0 0 1 16 0v2"
+  ],
+  "halloween": [
+    "Trick or Treat",
+    "https://torn.report/halloween",
+    "Trick or Treat",
+    "M12 4c-6-3-10 2-10 8s4 10 10 8c6 2 10-2 10-8S18 1 12 4 M12 4V1 M7 10l2 2m6-2 2 2 M7 16h10"
+  ],
+  "loottimer": [
+    "Loot Timer",
+    "https://torn.report/loot/timer",
+    "Loot Timer",
+    "M12 5a8 8 0 1 0 0 16 8 8 0 0 0 0-16 M9 2h6m-3 3v8l4 2"
+  ],
+  "data": [
+    "Manage Data",
+    "https://torn.report/data",
+    "Manage Data",
+    "M3 6c0-5 18-5 18 0s-18 5-18 0v12c0 5 18 5 18 0V6 M3 12c0 5 18 5 18 0"
+  ],
+  "export": [
+    "Export Logs",
+    "https://torn.report/export",
+    "Export Logs",
+    "M12 3v12m-5-5 5 5 5-5 M3 15v6h18v-6"
+  ]
 });
 function homePair(label,value,extraClass=""){
   return '<div class="home-pair"><dt>'+safe(label)+'</dt><dd class="'+extraClass+'">'+safe(value??"Not available")+'</dd></div>';
@@ -952,13 +1141,6 @@ function renderDashboard() {
   }
   const st=tornGuideApi.state;
   result+=tornCrimeGuide.recommendations();
-  result+='<details class="home-expand-panel"><summary>Activity &amp; detailed reports</summary>'+
-    '<div class="home-expand-body"><p class="fine-print">Reports open in a preview window when supported by the provider, with a new-tab fallback.</p><div class="report-links">';
-  for(const [id,[label,,tip]] of Object.entries(tornReportCatalog)){
-    result+='<button type="button" class="report-launch" data-report="'+safe(id)+'" aria-haspopup="dialog" title="'+safe(tip)+'">'+
-      '<strong>'+safe(label)+'</strong><small>'+safe(tip)+'</small></button>';
-  }
-  result+='</div></div></details>';
   const issues=[...Object.entries(st.errors).map(([key,value])=>[key,value]),
     ...Object.entries(st.inventoryErrors).map(([key,value])=>["Inventory: "+key,value])];
   if(issues.length){
