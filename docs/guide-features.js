@@ -385,19 +385,33 @@ const tornGuideApi=(()=>{
     rwPending.set(key,task);return task;
   }
   function readCrimeProgress(id){return Number.isInteger(id)&&id>=1&&id<=13?gearRead("user/"+id+"/crimes",true):null;}
+  let crimeVersionEpoch=-1,detectedCrimeVersion=null;
+  function crimeVersion(){
+    if(crimeVersionEpoch!==epoch){crimeVersionEpoch=epoch;detectedCrimeVersion=null;}
+    const raw=state.data.skills?.skills??state.data.skills,profile=state.data.profile?.profile??state.data.profile;
+    const explicit=profile?.crimes_version??profile?.crime_version??raw?.crimes_version;
+    if(["1","1.0","2","2.0"].includes(String(explicit)))return Number(explicit);
+    const skills=raw?.crimes??raw?.crime??raw;
+    const names=Array.isArray(skills)?skills.map(x=>x?.name??x?.crime??x?.type):Object.keys(skills||{});
+    if(names.some(x=>/^(search.?for.?cash|bootlegging|graffiti|pickpocketing|card.?skimming)$/i.test(String(x))))return 2;
+    if(detectedCrimeVersion!==null)return detectedCrimeVersion;
+    for(let id=1;id<=13;id++)if(gearRead("user/"+id+"/crimes",true)?.crimes)return 2;
+    return null;
+  }
   const crimeRetry=new Map();
   let crimeRefreshTask=null;
   function refreshCrimeProgress(){
     if(!secret||document.visibilityState!=="visible"||!["home","crime"].includes(routeName()))return Promise.resolve(false);
     if(crimeRefreshTask)return crimeRefreshTask;
     const owner=epoch;
+    if(crimeVersion()===1)return Promise.resolve(false);
     crimeRefreshTask=(async()=>{
       let changed=false;
       for(let id=1;id<=13;id++){
         if(owner!==epoch||document.visibilityState!=="visible"||!["home","crime"].includes(routeName()))break;
         const path="user/"+id+"/crimes",key=owner+":"+id;
         if(gearRead(path)||now()-(crimeRetry.get(key)||0)<15*mins)continue;
-        try{await gearRequest(path);changed=true;crimeRetry.delete(key);}catch{crimeRetry.set(key,now());}
+        try{const data=await gearRequest(path);if(data?.crimes){crimeVersionEpoch=owner;detectedCrimeVersion=2;}changed=true;crimeRetry.delete(key);}catch(error){crimeRetry.set(key,now());if(/(?:migrate|switch|upgrade).{0,50}crimes.{0,10}(?:2|v2)|crimes.{0,10}(?:2|v2).{0,50}(?:migrate|switch|upgrade)/i.test(String(error.message))){crimeVersionEpoch=owner;detectedCrimeVersion=1;changed=true;break;}}
       }
       if(changed&&owner===epoch&&["home","crime"].includes(routeName())&&typeof renderRoute==="function")renderRoute();
       return changed;
@@ -594,7 +608,7 @@ const tornGuideApi=(()=>{
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,passiveRwReport,readCrimeProgress,loadCrimeProgress,refreshCrimeProgress,
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,passiveRwReport,readCrimeProgress,loadCrimeProgress,refreshCrimeProgress,crimeVersion,
     disconnect,restore,setRemember,isRemembering:()=>remember,
     isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
