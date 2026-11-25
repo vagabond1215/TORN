@@ -296,9 +296,7 @@ const tornGuideApi=(()=>{
       for(const item of items){
         const uid=gearUid(item.uid??item.unique_id);
         if(!uid)continue;
-        const rarity=String(item.rarity??item.item?.rarity??"").toLowerCase();
-        // Inventory may not expose rarity. Discover unknown unique equipment too.
-        if(rarity&&!["yellow","orange","red"].includes(rarity))continue;
+        // All weapons and armor use individual UID attributes, regardless of rarity.
         if(gearRead("torn/"+uid+"/itemdetails")||gearAttempts.has(scanEpoch+":initial:"+uid))continue;
         candidates.add(uid);
       }
@@ -1081,8 +1079,8 @@ function inventoryGearTitle(uid,category,name,equipped,info={}){
   const field=(label,value)=>value==null?"":'<span class="inventory-title-stat" title="'+safe(label)+'">'+safe(value)+'</span>';
   const bonuses=Array.isArray(gear?.bonuses)?gear.bonuses:[];
   return '<span class="inventory-title-content'+(ranked?" rarity-"+rarity:"")+'"><span class="inventory-title-name">'+safe(name)+(equipped?inventoryEquippedIcon:"")+'</span>'+
-    (ranked?field("Quality",quality===null?null:quality+"%")+(category==="Defensive"?field("Armor rating / Coverage · "+coverageLabel,armor===null?null:"ARMOR "+armor+" / "+coverageText):field("Damage | Accuracy",damage!==null||accuracy!==null?"DMG "+(damage??"—")+" | ACC "+(accuracy??"—"):null))+
-    bonuses.map(b=>field(b.description||"Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join(""):"")+'</span>';
+    field("Quality",quality===null?"—%":quality+"%")+(category==="Defensive"?field("Armor rating / Coverage · "+coverageLabel,"ARMOR "+(armor??"—")+" / "+coverageText):field("Damage | Accuracy","DMG "+(damage??"—")+" | ACC "+(accuracy??"—")))+
+    bonuses.map(b=>field(b.description||"Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join("")+'</span>';
 }
 function inventoryGearMarkup(uid,category,info,equipped){
   const weapon=["Primary","Secondary","Melee"].includes(category),armor=category==="Defensive";
