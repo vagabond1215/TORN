@@ -1016,12 +1016,13 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .guide-right-rail .home-work .home-pair dd{max-width:100%;font-size:.76rem;white-space:nowrap}
 .guide-right-rail .home-battle .panel-heading a,
 .guide-right-rail .home-work .panel-heading a{font-size:.7rem;color:var(--accent-strong)}
-.rail-timers .panel-heading button{
-  border:1px solid var(--border);background:transparent;border-radius:4px;
-  padding:.2rem .35rem;font-size:.68rem;color:var(--accent-strong);
-}
-.rail-timers .panel-heading button:hover{border-color:var(--accent)}
-.rail-timers .panel-heading button:disabled{opacity:.5;cursor:wait}
+.rail-timer-header{display:flex;align-items:stretch;border-bottom:1px solid var(--border)}
+.rail-timer-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:1;min-width:0}
+.rail-timer-header button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font:inherit;font-size:.72rem;font-weight:650;padding:.4rem .1rem;cursor:pointer}
+.rail-timer-header button:hover,.rail-timer-header button:focus-visible,.rail-timer-header button[aria-pressed="true"]{color:var(--accent-strong);background:var(--raised)}
+.rail-timer-header button[aria-pressed="true"]{border-bottom-color:var(--accent)}
+.rail-timer-header .rail-timer-refresh{padding-inline:.45rem;font-size:1rem;line-height:1}
+.rail-timer-header button:disabled{opacity:.5;cursor:wait}
 .rail-timer-list{margin:0}
 .rail-timer-row{
   display:flex;align-items:baseline;justify-content:space-between;gap:.3rem;

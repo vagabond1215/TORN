@@ -23,7 +23,7 @@ const tornGuideApi=(()=>{
     stats:["profile","bars","cooldowns","refills","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
-    railTimers:["education","virus","itemCatalog","cooldowns","organizedcrime","factionRankedWars","travel","money"],
+    railTimers:["education","virus","itemCatalog","cooldowns","organizedcrime","factionWars","factionRankedWars","travel","money"],
     activity:["virus","travel","racingrecords","races"],
     crime:["bars","skills","itemCatalog"],
     merits:["honors","medals","honorCatalog","medalCatalog","merits","meritCatalog"],
