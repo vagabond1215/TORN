@@ -427,7 +427,7 @@ const tornTrainSequence=(()=>{
           const spend=cashCost(result);
           if(!result.complete||spend==null||spend>cash||executed.length!==actions.length*cycles)continue;
           if(id!=="natural"&&result.costs.xanax+result.costs.ecstasy+result.costs.dvd+result.costs.candy+result.costs.refill===0)continue;
-          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,cashCost:spend,excludeOwned,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan",startEnergy:startingEnergy[id],generatedAt:now.getTime(),execution:result.log.filter(x=>x.type!=="happyReset").map(x=>({type:x.type,at:x.start.time,end:x.end.time,quantity:x.quantity??1,energy:x.type==="train"?Math.max(0,x.start.energy-x.end.energy):null,reason:x.reason??null}))};
+          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,cashCost:spend,excludeOwned,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan",timing:{xanaxCD:Math.round(p.xanaxCDMin*60),ecstasyCD:Math.round(p.ecstasyCDMin*60),boosterCap:p.boosterCapH*3600,candyCD:Math.round(1800*p.candyCDMultiplier),dvdCD:Math.round(21600*p.dvdCDMultiplier)},startEnergy:startingEnergy[id],generatedAt:now.getTime(),execution:result.log.filter(x=>x.type!=="happyReset").map(x=>({type:x.type,at:x.start.time,end:x.end.time,quantity:x.quantity??1,energy:x.type==="train"?Math.max(0,x.start.energy-x.end.energy):null,reason:x.reason??null}))};
           if(!best||candidate.gain>best.gain||candidate.gain===best.gain&&candidate.cashCost<best.cashCost)best=candidate;
         }
         if(best)results.push(best);
