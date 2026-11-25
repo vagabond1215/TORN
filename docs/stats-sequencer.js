@@ -360,6 +360,48 @@ const tornTrainSequence=(()=>{
     }
     return {state:v,limit,gymCost,canTrain,fullEnergyDelay,advance,execute,run,finish};
   }
+  function trainingPurchases(pointsHeld=0){
+    const items=itemList();
+    const owned=(name,category)=>{
+      const list=tornGuideApi.state.inventory[category];
+      if(!Array.isArray(list)||tornGuideApi.state.inventoryErrors?.[category])return 0;
+      return list.reduce((sum,item)=>{
+        const id=item.id??item.item_id??item.item?.id;
+        const itemName=item.name??item.item?.name??items.find(entry=>String(entry.id)===String(id))?.name;
+        return keyName(itemName)===keyName(name)?sum+Math.max(0,Math.floor(n(item.amount??item.quantity))):sum;
+      },0);
+    };
+    const supplies=[
+      ["xanax","Xanax",owned("Xanax","Drug"),p.xanaxPrice,1],
+      ["ecstasy","Ecstasy",owned("Ecstasy","Drug"),p.ecstasyPrice,1],
+      ["dvd","Erotic DVD",owned("Erotic DVD","Booster"),p.dvdPrice,1],
+      ["refill","Points",pointsHeld,p.pointPrice,30]
+    ];
+    return costs=>{
+      const items=supplies.map(([type,name,held,price,units])=>({name,quantity:Math.max(0,(costs[type]??0)*units-held),price})).filter(item=>item.quantity>0);
+      const cost=items.some(item=>item.price==null)?null:items.reduce((sum,item)=>sum+item.quantity*item.price,0);
+      return {items,cost};
+    };
+  }
+  function periodPurchases(periods,confirmed=[]){
+    const old={...p};
+    try{
+      marketInputs();
+      const balance=tornGuideApi.state.errors?.money?null:payload("money","money")?.points;
+      const pointsHeld=Math.floor(positive(balance?.current??balance)??0);
+      const purchases=trainingPurchases(pointsHeld);
+      return periods.map(period=>{
+        if(!period.costs)return period;
+        const remaining={...period.costs};
+        for(const action of confirmed){
+          if(action.at<=period.days*86400&&Object.hasOwn(remaining,action.type)){
+            remaining[action.type]=Math.max(0,remaining[action.type]-(action.quantity??1));
+          }
+        }
+        return {...period,...purchases(remaining)};
+      });
+    }finally{Object.assign(p,old);}
+  }
   // Home recommendations replay the same saved/default Plan templates with
   // one continuous weekly engine; no independent strategy definitions.
   function weeklyPrograms(context,budget,risk,options={}){
@@ -371,19 +413,8 @@ const tornTrainSequence=(()=>{
       Object.assign(p,{startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
       if(budget==null&&!options.naturalOnly)return [];
       const cash=Math.max(0,Number(budget)||0),excludeOwned=options.excludeOwned!==false;
-      const owned=(name,cat)=>{
-        const list=tornGuideApi.state.inventory[cat];
-        if(!Array.isArray(list)||tornGuideApi.state.inventoryErrors?.[cat])return 0;
-        const items=itemList();
-        return list.filter(x=>keyName(x.name??x.item?.name??items.find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id))?.name)===keyName(name)).reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity))),0);
-      };
-      const held={xanax:owned("Xanax","Drug"),ecstasy:owned("Ecstasy","Drug"),dvd:owned("Erotic DVD","Booster")};
-      function cashCost(result){
-        if(!excludeOwned)return result.money;
-        // Candy simulation consumes only verified inventory; count each owned unit once.
-        const prices=[[Math.max(0,result.costs.xanax-held.xanax),p.xanaxPrice],[Math.max(0,result.costs.ecstasy-held.ecstasy),p.ecstasyPrice],[Math.max(0,result.costs.dvd-held.dvd),p.dvdPrice],[result.costs.refill*30,p.pointPrice]];
-        return prices.some(([qty,price])=>qty>0&&price==null)?null:prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0);
-      }
+      const purchases=trainingPurchases();
+      const cashCost=result=>excludeOwned?purchases(result.costs).cost:result.money;
       const candidates=templates.filter(([id])=>options.naturalOnly?id==="natural":id!=="custom"||editedPlans.has(id));
       // Match the Plan comparison preparation window, including saved jump actions.
       let blockHours=24;
@@ -405,16 +436,12 @@ const tornTrainSequence=(()=>{
         }
         if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
       }
-      for(const [id,short,label] of candidates){
-        const actions=(options.naturalOnly?[]:editedPlans.has(id)?steps[id]:defaultActions(id)).map(x=>({...x}));
-        // External happiness has no verified price, so cannot establish affordability.
-        if(actions.some(x=>x.type==="externalHappy"||options.blockDrugs&&["xanax","ecstasy"].includes(x.type)))continue;
-        const maxCycles=id==="natural"?1:Math.max(1,Math.floor(168/blockHours));
-        let best=null;
-        for(let cycles=1;cycles<=maxCycles;cycles++){
-          const engine=createEngine(cfg),v=engine.state,executed=[];
-          for(let k=0;k<cycles&&!v.errors.length&&v.time<engine.limit;k++){
-            const end=Math.min(engine.limit,Math.round((k+1)*blockHours*3600));
+      function runProgram(id,actions,cycles,hours){
+        const engine=createEngine({...cfg,hours}),v=engine.state,executed=[];
+        for(let week=0;week<hours/168&&!v.errors.length;week++){
+          const weekEnd=Math.min(engine.limit,(week+1)*604800);
+          for(let k=0;k<cycles&&!v.errors.length&&v.time<weekEnd;k++){
+            const end=Math.min(weekEnd,week*604800+Math.round((k+1)*blockHours*3600));
             // No free energy or cooldown reset between repetitions.
             if(startingEnergy[id]==="zero"&&v.energy>=engine.gymCost){
               if(actions[0]?.type==="xanax")engine.advance(v.drug);
@@ -425,8 +452,20 @@ const tornTrainSequence=(()=>{
             if(v.time<end)naturalUntil(engine,end);
             else if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
           }
-          if(!v.errors.length)naturalUntil(engine,engine.limit);
-          const result=engine.finish(executed);
+          if(!v.errors.length)naturalUntil(engine,weekEnd);
+        }
+        return {result:engine.finish(executed),executed};
+      }
+      const templatesById=new Map();
+      for(const [id,short,label] of candidates){
+        const actions=(options.naturalOnly?[]:editedPlans.has(id)?steps[id]:defaultActions(id)).map(x=>({...x}));
+        // External happiness has no verified price, so cannot establish affordability.
+        if(actions.some(x=>x.type==="externalHappy"||options.blockDrugs&&["xanax","ecstasy"].includes(x.type)))continue;
+        templatesById.set(id,actions);
+        const maxCycles=id==="natural"?1:Math.max(1,Math.floor(168/blockHours));
+        let best=null;
+        for(let cycles=1;cycles<=maxCycles;cycles++){
+          const {result,executed}=runProgram(id,actions,cycles,168);
           const spend=cashCost(result);
           if(!result.complete||spend==null||spend>cash||executed.length!==actions.length*cycles)continue;
           if(id!=="natural"&&result.costs.xanax+result.costs.ecstasy+result.costs.dvd+result.costs.candy+result.costs.refill===0)continue;
@@ -435,7 +474,16 @@ const tornTrainSequence=(()=>{
         }
         if(best)results.push(best);
       }
-      return results.sort((a,b)=>b.gain-a.gain||a.cashCost-b.cashCost);
+      results.sort((a,b)=>b.gain-a.gain||a.cashCost-b.cashCost);
+      const selected=results[0];
+      if(selected){
+        selected.periods=[1,7,28].map(days=>{
+          const result=days===7?selected:runProgram(selected.id,templatesById.get(selected.id),selected.cycles,days*24).result;
+          return {days,gain:result.complete===false?null:result.gain,value:result.complete===false?null:result.money,
+            energy:result.complete===false?null:result.used,costs:result.complete===false?null:result.costs};
+        });
+      }
+      return results;
     }finally{ctx=previous;Object.assign(p,old);}
   }
   // Re-simulate the unconfirmed suffix only, using the current account snapshot.
@@ -748,5 +796,5 @@ const tornTrainSequence=(()=>{
       rebuild(el===document.activeElement?focusTarget:null);
     });
   }
-  return {render,wire,simulate,weeklyPrograms,replayRemaining,steps,settings:p,loadLive,templateButtons};
+  return {render,wire,simulate,weeklyPrograms,periodPurchases,replayRemaining,steps,settings:p,loadLive,templateButtons};
 })();
