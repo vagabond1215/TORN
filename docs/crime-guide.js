@@ -463,10 +463,14 @@ const tornCrimeGuide = (() => {
       const step=session.actions[session.index];
       heading="Active plan · "+session.label;
       if(!step){heading="Training session complete";label="All actions confirmed";controls='<button type="button" data-growth-session="stop">Finish</button>';}
-      else if(training.blockDrugs&&session.drugRisk){label="Drug restriction active · stop and replan";controls='<button type="button" data-growth-session="stop">Stop plan</button>';}
-      else {due=sessionSchedule(session)[session.index]?.due??Date.now();label=(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done" '+(due>Date.now()?"disabled":"")+'>Mark done</button><button type="button" data-growth-session="stop">Stop plan</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;controls+='<button type="button" data-growth-session="refresh" '+(recoveryBusy?"disabled":"")+'>'+(recoveryBusy?"Refreshing…":"Continue / Refresh")+'</button>';}
-    }else{heading="";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button><button type="button" data-growth-session="refresh">Refresh</button>';}
-    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+lowHappyWarning()+(heading?'<small>'+esc(heading)+'</small>':'')+'<strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span>'+esc(label)+'</span><div class="growth-session-controls">'+controls+'</div>'+recoveryPanel(session,names)+'</div>';
+      else if(training.blockDrugs&&session.drugRisk){label="Drug restriction active · cancel and replan";}
+      else {due=sessionSchedule(session)[session.index]?.due??Date.now();label=(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done" '+(due>Date.now()?"disabled":"")+'>Mark done</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;}
+    }else{heading="";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button>';}
+    const refreshLabel=recoveryBusy?"Refreshing…":session?"Continue / Refresh":"Refresh training readiness";
+    const cornerControls='<div class="growth-counter-actions">'+
+      '<button type="button" data-growth-session="refresh" aria-label="'+refreshLabel+'" title="'+refreshLabel+'" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button>'+
+      '<button type="button" data-growth-session="stop" aria-label="Cancel training program" title="Cancel training program and return to Start" '+(!session||session.index>=session.actions.length?"disabled":"")+'><span aria-hidden="true">×</span></button></div>';
+    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+lowHappyWarning()+cornerControls+(heading?'<small>'+esc(heading)+'</small>':'')+'<strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span>'+esc(label)+'</span>'+(controls?'<div class="growth-session-controls">'+controls+'</div>':"")+recoveryPanel(session,names)+'</div>';
   }
   function replayPanel(session,fmt){
     if(!session)return "";
@@ -938,7 +942,7 @@ const tornCrimeGuide = (() => {
       if(gear){e.preventDefault();e.stopPropagation();growthSettingsOpen=!growthSettingsOpen;recExpanded.add("growth");try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}refreshRecommendations(view);return;}
       if(e.target.closest("[data-growth-budget]")){if(!tornRoadmap.activitiesOpen())tornRoadmap.toggleActivities();view.querySelector('[data-home-pref="weeklyBudget"]')?.focus();return;}
       const sessionButton=e.target.closest("[data-growth-session]");
-      if(sessionButton){const action=sessionButton.dataset.growthSession,session=loadTrainingSession();
+      if(sessionButton&&!sessionButton.disabled){const action=sessionButton.dataset.growthSession,session=loadTrainingSession();
       if(action==="refresh"&&!recoveryBusy){recoveryBusy=true;recovery=null;recoveryMessage="Refreshing Energy, Happiness and cooldowns…";const owner=sessionOwner,started=session?.started,index=session?.index,requested=Date.now();refreshRecommendations(view);(async()=>{try{
         await tornGuideApi.loadPage("stats",true);
         const current=loadTrainingSession(),st=tornGuideApi.state;
