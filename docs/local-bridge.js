@@ -12,6 +12,14 @@ const tornGuideLocalBridge=(()=>{
     if(place)place.textContent=lastStatus;
   }
   window.addEventListener("torn-guide-local-snapshot",accept);
+  window.addEventListener("torn-guide-rw-snapshot",event=>{
+    let packet;try{packet=typeof event.detail==="string"?JSON.parse(event.detail):event.detail;}catch{return;}
+    if(!tornGuideApi.acceptRwSnapshot(packet))return;
+    for(const row of document.querySelectorAll("[data-gear-uid]")){
+      const slot=row.querySelector(".inventory-rw-slot");
+      if(slot)slot.innerHTML=inventoryRwMarket(row.dataset.gearUid,Number(row.dataset.buyerItem));
+    }
+  });
   function request(){
     window.dispatchEvent(new Event("torn-guide-request-snapshot"));
   }
