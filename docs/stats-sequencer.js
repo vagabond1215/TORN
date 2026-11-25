@@ -366,7 +366,21 @@ const tornTrainSequence=(()=>{
       const now=new Date(),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(Date.now()-stamp)/60000):0;
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
       Object.assign(p,{startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
-      const cash=budget==null?0:Math.max(0,Number(budget)||0);
+      if(budget==null)return [];
+      const cash=Math.max(0,Number(budget)||0),excludeOwned=options.excludeOwned!==false;
+      const owned=(name,cat)=>{
+        const list=tornGuideApi.state.inventory[cat];
+        if(!Array.isArray(list)||tornGuideApi.state.inventoryErrors?.[cat])return 0;
+        const items=itemList();
+        return list.filter(x=>keyName(x.name??x.item?.name??items.find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id))?.name)===keyName(name)).reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity))),0);
+      };
+      const held={xanax:owned("Xanax","Drug"),ecstasy:owned("Ecstasy","Drug"),dvd:owned("Erotic DVD","Booster")};
+      function cashCost(result){
+        if(!excludeOwned)return result.money;
+        // Candy simulation consumes only verified inventory; count each owned unit once.
+        const prices=[[Math.max(0,result.costs.xanax-held.xanax),p.xanaxPrice],[Math.max(0,result.costs.ecstasy-held.ecstasy),p.ecstasyPrice],[Math.max(0,result.costs.dvd-held.dvd),p.dvdPrice],[result.costs.refill*30,p.pointPrice]];
+        return prices.some(([qty,price])=>qty>0&&price==null)?null:prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0);
+      }
       const candidates=templates.filter(([id])=>id!=="custom"||editedPlans.has(id));
       // Match the Plan comparison preparation window, including saved jump actions.
       let blockHours=24;
@@ -410,14 +424,15 @@ const tornTrainSequence=(()=>{
           }
           if(!v.errors.length)naturalUntil(engine,engine.limit);
           const result=engine.finish(executed);
-          if(!result.complete||result.money==null||result.money>cash||executed.length!==actions.length*cycles)continue;
+          const spend=cashCost(result);
+          if(!result.complete||spend==null||spend>cash||executed.length!==actions.length*cycles)continue;
           if(id!=="natural"&&result.costs.xanax+result.costs.ecstasy+result.costs.dvd+result.costs.candy+result.costs.refill===0)continue;
-          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan",startEnergy:startingEnergy[id],generatedAt:now.getTime(),execution:result.log.filter(x=>x.type!=="happyReset").map(x=>({type:x.type,at:x.start.time,end:x.end.time,quantity:x.quantity??1,energy:x.type==="train"?Math.max(0,x.start.energy-x.end.energy):null,reason:x.reason??null}))};
-          if(!best||candidate.gain>best.gain||candidate.gain===best.gain&&candidate.money<best.money)best=candidate;
+          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,cashCost:spend,excludeOwned,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan",startEnergy:startingEnergy[id],generatedAt:now.getTime(),execution:result.log.filter(x=>x.type!=="happyReset").map(x=>({type:x.type,at:x.start.time,end:x.end.time,quantity:x.quantity??1,energy:x.type==="train"?Math.max(0,x.start.energy-x.end.energy):null,reason:x.reason??null}))};
+          if(!best||candidate.gain>best.gain||candidate.gain===best.gain&&candidate.cashCost<best.cashCost)best=candidate;
         }
         if(best)results.push(best);
       }
-      return results.sort((a,b)=>b.gain-a.gain||a.money-b.money);
+      return results.sort((a,b)=>b.gain-a.gain||a.cashCost-b.cashCost);
     }finally{ctx=previous;Object.assign(p,old);}
   }
   function simulate(list,overrides={}){
