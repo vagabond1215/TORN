@@ -124,17 +124,17 @@ const tornCrimeGuide = (() => {
     [10,"Crane Reaction","Binoculars|Remote Detonator","Shaped Charge|Tear Gas"]
   ];
   const extraCrimeItems=[
-    ["Search for Cash","Lost and Found Office Key|Bucket",1],
-    ["Bootlegging","Blank DVDs",1],
-    ["Graffiti","Spray Paint : Black|Spray Paint : Blue|Spray Paint : Green|Spray Paint : Orange|Spray Paint : Pink|Spray Paint : Purple|Spray Paint : Red|Spray Paint : White",3],
-    ["Card Skimming","Card Skimmer",5],
-    ["Disposal","Double Cut File|Handkerchief|Wheelbarrow|Shovel",1],
-    ["Disposal","Anchor|Bleach|Disposable Mask|Gasoline|Hydrochloric Acid|Lye|Paper Towels|Rope",2],
-    ["Burglary","Lockpicks|Rope",1],
-    ["Cracking","Computer Fan|CPU|ECPU|HPCPU|Heat Sink",1],
-    ["Forgery","Card Programmer|Crucible|Embosser|Fountain Pen|Graver|Grinding Stone|Hand Drill|Hole Punch|Hot Foil Stamper|Lump of Coal|Perforator|Permanent Marker|Polishing Pad|Printer|Scissors|Sewing Kit|Thimble|Wax Seal Stamp",1],
-    ["Forgery","Adhesive Plastic|Aluminum Plate|Bank Statement|Binder|Bond Paper|Bonded Latex|Brass Ingot|Candle|Cardstock|Certificate Seal|Crushed Enamel|Glow Stick|Glue|Inkwell|Lanyard|Medical Bill|PVC Cards|Picture Frame|Toner",3],
-    ["Arson","Diesel|Fire Extinguisher|Gasoline|Hydrogen Tank|Kerosene|Magnesium Shavings|Methane Tank|Oxygen Tank|Potassium Nitrate|Sand|Thermite",3]
+    ["Search for Cash","Lost and Found Office Key|Bucket",1,"Equipment"],
+    ["Bootlegging","Blank DVDs",1,"Consumable"],
+    ["Graffiti","Spray Paint : Black|Spray Paint : Blue|Spray Paint : Green|Spray Paint : Orange|Spray Paint : Pink|Spray Paint : Purple|Spray Paint : Red|Spray Paint : White",3,"Consumable"],
+    ["Card Skimming","Card Skimmer",5,"Equipment"],
+    ["Disposal","Double Cut File|Handkerchief|Wheelbarrow|Shovel",1,"Equipment"],
+    ["Disposal","Anchor|Bleach|Disposable Mask|Gasoline|Hydrochloric Acid|Lye|Paper Towels|Rope",2,"Consumable"],
+    ["Burglary","Lockpicks|Rope",1,"Tool"],
+    ["Cracking","Computer Fan|CPU|ECPU|HPCPU|Heat Sink",1,"Equipment"],
+    ["Forgery","Card Programmer|Crucible|Embosser|Fountain Pen|Graver|Grinding Stone|Hand Drill|Hole Punch|Hot Foil Stamper|Lump of Coal|Perforator|Permanent Marker|Polishing Pad|Printer|Scissors|Sewing Kit|Thimble|Wax Seal Stamp",1,"Equipment"],
+    ["Forgery","Adhesive Plastic|Aluminum Plate|Bank Statement|Binder|Bond Paper|Bonded Latex|Brass Ingot|Candle|Cardstock|Certificate Seal|Crushed Enamel|Glow Stick|Glue|Inkwell|Lanyard|Medical Bill|PVC Cards|Picture Frame|Toner",3,"Consumable"],
+    ["Arson","Diesel|Fire Extinguisher|Gasoline|Hydrogen Tank|Kerosene|Magnesium Shavings|Methane Tank|Oxygen Tank|Potassium Nitrate|Sand|Thermite",3,"Consumable"]
   ];
   const reusableCrimeItems=new Set(ocReference.flatMap(([, , tools])=>tools.split("|").filter(Boolean).map(normalize)));
   const consumedCrimeItems=new Set(ocReference.flatMap(([, , , materials])=>materials.split("|").filter(Boolean).map(normalize)));
@@ -987,14 +987,18 @@ const tornCrimeGuide = (() => {
         add("crime",item,cat,1,ref[0]+" · "+reason);
       }
     }
-    for(const [name,names,target] of extraCrimeItems){
+    for(const [name,names,target,usage] of extraCrimeItems){
       const cs=skill(name);if(cs===null||cs<=1)continue;
-      for(const item of names.split("|"))add("crime",item,null,target,name+" · optional stock");
+      for(const item of names.split("|")){
+        const cat=category(itemsByName.get(normalize(item)));
+        const role=usage==="Equipment"&&["Tool","Enhancer"].includes(cat)?cat:usage;
+        add("crime",item,cat,target,name+" "+role);
+      }
     }
     for(const [level,name,tools,materials] of ocReference){
       if(!ocEnabled.has(level%2?level:level-1))continue;
       for(const item of tools.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · reusable",level);
-      for(const item of materials.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · consumed",level);
+      for(const item of materials.split("|").filter(Boolean))add("oc",item,null,1,"L"+level+" "+name+" · Consumable",level);
     }
     // The selected weekly program is the same object used by growth and consumable advice.
     const trainingItems=[["Xanax","Drug","xanax"],["Ecstasy","Drug","ecstasy"],["Erotic DVD","Booster","dvd"]];
@@ -1078,7 +1082,7 @@ const tornCrimeGuide = (() => {
       '<button type="button" data-restock-tab="'+key+'" aria-controls="restock-panel-'+key+'" aria-pressed="'+(restockTab===key)+'">'+label+'</button>').join("")+'</div>';
     const panels=tabs.map(([key,,items,empty])=>'<div class="restock-tab-panel" id="restock-panel-'+key+'" data-restock-panel="'+key+'" '+(restockTab===key?"":"hidden")+'>'+
       (items.length?'<ul class="crime-recommendations">'+rows(items)+'</ul>':'<p class="fine-print">'+esc(empty)+'</p>')+'</div>').join("");
-    const pending=tornGuideApi.inventoryTypes.filter(c=>c!=="Book"&&!ready(c));
+    const pending=tornGuideApi.inventoryTypes.filter(c=>!["Book","Collectible"].includes(c)&&!ready(c));
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
     const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print restock-inventory-note">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
     const priority=tornRoadmap.preferences().priority,first={growth:["growth","consume"],completion:["crime","merit"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
