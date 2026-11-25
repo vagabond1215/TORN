@@ -36,7 +36,7 @@ const tornTrainSequence=(()=>{
   const startingTime=Object.fromEntries(templates.map(([id])=>[id,0]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openTimelines=new Set(),editedPlans=new Set();
-  let settingsOpen=false;
+  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7;
   let planPreferenceOwner;
   function restoreAction(saved){
     if(!saved||typeof saved.type!=="string"||!Object.hasOwn(names,saved.type))return null;
@@ -51,6 +51,9 @@ const tornTrainSequence=(()=>{
     if(planPreferenceOwner===owner)return;
     planPreferenceOwner=owner;
     let saved=null;try{saved=JSON.parse(localStorage.getItem("torn-city-guide:plan-view:"+owner));}catch{}
+    chartMode=saved?.chartMode==="continuous"?"continuous":"cycles";
+    chartCycles=Math.floor(clamp(saved?.chartCycles,1,28));
+    continuousDays=Math.floor(clamp(saved?.continuousDays??7,1,28));
     const valid=new Set(templates.map(([id])=>id));
     selected.clear();openTimelines.clear();editedPlans.clear();
     for(const id of (Array.isArray(saved?.selected)?saved.selected:["natural","jump"]))if(valid.has(id))selected.add(id);
@@ -71,7 +74,7 @@ const tornTrainSequence=(()=>{
     const plans=Object.fromEntries(templates.map(([id])=>[id,{
       energy:startingEnergy[id],time:startingTime[id],actions:editedPlans.has(id)?steps[id]:undefined
     }]));
-    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans}));}catch{}
+    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays}));}catch{}
   }
   function templateButtons(){loadPlanPreferences();return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'<button type="button" class="tc-stat-tab ts-settings-toggle '+(settingsOpen?"is-selected":"")+'" data-ts-settings aria-expanded="'+settingsOpen+'" aria-controls="ts-plan-settings" title="Time, cooldowns, effects, prices"><span aria-hidden="true">⚙</span> Settings</button></div>';}
   function activeTemplates(){return templates.filter(([id])=>selected.has(id));}
@@ -191,16 +194,6 @@ const tornTrainSequence=(()=>{
     const premium=known?status==="donator"||status==="subscriber":observed>=150;
     return {cap:premium?150:100,minutes:premium?10:15,mode:"auto",label:known?(premium?profile.donator_status:"Standard"):"Estimated from energy bar"};
   }
-  function preparationHours(){
-    let hours=24;
-    for(const [id] of activeTemplates()){
-      if(id!=="jump"&&id!=="maxhappy")continue;
-      const engine=createEngine({hours:Infinity,startEnergy:startingEnergy[id],autoWait:true,midnightJump:midnightJumps.has(id),refillUsedToday:energyRefillUsedToday()},true);
-      engine.run(steps[id]);
-      hours=Math.max(hours,Math.ceil(engine.state.time/36)/100);
-    }
-    return hours;
-  }
   function nervePreview(config){
     const source=tornGuideApi.state.data.bars;
     const value=source&&(source.bars||source),nerve=value&&value.nerve;
@@ -219,7 +212,7 @@ const tornTrainSequence=(()=>{
     const dvdHeld=dvdKnown?dvdInventory.filter(x=>keyName(x.name??x.item?.name??itemList().find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id))?.name)===keyName("Erotic DVD")).reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity))),0):null;
     const rowInfo={},notices=[],actionStates={};let rowCandy=null,rowUsed=null;
     let candyCost=0,candyGain=0,unknownCandyPrice=false;
-    const gym=ctx.gym,stat=ctx.state.compareStat,limit=Math.floor(cfg.hours*3600);
+    const gym=ctx.gym,stat=ctx.state.compareStat,limit=cfg.limitSeconds??Math.floor(cfg.hours*3600);
     const rule=energyRules(),eCap=rule.cap;
     const boosterLimit=cfg.boosterCapH*3600;
     const regenTime=rule.minutes*60;
@@ -691,49 +684,102 @@ const tornTrainSequence=(()=>{
     const heading=templates.find(x=>x[0]===side)?.[2]??side;
     const metric=(label,value,extra="")=>'<span class="ts-title-metric '+extra+'"><small>'+label+'</small><strong>'+value+'</strong></span>';
     return '<details class="ts-side ts-template-card" data-ts-timeline="'+side+'" '+(openTimelines.has(side)?"open":"")+'><summary class="ts-template-header"><span class="ts-template-name">'+$(heading)+'</span>'+
-      metric("Duration",fmt(p.hours,2)+"h")+metric("Energy used",fmt(data.used)+" E")+metric("Stat change",data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked","ts-title-gain")+metric("Ending stat",data.complete?fmt(data.final,2):"—")+metric("Cost",data.money==null?"Unavailable":"$"+fmt(data.money))+
+      metric("Cycle",fmt(data.elapsed/3600,2)+"h")+metric("Energy used",fmt(data.used)+" E")+metric("Stat change",data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked","ts-title-gain")+metric("Ending stat",data.complete?fmt(data.final,2):"—")+metric("Cost",data.money==null?"Unavailable":"$"+fmt(data.money))+
       '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+mergedTimeline(side,data)+
       (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join("; ")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
       '</details>';
   }
-  function chart(results){
-    const chartEnd=p.hours+1;
-    const xval=hour=>80+hour/chartEnd*800;
-    const values=results.flatMap(({data})=>[data.initial.stat,data.final,...data.series.map(point=>point.s)]);
-    const bottom=Math.min(...values),top=Math.max(bottom+1,...values);
+  function chart(results,hours){
+    const xval=hour=>80+hour/hours*800;
+    let bottom=Infinity,top=-Infinity;
+    for(const {data} of results){
+      bottom=Math.min(bottom,data.initial.stat);
+      top=Math.max(top,data.initial.stat);
+      for(const point of data.series){
+        bottom=Math.min(bottom,point.s);
+        top=Math.max(top,point.s);
+      }
+    }
+    top=Math.max(bottom+1,top);
     const yval=val=>210-(val-bottom)/(top-bottom)*190;
     const path=points=>points.map(({h,s},i)=>{
       const x=xval(h).toFixed(1),y=yval(s).toFixed(1);
       return i?"H"+x+"V"+y:"M"+x+","+y;
     }).join(" ");
-    const windowX=xval(p.hours),extensionX=xval(chartEnd);
     const seriesClass=(id,data)=>"ts-series ts-series-"+id+(data.complete?"":" is-blocked");
     const endpoint=(x,y)=>'<circle class="ts-series-end" cx="'+x+'" cy="'+y+'" r="3"/>';
-    let out='<svg viewBox="0 0 910 260" class="ts-chart" role="img" aria-label="Projected stat growth over '+p.hours+' hours with a one-hour visual extension">';
-    out+='<rect class="ts-extension" x="'+windowX+'" y="20" width="'+(extensionX-windowX)+'" height="190"/>';
+    let out='<svg viewBox="0 0 910 260" class="ts-chart" role="img" aria-label="Projected stat growth over '+hours+' hours">';
     for(let i=0;i<5;i++){
-      const val=bottom+(top-bottom)*i/4,y=yval(val),hr=p.hours*i/4;
-      out+='<line x1="80" y1="'+y+'" x2="'+extensionX+'" y2="'+y+'" class="ts-gridline"/><text x="74" y="'+(y+4)+'" font-size="11" text-anchor="end">'+fmt(val)+'</text><text x="'+xval(hr)+'" y="234" font-size="11" text-anchor="middle">'+fmt(hr,2)+'h</text>';
+      const val=bottom+(top-bottom)*i/4,y=yval(val),hr=hours*i/4;
+      out+='<line x1="80" y1="'+y+'" x2="'+xval(hours)+'" y2="'+y+'" class="ts-gridline"/><text x="74" y="'+(y+4)+'" font-size="11" text-anchor="end">'+fmt(val)+'</text><text x="'+xval(hr)+'" y="234" font-size="11" text-anchor="middle">'+fmt(hr,2)+'h</text>';
     }
-    out+='<line class="ts-window-end" x1="'+windowX+'" y1="20" x2="'+windowX+'" y2="221"/><text x="'+extensionX+'" y="251" font-size="11" text-anchor="end">'+fmt(chartEnd,2)+'h</text>';
     for(const {id,data} of results){
       // The simulator coalesces events at the same time. Restore the pre-action
       // value for the chart when an immediate train changes the first point.
-      const points=[...data.series,{h:chartEnd,s:data.final}];
-      if(points[0].s!==data.initial.stat)points.unshift({h:0,s:data.initial.stat});
-      out+='<g class="'+seriesClass(id,data)+'"><path class="ts-series-stroke" d="'+path(points)+'"/>'+endpoint(windowX,yval(data.final))+'</g>';
+      const points=[...data.series,{h:hours,s:data.final}];
+      if(points[0].h!==0||points[0].s!==data.initial.stat)points.unshift({h:0,s:data.initial.stat});
+      out+='<g class="'+seriesClass(id,data)+'"><path class="ts-series-stroke" d="'+path(points)+'"/>'+endpoint(xval(hours),yval(data.final))+'</g>';
     }
     return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg class="'+seriesClass(id,data)+'" width="44" height="10" aria-hidden="true"><line class="ts-series-stroke" x1="2" y1="5" x2="42" y2="5"/>'+endpoint(35,5)+'</svg> '+$(label)+(data.complete?"":" (blocked)")+'</span>').join("")+'</div>';
+  }
+  function cycleActions(id){
+    return id==="natural"?[{...make("train"),when:"full"}]:defaults[id]();
+  }
+  function projectCycles(id,cycles,{end=Infinity,continuous=false}={}){
+    const list=steps[id],offset=startingTime[id],clockSeconds=Math.round(p.tornClockMin*60)+offset;
+    const engine=createEngine({
+      limitSeconds:end-offset,startEnergy:startingEnergy[id],midnightJump:midnightJumps.has(id),
+      refillUsedToday:clockSeconds<86400&&energyRefillUsedToday(),
+      startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
+      tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900
+    });
+    const v=engine.state;
+    let completed=0;
+    while(list.length&&completed<cycles&&v.time<=engine.limit){
+      const before=v.time;
+      if(completed>0){
+        const delay=startingEnergy[id]==="full"?engine.fullEnergyDelay():0;
+        if(delay&&!engine.waitFor(delay,"Full Energy",false))break;
+      }
+      if(!engine.run(list))break;
+      completed++;
+      if(continuous&&v.time===before){
+        // Instant actions still move forward in real time between repetitions.
+        const delay=engine.fullEnergyDelay()||energyRules().minutes*60;
+        if(!engine.waitFor(delay,"Full Energy",false))break;
+      }
+      if(!continuous&&v.time===before&&completed<cycles&&v.energy<engine.gymCost&&list.some(step=>step.type==="train")){
+        if(!engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false))break;
+      }
+    }
+    const data=engine.finish(list,{tail:false});
+    return {...data,elapsed:v.time,completed,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
+  }
+  function comparisonControls(hours){
+    return '<div class="ts-cycle-controls" aria-label="Stat growth chart range">'+
+      '<label>Projection <select data-ts-chart-mode><option value="cycles" '+(chartMode==="cycles"?"selected":"")+'>Cycles</option><option value="continuous" '+(chartMode==="continuous"?"selected":"")+'>Continuous</option></select></label>'+
+      (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
+      '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
+      '<span class="fine-print">'+fmt(hours,2)+'h shown</span></div>';
   }
   function render(context){
     if(context)ctx=context;
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
     loadPlanPreferences();loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
-    p.hours=preparationHours();
     const active=activeTemplates();
-    for(const [id] of active)if(!editedPlans.has(id))steps[id]=defaultActions(id);
-    const results=active.map(([id,,label])=>({id,label,data:simulate(steps[id])}));
-    return controls()+(results.length?'<div class="ts-layout" data-template-count="'+results.length+'">'+results.map(x=>section(x.id,x.data)).join("")+'</div><div class="ts-outcomes"><h3>Same '+fmt(p.hours,2)+'-hour window</h3><div class="ts-comparison-results">'+results.map(({label,data})=>'<span>'+$(label)+': <strong>'+(data.complete?fmt(data.final,2):"Blocked")+'</strong> ('+fmt(data.used)+' E)</span>').join("")+'</div>'+chart(results)+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
+    for(const [id] of active)if(!editedPlans.has(id))steps[id]=cycleActions(id);
+    const oneCycle=active.map(([id,,label])=>({id,label,data:projectCycles(id,1)}));
+    const shortest=entries=>Math.max(60,...entries.map(({id,data})=>startingTime[id]+data.elapsed));
+    p.hours=shortest(oneCycle)/3600;
+    const continuous=chartMode==="continuous";
+    const duration=continuous?Math.max(shortest(oneCycle),continuousDays*86400):null;
+    const results=!continuous&&chartCycles===1?oneCycle:active.map(([id,,label])=>({
+      id,label,data:continuous?projectCycles(id,Infinity,{end:duration,continuous:true}):projectCycles(id,chartCycles)
+    }));
+    const chartHours=(duration??shortest(results))/3600;
+    return controls()+(results.length?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
+      '<div class="ts-outcomes">'+comparisonControls(chartHours)+'<div class="ts-comparison-results">'+results.map(({label,data})=>'<span>'+$(label)+': <strong>'+(data.complete?fmt(data.final,2):"Blocked")+'</strong> ('+fmt(data.used)+' E)</span>').join("")+
+      '</div>'+chart(results,chartHours)+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
   }
   function wire(view){
@@ -767,6 +813,14 @@ const tornTrainSequence=(()=>{
     };
     view.addEventListener("change",event=>{
       const el=event.target;
+      if(el.matches("[data-ts-chart-mode],[data-ts-chart-cycles],[data-ts-chart-days]")){
+        if(el.hasAttribute("data-ts-chart-mode"))chartMode=el.value==="continuous"?"continuous":"cycles";
+        if(el.hasAttribute("data-ts-chart-cycles"))chartCycles=Math.floor(clamp(el.value,1,28));
+        if(el.hasAttribute("data-ts-chart-days"))continuousDays=Math.floor(clamp(el.value,1,28));
+        savePlanPreferences();
+        rebuild(el.hasAttribute("data-ts-chart-mode")?"[data-ts-chart-mode]":el.hasAttribute("data-ts-chart-cycles")?"[data-ts-chart-cycles]":"[data-ts-chart-days]");
+        return;
+      }
       if(el.matches("[data-ts-choice]")){const button=el.closest(".ts-add")?.querySelector('[data-ts-op="add"]');if(button)button.disabled=!Object.hasOwn(names,el.value);return;}
       const {tsStartTime,tsStartEnergy}=el.dataset;
       if(tsStartTime&&Object.hasOwn(startingTime,tsStartTime)){
