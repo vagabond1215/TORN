@@ -278,7 +278,7 @@ const tornCrimeGuide = (() => {
     }
     if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
     if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
-    rows.crime.push(crimeRecommendation(risk,completion));
+    rows.crime.push(crimeRecommendation("low",completion));
     loadEducationPreference();
     const m=educationModel();
     if(m.known&&m.courses.length){
@@ -299,6 +299,15 @@ const tornCrimeGuide = (() => {
     if(!rows.education.length)add("education",growth?"Prioritize Sports Science / education reductions":"Prioritize Business or useful income-related courses","Course completion or prerequisites may be unavailable. Open Education to compare available courses.","#education");
     const money=payload("money","money"),wallet=n(money?.wallet??money?.cash),bank=n(money?.city_bank?.amount??money?.city_bank),cayman=n(money?.cayman_bank?.amount??money?.cayman_bank);
     const stocks=stockRows(),company=prefs.priority==="company"||activities.includes("Business"),education=prefs.priority==="education";
+    const financialRisk={
+      low:{travel:"Prefer short trips, carry only the purchase amount, and keep spare cash protected.",trade:"Prefer small transactions and trusted counterparties; avoid holding large sale proceeds in your wallet.",mug:"Prefer targets with well-understood combat and retaliation risk; account for Energy opportunity cost.",gamble:"Avoid gambling as an income strategy; preserve training and investment funds."},
+      medium:{travel:"Compare profit per hour on short and longer routes; limit carried cash to planned purchases.",trade:"Consider moderately sized trades with verified prices, safe settlement and a predefined exposure limit.",mug:"Compare likely net proceeds with Energy, medical costs and retaliation risk; avoid uncertain targets.",gamble:"Treat gambling only as entertainment with a separate fixed loss limit; never use essential funds."},
+      high:{travel:"Consider longer routes or higher-value cargo only when net profit justifies time and exposure; protect reserves.",trade:"Consider larger trades and price volatility within a predefined loss limit; verify settlement and liquidity.",mug:"Consider higher-variance opportunities only after checking combat odds, protection and retaliation; preserve reserves.",gamble:"High financial risk tolerance does not improve gambling odds. Use a separate entertainment limit and never chase losses."}
+    }[risk]??{};
+    if(activities.includes("Travel"))add("money","Travel · financial exposure",financialRisk.travel,"#money");
+    if(activities.includes("Trade"))add("money","Trading · settlement and cash",financialRisk.trade,"#money");
+    if(activities.includes("Mug"))add("money","Mugging · expected net return",financialRisk.mug,"#attacking");
+    if(activities.includes("Gambling"))add("money","Gambling · loss limit",financialRisk.gamble,"#money");
     const options=stocks.filter(x=>x.shares!==null&&x.nextCost>0&&(x.nextRoi!=null||["TCP","TGP","TCI","WSU"].includes(x.ticker))).map(x=>{
       const strategic=(company&&["TCP","TGP"].includes(x.ticker)?100:0)+(education&&x.ticker==="WSU"?100:0)+(x.ticker==="TCI"?35:0)+(growth&&x.ticker==="WSU"?50:0);
       const history=tornInvestmentHistory.get(x.ticker,x.price);
