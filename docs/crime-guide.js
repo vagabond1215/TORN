@@ -446,24 +446,42 @@ const tornCrimeGuide = (() => {
     const drug=n(cd?.drug),booster=n(cd?.booster);
     const program=plan?.program, costs=program?.costs??{};
     if(highAddiction&&!educationRisk&&!protectedEducation)add("consume","High addiction · consider rehabilitation","Addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Pause drug use until addiction is reduced; review your training schedule.","#stats");
-    if(growth){
-      if(program){
-        const items=[["Xanax","xanax","Drug"],["Ecstasy","ecstasy","Drug"],["Erotic DVD","dvd","Booster"],["Candy","candy","Candy"],["Points refill","refill",null]];
-        for(const [name,key,cat] of items){
-          if(!(costs[key]>0)||blockDrugs&&cat==="Drug")continue;
-          const held=cat&&key!=="candy"?count(name,cat):null;
-          const status=cat==="Drug"?(drug===0?"Drug cooldown clear; follow the plan sequence, not simply the cooldown.":drug==null?"Check drug cooldown.":"Wait for drug cooldown and the planned action."):cat==="Booster"||key==="candy"?"Reserve booster allowance for the planned training action.":"Use only at the scheduled refill step.";
-          add("consume",name+" · "+number(costs[key])+" / week"+(held!=null?" · "+number(held)+" held":""),program.label+" · "+status,"#stats");
-        }
-        if(!Object.values(costs).some(x=>x>0))add("consume","Natural training","No paid consumables required by the recommended plan.","#stats");
-      }else add("consume","Training plan required","Load the Stats plan comparison before choosing training consumables.","#stats");
-    }else{
-      const nerveRoom=nerve!=null&&n(bars?.nerve?.maximum)!=null&&nerve<n(bars.nerve.maximum);
-      const crimeActivity=completion||activities.some(x=>["Crime","OC"].includes(x));
-      const marijuana=count("Cannabis","Drug");
-      if(!blockDrugs&&drug===0&&marijuana>0&&(crimeActivity||completion)&&nerveRoom)add("consume","Cannabis · "+number(marijuana)+" held","Consider the in-game Nerve effect for crime activity when there is room; check the drug cooldown and any scheduled training or war.","#crime");
-      const alcohol=tornGuideApi.state.inventory.Alcohol;
-      if(crimeActivity&&nerveRoom&&booster!==null&&booster<86400&&Array.isArray(alcohol)&&!tornGuideApi.state.inventoryErrors?.Alcohol&&alcohol.some(x=>n(x.amount??x.quantity)>0))add("consume","Alcohol","Consider a Nerve boost for crime activity; reserve booster allowance for scheduled training if needed.","#crime");
+    // Training owns all training consumables. Only recommend independent
+    // crime consumables when their shared cooldowns leave training untouched.
+    const session=loadTrainingSession(),now=Date.now();
+    const upcoming=session?sessionSchedule(session,now).filter(x=>!x.done).map(x=>({type:x.step.type,due:x.due})):program?(program.execution??[]).filter(actionable).map(x=>({type:x.type,due:now+x.at*1000})):[];
+    const knownPlan=!!session||!!program;
+    const nextBooster=upcoming.find(x=>["candy","dvd"].includes(x.type));
+    const usesDrugs=upcoming.some(x=>["xanax","ecstasy"].includes(x.type));
+    const crimePriority=completion||prefs.priority==="crime";
+    const crimeActivity=crimePriority||activities.some(x=>["Crime","OC"].includes(x));
+    const nerveRoom=nerve!=null&&n(bars?.nerve?.maximum)!=null&&nerve<n(bars.nerve.maximum);
+    const cdStamp=Number(tornGuideApi.state.fetchedAt?.cooldowns||0);
+    const cooldownKnown=cdStamp>0&&!tornGuideApi.state.errors?.cooldowns;
+    const elapsed=Math.max(0,(now-cdStamp)/1000);
+    const drugLeft=cooldownKnown&&drug!==null?Math.max(0,drug-elapsed):null;
+    const boosterLeft=cooldownKnown&&booster!==null?Math.max(0,booster-elapsed):null;
+    const marijuana=count("Cannabis","Drug");
+    if(crimeActivity&&nerveRoom&&iconFresh&&!highAddiction&&!blockDrugs&&drugLeft===0&&marijuana>0&&(crimePriority||knownPlan&&!usesDrugs)){
+      add("consume","Cannabis · 1 ("+number(marijuana)+" held)",crimePriority&&usesDrugs?"Completion priority: Cannabis may delay training drugs. The locked plan will wait for the drug cooldown.":"No remaining training drug steps. Use for Nerve; normal drug cooldown is 60–90 minutes.","#crime");
+    }
+    const alcohol=tornGuideApi.state.inventory.Alcohol;
+    if(crimeActivity&&nerveRoom&&knownPlan&&boosterLeft!==null&&Array.isArray(alcohol)&&!tornGuideApi.state.inventoryErrors?.Alcohol){
+      const held=alcohol.reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity)??0)),0);
+      const timing=session?.timing??program?.timing??{};
+      const boosterCap=Math.max(0,Number(timing.boosterCap)||86400);
+      // One hour normally; conservatively allow 30% extra if alcohol-specific
+      // cooldown modifiers are not modeled. Never exceed the known cap.
+      const unit=4680;
+      const room=Math.max(0,boosterCap-boosterLeft);
+      // Require the entire resulting cooldown to clear before the first
+      // planned candy/DVD, rather than merely allowing one more booster.
+      const window=nextBooster?Math.max(0,(nextBooster.due-now)/1000-boosterLeft):Infinity;
+      // A not-yet-started plan may be started immediately; its estimated
+      // preparation timing is not a guaranteed free booster window.
+      const safeWindow=!session&&nextBooster?0:window;
+      const amount=Math.max(0,Math.min(held,Math.floor(room/unit),Math.floor(safeWindow/unit),Math.ceil(n(bars.nerve.maximum)-nerve)));
+      if(amount>0)add("consume","Alcohol · up to "+number(amount),number(held)+" held · "+(nextBooster?"Cooldown clears before the next training booster at "+sessionTime(nextBooster.due):"No remaining candy or DVD steps")+" · Conservative cooldown allowance.","#crime");
     }
     if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
     if(!rows.consume.length)add("consume","No immediate consumable suggestion","Check current bars, cooldowns, inventory and planned training before consuming items.","#stats");
