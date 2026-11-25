@@ -1830,3 +1830,14 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-gear-pair dd{font-variant-numeric:tabular-nums}
 .inventory-item-effects{border-top:1px solid var(--border);margin-top:.45rem;padding-top:.4rem}
 .inventory-item-effects h4{font-size:.83rem;color:var(--accent-strong);margin:0 0 .25rem}
+
+/* Ranked-war inventory row title and compact inline attributes. */
+.inventory-title-content{display:flex;flex-wrap:wrap;align-items:center;column-gap:.65rem;row-gap:.2rem;min-width:0}
+.inventory-title-name{min-width:0;overflow-wrap:anywhere}
+.inventory-title-stat{font-size:.74rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.inventory-title-content.rarity-yellow{color:#d4b645}
+.inventory-title-content.rarity-orange{color:#df9245}
+.inventory-title-content.rarity-red{color:#eb7777}
+[data-theme="light"] .inventory-title-content.rarity-yellow{color:#846300}
+[data-theme="light"] .inventory-title-content.rarity-orange{color:#a34d00}
+[data-theme="light"] .inventory-title-content.rarity-red{color:#b42328}
