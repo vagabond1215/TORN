@@ -1841,3 +1841,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 [data-theme="light"] .inventory-title-content.rarity-yellow{color:#846300}
 [data-theme="light"] .inventory-title-content.rarity-orange{color:#a34d00}
 [data-theme="light"] .inventory-title-content.rarity-red{color:#b42328}
+
+/* Compact market summary with a borderless marketplace shortcut. */
+.inventory-market-summary{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;font-size:.82rem;font-variant-numeric:tabular-nums;padding:.2rem 0}
+.inventory-market-summary>span,.inventory-market-gross{white-space:nowrap}
+.inventory-market-gross{margin-inline-start:auto;color:var(--accent-strong)}
+.inventory-weav3r-icon{display:inline-grid;place-items:center;width:24px;height:24px;flex:none;color:var(--muted);text-decoration:none}
+.inventory-weav3r-icon:hover,.inventory-weav3r-icon:focus-visible{color:var(--accent-strong)}
+.inventory-market-qty{color:var(--muted)}
