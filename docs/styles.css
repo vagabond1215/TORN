@@ -1864,3 +1864,8 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rw-diagnostic-table th,.rw-diagnostic-table td{padding:.3rem .45rem;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
 .rw-diagnostic-table th:first-child,.rw-diagnostic-table td:first-child{text-align:left}
 .rw-diagnostic-table th{position:sticky;top:0;background:var(--surface)}
+
+/* Compact Torn-style inventory combat stats */
+.inventory-title-combat{display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}
+.inventory-title-stat{display:inline-flex;align-items:center;gap:.14rem}
+.inventory-title-stat svg{width:.78rem;height:.78rem;flex:none;opacity:.85}
