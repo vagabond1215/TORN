@@ -1911,3 +1911,18 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 /* Independent recommendation tile heights; normal grid is the fallback. */
 .rec-tile-grid.rec-masonry{grid-auto-rows:1px;grid-auto-flow:row dense;row-gap:0;align-items:start}
 .rec-tile-grid.rec-masonry>.rec-tile{align-self:start;min-height:0}
+
+/* Home recommendations: distinct centered heading strips, docked preferences. */
+.rec-tile>h3{display:flex;align-items:center;justify-content:center;text-align:center;min-height:34px;margin:-.7rem -.7rem .5rem;padding:.35rem .7rem;box-sizing:border-box;background:color-mix(in srgb,var(--surface) 70%,var(--canvas));border-bottom:1px solid var(--border);border-radius:5px 5px 0 0}
+.home-activities>.panel-heading{display:flex;align-items:center;justify-content:center;text-align:center;min-height:34px;padding:.35rem .65rem;background:color-mix(in srgb,var(--surface) 70%,var(--canvas))}
+.home-activities>.panel-heading h2{margin:0;font-size:.9rem}
+.layout>main:has(>#topic-view:not([hidden])>.home-activities){padding-top:0}
+#topic-view>.home-activities{margin-top:0;border-top:0;border-radius:0 0 6px 6px}
+#topic-view>.home-activities[hidden]{display:none!important}
+.home-settings-toggle-wrap{display:flex;align-items:stretch;flex:0 0 auto;border-left:1px solid var(--border)}
+.home-settings-toggle-wrap+.rail-visibility-controls{margin-left:0}
+.home-activities .home-priority-choices .roadmap-style{width:96px;min-width:96px}
+.home-activities .home-risk-choices .roadmap-style{width:40px;min-width:40px;position:relative}
+.home-activities .home-risk-choices input{position:absolute;opacity:0;inset:0;width:100%;height:100%;cursor:pointer}
+.home-activities .home-risk-choices .roadmap-style:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.home-activities .home-risk-choices span{display:flex;align-items:center;justify-content:center}
