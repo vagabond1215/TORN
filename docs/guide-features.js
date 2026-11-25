@@ -18,7 +18,7 @@ const tornGuideApi=(()=>{
     honors:24*hrs,medals:24*hrs,honorCatalog:30*days,medalCatalog:30*days,gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
+    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog"],
     stats:["profile","bars","cooldowns","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
