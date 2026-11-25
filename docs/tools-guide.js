@@ -177,13 +177,23 @@ const tornToolsGuide=(()=>{
   const reportToggle=context==="home"?'<button type="button" class="rail-visibility-toggle" data-report-toggle aria-controls="torn-reports-strip" aria-label="Torn Reports" title="Torn Reports" aria-pressed="'+reportPrefs().open+'">'+reportIcon("M4 3h16v18H4z M8 16v-4m4 4V8m4 8v-6")+'</button>':"";
   const open=tornRoadmap.activitiesOpen();
   const gear=context==="home"?'<button type="button" class="rail-visibility-toggle" data-home-activities-toggle aria-controls="home-activities" aria-label="Playstyle and recommendation settings" title="Playstyle and recommendation settings" aria-pressed="'+open+'" aria-expanded="'+open+'"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>':"";
-  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+ (gear?'<div class="home-settings-toggle-wrap">'+reportToggle+gear+'</div>':"")+rail+'</div>'+(context==="home"?reportStrip():"");
+  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+ (gear?'<div class="home-settings-toggle-wrap">'+reportToggle+gear+'</div>':"")+rail+'</div>';
  }
  function updateBar(route){
   ensureIconHandler();
   if(route)currentBarRoute=route;
-  const host=typeof document!=="undefined"&&document.getElementById("tool-quickbar");
-  if(host){host.innerHTML=quickLinks(currentBarRoute);host.querySelector("[data-home-activities-toggle]")?.addEventListener("click",()=>tornRoadmap.toggleActivities());host.querySelector("[data-report-toggle]")?.addEventListener("click",()=>{reportOpenFallback=!reportPrefs().open;try{localStorage.setItem("torn-city-guide:reports-open",String(reportOpenFallback));}catch{}updateBar();});host.querySelector("[data-report-customize]")?.addEventListener("click",()=>{reportEdit=!reportEdit;updateBar();});for(const el of host.querySelectorAll("[data-report-pin]"))el.addEventListener("change",()=>{const pins=new Set(reportPrefs().pins);if(el.checked)pins.add(el.dataset.reportPin);else pins.delete(el.dataset.reportPin);try{localStorage.setItem("torn-city-guide:report-pins",JSON.stringify([...pins]));}catch{}updateBar();});}
+  const host=document.getElementById("tool-quickbar"),dock=document.getElementById("reports-dock");
+  if(host){
+    host.innerHTML=quickLinks(currentBarRoute);
+    host.querySelector("[data-home-activities-toggle]")?.addEventListener("click",()=>tornRoadmap.toggleActivities());
+    host.querySelector("[data-report-toggle]")?.addEventListener("click",()=>{reportOpenFallback=!reportPrefs().open;try{localStorage.setItem("torn-city-guide:reports-open",String(reportOpenFallback));}catch{}updateBar();});
+  }
+  if(dock){
+    dock.hidden=currentBarRoute!=="home"||!reportPrefs().open;
+    dock.innerHTML=currentBarRoute==="home"?reportStrip():"";
+    dock.querySelector("[data-report-customize]")?.addEventListener("click",()=>{reportEdit=!reportEdit;updateBar();});
+    for(const el of dock.querySelectorAll("[data-report-pin]"))el.addEventListener("change",()=>{const pins=new Set(reportPrefs().pins);if(el.checked)pins.add(el.dataset.reportPin);else pins.delete(el.dataset.reportPin);try{localStorage.setItem("torn-city-guide:report-pins",JSON.stringify([...pins]));}catch{}updateBar();dock.querySelector('[data-report-pin="'+el.dataset.reportPin+'"]')?.focus();});
+  }
  }
  // Contextual page suggestions are deliberately suppressed: when enabled,
  // the global icon bar already reflects the current page, without duplicate rows.
