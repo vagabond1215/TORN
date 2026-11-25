@@ -1869,3 +1869,19 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-title-combat{display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}
 .inventory-title-stat{display:inline-flex;align-items:center;gap:.14rem}
 .inventory-title-stat svg{width:.78rem;height:.78rem;flex:none;opacity:.85}
+
+/* Equipment title alignment: keep combat stats at the control edge. */
+.inventory-title-content{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:.4rem;row-gap:.18rem;padding-block:.15rem}
+.inventory-title-main{display:flex;align-items:center;flex-wrap:wrap;gap:.15rem .45rem;min-width:0}
+.inventory-title-name{min-width:0;overflow-wrap:anywhere}
+.inventory-title-combat{justify-self:end;align-self:start;display:grid;grid-template-columns:repeat(2,minmax(0,auto));gap:.4rem}
+.inventory-title-combat>.inventory-title-stat{justify-content:flex-end;min-width:5.2ch}
+.inventory-title-secondary{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:.12rem .6rem;min-width:0;font-size:.74rem;line-height:1.2}
+.inventory-title-mods{display:inline-flex;align-items:center;flex-wrap:wrap;gap:.3rem;color:var(--muted);min-width:0}
+.inventory-title-mod{overflow-wrap:anywhere}
+.inventory-detail-row[data-gear-category]>details>summary{align-items:flex-start}
+.inventory-detail-row[data-gear-category]>details>summary::before,.inventory-detail-row[data-gear-category]>details>summary>strong,.inventory-detail-row[data-gear-category]>details>summary>.inventory-buyer-badge{margin-top:.25rem}
+.inventory-detail-row[data-gear-category]>details>summary>.inventory-inline-search{height:20px;align-self:flex-start}
+/* Reserve a consistent buyer indicator slot for equipment rows so stats do not jump. */
+.inventory-detail-row[data-gear-category]>details>summary>.inventory-buyer-badge{display:inline-flex;justify-content:center;width:1.05rem;flex:none}
+.inventory-detail-row[data-gear-category]>details>summary>.inventory-buyer-badge:empty{visibility:hidden}
