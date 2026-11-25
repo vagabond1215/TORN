@@ -59,6 +59,14 @@ const tornCrimeGuide = (() => {
     const v=item?.market_value??item?.value?.market_price??item?.value?.market_value??item?.market_price;
     return v!=null&&Number.isFinite(Number(v))&&Number(v)>0?Number(v):null;
   }
+  function reservePurchase(item,marketPrice){
+    if(!item||["blankdvds50","blankdvds100"].includes(normalize(item.name)))return null;
+    if(marketPrice!==null&&item.is_tradable!==false)return {price:marketPrice,source:"Market value"};
+    const shops=item.value?.shops;
+    const prices=[item.buy_price,item.value?.buy_price,...(Array.isArray(shops)?shops.map(shop=>shop?.buy_price):[])]
+      .map(Number).filter(price=>Number.isFinite(price)&&price>0);
+    return prices.length?{price:Math.min(...prices),source:"Shop buy price"}:null;
+  }
   function equipment(ref){
     const [name,enhancer,,,tools]=ref;
     return [[enhancer,"Enhancer",name==="Arson"?"Crime-specific enhancer; check current effect":"5% crime experience and skill gains"],...tools];
@@ -816,11 +824,15 @@ const tornCrimeGuide = (() => {
         if(rule?.monitored===false)return;
         target=rule?.minimum??settingsCategories.get(cat??"Other")?.get(key)?.target??target;
       }
+      if(bucket==="stock"&&restockRules.get(key)?.monitored===false)return;
       const n=count(item,hint);
       if(n===null||n>=target)return;
+      const marketPrice=market(item);
+      const purchase=bucket==="stock"?reservePurchase(itemsByName.get(key),marketPrice):null;
+      if(bucket==="stock"&&!purchase)return;
       const map=buckets[bucket],old=map.get(key);
       if(old){old.target=Math.max(old.target,target);if(!old.reasons.includes(reason))old.reasons.push(reason);old.level=Math.min(old.level,level??99);return;}
-      map.set(key,{item,owned:n,target,reasons:[reason],price:market(item),level:level??99});
+      map.set(key,{item,owned:n,target,reasons:[reason],price:purchase?.price??marketPrice,priceSource:purchase?.source,level:level??99});
     }
     // Assigned OC items take precedence over elective stockpiling. API slot
     // formats vary; only recommend exact requirements explicitly attributed to us.
@@ -917,11 +929,16 @@ const tornCrimeGuide = (() => {
       }
     }
     const moneyValue=value=>value==null?"—":"$"+number(value);
-    const rows=items=>items.map(x=>'<li class="restock-row"><div class="restock-line">'+
-      '<strong>'+esc(x.item)+'</strong><span title="Quantity to buy">× '+number(x.missing)+'</span>'+
-      '<span title="Market value per unit" aria-label="Market value '+moneyValue(x.price)+'">'+moneyValue(x.price)+'</span>'+
-      '<span title="Total purchase cost" aria-label="Total '+moneyValue(x.price===null?null:x.missing*x.price)+'">'+moneyValue(x.price===null?null:x.missing*x.price)+'</span></div>'+
-      '<div class="restock-line restock-source"><small>'+esc(x.reasons.join(" · "))+'</small><span title="Current / needed">'+number(x.owned)+'/'+number(x.target)+'</span></div></li>').join("");
+    const rows=items=>items.map(x=>{
+      const defaultReserve=x.reasons.length===1&&x.reasons[0]==="Default reserve";
+      const stock='<span class="restock-stock" title="Current / needed">'+number(x.owned)+'/'+number(x.target)+'</span>';
+      const priceSource=x.priceSource??"Market value",total=moneyValue(x.price===null?null:x.missing*x.price);
+      return '<li class="restock-row"><div class="restock-line">'+
+        '<div class="restock-item"><strong>'+esc(x.item)+'</strong>'+(defaultReserve?stock:"")+'</div><span title="Quantity to buy">× '+number(x.missing)+'</span>'+
+        '<span title="'+priceSource+' per unit" aria-label="'+priceSource+' '+moneyValue(x.price)+'">'+moneyValue(x.price)+'</span>'+
+        '<span title="Total purchase cost" aria-label="Total '+total+'">'+total+'</span></div>'+
+        (defaultReserve?"":'<div class="restock-line restock-source"><small>'+esc(x.reasons.join(" · "))+'</small>'+stock+'</div>')+'</li>';
+    }).join("");
     const sorted=group=>[...group.values()].sort((a,b)=>a.level-b.level||a.item.localeCompare(b.item));
     const tabs=[
       ["urgent","Urgent",sorted(buckets.training),"No training shortages within "+restockForecastDays+" days."],
@@ -935,7 +952,7 @@ const tornCrimeGuide = (() => {
       (items.length?'<ul class="crime-recommendations">'+rows(items)+'</ul>':'<p class="fine-print">'+esc(empty)+'</p>')+'</div>').join("");
     const pending=tornGuideApi.inventoryTypes.filter(c=>c!=="Book"&&!ready(c));
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
-    const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
+    const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print restock-inventory-note">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
     const priority=tornRoadmap.preferences().priority,first={growth:["growth","consume"],completion:["crime","merit"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
     return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
