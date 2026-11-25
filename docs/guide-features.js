@@ -256,6 +256,43 @@ const tornGuideApi=(()=>{
     }).finally(()=>gearPending.delete(cacheKey));
     gearPending.set(cacheKey,task);return task;
   }
+  const rwCache=new Map(),rwPending=new Map();
+  function rwKey(id,rarity){return "torn-city-guide:rw-market:v1:"+id+":"+rarity;}
+  function readRwMarket(id,rarity){
+    const key=rwKey(id,rarity);
+    if(!rwCache.has(key)){try{const x=JSON.parse(localStorage.getItem(key)||"null");if(x&&Array.isArray(x.rows)&&Number.isFinite(x.at))rwCache.set(key,x);}catch{}}
+    return rwCache.get(key)??null;
+  }
+  async function loadRwMarket(id,rarity,force=false){
+    if(!secret||!Number.isSafeInteger(id)||id<=0||!["yellow","orange","red"].includes(rarity))throw Error("Invalid ranked equipment lookup.");
+    const key=rwKey(id,rarity),old=readRwMarket(id,rarity);
+    if(!force&&old&&now()-old.at<24*hrs)return old;
+    if(rwPending.has(key))return rwPending.get(key);
+    const accountEpoch=epoch,apiKey=secret;
+    const task=(async()=>{
+      const rows=[],seen=new Set();let truncated=false,sourceAt=null;
+      for(let offset=0;offset<500;offset+=100){
+        if(epoch!==accountEpoch)throw Error("Account changed.");
+        const data=await request("market/"+id+"/itemmarket?bonus="+encodeURIComponent(rarity[0].toUpperCase()+rarity.slice(1))+"&limit=100&offset="+offset,apiKey);
+        const m=data.itemmarket;
+        if(!Array.isArray(m?.listings)||Number(m.item?.id)!==id)throw Error("Unexpected item market response.");
+        sourceAt=Number(m.cache_timestamp)||sourceAt;
+        for(const x of m.listings){
+          const d=x.item_details,uid=gearUid(d?.uid);
+          if(!uid||seen.has(uid)||d.rarity!==rarity||!Number.isSafeInteger(x.price)||x.price<=0||!Array.isArray(d.bonuses))continue;
+          seen.add(uid);rows.push({uid,price:x.price,stats:d.stats,bonuses:d.bonuses.map(b=>({id:b.id,title:b.title,value:b.value}))});
+        }
+        const more=m.listings.length===100&&(!Number.isFinite(data._metadata?.total)||offset+100<data._metadata.total);
+        if(!more)break;
+        if(offset===400)truncated=true;
+      }
+      if(epoch!==accountEpoch)throw Error("Account changed.");
+      const result={at:now(),sourceAt,rows,truncated};rwCache.set(key,result);
+      try{localStorage.setItem(key,JSON.stringify(result));}catch{}
+      return result;
+    })().finally(()=>rwPending.delete(key));
+    rwPending.set(key,task);return task;
+  }
   function readCrimeProgress(id){return Number.isInteger(id)&&id>=1&&id<=13?gearRead("user/"+id+"/crimes"):null;}
   async function loadCrimeProgress(id){if(!Number.isInteger(id)||id<1||id>13)throw Error("Invalid crime ID.");return gearRequest("user/"+id+"/crimes",true);}
   function readGear(uid){
@@ -447,7 +484,7 @@ const tornGuideApi=(()=>{
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readCrimeProgress,loadCrimeProgress,
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readCrimeProgress,loadCrimeProgress,
     disconnect,restore,setRemember,isRemembering:()=>remember,
     isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
@@ -1082,6 +1119,50 @@ function inventoryGearTitle(uid,category,name,equipped,info={}){
     field("Quality",quality===null?"—%":quality+"%")+(category==="Defensive"?field("Armor rating / Coverage · "+coverageLabel,"ARMOR "+(armor??"—")+" / "+coverageText):field("Damage | Accuracy","DMG "+(damage??"—")+" | ACC "+(accuracy??"—")))+
     bonuses.map(b=>field(b.description||"Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join("")+'</span>';
 }
+function weaponEndurance(min,max,mag,magazines){
+  if(![min,max,mag,magazines].every(Number.isSafeInteger)||min<1||max<min||max>500||mag<1||mag>1000||magazines<1||magazines>20)return null;
+  const e=[0];for(let r=1;r<=mag;r++){let sum=0;for(let n=min;n<=max;n++)sum+=e[Math.max(0,r-n)];e[r]=1+sum/(max-min+1);}
+  return {expected:e[mag],min:Math.ceil(mag/max),max:Math.ceil(mag/min),total:e[mag]*magazines,reloads:magazines-1,efficiency:e[mag]*magazines/(e[mag]*magazines+magazines-1),rounds:mag*magazines};
+}
+function rwComparableEstimate(gear,rows,uid){
+  const key=b=>String(b.title??b.id??"").trim().toLowerCase();
+  const bonuses=Array.isArray(gear?.bonuses)?gear.bonuses:[],signature=bs=>bs.map(key).sort().join("|");
+  if(!bonuses.length||!bonuses.every(b=>key(b)&&Number.isFinite(b.value)))return null;
+  const candidates=rows.filter(r=>r.uid!==uid&&Array.isArray(r.bonuses)&&signature(r.bonuses)===signature(bonuses)&&r.bonuses.every(b=>Number.isFinite(b.value))&&Number.isFinite(r.price)&&r.price>0).map(r=>{
+    const distance=bonuses.reduce((s,b)=>s+Math.abs(b.value-r.bonuses.find(x=>key(x)===key(b)).value)/Math.max(1,Math.abs(b.value)),0)/bonuses.length;
+    const q=Number.isFinite(gear.stats?.quality)&&Number.isFinite(r.stats?.quality)?Math.abs(gear.stats.quality-r.stats.quality)/100:0;
+    const combat=["damage","accuracy","armor"].filter(k=>Number.isFinite(gear.stats?.[k])&&Number.isFinite(r.stats?.[k])).reduce((s,k)=>s+Math.abs(gear.stats[k]-r.stats[k])/100,0);
+    return {...r,distance,score:distance*4+q*.5+combat};
+  }).sort((a,b)=>a.score-b.score);
+  const close=candidates.filter(x=>x.distance<=.2),selected=(close.length>=3?close:candidates).slice(0,12);
+  if(selected.length<3)return {count:selected.length,rows:selected,estimate:null};
+  const prices=selected.map(x=>x.price).sort((a,b)=>a-b),quantile=q=>prices[Math.floor((prices.length-1)*q)];
+  const weighted=selected.map(x=>({...x,w:1/(.1+x.score)})).sort((a,b)=>a.price-b.price);let running=0,half=weighted.reduce((s,x)=>s+x.w,0)/2,median=weighted[0].price;
+  for(const x of weighted){running+=x.w;median=x.price;if(running>=half)break;}
+  return {count:selected.length,rows:selected,estimate:median,low:quantile(.25),high:quantile(.75),confidence:close.length>=5?"Higher match":close.length>=3?"Moderate match":"Low match"};
+}
+function inventoryRwMarket(uid,id){
+  const gear=tornGuideApi.readGear(uid).item,rarity=gear?.rarity;
+  if(!id||!["yellow","orange","red"].includes(rarity))return "";
+  const data=tornGuideApi.readRwMarket(id,rarity),model=data?rwComparableEstimate(gear,data.rows,uid):null;
+  const money=n=>"$"+formatNumber(n);
+  return '<section class="inventory-rw-market"><h4>RW comparable asking prices</h4><button type="button" class="button secondary" data-rw-query>'+ (data?"Refresh RW value":"Check RW value")+'</button>'+
+    (data?'<p class="fine-print">Checked '+safe(tornGuidePreferences.formatDate(data.at))+(data.truncated?" · first 500 listings only":"")+'</p>':"")+
+    (model?.estimate!=null?'<p><strong>'+safe(money(model.estimate))+'</strong> · '+safe(model.confidence)+' · '+model.count+' matches</p><p>Middle asking-price range: '+safe(money(model.low))+' – '+safe(money(model.high))+'</p>':data?'<p>Insufficient exact bonus matches ('+(model?.count??0)+'). No estimated RW value.</p>':"")+
+    (model?.rows.length?'<details><summary>Comparable listings</summary>'+model.rows.map(r=>'<p>'+safe(money(r.price))+' · '+safe(r.stats?.quality??"—")+'% · '+safe(r.bonuses.map(b=>b.value+"% "+(b.title??b.id)).join(", "))+'</p>').join("")+'</details>':"")+
+    '<small>Active asking prices, not completed sales. Generic MV remains separate.</small><p class="inventory-rw-status" role="status"></p></section>';
+}
+if(typeof document!=="undefined")document.addEventListener("click",async event=>{
+  const button=event.target.closest?.("[data-rw-query]");if(!button)return;
+  const row=button.closest(".inventory-detail-row"),uid=row.dataset.gearUid,id=Number(row.dataset.buyerItem),gear=tornGuideApi.readGear(uid).item;
+  if(!gear)return;button.disabled=true;
+  try{await tornGuideApi.loadRwMarket(id,gear.rarity,true);
+    for(const target of document.querySelectorAll("[data-gear-uid]")){
+      const section=target.querySelector(".inventory-rw-slot");if(section&&Number(target.dataset.buyerItem)===id)section.innerHTML=inventoryRwMarket(target.dataset.gearUid,id);
+    }
+  }catch(e){if(row.isConnected)row.querySelector(".inventory-rw-status").textContent=e.message;}
+  finally{if(button.isConnected)button.disabled=false;}
+});
 function inventoryGearMarkup(uid,category,info,equipped){
   const weapon=["Primary","Secondary","Melee"].includes(category),armor=category==="Defensive";
   if(!weapon&&!armor)return "";
@@ -1091,8 +1172,11 @@ function inventoryGearMarkup(uid,category,info,equipped){
   const read=tornGuideApi.readGear(uid),unique=read.item,stats=unique?.stats??{};
   const rarity=["yellow","orange","red"].includes(unique?.rarity)?unique.rarity:null;
   const bonuses=Array.isArray(unique?.bonuses)?unique.bonuses:null;
+  const mags=bonuses?.some(b=>String(b.title).toLowerCase()==="specialist")?1:3;
+  const endurance=weaponEndurance(rate?.minimum,rate?.maximum,ammo?.magazine_rounds,mags);
   const rows=pair("Class",unique?.sub_type??info.sub_type??meta.category)+
     (weapon?pair("Damage",num(stats.damage))+pair("Accuracy",num(stats.accuracy))+pair("Stealth",num(meta.stealth_level))+pair("Caliber / ammo",ammo?.name)+pair("Magazine rounds",num(ammo?.magazine_rounds))+pair("Rate of fire",rate?.minimum!=null&&rate?.maximum!=null?rate.minimum+"–"+rate.maximum:null)+pair("Current ammo",read.ammo?read.ammo.name+" · "+read.ammo.type+" · "+read.ammo.quantity:null):pair("Armor rating",num(stats.armor)))+
+    (endurance?pair("Base attacks / mag",endurance.expected.toFixed(2)+" ("+endurance.min+"–"+endurance.max+")")+pair("Base attacks / total",endurance.total.toFixed(2))+pair("Base reloads",String(endurance.reloads))+pair("Base firing efficiency",(endurance.efficiency*100).toFixed(1)+"%"):"")+
     pair("Quality",num(stats.quality,"%"))+pair("Rarity",rarity)+
     (armor&&Array.isArray(meta.coverage)?pair("Coverage",meta.coverage.map(x=>x.name+" "+x.value+"%").join(" · ")):"");
   const bonusList=bonuses===null?"Not loaded":bonuses.length?bonuses.map(b=>'<div><strong>'+safe(b.title)+(typeof b.value==="number"?" · "+safe(b.value):"")+'</strong><small>'+safe(b.description??"")+'</small></div>').join(""):"None";
@@ -1100,7 +1184,7 @@ function inventoryGearMarkup(uid,category,info,equipped){
   const modStamp=read.modsAt?'<small>Mods checked '+safe(tornGuidePreferences.formatDate(read.modsAt))+'</small>':"";
   const ammoStamp=read.ammo&&read.ammoAt?'<small>Ammo snapshot '+safe(tornGuidePreferences.formatDate(read.ammoAt))+'</small>':"";
   const modList=mods===null||mods===undefined?"Not loaded":mods.length?mods.map(m=>safe(m.name??m.title??"Unknown mod")).join(" · "):"None attached";
-  return '<section class="inventory-gear"><h4>Equipment attributes</h4>'+(rows?'<dl class="inventory-gear-grid">'+rows+'</dl>':"")+(unique?'<div class="inventory-gear-bonuses '+(rarity?"rarity-"+rarity:"")+'"><strong>Ranked bonuses</strong>'+bonusList+'</div>':'<p class="fine-print">Individual attributes not loaded.</p>')+
+  return '<section class="inventory-gear"><h4>Equipment attributes</h4>'+(rows?'<dl class="inventory-gear-grid">'+rows+'</dl>':"")+(endurance?'<p class="fine-print">Base endurance assumes '+mags+' magazine(s), full ammunition and no ammo-saving effects or mods.</p>':"")+(unique?'<div class="inventory-gear-bonuses '+(rarity?"rarity-"+rarity:"")+'"><strong>Ranked bonuses</strong>'+bonusList+'</div>':'<p class="fine-print">Individual attributes not loaded.</p>')+
     (weapon?'<div class="inventory-gear-mods"><strong>Attached mods</strong><p>'+modList+'</p>'+modStamp+ammoStamp+(Array.isArray(meta.mods)?'<small>'+meta.mods.length+' compatible mod types in catalog</small>':"")+'</div>':"")+
     (uid?'<button type="button" class="button secondary" data-load-gear>'+ (unique?"Refresh mods / equipment":"Load equipment details")+'</button>':'<p class="fine-print">Unique item ID unavailable.</p>')+'<p role="status" class="inventory-gear-status"></p></section>';
 }
@@ -1117,6 +1201,7 @@ if(typeof document!=="undefined")document.addEventListener("click",async event=>
       const raw=payload("itemCatalog","items"),catalog=Array.isArray(raw)?raw:Object.entries(raw||{}).map(([id,x])=>({...x,id:x.id??id}));
       const info=catalog.find(x=>String(x.id)===target.dataset.buyerItem)??{};
       panel.outerHTML=inventoryGearMarkup(target.dataset.gearUid,target.dataset.gearCategory,info,target.dataset.gearEquipped==="true");
+      const rw=target.querySelector(".inventory-rw-slot");if(rw)rw.innerHTML=inventoryRwMarket(target.dataset.gearUid,Number(target.dataset.buyerItem));
       const title=target.querySelector(".inventory-row-title");
       if(title)title.innerHTML=inventoryGearTitle(target.dataset.gearUid,target.dataset.gearCategory,title.dataset.titleName,title.dataset.titleEquipped==="true",info);
       if(target.dataset.gearUid===uid)target.querySelector(".inventory-gear-status").textContent=result.errors.join(" · ");
@@ -1155,6 +1240,7 @@ function inventoryDetailRow(item,category,index){
   const tab=inventoryTabs.get(rowKey)??"details";
   const tabbar='<div class="inventory-item-tabs" role="group" aria-label="Item information">'+["details","market"].map(t=>'<button type="button" data-inventory-tab="'+t+'" aria-pressed="'+(tab===t)+'">'+(t==="details"?"Details":"Market")+'</button>').join("")+'</div>';
   return '<li class="inventory-detail-row" '+(gear?'data-gear-uid="'+safe(uid??"")+'" data-gear-category="'+safe(category)+'" data-gear-equipped="'+Boolean(item.equipped)+'" ':"")+'data-buyer-item="'+(id??"")+'" data-buyer-qty="'+(Number.isSafeInteger(qty)&&qty>0?qty:0)+'"><details data-inventory-detail="'+safe(rowKey)+'" '+(inventoryExpanded.has(rowKey)?"open":"")+'><summary><span class="inventory-row-title" data-title-name="'+safe(name)+'" data-title-equipped="'+Boolean(item.equipped)+'">'+(gear?inventoryGearTitle(uid,category,name,item.equipped,info):safe(name)+(item.equipped?inventoryEquippedIcon:""))+'</span><span class="inventory-buyer-badge">'+inventoryBuyerIcon(id)+'</span>'+(id?'<button type="button" class="inventory-inline-search" data-query-buyers aria-label="Query Weav3r buyers for '+safe(name)+'" title="Query Weav3r buyers" '+(weav3rBuyers.pending(id)?'disabled aria-busy="true"':'')+'>'+inventorySearchIcon+'</button>':'')+'<strong>×'+safe(formatNumber(item.amount??item.quantity))+'</strong></summary><div class="inventory-detail-body">'+tabbar+'<div data-inventory-tab-panel="details" '+(tab!=="details"?"hidden":"")+'><p>'+safe(description)+'</p>'+inventoryGearMarkup(uid,category,info,item.equipped)+(effects?'<section class="inventory-item-effects"><h4>Effects</h4><p>'+safe(effects)+'</p></section>':"")+'</div><div data-inventory-tab-panel="market" '+(tab!=="market"?"hidden":"")+'><div class="inventory-market-summary">'+(url?'<a class="inventory-weav3r-icon" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" aria-label="Open Weav3r marketplace" title="Open Weav3r marketplace"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 6 5 12 5-8 5 8 5-12M7 6l5 7 5-7"/></svg></a>':'')+'<span title="Market value per item">MV: '+(validPrice?'$'+safe(formatNumber(Number(price))):'Unavailable')+'</span><span class="inventory-market-qty">× '+(Number.isFinite(qty)&&qty>=0?safe(formatNumber(qty)):'—')+'</span><strong class="inventory-market-gross" title="Estimated gross stack value">'+(validPrice&&Number.isFinite(qty)&&qty>=0?'$'+safe(formatNumber(Number(price)*qty)):'—')+'</strong></div>'+(info.circulation!=null&&Number.isFinite(Number(info.circulation))?'<p class="fine-print">Circulation: '+safe(formatNumber(Number(info.circulation)))+'</p>':'')+(item.equipped?'<p class="fine-print">Equipped item: verify what you can spare before trading.</p>':'')+
+    (gear&&id?'<div class="inventory-rw-slot">'+inventoryRwMarket(uid,id)+'</div>':"")+
     (id?'<p class="inventory-buyer-status" role="status"></p><div class="inventory-buyer-results">'+inventoryBuyerResults(id,qty)+'</div>':"")+
     '</div></div></details></li>';
 }
