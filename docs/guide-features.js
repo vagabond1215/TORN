@@ -257,6 +257,45 @@ const tornGuideApi=(()=>{
     gearPending.set(cacheKey,task);return task;
   }
   const rwCache=new Map(),rwPending=new Map();
+  const passiveRwKey="torn-city-guide:passive-rw:v1";
+  let passiveRw=[];
+  try{const saved=JSON.parse(localStorage.getItem(passiveRwKey)||"[]");if(Array.isArray(saved))passiveRw=saved;}catch{}
+  function acceptRwSnapshot(packet){
+    if(packet?.version!==1||!Array.isArray(packet.rows))return false;
+    const clean=[];
+    for(const x of packet.rows.slice(0,2500)){
+      if(!x||typeof x.name!=="string"||!x.name.trim()||x.name.length>120||
+        !["Primary","Secondary","Melee","Armor","Defensive"].includes(x.category)||
+        !["yellow","orange","red"].includes(x.rarity)||!Number.isSafeInteger(x.price)||x.price<=0||
+        !Number.isFinite(x.at)||x.at>now()+5000||now()-x.at>72*hrs)continue;
+      const stats={};for(const k of ["quality","damage","accuracy","armor"]){const n=x.stats?.[k];if(typeof n==="number"&&Number.isFinite(n)&&n>=0&&n<=10000)stats[k]=n;}
+      const bonuses=Array.isArray(x.bonuses)?x.bonuses.slice(0,3).filter(b=>b&&typeof b.title==="string"&&/^[A-Za-z][A-Za-z '-]{0,40}$/.test(b.title)&&Number.isFinite(b.value)&&b.value>=0&&b.value<=10000).map(b=>({title:b.title,value:b.value})):[];
+      const complete=x.complete===true&&Number.isFinite(stats.quality)&&bonuses.length>0&&bonuses.length===x.bonuses?.length&&(Number.isFinite(stats.armor)||Number.isFinite(stats.damage)&&Number.isFinite(stats.accuracy));
+      const uid=gearUid(x.uid);
+      clean.push({name:x.name,category:x.category,rarity:x.rarity,price:x.price,stats,bonuses,complete,uid,at:x.at});
+    }
+    const next=JSON.stringify(clean);
+    if(next===JSON.stringify(passiveRw))return false;
+    passiveRw=clean;
+    try{localStorage.setItem(passiveRwKey,next);}catch{}
+    return true;
+  }
+  function readPassiveRwMarket(id,rarity){
+    const raw=state.data.itemCatalog;
+    const items=raw?.items??raw?.data?.items??raw?.payload?.items;
+    const catalog=Array.isArray(items)?items:Object.entries(items||{}).map(([id,x])=>({...x,id:x.id??id}));
+    const name=catalog.find(x=>Number(x.id)===id)?.name;
+    if(!name)return null;
+    const observations=passiveRw.filter(x=>x.name.toLowerCase()===String(name).toLowerCase()&&x.rarity===rarity&&now()-x.at<=72*hrs);
+    if(!observations.length)return null;
+    const rows=[],seen=new Set();
+    for(const x of observations.filter(x=>x.complete).sort((a,b)=>b.at-a.at)){
+      const key=x.uid??JSON.stringify([x.stats,x.bonuses,x.price]);
+      if(seen.has(key))continue;seen.add(key);
+      rows.push({uid:x.uid??"passive:"+key,price:x.price,stats:x.stats,bonuses:x.bonuses,at:x.at});
+    }
+    return {at:Math.max(...observations.map(x=>x.at)),rows,observations:observations.length,source:"passive",truncated:true};
+  }
   function rwKey(id,rarity){return "torn-city-guide:rw-market:v1:"+id+":"+rarity;}
   function readRwMarket(id,rarity){
     const key=rwKey(id,rarity);
@@ -484,7 +523,7 @@ const tornGuideApi=(()=>{
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
-  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readCrimeProgress,loadCrimeProgress,
+  return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,readCrimeProgress,loadCrimeProgress,
     disconnect,restore,setRemember,isRemembering:()=>remember,
     isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
@@ -1144,10 +1183,14 @@ function rwComparableEstimate(gear,rows,uid){
 function inventoryRwMarket(uid,id){
   const gear=tornGuideApi.readGear(uid).item,rarity=gear?.rarity;
   if(!id||!["yellow","orange","red"].includes(rarity))return "";
-  const data=tornGuideApi.readRwMarket(id,rarity),model=data?rwComparableEstimate(gear,data.rows,uid):null;
+  const passive=tornGuideApi.readPassiveRwMarket(id,rarity),api=tornGuideApi.readRwMarket(id,rarity);
+  const passiveModel=passive?rwComparableEstimate(gear,passive.rows,uid):null;
+  const data=passiveModel?.estimate!=null&&Date.now()-passive.at<24*60*60*1000?passive:api??passive;
+  const model=data===passive?passiveModel:data?rwComparableEstimate(gear,data.rows,uid):null;
   const money=n=>"$"+formatNumber(n);
-  return '<section class="inventory-rw-market"><h4>RW comparable asking prices</h4><button type="button" class="button secondary" data-rw-query>'+ (data?"Refresh RW value":"Check RW value")+'</button>'+
-    (data?'<p class="fine-print">Checked '+safe(tornGuidePreferences.formatDate(data.at))+(data.truncated?" · first 500 listings only":"")+'</p>':"")+
+  return '<section class="inventory-rw-market"><h4>RW comparable asking prices</h4><button type="button" class="button secondary" data-rw-query>'+ (data?"Query API comparables":"Check RW value")+'</button>'+
+    (data?'<p class="fine-print">Checked '+safe(tornGuidePreferences.formatDate(data.at))+(data.source==="passive"?" · passive observations, not a complete market scan":data.truncated?" · first 500 listings only":"")+'</p>':"")+
+    (passive?'<p class="fine-print">Passive market: '+passive.observations+' observations · '+passive.rows.length+' full-detail records</p>':"")+
     (model?.estimate!=null?'<p><strong>'+safe(money(model.estimate))+'</strong> · '+safe(model.confidence)+' · '+model.count+' matches</p><p>Middle asking-price range: '+safe(money(model.low))+' – '+safe(money(model.high))+'</p>':data?'<p>Insufficient exact bonus matches ('+(model?.count??0)+'). No estimated RW value.</p>':"")+
     (model?.rows.length?'<details><summary>Comparable listings</summary>'+model.rows.map(r=>'<p>'+safe(money(r.price))+' · '+safe(r.stats?.quality??"—")+'% · '+safe(r.bonuses.map(b=>b.value+"% "+(b.title??b.id)).join(", "))+'</p>').join("")+'</details>':"")+
     '<small>Active asking prices, not completed sales. Generic MV remains separate.</small><p class="inventory-rw-status" role="status"></p></section>';
