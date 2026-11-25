@@ -95,7 +95,7 @@ const tornRoadmap=(()=>{
  };
  let selected=null,selectedFor=null;
  const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
- const activityOptions=[["War","War"],["Mug","Mugging"],["Trade","Trading"],["Travel","Travel"],["Training","Gym training"],["Revive","Reviver"],["Jail","Jail break / busting"],["Business","Business"],["Crime","Crime"],["OC","Organized crimes"],["Racing","Racing"],["Money","Investing"],["Gambling","Gambling"],["Education","Education"],["Merits","Merit hunting"]];
+ const activityOptions=[["War","War"],["Mug","Mugging"],["Trade","Trading"],["Travel","Travel"],["Training","Gym training"],["Revive","Reviver"],["Jail","Jail break / busting"],["Business","Business"],["Crime","Crime"],["OC","Organized crimes"],["Racing","Racing"],["Money","Investing"],["Gambling","Gambling"],["Education","Education"],["Merits","Merit hunting"],["Attack","PvP / attacking"],["Missions","Missions"],["Bounty","Bounty hunting"],["Career","Career / work stats"],["Faction","Faction support"],["Property","Property rental"],["Collect","Collecting"]];
  const styleOptions=activityOptions.map(([id])=>id);
  const activityLabels=Object.fromEntries(activityOptions);
  Object.assign(branches,{
@@ -104,6 +104,14 @@ const tornRoadmap=(()=>{
   OC:[["oc-roles","Prepare organized crime roles","Coordinate with your faction and check required items and scheduling.","crime"]],
   Money:[["invest-plan","Compare bank and stock investments","Balance liquidity, recurring returns and training expenses.","stocks"]],
   Education:[["education-focus","Prioritize useful education effects","Use education paths and reduce future course durations.","education"]],
+  Attack:[["attack-focus","Develop combat skills and loadouts","Compare combat stats, equipment and Energy costs.","gym"]],
+  Missions:[["mission-focus","Complete mission objectives","Reserve Energy for assigned targets.","mission"]],
+  Bounty:[["bounty-focus","Evaluate bounty opportunities","Compare rewards with combat capability and Energy cost.","faction"]],
+  Career:[["career-focus","Develop working stats and career perks","Compare jobs, trains and permanent benefits.","job"]],
+  Faction:[["faction-focus","Coordinate faction support","Review faction roles, armory and scheduled activities.","faction"]],
+  Property:[["property-focus","Compare rental income and costs","Evaluate occupancy, upkeep and invested capital.","property"]],
+  Collect:[["collect-focus","Track collections and unique items","Compare availability, prices and award requirements.","award"]],
+  Gambling:[["gamble-focus","Keep casino entertainment separate from income","Set a loss limit and protect essential funds.","bank"]],
   Merits:[["merit-focus","Track attainable awards and merits","Prioritize awards that fit your normal activity.","award"]]
  });
  function selectedStyles(){
@@ -120,10 +128,14 @@ const tornRoadmap=(()=>{
   try{data=JSON.parse(read(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences")||"{}")||{};}catch{}
   return {priority:["growth","networth","company","education","completion"].includes(data.priority)?data.priority:data.priority==="money"?"networth":"growth",risk:["low","medium","high"].includes(data.risk)?data.risk:"low",weeklyBudget:data.weeklyBudget!=null&&Number.isFinite(Number(data.weeklyBudget))?Math.max(0,Number(data.weeklyBudget)):null};
  }
+ let openFallback=true;
+ function activitiesOpen(){try{return localStorage.getItem("torn-city-guide:home-activities-open")!=="false";}catch{return openFallback;}}
+ function toggleActivities(){const open=!activitiesOpen();openFallback=open;try{localStorage.setItem("torn-city-guide:home-activities-open",String(open));}catch{}const panel=document.getElementById("home-activities");if(panel)panel.hidden=!open;const button=document.querySelector("[data-home-activities-toggle]");if(button){button.setAttribute("aria-pressed",String(open));button.setAttribute("aria-expanded",String(open));}}
  function renderActivities(){
   const p=preferences();
-  const radio=(name,opts,value)=>'<div class="roadmap-styles">'+opts.map(([id,label])=>'<label class="roadmap-style"><input type="radio" name="home-'+name+'" data-home-pref="'+name+'" value="'+id+'" '+(value===id?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div>';
-  return '<section class="panel home-activities"><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div><div class="home-pref-row"><div class="home-pref-group"><strong>Priority</strong>'+radio("priority",[["growth","Stat Growth"],["networth","Networth"],["company","Company"],["education","Education"],["completion","Completion"]],p.priority)+'</div><div class="home-pref-group"><strong title="Financial exposure: carried cash, trade settlement, gambling losses and investment volatility. Not drug use or training intensity.">Financial risk</strong>'+radio("risk",[["low","Low"],["medium","Medium"],["high","High"]],p.risk)+'</div><label class="home-budget"><strong>Weekly budget</strong><span>$</span><input type="number" min="0" step="any" data-home-pref="weeklyBudget" value="'+(p.weeklyBudget??"")+'" placeholder="Not set" aria-label="Weekly training budget"></label></div></div></section>';
+  const riskIcon=id=>{const level={low:1,medium:2,high:3}[id];return '<svg width="18" height="16" viewBox="0 0 18 16" aria-hidden="true">'+[1,2,3].map((n,i)=>'<rect x="'+(i*6)+'" y="'+(16-n*5)+'" width="4" height="'+(n*5)+'" rx="1" fill="currentColor" opacity="'+(n<=level?1:.22)+'"/>').join("")+'</svg>';};
+  const radio=(name,opts,value)=>'<div class="roadmap-styles home-'+name+'-choices">'+opts.map(([id,label])=>'<label class="roadmap-style" title="'+esc(label)+'"><input type="radio" name="home-'+name+'" data-home-pref="'+name+'" value="'+id+'" aria-label="'+esc(label)+'" '+(value===id?"checked":"")+'><span>'+(name==="risk"?riskIcon(id):esc(label))+'</span></label>').join("")+'</div>';
+  return '<section id="home-activities" class="panel home-activities" '+(activitiesOpen()?"":"hidden")+'><div class="panel-heading"><h2>Playstyle / activities</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div><div class="home-pref-row"><div class="home-pref-group"><strong>Priority</strong>'+radio("priority",[["growth","Growth"],["networth","Networth"],["company","Company"],["education","Education"],["completion","Completion"]],p.priority)+'</div><div class="home-pref-group"><strong title="Financial exposure: carried cash, trade settlement, gambling losses and investment volatility. Not drug use or training intensity.">Financial risk</strong>'+radio("risk",[["low","Low"],["medium","Medium"],["high","High"]],p.risk)+'</div><label class="home-budget"><strong>Weekly budget</strong><span>$</span><input type="number" min="0" step="any" data-home-pref="weeklyBudget" value="'+(p.weeklyBudget??"")+'" placeholder="Not set" aria-label="Weekly training budget"></label></div></div></section>';
  }
  function wireActivities(view){
   if(view.dataset.activitiesBound==="1")return;
@@ -155,7 +167,7 @@ const tornRoadmap=(()=>{
  function all(){
   const common=core.flatMap(([stage,...items])=>items.map(([id,title,detail,source])=>({stage,id,title,detail,source:official[source]})));
   const styles=selectedStyles().filter(x=>x!=="Balanced");
-  for(const style of styles)for(const [id,title,detail,source] of branches[style])
+  for(const style of styles)for(const [id,title,detail,source] of (branches[style]||[]))
    common.push({stage:(activityLabels[style]||style)+" specialization",id,title,detail,source:official[source]});
   return common;
  }
@@ -233,5 +245,5 @@ const tornRoadmap=(()=>{
    }
   });
  }
- return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities,preferences};
+ return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities,preferences,activitiesOpen,toggleActivities};
 })();
