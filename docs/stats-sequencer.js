@@ -210,7 +210,7 @@ const tornTrainSequence=(()=>{
     const regenTime=rule.minutes*60;
     const gymCost=Math.max(1,Math.floor(gym.energy));
     const mult=ctx.effectsFor(stat).multiplier;
-    const initialE=cfg.startEnergy==="zero"?0:cfg.startEnergy==="full"?eCap:Math.min(ctx.state.currentEnergy,eCap);
+    const initialE=cfg.startEnergy==="zero"?0:cfg.startEnergy==="full"?eCap:Math.min(Math.max(0,ctx.state.currentEnergy),1000);
     const v={time:0,stat:base,energy:initialE,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),
       costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0,warnings:[]};
     const snap=()=>({time:v.time,energy:v.energy,happy:v.happy,drug:v.drug,booster:v.booster,stat:v.stat});
@@ -399,7 +399,10 @@ const tornTrainSequence=(()=>{
           for(let k=0;k<cycles&&!v.errors.length&&v.time<engine.limit;k++){
             const end=Math.min(engine.limit,Math.round((k+1)*blockHours*3600));
             // No free energy or cooldown reset between repetitions.
-            if(startingEnergy[id]==="zero"&&v.energy>=engine.gymCost)engine.execute(make("train"),0);
+            if(startingEnergy[id]==="zero"&&v.energy>=engine.gymCost){
+              if(actions[0]?.type==="xanax")engine.advance(v.drug);
+              engine.execute(make("train"),0);
+            }else if(startingEnergy[id]==="full"&&v.energy<energyRules().cap)engine.advance(engine.fullEnergyDelay());
             if(!engine.run(actions))break;
             executed.push(...actions);
             if(v.time<end)naturalUntil(engine,end);
@@ -409,7 +412,7 @@ const tornTrainSequence=(()=>{
           const result=engine.finish(executed);
           if(!result.complete||result.money==null||result.money>cash||executed.length!==actions.length*cycles)continue;
           if(id!=="natural"&&result.costs.xanax+result.costs.ecstasy+result.costs.dvd+result.costs.candy+result.costs.refill===0)continue;
-          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan",execution:result.log.filter(x=>x.type!=="happyReset").map(x=>({type:x.type,at:x.start.time,end:x.end.time,quantity:x.quantity??1,energy:x.type==="train"?Math.max(0,x.start.energy-x.end.energy):null,reason:x.reason??null}))};
+          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,used:result.used,costs:result.costs,cycles,blockHours,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan",startEnergy:startingEnergy[id],generatedAt:now.getTime(),execution:result.log.filter(x=>x.type!=="happyReset").map(x=>({type:x.type,at:x.start.time,end:x.end.time,quantity:x.quantity??1,energy:x.type==="train"?Math.max(0,x.start.energy-x.end.energy):null,reason:x.reason??null}))};
           if(!best||candidate.gain>best.gain||candidate.gain===best.gain&&candidate.money<best.money)best=candidate;
         }
         if(best)results.push(best);
