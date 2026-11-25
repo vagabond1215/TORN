@@ -285,10 +285,47 @@ const tornGuideApi=(()=>{
     }
     return {data:readGear(uid),errors};
   }
+  let initialGearScan=null;
+  async function checkInitialGear(){
+    if(!secret||routeName()!=="inventory")return;
+    if(initialGearScan)return initialGearScan;
+    const scanEpoch=epoch;
+    const candidates=new Set();
+    for(const [cat,items] of Object.entries(state.inventory)){
+      if(!["Primary","Secondary","Melee","Defensive"].includes(cat)||!Array.isArray(items))continue;
+      for(const item of items){
+        const uid=gearUid(item.uid??item.unique_id);
+        if(!uid)continue;
+        const rarity=String(item.rarity??item.item?.rarity??"").toLowerCase();
+        // Inventory may not expose rarity. Discover unknown unique equipment too.
+        if(rarity&&!["yellow","orange","red"].includes(rarity))continue;
+        if(gearRead("torn/"+uid+"/itemdetails")||gearAttempts.has(scanEpoch+":initial:"+uid))continue;
+        candidates.add(uid);
+      }
+    }
+    if(!candidates.size)return;
+    const task=(async()=>{
+      let changed=false,attempted=0;
+      for(const uid of candidates){
+        if(epoch!==scanEpoch||routeName()!=="inventory"||!secret||attempted>=25)break;
+        const path="torn/"+uid+"/itemdetails";
+        if(gearRead(path))continue;
+        gearAttempts.set(scanEpoch+":initial:"+uid,now());
+        attempted++;
+        try{await gearRequest(path);changed=true;}
+        catch{break;} // Stop on errors rather than hammering the API.
+        if(epoch!==scanEpoch)break;
+      }
+      if(changed&&epoch===scanEpoch&&routeName()==="inventory")announce();
+    })();
+    initialGearScan=task;
+    try{await task;}finally{if(initialGearScan===task)initialGearScan=null;}
+  }
   async function checkGearDaily(){
     if(!secret||routeName()!=="inventory")return;
     const known=Object.entries(state.inventory).some(([cat,items])=>["Primary","Secondary","Melee"].includes(cat)&&Array.isArray(items)&&items.some(x=>gearUid(x.uid??x.unique_id)));
-    if(!known||gearRead("user/itemmods"))return;
+    await checkInitialGear();
+    if(!secret||routeName()!=="inventory"||!known||gearRead("user/itemmods"))return;
     const key=epoch+":daily-mods";
     if(now()-(gearAttempts.get(key)??0)<15*mins)return;
     gearAttempts.set(key,now());
@@ -1045,7 +1082,7 @@ function inventoryGearTitle(uid,category,name,equipped,info={}){
   const bonuses=Array.isArray(gear?.bonuses)?gear.bonuses:[];
   return '<span class="inventory-title-content'+(ranked?" rarity-"+rarity:"")+'"><span class="inventory-title-name">'+safe(name)+(equipped?inventoryEquippedIcon:"")+'</span>'+
     (ranked?field("Quality",quality===null?null:quality+"%")+(category==="Defensive"?field("Armor rating / Coverage · "+coverageLabel,armor===null?null:"ARMOR "+armor+" / "+coverageText):field("Damage | Accuracy",damage!==null||accuracy!==null?"DMG "+(damage??"—")+" | ACC "+(accuracy??"—"):null))+
-    bonuses.map(b=>field("Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join(""):"")+'</span>';
+    bonuses.map(b=>field(b.description||"Ranked bonus",(typeof b.value==="number"?b.value+"% ":"")+(b.title??b.name??""))).join(""):"")+'</span>';
 }
 function inventoryGearMarkup(uid,category,info,equipped){
   const weapon=["Primary","Secondary","Melee"].includes(category),armor=category==="Defensive";
