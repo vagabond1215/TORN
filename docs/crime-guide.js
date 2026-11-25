@@ -305,7 +305,7 @@ const tornCrimeGuide = (() => {
     const incomplete=all.filter(x=>x.cs!==null&&x.cs<100);
     const eligible=recIncomplete?incomplete:all.filter(x=>x.cs!==null);
     const pool=eligible.length?eligible:all.filter(x=>x.cs!==null&&completion&&x.total>0&&(x.uniqueCount===null||x.uniqueCount<x.total));
-    const rank=(a,b)=>Number(a.rank>maxRisk)-Number(b.rank>maxRisk)||a.rank-b.rank||a.i-b.i;
+    const rank=(a,b)=>Number(a.rank>maxRisk)-Number(b.rank>maxRisk)||(risk==="low"?a.rank-b.rank:b.cs-a.cs)||a.rank-b.rank||a.i-b.i;
     const chosen=[...pool].sort((a,b)=>completion&&!recIncomplete?Number(a.cs>=100)-Number(b.cs>=100)||rank(a,b):rank(a,b))[0]??[...all].filter(x=>x.cs!==null).sort(rank)[0]??all[0];
     const fallback=!eligible.length||chosen.rank>maxRisk;
     const detail=(chosen.cs===null?"Skill unavailable":chosen.cs<100?number(100-chosen.cs)+" skill levels to 100":"CS 100 · practice / unique review")+(fallback?" · No eligible safer unfinished crime; verify conditions and choose the easiest available action.":"");
@@ -337,7 +337,7 @@ const tornCrimeGuide = (() => {
     const educationRisk=enrolled&&highAddiction&&!protectedEducation;
     const blockDrugs=highAddiction&&(!enrolled||!protectedEducation);
     const session=loadTrainingSession();
-    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs,excludeOwned:excludeOwned(),skipPrograms:!!session,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth"});
+    const plan=tornStatPlanner.homeTrainingAdvice(prefs.weeklyBudget,prefs.risk,{blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth"});
     return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan};
   }
   let growthTab="summary";
@@ -669,7 +669,7 @@ const tornCrimeGuide = (() => {
     const drugLeft=cooldownKnown&&drug!==null?Math.max(0,drug-elapsed):null;
     const boosterLeft=cooldownKnown&&booster!==null?Math.max(0,booster-elapsed):null;
     const marijuana=count("Cannabis","Drug");
-    if(crimeActivity&&nerveRoom&&iconFresh&&!highAddiction&&!blockDrugs&&drugLeft===0&&marijuana>0&&(crimePriority||knownPlan&&!usesDrugs)){
+    if(crimeActivity&&nerveRoom&&iconFresh&&!highAddiction&&!blockDrugs&&prefs.odRisk!=="low"&&drugLeft===0&&marijuana>0&&(crimePriority||knownPlan&&!usesDrugs)){
       add("consume","Cannabis · 1 ("+number(marijuana)+" held)",crimePriority&&usesDrugs?"Completion priority: Cannabis may delay training drugs. The locked plan will wait for the drug cooldown.":"No remaining training drug steps. Use for Nerve; normal drug cooldown is 60–90 minutes.","#crime");
     }
     const alcohol=tornGuideApi.state.inventory.Alcohol;
@@ -700,13 +700,13 @@ const tornCrimeGuide = (() => {
       rows.crime.push('<li><a href="https://www.torn.com/page.php?sid=points">Refill Nerve with Points</a></li>');
     }
     if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
-    rows.crime.push(crimeRecommendation("low",completion));
+    rows.crime.push(crimeRecommendation(prefs.jailRisk,completion));
     loadEducationPreference();
     const m=educationModel();
     if(m.known&&m.courses.length){
       const groups=educationPaths.filter(([name])=>name!=="Other Perks");
       const preferred=educationView.groupBy==="effect"&&educationView.effect!=="all"?educationView.effect:null;
-      const weights={"Gym Perks":growth?5:1,"Passive Battle Stats":activities.some(x=>["War","Mug"].includes(x))?4:1,"Company Perks":prefs.priority==="company"||activities.includes("Business")?5:0,"Crime Perks":activities.some(x=>["Crime","OC"].includes(x))?5:1,"Jail Perks":activities.includes("Jail")?5:0,"Medical Perks":activities.includes("Revive")?5:0,"Attacking Perks":activities.some(x=>["War","Mug"].includes(x))?4:0};
+      const weights={"Gym Perks":growth?5:1,"Passive Battle Stats":activities.some(x=>["War","Mug","Bounty","Attack"].includes(x))?4:1,"Company Perks":prefs.priority==="company"||activities.includes("Business")?5:0,"Crime Perks":activities.some(x=>["Crime","OC"].includes(x))?5:1,"Jail Perks":activities.includes("Jail")?5:0,"Medical Perks":activities.includes("Revive")?5:0,"Attacking Perks":activities.some(x=>["War","Mug","Bounty","Attack"].includes(x))?4:0};
       const ranked=m.courses.filter(c=>!m.ids.has(String(c.id))&&String(c.id)!==String(m.id)).map(c=>{
         const effect=educationEffectText(c),code=educationCode(c);
         const req=c.prerequisites??c.requirements;
@@ -936,7 +936,7 @@ const tornCrimeGuide = (() => {
     const pending=tornGuideApi.inventoryTypes.filter(c=>c!=="Book"&&!ready(c));
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
     const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
-    const priority=tornRoadmap.preferences().priority,first={growth:["growth","consume"],completion:["crime","merit"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
+    const priority=tornRoadmap.preferences().priority,first={growth:["growth","consume"],completion:["crime","merit"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
     return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
 

@@ -1919,8 +1919,14 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .home-activities>.panel-heading h2{margin:0;font-size:.9rem}
 .guide-right-rail>.home-activities{margin:0;border:0;border-radius:0}
 .guide-right-rail>.home-activities+[data-rail-content]:not([hidden]){border-top:1px solid var(--border)}
-.guide-right-rail .home-activities>.panel-content>.roadmap-styles,.guide-right-rail .home-priority-choices{display:grid;grid-template-columns:minmax(0,1fr)}
-.guide-right-rail .home-activities .roadmap-style{justify-content:flex-start}
+.guide-right-rail .home-activities>.panel-content>.roadmap-styles,.guide-right-rail .home-priority-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.guide-right-rail .home-activities .roadmap-style{min-width:0;justify-content:flex-start;white-space:normal}
+.guide-right-rail .home-activities .roadmap-style span{min-width:0;overflow-wrap:anywhere}
+.guide-right-rail .home-activities .roadmap-style input{flex-shrink:0}
+.home-risk-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem}
+.guide-right-rail .home-activities .home-risk-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.15rem}
+.guide-right-rail .home-activities .home-risk-choices .roadmap-style{min-width:0;width:auto;justify-content:center;padding-inline:.1rem}
+.home-risk-choices .home-risk-icon{max-width:100%}
 .guide-right-rail .home-activities .home-priority-choices .roadmap-style{width:auto;min-width:0}
 .guide-right-rail .home-pref-row,.guide-right-rail .home-pref-group{display:grid;align-items:start}
 .guide-right-rail .home-budget input{max-width:100%}

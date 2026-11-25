@@ -95,7 +95,11 @@ const tornRoadmap=(()=>{
  };
  let selected=null,selectedFor=null;
  const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
- const activityOptions=[["War","War"],["Mug","Mugging"],["Trade","Trading"],["Travel","Travel"],["Training","Gym training"],["Revive","Reviver"],["Jail","Jail break / busting"],["Business","Business"],["Crime","Crime"],["OC","Organized crimes"],["Racing","Racing"],["Money","Investing"],["Gambling","Gambling"],["Education","Education"],["Merits","Merit hunting"],["Attack","PvP / attacking"],["Missions","Missions"],["Bounty","Bounty hunting"],["Career","Career / work stats"],["Faction","Faction support"],["Property","Property rental"],["Collect","Collecting"]];
+ const activityOptions=[["War","War"],["Mug","Mugging"],["Bounty","Bounties"],["Attack","Combat"],["Trade","Trading"],["Travel","Travel"],["Training","Gym training"],["Revive","Reviver"],["Jail","Busting"],["Business","Business"],["Crime","Crime"],["OC","Organized crimes"],["Racing","Racing"],["Money","Investing"],["Gambling","Gambling"],["Education","Education"],["Merits","Merit hunting"],["Missions","Missions"],["Career","Work Stats"],["Faction","Faction support"],["Property","Property rental"],["Collect","Collecting"]];
+ const priorities=[["growth","Growth"],["networth","Net Worth"],["company","Company"],["education","Education"],["completion","Completion"],["crime","Crime"]];
+ const riskLevels=[["low","Low"],["medium","Medium"],["high","High"]];
+ const preferenceOptions={priority:priorities,risk:riskLevels,odRisk:riskLevels,jailRisk:riskLevels};
+ const allowedPreference=(key,value)=>Object.hasOwn(preferenceOptions,key)&&preferenceOptions[key].some(([id])=>id===value);
  const styleOptions=activityOptions.map(([id])=>id);
  const activityLabels=Object.fromEntries(activityOptions);
  Object.assign(branches,{
@@ -126,7 +130,13 @@ const tornRoadmap=(()=>{
  function preferences(){
   let data={};
   try{data=JSON.parse(read(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences")||"{}")||{};}catch{}
-  return {priority:["growth","networth","company","education","completion"].includes(data.priority)?data.priority:data.priority==="money"?"networth":"growth",risk:["low","medium","high"].includes(data.risk)?data.risk:"low",weeklyBudget:data.weeklyBudget!=null&&Number.isFinite(Number(data.weeklyBudget))?Math.max(0,Number(data.weeklyBudget)):null};
+  return {
+   priority:allowedPreference("priority",data.priority)?data.priority:data.priority==="money"?"networth":"growth",
+   risk:allowedPreference("risk",data.risk)?data.risk:"low",
+   odRisk:allowedPreference("odRisk",data.odRisk)?data.odRisk:"medium",
+   jailRisk:allowedPreference("jailRisk",data.jailRisk)?data.jailRisk:"low",
+   weeklyBudget:data.weeklyBudget!=null&&Number.isFinite(Number(data.weeklyBudget))?Math.max(0,Number(data.weeklyBudget)):null
+  };
  }
  let openFallback=true;
  function activitiesOpen(){try{return localStorage.getItem("torn-city-guide:home-activities-open")!=="false";}catch{return openFallback;}}
@@ -134,8 +144,18 @@ const tornRoadmap=(()=>{
  function renderActivities(){
   const p=preferences();
   const riskIcon=id=>{const level={low:1,medium:2,high:3}[id];return '<svg width="18" height="16" viewBox="0 0 18 16" aria-hidden="true" class="home-risk-icon risk-'+id+'">'+[1,2,3].map((n,i)=>'<rect x="'+(i*6)+'" y="'+(16-n*5)+'" width="4" height="'+(n*5)+'" rx="1" fill="currentColor" opacity="'+(n<=level?1:.22)+'"/>').join("")+'</svg>';};
-  const radio=(name,opts,value)=>'<div class="roadmap-styles home-'+name+'-choices">'+opts.map(([id,label])=>'<label class="roadmap-style" title="'+esc(label)+'"><input type="radio" name="home-'+name+'" data-home-pref="'+name+'" value="'+id+'" aria-label="'+esc(label)+'" '+(value===id?"checked":"")+'><span>'+(name==="risk"?riskIcon(id):esc(label))+'</span></label>').join("")+'</div>';
-  return '<section id="home-activities" class="panel home-activities" '+(activitiesOpen()?"":"hidden")+'><div class="panel-heading"><h2>Focus</h2></div><div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>'<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(selectedStyles().includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+'</div><div class="home-pref-row"><div class="home-pref-group"><strong>Priority</strong>'+radio("priority",[["growth","Growth"],["networth","Networth"],["company","Company"],["education","Education"],["completion","Completion"]],p.priority)+'</div><div class="home-pref-group"><strong title="Financial exposure: carried cash, trade settlement, gambling losses and investment volatility. Not drug use or training intensity.">Financial risk</strong>'+radio("risk",[["low","Low"],["medium","Medium"],["high","High"]],p.risk)+'</div><label class="home-budget"><strong>Weekly budget</strong><span>$</span><input type="number" min="0" step="any" data-home-pref="weeklyBudget" value="'+(p.weeklyBudget??"")+'" placeholder="Not set" aria-label="Weekly training budget"></label></div></div></section>';
+  const radio=(name,options,value,icons=false)=>'<div class="roadmap-styles '+(icons?"home-risk-choices":"home-priority-choices")+'">'+options.map(([id,label])=>
+   '<label class="roadmap-style" title="'+esc(label)+'"><input type="radio" name="home-'+name+'" data-home-pref="'+name+'" value="'+id+'" aria-label="'+esc(label)+'" '+(value===id?"checked":"")+'><span>'+(icons?riskIcon(id):esc(label))+'</span></label>').join("")+'</div>';
+  const riskGroup=(name,label,detail)=>'<div class="home-pref-group" role="group" aria-label="'+label+'"><strong title="'+esc(detail)+'">'+label+'</strong>'+radio(name,riskLevels,p[name],true)+'</div>';
+  const activities=selectedStyles();
+  return '<section id="home-activities" class="panel home-activities" '+(activitiesOpen()?"":"hidden")+'><div class="panel-heading"><h2>Focus</h2></div>'+
+   '<div class="panel-content"><div class="roadmap-styles">'+activityOptions.map(([id,label])=>
+    '<label class="roadmap-style"><input type="checkbox" data-roadmap-style="'+esc(id)+'" '+(activities.includes(id)?"checked":"")+'><span>'+esc(label)+'</span></label>').join("")+
+   '</div><div class="home-pref-row"><div class="home-pref-group" role="group" aria-label="Priority"><strong>Priority</strong>'+radio("priority",priorities,p.priority)+'</div>'+
+   '<div class="home-risk-groups">'+riskGroup("risk","Financial Risk","Carried cash, trade settlement, gambling losses and investment volatility.")+
+   riskGroup("odRisk","OD Risk","Low avoids drug recommendations for new training plans and independent consumable use. Medium and High allow drugs subject to existing safeguards.")+
+   riskGroup("jailRisk","Jail Risk","Changes the range of crime difficulty considered for recommendations.")+'</div>'+
+   '<label class="home-budget"><strong>Weekly budget</strong><span>$</span><input type="number" min="0" step="any" data-home-pref="weeklyBudget" value="'+(p.weeklyBudget??"")+'" placeholder="Not set" aria-label="Weekly training budget"></label></div></div></section>';
  }
  function wireActivities(view){
   if(view.dataset.activitiesBound==="1")return;
@@ -157,7 +177,7 @@ const tornRoadmap=(()=>{
     updateBudget(el);return;
    }else if(el.dataset.homePref&&el.checked){
     const p=preferences(),key=el.dataset.homePref;
-    if(key==="priority"&&["growth","networth","company","education","completion"].includes(el.value)||key==="risk"&&["low","medium","high"].includes(el.value)){
+    if(allowedPreference(key,el.value)){
      p[key]=el.value;write(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences",JSON.stringify(p));
     }
    }else return;
