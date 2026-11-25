@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Guide - Passive Visible Status Bridge
 // @namespace    https://vagabond1215.github.io/TORN/
-// @version      2.3.0
+// @version      2.4.0
 // @description  Synchronize visible status bars and ranked market observations to your local Torn City Guide. Read-only, no API key or network calls.
 // @match        https://www.torn.com/*
 // @match        https://torn.com/*
@@ -15,6 +15,11 @@
   "use strict";
   const key="torn-city-guide:passive-bars:v2";
   const marketKey="torn-city-guide:passive-rw:v1";
+  const archivePrefix="torn-city-guide:passive-rw:v2:",archiveMeta=archivePrefix+"meta",bucketCount=128,bucketLimit=800;
+  const archiveAge=row=>(row.complete?90:30)*86400000;
+  const archiveValid=(row,stamp=Date.now())=>row&&Number.isFinite(row.at)&&row.at<=stamp+5000&&stamp-row.at<archiveAge(row);
+  const archiveId=row=>row.uid?"uid:"+row.uid:row.fingerprint||JSON.stringify([row.name,row.rarity,row.price,row.stats,row.bonuses]);
+  function bucketOf(id){let h=2166136261;for(let i=0;i<id.length;i++)h=Math.imul(h^id.charCodeAt(i),16777619);return (h>>>0)%bucketCount;}
   const guideOrigin="https://vagabond1215.github.io";
   const refreshAge=60*1000;
   const isTorn=location.hostname==="www.torn.com"||location.hostname==="torn.com";
@@ -30,15 +35,37 @@
         detail:JSON.stringify(packet)
       }));
     };
-    const shareMarket=()=>{
-      const packet=GM_getValue(marketKey,null);
-      const snapshot=packet?.version===1&&Array.isArray(packet.rows)?packet:{version:1,rows:[]};
-      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...snapshot,companionVersion:"2.3.0",bridgeAt:Date.now()})}));
-    };
-    window.addEventListener("torn-guide-request-snapshot",shareMarket);
-    GM_addValueChangeListener(marketKey,()=>{if(document.visibilityState==="visible")shareMarket();});
-    setTimeout(shareMarket,1200);
-    window.addEventListener("focus",shareMarket);
+    const sent=new Map();
+    let transferTimer=null;
+    function shareMarket(force=false){
+      if(document.visibilityState!=="visible")return;
+      const meta=GM_getValue(archiveMeta,null);
+      if(!meta?.buckets){
+        const packet=GM_getValue(marketKey,null);
+        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.4.0",bridgeAt:Date.now()})}));
+        return;
+      }
+      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.4.0",bridgeAt:Date.now(),buckets:meta.buckets})}));
+      if(transferTimer!==null)clearTimeout(transferTimer);
+      const pending=Object.entries(meta.buckets).filter(([id,rev])=>force||sent.get(id)!==rev);
+      const next=()=>{
+        transferTimer=null;
+        if(document.visibilityState!=="visible")return;
+        const entry=pending.shift();if(!entry)return;
+        const [id,rev]=entry,part=GM_getValue(archivePrefix+id,null);
+        if(part&&Array.isArray(part.rows)){
+          window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"bucket",bucket:Number(id),revision:part.revision,rows:part.rows})}));
+          sent.set(id,part.revision);
+        }
+        if(pending.length)transferTimer=setTimeout(next,40);
+      };
+      next();
+    }
+    window.addEventListener("torn-guide-request-snapshot",()=>shareMarket(true));
+    GM_addValueChangeListener(archiveMeta,()=>shareMarket());
+    GM_addValueChangeListener(marketKey,()=>{if(!GM_getValue(archiveMeta,null))shareMarket();});
+    setTimeout(()=>shareMarket(),1200);
+    window.addEventListener("focus",()=>shareMarket());
     document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")shareMarket();});
     window.addEventListener("torn-guide-request-snapshot",share);
     GM_addValueChangeListener(key,()=>share());
@@ -93,7 +120,6 @@
     if(!Object.keys(bars).length)throw Error("No readable Energy/Nerve/Happy/Life values found.");
     return {version:2,playerId:id,timestamp:Date.now(),bars};
   }
-  const marketTTL=72*60*60*1000;
   function marketRoute(){
     if(location.pathname!=="/page.php"||new URLSearchParams(location.search).get("sid")!=="ItemMarket")return null;
     const q=new URLSearchParams(location.hash.replace(/^#\/market\//,""));
@@ -120,30 +146,39 @@
   const buySelector='button[aria-label^="Buy item "]';
   const infoSelector='button[aria-label^="View info for item "]';
   const active=()=>document.visibilityState==="visible"&&document.hasFocus();
-  const maxStored=2500,maxQueue=12000;
+  const maxQueue=12000;
   let routeKey="",route=null,queue=new Set(),cards=new WeakMap(),owners=new WeakMap(),seen=new WeakMap(),boundaries=new WeakSet();
-  let workTimer=null,flushTimer=null,dirty=false,lastFlush=0,lastCapture=null,stored=null,metrics=null,initialScanPending=false;
+  let workTimer=null,flushTimer=null,dirty=false,lastFlush=0,lastCapture=null,stored=new Map(),metrics=null,initialScanPending=false;
   function freshMetrics(){return {buttons:0,rendered:0,matched:0,ranked:0,accepted:0,complete:0,duplicates:0,added:0,processed:0,batches:0,maxBatchMs:0,queued:0,dropped:0};}
-  function rowKey(row){return row.uid?"uid:"+row.uid:row.fingerprint;}
-  function readStore(){
-    if(stored)return stored;
-    const p=GM_getValue(marketKey,null);
-    stored=new Map();lastCapture=p?.diagnostic?.lastCapture??null;
-    for(const r of Array.isArray(p?.rows)?p.rows:[])if(r&&Number.isFinite(r.at)&&Date.now()-r.at<marketTTL&&rowKey(r))stored.set(rowKey(r),r);
-    return stored;
+  function rowKey(row){return archiveId(row);}
+  function readStore(){return stored;}
+  function mergeBucket(id,updates,stamp){
+    const prior=GM_getValue(archivePrefix+id,null),map=new Map();
+    for(const row of prior?.rows??[])if(archiveValid(row,stamp))map.set(rowKey(row),row);
+    for(const row of updates){
+      if(!archiveValid(row,stamp))continue;
+      const k=rowKey(row),old=map.get(k);
+      if(!old||row.complete&&!old.complete||row.complete===old.complete&&row.at>=old.at)map.set(k,row);
+    }
+    const rows=Array.from(map.values()).sort((a,b)=>Number(b.complete)-Number(a.complete)||b.at-a.at).slice(0,bucketLimit);
+    const revision=stamp+"-"+Math.random().toString(36).slice(2,10);
+    GM_setValue(archivePrefix+id,{revision,rows});
+    return revision;
   }
   function flush(){
     if(flushTimer!==null){clearTimeout(flushTimer);flushTimer=null;}
     if(!dirty||!metrics||!route)return;
-    // Merge the latest persisted records once per write, not once per card.
-    const prior=GM_getValue(marketKey,null),stamp=Date.now(),map=new Map();
-    for(const r of Array.isArray(prior?.rows)?prior.rows:[])if(r&&stamp-r.at<marketTTL&&rowKey(r))map.set(rowKey(r),r);
-    for(const [k,r] of readStore()){const old=map.get(k);if(stamp-r.at<marketTTL&&(!old||r.complete&&!old.complete||r.complete===old.complete&&r.at>=old.at))map.set(k,r);}
-    const rows=Array.from(map.values()).sort((a,b)=>Number(b.complete)-Number(a.complete)||b.at-a.at).slice(0,maxStored);
-    stored=new Map(rows.map(r=>[rowKey(r),r]));
+    const stamp=Date.now(),old=GM_getValue(archiveMeta,null),buckets={...(old?.buckets??{})},groups=new Map();
+    const add=row=>{if(!archiveValid(row,stamp))return;const id=bucketOf(rowKey(row));if(!groups.has(id))groups.set(id,[]);groups.get(id).push(row);};
+    if(!old?.migrated){const legacy=GM_getValue(marketKey,null);for(const row of legacy?.rows??[])add(row);}
+    for(const row of stored.values())add(row);
+    // Stale shards are pruned during normal writes; rotate one additional shard per flush.
+    const sweep=Number.isInteger(old?.sweep)?old.sweep%bucketCount:0;
+    if(buckets[sweep]&&!groups.has(sweep))groups.set(sweep,[]);
+    for(const [id,rows] of groups)buckets[id]=mergeBucket(id,rows,stamp);
     const diagnostic={...metrics,at:stamp,lastCapture,category:route.category,rarity:route.rarity,queued:queue.size,mode:"incremental"};
-    GM_setValue(marketKey,{version:1,diagnostic,rows});
-    lastFlush=stamp;dirty=false;
+    GM_setValue(archiveMeta,{version:2,migrated:true,buckets,sweep:(sweep+1)%bucketCount,diagnostic});
+    stored.clear();lastFlush=stamp;dirty=false;
   }
   function scheduleFlush(){
     dirty=true;
@@ -213,11 +248,7 @@
     if(prev){metrics.duplicates++;if(prev.complete&&!row.complete)return;}
     else metrics.added++;
     map.set(k,row);
-    // Bound transient memory even when loading a very long market page.
-    if(map.size>maxStored+500){
-      const keep=Array.from(map.values()).sort((a,b)=>Number(b.complete)-Number(a.complete)||b.at-a.at).slice(0,maxStored);
-      stored=new Map(keep.map(r=>[rowKey(r),r]));
-    }
+    if(map.size>=1000)flush();
   }
   function runBatch(){
     workTimer=null;
