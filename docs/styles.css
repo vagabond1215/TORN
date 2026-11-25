@@ -2036,3 +2036,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-instruction{text-align:center;font-size:.9rem;line-height:1.4;padding:.2rem 0;overflow-wrap:anywhere}
 .growth-build-content{display:grid;gap:.45rem;padding:.4rem 0 .1rem}
 .growth-build-details>summary{cursor:pointer;overflow-wrap:anywhere}
+
+.growth-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--border);gap:0}
+.growth-tabs button{min-width:0;padding:.45rem .2rem;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font:inherit;font-weight:650;cursor:pointer;text-align:center}
+.growth-tabs button:hover,.growth-tabs button:focus-visible{background:var(--surface);color:var(--accent-strong)}
+.growth-tabs button[aria-selected="true"]{border-bottom-color:var(--accent);color:var(--accent-strong);background:var(--surface)}
+.growth-tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.growth-tab-panel{display:grid;gap:.45rem;min-width:0}
+.growth-tab-panel[hidden]{display:none!important}
