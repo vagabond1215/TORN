@@ -1775,3 +1775,18 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .inventory-gear-bonuses small{display:block;color:var(--muted);font-weight:normal}
 .inventory-gear-bonuses.rarity-yellow{color:#d4b645}.inventory-gear-bonuses.rarity-orange{color:#df9245}.inventory-gear-bonuses.rarity-red{color:#eb7777}
 .inventory-gear-status:empty{display:none}
+
+/* Home recommendation menu and independent responsive tiles. */
+.home-recommendations{margin-top:.8rem}
+.home-recommendations .rec-titlebar{border:1px solid var(--border);border-radius:4px;padding:0;overflow-x:auto;flex-wrap:nowrap}
+.home-recommendations .rec-type-toggles{margin:0;gap:0;flex-wrap:nowrap;min-width:max-content}
+#topic-view .home-recommendations .rec-type-toggles button{border:0;border-right:1px solid var(--border);border-radius:0;min-height:30px;padding:.4rem .65rem;background:transparent;box-shadow:none}
+#topic-view .home-recommendations .rec-type-toggles button[aria-pressed="true"]{color:var(--accent-strong);box-shadow:inset 0 -2px var(--accent-strong)}
+.rec-tile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:.65rem;align-items:start;margin-top:.65rem}
+.rec-tile{order:2;border:1px solid var(--border);border-radius:6px;background:var(--raised);padding:.7rem;min-width:0;overflow-wrap:anywhere}
+.rec-tile h3{margin:0 0 .4rem;color:var(--accent-strong);font-size:.9rem}
+.rec-tile-grid[data-rec-priority^="growth"]>[data-rec-group="growth"],.rec-tile-grid[data-rec-priority^="crime"]>[data-rec-group="crime"],.rec-tile-grid[data-rec-priority^="money"]>[data-rec-group="money"],.rec-tile-grid[data-rec-priority^="education"]>[data-rec-group="education"]{order:0}
+.rec-tile-grid[data-rec-priority="growth,consume"]>[data-rec-group="consume"],.rec-tile-grid[data-rec-priority="crime,merit"]>[data-rec-group="merit"],.rec-tile-grid[data-rec-priority="money,education"]>[data-rec-group="education"]{order:1}
+.rec-tile .rec-advice>li{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:start;gap:.4rem;border:1px solid var(--border);border-radius:4px;padding:.45rem;margin:.35rem 0}
+.rec-tile .rec-pickpocket{display:block!important}.rec-tile .rec-pickpocket .crime-table-scroll{margin-top:.4rem}
+.rec-crime-actions{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.4rem}
