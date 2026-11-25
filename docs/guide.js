@@ -311,7 +311,7 @@ function renderRoute() {
   // A route change only loads selections required by that page. Each endpoint
   // has its own TTL and failure-backoff; navigating within cached pages is free.
   if(tornGuideApi.isConnected() && route !== "profile")
-    tornGuideApi.loadPage(route).catch(error=>{
+    tornGuideApi.loadPage(route).then(()=>{if(route==="inventory")return tornGuideApi.checkGearDaily();}).catch(error=>{
       byId("refresh-status").textContent=String(error.message||error);
     });
 }
@@ -528,7 +528,7 @@ byId("topic-view").addEventListener("click",async event=>{
   if(!tornGuideApi.inventoryTypes.includes(category))return;
   const alreadyLoaded=Object.hasOwn(tornGuideApi.state.inventory,category);
   button.disabled=true;button.setAttribute("aria-busy","true");
-  try{await tornGuideApi.loadInventory(category,alreadyLoaded);}
+  try{await tornGuideApi.loadInventory(category,alreadyLoaded);await tornGuideApi.checkGearDaily();}
   catch(error){byId("refresh-status").textContent=String(error.message||error);}
   finally{
     // A successful request rerenders Inventory, replacing this button.
