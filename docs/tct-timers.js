@@ -185,7 +185,7 @@ const tornTctClock=(()=>{
   function saveManual(){
     const field=get("tct-manual-rw"),status=get("tct-load-status"),value=field?.value;
     if(typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(localStorage,owner())){status.textContent="Resolve the pending account restore before changing this deadline.";return;}
-    if(!value){manualRW=null;try{localStorage.removeItem(customKey+owner());}catch{}
+    if(!value){manualRW=null;try{if(typeof tornAccountStorage!=="undefined")tornAccountStorage.trackedWrite(localStorage,owner(),customKey+owner(),null);else localStorage.removeItem(customKey+owner());}catch{status.textContent="Could not preserve deletion; deadline was not cleared.";renderRows();return;}
       status.textContent="Manual RW deadline cleared.";renderRows();return;}
     // datetime-local is a wall time string; interpret explicitly as UTC/TCT,
     // not in the browser's local timezone.
@@ -194,7 +194,7 @@ const tornTctClock=(()=>{
       status.textContent="Enter a future Torn (UTC) date and time.";return;
     }
     manualOwner=owner();manualRW=at;
-    try{localStorage.setItem(customKey+owner(),String(at));}catch{}
+    try{if(typeof tornAccountStorage!=="undefined")tornAccountStorage.trackedWrite(localStorage,owner(),customKey+owner(),String(at));else localStorage.setItem(customKey+owner(),String(at));}catch{status.textContent="Could not save deadline.";renderRows();return;}
     status.textContent="Saved manually for this browser. It is not confirmed by Torn.";
     renderRows();
   }

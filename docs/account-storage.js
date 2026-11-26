@@ -88,6 +88,46 @@ const tornAccountStorage=(()=>{
     if(!m)return null;
     return {key:profile(id,section),valid:m[1]==="notes"?raw=>str(raw,100000):simple(["done"])};
   }
+  function sectionForKey(playerId,key){
+    const id=owner(playerId);
+    if(key===prefix+"training-session:"+id||key===tornTrainingRecovery.reviewKey(id))return "training-session-review";
+    for(const [section,toKey] of definitions)if(key===toKey(id))return section;
+    const base=profile(id,"");
+    if(key.startsWith(base)){const section=key.slice(base.length);if(descriptor(id,section))return section;}
+    return null;
+  }
+  const deletionPrefix=id=>prefix+"revision-observed-delete:v1:"+owner(id)+":";
+  function deletionMarkers(store,playerId){
+    const id=owner(playerId),base=deletionPrefix(id),sections=[];
+    for(let i=0;i<store.length;i++){const k=store.key(i);if(!k?.startsWith(base))continue;
+      const section=k.slice(base.length);
+      if(!descriptor(id,section)||store.getItem(k)!=="1")throw Error("Invalid observed deletion marker");
+      sections.push(section);if(sections.length>maxRecords)throw Error("Observed deletion history exceeds limit");
+    }
+    return sections.sort();
+  }
+  // Supported ordinary writers use this synchronous boundary. Record a
+  // durable marker BEFORE deleting an existing value, including before its
+  // first digest capture. No plaintext historical values are copied.
+  function trackedWrite(store,playerId,key,value){
+    let id;try{id=owner(playerId);}catch{
+      if(value===null)store.removeItem(key);else store.setItem(key,value);return;
+    }
+    const section=sectionForKey(id,key);
+    if(section&&journalPending(store,id))throw Error("Account restore is pending");
+    const before=store.getItem(key);
+    if(before===value)return;
+    if(section&&value===null&&before!==null){
+      const mark=deletionPrefix(id)+section;
+      if(store.getItem(mark)!=="1"){
+        if(deletionMarkers(store,id).length>=maxRecords)throw Error("Observed deletion history exceeds limit");
+        store.setItem(mark,"1");
+        if(store.getItem(mark)!=="1")throw Error("Could not preserve deletion marker");
+      }
+    }
+    if(value===null)store.removeItem(key);else store.setItem(key,value);
+    if(section&&typeof window!=="undefined"&&typeof Event!=="undefined")window.dispatchEvent(new Event("torn-account-write"));
+  }
   function keys(store,id){
     const out=new Map(definitions.map(d=>[d[0],d[1](id)]));
     const base=profile(id,"");
@@ -127,7 +167,7 @@ const tornAccountStorage=(()=>{
     // Reject a non-empty account, even if its sections are not in this file.
     // No additive merge: missing rows may represent intentional deletions.
     const existing=snapshot(store,id);
-    if(existing.records.length||existing.omitted.length||store.getItem(prefix+"account-revisions:v1:"+id)!==null)throw Error("Account already has supported local data or revision history; merge is not available yet");
+    if(existing.records.length||existing.omitted.length||(store.getItem(prefix+"account-revisions:v1:"+id)!==null||deletionMarkers(store,id).length))throw Error("Account already has supported local data or revision history; merge is not available yet");
     // Also protect excluded durable session/history data from partial restore.
     if(store.getItem(prefix+"training-session:"+id)!==null||store.getItem(tornTrainingRecovery.reviewKey(id))!==null)throw Error("Existing training session or recovery hold; merge is not available yet");
     if(!assertCurrent())throw Error("Account changed before restore");
@@ -212,7 +252,7 @@ const tornAccountStorage=(()=>{
     if((!records.length&&!manifest?.entries?.length)||journalPending(store,id))throw Error("Resolve the pending restore journal first");
     if(manifest)tornAccountRevisions.validate(manifest,id);
     const existing=snapshot(store,id);
-    if(existing.records.length||existing.omitted.length||store.getItem(prefix+"training-session:"+id)!==null||store.getItem(prefix+"account-revisions:v1:"+id)!==null)throw Error("Account already has local data or revision history; merge is not available yet");
+    if(existing.records.length||existing.omitted.length||store.getItem(prefix+"training-session:"+id)!==null||(store.getItem(prefix+"account-revisions:v1:"+id)!==null||deletionMarkers(store,id).length))throw Error("Account already has local data or revision history; merge is not available yet");
     if(!isCurrent())throw Error("Account changed before restore");
     const ordered=[...records].sort((a,b)=>Number(b.section==="training-session-review")-Number(a.section==="training-session-review"));
     const rows=ordered.map(row=>({section:row.section,value:row.section==="training-session-review"?tornTrainingRecovery.stageValue(id,JSON.parse(row.value),createdAt):restoredValue(row)}));
@@ -240,5 +280,5 @@ const tornAccountStorage=(()=>{
     const id=owner(playerId);
     return locks?.request?locks.request(prefix+"account-recovery:"+id,{mode:"exclusive"},fn):fn();
   }
-  return {owner,knownSection:(id,section)=>typeof section==="string"&&section.length<=160&&Boolean(descriptor(owner(id),section)),snapshot,validRecords,restoreEmpty,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
+  return {owner,sectionForKey,deletionMarkers,trackedWrite,knownSection:(id,section)=>typeof section==="string"&&section.length<=160&&Boolean(descriptor(owner(id),section)),snapshot,validRecords,restoreEmpty,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
 })();

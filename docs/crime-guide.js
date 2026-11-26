@@ -645,7 +645,9 @@ const tornCrimeGuide = (() => {
   function writeAccountValue(key,value){
     const owner=String(key).split(":").at(-1);
     if(typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(localStorage,owner))throw Error("Account restore is pending");
-    localStorage.setItem(key,value);
+    if(typeof tornAccountStorage!=="undefined")tornAccountStorage.trackedWrite(localStorage,owner,key,value);
+    else if(value===null)localStorage.removeItem(key);
+    else localStorage.setItem(key,value);
   }
   function trainingRecoveryHeld(){
     const id=tornGuideApi.state.identity?.id;
@@ -660,7 +662,7 @@ const tornCrimeGuide = (() => {
     if(sessionOwner!==owner){sessionOwner=owner;trainingSession=null;try{const x=JSON.parse(localStorage.getItem("torn-city-guide:training-session:"+owner));if(x?.version===1&&Array.isArray(x.actions)&&x.actions.length<=2000&&Number.isFinite(x.started)&&Number.isInteger(x.index)&&x.index>=0&&x.index<=x.actions.length)trainingSession=x;}catch{}}
     return trainingSession;
   }
-  function saveTrainingSession(){if(trainingRecoveryHeld()||sessionOwner!==String(tornGuideApi.state.identity?.id??"guest"))return;try{const key="torn-city-guide:training-session:"+sessionOwner;if(trainingSession)writeAccountValue(key,JSON.stringify(trainingSession));else localStorage.removeItem(key);}catch{}}
+  function saveTrainingSession(){if(trainingRecoveryHeld()||sessionOwner!==String(tornGuideApi.state.identity?.id??"guest"))return;try{const key="torn-city-guide:training-session:"+sessionOwner;if(trainingSession)writeAccountValue(key,JSON.stringify(trainingSession));else writeAccountValue(key,null);}catch{}}
   const actionable=x=>Number.isFinite(x.at)&&x.at>=0&&!["wait","autoWait","happyReset"].includes(x.type)&&(x.type!=="train"||x.energy>0)&&(!["candy","dvd"].includes(x.type)||x.quantity>0);
   // Reconcile only future actions. Confirmed steps are immutable; missing live
   // snapshots never imply that an action happened.

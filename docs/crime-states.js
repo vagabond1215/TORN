@@ -59,7 +59,7 @@ const tornCrimeStates=(()=>{
   if(raw!==""&&!valid(crime,id,field,val))return false;
   const all=load(owner,store),k=crime+"|"+id+"|"+field;
   if(raw==="")delete all[k];else all[k]={value:val,at:now};
-  try{store.setItem(key(owner),JSON.stringify(all));return true;}catch{return false;}
+  try{if(typeof tornAccountStorage!=="undefined")tornAccountStorage.trackedWrite(store,owner,key(owner),JSON.stringify(all));else store.setItem(key(owner),JSON.stringify(all));return true;}catch{return false;}
  }
  function observed(all,crime,id,field,now){
   const x=all[crime+"|"+id+"|"+field];

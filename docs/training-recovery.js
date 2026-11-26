@@ -109,7 +109,7 @@ const tornTrainingRecovery=(()=>{
     if(typeof raw!=="string"||!isCurrent())throw Error("Account changed before review");
     const key=reviewKey(playerId);
     if(store.getItem(key)!==raw||store.getItem(prefix+"training-session:"+playerId)!==null)throw Error("Recovery record changed or a local session exists; preserve both for review");
-    store.removeItem(key);
+    if(typeof tornAccountStorage!=="undefined")tornAccountStorage.trackedWrite(store,playerId,key,null);else store.removeItem(key);
     if(store.getItem(key)!==null)throw Error("Could not release recovery hold");
   }
   // Pure evidence report, deliberately not a proof of completed actions.

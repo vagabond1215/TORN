@@ -137,7 +137,7 @@ const tornBackupUI=(()=>{
           const data=await tornAccountBackup.decrypt(await chosen.text(),id,password);
           if(!verified.isCurrent())throw Error("Account changed before recovery");
           // On a populated account, compare without applying incoming data.
-          const local=tornAccountStorage.snapshot(localStorage,id),hasManifest=localStorage.getItem(tornAccountRevisions.key(id))!==null;
+          const local=tornAccountStorage.snapshot(localStorage,id),hasManifest=localStorage.getItem(tornAccountRevisions.key(id))!==null||tornAccountStorage.deletionMarkers(localStorage,id).length>0;
           if(local.records.length||local.omitted.length||hasManifest){
             if(!data.manifest){message("Version 1 backup has no revision history. Recovery into an existing account is disabled; keep both copies.");return;}
             const current=await tornAccountStorage.withRecoveryLock(id,navigator.locks,()=>tornAccountRevisions.capture(localStorage,id,verified.isCurrent));

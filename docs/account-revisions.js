@@ -47,7 +47,9 @@ const tornAccountRevisions=(()=>{
   async function observe(previous,snapshot,id,{digest=hash,newRevision=revision}={}){
     validate(previous,id);
     if(!Array.isArray(snapshot?.omitted)||snapshot.omitted.length)throw Error("Cannot track revisions while saved sections are invalid or omitted");
-    const actual=await digests(snapshot.records,id,digest),prior=map(previous),sections=new Set([...prior.keys(),...actual.keys()]);
+    const deleted=snapshot.deleted??[];
+    if(!Array.isArray(deleted)||deleted.length>maxSections||new Set(deleted).size!==deleted.length||deleted.some(section=>!tornAccountStorage.knownSection(id,section)))throw Error("Invalid observed deletion history");
+    const actual=await digests(snapshot.records,id,digest),prior=map(previous),sections=new Set([...prior.keys(),...actual.keys(),...deleted]);
     if(sections.size>maxSections)throw Error("Revision history exceeds section limit; do not discard tombstones");
     const used=new Set(previous.entries.flatMap(e=>[e.revision,...e.ancestors])),entries=[];
     for(const section of [...sections].sort()){
@@ -83,9 +85,9 @@ const tornAccountRevisions=(()=>{
   async function capture(store,id,isCurrent,options={}){
     id=owner(id);
     if(!isCurrent())throw Error("Account changed before revision capture");
-    const raw=store.getItem(key(id)),prior=read(store,id),snap=tornAccountStorage.snapshot(store,id);
-    const next=await observe(prior,snap,id,options);
-    if(!isCurrent()||store.getItem(key(id))!==raw||JSON.stringify(tornAccountStorage.snapshot(store,id))!==JSON.stringify(snap))throw Error("Account changed during revision capture");
+    const raw=store.getItem(key(id)),prior=read(store,id),snap=tornAccountStorage.snapshot(store,id),deleted=tornAccountStorage.deletionMarkers(store,id);
+    const next=await observe(prior,{...snap,deleted},id,options);
+    if(!isCurrent()||store.getItem(key(id))!==raw||JSON.stringify(tornAccountStorage.snapshot(store,id))!==JSON.stringify(snap)||JSON.stringify(tornAccountStorage.deletionMarkers(store,id))!==JSON.stringify(deleted))throw Error("Account changed during revision capture");
     const encoded=JSON.stringify(next);
     if(encoded.length>2000000)throw Error("Revision manifest too large");
     if(raw===null&&!next.entries.length)return {...snap,manifest:next};
@@ -98,5 +100,24 @@ const tornAccountRevisions=(()=>{
     if(!isCurrent())throw Error("Account changed before restore");
     return tornAccountStorage.restoreJournaled(store,id,records,isCurrent,{createdAt,manifest});
   }
-  return {empty,key,read,validate,verify,observe,compare,capture,restore};
+  // Normal usage capture coalesces writes and retries on a later signal.
+  // No API requests or secret persistence; the connection/owner guard is
+  // supplied by the page. Capture is not an atomic per-mutation transaction.
+  function createCaptureQueue({current,capture,report=()=>{},schedule=fn=>setTimeout(fn,250)}){
+    let queued=false,running=false,dirty=false;
+    function request(){
+      dirty=true;if(queued||running)return;
+      queued=true;schedule(()=>void flush());
+    }
+    async function flush(){
+      queued=false;if(running||!dirty)return;
+      dirty=false;const scope=current();if(!scope)return;
+      running=true;
+      try{await capture(scope);if(current()?.id===scope.id&&scope.isCurrent())report("");}
+      catch(error){if(current()?.id===scope.id&&scope.isCurrent())report(String(error?.message??error));}
+      finally{running=false;if(dirty)request();}
+    }
+    return {request,flush};
+  }
+  return {empty,key,read,validate,verify,observe,compare,capture,restore,createCaptureQueue};
 })();

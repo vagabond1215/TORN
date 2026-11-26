@@ -92,3 +92,5 @@ V2 encrypted manifest integration and empty-account journaled ancestry restorati
 
 ### Unified Calendar timeline
 Implemented presentation-only shared TCT timeline on Home and Calendar, with layered durations, clustered pins, tooltip/inspector and agenda fallback. See activity-scheduler-plan.md for geometry, safety semantics and validation gates. Account recovery and financial roadmap order unchanged.
+
+Ordinary supported writers and coalesced local capture now preserve durable observed deletion markers even before first hash capture. Existing calendar timeline changes retained. Merge planning/application and native tests remain open; no automatic sync.

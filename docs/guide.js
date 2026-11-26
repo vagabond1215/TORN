@@ -130,7 +130,8 @@ function write(key, value) {
   else temporaryStorage.set(key, value);
   if (persistent) {
     try {
-      if (value === null) localStorage.removeItem(prefix + key);
+      if(account&&typeof tornAccountStorage!=="undefined")tornAccountStorage.trackedWrite(localStorage,account,prefix+key,value);
+      else if (value === null) localStorage.removeItem(prefix + key);
       else localStorage.setItem(prefix + key, value);
     } catch {
       markStorageUnavailable();
@@ -511,6 +512,24 @@ byId("setting-timezone").innerHTML=tornGuidePreferences.zones.map(([id,name])=>
   '<option value="'+id+'">'+name+'</option>').join("");
 tornGuidePreferences.init();
 tornBackupUI.wire();
+// Coalesced local-only revision capture. Do not infer an owner from a
+// disconnected profile; export/import still requires fresh API verification.
+const revisionQueue=tornAccountRevisions.createCaptureQueue({
+  current:()=>{
+    const id=tornGuideApi.state.identity?.id;
+    if(!tornGuideApi.isConnected()||id==null||tornTrainingRecovery.journalHeld(localStorage,id))return null;
+    return {id:String(id),isCurrent:()=>tornGuideApi.isConnected()&&String(tornGuideApi.state.identity?.id)===String(id)};
+  },
+  capture:scope=>tornAccountStorage.withRecoveryLock(scope.id,navigator.locks,()=>tornAccountRevisions.capture(localStorage,scope.id,scope.isCurrent)),
+  report:error=>{const el=byId("backup-revision-status");if(el)el.textContent=error?"Revision tracking pending: "+error:"Local revision tracking up to date. External backup is still required.";}
+});
+window.addEventListener("torn-account-write",()=>revisionQueue.request());
+window.addEventListener("torn-guide-sync",()=>revisionQueue.request());
+window.addEventListener("storage",event=>{
+  const id=tornGuideApi.state.identity?.id;if(id==null||!event.key)return;
+  if(tornAccountStorage.sectionForKey(id,event.key)||event.key.startsWith("torn-city-guide:revision-observed-delete:v1:"+id+":"))revisionQueue.request();
+});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)revisionQueue.request();});
 syncSettingsControls();
 byId("settings-toggle").addEventListener("click",toggleSettings);
 document.addEventListener("click",event=>{
@@ -634,7 +653,7 @@ if(resumed){
   byId("profile-feedback").textContent=resumed.cached
     ? "Restored your locally cached Torn profile. Automatic updates are enabled while this page is open."
     : "Reconnected with your stored API key. Loading account data…";
-  tornGuideApi.refreshOnResume();
+  tornGuideApi.refreshOnResume();revisionQueue.request();
 }else{
   updateRefreshUI();
 }
