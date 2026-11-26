@@ -252,10 +252,13 @@ const tornCrimeGuide = (() => {
         adjustment:bounded(data.adjustment,-120,120,60),lead:bounded(data.lead,0,120,2)};
     }catch{return defaults;}
   }
+  function autoTrainingWatch(){
+    try{return localStorage.getItem("torn-city-guide:growth-watch:"+String(tornGuideApi.state.identity?.id??"guest"))!=="false";}catch{return true;}
+  }
   function growthSettings(){
     if(!growthSettingsOpen)return "";
     const war=energyWarSettings();
-    return '<div class="growth-settings-panel"><label><input type="checkbox" data-growth-exclude-owned '+(excludeOwned()?"checked":"")+'> Inventory value not counted toward budget</label>'+
+    return '<div class="growth-settings-panel"><label><input type="checkbox" data-growth-watch '+(autoTrainingWatch()?"checked":"")+'> Automatically detect completed training actions</label><small>Read-only Torn API checks while an active Energy plan is open. No game actions are performed.</small><label><input type="checkbox" data-growth-exclude-owned '+(excludeOwned()?"checked":"")+'> Inventory value not counted toward budget</label>'+
       '<small>Only additional purchases count when enabled. Points refills remain priced; unverified inventory is not credited.</small>'+
       '<label>War mode <select data-energy-war="mode">'+[["scheduled","Scheduled ranked wars"],["faction","Only wars with a published mode"],["off","Off"]]
         .map(([id,label])=>'<option value="'+id+'" '+(war.mode===id?"selected":"")+'>'+label+'</option>').join("")+'</select></label>'+
@@ -553,6 +556,115 @@ const tornCrimeGuide = (() => {
     if(!E||!H||!at||!barAt||st.errors?.bars||st.errors?.cooldowns)return null;
     return {energy:E.current,cap:E.maximum,happy:H.current,maxHappy:H.maximum,drug:cooldown("drug"),booster:cooldown("booster"),at:now};
   }
+  // Compare actual API snapshots, not extrapolated bars or the planned
+  // starting state. A newly observed cooldown alone is not proof of a dose.
+  function trainingWatchSnapshot(session,now=Date.now()){
+    if(!session)return null;
+    const st=tornGuideApi.state,stamps=st.fetchedAt??{},bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns"),refills=payload("refills","refills");
+    const barAt=Number(stamps.bars)||0,cdAt=Number(stamps.cooldowns)||0,statAt=Number(stamps.battlestats)||0,refillAt=Number(stamps.refills)||0;
+    if(!barAt||!cdAt||Math.abs(barAt-cdAt)>60000||now-Math.min(barAt,cdAt)>120000||st.errors?.bars||st.errors?.cooldowns||
+      Number(st.bridge?.timestamp||0)>barAt)return null;
+    const val=x=>x==null?null:Number.isFinite(Number(x))?Number(x):null;
+    const seconds=x=>val(typeof x==="object"?x?.remaining??x?.time_left:x);
+    const entry=payload("battlestats","battlestats")?.[session.statKey];
+    const stat=!st.errors?.battlestats&&statAt&&Math.abs(statAt-cdAt)<=60000?val(typeof entry==="object"?entry?.value:entry):null;
+    const energy=val(bars?.energy?.current),cap=val(bars?.energy?.maximum),happy=val(bars?.happy?.current),maxHappy=val(bars?.happy?.maximum),drug=seconds(cd?.drug),booster=seconds(cd?.booster);
+    const rawUsed=refills?.energy_refill_used??refills?.energy?.used;
+    const refillUsed=!st.errors?.refills&&refillAt&&Math.floor(refillAt/86400000)===Math.floor(now/86400000)&&typeof rawUsed==="boolean"?rawUsed:null;
+    if([energy,cap,happy,maxHappy,drug,booster].some(x=>x===null||x<0)||cap<=0)return null;
+    return {at:Math.min(barAt,cdAt),barAt,cdAt,statAt,refillAt,energy,cap,happy,maxHappy,drug,booster,stat,refillUsed};
+  }
+  function detectWatchedAction(step,before,after,timing={},gymCost=10){
+    if(!step||!before||!after||after.barAt<=before.barAt||after.cdAt<=before.cdAt)return false;
+    const elapsed=Math.max(0,(after.at-before.at)/1000);
+    if(elapsed>180||elapsed<0)return false; // avoid inferring individual actions over long gaps
+    const regen=Math.ceil(elapsed/300)*5+5;
+    const drugJump=after.drug-Math.max(0,before.drug-elapsed);
+    const boostJump=after.booster-Math.max(0,before.booster-elapsed);
+    const energyGain=after.energy-before.energy,happyGain=after.happy-before.happy;
+    const drugMatch=(target,tolerance)=>drugJump>1800&&Math.abs(drugJump-target)<=tolerance+elapsed;
+    if(step.type==="xanax"){
+      const expected=Math.min(250,Math.max(0,1000-before.energy));
+      return expected>0&&energyGain>=expected-5&&energyGain<=expected+regen&&drugMatch(timing.xanaxCD??25200,5400);
+    }
+    if(step.type==="ecstasy"){
+      const expected=Math.min(99999,before.happy*2)-before.happy;
+      return expected>0&&happyGain>=Math.max(1,expected-25)&&happyGain<=expected+25&&Math.abs(energyGain)<=regen&&drugMatch(timing.ecstasyCD??12900,3600);
+    }
+    if(step.type==="candy"||step.type==="dvd"){
+      const qty=Number(step.quantity??1),unit=step.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600;
+      const predicted=Math.max(0,(step.after?.happy??0)-(step.before?.happy??0));
+      return qty>0&&predicted>0&&Math.abs(boostJump-qty*unit)<=60+elapsed&&happyGain>=Math.max(1,predicted-25)&&happyGain<=predicted+25;
+    }
+    if(step.type==="refill"){
+      return before.refillUsed===false&&after.refillUsed===true&&after.refillAt>before.refillAt&&Math.floor(before.at/86400000)===Math.floor(after.at/86400000)&&energyGain>0&&after.energy>=after.cap;
+    }
+    if(step.type==="train"){
+      const expected=Math.max(0,Number(step.energy)||0),gain=after.stat-before.stat;
+      return before.stat!=null&&after.stat!=null&&after.statAt>before.statAt&&gain>0&&expected>=gymCost&&
+        before.energy-after.energy>=Math.max(gymCost,expected-regen)&&before.energy-after.energy<=expected+regen;
+    }
+    return false;
+  }
+  function observeTrainingStep(session,sample=trainingWatchSnapshot(session)){
+    if(!session||!sample||session.index>=session.actions.length)return false;
+    const step=session.actions[session.index],after=Math.max(session.started,session.lastConfirmed??0);
+    const watch=session.watch;
+    if(!watch||watch.index!==session.index||!watch.sample){session.watch={index:session.index,sample};saveTrainingSession();return false;}
+    const before=watch.sample;
+    if(sample.at<=before.at||sample.barAt<=after||sample.cdAt<=after)return false;
+    if(!detectWatchedAction(step,before,sample,session.timing,session.gym?.energy??10)){
+      // Don't overwrite a promising pre-action baseline with a split/cached
+      // update. Retry on the next fresh snapshot, then fall back to manual.
+      const elapsed=(sample.at-before.at)/1000;
+      const suspect=["xanax","ecstasy"].includes(step.type)?sample.drug>Math.max(0,before.drug-elapsed)+1800||
+        (step.type==="xanax"?sample.energy-before.energy>=100:sample.happy-before.happy>=100):
+        ["candy","dvd"].includes(step.type)?sample.booster>Math.max(0,before.booster-elapsed)+60:
+        step.type==="refill"?before.refillUsed===false&&sample.refillUsed===true:
+        step.type==="train"?sample.stat!=null&&before.stat!=null&&sample.stat>before.stat:false;
+      if(!suspect||elapsed>180){session.watch={index:session.index,sample};saveTrainingSession();}
+      return false;
+    }
+    const i=session.index;
+    session.completed??={};session.recovered??={};
+    session.completed[i]=sample.at;session.recovered[i]=true;
+    session.index++;session.lastConfirmed=sample.at;
+    const next=session.actions[session.index];
+    session.notBefore=next&&!next.midnightRefill?sample.at+Math.max(0,next.at-step.at)*1000:0;
+    session.drugUntil=sample.cdAt+sample.drug*1000;session.boosterUntil=sample.cdAt+sample.booster*1000;
+    if(step.type==="refill")session.refillDay=Math.floor(sample.at/86400000);
+    if(sample.stat!=null&&Number.isFinite(step.after?.stat))session.statCheckpoint={actual:sample.stat,projected:step.after.stat};
+    session.watch={index:session.index,sample};saveTrainingSession();
+    recoveryMessage="Training progress detected.";readinessExpires=Date.now()+3500;
+    return true;
+  }
+  let watchRequestAt=0,watchRetryAt=0,watchPending=false;
+  function watchTraining(view,{resume=false}={}){
+    if(!view||view.hidden||!view.isConnected||tornGuideApi.routeName()!=="home"||!autoTrainingWatch()||recoveryBusy)return;
+    const session=loadTrainingSession();
+    if(!session||session.index>=session.actions.length||warTraining&&(energyWarAdvice(warTraining)?.active||warTraining.blockDrugs&&session.drugRisk))return;
+    const st=tornGuideApi.state;
+    if(!st.identity)return;
+    if(observeTrainingStep(session)){
+      if(session.index>=session.actions.length)void reviewNextCycle(view,session);
+      else refreshRecommendations(view);
+      return;
+    }
+    const now=Date.now(),next=sessionSchedule(session)[session.index];
+    const due=next?.due??now,interval=due>now+60000?120000:30000;
+    if(watchPending||st.loading||now<watchRetryAt||now-watchRequestAt<(resume?30000:interval))return;
+    watchRequestAt=now;watchPending=true;
+    const owner=sessionOwner,started=session.started;
+    void tornGuideApi.loadPage("trainingProgress",true).then(result=>{
+      if(result?.failures||result?.discarded)watchRetryAt=Date.now()+120000;
+      if(owner!==sessionOwner||loadTrainingSession()?.started!==started||!view.isConnected||!autoTrainingWatch()||tornGuideApi.routeName()!=="home"||recoveryBusy)return;
+      const active=loadTrainingSession();
+      if(active.index<active.actions.length&&observeTrainingStep(active)){
+        if(active.index>=active.actions.length)void reviewNextCycle(view,active);
+        else refreshRecommendations(view);
+      }
+    }).catch(()=>{watchRetryAt=Date.now()+120000;}).finally(()=>{watchPending=false;});
+  }
   function matchTrainingCheckpoint(session,live,stat,statsAt,cooldownsAt,refillUsed){
     const from=session.index,actions=session.actions;
     const after=Math.max(session.started,session.lastConfirmed??0);
@@ -606,6 +718,7 @@ const tornCrimeGuide = (() => {
     }
     session.index=match.index;session.lastConfirmed=live.at;session.notBefore=0;
     session.statCheckpoint={actual:stat,projected:match.projected};
+    session.watch={index:session.index,sample:trainingWatchSnapshot(session)};
     if(live.drug!=null)session.drugUntil=live.at+live.drug*1000;
     if(live.booster!=null)session.boosterUntil=live.at+live.booster*1000;
     saveTrainingSession();
@@ -633,6 +746,7 @@ const tornCrimeGuide = (() => {
       '<button type="button" data-growth-session="refresh" aria-label="'+refreshLabel+'" title="'+refreshLabel+'" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button>'+
       '<button type="button" data-growth-session="stop" aria-label="Cancel training program" title="Cancel training program and return to Start" '+(!session||session.index>=session.actions.length?"disabled":"")+'><span aria-hidden="true">×</span></button></div>';
     return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+cornerControls+(heading?'<small>'+esc(heading)+'</small>':'')+'<strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span data-growth-step>'+esc(label)+'</span>'+'<div class="growth-session-controls">'+controls+barWarning("happy")+barWarning("energy")+'</div>'+
+      (session&&session.index<session.actions.length&&autoTrainingWatch()?'<small>Auto-detection active · API checks when ready</small>':"")+
       (boosterWait?'<small>Already trained? Refresh to check for completed steps.</small>':"")+
       recoveryPanel()+'</div>';
   }
@@ -806,6 +920,7 @@ const tornCrimeGuide = (() => {
     return '<a class="rec-header-refill rec-'+kind+'-refill '+(status==="Refill Available"?"is-available":"")+'" data-rec-refill="'+kind+'" href="https://www.torn.com/page.php?sid=points" title="'+(kind==="energy"?"Energy":"Nerve")+' refill · Points shop" '+(status?"":"hidden")+'>'+esc(status)+'</a>';
   }
   function tickGrowth(){
+    watchTraining(document.getElementById("topic-view"));
     for(const indicator of document.querySelectorAll("[data-rec-refill]")){
       const status=refillStatus(indicator.dataset.recRefill);
       indicator.hidden=!status;
@@ -838,7 +953,7 @@ const tornCrimeGuide = (() => {
       refreshRecommendations(document.getElementById("topic-view"));
     }
     const el=document.querySelector("[data-growth-due]");if(!el||el.closest("[hidden]"))return;
-    if(!recoveryBusy){
+    if(!recoveryBusy&&autoTrainingWatch()){
       const active=loadTrainingSession();
       if(reconcileTrainingProgress(active)){
         const view=document.getElementById("topic-view");
@@ -1255,13 +1370,8 @@ const tornCrimeGuide = (() => {
     layoutRecommendations(view);
     if(view.dataset.ocRecommendationsBound==="1")return;
     view.dataset.ocRecommendationsBound="1";
-    let lastReturnCheck=0;
     const checkAfterReturn=()=>{
-      if(document.visibilityState!=="visible"||view.hidden||tornGuideApi.routeName()!=="home"||recoveryBusy)return;
-      const session=loadTrainingSession();
-      if(!session||session.index>=session.actions.length||Date.now()-lastReturnCheck<30000)return;
-      lastReturnCheck=Date.now();
-      void tornGuideApi.loadPage("trainingProgress",true).catch(()=>{});
+      if(document.visibilityState==="visible")watchTraining(view,{resume:true});
     };
     document.addEventListener("visibilitychange",checkAfterReturn);
     window.addEventListener("focus",checkAfterReturn);
@@ -1277,6 +1387,11 @@ const tornCrimeGuide = (() => {
     },true);
     view.addEventListener("change",e=>{if(e.target.matches("[data-growth-exclude-owned]")){try{localStorage.setItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"),String(e.target.checked));}catch{}refreshRecommendations(view);}});
     view.addEventListener("change",event=>{
+      if(event.target.matches("[data-growth-watch]")){
+        try{localStorage.setItem("torn-city-guide:growth-watch:"+String(tornGuideApi.state.identity?.id??"guest"),String(event.target.checked));}catch{}
+        const session=loadTrainingSession();if(session){delete session.watch;saveTrainingSession();}
+        refreshRecommendations(view);return;
+      }
       if(event.target.matches("[data-rec-crime-override]")){
         const value=event.target.value;
         if(value!=="auto"&&!crimes.some(([name])=>name===value))return;
@@ -1355,11 +1470,11 @@ const tornCrimeGuide = (() => {
         if(sessionOwner!==owner||current?.started!==started||current?.index!==index)return;
         const live=recoverySnapshot();
         if(!live||Number(st.fetchedAt?.cooldowns||0)<requested||Math.max(Number(st.fetchedAt?.bars||0),Number(st.bridge?.timestamp||0))<requested){recoveryMessage="Fresh account data unavailable. Try Refresh again.";return;}
-        if(reconcileTrainingProgress(current,live)){
+        if(observeTrainingStep(current)||reconcileTrainingProgress(current,live)){
           if(current.index>=current.actions.length){recoveryBusy=false;await reviewNextCycle(view,current);}
         }else {recoveryMessage="Readiness updated.";readinessExpires=Date.now()+3500;}
       }catch(error){recoveryMessage="Refresh failed: "+String(error.message??error);}finally{recoveryBusy=false;if(view.isConnected)refreshRecommendations(view);}})();return;}
-      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recoveryMessage="";trainingSession={version:1,label:prog.label,source:prog.source,sequence:prog.sequence,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,periods:prog.periods,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:sessionActions(prog.cycleExecution??prog.execution),cycleSpend:prog.cycleSpend,notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next&&!next.midnightRefill?now+Math.max(0,next.at-old.at)*1000:0;saveTrainingSession();if(session.index>=session.actions.length){void reviewNextCycle(view,session);return;}}else if(action==="stop"){trainingSession=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
+      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recoveryMessage="";trainingSession={version:1,label:prog.label,source:prog.source,sequence:prog.sequence,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,periods:prog.periods,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:sessionActions(prog.cycleExecution??prog.execution),cycleSpend:prog.cycleSpend,notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};trainingSession.watch={index:0,sample:trainingWatchSnapshot(trainingSession)};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next&&!next.midnightRefill?now+Math.max(0,next.at-old.at)*1000:0;delete session.watch;saveTrainingSession();if(session.index>=session.actions.length){void reviewNextCycle(view,session);return;}}else if(action==="stop"){trainingSession=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
       const btn=e.target.closest("[data-rec-type],[data-rec-incomplete],[data-rec-uniques],[data-rec-history],[data-rec-crime-load]");
       if(!btn||!btn.closest("[data-home-recommendations]"))return;
       if(btn.hasAttribute("data-rec-crime-load")){
