@@ -88,9 +88,15 @@ const tornAccountRevisions=(()=>{
     if(!isCurrent()||store.getItem(key(id))!==raw||JSON.stringify(tornAccountStorage.snapshot(store,id))!==JSON.stringify(snap))throw Error("Account changed during revision capture");
     const encoded=JSON.stringify(next);
     if(encoded.length>2000000)throw Error("Revision manifest too large");
+    if(raw===null&&!next.entries.length)return {...snap,manifest:next};
     if(raw!==encoded)store.setItem(key(id),encoded);
     if(store.getItem(key(id))!==encoded)throw Error("Revision manifest write not verified");
     return {...snap,manifest:next};
   }
-  return {empty,key,read,validate,verify,observe,compare,capture};
+  async function restore(store,id,records,manifest,isCurrent,{createdAt=Date.now(),digest=hash}={}){
+    id=owner(id);await verify(manifest,records,id,{digest});
+    if(!isCurrent())throw Error("Account changed before restore");
+    return tornAccountStorage.restoreJournaled(store,id,records,isCurrent,{createdAt,manifest});
+  }
+  return {empty,key,read,validate,verify,observe,compare,capture,restore};
 })();

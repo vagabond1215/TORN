@@ -87,3 +87,5 @@ Staged recovery hardening passed loader/ledger guard and fresh API-only observat
 Journal current-writer guard coverage and actual strict natural replay fixtures added. Restore remains empty-only. Next 1P.3c: revision manifests and deletion tombstones, tested conflict staging, and explicit activation transaction without estimated spend duplication.
 
 1P.3c revision ancestry foundation implemented and tested: observed section tombstones, bounded causal ancestry and conservative divergence classification. No runtime merge yet; next wire encrypted versioned manifests, journaled manifest restoration and comparison UI.
+
+V2 encrypted manifest integration and empty-account journaled ancestry restoration implemented; V1 remains readable, populated V2 imports show a read-only comparison. Tombstone-only backups supported. Next: ordinary mutation tracking, conservative merge application and conflict staging; no activation or automatic synchronization yet.

@@ -9,6 +9,7 @@ const tornBackupUI=(()=>{
   }
   function wire(){
     const open=get("backup-open"),dialog=get("backup-dialog"),form=get("backup-form");
+    const comparison=get("backup-comparison");
     const status=get("backup-status"),secret=get("backup-passphrase"),confirmation=get("backup-confirm"),file=get("backup-file");
     const exportButton=get("backup-export"),importButton=get("backup-import"),close=get("backup-close");
     if(!open||!dialog||!form)return;
@@ -92,10 +93,10 @@ const tornBackupUI=(()=>{
     }
     inspect.addEventListener("click",()=>void reviewAction("inspect"));
     discard.addEventListener("click",()=>void reviewAction("discard"));
-    const clear=()=>{secret.value="";confirmation.value="";file.value="";};
+    const clear=()=>{secret.value="";confirmation.value="";file.value="";comparison.replaceChildren();};
     open.addEventListener("click",()=>{
       if(!tornGuideApi.isConnected()||busy)return;
-      clear();message("Verified account required. Version 1 covers supported settings, notes, checklists, calendar events, existing expenditure records, validated training sessions and cycle history.");
+      clear();message("Verified account required. Version 2 adds section revision tracking to supported settings, notes, checklists, calendar events, expenditure records, validated training sessions and cycle history. Version 1 files remain readable.");
       showJournal();showReview();dialog.showModal();
     });
     close.addEventListener("click",()=>{if(!busy)dialog.close();});
@@ -104,6 +105,7 @@ const tornBackupUI=(()=>{
     form.addEventListener("submit",event=>event.preventDefault());
     async function run(mode){
       if(busy)return;
+      comparison.replaceChildren();
       let password=secret.value,repeat=confirmation.value;
       const chosen=file.files?.[0];
       // Clear the DOM fields promptly; keep no persistent passphrase state.
@@ -118,12 +120,12 @@ const tornBackupUI=(()=>{
         const verified=await tornGuideApi.verifyBackupOwner(),id=verified.playerId;
         if(!verified.isCurrent())throw Error("Account changed");
         if(mode==="export"){
-          const snap=tornAccountStorage.snapshot(localStorage,id);
+          const snap=await tornAccountStorage.withRecoveryLock(id,navigator.locks,()=>tornAccountRevisions.capture(localStorage,id,verified.isCurrent));
           const critical=snap.omitted.filter(x=>["calendar-events","training-spend-estimates","activity-spend","training-session-review","training-cycle-history"].includes(x));
           if(critical.length)throw Error("Cannot safely export: invalid calendar, expenditure or training records ("+critical.join(", ")+"). Preserve local data for review.");
-          if(!snap.records.length)throw Error("No supported saved account records to export");
+          if(!snap.records.length&&!snap.manifest.entries.length)throw Error("No supported saved account records to export");
           message("Encrypting "+snap.records.length+" supported records…");
-          const data=await tornAccountBackup.encrypt(id,snap.records,password);
+          const data=await tornAccountBackup.encrypt(id,snap.records,password,Date.now(),snap.manifest);
           if(!verified.isCurrent())throw Error("Account changed before export");
           const url=URL.createObjectURL(new Blob([data],{type:"application/json"}));
           const link=document.createElement("a");
@@ -134,10 +136,20 @@ const tornBackupUI=(()=>{
           message("Checking and decrypting selected backup…");
           const data=await tornAccountBackup.decrypt(await chosen.text(),id,password);
           if(!verified.isCurrent())throw Error("Account changed before recovery");
+          // On a populated account, compare without applying incoming data.
+          const local=tornAccountStorage.snapshot(localStorage,id),hasManifest=localStorage.getItem(tornAccountRevisions.key(id))!==null;
+          if(local.records.length||local.omitted.length||hasManifest){
+            if(!data.manifest){message("Version 1 backup has no revision history. Recovery into an existing account is disabled; keep both copies.");return;}
+            const current=await tornAccountStorage.withRecoveryLock(id,navigator.locks,()=>tornAccountRevisions.capture(localStorage,id,verified.isCurrent));
+            const rows=tornAccountRevisions.compare(current.manifest,data.manifest,id);
+            comparison.replaceChildren();
+            for(const row of rows)append(comparison,row.section+" · "+row.status+(row.localDeleted?" · local deletion":"")+(row.incomingDeleted?" · backup deletion":""));
+            message("Read-only comparison: "+rows.length+" sections, "+rows.filter(x=>x.status==="conflict").length+" conflicts. No incoming records applied. Merge is not enabled yet.");return;
+          }
           // Explicit approval, no silent overwrite or partial account merge.
           if(!window.confirm("Restore "+data.records.length+" supported records for Torn player "+id+"? Existing supported account data or session/history will prevent recovery. Restored training sessions will be held for review and cannot resume yet. Restored pending rehab will not auto-confirm; review reservations manually. The guide will reload; session-only API connections must reconnect.")){message("Recovery cancelled; no changes made.");return;}
           if(!navigator.locks?.request&&!window.confirm("This browser does not support cross-tab recovery locking. Close other guide tabs before restoring. Continue in this tab?")){message("Restore cancelled.");return;}
-          const count=await tornAccountStorage.withRecoveryLock(id,navigator.locks,()=>tornAccountStorage.restoreJournaled(localStorage,id,data.records,verified.isCurrent,{createdAt:data.createdAt}));
+          const count=await tornAccountStorage.withRecoveryLock(id,navigator.locks,()=>data.manifest?tornAccountRevisions.restore(localStorage,id,data.records,data.manifest,verified.isCurrent,{createdAt:data.createdAt}):tornAccountStorage.restoreJournaled(localStorage,id,data.records,verified.isCurrent,{createdAt:data.createdAt}));
           message("Restored "+count+" supported records. Reloading guide…");
           location.reload();
         }

@@ -3,7 +3,7 @@
  * V1 covers only the explicit account-storage registry, not a full account.
  * The authenticated outer metadata binds ciphertext to format and player ID. */
 const tornAccountBackup=(()=>{
-  const format="torn-guide-backup",version=1,iterations=600000,maxFile=16000000;
+  const format="torn-guide-backup",iterations=600000,maxFile=16000000;
   const encode=v=>new TextEncoder().encode(v);
   const decode=v=>new TextDecoder("utf-8",{fatal:true}).decode(v);
   const plain=v=>v!==null&&typeof v==="object"&&!Array.isArray(v);
@@ -26,19 +26,21 @@ const tornAccountBackup=(()=>{
   }
   function aad(e){return encode(JSON.stringify([e.format,e.version,e.playerId,e.createdAt,e.kdf,e.iterations,e.salt,e.iv]));}
   function metadata(e,playerId){
-    if(!exact(e,["format","version","playerId","createdAt","kdf","iterations","salt","iv","ciphertext"])||e.format!==format||e.version!==version||e.kdf!=="PBKDF2-SHA256"||e.iterations!==iterations||!validDate(e.createdAt))throw Error("Unsupported or invalid backup format");
+    if(!exact(e,["format","version","playerId","createdAt","kdf","iterations","salt","iv","ciphertext"])||e.format!==format||![1,2].includes(e.version)||e.kdf!=="PBKDF2-SHA256"||e.iterations!==iterations||!validDate(e.createdAt))throw Error("Unsupported or invalid backup format");
     const id=tornAccountStorage.owner(playerId);
     if(typeof e.playerId!=="string"||e.playerId!==id)throw Error("Backup belongs to a different Torn account");
     const salt=from64(e.salt,16),iv=from64(e.iv,12);
     if(salt.length!==16||iv.length!==12)throw Error("Invalid backup encryption parameters");
     return {salt,iv};
   }
-  async function encrypt(playerId,records,secret,now=Date.now()){
+  async function encrypt(playerId,records,secret,now=Date.now(),manifest=null){
     const id=tornAccountStorage.owner(playerId);tornAccountStorage.validRecords(records,id);
-    if(!validDate(now)||!records.length)throw Error("No supported records to back up");
+    if(manifest)await tornAccountRevisions.verify(manifest,records,id);
+    const version=manifest?2:1;
+    if(!validDate(now)||(!records.length&&!manifest?.entries?.length))throw Error("No supported records to back up");
     const crypto=cryptoReady(),salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
     const e={format,version,playerId:id,createdAt:now,kdf:"PBKDF2-SHA256",iterations,salt:b64(salt),iv:b64(iv)};
-    const data=encode(JSON.stringify({playerId:id,createdAt:now,records}));
+    const data=encode(JSON.stringify({playerId:id,createdAt:now,records,...(manifest?{manifest}:{})}));
     if(data.length>maxFile/2)throw Error("Backup exceeds size limit");
     const key=await keyFor(secret,salt);
     const ciphertext=await crypto.subtle.encrypt({name:"AES-GCM",iv,additionalData:aad(e),tagLength:128},key,data);
@@ -55,9 +57,10 @@ const tornAccountBackup=(()=>{
     let data;
     try{data=JSON.parse(decode(await cryptoReady().subtle.decrypt({name:"AES-GCM",iv,additionalData:aad(e),tagLength:128},key,ciphertext)));}
     catch{throw Error("Incorrect recovery passphrase or damaged backup");}
-    if(!exact(data,["playerId","createdAt","records"])||data.playerId!==e.playerId||data.createdAt!==e.createdAt)throw Error("Backup identity or metadata mismatch");
+    if(!exact(data,e.version===2?["playerId","createdAt","records","manifest"]:["playerId","createdAt","records"])||data.playerId!==e.playerId||data.createdAt!==e.createdAt)throw Error("Backup identity or metadata mismatch");
     tornAccountStorage.validRecords(data.records,e.playerId);
-    if(!data.records.length)throw Error("Backup contains no supported records");
+    if(e.version===2)await tornAccountRevisions.verify(data.manifest,data.records,e.playerId);
+    if(!data.records.length&&!data.manifest?.entries?.length)throw Error("Backup contains no supported records");
     return data;
   }
   return {encrypt,decrypt,maxFile};

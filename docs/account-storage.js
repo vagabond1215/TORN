@@ -127,7 +127,7 @@ const tornAccountStorage=(()=>{
     // Reject a non-empty account, even if its sections are not in this file.
     // No additive merge: missing rows may represent intentional deletions.
     const existing=snapshot(store,id);
-    if(existing.records.length||existing.omitted.length)throw Error("Account already has supported local data; merge is not available yet");
+    if(existing.records.length||existing.omitted.length||store.getItem(prefix+"account-revisions:v1:"+id)!==null)throw Error("Account already has supported local data or revision history; merge is not available yet");
     // Also protect excluded durable session/history data from partial restore.
     if(store.getItem(prefix+"training-session:"+id)!==null||store.getItem(tornTrainingRecovery.reviewKey(id))!==null)throw Error("Existing training session or recovery hold; merge is not available yet");
     if(!assertCurrent())throw Error("Account changed before restore");
@@ -148,19 +148,24 @@ const tornAccountStorage=(()=>{
   }
   // Journal rows contain validated destination values, not arbitrary keys.
   // A pending journal is local recovery data and never exported.
+  const manifestSection="@revision-manifest";
+  function journalDescriptor(id,section){
+    if(section===manifestSection)return {key:prefix+"account-revisions:v1:"+id,valid:raw=>{try{tornAccountRevisions.validate(JSON.parse(raw),id);return true;}catch{return false;}}};
+    return descriptor(id,section);
+  }
   function parseJournal(raw,id){
-    if(typeof raw!=="string"||raw.length>maxBytes*3+100000)throw Error("Invalid restore journal size");
+    if(typeof raw!=="string"||raw.length>maxBytes*5+100000)throw Error("Invalid restore journal size");
     const j=JSON.parse(raw);
-    if(!shape(j,["version","playerId","createdAt","rows"])||j.version!==1||j.playerId!==id||!observedDate(j.createdAt)||!Array.isArray(j.rows)||!j.rows.length||j.rows.length>maxRecords)throw Error("Invalid restore journal");
+    if(!shape(j,["version","playerId","createdAt","rows"])||j.version!==1||j.playerId!==id||!observedDate(j.createdAt)||!Array.isArray(j.rows)||!j.rows.length||j.rows.length>maxRecords+1)throw Error("Invalid restore journal");
     let size=0;const seen=new Set();
     for(const row of j.rows){
-      if(!shape(row,["section","value"])||!str(row.section,160)||!str(row.value,maxValue+1000)||seen.has(row.section))throw Error("Invalid journal section");
-      const d=descriptor(id,row.section);
+      if(!shape(row,["section","value"])||!str(row.section,160)||!str(row.value,row.section===manifestSection?maxBytes:maxValue+1000)||seen.has(row.section))throw Error("Invalid journal section");
+      const d=journalDescriptor(id,row.section);
       if(!d)throw Error("Unknown journal section");
       if(row.section==="training-session-review")tornTrainingRecovery.parseStage(row.value,id);
       else if(!d.valid(row.value))throw Error("Invalid journal value");
       seen.add(row.section);size+=row.section.length+row.value.length;
-      if(size>maxBytes+1000)throw Error("Restore journal exceeds size limit");
+      if(size>2*maxBytes+2000)throw Error("Restore journal exceeds size limit");
     }
     return j;
   }
@@ -169,7 +174,7 @@ const tornAccountStorage=(()=>{
     if(raw===null)return null;
     const j=parseJournal(raw,id);
     const rows=j.rows.map(row=>{
-      const key=descriptor(id,row.section).key,current=store.getItem(key);
+      const key=journalDescriptor(id,row.section).key,current=store.getItem(key);
       return {section:row.section,state:current===null?"missing":current===row.value?"matched":"conflict"};
     });
     // A local runnable session is never part of the journal.
@@ -193,7 +198,7 @@ const tornAccountStorage=(()=>{
     const j=parseJournal(raw,id);
     for(const row of [...j.rows].reverse()){
       assertJournal(store,id,raw,isCurrent);
-      const key=descriptor(id,row.section).key,current=store.getItem(key);
+      const key=journalDescriptor(id,row.section).key,current=store.getItem(key);
       if(current!==null&&current!==row.value)throw Error("Concurrent change during rollback; journal retained");
       if(current!==null)store.removeItem(key);
     }
@@ -202,14 +207,16 @@ const tornAccountStorage=(()=>{
     store.removeItem(journalKey(id));
     if(journalPending(store,id))throw Error("Restore journal could not be cleared");
   }
-  function restoreJournaled(store,playerId,records,isCurrent,{createdAt=Date.now()}={}){
+  function restoreJournaled(store,playerId,records,isCurrent,{createdAt=Date.now(),manifest=null}={}){
     const id=owner(playerId);validRecords(records,id);
-    if(!records.length||journalPending(store,id))throw Error("Resolve the pending restore journal first");
+    if((!records.length&&!manifest?.entries?.length)||journalPending(store,id))throw Error("Resolve the pending restore journal first");
+    if(manifest)tornAccountRevisions.validate(manifest,id);
     const existing=snapshot(store,id);
-    if(existing.records.length||existing.omitted.length||store.getItem(prefix+"training-session:"+id)!==null)throw Error("Account already has local data; merge is not available yet");
+    if(existing.records.length||existing.omitted.length||store.getItem(prefix+"training-session:"+id)!==null||store.getItem(prefix+"account-revisions:v1:"+id)!==null)throw Error("Account already has local data or revision history; merge is not available yet");
     if(!isCurrent())throw Error("Account changed before restore");
     const ordered=[...records].sort((a,b)=>Number(b.section==="training-session-review")-Number(a.section==="training-session-review"));
     const rows=ordered.map(row=>({section:row.section,value:row.section==="training-session-review"?tornTrainingRecovery.stageValue(id,JSON.parse(row.value),createdAt):restoredValue(row)}));
+    if(manifest)rows.push({section:manifestSection,value:JSON.stringify(manifest)});
     const raw=JSON.stringify({version:1,playerId:id,createdAt:Date.now(),rows});
     parseJournal(raw,id);
     if(!isCurrent()||journalPending(store,id))throw Error("Account or journal changed before restore");
@@ -219,13 +226,13 @@ const tornAccountStorage=(()=>{
     try{
       for(const row of rows){
         assertJournal(store,id,raw,isCurrent);
-        const key=descriptor(id,row.section).key;
+        const key=journalDescriptor(id,row.section).key;
         if(store.getItem(key)!==null||store.getItem(prefix+"training-session:"+id)!==null)throw Error("Concurrent account write");
         store.setItem(key,row.value);
       }
       finishJournal(store,id,raw,isCurrent);
     }catch(error){throw Error("Restore interrupted; journal retained for review. "+String(error?.message??error));}
-    return rows.length;
+    return records.length;
   }
   // Cooperative cross-tab serialization where Web Locks is available.
   // Older scripts and other ordinary writers do not participate yet.
