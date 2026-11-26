@@ -349,8 +349,8 @@ const tornTrainSequence=(()=>{
       }
       if(type==="refill"){
         const used=v.days.has(tornDay());
-        if(used&&boostedRefill){
-          notices.push({index:i,text:"Refill skipped: already used today. Train before Happiness resets."});
+        if(used&&(boostedRefill||cfg.skipUsedRefill)){
+          notices.push({index:i,text:boostedRefill?"Refill skipped: already used today. Train before Happiness resets.":"Refill skipped: already used today."});
           return true;
         }
         if(v.energy>=eCap){
@@ -499,7 +499,7 @@ const tornTrainSequence=(()=>{
       Object.assign(p,{startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
       if(budget==null&&!options.naturalOnly)return [];
       const cash=Math.max(0,Number(budget)||0),excludeOwned=options.excludeOwned!==false;
-      const purchases=trainingPurchases();
+      const purchases=chartPurchases();
       const cashCost=result=>excludeOwned?purchases(result.costs).cost:result.money;
       const candidates=templates.filter(([id])=>options.naturalOnly?id==="natural":id!=="custom"||editedPlans.has(id));
       // Match the Plan comparison preparation window, including saved jump actions.
@@ -511,7 +511,7 @@ const tornTrainSequence=(()=>{
       }
       if(!Number.isFinite(blockHours)||blockHours>168)blockHours=168;
       p.hours=blockHours;
-      const cfg={startEnergy:"current",autoWait:true,refillUsedToday:energyRefillUsedToday(now)},results=[];
+      const cfg={startEnergy:"current",autoWait:true,refillUsedToday:energyRefillUsedToday(now),skipUsedRefill:true},results=[];
       function naturalUntil(engine,end){
         const v=engine.state;
         while(v.time<end&&!v.errors.length){
@@ -534,12 +534,18 @@ const tornTrainSequence=(()=>{
               if(actions[0]?.type==="xanax")engine.waitFor(v.drug,"Drug cooldown",false);
               engine.execute(make("train"),0);
             }else if(startingEnergy[id]==="full"&&v.energy<energyRules().cap)engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false);
-            if(!engine.run(actions))break;
-            executed.push(...actions);
             if(captureCycle&&id!=="natural"&&!cycle){
-              const first=engine.finish(executed,{tail:false});
+              // Execute only the base cycle before saving the live session.
+              // Recurring filler improves the forecast but should not lock
+              // the player into the rest of the forecast block.
+              const baseLength=editedPlans.has(id)?actions.length:cycleActions(id).length;
+              const base=actions.slice(0,baseLength);
+              if(!engine.run(base))break;
+              const first=engine.finish(base,{tail:false});
               cycle={length:first.log.filter(step=>step.type!=="happyReset").length,spend:cashCost(first)};
-            }
+              if(!engine.run(actions.slice(baseLength)))break;
+            }else if(!engine.run(actions))break;
+            executed.push(...actions);
             if(v.time<end)naturalUntil(engine,end);
             else if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
           }
@@ -573,9 +579,16 @@ const tornTrainSequence=(()=>{
       if(selected&&!options.naturalOnly){
         const ids=[...templatesById.keys()];
         const lead=Math.max(1,Math.ceil(168/blockHours));
-        const proposal=optimizeCycles(ids,Math.min(14,2*lead),604800,true,{
-          cap:cash,priceOf:cashCost,overrides:[],projection:{actionsFor,respectOffset:false,refillUsedToday:cfg.refillUsedToday}
+        const projection={actionsFor,respectOffset:false,refillUsedToday:cfg.refillUsedToday,skipUsedRefill:true};
+        const legacy=optimizeCycles(ids,Math.min(14,2*lead),604800,true,{
+          cap:cash,priceOf:cashCost,overrides:[],projection
         });
+        // Compare densely repeated and mixed cycles against the weekly block
+        // forecast from the same live state and with the same purchase cap.
+        const repeated=optimizeChart(ids.map(id=>({id})),28,604800,cash,[],{
+          projection,priceOf:cashCost,minDepth:28
+        });
+        const proposal=repeated?.data.firstCycle&&repeated.data.gain>(legacy?.data.gain??-Infinity)?repeated:legacy;
         if(proposal?.data.firstCycle&&proposal.data.gain>selected.gain){
           mixed=proposal;
           const id=mixed.sequence[0],first=mixed.data.firstCycle;
@@ -603,7 +616,7 @@ const tornTrainSequence=(()=>{
         const periods=horizons.map(days=>{
           const result=days===7?selected:mixed?
             mixedProjection(Array.from({length:Math.ceil(days/7)},()=>mixed.sequence).flat(),days*86400,
-              {actionsFor,respectOffset:false,fill:true,refillUsedToday:cfg.refillUsedToday}):
+              {actionsFor,respectOffset:false,fill:true,refillUsedToday:cfg.refillUsedToday,skipUsedRefill:true}):
             runProgram(selected.id,templatesById.get(selected.id),selected.cycles,days*24,false,selected.allowPartialDvd).result;
           if(days===forecastDays)selected.restockCosts=result.costs;
           const unavailable=result.complete===false&&(!mixed||result.errors?.length);
@@ -900,10 +913,10 @@ const tornTrainSequence=(()=>{
     const data=engine.finish(list,{tail:false});
     return {...data,elapsed:v.time,offset,completed,segments,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
-  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false}={}){
+  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false}={}){
     const first=sequence[0],offset=respectOffset?Math.min(end,startingTime[first]??0):0;
     const clockSeconds=Math.round(p.tornClockMin*60)+offset;
-    const engine=createEngine({limitSeconds:end-offset,startEnergy:"current",allowPartialDvd,
+    const engine=createEngine({limitSeconds:end-offset,startEnergy:"current",allowPartialDvd,skipUsedRefill,
       refillUsedToday:refillUsedToday&&clockSeconds<86400,
       startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
       tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900});
@@ -986,17 +999,17 @@ const tornTrainSequence=(()=>{
     if(!continuous)best=frontier[0]??null;
     return best;
   }
-  function optimizeChart(results,slots,end,budget=null,overrides=[]){
-    const weeklySpend=budget==null?null:weeklyPurchaseCost();
+  function optimizeChart(results,slots,end,budget=null,overrides=[],{projection={},priceOf,minDepth=0}={}){
+    const weeklySpend=budget==null?null:priceOf??weeklyPurchaseCost();
     const lastOverride=overrides.findLastIndex(Boolean);
-    const actionsFor=id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id];
+    const actionsFor=projection.actionsFor??(id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id]);
     const ids=[...new Set([...(lastOverride>=0?["natural"]:[]),...results.map(({id})=>id)])].filter(id=>actionsFor(id).length);
-    const completed=new Map(results.map(({id,data})=>[id,data.completed]));
+    const completed=new Map(results.map(({id,data})=>[id,data?.completed??0]));
     const natural=ids.includes("natural")&&!completed.has("natural")?projectCycles("natural",Infinity,{end,continuous:true}):null;
     if(natural)completed.set("natural",natural.completed);
     let best=null;
-    const consider=data=>{
-      if(!best||data.gain>best.data.gain+1e-7)best={data};
+    const consider=(data,sequence)=>{
+      if(!best||data.gain>best.data.gain+1e-7)best={data,sequence};
     };
     const affordable=data=>{
       if(!weeklySpend)return true;
@@ -1004,22 +1017,22 @@ const tornTrainSequence=(()=>{
       return cost!==null&&cost<=budget;
     };
     if(lastOverride<0){
-      for(const {data} of results)if(affordable(data))consider(data);
+      for(const {data} of results)if(data&&affordable(data))consider(data);
       if(natural&&affordable(natural))consider(natural);
     }
     // Search each pair independently so a newly selected plan cannot evict
     // promising prefixes from a search over plans that were already selected.
     for(const [i,first] of ids.entries())for(const second of ids.slice(i)){
       const pair=first===second?[first]:[first,second];
-      const maxDepth=Math.max(lastOverride+1,...pair.map(id=>completed.get(id)??0),1)+5;
+      const maxDepth=Math.max(lastOverride+1,...pair.map(id=>completed.get(id)??0),1,minDepth)+5;
       let frontier=[{sequence:[]}];
       for(let index=0;index<maxDepth&&frontier.length;index++){
         const next=[];
         const choices=overrides[index]?[overrides[index]]:pair;
         for(const parent of frontier)for(const id of choices){
-          const sequence=[...parent.sequence,id],data=mixedProjection(sequence,end,{actionsFor});
+          const sequence=[...parent.sequence,id],data=mixedProjection(sequence,end,{...projection,actionsFor});
           if(!affordable(data))continue;
-          if(index>=lastOverride&&data.segments.length>lastOverride&&!data.errors.length)consider(data);
+          if(index>=lastOverride&&data.segments.length>lastOverride&&!data.errors.length)consider(data,sequence);
           if(data.complete&&data.elapsed<end&&(!parent.data||data.elapsed>parent.data.elapsed||
             data.gain>parent.data.gain))next.push({sequence,data});
         }
