@@ -364,6 +364,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-cycle-choices label:has([data-ts-optimizer-plan]){grid-template-columns:auto 1fr}
 .ts-cycle-choices [data-ts-optimizer-plan]{width:auto}
 .ts-cycle-choices small{grid-column:2;color:var(--muted)}
+.ts-cycle-controls .ts-manual-choices{grid-template-columns:minmax(0,1fr);gap:.55rem;width:min(20rem,75vw)}
+.ts-cycle-controls .ts-manual-choices label{display:grid;grid-template-columns:4.2rem minmax(0,1fr);align-items:center;gap:.25rem .5rem}
+.ts-manual-choices select{width:100%;min-width:0}
+.ts-manual-choices label small{grid-column:2;line-height:1.35;font-weight:400}
+.ts-cycle-controls .ts-manual-choices .ts-manual-note{grid-column:1/-1;line-height:1.4}
 .ts-series-mixed{--ts-series-color:var(--accent-strong);--ts-series-dash:14 4 3 4}
 .ts-series-manual{--ts-series-color:#a4a4a4;--ts-series-dash:2 3 8 3}
 .ts-series-budget{--ts-series-color:#ff8375;--ts-series-dash:3 5}
