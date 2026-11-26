@@ -71,7 +71,7 @@ const tornActivityScheduler=(()=>{
     times.sort((a,b)=>a-b);
     const unique=[...new Set(times)];
     for(let i=0;i<unique.length;i++){
-      const start=unique[i]+(i?60000:0),finish=start+duration,next=unique[i+1]??end;
+      const start=unique[i]+(actions.some(at=>Math.abs(at-unique[i])<1000)?60000:0),finish=start+duration,next=unique[i+1]??end;
       if(finish<=next&&fits(start,finish))return {start,end:finish,duration,cost:rehabEstimate(s),type:s.travel,source:"proposal",overlapsCooldown:Number.isFinite(drugReady)&&finish<=drugReady};
     }
     // Critical rehab may require pausing training rather than fitting a gap.
@@ -84,7 +84,7 @@ const tornActivityScheduler=(()=>{
     return tornTctClock.entries().filter(x=>map[x.id]&&Number.isFinite(x.at)&&x.at>=now).map(x=>({id:"api-"+x.id,kind:map[x.id],title:x.title,start:x.at,end:x.at,source:x.note?.includes("API")?"API / cached":"Timer estimate",detail:x.note,blocking:false}));
   }
   function schedule({now=Date.now(),war=null,health=null,rehab=null,training=[],manual=events(),limit=null}={}){
-    const list=[...manual.filter(x=>x.end>=now),...apiEvents(now)];
+    const list=[...manual.filter(x=>x.end>=now&&!(war?.source==="Manual Calendar war"&&x.kind==="war"&&x.start===war.start)),...apiEvents(now)];
     if(war){
       if(war.phase!=="active"){
         if(war.cutoff>=now)list.push({id:"war-cutoff",kind:"war",title:"Training cutoff / stack begins",start:war.cutoff,end:war.cutoff,source:"Calculated deadline"});
@@ -141,7 +141,7 @@ const tornActivityScheduler=(()=>{
     d.showModal();
   }
   function manualForm(){
-    return '<form class="activity-manual-form" data-activity-form><label>Activity <input name="title" maxlength="100" required placeholder="Faction chain"></label><label>Category <select name="kind">'+Object.entries(kinds).map(([id,label])=>'<option value="'+id+'">'+label+'</option>').join("")+'</select></label><label>Start (TCT) <input type="datetime-local" name="start" required></label><label>End (TCT) <input type="datetime-local" name="end" required></label><label><input type="checkbox" name="blocking" checked> Reserve time (pause training)</label><button type="submit">Add activity</button><small role="status"></small></form>';
+    return '<form class="activity-manual-form" data-activity-form><label>Activity <input name="title" maxlength="100" required placeholder="Faction chain"></label><label>Category <select name="kind">'+Object.entries(kinds).map(([id,label])=>'<option value="'+id+'">'+label+'</option>').join("")+'</select></label><label>Start (TCT) <input type="datetime-local" name="start" required></label><label>End (TCT) <input type="datetime-local" name="end" required></label><label><input type="checkbox" name="blocking" checked> Reserve time (pause training)</label><small>Manual War activities also calculate a four-Xanax preparation cutoff when automatic war mode is enabled.</small><button type="submit">Add activity</button><small role="status"></small></form>';
   }
   function wire(view,onChange){
     if(view.dataset.activityBound==="1")return;view.dataset.activityBound="1";
