@@ -232,7 +232,7 @@ const tornActivityScheduler=(()=>{
     const end=now+days*D;
     return '<div class="activity-timeline">'+Object.entries(kinds).map(([kind,label])=>{
       const rows=list.filter(e=>e.kind===kind&&e.start<end&&e.end>=now);if(!rows.length)return "";
-      return '<div class="activity-lane"><strong>'+esc(label)+'</strong><div>'+rows.map(e=>{const x=Math.max(0,(e.start-now)/(end-now)*100),w=Math.max(1,Math.min(100-x,(e.end-Math.max(now,e.start))/(end-now)*100));return '<span class="activity-'+kind+'" title="'+esc(time(e.start)+" "+e.title)+'" style="left:'+x+'%;width:'+w+'%"></span>';}).join("")+'</div></div>';
+      return '<div class="activity-lane"><strong>'+esc(label)+'</strong><div>'+rows.map(e=>{const x=Math.max(0,Math.min(99,(e.start-now)/(end-now)*100)),w=Math.min(100-x,Math.max(1,(e.end-Math.max(now,e.start))/(end-now)*100));return '<span class="activity-'+kind+'" title="'+esc(time(e.start)+" "+e.title)+'" style="left:'+x+'%;width:'+w+'%"></span>';}).join("")+'</div></div>';
     }).join("")+'</div><small>Next '+days+' days · hover markers for details</small>'+renderAgenda(list.filter(e=>e.start<end));
   }
   function renderGrid(list,now,days){
