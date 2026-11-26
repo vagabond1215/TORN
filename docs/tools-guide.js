@@ -166,8 +166,8 @@ const tornToolsGuide=(()=>{
  // Global quick bar: cached account status, no additional polling.
  const statusIcons={
    addiction:'<path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="7"/><path d="M9 11h.01M15 11h.01M9 15h6"/>',
-   travel:'<path d="m2 12 20-9-6 19-4-8-10-2zM12 14l10-11"/>',
-   racing:'<path d="M4 22V3m0 1c6-5 10 5 16 0v11c-6 5-10-5-16 0"/><path d="M9 4v11m6-9v11M4 9c6-5 10 5 16 0"/>',
+   travel:'<path d="M17 21v-8l-5-3V4a2 2 0 0 0-4 0v6l-5 3v8l7-4z" transform="translate(2 0)"/><path d="M10 17v5"/>',
+   racing:'<path d="M4.5 19a10 10 0 1 1 15 0zM12 15l4-5M6 12h.01M12 6h.01M18 12h.01"/><circle cx="12" cy="15" r="1"/>',
    drug:'<path d="M5 19a5 5 0 0 1 0-7l7-7a5 5 0 0 1 7 7l-7 7a5 5 0 0 1-7 0zM8 9l7 7"/>',
    booster:'<path d="m13 2-9 12h7l-1 8 10-12h-7l1-8z"/>',
    medical:'<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
@@ -191,24 +191,31 @@ const tornToolsGuide=(()=>{
      const p=health.penalty,level=health.level,detail=level==="restricted"?"Drug recommendations restricted":level==="recommended"?"Rehab recommended":level==="preferred"?"Rehab preferred":"Observed battle-stat penalty";
      items.push(item("addiction","Addiction",p+"%"+(decayAt&&decayAt>now?" · "+duration(decayAt):""), "Addiction penalty "+p+"% · "+detail+(decayAt?" · Next approximate natural decay in "+duration(decayAt):"")+" · Open Calendar for rehab", "#calendar",level==="restricted"?"danger":["preferred","recommended"].includes(level)?"warning":"ready"));
    }else items.push(unknown("addiction","Addiction","#calendar"));
+   // One stable slot: a reported flight takes precedence over cached race data.
+   // An expired flight is not proof of arrival; wait for a new snapshot.
    const travel=data("travel"),remaining=nonnegative(travel?.time_left??travel?.remaining??travel?.remaining_seconds);
-   const arrival=timeValue(travel?.arrival??travel?.arrival_at??travel?.until??travel?.timestamp??travel?.arrives_at)??(remaining!==null?Number(state.fetchedAt?.travel||0)+remaining*1000:null);
-   const destination=typeof travel?.destination==="string"?travel.destination:typeof travel?.destination?.name==="string"?travel.destination.name:"destination";
-   if(!present("travel")||!travel)items.push(unknown("travel","Travel","#calendar"));
-   else if(arrival!=null&&arrival>now)items.push(item("travel","Travel",duration(arrival),"Travel to "+destination+" · Arrival countdown from last API snapshot"+old("travel"),"#calendar",fresh("travel")?"normal":"stale"));
-   else if(arrival!=null&&arrival<=now&&remaining!==0&&arrival>Number(state.fetchedAt.travel))items.push(item("travel","Travel","Verify","Estimated arrival passed; refresh to confirm location","#calendar","stale"));
-   else if(fresh("travel")&&(remaining===0||arrival!=null&&arrival<=Number(state.fetchedAt.travel)||destination.toLowerCase()==="torn"))items.push(item("travel","Travel",destination.toLowerCase()==="torn"?"In Torn":"Idle","No active flight reported · "+destination,"#calendar","ready"));
-   else items.push(unknown("travel","Travel","#calendar"));
-   const races=data("races");
-   if(!present("races")||!Array.isArray(races))items.push(unknown("racing","Racing","#racing"));
-   else {
-     const pending=races.filter(x=>["open","in_progress"].includes(x.status)).sort((a,b)=>(a.status==="in_progress"?0:1)-(b.status==="in_progress"?0:1)||(timeValue(a.schedule?.start)??Infinity)-(timeValue(b.schedule?.start)??Infinity));
+   const travelStamp=Number(state.fetchedAt?.travel||0);
+   const arrival=timeValue(travel?.arrival_at??travel?.arrival??travel?.until??travel?.timestamp??travel?.arrives_at)??(remaining!==null?travelStamp+remaining*1000:null);
+   const destination=typeof travel?.destination==="string"?travel.destination:typeof travel?.destination?.name==="string"?travel.destination.name:"Unknown destination";
+   const returning=destination.trim().toLowerCase()==="torn";
+   const flightLabel=returning?"Returning to Torn":"In flight - "+destination;
+   const activity=(icon,label,value,tip,href,tone="normal")=>({...item("activity",label,value,tip,href,tone),icon});
+   const flight=present("travel")&&remaining!==0&&arrival!=null&&arrival>travelStamp;
+   const noFlight=fresh("travel")&&(remaining===0||arrival!=null&&arrival<=travelStamp);
+   if(flight&&arrival>now){
+     items.push(activity("travel","Travel",flightLabel+(returning?" - ":" ")+duration(arrival),flightLabel+" · Arrival countdown from last API snapshot"+old("travel"),"#calendar",fresh("travel")?"normal":"stale"));
+   }else if(flight&&arrival<=now){
+     items.push(activity("travel","Travel","Verify arrival","Estimated arrival passed; refresh to confirm arrival","#calendar","stale"));
+   }else{
+     const races=data("races");
+     const pending=present("races")&&Array.isArray(races)?races.filter(x=>["open","in_progress"].includes(x.status)).sort((a,b)=>(a.status==="in_progress"?0:1)-(b.status==="in_progress"?0:1)||(timeValue(a.schedule?.start)??Infinity)-(timeValue(b.schedule?.start)??Infinity)):[];
      const race=pending[0],start=timeValue(race?.schedule?.start),end=timeValue(race?.schedule?.end);
-     if(!race)items.push(fresh("races")?item("racing","Racing","Idle","No scheduled or active race reported","#racing","ready"):unknown("racing","Racing","#racing"));
-     else if(race.status==="open"&&start!=null&&start>now)items.push(item("racing","Racing",duration(start),(race.title||"Race")+" · Until start"+old("races"),"#racing",fresh("races")?"normal":"stale"));
-     else if(race.status==="in_progress"&&end!=null&&end>now)items.push(item("racing","Racing",duration(end),(race.title||"Race")+" · Until reported finish"+old("races"),"#racing",fresh("races")?"normal":"stale"));
-     else if(race.status==="in_progress"&&end==null&&fresh("races"))items.push(item("racing","Racing","Active",(race.title||"Race")+" · No finish time supplied","#racing"));
-     else items.push(item("racing","Racing","Verify","Race start or finish needs a fresh API snapshot","#racing","stale"));
+     if(race?.status==="open"&&start!=null&&start>now)items.push(activity("racing","Racing","Race starts - "+duration(start),(race.title||"Race")+" · Until start"+old("races"),"#racing",fresh("races")?"normal":"stale"));
+     else if(race?.status==="in_progress"&&end!=null&&end>now)items.push(activity("racing","Racing","Racing - "+duration(end),(race.title||"Race")+" · Until reported finish"+old("races"),"#racing",fresh("races")?"normal":"stale"));
+     else if(race?.status==="in_progress"&&end==null&&fresh("races"))items.push(activity("racing","Racing","Racing",(race.title||"Race")+" · No finish time supplied","#racing"));
+     else if(race)items.push(activity("racing","Racing","Verify race","Race start or finish needs a fresh API snapshot","#racing","stale"));
+     else if(noFlight&&fresh("races")&&Array.isArray(races))items.push(activity("racing","Racing","Not Racing","No active flight or scheduled race reported","#racing","ready"));
+     else items.push(activity("racing","Racing / travel","Not Racing","Default display · Racing or flight status not verified; refresh to check","#racing","unknown"));
    }
    const cooldowns=data("cooldowns");
    for(const id of ["drug","booster","medical"]){
@@ -225,12 +232,15 @@ const tornToolsGuide=(()=>{
    return quickStatusModel(tornGuideApi.state,health,now,decayAt,connected);
  }
  function statusMarkup(){
-   return '<div class="quick-status-strip" aria-label="Account status">'+statusRows().map(x=>'<a class="quick-status" data-quick-status="'+x.id+'" data-tone="'+x.tone+'" href="'+x.href+'" title="'+esc(x.tip)+'" aria-label="'+esc(x.label+": "+x.value+" · "+x.tip)+'">'+reportIcon(statusIcons[x.id])+'<span>'+esc(x.value)+'</span></a>').join("")+'</div><button type="button" class="rail-visibility-toggle quick-status-refresh" data-quick-status-refresh title="Refresh addiction, travel, racing and cooldowns" aria-label="Refresh account status" '+(!tornGuideApi.isConnected()||tornGuideApi.state.loading?"disabled":"")+'>'+reportIcon(statusIcons.refresh)+'</button>';
+   return '<div class="quick-status-strip" aria-label="Account status">'+statusRows().map(x=>'<a class="quick-status" data-quick-status="'+x.id+'" data-status-icon="'+(x.icon??x.id)+'" data-tone="'+x.tone+'" href="'+x.href+'" title="'+esc(x.tip)+'" aria-label="'+esc(x.label+": "+x.value+" · "+x.tip)+'">'+reportIcon(statusIcons[x.icon??x.id])+'<span>'+esc(x.value)+'</span></a>').join("")+'</div><button type="button" class="rail-visibility-toggle quick-status-refresh" data-quick-status-refresh title="Refresh addiction, travel, racing and cooldowns" aria-label="Refresh account status" '+(!tornGuideApi.isConnected()||tornGuideApi.state.loading?"disabled":"")+'>'+reportIcon(statusIcons.refresh)+'</button>';
  }
  function tickStatus(){
    const host=document.getElementById("tool-quickbar");if(!host)return;
    for(const x of statusRows()){
      const node=host.querySelector('[data-quick-status="'+x.id+'"]');if(!node)continue;
+     const icon=x.icon??x.id;
+     if(node.dataset.statusIcon!==icon){node.querySelector("svg")?.remove();node.insertAdjacentHTML("afterbegin",reportIcon(statusIcons[icon]));node.dataset.statusIcon=icon;}
+     if(node.getAttribute("href")!==x.href)node.setAttribute("href",x.href);
      const span=node.querySelector("span");
      if(span.textContent!==x.value)span.textContent=x.value;
      if(node.dataset.tone!==x.tone)node.dataset.tone=x.tone;
