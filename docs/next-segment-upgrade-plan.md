@@ -89,3 +89,6 @@ Journal current-writer guard coverage and actual strict natural replay fixtures 
 1P.3c revision ancestry foundation implemented and tested: observed section tombstones, bounded causal ancestry and conservative divergence classification. No runtime merge yet; next wire encrypted versioned manifests, journaled manifest restoration and comparison UI.
 
 V2 encrypted manifest integration and empty-account journaled ancestry restoration implemented; V1 remains readable, populated V2 imports show a read-only comparison. Tombstone-only backups supported. Next: ordinary mutation tracking, conservative merge application and conflict staging; no activation or automatic synchronization yet.
+
+### Unified Calendar timeline
+Implemented presentation-only shared TCT timeline on Home and Calendar, with layered durations, clustered pins, tooltip/inspector and agenda fallback. See activity-scheduler-plan.md for geometry, safety semantics and validation gates. Account recovery and financial roadmap order unchanged.

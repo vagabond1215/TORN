@@ -230,23 +230,128 @@ const tornActivityScheduler=(()=>{
       return heading+'<div class="activity-event activity-'+esc(e.kind)+'"><time>'+shortTime(e.start)+(e.end>e.start?'–'+shortTime(e.end):"")+'</time><div><strong>'+esc(e.title)+'</strong><small>'+esc(e.source??"Manual")+(e.detail?" · "+esc(e.detail):"")+'</small></div>'+(e.source==="manual"?'<button type="button" data-activity-remove="'+esc(e.id)+'" aria-label="Remove '+esc(e.title)+'">×</button>':"")+'</div>';
     }).join("")+'</div>';
   }
-  function renderTimeline(list,now,days=7){
-    const end=now+days*D;
-    return '<div class="activity-timeline">'+Object.entries(kinds).map(([kind,label])=>{
-      const rows=list.filter(e=>e.kind===kind&&e.start<end&&e.end>=now);if(!rows.length)return "";
-      return '<div class="activity-lane"><strong>'+esc(label)+'</strong><div>'+rows.map(e=>{const x=Math.max(0,Math.min(99,(e.start-now)/(end-now)*100)),w=Math.min(100-x,Math.max(1,(e.end-Math.max(now,e.start))/(end-now)*100));return '<span class="activity-'+kind+'" title="'+esc(time(e.start)+" "+e.title)+'" style="left:'+x+'%;width:'+w+'%"></span>';}).join("")+'</div></div>';
-    }).join("")+'</div><small>Next '+days+' days · hover markers for details</small>'+renderAgenda(list.filter(e=>e.start<end));
+  // A unified timeline: actual intervals share a ruler, not separate category lanes.
+  const timelineIcons={training:"⚡",rehab:"✚",travel:"✈",war:"⚔",chain:"↔",oc:"◆",racing:"⚑",education:"▤",event:"▣",personal:"◉",health:"✚",collection:"◷"};
+  function timelineStatus(e){
+    if(e.recoveryReview)return "Review required";
+    if(e.stale||/last known|stale/i.test(e.source??"")||/last known/i.test(e.title))return "Last known · verify";
+    if(e.blocking===true)return "Training reservation";
+    if(/proposal|tentative|forecast|projected|estimated|target|calculated/i.test(e.source??""))return "Tentative / calculated";
+    return "Scheduled / informational";
+  }
+  function timelineLayout(list,now,days=7,war=null){
+    const end=now+days*D,width=days*240,bin=48,maxLanes=3;
+    const x=at=>Math.max(0,Math.min(width,(at-now)/(end-now)*width));
+    const valid=at=>Number.isFinite(at)&&Math.abs(at)<=8640000000000000;
+    const rows=list.filter(e=>e&&Object.hasOwn(kinds,e.kind)&&typeof e.title==="string"&&valid(e.start)&&valid(e.end)&&e.end>=e.start).map(e=>({...e}));
+    if(war&&valid(war.cutoff)&&valid(war.start)&&war.cutoff<war.start&&war.start>now&&war.cutoff<end)
+      rows.push({id:"timeline-war-prep",kind:"war",title:war.stale?"Last known war preparation":"War preparation",start:war.cutoff,end:war.start,blocking:true,stale:!!war.stale,source:war.stale?"Last known schedule":"Calculated training reservation",detail:"Training cutoff to ranked war start; not a confirmed dose schedule"});
+    if(war&&valid(war.start)){
+      const row=rows.find(e=>e.id==="war-start");
+      if(row){row.blocking=true;row.stale=!!war.stale;
+        if(!(valid(war.end)&&war.end>war.start)){
+          row.originalStart=war.start;row.start=row.end=Math.max(now,war.start);
+          row.detail=[row.detail,"War end not supplied"].filter(Boolean).join(" · ");
+          if(war.start<=now)row.title=war.stale?"Last known ranked war · end unknown":"Ranked war active · end unknown";
+        }
+      }
+    }
+    for(const e of rows)if(e.kind==="racing"&&e.detail==="End not supplied"){e.originalStart=e.start;e.start=e.end=Math.max(now,e.start);}
+    const visible=rows.filter(e=>e.start<end&&e.end>=now&&!(e.end===now&&e.start<now));
+    const spans=[],pins=[],lanes=Array.from({length:maxLanes},()=>[]);
+    for(const e of visible.slice().sort((a,b)=>Number(b.blocking===true)-Number(a.blocking===true)||a.start-b.start||b.end-a.end||String(a.id).localeCompare(String(b.id)))){
+      const left=x(e.start),right=x(e.end),range=e.end>e.start;
+      const lane=range&&right-left>=30?lanes.findIndex(items=>items.every(i=>right+2<=i.left||left>=i.right+2)):-1;
+      if(lane>=0){const item={event:e,left,right,lane,clippedStart:e.start<now,clippedEnd:e.end>end};spans.push(item);lanes[lane].push(item);}
+      else pins.push({event:e,x:left,range,overflow:range&&right-left>=30});
+    }
+    // Nearby marker clusters retain separate exact anchors and full event detail.
+    const groups=new Map();
+    for(const p of pins.sort((a,b)=>a.x-b.x||String(a.event.id).localeCompare(String(b.event.id)))){
+      const i=Math.min(Math.ceil(width/bin)-1,Math.floor(p.x/bin));
+      if(!groups.has(i))groups.set(i,[]);groups.get(i).push(p);
+    }
+    const annotations=[...groups].map(([i,items])=>({items,side:i%2?"bottom":"top",x:(items[0].x+items.at(-1).x)/2,label:true}));
+    for(const side of ["top","bottom"]){
+      const same=annotations.filter(a=>a.side===side);
+      for(let i=0;i<same.length;i++){const a=same[i];a.label=(!same[i-1]||a.x-same[i-1].x>=136)&&(!same[i+1]||same[i+1].x-a.x>=136);}
+    }
+    return {now,end,width,spans,annotations,laneCount:Math.max(1,...spans.map(i=>i.lane+1)),count:visible.length};
+  }
+  function timelineDetail(e){
+    const timing=e.originalStart!=null?"Start "+time(e.originalStart)+" · end unknown":e.end>e.start?time(e.start)+" → "+time(e.end):time(e.start);
+    return '<div class="activity-timeline-detail-row activity-'+e.kind+'"><strong>'+esc(timelineIcons[e.kind]+" "+e.title)+'</strong><span>'+esc(timing)+'</span><small>'+esc(kinds[e.kind]+" · "+timelineStatus(e)+" · "+(e.source??"Not supplied"))+'</small>'+(e.detail?'<small>'+esc(e.detail)+'</small>':"")+'</div>';
+  }
+  function renderTimeline(list,now,days=7,war=null){
+    const layout=timelineLayout(list,now,days,war),{width,end}=layout,pct=v=>(v/width*100).toFixed(5)+"%";
+    const ticks=[];
+    for(let at=Math.ceil(now/(6*H))*6*H;at<end;at+=6*H){
+      const major=at%D===0;
+      ticks.push('<span class="activity-time-tick'+(major?' is-day':'')+'" style="--x:'+pct((at-now)/(end-now)*width)+'" aria-hidden="true"><span>'+(major?'<b>'+esc(dateLabel(at).slice(5))+'</b>':"")+esc(shortTime(at))+'</span></span>');
+    }
+    let seq=0;const templates=[];
+    const button=(events,body,cls,style)=>{
+      const id=String(seq++),e=events[0],label=events.length===1?e.title+" · "+timelineStatus(e)+" · "+time(e.originalStart??e.start)+(e.end>e.start?" to "+time(e.end):"")+(e.originalStart!=null?" · end unknown":""):events.length+" nearby events; activate to review each time";
+      templates.push('<template data-activity-timeline-content="'+id+'">'+events.map(timelineDetail).join("")+'</template>');
+      return '<button type="button" class="'+cls+'" style="'+style+'" data-activity-timeline-item="'+id+'" aria-pressed="false" aria-label="'+esc(label)+'">'+body+'</button>';
+    };
+    const spans=layout.spans.slice().sort((a,b)=>a.event.start-b.event.start||a.lane-b.lane).map(i=>{
+      const e=i.event,cls="activity-time-span activity-"+e.kind+(e.blocking?" is-blocking":" is-advisory")+(e.stale||e.recoveryReview?" is-review":"")+(i.clippedStart?" continues-left":"")+(i.clippedEnd?" continues-right":"");
+      return button([e],'<span aria-hidden="true">'+timelineIcons[e.kind]+'</span><span class="activity-time-span-title">'+esc(e.title)+'</span>',cls,"--x:"+pct(i.left)+";--w:"+pct(i.right-i.left)+";--lane:"+i.lane);
+    }).join("");
+    const markers=layout.annotations.map(a=>{
+      const events=a.items.map(i=>i.event),e=events[0],cluster=events.length>1,label=cluster?events.length+" events":e.title;
+      const half=a.label?56:18,center=Math.max(half,Math.min(width-half,a.x));
+      const cls="activity-time-pin activity-"+(cluster?"event":e.kind)+" is-"+a.side+(a.label?" has-label":"")+(cluster?" is-cluster":"")+(events.some(x=>x.recoveryReview||x.stale)?" is-review":"")+(events.some(x=>x.blocking===true)?" is-reserved":"");
+      const anchors=a.items.map(i=>'<i class="activity-pin-anchor is-'+a.side+' activity-'+i.event.kind+'" style="--x:'+pct(i.x)+'" aria-hidden="true"></i>').join("");
+      const body='<span class="activity-time-pin-icon" aria-hidden="true">'+(cluster?String(events.length):timelineIcons[e.kind])+'</span>'+(a.label?'<span class="activity-time-pin-label">'+esc(label)+'</span>':"");
+      return anchors+button(events,body,cls,"--x:"+pct(center));
+    }).join("");
+    return '<div class="activity-unified-timeline" data-activity-timeline><div class="activity-timeline-heading"><strong>Next '+days+' days · TCT</strong><small>Scroll to explore · select an event for details</small></div>'+
+      '<div class="activity-timeline-scroll" tabindex="0" role="region" aria-label="Scrollable '+days+' day activity timeline"><div class="activity-time-canvas" style="--canvas-width:'+width+'px;--lanes:'+layout.laneCount+'"><div class="activity-time-ruler">'+ticks.join("")+'</div><div class="activity-time-track"><div class="activity-time-grid" aria-hidden="true">'+ticks.join("")+'</div><div class="activity-time-now" aria-hidden="true"><span>NOW</span></div><div class="activity-time-spans">'+spans+'</div>'+markers+'</div></div></div>'+
+      '<div class="activity-timeline-legend"><span><i class="activity-legend-block"></i> Training reservation</span><span><i class="activity-legend-advisory"></i> Informational / forecast</span><span><i class="activity-legend-pin"></i> Timed event / short range</span><span><i class="activity-legend-review"></i> Review / stale</span></div>'+
+      '<div class="activity-timeline-inspector" data-activity-timeline-inspector aria-live="polite"><small>'+(layout.count?"Select a block or pin to keep its source, TCT timing and status visible. Clustered pins list every included event.":"No scheduled activities in this window.")+'</small></div>'+
+      '<div class="activity-timeline-tooltip" data-activity-timeline-tooltip hidden aria-hidden="true"></div>'+templates.join("")+'</div>'+
+      '<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&e.end>=now))+'</details>';
+  }
+  function timelineInteraction(view){
+    const item=e=>e.target?.closest?.("[data-activity-timeline-item]");
+    const get=(button,name)=>button?.closest("[data-activity-timeline]")?.querySelector("[data-activity-timeline-"+name+"]");
+    const hide=()=>{for(const t of view.querySelectorAll("[data-activity-timeline-tooltip]"))t.hidden=true;};
+    function populate(button,node){
+      const template=button.closest("[data-activity-timeline]").querySelector('template[data-activity-timeline-content="'+button.dataset.activityTimelineItem+'"]');
+      if(template)node.replaceChildren(template.content.cloneNode(true));
+    }
+    function show(button){
+      const tooltip=get(button,"tooltip");if(!tooltip)return;
+      populate(button,tooltip);tooltip.hidden=false;
+      const rect=button.getBoundingClientRect(),box=tooltip.getBoundingClientRect(),vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
+      tooltip.style.left=Math.max(8,Math.min(vw-box.width-8,rect.left+rect.width/2-box.width/2))+"px";
+      const y=rect.bottom+8+box.height<=vh?rect.bottom+8:rect.top-box.height-8;
+      tooltip.style.top=Math.max(8,Math.min(vh-box.height-8,y))+"px";
+    }
+    view.addEventListener("pointerover",e=>{const b=item(e);if(b&&e.pointerType!=="touch"&&!b.contains(e.relatedTarget))show(b);});
+    view.addEventListener("pointerout",e=>{const b=item(e);if(b&&!b.contains(e.relatedTarget))hide();});
+    view.addEventListener("focusin",e=>{const b=item(e);if(b)show(b);});
+    view.addEventListener("focusout",e=>{if(item(e))hide();});
+    view.addEventListener("scroll",hide,true);
+    view.addEventListener("keydown",e=>{if(e.key==="Escape")hide();});
+    view.addEventListener("click",e=>{
+      const b=item(e);if(!b)return;const inspector=get(b,"inspector");if(!inspector)return;
+      for(const other of b.closest("[data-activity-timeline]").querySelectorAll("[data-activity-timeline-item]"))other.setAttribute("aria-pressed",String(other===b));
+      populate(b,inspector);hide();
+    });
   }
   function renderGrid(list,now,days){
     const start=Math.floor(now/D)*D;
     return '<div class="activity-grid">'+Array.from({length:days},(_,i)=>{const at=start+i*D;return '<section><strong>'+dateLabel(at).slice(5)+'</strong>'+list.filter(e=>e.start<at+D&&e.end>=at).slice(0,8).map(e=>'<small class="activity-'+esc(e.kind)+'">'+esc(shortTime(Math.max(e.start,at))+" "+e.title)+'</small>').join("")+'</section>';}).join("")+'</div>';
   }
-  function render(list,{full=false,now=Date.now(),view=settings().view}={}){
+  function render(list,{full=false,now=Date.now(),view=settings().view,war=null}={}){
     const modes=full?["agenda","timeline","week","month"]:["agenda","timeline","week"];
     if(!modes.includes(view))view="agenda";
     const visible=list.filter(e=>e.start<now+(view==="month"?30:7)*D&&e.end>=now);
     return '<div class="activity-calendar"><div class="activity-tabs">'+modes.map(m=>'<button type="button" data-activity-view="'+m+'" aria-pressed="'+(view===m)+'">'+m[0].toUpperCase()+m.slice(1)+'</button>').join("")+'</div>'+
-      (!visible.length?'<p class="fine-print">No scheduled activities in this window.</p>':view==="agenda"?renderAgenda(visible):view==="timeline"?renderTimeline(visible,now):renderGrid(visible,now,view==="month"?30:7))+
+      (view==="timeline"?renderTimeline(list,now,7,war):!visible.length?'<p class="fine-print">No scheduled activities in this window.</p>':view==="agenda"?renderAgenda(visible):renderGrid(visible,now,view==="month"?30:7))+
       '<small>Forecasts are tentative. The Energy tile remains the action and confirmation interface.</small></div>';
   }
   function settingsDialog(onChange,button){
@@ -273,7 +378,7 @@ const tornActivityScheduler=(()=>{
     return '<form class="activity-manual-form" data-activity-form><label>Activity <input name="title" maxlength="100" required placeholder="Faction chain"></label><label>Category <select name="kind">'+Object.entries(kinds).map(([id,label])=>'<option value="'+id+'">'+label+'</option>').join("")+'</select></label><label>Start (TCT) <input type="datetime-local" name="start" required></label><label>End (TCT) <input type="datetime-local" name="end" required></label><label><input type="checkbox" name="blocking" checked> Reserve time (pause training)</label><small>Manual War activities also calculate a four-Xanax preparation cutoff when automatic war mode is enabled.</small><button type="submit">Add activity</button><small role="status"></small></form>';
   }
   function wire(view,onChange){
-    if(view.dataset.activityBound==="1")return;view.dataset.activityBound="1";
+    if(view.dataset.activityBound==="1")return;view.dataset.activityBound="1";timelineInteraction(view);
     view.addEventListener("click",e=>{
       const mode=e.target.closest("[data-activity-view]"),remove=e.target.closest("[data-activity-remove]");
       if(mode){write("settings",{...settings(),view:mode.dataset.activityView});onChange();}
@@ -289,5 +394,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineLayout,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
 })();

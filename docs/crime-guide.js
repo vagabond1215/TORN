@@ -561,7 +561,7 @@ const tornCrimeGuide = (() => {
       (reserves.warReserve||reserves.rehabReserve?'<small>Reserved cash: war $'+number(reserves.warReserve)+' · rehab $'+number(reserves.rehabReserve)+(reserves.shortfall?" · exceeds available budget":"")+'</small>':"")+'</div>';
   }
   function calendarCard(training,full=false){
-    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(calendarEvents(training),{full})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
+    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(calendarEvents(training,training.now),{full,now:training.now,war:training.activity.war})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
   }
   function renderCalendar(){
     loadOcFilters();loadRecFilters();
