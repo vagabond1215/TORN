@@ -10,7 +10,9 @@ const scheduler=new Function("tornGuideApi","localStorage",read("activity-schedu
 const t=new Function("tornTctClock","tornGuideApi","tornActivityScheduler","tornRightRail","tornRoadmap","localStorage",read("tools-guide.js")+"\nreturn tornToolsGuide;")(clock,api,scheduler,{controls:()=>""},{activitiesOpen:()=>false},store);
 const health=scheduler.addictionSnapshot(now);assert.equal(health.penalty,3);
 let rows=t.quickStatusModel(state,health,now,now+60000),v=id=>rows.find(x=>x.id===id);
-assert.equal(rows.length,5);assert.equal(v("addiction").value,"3% · 60");assert.equal(v("addiction").tone,"warning");
+assert.equal(rows.length,5);assert.equal(rows.map(x=>x.id).join(","),"activity,addiction,drug,booster,medical");
+for(const p of [0,1,2,3,4,5,6,10]){const row=t.quickStatusModel(state,{penalty:p,level:"normal"},now).find(x=>x.id==="addiction");assert.equal(row.tone,p>=5?"danger":p>0?"warning":"ready");}
+assert.equal(t.quickStatusModel(state,{penalty:2,level:"restricted"},now).find(x=>x.id==="addiction").tone,"warning");assert.equal(v("addiction").value,"3% · 60");assert.equal(v("addiction").tone,"warning");
 assert.equal(v("activity").value,"In flight - Switzerland 1800");assert.equal(v("activity").icon,"travel");assert.equal(v("activity").href,"#calendar");assert.equal(v("drug").value,"3600");assert.equal(v("booster").value,"Ready");
 rows=t.quickStatusModel(state,health,now+60000);assert.equal(v("activity").value,"In flight - Switzerland 1740");assert.equal(v("drug").value,"3540");
 rows=t.quickStatusModel(state,health,now+1801000);assert.equal(v("activity").value,"Verify arrival");assert.equal(v("addiction").value,"—");assert.equal(v("drug").tone,"stale");
@@ -26,4 +28,6 @@ delete state.errors.travel;
 const markup=t.quickLinks("home");assert.ok(markup.includes('aria-controls="quick-tools-menu"')&&markup.includes('id="quick-tools-menu"')&&markup.includes("Manage bookmarks")&&markup.includes("Torn Report")&&markup.includes("data-quick-status-refresh"));
 assert.equal((markup.match(/data-quick-status="/g)||[]).length,5);assert.ok(markup.includes('data-quick-status="activity" data-status-icon="racing"'));
 assert.ok(markup.includes('aria-expanded="false"'));
+assert.ok(markup.indexOf('data-quick-status="activity"')<markup.indexOf('data-quick-status="addiction"'));
+for(const id of ["activity","addiction","drug","booster","medical"]){const start=markup.indexOf('data-quick-status="'+id+'"'),end=markup.indexOf("</a>",start),node=markup.slice(start,end);assert.ok(node.includes("<svg")&&node.includes("<path d=\"M")||node.includes("<svg")&&node.includes("<path d=\"m"));assert.ok(!node.includes("&lt;path"));}
 console.log("Quick status countdown, shared addiction, unknown/stale states and bookmark menu markup passed.");
