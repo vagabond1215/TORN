@@ -344,6 +344,12 @@ const tornTrainSequence=(()=>{
       if(isBooster)rowInfo[i]={maximum,allowance,held,qty,used:rowUsed,tier,happy:0,dvdBefore:v.costs.dvd};
       if(isBooster&&a.max&&maximum===null&&!planning){v.errors.push("MAX requires loaded inventory.");return false;}
       if((type==="xanax"||type==="ecstasy")&&!waitFor(v.drug,"Drug cooldown"))return false;
+      // Live scheduling only: a dose may not overrun the hard clearance
+      // deadline, even if its immediate training gain would be attractive.
+      if(cfg.requireDrugClear&&["xanax","ecstasy"].includes(type)){
+        const duration=type==="xanax"?Math.max(cfg.xanaxCDMin*60,cfg.warXanaxSeconds??28800):Math.max(cfg.ecstasyCDMin*60,14400);
+        if(v.time+duration>limit){cutoff=true;return false;}
+      }
       if(type==="train"){
         if(a.when==="full"&&!waitFor(fullEnergyDelay(),"Full Energy",false))return false;
         if(a.when==="drug"&&beforeXanax&&!waitFor(v.drug,"Drug cooldown before Xanax"))return false;
@@ -460,7 +466,7 @@ const tornTrainSequence=(()=>{
     }
     return {state:v,limit,gymCost,canTrain,fullEnergyDelay,advance,waitFor,execute,run,finish,snapshot,restore,tornDay,untilMidnight,get cutoff(){return cutoff;}};
   }
-  function trainingPurchases(pointsHeld=0,{excludeOwned=true}={}){
+  function trainingPurchases(pointsHeld=0,{excludeOwned=true,reserveXanax=0}={}){
     const items=itemList();
     const owned=(name,category)=>{
       const list=tornGuideApi.state.inventory[category];
@@ -473,7 +479,7 @@ const tornTrainSequence=(()=>{
       },0);
     };
     const supplies=[
-      ["xanax","Xanax",owned("Xanax","Drug"),p.xanaxPrice,1],
+      ["xanax","Xanax",Math.max(0,owned("Xanax","Drug")-reserveXanax),p.xanaxPrice,1],
       ["ecstasy","Ecstasy",owned("Ecstasy","Drug"),p.ecstasyPrice,1],
       ["dvd","Erotic DVD",owned("Erotic DVD","Booster"),p.dvdPrice,1],
       ["refill","Points",pointsHeld,p.pointPrice,30],
@@ -518,26 +524,32 @@ const tornTrainSequence=(()=>{
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
       Object.assign(p,{startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
       const cash=Math.max(0,Number(budget)||0),excludeOwned=options.excludeOwned!==false;
-      const purchases=trainingPurchases(0);
+      const deadline=Number.isFinite(options.deadline)?options.deadline:null;
+      const end=deadline===null?604800:Math.min(604800,Math.floor((deadline-now.getTime())/1000)-60);
+      if(end<=0)return [];
+      const bounded=end<604800,requireDrugClear=bounded&&!!options.requireDrugClear;
+      const purchases=trainingPurchases(0,{reserveXanax:Math.max(0,Number(options.reserveXanax)||0)});
       const cashCost=(result,engine)=>excludeOwned?purchases(result.costs).cost:engine?engine.finish([],{tail:false}).money:result.money;
       const actionsFor=id=>id==="natural"?cycleActions("natural"):editedPlans.has(id)?steps[id]:cycleActions(id);
       const ids=templates.map(([id])=>id).filter(id=>id==="natural"||!options.naturalOnly&&!excludedPlans.budget.has(id)&&(id!=="custom"||editedPlans.has(id))&&actionsFor(id).length&&!actionsFor(id).some(x=>options.blockDrugs&&["xanax","ecstasy"].includes(x.type)||x.type==="dvd"&&id!=="jump"||x.type==="externalHappy"&&id!=="maxhappy"));
-      const projection={actionsFor,respectOffset:false,refillUsedToday:energyRefillUsedToday(now),skipUsedRefill:true,partialBudget:cash,partialOptions:{priceOf:cashCost,blockDrugs:!!options.blockDrugs}};
-      const natural=mixedProjection(["natural"],604800,{...projection,repeatLast:true});
+      const projection={actionsFor,respectOffset:false,refillUsedToday:energyRefillUsedToday(now),skipUsedRefill:true,requireDrugClear,warXanaxSeconds:options.warXanaxSeconds??28800,partialBudget:cash,partialOptions:{priceOf:cashCost,blockDrugs:!!options.blockDrugs}};
+      const natural=mixedProjection(["natural"],end,{...projection,repeatLast:true});
       const candidates=ids.map(id=>id==="natural"?{id,data:natural}:{id});
-      const proposal=ids.length===1?{data:natural}:optimizeChart(candidates,48,604800,cash,[],{projection,priceOf:cashCost,minDepth:36,finishWindow:true});
+      const proposal=ids.length===1?{data:natural}:optimizeChart(candidates,48,end,cash,[],{projection,priceOf:cashCost,minDepth:Math.max(4,Math.ceil(end/18000)),finishWindow:true});
       const data=proposal?.data;
       if(!data||data.errors.length||cashCost(data)==null||cashCost(data)>cash)return [];
+      if(requireDrugClear&&data.log.some(e=>["xanax","ecstasy"].includes(e.type)&&e.start.time+(e.type==="xanax"?Math.max(p.xanaxCDMin*60,options.warXanaxSeconds??28800):Math.max(p.ecstasyCDMin*60,14400))>end))return [];
       const sequence=[...data.segments.map(s=>({id:s.id,start:s.start,at:s.at,gain:s.gain})),...(data.partialSegment?[{...data.partialSegment,partial:true}]:[])];
       const first=sequence[0],firstData=data.firstCycle;
       if(!first||!firstData)return [];
       const cycleExecution=trainingExecution(firstData.log),execution=trainingExecution(data.log);
       if(!cycleExecution.some(x=>x.type==="train"&&x.energy>0))return [];
       const id=first.id,label=templates.find(x=>x[0]===id)?.[2]??id;
-      const selected={id,label,source:options.naturalOnly?"natural":"optimal-budget",sequence,gain:data.gain,money:data.money,cashCost:cashCost(data),excludeOwned,used:data.used,costs:data.costs,cycles:data.segments.length,drugRisk:firstData.costs.xanax+firstData.costs.ecstasy>0,startEnergy:"current",generatedAt:now.getTime(),execution,cycleExecution,cycleSpend:cashCost(firstData),timing:{xanaxCD:Math.round(p.xanaxCDMin*60),ecstasyCD:Math.round(p.ecstasyCDMin*60),boosterCap:p.boosterCapH*3600,candyCD:Math.round(1800*p.candyCDMultiplier),dvdCD:Math.round(21600*p.dvdCDMultiplier)}};
+      const selected={id,label,source:options.naturalOnly?"natural":"optimal-budget",sequence,gain:data.gain,money:data.money,cashCost:cashCost(data),excludeOwned,used:data.used,costs:data.costs,cycles:data.segments.length,drugRisk:firstData.costs.xanax+firstData.costs.ecstasy>0,startEnergy:"current",generatedAt:now.getTime(),horizonSeconds:end,deadline:bounded?deadline:null,execution,cycleExecution,cycleSpend:cashCost(firstData),timing:{xanaxCD:Math.round(p.xanaxCDMin*60),ecstasyCD:Math.round(p.ecstasyCDMin*60),boosterCap:p.boosterCapH*3600,candyCD:Math.round(1800*p.candyCDMultiplier),dvdCD:Math.round(21600*p.dvdCDMultiplier)}};
       const forecastDays=options.restockForecastDays;
       const horizons=[...new Set([1,7,28,...(Number.isInteger(forecastDays)&&forecastDays>=1&&forecastDays<=28?[forecastDays]:[])])];
       const periodFor=days=>{
+        if(bounded&&days*86400>end)return {days,gain:null,value:null,energy:null,costs:null};
         if(days===7)return {days,gain:data.gain,value:data.money,energy:data.used,costs:data.costs};
         if(days<7){
           const events=data.log.filter(e=>e.end.time<=days*86400);
@@ -563,7 +575,7 @@ const tornTrainSequence=(()=>{
       };
       const periods=horizons.map(periodFor);
       selected.periods=periods.filter(period=>[1,7,28].includes(period.days));
-      if(forecastDays!=null)selected.restockCosts=periods.find(x=>x.days===forecastDays)?.costs??null;
+      if(forecastDays!=null)selected.restockCosts=bounded&&forecastDays*86400>=end?data.costs:periods.find(x=>x.days===forecastDays)?.costs??null;
       return [selected];
     }finally{ctx=previous;Object.assign(p,old);}
   }
@@ -1027,10 +1039,10 @@ const tornTrainSequence=(()=>{
     const data=engine.finish(list,{tail:false});
     return {...data,elapsed:v.time,offset,completed,segments,partialSegment,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
-  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false,matchTemplateStart=false,repeatLast=false,partialBudget=null,partialOptions={}}={}){
+  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false,matchTemplateStart=false,repeatLast=false,partialBudget=null,partialOptions={},requireDrugClear=false,warXanaxSeconds=28800}={}){
     const first=sequence[0],offset=respectOffset?Math.min(end,startingTime[first]??0):0;
     const clockSeconds=Math.round(p.tornClockMin*60)+offset;
-    const engine=createEngine({limitSeconds:end-offset,startEnergy:matchTemplateStart?startingEnergy[first]:"current",allowPartialDvd,skipUsedRefill,
+    const engine=createEngine({limitSeconds:end-offset,startEnergy:matchTemplateStart?startingEnergy[first]:"current",allowPartialDvd,skipUsedRefill,requireDrugClear,warXanaxSeconds,
       refillUsedToday:refillUsedToday&&clockSeconds<86400,
       startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
       tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900});
