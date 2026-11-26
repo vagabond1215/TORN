@@ -631,7 +631,7 @@ const tornTrainSequence=(()=>{
   function simulate(list,overrides={}){
     const side=Object.keys(steps).find(id=>steps[id]===list);
     const engine=createEngine({startEnergy:startingEnergy[side],midnightJump:midnightJumps.has(side),...overrides});
-    const prepared=side?cycleStart(side,list,engine,{adaptive:startingEnergy[side]==="current"||overrides.startEnergy==="current",prepare:startingEnergy[side]==="current"||overrides.startEnergy==="current"}):list;
+    const prepared=side?cycleStart(side,list,engine,{adaptive:startingEnergy[side]==="current"||overrides.startEnergy==="current",prepare:startingEnergy[side]==="current"||overrides.startEnergy==="current",livePolicy:startingEnergy[side]==="current"||overrides.startEnergy==="current"}):list;
     if(prepared)engine.run(prepared);
     return engine.finish(list);
   }
@@ -1058,7 +1058,7 @@ const tornTrainSequence=(()=>{
     const segments=[];
     while(list.length&&completed<cycles&&v.time<=engine.limit){
       const before=v.time,statBefore=v.stat,logStart=v.log.length,checkpoint=cycleCheckpoint(v,offset,id),prefix=Number.isFinite(end)?engine.snapshot():null;
-      const actions=cycleStart(id,list,engine,{adaptive:liveStart||startingEnergy[id]==="current"||completed>0,prepare:liveStart||completed>0||startingEnergy[id]==="current",livePolicy:liveStart});
+      const actions=cycleStart(id,list,engine,{adaptive:liveStart||startingEnergy[id]==="current"||completed>0,prepare:liveStart||completed>0||startingEnergy[id]==="current",livePolicy:liveStart||startingEnergy[id]==="current"});
       if(!actions||!engine.run(actions)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
       completed++;
       segments.push({id,at:offset+v.time,start:offset+before,logStart,gain:v.stat-statBefore});
@@ -1089,7 +1089,7 @@ const tornTrainSequence=(()=>{
       if(!actions.length||v.time>engine.limit)break;
       const before=v.stat,start=offset+v.time,logStart=v.log.length,checkpoint=cycleCheckpoint(v,offset,id),prefix=Number.isFinite(end)?engine.snapshot():null;
       const prepare=!matchTemplateStart||index>0||startingEnergy[id]==="current";
-      const prepared=cycleStart(id,actions,engine,{adaptive:prepare,prepare,livePolicy:!matchTemplateStart});
+      const prepared=cycleStart(id,actions,engine,{adaptive:prepare,prepare,livePolicy:!matchTemplateStart||startingEnergy[first]==="current"});
       if(!prepared||!engine.run(prepared,{midnightJump:midnightJumps.has(id)})){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
       segments.push({id,at:offset+v.time,start,logStart,gain:v.stat-before});
       if(matchTemplateStart&&start===offset+v.time){
