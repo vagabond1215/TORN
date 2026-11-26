@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City Guide - Passive Visible Status Bridge
 // @namespace    https://vagabond1215.github.io/TORN/
-// @version      2.6.0
+// @version      2.6.1
 // @description  Synchronize visible status bars, ranked market observations and opted-in personal activity logs to your local Torn City Guide. Read-only, no API key or network calls.
 // @match        https://www.torn.com/*
 // @match        https://torn.com/*
@@ -84,13 +84,17 @@
   // END personal log helpers
   if(window.top!==window)return;
   if(isGuide){
+    // Version-only handshake: no player identity, account data or API requests.
+    const announceVersion=()=>window.dispatchEvent(new CustomEvent("torn-guide-companion-version",{detail:JSON.stringify({version:"2.6.1"})}));
+    window.addEventListener("torn-guide-request-companion-version",announceVersion);
+    announceVersion();
     let requestedLogOwner=null;
     function shareLog(){
       if(location.hash!=="#log"||document.visibilityState!=="visible"||!requestedLogOwner)return;
       const stored=GM_getValue(logPrefix+"rows:"+requestedLogOwner,null);
       const packet=stored?.playerId===requestedLogOwner?stored:null;
       window.dispatchEvent(new CustomEvent("torn-guide-log-snapshot",{detail:JSON.stringify({
-        version:1,playerId:requestedLogOwner,companionVersion:"2.6.0",capturedAt:packet?.capturedAt??null,
+        version:1,playerId:requestedLogOwner,companionVersion:"2.6.1",capturedAt:packet?.capturedAt??null,
         matched:packet?.matched??0,skipped:packet?.skipped??0,rows:Array.isArray(packet?.rows)?packet.rows.slice(0,logLimit):[]
       })}));
     }
@@ -119,10 +123,10 @@
       const meta=GM_getValue(archiveMeta,null);
       if(!meta?.buckets){
         const packet=GM_getValue(marketKey,null);
-        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.6.0",bridgeAt:Date.now()})}));
+        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.6.1",bridgeAt:Date.now()})}));
         return;
       }
-      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.6.0",bridgeAt:Date.now(),buckets:meta.buckets})}));
+      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.6.1",bridgeAt:Date.now(),buckets:meta.buckets})}));
       if(transferTimer!==null)clearTimeout(transferTimer);
       const pending=Object.entries(meta.buckets).filter(([id,rev])=>force||sent.get(id)!==rev);
       const next=()=>{
