@@ -234,7 +234,7 @@ const tornCrimeGuide = (() => {
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
     recOwner=owner;collectView="ready";incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
-    try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v)){recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));if(!v.includes("calendar")&&localStorage.getItem("torn-city-guide:calendar-introduced:"+owner)!=="true"){recEnabled.add("calendar");localStorage.setItem("torn-city-guide:calendar-introduced:"+owner,"true");}}}catch{}
+    try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v)){recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));if(!v.includes("calendar")&&localStorage.getItem("torn-city-guide:calendar-introduced:"+owner)!=="true"){recEnabled.add("calendar");localStorage.setItem("torn-city-guide:rec-types:"+owner,JSON.stringify([...recEnabled]));localStorage.setItem("torn-city-guide:calendar-introduced:"+owner,"true");}}}catch{}
   }
   let growthSettingsOpen=false;
   function excludeOwned(){try{return localStorage.getItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"))!=="false";}catch{return true;}}
@@ -476,7 +476,7 @@ const tornCrimeGuide = (() => {
     return '<li class="rec-pickpocket"><div><strong>Recommended targets</strong>'+(rows.length?'<ul class="rec-pick-targets">'+rows.join("")+'</ul>':'<small>No incomplete unique targets at this risk level.</small>')+'</div></li>';
   }
   function currentActivityWar(now=Date.now()){
-    const settings=energyWarSettings(),war=rankedWar(now);
+    const settings=energyWarSettings(),manual=tornActivityScheduler.events().filter(e=>e.kind==="war"&&e.end>now).sort((a,b)=>a.start-b.start)[0],war=rankedWar(now)??(manual?{start:manual.start,end:manual.end,mode:"manual",source:"Manual Calendar war"}:null);
     if(settings.mode==="off"||settings.mode==="faction"&&!war?.mode)return null;
     return tornActivityScheduler.warWindow(war,settings,now);
   }
@@ -495,7 +495,7 @@ const tornCrimeGuide = (() => {
     const now=Date.now(),activity=activityLimits(now),settings=tornActivityScheduler.settings();
     const health=tornActivityScheduler.addiction(!!iconFresh,iconTexts,settings,activity.war);
     const addictionDebuff=health.penalty==null?[]:[health.penalty],highAddiction=health.blockDrugs;
-    const edu=educationModel(),enrolled=Boolean((edu.id!=null&&edu.id!==0&&edu.id!=="0"&&edu.id!=="0"&&edu.id!=="")||(Number(edu.deadline)>now));
+    const edu=educationModel(),enrolled=Boolean((edu.id!=null&&edu.id!==0&&edu.id!=="0"&&edu.id!=="")||(Number(edu.deadline)>now));
     const perks=payload("perks","perks"),jobPerks=Object.entries(perks||{}).filter(([key])=>/job|company/i.test(key)).flatMap(([,v])=>Array.isArray(v)?v:[]).map(x=>typeof x==="string"?x:[x?.name,x?.description,x?.effect].filter(Boolean).join(" "));
     const protectedEducation=jobPerks.some(x=>/\bRestraint\b|education is unaffected by drug addiction|education.*immune.*addiction/i.test(x));
     const educationRisk=enrolled&&!protectedEducation&&health.penalty!=null&&health.penalty>=5;
@@ -986,11 +986,11 @@ const tornCrimeGuide = (() => {
     if(avoidDrugs)return {first,due:war.start,label:"Preserve Energy · drug use excluded by Focus or addiction restrictions"};
     if(held===null)return {first,due:null,label:"Refresh to verify Xanax inventory"};
     const ready=now+live.drug*1000,remaining=4-stacked;
-    const fit=Math.max(0,Math.floor((desiredClear-ready)/interval));
+    const fit=Math.max(0,Math.floor((war.start-ready)/interval));
     const doses=Math.min(remaining,held,fit);
-    if(!doses)return {first,due:war.start,label:held===0?"No Xanax on hand · preserve Energy for war":"Preserve Energy · another dose cannot clear by buffer"};
+    if(!doses)return {first,due:war.start,label:held===0?"No Xanax on hand · preserve Energy for war":"Preserve Energy · another dose cannot clear before war"};
     const due=Math.max(ready,desiredClear-doses*interval);
-    return {first,due,label:(due>now?"Wait, then ":"")+"Take Xanax"+(doses<remaining?" · "+doses+" of "+remaining+" remaining doses fit":" · dose "+(stacked+1)+" of 4")};
+    return {first,due,label:(due>now?"Wait, then ":"")+"Take Xanax"+(doses<remaining?" · "+doses+" of "+remaining+" remaining doses fit":" · dose "+(stacked+1)+" of 4")+(due+doses*interval>desiredClear?" · clearance buffer reduced":"")};
   }
   function energyWarAdvice(training,now=Date.now()){
     const settings=energyWarSettings(),war=currentActivityWar(now);
