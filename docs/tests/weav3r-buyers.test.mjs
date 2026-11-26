@@ -17,9 +17,11 @@ function fixture(fetchResponse, storage = new Map()) {
   const calls = [];
   const handlers = {};
   const nodes = Object.fromEntries([
-    "[data-query-buyers]", ".inventory-buyer-badge", ".inventory-buyer-status", ".inventory-buyer-results"
+    "[data-inventory-detail]", "[data-query-buyers]", ".inventory-buyer-badge", ".inventory-buyer-status", ".inventory-buyer-results"
   ].map(selector => [selector, {}]));
-  const row = { dataset: { buyerItem: "886", buyerQty: "10" }, querySelector: key => nodes[key] };
+  nodes["[data-inventory-detail]"].dataset = { inventoryDetail: "fixture" };
+  nodes["[data-query-buyers]"].setAttribute = () => {};
+  const row = { querySelectorAll: () => [], dataset: { buyerItem: "886", buyerQty: "10" }, querySelector: key => nodes[key] };
   nodes["[data-query-buyers]"].closest = () => row;
   const sandbox = vm.createContext({
     AbortSignal,
@@ -40,7 +42,7 @@ function fixture(fetchResponse, storage = new Map()) {
   });
   const guide = vm.runInContext(script + "\n({ api:weav3rBuyers, render:inventoryDetailRow })", sandbox);
   const click = () => handlers.click({
-    target: { closest: selector => nodes[selector] }
+    preventDefault: () => {}, target: { closest: selector => nodes[selector] }
   });
   return { ...guide, click, nodes, calls, storage, advance: ms => { time += ms; } };
 }
@@ -52,7 +54,8 @@ test("only clicking Query Buyers sends a credential-free item request and render
     trader(23, 4600)
   ]));
   const initial = f.render(item, "Tool", 0);
-  assert.match(initial, /Query Buyers/);
+  assert.match(initial, /data-query-buyers/);
+  assert.match(initial, /aria-label="Query Weav3r buyers for Torn City Times"/);
   assert.match(initial, /intent=sell&amp;item=886/);
   assert.doesNotMatch(initial, /inventory-buyer-icon/);
   assert.equal(f.calls.length, 0);
@@ -92,7 +95,7 @@ test("stale upstream timestamps and unresolved item IDs do not confirm availabil
   await f.api.query(886);
   assert.match(f.render(item, "Tool", 0), /Stale result/);
   assert.doesNotMatch(f.render(item, "Tool", 0), /inventory-buyer-icon/);
-  assert.doesNotMatch(f.render({ name: "Unknown" }, "Tool", 0), /Query Buyers/);
+  assert.doesNotMatch(f.render({ name: "Unknown" }, "Tool", 0), /data-query-buyers/);
 });
 
 test("rate limiting uses the header when readable and a fallback when hidden", async () => {
