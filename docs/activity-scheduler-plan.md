@@ -31,3 +31,11 @@ Scope: `vagabond1215/TORN`, `docs/` only. Energy remains the current-action and 
 - Synthetic fixed-clock tests: 34h cutoff; deadline/clearance boundary; late start, drug restrictions and no stock; confirmed prefix preservation; war end; rehab fits/doesn't fit, active war blocks trip, budget reserve and unknown addiction; manual blocking events; render all views; existing full-cycle charts unchanged.
 - Verify source syntax, run controlled simulator tests, verify deployed asset versions. Live authenticated game/browser validation remains manual.
 - Source references: https://wiki.torn.com/wiki/Switzerland ; https://wiki.torn.com/wiki/Drug ; https://wiki.torn.com/wiki/Cooldown ; https://wiki.torn.com/wiki/Traveling .
+
+## Follow-up: live Energy and activity sources
+1. Live stack normalization: HJ/99k retain tiers and skip held doses, bounded gym spending, explicit zero/full/live standalone starts. Optimal and Optimal Budget use a common live baseline. Preserve custom templates.
+2. Rehab confirmation: fresh count increase plus returned status; snapshot prior to reservation; record fee delta exactly once if present; missing permission or shape leaves reservation unconfirmed.
+3. Add current faction chain, own race schedule, official event calendar and personal time slot. Never manufacture future chain schedules or race end times.
+4. Actual expense ledger: rehab counter delta and manual war/rehab cash entries; deduct only in shared-budget mode.
+5. Active war: opt-in recent outgoing ranked-war attack read, explicit truncated-history label; no automated attacks.
+6. Test live API shapes, permissions, current-energy combinations, return from rehab, and mobile/browser interactions. Source: https://www.torn.com/swagger.php and https://wiki.torn.com/wiki/Calendar.
