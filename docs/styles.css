@@ -2340,3 +2340,38 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-watch-status:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:3px}
 .growth-watch-status:is(:hover,:focus-visible)::after{content:attr(data-tooltip);position:absolute;z-index:10;bottom:calc(100% + .35rem);right:-2.8rem;width:max-content;max-width:min(17rem,70vw);padding:.4rem .55rem;border:1px solid var(--border);border-radius:4px;background:var(--raised);color:var(--text);font-size:.72rem;font-weight:500;line-height:1.35;text-align:left;white-space:normal;box-shadow:0 2px 8px #0004;pointer-events:none}
 .growth-tabs button[aria-expanded="false"]{border-bottom-color:transparent}
+
+/* Global secondary bar: compact status strip and slide-down bookmark menu. */
+#tool-quickbar{position:relative;z-index:20;overflow:visible}
+#tool-quickbar .quick-inner{position:relative;min-width:0}
+.quick-tools{position:relative;align-self:stretch;flex:0 0 auto}
+.quick-tools-toggle{display:flex;align-items:center;gap:.35rem;height:var(--guide-bar-height);padding:0 .65rem;border:0;border-right:1px solid var(--border);background:transparent;color:var(--accent-strong);font:inherit;font-size:.8rem;font-weight:650;cursor:pointer}
+.quick-tools-toggle:hover,.quick-tools-toggle[aria-expanded="true"]{background:var(--raised)}
+.quick-tools-chevron{font-size:.7rem;transition:transform .15s}
+.quick-tools-toggle[aria-expanded="true"] .quick-tools-chevron{transform:rotate(180deg)}
+.quick-tools-menu{position:absolute;left:0;top:100%;width:min(250px,calc(100vw - 1rem));max-height:min(65vh,460px);overflow:auto;z-index:40;display:grid;gap:0;background:var(--surface);border:1px solid var(--border);border-top:0;border-radius:0 0 5px 5px;box-shadow:0 8px 18px #0005;transform-origin:top;animation:quick-tools-slide .16s ease-out}
+.quick-tools-menu[hidden]{display:none!important}
+@keyframes quick-tools-slide{from{opacity:0;transform:translateY(-6px) scaleY(.92)}to{opacity:1;transform:translateY(0) scaleY(1)}}
+@media(prefers-reduced-motion:reduce){.quick-tools-menu{animation:none}.quick-tools-chevron{transition:none}}
+.quick-tool-bookmark,.quick-tools-manage{display:flex;align-items:center;gap:.65rem;padding:.55rem .7rem;color:var(--text);text-decoration:none;font-size:.8rem;min-width:0}
+.quick-tool-bookmark:hover,.quick-tools-manage:hover{background:var(--raised);color:var(--accent-strong)}
+.quick-tool-bookmark img,.quick-tool-bookmark svg{width:22px;height:22px;flex:0 0 22px;object-fit:contain}
+.quick-tool-bookmark span:not(.quick-favicon-fallback){overflow-wrap:anywhere}
+.quick-tools-menu>small{padding:.6rem .7rem;color:var(--muted)}
+.quick-tools-manage{border-top:1px solid var(--border);color:var(--accent-strong)}
+.quick-status-strip{display:flex;flex:1 1 auto;align-items:stretch;min-width:0;overflow-x:auto;scrollbar-width:thin}
+.quick-status{display:flex;align-items:center;gap:.3rem;flex:0 0 auto;min-height:var(--guide-bar-height);padding:0 .5rem;white-space:nowrap;color:var(--text);font-size:.75rem;font-variant-numeric:tabular-nums;text-decoration:none}
+.quick-status svg{flex:0 0 17px;width:17px;height:17px;color:var(--muted)}
+.quick-status:hover{background:var(--raised);color:var(--accent-strong)}
+.quick-status[data-tone="ready"]{color:var(--accent-strong)}
+.quick-status[data-tone="warning"]{color:#e6ad68}
+.quick-status[data-tone="danger"]{color:#ff7474}
+.quick-status[data-tone="stale"],.quick-status[data-tone="unknown"]{color:var(--muted)}
+:root[data-theme="light"] .quick-status[data-tone="warning"]{color:#85501c}
+:root[data-theme="light"] .quick-status[data-tone="danger"]{color:#b42323}
+.quick-status[data-tone="ready"] svg,.quick-status[data-tone="warning"] svg,.quick-status[data-tone="danger"] svg{color:currentColor}
+.quick-status-refresh{flex:0 0 auto}
+.quick-status-refresh:disabled{opacity:.35;cursor:default}
+.quick-tools-toggle:focus-visible,.quick-tool-bookmark:focus-visible,.quick-tools-manage:focus-visible,.quick-status:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.activity-rehab-details{margin-top:.7rem}
+@media(max-width:650px){.quick-tools-toggle{padding-inline:.4rem}.quick-tools-toggle>svg{display:none}.quick-status{padding-inline:.35rem}.quick-status-refresh{width:28px!important}}
