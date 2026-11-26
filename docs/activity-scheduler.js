@@ -57,6 +57,12 @@ const tornActivityScheduler=(()=>{
     return {...known,due,clearAt,projectedEnergy,bufferReduced,doses:Array.from({length:count},(_,i)=>({at:due+i*interval,energy:Math.min(1000,energy+(i+1)*250)})),
       label:(due>now+1000?"Wait, then ":"")+"Take Xanax · "+count+" of "+remaining+" remaining doses fit"+(bufferReduced?" · clearance buffer reduced":"")};
   }
+  function addictionSnapshot(now=Date.now(),s=settings(),war=null){
+    const st=tornGuideApi.state,icons=st.data?.icons?.icons;
+    const fresh=!!icons&&activityFresh("icons",now,15*60000);
+    const texts=fresh?Object.values(icons).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")):[];
+    return {...addiction(fresh,texts,s,war),fresh};
+  }
   function addiction(iconFresh,iconTexts,s=settings(),war=null){
     const relevant=iconTexts.filter(x=>/addict/i.test(x));
     const values=relevant.map(x=>x.match(/(?:reduced by|reduction of|[-−])\s*(\d+(?:\.\d+)?)\s*%/i)?.[1]).filter(x=>x!=null).map(Number);
@@ -281,5 +287,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
 })();
