@@ -995,15 +995,18 @@ const tornTrainSequence=(()=>{
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
     loadPlanPreferences();if(!keepClock)loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
     const active=activeTemplates();
+    const optimize=showOptimal||showOptimalBudget;
+    const rangeTemplates=active.length||!optimize?active:templates;
     for(const [id] of templates)if(!editedPlans.has(id))steps[id]=cycleActions(id);
-    const oneCycle=active.map(([id,,label])=>({id,label,data:projectCycles(id,1)}));
+    const rangeCycles=rangeTemplates.map(([id,,label])=>({id,label,data:projectCycles(id,1)}));
+    const oneCycle=active.length?rangeCycles:[];
     const shortest=entries=>Math.max(60,...entries.map(({id,data})=>startingTime[id]+data.elapsed));
-    p.hours=shortest(oneCycle)/3600;
+    p.hours=shortest(rangeCycles)/3600;
     const continuous=chartMode==="continuous",slots=continuous?28:chartCycles;
-    const duration=continuous?Math.max(shortest(oneCycle),continuousDays*86400):null;
+    const duration=continuous?Math.max(shortest(rangeCycles),continuousDays*86400):null;
     // The cycle count sets a common time window. Faster plans keep repeating
     // throughout that window, with the same cooldowns, refills and inventory.
-    const counted=continuous||chartCycles===1?oneCycle:active.map(([id,,label])=>({
+    const counted=continuous||chartCycles===1?rangeCycles:rangeTemplates.map(([id,,label])=>({
       id,label,data:projectCycles(id,chartCycles)
     }));
     let end=duration??shortest(counted);
@@ -1015,14 +1018,16 @@ const tornTrainSequence=(()=>{
     }
     const results=active.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true})}));
     const budget=typeof tornRoadmap==="undefined"?null:tornRoadmap.preferences().weeklyBudget;
-    const mixed=showOptimal&&(results.length||hasOverrides)?optimizeChart(results,slots,end):null;
-    const budgeted=showOptimalBudget&&(results.length||hasOverrides)?optimizeChart(results,slots,end,budget):null;
+    const candidates=optimize?templates.map(([id,,label])=>results.find(entry=>entry.id===id)??
+      {id,label,data:projectCycles(id,Infinity,{end,continuous:true})}):[];
+    const mixed=showOptimal?optimizeChart(candidates,slots,end):null;
+    const budgeted=showOptimalBudget?optimizeChart(candidates,slots,end,budget):null;
     const manual=hasOverrides?optimizeChart(results,slots,end,null,overrides):null;
     if(mixed)results.push({id:"mixed",label:"Optimal sequence",data:mixed.data});
     if(manual)results.push({id:"manual",label:"Manual",data:manual.data});
     if(budgeted)results.push({id:"budget",label:"Optimal Budget",data:budgeted.data});
     const chartHours=end/3600;
-    return controls()+(results.length||hasOverrides?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
+    return controls()+(results.length||hasOverrides||optimize?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
       '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,manual)+(showManual&&!manual?'<p class="fine-print">'+(hasOverrides?"The manual sequence does not fit this window.":"Choose at least one cycle in Manual settings.")+'</p>':"")+
       (showOptimalBudget&&!budgeted?'<p class="fine-print">No sequence fits the weekly budget.</p>':"")+(results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
