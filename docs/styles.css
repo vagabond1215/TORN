@@ -2225,3 +2225,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rec-unique-links summary{cursor:pointer;color:var(--accent-strong)}
 .rec-unique-links>a{display:block;padding:.15rem 0}
 @media(max-width:380px){.rec-header-refill{white-space:normal;max-width:7rem}.rec-crime-settings{gap:.2rem}.rec-crime-settings select{max-width:42%}}
+
+/* Crime settings use a modal; the primary filter controls stay visible. */
+.crime-settings-dialog{width:min(27rem,94vw)}
+.crime-settings-content{display:grid;gap:.55rem;padding:1rem}
+.crime-settings-content label{display:flex;align-items:center;gap:.5rem;font-size:.9rem;cursor:pointer}
+.crime-settings-content small{color:var(--muted);line-height:1.4}
