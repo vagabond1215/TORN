@@ -2327,3 +2327,16 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 @media(max-width:380px){
   .rec-tile-grid>.rec-tile>.rec-tile-heading .rec-header-refill{max-width:6.5rem;font-size:.65rem}
 }
+
+/* Keep the Energy counter heading and monitoring controls aligned, without
+   changing the 40px recommendation tile headers. */
+.growth-counter-header{display:flex;align-items:center;justify-content:space-between;gap:.35rem;width:100%;min-height:1.5rem}
+.growth-counter-header .growth-counter-title{flex:1;min-width:0;text-align:left;overflow-wrap:anywhere;font-weight:650;color:var(--text);line-height:1.35}
+.growth-counter-header .growth-counter-actions{position:static;flex-shrink:0;align-items:center}
+.growth-watch-status{position:relative;display:grid;place-items:center;width:1.5rem;height:1.5rem;flex-shrink:0;font-size:1.12rem;font-weight:800;line-height:1;color:#ff7474;cursor:help}
+.growth-watch-status[data-growth-watch-status="active"]{color:#8ecb51}
+:root[data-theme="light"] .growth-watch-status{color:#b42323}
+:root[data-theme="light"] .growth-watch-status[data-growth-watch-status="active"]{color:#39731e}
+.growth-watch-status:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:3px}
+.growth-watch-status:is(:hover,:focus-visible)::after{content:attr(data-tooltip);position:absolute;z-index:10;bottom:calc(100% + .35rem);right:-2.8rem;width:max-content;max-width:min(17rem,70vw);padding:.4rem .55rem;border:1px solid var(--border);border-radius:4px;background:var(--raised);color:var(--text);font-size:.72rem;font-weight:500;line-height:1.35;text-align:left;white-space:normal;box-shadow:0 2px 8px #0004;pointer-events:none}
+.growth-tabs button[aria-expanded="false"]{border-bottom-color:transparent}
