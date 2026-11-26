@@ -554,7 +554,7 @@ const tornTrainSequence=(()=>{
         const ids=[...templatesById.keys()];
         const lead=Math.max(1,Math.ceil(168/blockHours));
         const proposal=optimizeCycles(ids,Math.min(14,2*lead),604800,true,{
-          cap:cash,priceOf:cashCost,overrides:[],projection:{actionsFor,respectOffset:false}
+          cap:cash,priceOf:cashCost,overrides:[],projection:{actionsFor,respectOffset:false,refillUsedToday:cfg.refillUsedToday}
         });
         if(proposal?.data.firstCycle&&proposal.data.gain>selected.gain){
           mixed=proposal;
@@ -583,7 +583,7 @@ const tornTrainSequence=(()=>{
         const periods=horizons.map(days=>{
           const result=days===7?selected:mixed?
             mixedProjection(Array.from({length:Math.ceil(days/7)},()=>mixed.sequence).flat(),days*86400,
-              {actionsFor,respectOffset:false,fill:true}):
+              {actionsFor,respectOffset:false,fill:true,refillUsedToday:cfg.refillUsedToday}):
             runProgram(selected.id,templatesById.get(selected.id),selected.cycles,days*24,false,selected.allowPartialDvd).result;
           if(days===forecastDays)selected.restockCosts=result.costs;
           const unavailable=result.complete===false&&(!mixed||result.errors?.length);
@@ -642,7 +642,7 @@ const tornTrainSequence=(()=>{
   }
   function simulate(list,overrides={}){
     const side=Object.keys(steps).find(id=>steps[id]===list);
-    const engine=createEngine({startEnergy:startingEnergy[side],midnightJump:midnightJumps.has(side),refillUsedToday:energyRefillUsedToday(),...overrides});
+    const engine=createEngine({startEnergy:startingEnergy[side],midnightJump:midnightJumps.has(side),...overrides});
     engine.run(list);
     return engine.finish(list);
   }
@@ -809,7 +809,7 @@ const tornTrainSequence=(()=>{
     const list=steps[id],offset=startingTime[id],clockSeconds=Math.round(p.tornClockMin*60)+offset;
     const engine=createEngine({
       limitSeconds:end-offset,startEnergy:startingEnergy[id],midnightJump:midnightJumps.has(id),
-      refillUsedToday:clockSeconds<86400&&energyRefillUsedToday(),
+
       startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
       tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900
     });
@@ -835,11 +835,11 @@ const tornTrainSequence=(()=>{
     const data=engine.finish(list,{tail:false});
     return {...data,elapsed:v.time,completed,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
-  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false}={}){
+  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false}={}){
     const first=sequence[0],offset=respectOffset?Math.min(end,startingTime[first]??0):0;
     const clockSeconds=Math.round(p.tornClockMin*60)+offset;
     const engine=createEngine({limitSeconds:end-offset,startEnergy:"current",allowPartialDvd,
-      refillUsedToday:clockSeconds<86400&&energyRefillUsedToday(),
+      refillUsedToday:refillUsedToday&&clockSeconds<86400,
       startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
       tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900});
     const segments=[];
@@ -932,7 +932,9 @@ const tornTrainSequence=(()=>{
       '<label>Projection <select data-ts-chart-mode><option value="cycles" '+(chartMode==="cycles"?"selected":"")+'>Cycles</option><option value="continuous" '+(chartMode==="continuous"?"selected":"")+'>Continuous</option></select></label>'+
       (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
-      '<span class="fine-print">'+fmt(hours,2)+'h shown</span>'+cycleOverrideControls(slots,mixed)+'</div>';
+      '<span class="fine-print">'+fmt(hours,2)+'h shown</span>'+
+      (energyRefillUsedToday()?'<span class="ts-refill-caution" tabindex="0" aria-label="Refill caution" aria-describedby="ts-refill-caution-note"><span aria-hidden="true">⚠</span><span id="ts-refill-caution-note" role="tooltip">Today’s Points Energy refill has already been used.</span></span>':"")+
+      cycleOverrideControls(slots,mixed)+'</div>';
   }
   function render(context){
     if(context)ctx=context;
