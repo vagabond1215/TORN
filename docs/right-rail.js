@@ -4,14 +4,15 @@ const tornRightRail=(()=>{
   const timers=[["oc","Organized crime ready"],["rw","Ranked war"],["raid","Raid war"],
     ["virus","Virus completes"],["education","Education completes"],["flight","Travel arrival"],
     ["bank","Bank investment matures"],["point","Daily reset"]];
+  // Keep cooldowns excluded from the left timer list: they live in the global sub-bar.
   const order=[...cooldowns,...timers.filter(([id])=>id!=="point")];
-  const tabs=[["cooldowns","Cooldowns"],["timers","Timers"],["stocks","Stocks"]];
+  const tabs=[["timers","Timers"],["stocks","Stocks"]];
   const tabKey="torn-city-guide:right-rail:countdown-tab";
-  let busy=false,initialized=false,activeTab="cooldowns",refreshStatus="";
+  let busy=false,initialized=false,activeTab="timers",refreshStatus="";
   try{const saved=localStorage.getItem(tabKey);if(tabs.some(([id])=>id===saved))activeTab=saved;}catch{}
   const collapsed=new Set();
   const sectionKey="torn-city-guide:right-rail:hidden:v1";
-  const sections=[["timers","Cooldowns, timers and stocks",'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/>'],["networth","Net worth",'<path d="M3 3v18h18M6 15l5-5 4 3 6-8M16 5h5v5"/>'],["property","Property",'<path d="m3 10 9-7 9 7M5 9v12h14V9M10 21v-7h4v7"/>'],["merits","Merits",'<circle cx="12" cy="8" r="5"/><path d="m8 12-2 10 6-4 6 4-2-10"/>']];
+  const sections=[["timers","Timers and stocks",'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/>'],["networth","Net worth",'<path d="M3 3v18h18M6 15l5-5 4 3 6-8M16 5h5v5"/>'],["property","Property",'<path d="m3 10 9-7 9 7M5 9v12h14V9M10 21v-7h4v7"/>'],["merits","Merits",'<circle cx="12" cy="8" r="5"/><path d="m8 12-2 10 6-4 6 4-2-10"/>']];
   const hiddenSections=new Set();
   try{const saved=JSON.parse(localStorage.getItem(sectionKey)||"[]");if(Array.isArray(saved))for(const [id] of sections)if(saved.includes(id))hiddenSections.add(id);}catch{}
   function controls(){
@@ -33,7 +34,6 @@ const tornRightRail=(()=>{
     if(entry.at)return "Ready";
     if(["rw","raid"].includes(entry.id))return entry.fighting?"Active":entry.loaded===false?"Not loaded":"Not scheduled";
     if(entry.id==="bank")return tornGuideApi.state.data.money?"No deposit":"Not loaded";
-    if(cooldowns.some(([id])=>id===entry.id))return entry.note==="Not loaded"?"Not loaded":"Ready";
     return /not loaded|not scheduled|manual/i.test(entry.note||"")?"Not loaded":"No active timer";
   }
   function timerEntries(){
@@ -74,12 +74,12 @@ const tornRightRail=(()=>{
   }
   function clocks(){
     const entries=timerEntries();
-    const rows=(activeTab==="cooldowns"?cooldowns:timers).map(([id,label])=>{
+    const rows=timers.map(([id,label])=>{
       const entry=entries.get(id);
       return '<div class="rail-timer-row" title="'+safe(id==="virus"?virusTooltip():entry?.note||"Not loaded")+'">'+
         '<dt data-rail-timer-label="'+id+'">'+safe(["rw","raid"].includes(id)?entry?.title??label:label)+'</dt><dd data-rail-timer="'+id+'">'+safe(status(entry))+'</dd></div>';
     }).join("");
-    return '<section class="panel rail-section rail-timers" aria-label="Countdowns"><div class="rail-timer-header">'+
+    return '<section class="panel rail-timers"><div class="panel-heading"><h2>Timers &amp; stocks</h2></div><div class="rail-timer-header">'+
       '<div class="rail-timer-tabs" role="group" aria-label="Countdown views">'+tabs.map(([id,label])=>
         '<button type="button" data-rail-tab="'+id+'" aria-controls="rail-timer-content" aria-pressed="'+(activeTab===id)+'">'+label+'</button>').join("")+'</div></div>'+
       '<div class="panel-content" id="rail-timer-content">'+(activeTab==="stocks"?stockTimers():'<dl class="rail-timer-list">'+rows+'</dl>')+
@@ -90,26 +90,42 @@ const tornRightRail=(()=>{
     const body=rows.length?'<ul class="rail-merit-list">'+rows.map(x=>'<li><div class="rail-merit-row"><div><strong>'+safe(x.name)+'</strong><small>'+safe(x.detail)+' · '+safe(x.effort)+'</small></div>'+(x.link?'<a href="'+safe(x.link)+'" aria-label="View '+safe(x.name)+'">View</a>':"")+'</div>'+tornMeritGuide.affrontedDetails(x.name,"rail")+'</li>').join("")+'</ul>':'<p class="rail-snapshot-note">No confirmed unearned recommendations loaded. Open Merits or use the main Refresh button.</p>';
     return '<section class="panel rail-merits"><div class="panel-heading"><h2>Merits</h2><a href="#merits">View all</a></div><div class="panel-content">'+body+'</div></section>';
   }
-  function property(){
-    const raw=payload("property","property");
-    // user/property returns UserPropertyDetails whose property.name is a
-    // separate BasicProperty; upkeep is on the details object itself.
+  // The documented v2 user/property upkeep object contains daily property
+  // and staff charges, not accumulated debt. Never substitute one for the other.
+  function propertyModel(raw,icons=null){
     const p=raw?.upkeep?raw:raw?.property?.upkeep?raw.property:raw;
-    const name=p?.property?.name??p?.name??"Not loaded";
-    const upkeep=p?.upkeep;
-    const base=Number(upkeep?.property),staff=Number(upkeep?.staff);
-    const b=upkeep?.property!=null&&Number.isFinite(base);
-    const s=upkeep?.staff!=null&&Number.isFinite(staff);
-    const total=b&&s?base+staff:null;
-    const due=upkeep?.total??upkeep?.due??upkeep?.outstanding??p?.upkeep_due;
-    const currentTotal=due!=null&&Number.isFinite(Number(due))?Number(due):null;
-    return '<section class="panel rail-property"><div class="panel-heading"><h2>Property</h2></div>'+
-      '<div class="panel-content"><p class="rail-property-name">'+safe(name)+'</p>'+
-      '<dl class="home-stat-list">'+homePair("Daily upkeep",total==null?"Not available":"$"+formatNumber(total))+
-      (b?homePair("Property","$"+formatNumber(base)):"")+
-      (s?homePair("Staff","$"+formatNumber(staff)):"")+
-      homePair("Current total upkeep",currentTotal==null?"Not available":"$"+formatNumber(currentTotal))+
-      '</dl>'+sourceError("property")+'</div></section>';
+    const money=v=>v!==null&&v!==undefined&&v!==""&&(typeof v==="number"||typeof v==="string"&&/^\d+$/.test(v))&&Number.isSafeInteger(Number(v))&&Number(v)>=0?Number(v):null;
+    const upkeep=p?.upkeep,base=money(upkeep?.property),staff=money(upkeep?.staff);
+    const daily=base!==null&&staff!==null?base+staff:null;
+    // Accept explicitly named outstanding balances if a future API response
+    // or compatible cached response actually supplies one; total is ambiguous.
+    let due=[upkeep?.due,upkeep?.outstanding,p?.upkeep_due].map(money).find(x=>x!==null)??null;
+    let indicator=null;
+    for(const icon of Object.values(icons??{})){
+      const value=typeof icon==="string"?icon:[icon?.title,icon?.name,icon?.description,icon?.text].filter(Boolean).join(" ");
+      if(!/\bupkeep\b/i.test(value)||!/\b(?:due|owed|unpaid|outstanding)\b/i.test(value))continue;
+      // Only an explicitly labeled dollar amount, never percentage bands
+      // or daily costs, is an exact unpaid balance.
+      const m=value.match(/\b(?:upkeep\s+(?:due|owed|unpaid|outstanding)|(?:unpaid|outstanding)\s+upkeep)\s*[:=-]?\s*\$([\d,]+)(?![\d,.])/i);
+      if(due===null&&m)due=money(m[1].replace(/,/g,""));
+      const band=value.match(/\b(\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?)?)\s*%/);
+      if(band)indicator=band[1]+"% due (icon)";
+    }
+    return {name:p?.property?.name??p?.name??"Not loaded",base,staff,daily,due,indicator};
+  }
+  function property(){
+    const state=tornGuideApi.state,raw=payload("property","property");
+    const iconStamp=Number(state.fetchedAt?.icons||0),iconFresh=!state.errors?.icons&&iconStamp>0&&Date.now()-iconStamp>=0&&Date.now()-iconStamp<15*60000;
+    const p=propertyModel(state.errors?.property?null:raw,iconFresh?payload("icons","icons"):null);
+    const price=value=>value==null?"Not available":"$"+formatNumber(value);
+    return '<section class="panel rail-property"><div class="panel-heading"><h2>Property</h2><a class="rail-upkeep-link" href="https://www.torn.com/properties.php#/p=options&amp;tab=upkeep" target="_blank" rel="noopener noreferrer">Upkeep</a></div>'+
+      '<div class="panel-content"><p class="rail-property-name">'+safe(p.name)+'</p>'+
+      '<dl class="home-stat-list">'+homePair("Daily upkeep",price(p.daily))+
+      (p.base!==null?homePair("Property",price(p.base)):"")+
+      (p.staff!==null?homePair("Staff",price(p.staff)):"")+
+      homePair("Current total upkeep",p.due!==null?price(p.due):"Not reported")+
+      (p.indicator?homePair("Upkeep indicator",p.indicator):"")+
+      '</dl>'+(p.due===null?'<p class="rail-snapshot-note">Torn API reports daily charges, not the outstanding balance. Open Upkeep to view the amount owed.</p>':"")+sourceError("property")+'</div></section>';
   }
   function virusTooltip(){
     const raw=payload("virus","virus"), v=raw?.coding??raw?.current??raw?.virus??raw;
@@ -150,7 +166,7 @@ const tornRightRail=(()=>{
     }
     content.hidden=!showSections;
     content.innerHTML=showSections?[["timers",clocks],["networth",networthPanel],["property",property],["merits",merits]]
-      .filter(([id])=>!hiddenSections.has(id)).map(([id,fn])=>id==="timers"?fn():collapsible(fn(),id)).join(""):"";
+      .filter(([id])=>!hiddenSections.has(id)).map(([id,fn])=>collapsible(fn(),id)).join(""):"";
   }
   function tick(){
     const el=host();if(!el||el.hidden)return;
@@ -197,5 +213,5 @@ const tornRightRail=(()=>{
       }
     });
   }
-  return {init,render,tick,order,controls,meritsVisible:()=>!hiddenSections.has("merits")};
+  return {init,render,tick,order,controls,propertyModel,meritsVisible:()=>!hiddenSections.has("merits")};
 })();
