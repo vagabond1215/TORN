@@ -168,8 +168,8 @@ const tornToolsGuide=(()=>{
    addiction:'<path d="M12 5a3 3 0 0 0-5.8-1A4 4 0 0 0 3 9a4 4 0 0 0 .5 6.5A4 4 0 0 0 8 21a4 4 0 0 0 4-4V5Zm0 0a3 3 0 0 1 5.8-1A4 4 0 0 1 21 9a4 4 0 0 1-.5 6.5A4 4 0 0 1 16 21a4 4 0 0 1-4-4M7 4c0 2 1 3 3 3M3 9c2-1 4 0 4 2m-3.5 4.5C5 14 7 14 8 16m9-12c0 2-1 3-3 3m7 2c-2-1-4 0-4 2m3.5 4.5C19 14 17 14 16 16"/>',
    travel:'<path d="M17 21v-8l-5-3V4a2 2 0 0 0-4 0v6l-5 3v8l7-4z" transform="translate(2 0)"/><path d="M10 17v5"/>',
    racing:'<path d="M4.5 19a10 10 0 1 1 15 0zM12 15l4-5M6 12h.01M12 6h.01M18 12h.01"/><circle cx="12" cy="15" r="1"/>',
-   drug:'<path d="M5 19a5 5 0 0 1 0-7l7-7a5 5 0 0 1 7 7l-7 7a5 5 0 0 1-7 0zM8.5 8.5l7 7"/>',
-   booster:'<path d="m13 2-9 12h7l-1 8 10-12h-7l1-8z"/>',
+   drug:'<path d="M12 22v-6M12 16C9 13 9 7 12 2c3 5 3 11 0 14ZM12 16C7 15 4 11 3 5c5 2 8 6 9 11ZM12 16c5-1 8-5 9-11-5 2-8 6-9 11ZM12 17C7 18 4 16 2 13c5-1 8 1 10 4ZM12 17c5 1 8-1 10-4-5-1-8 1-10 4Z"/>',
+   booster:'<path d="M10 2h4v3h-4zM10.5 5v5l-3 4v6a2 2 0 0 0 2 2h5a2 2 0 0 0 2-2v-6l-3-4V5M7.5 15h9v4h-9z"/>',
    medical:'<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
    refresh:'<path d="M20 7v5h-5M4 17v-5h5M6 8a7 7 0 0 1 12-2l2 6M18 16a7 7 0 0 1-12 2l-2-6"/>',
    tools:'<path d="M4 6h16M4 12h16M4 18h16"/>'
