@@ -788,16 +788,20 @@ const tornTrainSequence=(()=>{
       (items.length?items.map(({name,quantity,price})=>'<span><span>'+$(name)+' × '+fmt(quantity)+'</span><span>'+dollars(price==null?null:quantity*price)+'</span></span>').join(""):'<span>No items</span>')+
       '</span></span>';
   }
-  function section(side,data){
+  function section(side,data,projection,hours,budget){
     const heading=templates.find(x=>x[0]===side)?.[2]??side;
     const metric=(label,value,extra="")=>'<span class="ts-title-metric '+extra+'"><small>'+label+'</small><strong>'+value+'</strong></span>';
+    const purchases=chartPurchases()(projection.costs),weekly=weeklyPurchaseCost()(projection);
     return '<details class="ts-side ts-template-card" data-ts-timeline="'+side+'" '+(openTimelines.has(side)?"open":"")+'><summary class="ts-template-header"><span class="ts-template-name">'+$(heading)+'</span>'+
-      metric("Cycle",fmt(data.elapsed/3600,2)+"h")+metric("Energy used",fmt(data.used)+" E")+metric("Stat change",data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked","ts-title-gain")+metric("Ending stat",data.complete?fmt(data.final,2):"—")+costMetric(side,data.money,data.consumed,"Consumed items")+
-      '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+mergedTimeline(side,data)+
+      metric("Window",fmt(hours,2)+"h · "+projection.segments.length+" cycles")+metric("Energy used",fmt(projection.used)+" E")+metric("Stat change","+"+fmt(projection.gain,2),"ts-title-gain")+metric("Ending stat",fmt(projection.final,2))+costMetric(side,purchases.cost,purchases.items,"Items to purchase")+
+      '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+
+      '<p class="fine-print">Peak rolling 7-day spend '+(weekly==null?"Unavailable":"$"+fmt(weekly)+(budget!=null&&weekly>budget?" · Over weekly budget":""))+
+      ' · Consumed value '+(projection.money==null?"Unavailable":"$"+fmt(projection.money))+' · One-cycle editor ('+fmt(data.elapsed/3600,2)+'h)</p>'+mergedTimeline(side,data)+
+      (projection.errors.length?'<p class="ts-error">'+projection.errors.map($).join(" · ")+'</p>':"")+
       (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join("; ")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
       '</details>';
   }
-  function optimizerCard(id,title,data){
+  function optimizerCard(id,title,data,hours){
     const metric=(label,value)=>'<span class="ts-title-metric"><small>'+label+'</small><strong>'+value+'</strong></span>';
     const dollars=cost=>cost==null?"Unavailable":"$"+fmt(cost);
     const offset=data.offset??0;
@@ -819,7 +823,7 @@ const tornTrainSequence=(()=>{
     const purchases=chartPurchases()(data.costs),cash=purchases.cost,weekly=weeklyPurchaseCost()(data);
     return '<details class="ts-side ts-template-card" data-ts-timeline="'+id+'" '+(openTimelines.has(id)?"open":"")+'>'+
       '<summary class="ts-template-header"><span class="ts-template-name">'+title+'</span>'+
-      metric("Sequence",fmt(data.time/3600,2)+"h · "+data.segments.length+" cycles")+
+      metric("Window",fmt(hours,2)+"h · "+data.segments.length+" cycles")+
       metric("Energy used",fmt(data.used)+" E")+metric("Stat change","+"+fmt(data.gain,2))+
       metric("Ending stat",fmt(data.final,2))+costMetric(id,cash,purchases.items,"Items to purchase")+
       '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+
@@ -844,7 +848,7 @@ const tornTrainSequence=(()=>{
       const x=xval(h).toFixed(1),y=yval(s).toFixed(1);
       return i?"H"+x+"V"+y:"M"+x+","+y;
     }).join(" ");
-    const seriesClass=(id,data)=>"ts-series ts-series-"+id+(data.complete?"":" is-blocked");
+    const seriesClass=(id,data)=>"ts-series ts-series-"+id+(data.errors.length?" is-blocked":"");
     const endpoint=(x,y)=>'<circle class="ts-series-end" cx="'+x+'" cy="'+y+'" r="3"/>';
     let out='<svg viewBox="0 0 910 260" class="ts-chart" role="img" aria-label="Projected stat growth over '+hours+' hours">';
     for(let i=0;i<5;i++){
@@ -858,7 +862,7 @@ const tornTrainSequence=(()=>{
       if(points[0].h!==0||points[0].s!==data.initial.stat)points.unshift({h:0,s:data.initial.stat});
       out+='<g class="'+seriesClass(id,data)+'"><path class="ts-series-stroke" d="'+path(points)+'"/>'+endpoint(xval(hours),yval(data.final))+'</g>';
     }
-    return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg class="'+seriesClass(id,data)+'" width="44" height="10" aria-hidden="true"><line class="ts-series-stroke" x1="2" y1="5" x2="42" y2="5"/>'+endpoint(35,5)+'</svg> '+$(label)+(data.complete?"":" (blocked)")+'</span>').join("")+'</div>';
+    return out+'</svg><div class="ts-legend ts-multi-legend">'+results.map(({id,label,data})=>'<span><svg class="'+seriesClass(id,data)+'" width="44" height="10" aria-hidden="true"><line class="ts-series-stroke" x1="2" y1="5" x2="42" y2="5"/>'+endpoint(35,5)+'</svg> '+$(label)+(data.errors.length?" (blocked)":"")+'</span>').join("")+'</div>';
   }
   function cycleActions(id){
     return id==="natural"?[{...make("train"),when:"full"}]:defaults[id]();
@@ -992,7 +996,7 @@ const tornTrainSequence=(()=>{
     if(natural)completed.set("natural",natural.completed);
     let best=null;
     const consider=data=>{
-      if(!best||data.gain>best.data.gain)best={data};
+      if(!best||data.gain>best.data.gain+1e-7)best={data};
     };
     const affordable=data=>{
       if(!weeklySpend)return true;
@@ -1090,8 +1094,8 @@ const tornTrainSequence=(()=>{
     if(manual)results.push({id:"manual",label:"Manual",data:manual.data});
     if(budgeted)results.push({id:"budget",label:"Optimal Budget",data:budgeted.data});
     const chartHours=end/3600;
-    return controls()+(results.length||hasOverrides||optimize?'<div class="ts-layout" data-template-count="'+(oneCycle.length+Number(Boolean(mixed))+Number(Boolean(budgeted)))+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+
-      (mixed?optimizerCard("optimal","Optimal",mixed.data):"")+(budgeted?optimizerCard("optimal-budget","Optimal Budget",budgeted.data):"")+'</div>'+
+    return controls()+(results.length||hasOverrides||optimize?'<div class="ts-layout" data-template-count="'+(oneCycle.length+Number(Boolean(mixed))+Number(Boolean(budgeted)))+'">'+oneCycle.map(x=>section(x.id,x.data,results.find(({id})=>id===x.id).data,chartHours,budget)).join("")+
+      (mixed?optimizerCard("optimal","Optimal",mixed.data,chartHours):"")+(budgeted?optimizerCard("optimal-budget","Optimal Budget",budgeted.data,chartHours):"")+'</div>'+
       '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,manual)+(showManual&&!manual?'<p class="fine-print">'+(hasOverrides?"The manual sequence does not fit this window.":"Choose at least one cycle in Manual settings.")+'</p>':"")+
       (showOptimal&&!mixed?'<p class="fine-print">No plans included in Optimal.</p>':"")+(showOptimalBudget&&!budgeted?'<p class="fine-print">No sequence fits the weekly budget.</p>':"")+(results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
