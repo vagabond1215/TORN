@@ -76,7 +76,7 @@ const tornTrainSequence=(()=>{
     showOptimalBudget=saved?.showOptimalBudget===true;
     selected.clear();openTimelines.clear();editedPlans.clear();
     for(const id of (Array.isArray(saved?.selected)?saved.selected:["natural","jump"]))if(valid.has(id))selected.add(id);
-    for(const id of (Array.isArray(saved?.expanded)?saved.expanded:[]))if(valid.has(id))openTimelines.add(id);
+    for(const id of (Array.isArray(saved?.expanded)?saved.expanded:[]))if(valid.has(id)||["optimal","optimal-budget"].includes(id))openTimelines.add(id);
     for(const [id] of templates){
       const plan=saved?.plans?.[id];
       startingEnergy[id]=["zero","full"].includes(plan?.energy)?plan.energy:defaultEnergy[id];
@@ -783,6 +783,36 @@ const tornTrainSequence=(()=>{
       (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join("; ")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
       '</details>';
   }
+  function optimizerCard(id,title,data){
+    const metric=(label,value)=>'<span class="ts-title-metric"><small>'+label+'</small><strong>'+value+'</strong></span>';
+    const dollars=cost=>cost==null?"Unavailable":"$"+fmt(cost);
+    const offset=data.offset??0;
+    const row=(time,label,state,previous)=>'<tr><td>'+clock(time)+'</td><td>'+$(label)+'</td>'+timelineCells(state,previous)+'</tr>';
+    let rows=row(offset,"Starting Energy",data.initial),cycleIndex=0;
+    for(const [index,step] of data.log.entries()){
+      while(data.segments[cycleIndex]?.logStart===index){
+        const cycle=data.segments[cycleIndex++];
+        const name=templates.find(([key])=>key===cycle.id)?.[2]??cycle.id;
+        rows+='<tr class="ts-dependent"><td>'+clock(cycle.start)+'</td><td colspan="7"><strong>'+$(("Cycle "+cycleIndex+" · "+name+" · "+clock(cycle.at-cycle.start)))+'</strong></td></tr>';
+      }
+      if(step.type==="train"&&step.end.energy===step.start.energy)continue;
+      const wait=["wait","autoWait"].includes(step.type);
+      const label=wait?waitTitle(step.reason??"")+" "+clock(step.end.time-step.start.time):
+        step.type==="happyReset"?"Happiness reset":
+        step.type==="candy"||step.type==="dvd"?(step.type==="candy"?"Candy":"eDVD")+" ×"+step.quantity:names[step.type]??step.type;
+      rows+=row(offset+step.end.time,label,step.end,step.start);
+    }
+    const cash=chartPurchases()(data.costs).cost,weekly=weeklyPurchaseCost()(data);
+    return '<details class="ts-side ts-template-card" data-ts-timeline="'+id+'" '+(openTimelines.has(id)?"open":"")+'>'+
+      '<summary class="ts-template-header"><span class="ts-template-name">'+title+'</span>'+
+      metric("Sequence",fmt(data.time/3600,2)+"h · "+data.segments.length+" cycles")+
+      metric("Energy used",fmt(data.used)+" E")+metric("Stat change","+"+fmt(data.gain,2))+
+      metric("Ending stat",fmt(data.final,2))+metric("Cost",dollars(cash))+
+      '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+
+      '<p class="fine-print">Purchase cost '+dollars(cash)+' · Peak rolling 7-day spend '+dollars(weekly)+' · Consumed value '+dollars(data.money)+'</p>'+
+      '<div class="ts-log"><div class="ts-log-scroller"><table><thead><tr><th>Time</th><th>Action</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th><th>Stat change</th><th>Current stat</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'+
+      (data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join(" · ")+'</p>':"")+'</details>';
+  }
   function chart(results,hours){
     const xval=hour=>80+hour/hours*800;
     let bottom=Infinity,top=-Infinity;
@@ -832,14 +862,14 @@ const tornTrainSequence=(()=>{
     let completed=0;
     const segments=[];
     while(list.length&&completed<cycles&&v.time<=engine.limit){
-      const before=v.time,statBefore=v.stat;
+      const before=v.time,statBefore=v.stat,logStart=v.log.length;
       if(completed>0){
         const delay=startingEnergy[id]==="full"?engine.fullEnergyDelay():0;
         if(delay&&!engine.waitFor(delay,"Full Energy",false))break;
       }
       if(!engine.run(list))break;
       completed++;
-      segments.push({id,at:offset+v.time,gain:v.stat-statBefore});
+      segments.push({id,at:offset+v.time,start:offset+before,logStart,gain:v.stat-statBefore});
       if(continuous&&v.time===before){
         // Instant actions still move forward in real time between repetitions.
         const delay=engine.fullEnergyDelay()||energyRules().minutes*60;
@@ -850,7 +880,7 @@ const tornTrainSequence=(()=>{
       }
     }
     const data=engine.finish(list,{tail:false});
-    return {...data,elapsed:v.time,completed,segments,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
+    return {...data,elapsed:v.time,offset,completed,segments,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
   function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false}={}){
     const first=sequence[0],offset=respectOffset?Math.min(end,startingTime[first]??0):0;
@@ -864,7 +894,7 @@ const tornTrainSequence=(()=>{
     for(const id of sequence){
       const actions=actionsFor(id),v=engine.state;
       if(!actions.length||v.time>engine.limit)break;
-      const before=v.stat;
+      const before=v.stat,start=offset+v.time,logStart=v.log.length;
       if(startingEnergy[id]==="zero"&&actions[0]?.type==="xanax"){
         if(!engine.waitFor(v.drug,"Drug cooldown"))break;
         if(v.energy>=engine.gymCost&&!engine.execute(make("train"),0))break;
@@ -872,7 +902,7 @@ const tornTrainSequence=(()=>{
       if(startingEnergy[id]==="full"&&v.energy<energyRules().cap&&
         !engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false))break;
       if(!engine.run(actions,{midnightJump:midnightJumps.has(id)}))break;
-      segments.push({id,at:offset+v.time,gain:v.stat-before});
+      segments.push({id,at:offset+v.time,start,logStart,gain:v.stat-before});
       if(!firstCycle){const snapshot=engine.finish(actions,{tail:false});firstCycle={...snapshot,costs:{...snapshot.costs},log:snapshot.log.slice()};}
     }
     const cycleState=engine.finish(sequence.flatMap(actionsFor),{tail:false});
@@ -885,11 +915,14 @@ const tornTrainSequence=(()=>{
     }
     const data=fill?engine.finish(sequence.flatMap(actionsFor),{tail:!engine.state.errors.length}):cycleState;
     return {...data,complete:data.complete&&segments.length===sequence.length,
-      elapsed:offset+data.time,segments,firstCycle,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
+      elapsed:offset+data.time,offset,segments,firstCycle,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
+  }
+  function chartPurchases(){
+    const credits=payload("money","money")?.points;
+    return trainingPurchases(Math.floor(positive(credits?.current??credits)??0));
   }
   function weeklyPurchaseCost(){
-    const credits=payload("money","money")?.points;
-    const purchases=trainingPurchases(Math.floor(positive(credits?.current??credits)??0));
+    const purchases=chartPurchases();
     return data=>{
       const costs={};
       const payments=[];
@@ -1043,7 +1076,8 @@ const tornTrainSequence=(()=>{
     if(manual)results.push({id:"manual",label:"Manual",data:manual.data});
     if(budgeted)results.push({id:"budget",label:"Optimal Budget",data:budgeted.data});
     const chartHours=end/3600;
-    return controls()+(results.length||hasOverrides||optimize?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
+    return controls()+(results.length||hasOverrides||optimize?'<div class="ts-layout" data-template-count="'+(oneCycle.length+Number(Boolean(mixed))+Number(Boolean(budgeted)))+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+
+      (mixed?optimizerCard("optimal","Optimal",mixed.data):"")+(budgeted?optimizerCard("optimal-budget","Optimal Budget",budgeted.data):"")+'</div>'+
       '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,manual)+(showManual&&!manual?'<p class="fine-print">'+(hasOverrides?"The manual sequence does not fit this window.":"Choose at least one cycle in Manual settings.")+'</p>':"")+
       (showOptimal&&!mixed?'<p class="fine-print">No plans included in Optimal.</p>':"")+(showOptimalBudget&&!budgeted?'<p class="fine-print">No sequence fits the weekly budget.</p>':"")+(results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
