@@ -821,7 +821,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .sidebar-character{min-width:0;border-bottom:1px solid var(--border)}
 .sidebar-character-summary{
   list-style:none;display:flex;justify-content:space-between;align-items:center;
-  gap:.3rem;padding:.68rem .55rem;min-height:43px;color:var(--accent-strong);
+  gap:.3rem;padding:0 .55rem;min-height:var(--guide-bar-height);color:var(--accent-strong);
   cursor:pointer;font-size:.76rem;line-height:1.28;
 }
 .sidebar-character-summary::-webkit-details-marker{display:none}
@@ -849,7 +849,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 @media(max-width:1000px){
   .home-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .home-work{grid-column:auto}
-  .sidebar-character-summary{padding:.6rem .4rem;gap:.2rem}
+  .sidebar-character-summary{padding-inline:.4rem;gap:.2rem}
   .sidebar-character-details{padding:.2rem .35rem .5rem}
   .sidebar-facts .home-pair,.sidebar-facts .home-pair dd{font-size:.64rem}
   .sidebar-bars .home-bar-head,.sidebar-bars .home-bar-head span{font-size:.59rem}
@@ -860,7 +860,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
   .layout>main{padding-top:.8rem}
   .sidebar{margin-bottom:0}
   .home-summary-grid{grid-template-columns:1fr}
-  .sidebar-character-summary{padding:.65rem .7rem}
+  .sidebar-character-summary{padding-inline:.7rem}
   .sidebar-character-details{padding:.3rem .65rem}
 }
 
@@ -1939,7 +1939,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 
 /* Home recommendations: distinct centered heading strips, docked preferences. */
 .rec-tile>h3{display:flex;align-items:center;justify-content:center;text-align:center;min-height:34px;margin:-.7rem -.7rem .5rem;padding:.35rem .7rem;box-sizing:border-box;background:color-mix(in srgb,var(--surface) 70%,var(--canvas));border-bottom:1px solid var(--border);border-radius:5px 5px 0 0}
-.home-activities>.panel-heading{display:flex;align-items:center;justify-content:center;text-align:center;min-height:34px;padding:.35rem .65rem;background:color-mix(in srgb,var(--surface) 70%,var(--canvas))}
+.home-activities>.panel-heading{display:flex;align-items:center;justify-content:center;text-align:center;min-height:var(--guide-bar-height);padding:0 .65rem;background:color-mix(in srgb,var(--surface) 70%,var(--canvas))}
 .home-activities>.panel-heading h2{margin:0;font-size:.9rem}
 .guide-right-rail>.home-activities{margin:0;border:0;border-radius:0}
 .guide-right-rail>.home-activities+[data-rail-content]:not([hidden]){border-top:1px solid var(--border)}
@@ -2000,6 +2000,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 
 /* Reports dock belongs to the center column, not the full-width header. */
 #reports-dock[hidden]{display:none!important}
+.layout>main:has(>#reports-dock[hidden]+#topic-view:not([hidden]) .home-recommendations){padding-top:0}
+#reports-dock[hidden]+#topic-view .home-recommendations{margin-top:0}
+#reports-dock[hidden]+#topic-view .home-recommendations .rec-titlebar{border-top:0;border-radius:0 0 4px 4px}
+#reports-dock[hidden]+#topic-view .home-recommendations .rec-type-toggles button{min-height:var(--guide-bar-height)}
+
 .layout>main:has(>#reports-dock:not([hidden])){padding-top:0}
 #reports-dock{min-width:0;margin:0 0 .45rem}
 #reports-dock .torn-reports-strip{border:1px solid var(--border);border-top:0;border-radius:0 0 5px 5px;overflow:hidden}
