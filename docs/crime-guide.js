@@ -515,7 +515,7 @@ const tornCrimeGuide = (() => {
     const {settings,session,activity,health,iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,budget,reserves,options}=context;
     const plan=tornStatPlanner.homeTrainingAdvice(budget,prefs.risk,options);
     const scheduled=activity.statusBlocked?[]:activityEventsForTraining(session,plan?.program,now);
-    const live=recoverySnapshot(),profile=payload("profile","profile"),st=tornGuideApi.state;
+    const live=recoverySnapshot(now),profile=payload("profile","profile"),st=tornGuideApi.state;
     const status=String(profile?.status?.state??"").toLowerCase();
     const travelAvailable=Number(st.identity?.level??profile?.level)>=15&&["okay","ok"].includes(status)&&!st.errors?.profile&&now-Number(st.fetchedAt?.profile||0)<15*60000&&!activity.blocked;
     const rehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&e.end>now)?null:tornActivityScheduler.rehabWindow({now,health,war:activity.war,actions:scheduled.map(e=>e.start),drugReady:live?.drug>0?now+live.drug*1000:null,s:settings,travelAvailable});
@@ -711,9 +711,17 @@ const tornCrimeGuide = (() => {
     const inputs=tornTrainSequence.liveInputs(st,Date.now(),tornBarProjection),projected=inputs.energy;
     const cd=payload("cooldowns","cooldowns"),drug=cd?.drug;
     const remaining=drug==null?null:Math.max(0,Number(typeof drug==="object"?drug.remaining??drug.time_left:drug)-(Date.now()-Number(st.fetchedAt?.cooldowns||Date.now()))/1000);
-    if(!program||!projected)return {ready:false,label:"Load training and Energy data",due:null};
-    if(inputs.criticalIssues.length||Date.now()-Number(program.generatedAt)>300000)return {ready:false,label:"Refresh live training data before starting",due:null};
-    if(activityLimits().blocked||program.deadline&&Date.now()>=program.deadline-60000)return {ready:false,label:"Scheduled activity prevents training",due:null};
+    if(!program||!projected||!inputs.happy)return {ready:false,label:"Load current Energy and Happiness",due:null};
+    const generated=Number(program.generatedAt),activity=activityLimits(inputs.now);
+    if(inputs.criticalIssues.length||!Number.isFinite(generated)||inputs.now-generated>300000||
+      program.source==="optimal-budget"&&(inputs.drug===null||inputs.booster===null))
+      return {ready:false,label:"Refresh live training data before starting",due:null};
+    const profile=payload("profile","profile"),factionId=Number(profile?.faction_id??profile?.faction?.id);
+    if(energyWarSettings().mode!=="off"&&factionId>0&&!inputs.sources.factionWars.ready)
+      return {ready:false,label:"Refresh faction war schedule before starting",due:null};
+    if(activity.blocked||program.deadline&&inputs.now>=program.deadline-60000)return {ready:false,label:"Scheduled activity prevents training",due:null};
+    if(activity.deadline!=null&&activity.deadline<generated+program.horizonSeconds*1000+60000&&activity.deadline!==program.deadline)
+      return {ready:false,label:"Activity deadline changed; refresh training plan",due:null};
     const e=projected.current,cap=projected.maximum,cost=Number(plan.gym?.energy)||10;
     const first=(program.cycleExecution??program.execution).find(actionable),startsZero=program.startEnergy==="zero"&&program.id!=="natural";
     if(program.source==="optimal-budget"||program.source==="natural"){
@@ -738,12 +746,10 @@ const tornCrimeGuide = (() => {
     return {ready:true,label:"Ready to start "+program.label,due:null};
   }
   let recoveryBusy=false,recoveryMessage="",readinessExpires=0;
-  function recoverySnapshot(){
-    const st=tornGuideApi.state,bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns"),at=Number(st.fetchedAt?.cooldowns||0),now=Date.now(),barAt=Math.max(Number(st.fetchedAt?.bars||0),Number(st.bridge?.timestamp||0));
-    const E=tornBarProjection("energy",bars?.energy,barAt,now),H=tornBarProjection("happy",bars?.happy,barAt,now);
-    const cooldown=k=>{const x=cd?.[k],v=Number(typeof x==="object"?x?.remaining??x?.time_left:x);return x!=null&&Number.isFinite(v)&&v>=0?Math.max(0,v-(now-at)/1000):null;};
-    if(!E||!H||!at||!barAt||st.errors?.bars||st.errors?.cooldowns)return null;
-    return {energy:E.current,cap:E.maximum,happy:H.current,maxHappy:H.maximum,drug:cooldown("drug"),booster:cooldown("booster"),at:now};
+  function recoverySnapshot(now=Date.now()){
+    const input=tornTrainSequence.liveInputs(tornGuideApi.state,now,tornBarProjection),E=input.energy,H=input.happy;
+    if(!E||!H||input.drug===null||input.booster===null)return null;
+    return {energy:E.current,cap:E.maximum,happy:H.current,maxHappy:H.maximum,drug:input.drug,booster:input.booster,at:now};
   }
   // Compare actual API snapshots, not extrapolated bars or the planned
   // starting state. A newly observed cooldown alone is not proof of a dose.
@@ -929,6 +935,7 @@ const tornCrimeGuide = (() => {
     const result=(state,detail)=>({state,label:"API auto-detection: "+(state==="active"?"Active":state==="inactive"?"Inactive":"Requires action")+" · "+detail});
     if(!enabled)return result("inactive","Disabled in Energy settings.");
     if(!connected)return result("action","Connect the Torn API.");
+    if(war?.stale)return result("action","Last known war schedule; refresh to verify.");
     if(war?.phase==="active")return result("inactive","Active war; training detection paused.");
     if(war?.phase==="stacking"){
       if(busy)return result("active","Refreshing war preparation.");
@@ -1072,7 +1079,7 @@ const tornCrimeGuide = (() => {
     },0):null;
     const fresh=key=>Number(state.fetchedAt?.[key]||0)>0&&now-Number(state.fetchedAt[key])<5*60000&&!state.errors?.[key];
     const stockFresh=Number(state.fetchedAt?.["inventory:Drug"]||0)>0&&now-Number(state.fetchedAt["inventory:Drug"])<5*60000;
-    const advice=war.stale||training.activity?.statusBlocked?{phase:war.phase,first:war.cutoff,due:null,doses:[],label:war.stale?"Last known war schedule · refresh to verify":"Training and war stacking paused · verify player status"}:warStackAdvice(war,settings,fresh("bars")&&fresh("cooldowns")?recoverySnapshot():null,stockFresh?held:null,training.avoidWarDrugs,now);
+    const advice=war.stale||tornTrainSequence.liveAccountStatus(state,now).blocked?{phase:war.phase,first:war.cutoff,due:null,doses:[],label:war.stale?"Last known war schedule · refresh to verify":"Training and war stacking paused · verify player status"}:warStackAdvice(war,settings,fresh("bars")&&fresh("cooldowns")?recoverySnapshot(now):null,stockFresh?held:null,training.avoidWarDrugs,now);
     return {...war,...advice,active:now>=war.cutoff,attacks:tornActivityScheduler.warAttackSummary(war,now)};
   }
   function warAttackPanel(summary){
@@ -1084,9 +1091,9 @@ const tornCrimeGuide = (() => {
   function warCounter(advice){
     return '<div class="growth-next-step" data-war-counter><div class="growth-counter-header"><small class="growth-counter-title">Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(advice.mode?" · "+esc(advice.mode):"")+'</small><div class="growth-counter-actions">'+growthWatchIndicator(growthWatchStatus(null,warTraining,advice))+
       '<button type="button" data-growth-session="war-refresh" aria-label="Refresh war preparation" title="Refresh war preparation" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button></div></div><strong class="growth-next-clock" data-war-clock>'+
-      esc(advice.phase==="active"?"Active":advice.due==null?"Verify":advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
+      esc(advice.stale?"Verify":advice.phase==="active"?"Active":advice.due==null?"Verify":advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
       '</strong><span data-war-step>'+esc(advice.label)+'</span>'+
-      (advice.phase==="active"?warAttackPanel(advice.attacks):'<small data-war-progress>'+esc(warProgressText(advice))+'</small>')+recoveryPanel()+'</div>';
+      (advice.phase==="active"&&!advice.stale?warAttackPanel(advice.attacks):'<small data-war-progress>'+esc(warProgressText(advice))+'</small>')+recoveryPanel()+'</div>';
   }
   let warTraining=null;
   function growthCard(training,prefs){
@@ -1095,7 +1102,7 @@ const tornCrimeGuide = (() => {
     let setup=growthSettings()+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
     warTraining=training;
     const war=energyWarAdvice(training);
-    if(war?.active&&!training.activity.statusBlocked)return '<div class="growth-card">'+setup+warCounter(war)+(activeSession?'<small>Training session held; reconciling before war preparation.</small>':"")+'</div>';
+    if(war?.active&&!training.activity.statusBlocked)return '<div class="growth-card">'+setup+warCounter(war)+(activeSession?'<small>'+(war.stale?"Training session retained; verify war schedule before replanning.":"Training session held; reconciling before war preparation.")+'</small>':"")+'</div>';
     if(training.activity.blocked)return '<div class="growth-card">'+setup+'<div class="growth-warning">Training paused · '+esc(training.activity.reason??"reserved activity")+'</div>'+(activeSession?'<small>Active session retained · '+activeSession.index+' / '+activeSession.actions.length+' steps confirmed.</small>':"")+'<a href="#calendar">View calendar</a></div>';
     if(activeSession&&sessionDeadlineConflict(activeSession,training.activity))return '<div class="growth-card">'+setup+'<div class="growth-warning">Current cycle conflicts with '+esc(training.activity.reason??"a scheduled activity")+'. Confirming completed actions and replanning the remainder.</div>'+recoveryPanel()+'</div>';
     if(training.activity.deadline!=null)setup+='<small data-activity-cutoff="'+training.activity.deadline+'">Training cutoff: '+esc(tornActivityScheduler.time(training.activity.deadline))+' · '+esc(training.activity.reason??"activity")+'</small>';
@@ -1153,9 +1160,12 @@ const tornCrimeGuide = (() => {
       if(sessionOwner!==owner||loadTrainingSession()!==session)return;
       const st=tornGuideApi.state;
       if(["bars","cooldowns","battlestats"].some(k=>Number(st.fetchedAt?.[k]||0)<requested||st.errors?.[k]))throw Error("Fresh training data unavailable");
+      const activity=activityLimits();
+      if(activity.statusBlocked||activity.war?.stale){
+        recoveryMessage="Training session retained; verify account status and war schedule.";return;
+      }
       observeTrainingStep(session);reconcileTrainingProgress(session);
-      if(activityLimits().statusBlocked)return;
-      if(!sessionDeadlineConflict(session,activityLimits())&&session.index<session.actions.length)return;
+      if(!sessionDeadlineConflict(session,activity)&&session.index<session.actions.length)return;
       // Preserve the completed prefix; unknown partial-cycle spend is
       // conservatively charged at the old cycle estimate, never refunded.
       const historyKey="torn-city-guide:activity-training-history:"+owner;
@@ -1196,7 +1206,7 @@ const tornCrimeGuide = (() => {
       const stableKey=activity.blocked?[activity.war?.phase??"","blocked",activity.reason??""].join("|"):key;
       if(lastActivityState!==null&&lastActivityState!==stableKey&&!recoveryBusy)refreshActivityView(view);
       lastActivityState=stableKey;
-      if(!activity.statusBlocked&&sessionDeadlineConflict(session,activity)&&!recoveryBusy&&Date.now()>=deadlineRetryAt){void replanActivityConflict(view,session);return;}
+      if(!activity.statusBlocked&&!activity.war?.stale&&sessionDeadlineConflict(session,activity)&&!recoveryBusy&&Date.now()>=deadlineRetryAt){void replanActivityConflict(view,session);return;}
     }else lastActivityState=null;
     watchTraining(view);
     updateGrowthWatchIndicator(view);
@@ -1224,7 +1234,7 @@ const tornCrimeGuide = (() => {
       const war=energyWarAdvice(warTraining);
       if(war?.active){
         const clock=warPanel.querySelector("[data-war-clock]"),step=warPanel.querySelector("[data-war-step]");
-        const value=war.phase==="active"?"Active":war.due==null?"Verify":war.due>Date.now()?tornTctClock.formatDuration((war.due-Date.now())/1000):"Ready";
+        const value=war.stale?"Verify":war.phase==="active"?"Active":war.due==null?"Verify":war.due>Date.now()?tornTctClock.formatDuration((war.due-Date.now())/1000):"Ready";
         if(clock.textContent!==value)clock.textContent=value;
         if(step.textContent!==war.label)step.textContent=war.label;
         const progress=warPanel.querySelector("[data-war-progress]");if(progress)progress.textContent=warProgressText(war);

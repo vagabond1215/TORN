@@ -124,8 +124,11 @@ const tornTrainSequence=(()=>{
     const raw=inventory?state.inventory?.[category]:state.data?.[key];
     const error=inventory?state.inventoryErrors?.[category]:state.errors?.[key];
     const at=Number(state.fetchedAt?.[key])||0,age=at>0&&at<=now?now-at:null;
-    const present=inventory?Array.isArray(raw):raw!==null&&typeof raw==="object";
-    const status=error?"failed":!present||age===null?"unknown":age>(liveAges[key]??900000)?"stale":state.cached?"cached":"observed";
+    const field=({itemCatalog:"items",pointsCatalog:"pointsmarket",gymCatalog:"gyms",factionWars:"wars"})[key]??key;
+    const value=!inventory&&raw&&Object.hasOwn(raw,field)?raw[field]:raw;
+    const present=inventory?Array.isArray(value):value!==null&&typeof value==="object";
+    const cached=state.cachedSources?state.cachedSources[key]===true:state.cached===true;
+    const status=error?"failed":!present||age===null?"unknown":age>(liveAges[key]??900000)?"stale":cached?"cached":"observed";
     return {status,ready:status==="observed"||status==="cached",at:at||null,age};
   }
   function liveAccountStatus(state,now=Date.now()){

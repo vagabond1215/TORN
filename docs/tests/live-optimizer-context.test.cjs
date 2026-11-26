@@ -100,5 +100,23 @@ sourceState.fetchedAt.itemCatalog=now-900001;assert.equal(checkStock()({xanax:5}
 sourceState.fetchedAt["inventory:Candy"]=now-900001;checkStock();assert.equal(strict.candyStock().loaded,false);
 assert.equal(seq.liveInputs(sourceState,now+20000,project).criticalIssues.length,0);
 sourceState.errors.perks="failed";assert.ok(seq.liveInputs(sourceState,now+20000,project).criticalIssues.some(x=>x.includes("Perks")));
-assert.ok(crime.includes("!activity.statusBlocked&&sessionDeadlineConflict"));
+assert.ok(crime.includes("!activity.statusBlocked&&!activity.war?.stale&&sessionDeadlineConflict"));
 console.log("Source states, stale price/stock exclusion, account isolation, travel/hospital holds and perk gating passed.");
+
+// Per-selection provenance survives an unrelated successful refresh.
+sourceState.cached=false;sourceState.cachedSources={"inventory:Booster":true};
+assert.equal(seq.liveSourceState(sourceState,"inventory:Booster",now+20000).status,"cached");
+assert.equal(seq.liveSourceState(sourceState,"profile",now+20000).status,"observed");
+sourceState.data.factionWars={wars:null};sourceState.fetchedAt.factionWars=now;
+assert.equal(seq.liveSourceState(sourceState,"factionWars",now+20000).status,"unknown");
+sourceState.data.factionWars={wars:{ranked:null}};
+assert.equal(seq.liveSourceState(sourceState,"factionWars",now+20000).ready,true);
+assert.ok(barsSrc.includes("delete state.cachedSources[job.name]"));
+assert.ok(barsSrc.includes("delete state.cachedSources[name]"));
+assert.ok(crime.includes('if(activity.statusBlocked||activity.war?.stale)'));
+assert.ok(crime.includes('if(war?.stale)return result("action"'));
+const recovery=crime.slice(crime.indexOf("  function recoverySnapshot("),crime.indexOf("  // Compare actual API snapshots"));
+const recover=new Function("tornGuideApi","tornTrainSequence","tornBarProjection",recovery+"\nreturn recoverySnapshot;")(api,optimizer,project);
+assert.ok(recover(now));
+assert.equal(recover(now+300001),null);
+console.log("Per-selection cache provenance, malformed war data, stale war session hold and shared recovery freshness passed.");

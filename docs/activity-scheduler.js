@@ -214,7 +214,7 @@ const tornActivityScheduler=(()=>{
           list.push({id:"war-clear",kind:"war",title:"Projected drug cooldown clear",start:prep.clearAt,end:prep.clearAt,source:prep.tentative?"Target":prep.bufferReduced?"Estimated · clearance buffer reduced":"Estimated"});
         if(!prep?.tentative&&!prep?.doses?.length&&prep?.label)list.push({id:"war-status",kind:"war",title:prep.label,start:now,end:now,source:"Current preparation status"});
       }
-      if(war.source!=="Manual Calendar war")list.push({id:"war-start",kind:"war",title:war.phase==="active"?"Ranked war active":"Ranked war begins",start:war.start,end:war.end>now?war.end:war.start,source:war.source??"Faction API"});
+      if(war.source!=="Manual Calendar war")list.push({id:"war-start",kind:"war",title:war.stale?"Last known ranked war schedule":war.phase==="active"?"Ranked war active":"Ranked war begins",start:war.start,end:war.end>now?war.end:war.start,source:war.source??"Faction API"});
     }
     if(rehab)list.push({id:"rehab-proposal",kind:"rehab",title:"Suggested Switzerland rehabilitation",start:rehab.start,end:rehab.end,source:"Proposal · not booked",detail:"Estimated $"+rehab.cost.toLocaleString("en-US")});
     for(const x of training)if(x.start>=now-60000&&(limit==null||x.start<limit))list.push(x);

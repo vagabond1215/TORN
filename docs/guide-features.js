@@ -41,7 +41,7 @@ const tornGuideApi=(()=>{
     log:[], racing:[], faction:[], attacking:[], war:[], tools:[]
   };
   const state={identity:null,data:{},inventory:{},errors:{},inventoryErrors:{},
-    fetchedAt:{},failedAt:{},updated:null,loading:false,cached:false,
+    fetchedAt:{},failedAt:{},cachedSources:{},updated:null,loading:false,cached:false,
     storageWarning:null,bridge:null,requests:0,lastRequest:0};
   const cacheKey=id=>cachePrefix+id;
   const now=()=>Date.now();
@@ -87,7 +87,7 @@ const tornGuideApi=(()=>{
     secret=record.key;remember=true;epoch++;batchMode="unknown";
     state.identity={id:Number(ident.id),name:String(ident.name),level:ident.level};
     state.data={};state.inventory={};state.errors={};state.inventoryErrors={};
-    state.fetchedAt={};state.failedAt={};state.updated=null;state.bridge=null;state.cached=false;
+    state.fetchedAt={};state.failedAt={};state.cachedSources={};state.updated=null;state.bridge=null;state.cached=false;
     try{
       const snap=JSON.parse(localStorage.getItem(cacheKey(state.identity.id))||"null");
       if(snap&&Number(snap.playerId)===state.identity.id){
@@ -95,6 +95,7 @@ const tornGuideApi=(()=>{
           state[key]=snap[key]&&typeof snap[key]==="object"?snap[key]:{};
         }
         state.updated=Number(snap.updated)||null;
+        state.cachedSources=Object.fromEntries(Object.keys(state.fetchedAt).map(key=>[key,true]));
         state.cached=true;
       }
     }catch{}
@@ -157,7 +158,7 @@ const tornGuideApi=(()=>{
     epoch++;secret=key;remember=Boolean(stay);batchMode="unknown";
     state.identity={id:profile.id,name:profile.name,level:profile.level};
     state.data={basic};state.inventory={};state.errors={};state.inventoryErrors={};
-    state.fetchedAt={basic:now()};state.failedAt={};state.updated=now();
+    state.fetchedAt={basic:now()};state.failedAt={};state.cachedSources={};state.updated=now();
     state.cached=false;state.bridge=null;state.storageWarning=null;
     save();schedule();announce();
     return state.identity;
@@ -552,7 +553,7 @@ const tornGuideApi=(()=>{
             batchMode="supported";
             for(const name of job.names){
               if(present.includes(name)){
-                state.fetchedAt[name]=now();delete state.failedAt[name];
+                state.fetchedAt[name]=now();delete state.failedAt[name];delete state.cachedSources[name];
                 state.data[name]={[name]:value[name]};
                 delete state.errors[name];succeeded++;
               }else jobs.push({name,run:()=>request(endpoint(name),currentKey)});
@@ -570,7 +571,7 @@ const tornGuideApi=(()=>{
           if(job.name.startsWith("inventory:"))state.inventoryErrors[job.name.slice(10)]=error;
           else state.errors[job.name]=error;
         }else{
-          state.fetchedAt[job.name]=now();delete state.failedAt[job.name];succeeded++;
+          state.fetchedAt[job.name]=now();delete state.failedAt[job.name];delete state.cachedSources[job.name];succeeded++;
           if(job.name.startsWith("inventory:")){
             const cat=job.name.slice(10);
             state.inventory[cat]=value.list;
@@ -617,7 +618,7 @@ const tornGuideApi=(()=>{
     epoch++;secret=null;remember=false;stopTimer();queued=null;
     clearSaved(id);clearGear(id);
     state.identity=null;state.data={};state.inventory={};state.errors={};
-    state.inventoryErrors={};state.fetchedAt={};state.failedAt={};
+    state.inventoryErrors={};state.fetchedAt={};state.failedAt={};state.cachedSources={};
     state.updated=null;state.bridge=null;state.loading=false;state.cached=false;
     announce();
   }
