@@ -913,27 +913,33 @@ const tornTrainSequence=(()=>{
     const data=engine.finish(list,{tail:false});
     return {...data,elapsed:v.time,offset,completed,segments,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
-  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false}={}){
+  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false,matchTemplateStart=false}={}){
     const first=sequence[0],offset=respectOffset?Math.min(end,startingTime[first]??0):0;
     const clockSeconds=Math.round(p.tornClockMin*60)+offset;
-    const engine=createEngine({limitSeconds:end-offset,startEnergy:"current",allowPartialDvd,skipUsedRefill,
+    const engine=createEngine({limitSeconds:end-offset,startEnergy:matchTemplateStart?startingEnergy[first]:"current",allowPartialDvd,skipUsedRefill,
       refillUsedToday:refillUsedToday&&clockSeconds<86400,
       startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
       tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900});
     const segments=[];
     let firstCycle=null;
-    for(const id of sequence){
+    for(const [index,id] of sequence.entries()){
       const actions=actionsFor(id),v=engine.state;
       if(!actions.length||v.time>engine.limit)break;
       const before=v.stat,start=offset+v.time,logStart=v.log.length;
-      if(startingEnergy[id]==="zero"&&actions[0]?.type==="xanax"){
+      const prepare=!matchTemplateStart||index>0;
+      const switching=sequence[index-1]!==id;
+      if(prepare&&(!matchTemplateStart||switching)&&startingEnergy[id]==="zero"&&actions[0]?.type==="xanax"){
         if(!engine.waitFor(v.drug,"Drug cooldown"))break;
         if(v.energy>=engine.gymCost&&!engine.execute(make("train"),0))break;
       }
-      if(startingEnergy[id]==="full"&&v.energy<energyRules().cap&&
+      if(prepare&&startingEnergy[id]==="full"&&v.energy<energyRules().cap&&
         !engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false))break;
       if(!engine.run(actions,{midnightJump:midnightJumps.has(id)}))break;
       segments.push({id,at:offset+v.time,start,logStart,gain:v.stat-before});
+      if(matchTemplateStart&&start===offset+v.time){
+        const delay=engine.fullEnergyDelay()||energyRules().minutes*60;
+        if(!engine.waitFor(delay,"Full Energy",false))break;
+      }
       if(!firstCycle){const snapshot=engine.finish(actions,{tail:false});firstCycle={...snapshot,costs:{...snapshot.costs},log:snapshot.log.slice()};}
     }
     const cycleState=engine.finish(sequence.flatMap(actionsFor),{tail:false});
@@ -1093,7 +1099,7 @@ const tornTrainSequence=(()=>{
     const overrides=cycleOverrides.slice(0,slots);
     const hasOverrides=showManual&&overrides.some(Boolean);
     if(!continuous&&hasOverrides){
-      const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||"natural"),Infinity);
+      const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||"natural"),Infinity,{matchTemplateStart:true});
       end=Math.max(end,forced.elapsed);
     }
     const results=active.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true})}));
@@ -1102,7 +1108,7 @@ const tornTrainSequence=(()=>{
       {id,label,data:projectCycles(id,Infinity,{end,continuous:true})}):[];
     const mixed=showOptimal?optimizeChart(candidates.filter(({id})=>!excludedPlans.optimal.has(id)),slots,end):null;
     const budgeted=showOptimalBudget?optimizeChart(candidates.filter(({id})=>!excludedPlans.budget.has(id)),slots,end,budget):null;
-    const manual=hasOverrides?optimizeChart(results,slots,end,null,overrides):null;
+    const manual=hasOverrides?optimizeChart(results,slots,end,null,overrides,{projection:{matchTemplateStart:true}}):null;
     if(mixed)results.push({id:"mixed",label:"Optimal sequence",data:mixed.data});
     if(manual)results.push({id:"manual",label:"Manual",data:manual.data});
     if(budgeted)results.push({id:"budget",label:"Optimal Budget",data:budgeted.data});
