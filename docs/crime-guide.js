@@ -228,12 +228,12 @@ const tornCrimeGuide = (() => {
     dialog.showModal();
   }
   const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Energy"],["calendar","Calendar"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
-  let recIncomplete=true,recUniques=false,collectView="ready",incompleteUniquesOnly=true,crimeOverride="auto";
+  let recIncomplete=true,recUniques=false,incompleteUniquesOnly=true,crimeOverride="auto";
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id)),recExpanded=new Set();
   function loadRecFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
-    recOwner=owner;collectView="ready";incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
+    recOwner=owner;incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
     try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v)){recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));if(!v.includes("calendar")&&localStorage.getItem("torn-city-guide:calendar-introduced:"+owner)!=="true"){recEnabled.add("calendar");localStorage.setItem("torn-city-guide:rec-types:"+owner,JSON.stringify([...recEnabled]));localStorage.setItem("torn-city-guide:calendar-introduced:"+owner,"true");}}}catch{}
   }
   let growthSettingsOpen=false;
@@ -1213,27 +1213,17 @@ const tornCrimeGuide = (() => {
       Number.isFinite(offer.expires_at)&&offer.expires_at*1000>now);
   }
   function useAndCollect(readyItems,stocks){
-    const ready=[...readyItems],upcoming=[];
+    const ready=[...readyItems];
     if(!tornGuideApi.state.errors?.missions){
       for(const book of affordableMissionBooks(payload("missions","missions"))){
         ready.push(recItem(book.details.name,"Mission reward · "+number(book.cost)+" Mission Credits","https://www.torn.com/loader.php?sid=missions"));
       }
     }
-    for(const stock of stocks.filter(x=>x.active&&!x.passive&&x.freq>0&&x.description.trim()&&x.description!=="Benefit unavailable")
-      .sort((a,b)=>(a.days??Infinity)-(b.days??Infinity)||a.ticker.localeCompare(b.ticker))){
-      const title=stock.ticker+" dividend",reward=stock.description;
-      if(stock.ready)ready.push(recItem("Collect "+title,reward,"#stocks"));
-      else if(stock.waiting||stock.days>0){
-        const days=Math.ceil(stock.days);
-        const timing=days>0?"Ready in "+days+" day"+(days===1?"":"s"):"Payout timing unavailable";
-        upcoming.push(recItem(title,reward+" · "+timing,"#stocks"));
-      }
+    for(const stock of stocks.filter(x=>x.ready===true&&x.active&&!x.passive&&x.freq>0&&x.description.trim()&&x.description!=="Benefit unavailable")
+      .sort((a,b)=>a.ticker.localeCompare(b.ticker))){
+      ready.push(recItem("Collect "+stock.ticker+" dividend",stock.description,"#stocks"));
     }
-    const views=[["ready","Ready",ready,"Nothing ready to use or collect."],["upcoming","Upcoming",upcoming,"No upcoming collections found."]];
-    const controls='<div class="rec-oc-filters" role="group" aria-label="Use and collect status">'+views.map(([key,label])=>
-      '<button type="button" class="rec-oc-toggle" data-collect-view="'+key+'" aria-pressed="'+(collectView===key)+'">'+label+'</button>').join("")+'</div>';
-    return controls+views.map(([key,,items,empty])=>'<div data-collect-panel="'+key+'" '+(collectView===key?"":"hidden")+'>'+
-      (items.length?'<ul class="crime-recommendations rec-advice">'+items.join("")+'</ul>':'<p class="fine-print">'+empty+'</p>')+'</div>').join("");
+    return ready.length?'<ul class="crime-recommendations rec-advice">'+ready.join("")+'</ul>':'<p class="fine-print">Nothing ready to use or collect.</p>';
   }
   function adviceSections(count,trainingRecommendation){
     const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",completion=prefs.priority==="completion",risk=prefs.risk;
@@ -1245,14 +1235,12 @@ const tornCrimeGuide = (() => {
     const {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan}=trainingRecommendation;
     if(educationRisk){
       const detail="Active education course · addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Avoid all drugs until addiction is reduced. Course dismissal can occur at 5%; restarting loses progress.";
-      add("consume","Protect education · avoid all drugs",detail,"#education");
       add("education","Education dismissal risk",detail,"#education");
-    }else if(enrolled&&highAddiction&&protectedEducation)add("consume","Education protected by Restraint","The active job perk protects enrollment, but addiction still affects other gameplay; consider rehabilitation.","#education");
+    }else if(enrolled&&highAddiction&&protectedEducation)add("education","Education protected by Restraint","The active job perk protects enrollment, but addiction still affects other gameplay; consider rehabilitation.","#education");
     const bars=payload("bars","bars"),cd=payload("cooldowns","cooldowns");
     const energy=n(bars?.energy?.current),cap=n(bars?.energy?.maximum),happy=n(bars?.happy?.current),happyCap=n(bars?.happy?.maximum),nerve=n(bars?.nerve?.current);
     const drug=n(cd?.drug),booster=n(cd?.booster);
     const program=plan?.program, costs=program?.costs??{};
-    if(highAddiction&&!educationRisk&&!protectedEducation)add("consume","High addiction · consider rehabilitation","Addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Pause drug use until addiction is reduced; review your training schedule.","#stats");
     // Training owns all training consumables. Only recommend independent
     // crime consumables when their shared cooldowns leave training untouched.
     const session=loadTrainingSession(),now=Date.now();
@@ -1290,7 +1278,6 @@ const tornCrimeGuide = (() => {
       const amount=Math.max(0,Math.min(held,Math.floor(room/unit),Math.floor(safeWindow/unit),Math.ceil(n(bars.nerve.maximum)-nerve)));
       if(amount>0)add("consume","Alcohol · up to "+number(amount),number(held)+" held · "+(nextBooster?"Cooldown clears before the next training booster at "+sessionTime(nextBooster.due):"No remaining candy or DVD steps")+" · Conservative cooldown allowance.","#crime");
     }
-    if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
     const crimeRefreshIds=[];
     rows.crime.push(crimeRecommendation(prefs.jailRisk,completion,crimeRefreshIds));
 
@@ -1667,13 +1654,6 @@ const tornCrimeGuide = (() => {
       }
       const restockButton=e.target.closest("[data-restock-settings]");
       if(restockButton){e.preventDefault();openRestockSettings(view,restockButton);return;}
-      const collectButton=e.target.closest("[data-collect-view]");
-      if(collectButton){
-        collectView=collectButton.dataset.collectView;
-        for(const button of view.querySelectorAll("[data-collect-view]"))button.setAttribute("aria-pressed",String(button.dataset.collectView===collectView));
-        for(const panel of view.querySelectorAll("[data-collect-panel]"))panel.hidden=panel.dataset.collectPanel!==collectView;
-        return;
-      }
       const tab=e.target.closest("[data-growth-tab]");if(tab){selectGrowthTab(tab.dataset.growthTab,true);return;}
       const gear=e.target.closest("[data-growth-settings]");
       if(gear){e.preventDefault();e.stopPropagation();growthSettingsOpen=!growthSettingsOpen;recExpanded.add("growth");try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}refreshRecommendations(view);return;}
