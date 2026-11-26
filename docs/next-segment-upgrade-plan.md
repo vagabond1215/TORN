@@ -85,3 +85,5 @@ Staged recovery hardening passed loader/ledger guard and fresh API-only observat
 1P.3c initial write-ahead restore journal implemented, with explicit matched finalize/rollback, conflict hold, bounded validation and cooperating Web Locks. Nonempty merge and session activation still disabled. Next: ordinary writer isolation, revisions/tombstones and replay integration validation.
 
 Journal current-writer guard coverage and actual strict natural replay fixtures added. Restore remains empty-only. Next 1P.3c: revision manifests and deletion tombstones, tested conflict staging, and explicit activation transaction without estimated spend duplication.
+
+1P.3c revision ancestry foundation implemented and tested: observed section tombstones, bounded causal ancestry and conservative divergence classification. No runtime merge yet; next wire encrypted versioned manifests, journaled manifest restoration and comparison UI.

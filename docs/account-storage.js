@@ -233,5 +233,5 @@ const tornAccountStorage=(()=>{
     const id=owner(playerId);
     return locks?.request?locks.request(prefix+"account-recovery:"+id,{mode:"exclusive"},fn):fn();
   }
-  return {owner,snapshot,validRecords,restoreEmpty,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
+  return {owner,knownSection:(id,section)=>typeof section==="string"&&section.length<=160&&Boolean(descriptor(owner(id),section)),snapshot,validRecords,restoreEmpty,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
 })();
