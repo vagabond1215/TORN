@@ -38,12 +38,8 @@ const tornBackupUI=(()=>{
         const requested=Date.now();await tornGuideApi.loadPage("energy",true);
         if(!stillCurrent())throw Error("Account or recovery record changed");
         const state=tornGuideApi.state,live=tornTrainSequence.liveInputs(state,Date.now(),tornBarProjection);
-        const required=["bars","cooldowns","battlestats","profile","gym","perks","icons"];
-        if(required.some(k=>Number(state.fetchedAt?.[k]||0)<requested||state.errors?.[k]||state.cachedSources?.[k])||live.criticalIssues.length||!live.energy||!live.happy||live.drug===null||live.booster===null||live.account?.blocked)throw Error("Fresh account evidence incomplete; recovery remains held");
-        const raw=state.data.battlestats?.battlestats?.[stage.session.statKey],stat=typeof raw==="object"?raw?.value:raw;
-        if(stat==null||!Number.isFinite(Number(stat)))throw Error("Battle stat unavailable");
-        const next=stage.session.actions[stage.session.index],anchor=stage.session.statCheckpoint;
-        evidence.textContent="Fresh observations: Energy "+live.energy.current+", Happiness "+live.happy.current+", "+stage.session.stat+" "+Number(stat).toLocaleString()+", drug cooldown "+Math.ceil(live.drug/60)+" min, booster cooldown "+Math.ceil(live.booster/60)+" min. Saved checkpoint "+(anchor?.actual??next?.before?.stat??"unknown")+". These observations do not prove which disconnected actions occurred. Session remains held; continuation will require separate reconciliation.";
+        const report=tornTrainingRecovery.evidenceReport(stage,live,state,requested);
+        evidence.textContent="Fresh API observations: Energy "+report.energy+", Happiness "+report.happy+", "+stage.session.stat+" "+report.stat.toLocaleString()+", drug cooldown "+Math.ceil(report.drug/60)+" min, booster cooldown "+Math.ceil(report.booster/60)+" min, daily refill "+(report.refillUsed?"used":"available")+". Saved observed stat checkpoint "+(report.savedCheckpoint??"unknown")+"; modeled next-action stat "+(report.modeledNextStat??"unknown")+". "+(report.warVerified===false?"Faction war schedule not verified. ":"")+"These observations do not prove which disconnected actions occurred. Session remains held; continuation requires separate reconciliation.";
       }catch(error){evidence.textContent=String(error?.message??"Recovery review failed");}
       finally{busy=false;controls();}
     }

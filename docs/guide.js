@@ -339,6 +339,14 @@ tornTctClock.init();
 tornRightRail.init();
 renderRoute();
 window.addEventListener("hashchange", renderRoute);
+// Other current-version tabs immediately refresh a changed recovery hold.
+// Reload resets cached account settings after an import or explicit release.
+window.addEventListener("storage",event=>{
+  const id=tornGuideApi.state.identity?.id;
+  if(id!=null&&(event.key===null||event.key==="torn-city-guide:training-session-review:v1:"+id)){
+    renderRoute();
+  }
+});
 document.getElementById("topic-view").addEventListener("click",async event=>{
   const btn=event.target.closest("[data-home-activity-refresh]");
   if(!btn||!tornGuideApi.isConnected()||btn.disabled)return;

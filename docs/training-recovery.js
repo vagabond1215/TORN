@@ -108,5 +108,19 @@ const tornTrainingRecovery=(()=>{
     store.removeItem(key);
     if(store.getItem(key)!==null)throw Error("Could not release recovery hold");
   }
-  return {validSession,validHistory,prepareReview,reviewKey,stageValue,parseStage,readStage,held,discardStage};
+  // Pure evidence report, deliberately not a proof of completed actions.
+  // Refresh must originate from the API, not restored cache or DOM bridge.
+  function evidenceReport(stage,live,state,requested,now=Date.now()){
+    if(!stage?.session||String(state.identity?.id)!==stage.playerId||String(live?.owner)!==stage.playerId)throw Error("Account changed");
+    const required=["bars","cooldowns","battlestats","profile","gym","perks","icons","refills"];
+    if(!observed(requested,now)||required.some(k=>!observed(state.fetchedAt?.[k],now)||state.fetchedAt[k]<requested||state.errors?.[k]||state.cachedSources?.[k])||live.criticalIssues?.length||!live.energy||!live.happy||live.energy.source!=="API"||live.happy.source!=="API"||!num(live.drug)||!num(live.booster)||live.account?.blocked||typeof live.refillUsed!=="boolean")throw Error("Fresh account evidence incomplete; recovery remains held");
+    const profile=state.data?.profile?.profile??state.data?.profile;
+    const factionId=Number(profile?.faction_id??profile?.faction?.id??0);
+    const warVerified=factionId>0?live.sources?.factionWars?.ready===true&&state.fetchedAt?.factionWars>=requested&&!state.cachedSources?.factionWars&&!state.errors?.factionWars:null;
+    const raw=(state.data?.battlestats?.battlestats??state.data?.battlestats)?.[stage.session.statKey],actual=typeof raw==="object"?raw?.value:raw;
+    if(actual==null||!num(Number(actual)))throw Error("Battle stat unavailable");
+    const next=stage.session.actions[stage.session.index],anchor=stage.session.statCheckpoint;
+    return {observedAt:Math.min(...required.map(k=>state.fetchedAt[k])),energy:live.energy.current,happy:live.happy.current,drug:live.drug,booster:live.booster,refillUsed:live.refillUsed,stat:Number(actual),savedCheckpoint:anchor?.actual??null,modeledNextStat:next?.before?.stat??null,confirmed:stage.session.index,total:stage.session.actions.length,warVerified};
+  }
+  return {validSession,validHistory,prepareReview,reviewKey,stageValue,parseStage,readStage,held,discardStage,evidenceReport};
 })();

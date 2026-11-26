@@ -76,3 +76,25 @@ assert.deepEqual(registry.snapshot(conflict,1).omitted,["training-session-review
 const damaged=memory({[stageAPI.reviewKey(1)]:"bad"});assert.equal(stageAPI.held(damaged,1),true);assert.ok(stageAPI.readStage(damaged,1).error);
 assert.ok(crime.includes("skipPrograms:recoveryHeld||")&&crime.includes("if(trainingRecoveryHeld())return recoveryHoldPanel()"));
 console.log("Portable training/history round trip, staged-only restore, account isolation, hold, re-export, conflicting records and explicit discard passed.");
+
+const current=now+1000,required=["bars","cooldowns","battlestats","profile","gym","perks","icons","refills"];
+const currentState={identity:{id:1},data:{battlestats:{battlestats:{strength:{value:175058}}},profile:{profile:{faction_id:12}}},fetchedAt:Object.fromEntries(required.map(k=>[k,current])),errors:{},cachedSources:{}};
+const currentLive={owner:1,energy:{source:"API",current:540},happy:{source:"API",current:5000},drug:0,booster:0,refillUsed:false,account:{blocked:false},criticalIssues:[],sources:{factionWars:{ready:false}}};
+const evidence=stageAPI.evidenceReport(stage,currentLive,currentState,current,current);
+assert.equal(evidence.stat,175058);assert.equal(evidence.confirmed,0);assert.equal(evidence.savedCheckpoint,null);assert.equal(evidence.warVerified,false);
+for(const bad of [{...currentLive,owner:2},{...currentLive,energy:{source:"bridge",current:540}},{...currentLive,refillUsed:null},{...currentLive,account:{blocked:true}}])assert.throws(()=>stageAPI.evidenceReport(stage,bad,currentState,current,current));
+assert.throws(()=>stageAPI.evidenceReport(stage,currentLive,{...currentState,cachedSources:{bars:true}},current,current),/incomplete/);
+assert.throws(()=>stageAPI.evidenceReport(stage,currentLive,{...currentState,fetchedAt:{...currentState.fetchedAt,battlestats:current-1}},current,current),/incomplete/);
+// Exercise the actual session loader/ledger/guard bodies with isolated storage.
+const body=crime.slice(crime.indexOf("  let sessionOwner=null"),crime.indexOf("  const actionable="));
+const active=memory({[key]:JSON.stringify(session),"torn-city-guide:training-spend:1":JSON.stringify([{started:now,at:now,cost:123}])});
+const stateApi={state:{identity:{id:1}}};
+const runtime=new Function("localStorage","tornGuideApi","tornTrainingRecovery",body+"\nreturn {loadTrainingSession,saveTrainingSession,accountForCycle,trainingSpend,trainingRecoveryHeld};")(active,stateApi,stageAPI);
+assert.equal(runtime.loadTrainingSession().started,now);
+active.setItem(stageAPI.reviewKey(1),stage.raw);
+assert.equal(runtime.loadTrainingSession(),null);assert.equal(runtime.trainingSpend(current)[0].cost,123);
+runtime.accountForCycle({...session,cycleSpend:999});assert.equal(runtime.trainingSpend(current).length,1);
+runtime.saveTrainingSession();assert.equal(active.getItem(key),JSON.stringify(session));
+stateApi.state.identity.id=2;assert.equal(runtime.trainingRecoveryHeld(),false);assert.equal(runtime.trainingSpend(current).length,0);
+assert.ok(read("guide.js").includes('window.addEventListener("storage"'));
+console.log("Fresh API-only evidence, stale/account mismatch rejection, live-loader hold, preserved ledger identity and blocked spend/write passed.");

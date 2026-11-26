@@ -593,7 +593,7 @@ const tornCrimeGuide = (() => {
     return tabbar+panels;
   }
   let sessionOwner=null,trainingSession=null,trainingDraft=null;
-  const trainingSpendKey=()=> "torn-city-guide:training-spend:"+sessionOwner;
+  const trainingSpendKey=()=> "torn-city-guide:training-spend:"+String(tornGuideApi.state.identity?.id??"guest");
   function trainingSpend(now=Date.now()){
     try{
       const saved=JSON.parse(localStorage.getItem(trainingSpendKey()));
@@ -601,7 +601,7 @@ const tornCrimeGuide = (() => {
     }catch{return [];}
   }
   function accountForCycle(session){
-    if(trainingRecoveryHeld()||!(session.cycleSpend>0))return;
+    if(trainingRecoveryHeld()||sessionOwner!==String(tornGuideApi.state.identity?.id??"guest")||!(session.cycleSpend>0))return;
     const entries=trainingSpend();
     if(entries.some(entry=>entry.started===session.started))return;
     entries.push({started:session.started,at:Date.now(),cost:session.cycleSpend});
@@ -626,7 +626,11 @@ const tornCrimeGuide = (() => {
     finally{recoveryBusy=false;if(view.isConnected)refreshRecommendations(view);}
   }
   function trainingRecoveryHeld(){
-    return typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.held(localStorage,tornGuideApi.state.identity?.id);
+    const id=tornGuideApi.state.identity?.id;
+    if(typeof tornTrainingRecovery!=="undefined")return tornTrainingRecovery.held(localStorage,id);
+    // Mixed cached assets must not silently release a stored hold.
+    if(!/^[1-9][0-9]{0,14}$/.test(String(id??"")))return false;
+    try{return localStorage.getItem("torn-city-guide:training-session-review:v1:"+id)!==null;}catch{return true;}
   }
   function loadTrainingSession(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
@@ -1128,6 +1132,7 @@ const tornCrimeGuide = (() => {
   function energyWarAdvice(training,now=Date.now()){
     const settings=energyWarSettings(),war=currentActivityWar(now);
     if(!war)return null;
+    if(trainingRecoveryHeld())return {...war,first:war.cutoff,due:null,doses:[],blocked:true,active:now>=war.cutoff,label:"War schedule retained; training recovery must be reviewed before stacking advice."};
     const state=tornGuideApi.state,inventory=state.inventory.Drug;
     const catalog=payload("itemCatalog","items"),items=Array.isArray(catalog)?catalog:Object.values(catalog||{});
     const xanax=items.find(item=>normalize(item.name)==="xanax");
@@ -1165,7 +1170,7 @@ const tornCrimeGuide = (() => {
   }
   let warTraining=null;
   function recoveryHoldPanel(){
-    const stage=tornTrainingRecovery.readStage(localStorage,tornGuideApi.state.identity?.id),session=stage?.session;
+    const stage=typeof tornTrainingRecovery==="undefined"?{error:"Recovery module unavailable; reload the guide."}:tornTrainingRecovery.readStage(localStorage,tornGuideApi.state.identity?.id),session=stage?.session;
     return '<div class="growth-card"><div class="growth-warning"><strong>Restored Training Session Held</strong><p>Training recommendations, detection and cycle accounting are paused. Imported actions will not resume automatically.</p>'+
       (session?'<p>'+esc(session.label)+' · '+esc(session.stat)+' · '+session.index+' / '+session.actions.length+' confirmed</p><small>Backup created: '+esc(sessionTime(stage.backupCreatedAt))+' · Last confirmation: '+esc(session.lastConfirmed==null?"Unknown":sessionTime(session.lastConfirmed))+' · Estimated cycle cost: '+esc(session.cycleSpend==null?"Unknown":"$"+number(session.cycleSpend))+'</small>':'<p>'+esc(stage?.error??"Recovery state unavailable")+'</p>')+
       '<p>Open Settings → Data &amp; Backup to inspect recovery evidence or release the hold without resuming.</p></div></div>';
@@ -1268,7 +1273,7 @@ const tornCrimeGuide = (() => {
     if(view?.isConnected&&!view.hidden&&(route==="home"||route==="calendar")){
       const activity=activityLimits(),session=loadTrainingSession();
       const now=Date.now();
-      if(activity.war?.phase==="stacking"&&autoTrainingWatch()&&tornGuideApi.isConnected()&&!recoveryBusy&&!tornGuideApi.state.loading&&now-lastWarCheck>=120000){
+      if(!trainingRecoveryHeld()&&activity.war?.phase==="stacking"&&autoTrainingWatch()&&tornGuideApi.isConnected()&&!recoveryBusy&&!tornGuideApi.state.loading&&now-lastWarCheck>=120000){
         lastWarCheck=now;void tornGuideApi.loadPage("warPreparation",true).catch(()=>{});
       }
       const pendingRehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&!e.completedAt&&!e.recoveryReview&&e.rehabBaseline&&e.start<=now&&e.end+86400000>now);
@@ -1679,7 +1684,7 @@ const tornCrimeGuide = (() => {
     }).join("");
     const sorted=group=>[...group.values()].sort((a,b)=>a.level-b.level||a.item.localeCompare(b.item));
     const tabs=[
-      ["urgent","Urgent",sorted(buckets.training),!program&&!session?"No current training forecast.":(!trainingRecommendation.inputs.sources["inventory:Drug"].ready||!trainingRecommendation.inputs.sources["inventory:Booster"].ready||!trainingRecommendation.inputs.sources["inventory:Candy"].ready||trainingRecommendation.inputs.points===null)?"Training stock or points unverified; refresh before estimating shortages.":"No training shortages within "+restockForecastDays+" days."],
+      ["urgent","Urgent",sorted(buckets.training),trainingRecommendation.recoveryHeld?"Training recovery held; no purchase forecast.":!program&&!session?"No current training forecast.":(!trainingRecommendation.inputs.sources["inventory:Drug"].ready||!trainingRecommendation.inputs.sources["inventory:Booster"].ready||!trainingRecommendation.inputs.sources["inventory:Candy"].ready||trainingRecommendation.inputs.points===null)?"Training stock or points unverified; refresh before estimating shortages.":"No training shortages within "+restockForecastDays+" days."],
       ["crime","Crime",sorted(buckets.crime),"No crime shortages identified."],
       ["oc","OC",[...sorted(buckets.current),...sorted(buckets.oc)],"No OC shortages identified."],
       ["reserves","Reserves",sorted(buckets.stock),"No reserve shortages identified."]

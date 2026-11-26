@@ -77,3 +77,5 @@ Training recovery validator now passes generated output for all seven cycle temp
 Energy clarity follow-up: structured preparation wait reasons, rechecked Start readiness on countdown expiry, active cooldown priority over future Happiness-reset waits, and equivalent ranked-war phase/Next hierarchy. No war planning-policy changes. Related CJS bodies passed adapted harness; actual mobile and responsive browser checks remain open.
 
 1P.3b staged portable recovery: encrypted backups now include validated training sessions and cycle history; imported sessions are held in a separate account namespace, with Settings inspection/discard and no runnable activation. Next: robust review/reconciliation and serialized revision/merge journal before allowing continuation or companion recovery.
+
+Staged recovery hardening passed loader/ledger guard and fresh API-only observation fixtures. Held sessions retain rolling budget, suppress war dosing and refresh current-version tabs; no resume or confirmed-cost inference. Next: explicit reviewed suffix preview, journal/serialization and conflict detection before activation.
