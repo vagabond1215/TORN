@@ -1,0 +1,20 @@
+"use strict";
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const source=fs.readFileSync(path.join(__dirname,"..","account-storage.js"),"utf8");
+const a=new Function(source+"\nreturn tornAccountStorage;")();
+function storage(entries={}){const m=new Map(Object.entries(entries));return {get length(){return m.size},key:i=>[...m.keys()][i]??null,getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)};}
+const p="torn-city-guide:",id=123;
+const s=storage({[p+"build:123"]:'{"choice":"balanced","total":1000}',[p+"build:456"]:'{"choice":"balanced","total":2000}',[p+"api:v2:remember"]:'{"key":"never-export"}',[p+"api:v2:cache:123"]:'{"private":true}',[p+"v1:profile:123:notes:gym"]:"note",[p+"training-session:123"]:'{"version":1}',[p+"activity-events:123"]:'[{"id":"x","kind":"war","title":"War","start":1000,"end":2000,"blocking":true,"source":"manual"}]'});
+const snap=a.snapshot(s,id);
+assert.deepEqual(snap.records.map(x=>x.section),["build","calendar-events","notes:gym"]);
+const dst=storage();assert.equal(a.restoreEmpty(dst,id,snap.records),3);assert.equal(dst.getItem(p+"build:123"),s.getItem(p+"build:123"));
+assert.equal(dst.getItem(p+"build:456"),null);
+assert.throws(()=>a.restoreEmpty(dst,id,snap.records),/already/);
+assert.throws(()=>a.restoreEmpty(storage({[p+"training-session:123"]:"{}"}),id,snap.records),/history/);
+for(const bad of [{section:"api:v2:remember",value:"key"},{section:"build",value:'{"choice":"bad","total":1}'},{section:"notes:__proto__",value:"x"},{section:"calendar-events",value:'[{"title":"bad"}]'}])assert.throws(()=>a.validRecords([bad],String(id)));
+assert.throws(()=>a.validRecords([snap.records[0],snap.records[0]],String(id)),/duplicate/);
+assert.throws(()=>a.restoreEmpty(storage(),id,snap.records,()=>false),/changed/);
+const broken=storage(),write=broken.setItem;let calls=0;broken.setItem=(k,v)=>{if(++calls===2)throw Error("quota");write(k,v)};
+assert.throws(()=>a.restoreEmpty(broken,id,snap.records),/quota/);assert.equal(broken.length,0);
+assert.throws(()=>a.owner("guest"),/player ID/);
+console.log("Account storage allowlist, ownership, validation, empty-account restore and rollback passed.");

@@ -55,3 +55,6 @@ Cache origin is tracked per selection/category across restore, account switch an
 
 ## Cross-cutting prerequisite — account-bound persistence (proposed)
 Before Phase 1B.3 financial ledger schema is finalized, implement the storage and recovery foundation in [account-persistence-plan.md](account-persistence-plan.md). Verified Torn player ID is the account namespace, not a credential. Use opt-in companion mirroring and independent portable backup; automatic matching only within authorized storage. Security review, migration and real browser recovery tests are required before enabling automatic restore. This is a design addition, not a completed runtime feature.
+
+### Persistence implementation sequence
+See [persistence-implementation-plan.md](persistence-implementation-plan.md). 1P.1 registry and audit precede 1P.2 encrypted portable recovery; critical-state merge, companion enrollment, authorized directory sync and ledger follow in dependency order. The initial registry is intentionally incomplete and must not be described as full account backup.
