@@ -492,7 +492,9 @@ const tornCrimeGuide = (() => {
     const iconData=payload("icons","icons");
     const iconFresh=iconData&&!tornGuideApi.state.errors?.icons&&Date.now()-Number(tornGuideApi.state.fetchedAt?.icons||0)<15*60000;
     const iconTexts=iconFresh?Object.values(iconData).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")):[];
-    const now=Date.now(),activity=activityLimits(now),settings=tornActivityScheduler.settings();
+    const now=Date.now(),settings=tornActivityScheduler.settings();
+    tornActivityScheduler.reconcileRehab(now);
+    const activity=activityLimits(now);
     const health=tornActivityScheduler.addiction(!!iconFresh,iconTexts,settings,activity.war);
     const addictionDebuff=health.penalty==null?[]:[health.penalty],highAddiction=health.blockDrugs;
     const edu=educationModel(),enrolled=Boolean((edu.id!=null&&edu.id!==0&&edu.id!=="0"&&edu.id!=="")||(Number(edu.deadline)>now));
@@ -501,7 +503,7 @@ const tornCrimeGuide = (() => {
     const educationRisk=enrolled&&!protectedEducation&&health.penalty!=null&&health.penalty>=5;
     const blockDrugs=highAddiction||educationRisk||health.penalty===null;
     const session=loadTrainingSession();
-    const remaining=prefs.weeklyBudget==null?null:Math.max(0,prefs.weeklyBudget-trainingSpend().reduce((sum,entry)=>sum+entry.cost,0));
+    const remaining=prefs.weeklyBudget==null?null:Math.max(0,prefs.weeklyBudget-trainingSpend().reduce((sum,entry)=>sum+entry.cost,0)-(settings.sharedBudget?tornActivityScheduler.weeklySpend(now):0));
     const reserves=tornActivityScheduler.budget(remaining,settings,activity.war,health),budget=reserves.training;
     const warDeadline=activity.war?.cutoff??null;
     const plan=tornStatPlanner.homeTrainingAdvice(budget,prefs.risk,{blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session||activity.blocked,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth",
@@ -525,9 +527,11 @@ const tornCrimeGuide = (() => {
   function rehabPanel(training){
     const {health,rehab,reserves}=training,fmt=tornActivityScheduler.time;
     const warning=health.level==="restricted"?"Drug recommendations restricted until refreshed addiction data clears the threshold.":health.level==="unknown"?"Addiction status unavailable; drug recommendations paused until icons refresh.":health.level==="recommended"?"Rehabilitation recommended.":health.level==="preferred"?"Rehabilitation preferred when a suitable gap exists.":"";
-    const active=tornActivityScheduler.events().find(e=>e.kind==="rehab"&&e.end>Date.now());
+    const active=tornActivityScheduler.events().find(e=>e.kind==="rehab"&&!e.completedAt&&e.end>Date.now());
+    const confirmed=tornActivityScheduler.events().filter(e=>e.kind==="rehab"&&e.completedAt).sort((a,b)=>b.completedAt-a.completedAt)[0];
     return '<div class="activity-health"><strong>Addiction penalty: '+(health.penalty==null?"Unknown":esc(health.penalty+"%"))+'</strong>'+(warning?'<small>'+esc(warning)+'</small>':"")+
       (active?'<small>Rehab reserved: '+esc(fmt(active.start))+' to '+esc(fmt(active.end))+'</small>':rehab?'<small>Suggested rehab: '+esc(fmt(rehab.start))+' to '+esc(fmt(rehab.end))+' · estimate $'+number(rehab.cost)+(rehab.overlapsCooldown?" · fits cooldown":"")+(rehab.requiresPause?" · pause training":"")+'</small><button type="button" data-activity-rehab>Reserve rehab window</button>':["preferred","recommended","restricted"].includes(health.level)?'<small>No verified travel window yet; check travel eligibility, live status and upcoming commitments.</small>':"")+
+      (confirmed?'<small>Last rehab confirmed '+esc(fmt(confirmed.completedAt))+(confirmed.rehabCost==null?" · cost unknown":" · $"+number(confirmed.rehabCost))+'</small>':"")+
       (reserves.warReserve||reserves.rehabReserve?'<small>Reserved cash: war $'+number(reserves.warReserve)+' · rehab $'+number(reserves.rehabReserve)+(reserves.shortfall?" · exceeds available budget":"")+'</small>':"")+'</div>';
   }
   function calendarCard(training,full=false){
@@ -556,7 +560,8 @@ const tornCrimeGuide = (() => {
       if(rehab&&activityContext?.rehab){const r=activityContext.rehab,now=Date.now(),start=Math.max(now,r.start),end=start+r.duration;
         const limit=activityLimits(now),busy=tornActivityScheduler.events().some(x=>x.blocking&&start<x.end&&end>x.start);
         if(limit.blocked||busy||limit.war&&end>limit.war.cutoff){refreshActivityView(view);return;}
-        if(tornActivityScheduler.saveEvent({id:"rehab-"+now,kind:"rehab",title:"Switzerland rehabilitation (reserved)",start,end,blocking:true}))refreshActivityView(view);
+        const baseline=tornActivityScheduler.rehabSnapshot(now);
+        if(tornActivityScheduler.saveEvent({id:"rehab-"+now,kind:"rehab",title:"Switzerland rehabilitation (reserved)",start,end,blocking:true,rehabBaseline:baseline}))refreshActivityView(view);
       }
     });
   }
@@ -1067,7 +1072,7 @@ const tornCrimeGuide = (() => {
     const status=refillStatus(kind);
     return '<a class="rec-header-refill rec-'+kind+'-refill '+(status==="Refill Available"?"is-available":"")+'" data-rec-refill="'+kind+'" href="https://www.torn.com/page.php?sid=points" title="'+(kind==="energy"?"Energy":"Nerve")+' refill · Points shop" '+(status?"":"hidden")+'>'+esc(status)+'</a>';
   }
-  let deadlineRetryAt=0,lastActivityState=null;
+  let deadlineRetryAt=0,lastActivityState=null,lastRehabCheck=0;
   function sessionDeadlineConflict(session,activity,now=Date.now()){
     if(!session||session.index>=session.actions.length)return false;
     return activity.blocked||tornActivityScheduler.conflicts(sessionSchedule(session,now),activity.deadline,now,activity.war?.cutoff===activity.deadline,Math.max(28800000,activity.war?.cd??0));
@@ -1100,6 +1105,8 @@ const tornCrimeGuide = (() => {
     const view=document.getElementById("topic-view"),route=tornGuideApi.routeName();
     if(view?.isConnected&&!view.hidden&&(route==="home"||route==="calendar")){
       const activity=activityLimits(),session=loadTrainingSession();
+      const now=Date.now(),pendingRehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&e.end+86400000>now);
+      if(pendingRehab&&!recoveryBusy&&!tornGuideApi.state.loading&&now-lastRehabCheck>=300000){lastRehabCheck=now;void tornGuideApi.loadPage("rehabProgress",false).catch(()=>{});}
       const key=[activity.war?.phase??"",activity.deadline??"",activity.blocked,activity.reason??""].join("|");
       // A deadline at 'now' changes each second; compare the reservation
       // identity while blocked rather than rebuilding the UI every tick.
