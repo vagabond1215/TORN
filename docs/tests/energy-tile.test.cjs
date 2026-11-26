@@ -15,3 +15,15 @@ assert.ok(api.gymMembership({name:"Gun Shop",energy:10}).includes("Member at the
 assert.ok(src.includes('growth-next-clock growth-stage')&&src.includes('Next: '));
 assert.ok(read("index.html").includes("Android / iPhone")&&read("index.html").includes("Manage scripts"));
 console.log("Energy stage, next action, membership, countdown labels and mobile install instructions passed.");
+
+const prepProgram={label:"Happy jump",cycleExecution:[{type:"xanax"}]};
+assert.deepEqual(api.energyPrepStatus({due:now+100,waitKind:"energy",nextAction:"Start Happy jump"},prepProgram,"STR",fmt),{status:"Waiting for Energy",next:"Start Happy jump"});
+assert.equal(api.energySessionStatus(session,{step:{type:"dvd"},due:now+100,drugWait:true,happyWait:true},now),"Waiting for Drug Cooldown");
+assert.equal(api.energySessionStatus(session,{step:{type:"dvd"},due:now+100,boosterPending:true},now),"Waiting for Booster Cooldown");
+const war=new Function(src.slice(src.indexOf("  function warDisplay("),src.indexOf("  function warCounter("))+"\nreturn warDisplay;")();
+assert.equal(war({phase:"stacking",due:now+100,doses:[{}],drugWait:true,label:"Wait, then Take Xanax"},now).status,"Waiting for Drug Cooldown");
+assert.equal(war({phase:"stacking",due:now,doses:[{}],label:"Take Xanax"},now).status,"Stacking for Ranked War");
+assert.equal(war({phase:"active",stale:true,label:"Verify"},now).status,"Verify War Readiness");
+assert.equal(war({phase:"active",label:"Reserve Energy"},now).status,"Ranked War Active");
+assert.ok(src.includes('button.disabled=!prep.ready'));
+console.log("Preparation readiness, actual cooldown priority and ranked-war stage labels passed.");

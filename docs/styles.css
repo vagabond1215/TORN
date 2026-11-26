@@ -2452,3 +2452,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-next-step [data-growth-step]{overflow-wrap:anywhere}
 .companion-install-help{font-size:.8rem;line-height:1.4;overflow-wrap:anywhere}
 .companion-install-help input{font-size:.75rem}
+
+.growth-next-step[data-war-due][data-ready="false"] .growth-next-clock{color:#f0ad45}
+:root[data-theme="light"] .growth-next-step[data-war-due][data-ready="false"] .growth-next-clock{color:#a65c00}
+.growth-next-step[data-ready="true"] .growth-next-clock{color:var(--accent-strong)}

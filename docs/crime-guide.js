@@ -650,10 +650,10 @@ const tornCrimeGuide = (() => {
       let drugWait=["xanax","ecstasy"].includes(x.type)&&drugEnd>now,energyWait=false,refillWait=false;
       if(["xanax","ecstasy"].includes(x.type))due=Math.max(due,drugEnd);
       const isBooster=["candy","dvd"].includes(x.type),unit=x.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600,qty=x.quantity??1;
-      let happyWait=false,boosterWait=false;
+      let happyWait=false,boosterWait=false,boosterPending=false;
       if(isBooster){
         const boosterReady=boosterEnd-(timing.boosterCap??86400)*1000+Math.max(0,qty-1)*unit*1000;
-        boosterWait=boosterReady>due;
+        boosterWait=boosterReady>due;boosterPending=boosterReady>now;
         due=Math.max(due,boosterReady);
         const next=actions.slice(i+1).find(step=>["xanax","ecstasy","train","refill"].includes(step.type));
         if(next?.type==="ecstasy"){drugWait=drugEnd>now;due=Math.max(due,drugEnd);}
@@ -674,7 +674,7 @@ const tornCrimeGuide = (() => {
         if(x.type==="xanax")energy=Math.min(1000,energy+250);
         if(x.type==="refill")energy=Math.max(energy,cap);
       }
-      rows.push({step:x,done:false,due,happyWait,boosterWait,drugWait,energyWait,refillWait});
+      rows.push({step:x,done:false,due,happyWait,boosterWait,boosterPending,drugWait,energyWait,refillWait});
       if(x.type==="xanax"||x.type==="ecstasy")drugEnd=due+(x.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;
       if(isBooster)boosterEnd=Math.max(due,boosterEnd)+qty*unit*1000;
       if(x.type==="refill")refillDay=Math.floor(due/86400000);
@@ -738,12 +738,12 @@ const tornCrimeGuide = (() => {
       // For a zero-E jump, spend natural energy as close to the first Xanax as possible.
       let wait=remaining;
       if(e>0&&e%cost!==0&&e<cap){let n=1;while(n<=cost&&Math.min(cap,e+n*projected.step)%cost!==0)n++;if(n<=cost)wait=Math.max(wait,projected.until+(n-1)*projected.interval);}
-      if(wait>0)return {ready:false,label:e>0?"Wait, then train to 0 E and take Xanax":"Wait for first Xanax",due:Date.now()+wait*1000};
+      if(wait>0)return {ready:false,label:e>0?"Wait, then train to 0 E and take Xanax":"Wait for first Xanax",waitKind:wait>remaining?"energy":"drug",nextAction:e>0?"Train to 0 E, then take Xanax":"Take Xanax",due:Date.now()+wait*1000};
       if(e>0)return {ready:false,label:"Train "+plan.stat+" · "+Math.floor(e/cost)*cost+" E, then start at 0 E and take Xanax",due:null};
       return {ready:true,label:"Ready to begin Xanax stack",due:null};
     }
-    if(program.id!=="natural"&&e<cap){const wait=projected.until+Math.max(0,Math.ceil((cap-e)/projected.step)-1)*projected.interval;return {ready:false,label:"Regenerate to "+cap+" E ("+e+" / "+cap+")",due:Date.now()+wait*1000};}
-    if(first?.type==="xanax"&&remaining>0)return {ready:false,label:"Wait for Xanax cooldown",due:Date.now()+remaining*1000};
+    if(program.id!=="natural"&&e<cap){const wait=projected.until+Math.max(0,Math.ceil((cap-e)/projected.step)-1)*projected.interval;return {ready:false,label:"Regenerate to "+cap+" E ("+e+" / "+cap+")",waitKind:"energy",nextAction:"Start "+program.label,due:Date.now()+wait*1000};}
+    if(first?.type==="xanax"&&remaining>0)return {ready:false,label:"Wait for Xanax cooldown",waitKind:"drug",nextAction:"Take Xanax",due:Date.now()+remaining*1000};
     return {ready:true,label:"Ready to start "+program.label,due:null};
   }
   let recoveryBusy=false,recoveryMessage="",readinessExpires=0;
@@ -989,11 +989,11 @@ const tornCrimeGuide = (() => {
     if(!row?.step)return "Training Cycle Complete";
     const {step,due}=row;
     if(due>now){
-      if(row.happyWait)return "Waiting for Happiness Reset";
-      if(row.boosterWait)return "Waiting for Booster Cooldown";
       if(row.drugWait)return "Waiting for Drug Cooldown";
+      if(row.boosterPending||row.boosterWait)return "Waiting for Booster Cooldown";
       if(row.refillWait)return "Waiting for Daily Refill";
       if(row.energyWait)return "Waiting for Energy";
+      if(row.happyWait)return "Waiting for Happiness Reset";
       return "Waiting for Scheduled Step";
     }
     const kind=String(session.label||"").toLowerCase();
@@ -1014,8 +1014,8 @@ const tornCrimeGuide = (() => {
     const first=(program.cycleExecution??program.execution??[]).find(actionable);
     if(prep.ready)return {status:"Ready to Start",next:"Start "+program.label+(first?" · "+energyAction(first,stat,fmt):"")};
     if(prep.due!=null){
-      if(/regenerate/i.test(prep.label))return {status:"Waiting for Energy",next:prep.label};
-      if(/wait/i.test(prep.label))return {status:"Waiting for Drug Cooldown",next:prep.label.replace(/^Wait, then /i,"").replace(/^Wait for first Xanax$/i,"Take Xanax").replace(/^Wait for Xanax cooldown$/i,"Take Xanax")};
+      const status=prep.waitKind==="energy"?"Waiting for Energy":prep.waitKind==="drug"?"Waiting for Drug Cooldown":"Waiting for Scheduled Step";
+      return {status,next:prep.nextAction??energyAction(first,stat,fmt)};
     }
     return {status:"Preparation Required",next:prep.label};
   }
@@ -1131,8 +1131,9 @@ const tornCrimeGuide = (() => {
     },0):null;
     const fresh=key=>Number(state.fetchedAt?.[key]||0)>0&&now-Number(state.fetchedAt[key])<5*60000&&!state.errors?.[key];
     const stockFresh=Number(state.fetchedAt?.["inventory:Drug"]||0)>0&&now-Number(state.fetchedAt["inventory:Drug"])<5*60000;
-    const advice=war.stale||tornTrainSequence.liveAccountStatus(state,now).blocked?{phase:war.phase,first:war.cutoff,due:null,doses:[],label:war.stale?"Last known war schedule · refresh to verify":"Training and war stacking paused · verify player status"}:warStackAdvice(war,settings,fresh("bars")&&fresh("cooldowns")?recoverySnapshot(now):null,stockFresh?held:null,training.avoidWarDrugs,now);
-    return {...war,...advice,active:now>=war.cutoff,attacks:tornActivityScheduler.warAttackSummary(war,now)};
+    const live=fresh("bars")&&fresh("cooldowns")?recoverySnapshot(now):null,blocked=tornTrainSequence.liveAccountStatus(state,now).blocked;
+    const advice=war.stale||blocked?{phase:war.phase,first:war.cutoff,due:null,doses:[],label:war.stale?"Last known war schedule · refresh to verify":"Training and war stacking paused · verify player status"}:warStackAdvice(war,settings,live,stockFresh?held:null,training.avoidWarDrugs,now);
+    return {...war,...advice,blocked,drugWait:!war.stale&&!blocked&&live?.drug>0,active:now>=war.cutoff,attacks:tornActivityScheduler.warAttackSummary(war,now)};
   }
   function warAttackPanel(summary){
     return '<small>'+(summary?"Recent outgoing ranked-war attacks: "+number(summary.attacks)+" · respect "+number(summary.respect)+(summary.limited?" · history truncated":""):"Attack data not loaded or unavailable")+'</small><button type="button" data-activity-war-refresh>Refresh war attacks</button>';
@@ -1140,11 +1141,19 @@ const tornCrimeGuide = (() => {
   function warProgressText(advice){
     return advice.energy==null?"Stack and readiness unverified":number(advice.energy)+" / 1,000 E · "+advice.doses.length+" future doses"+(advice.projectedEnergy==null?"":" · "+number(advice.projectedEnergy)+" E projected");
   }
+  function warDisplay(advice,now=Date.now()){
+    if(advice.stale||advice.blocked||advice.due==null&&advice.phase!=="active")return {status:"Verify War Readiness",next:advice.label};
+    if(advice.phase==="active")return {status:"Ranked War Active",next:advice.label};
+    if(advice.drugWait&&advice.doses?.length&&advice.due>now)return {status:"Waiting for Drug Cooldown",next:advice.label.replace(/^Wait, then /,"")};
+    if(advice.doses?.length)return {status:"Stacking for Ranked War",next:advice.label.replace(/^Wait, then /,"")};
+    return {status:"Preserving Energy for War",next:advice.label};
+  }
   function warCounter(advice){
-    return '<div class="growth-next-step" data-war-counter><div class="growth-counter-header"><small class="growth-counter-title">Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(advice.mode?" · "+esc(advice.mode):"")+'</small><div class="growth-counter-actions">'+growthWatchIndicator(growthWatchStatus(null,warTraining,advice))+
-      '<button type="button" data-growth-session="war-refresh" aria-label="Refresh war preparation" title="Refresh war preparation" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button></div></div><strong class="growth-next-clock" data-war-clock>'+
+    const display=warDisplay(advice);
+    return '<div class="growth-next-step" data-war-counter data-ready="'+(advice.due!=null&&advice.due<=Date.now()&&!advice.stale&&!advice.blocked)+'" '+(advice.due!=null?'data-war-due="'+advice.due+'"':"")+'><div class="growth-counter-header"><small class="growth-counter-title">Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(advice.mode?" · "+esc(advice.mode):"")+'</small><div class="growth-counter-actions">'+growthWatchIndicator(growthWatchStatus(null,warTraining,advice))+
+      '<button type="button" data-growth-session="war-refresh" aria-label="Refresh war preparation" title="Refresh war preparation" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button></div></div><strong class="growth-next-clock growth-stage" data-war-stage>'+esc(display.status)+'</strong><strong class="growth-next-clock" data-war-clock>'+
       esc(advice.stale?"Verify":advice.phase==="active"?"Active":advice.due==null?"Verify":advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
-      '</strong><span data-war-step>'+esc(advice.label)+'</span>'+
+      '</strong><span data-war-step>Next: '+esc(display.next)+'</span>'+
       (advice.phase==="active"&&!advice.stale?warAttackPanel(advice.attacks):'<small data-war-progress>'+esc(warProgressText(advice))+'</small>')+recoveryPanel()+'</div>';
   }
   let warTraining=null;
@@ -1285,8 +1294,12 @@ const tornCrimeGuide = (() => {
       if(war?.active){
         const clock=warPanel.querySelector("[data-war-clock]"),step=warPanel.querySelector("[data-war-step]");
         const value=war.stale?"Verify":war.phase==="active"?"Active":war.due==null?"Verify":war.due>Date.now()?tornTctClock.formatDuration((war.due-Date.now())/1000):"Ready";
+        const display=warDisplay(war),stage=warPanel.querySelector("[data-war-stage]");
+        warPanel.dataset.ready=String(war.due!=null&&war.due<=Date.now()&&!war.stale&&!war.blocked);
+        if(war.due==null)delete warPanel.dataset.warDue;else warPanel.dataset.warDue=String(war.due);
         if(clock.textContent!==value)clock.textContent=value;
-        if(step.textContent!==war.label)step.textContent=war.label;
+        if(stage&&stage.textContent!==display.status)stage.textContent=display.status;
+        if(step.textContent!=="Next: "+display.next)step.textContent="Next: "+display.next;
         const progress=warPanel.querySelector("[data-war-progress]");if(progress)progress.textContent=warProgressText(war);
       }else refreshRecommendations(document.getElementById("topic-view"));
     }else if(warSwitch&&Number(warSwitch.dataset.warSwitch)<=Date.now()){
@@ -1322,10 +1335,23 @@ const tornCrimeGuide = (() => {
     }
     const remaining=(Number(el.dataset.growthDue)-Date.now())/1000;
     if(!Number.isFinite(remaining))return;
-    const ready=remaining<=0;el.dataset.ready=String(ready);
-    const clock=el.querySelector("[data-growth-clock]"),value=ready?"Ready":tornTctClock.formatDuration(remaining);
+    const ready=remaining<=0;
+    const clock=el.querySelector("[data-growth-clock]");
+    if(!session&&ready&&trainingDraft){
+      // Countdown expiry does not prove readiness: recheck the Start control.
+      const prep=prepState(trainingDraft.plan,trainingDraft.training.blockDrugs);
+      const display=energyPrepStatus(prep,trainingDraft.plan?.program,trainingDraft.plan?.stat,number),stage=el.querySelector("[data-growth-stage]"),step=el.querySelector("[data-growth-step]"),button=el.querySelector('[data-growth-session="start"]');
+      el.dataset.ready=String(prep.ready);
+      if(prep.due==null)delete el.dataset.growthDue;else el.dataset.growthDue=String(prep.due);
+      if(clock){clock.hidden=prep.due==null;clock.textContent=prep.due==null?"":tornTctClock.formatDuration(Math.max(0,(prep.due-Date.now())/1000));}
+      if(stage&&stage.textContent!==display.status)stage.textContent=display.status;
+      if(step&&step.textContent!=="Next: "+display.next)step.textContent="Next: "+display.next;
+      if(button)button.disabled=!prep.ready;
+      return;
+    }
+    el.dataset.ready=String(ready);
+    const value=ready?"Ready":tornTctClock.formatDuration(remaining);
     if(clock&&clock.textContent!==value)clock.textContent=value;
-    if(!session&&ready&&trainingDraft){const display=energyPrepStatus(prepState(trainingDraft.plan,trainingDraft.training.blockDrugs),trainingDraft.plan?.program,trainingDraft.plan?.stat,number);const stage=el.querySelector("[data-growth-stage]"),step=el.querySelector("[data-growth-step]");if(stage&&stage.textContent!==display.status)stage.textContent=display.status;if(step&&step.textContent!=="Next: "+display.next)step.textContent="Next: "+display.next;}
   }
   function affordableMissionBooks(missions,now=Date.now()){
     if(!Number.isSafeInteger(missions?.credits)||!Array.isArray(missions?.rewards))return [];

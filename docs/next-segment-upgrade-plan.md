@@ -73,3 +73,5 @@ Gym membership and Energy/train replace the stat directive. Primary phase and co
 1P.3b first implementation gate: typed session and historical-cycle validator plus inert account-scoped review preparation, actual natural optimizer producer regression. Not yet exposed in runtime backup or training actions. Continue paid/custom/premium producer fixtures and staged restore gates before enabling recovery.
 
 Training recovery validator now passes generated output for all seven cycle templates and watch evidence checks. Active session backup/restore remains disabled until the independent staged-storage/UI hold and fresh reconciliation gate is wired.
+
+Energy clarity follow-up: structured preparation wait reasons, rechecked Start readiness on countdown expiry, active cooldown priority over future Happiness-reset waits, and equivalent ranked-war phase/Next hierarchy. No war planning-policy changes. Related CJS bodies passed adapted harness; actual mobile and responsive browser checks remain open.
