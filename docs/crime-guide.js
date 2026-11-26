@@ -227,29 +227,29 @@ const tornCrimeGuide = (() => {
     });
     dialog.showModal();
   }
-  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Energy"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
+  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Energy"],["calendar","Calendar"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
   let recIncomplete=true,recUniques=false,collectView="ready",incompleteUniquesOnly=true,crimeOverride="auto";
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id)),recExpanded=new Set();
   function loadRecFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
     recOwner=owner;collectView="ready";incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
-    try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v))recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}
+    try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v)){recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));if(!v.includes("calendar")&&localStorage.getItem("torn-city-guide:calendar-introduced:"+owner)!=="true"){recEnabled.add("calendar");localStorage.setItem("torn-city-guide:calendar-introduced:"+owner,"true");}}}catch{}
   }
   let growthSettingsOpen=false;
   function excludeOwned(){try{return localStorage.getItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"))!=="false";}catch{return true;}}
   const recGearIcon='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
   const recRefreshIcon='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.5 8a7 7 0 0 1 11.6-2L20 12M4 12l2.9 6A7 7 0 0 0 18.5 16"/></svg>';
-  const recRoutes={restock:"#inventory",merit:"#merits",growth:"#stats",consume:"#inventory",crime:"#crime",education:"#education",money:"#stocks"};
+  const recRoutes={restock:"#inventory",merit:"#merits",growth:"#stats",calendar:"#calendar",consume:"#inventory",crime:"#crime",education:"#education",money:"#stocks"};
   const recIconButton=(label,icon,attributes="",available=true)=>'<button type="button" class="rec-header-button" aria-label="'+esc(label)+'" title="'+esc(label+(available?"":" (not configured)"))+'" '+attributes+(available?"":" disabled")+'>'+icon+'</button>';
   function energyWarSettings(){
-    const defaults={mode:"scheduled",adjustment:60,lead:2};
+    const defaults={mode:"scheduled",adjustment:60,lead:120};
     try{
       const data=JSON.parse(localStorage.getItem("torn-city-guide:energy-war:"+recOwner));
       if(!data)return defaults;
       const bounded=(value,min,max,fallback)=>Number.isInteger(value)?Math.max(min,Math.min(max,value)):fallback;
       return {mode:["off","scheduled","faction"].includes(data.mode)?data.mode:defaults.mode,
-        adjustment:bounded(data.adjustment,-120,120,60),lead:bounded(data.lead,0,120,2)};
+        adjustment:bounded(data.adjustment,-120,120,60),lead:bounded(data.lead===2&&!data.version?120:data.lead,0,120,120)};
     }catch{return defaults;}
   }
   function autoTrainingWatch(){
@@ -264,17 +264,19 @@ const tornCrimeGuide = (() => {
         .map(([id,label])=>'<option value="'+id+'" '+(war.mode===id?"selected":"")+'>'+label+'</option>').join("")+'</select></label>'+
       '<label>Xanax cooldown adjustment (minutes) <input type="number" min="-120" max="120" step="1" value="'+war.adjustment+'" data-energy-war="adjustment"></label>'+
       '<label>Clear cooldown before war (minutes) <input type="number" min="0" max="120" step="1" value="'+war.lead+'" data-energy-war="lead"></label>'+
-      '<small>Adjustment applies to a 7-hour Xanax estimate. Default +60 allows 8 hours per dose.</small></div>';
+      '<small>Adjustment applies to a 7-hour Xanax estimate. Default +60 allows 8 hours per dose. Training ends before four cooldowns plus the clearance buffer.</small><button type="button" data-activity-settings>Rehab &amp; activity budget settings</button></div>';
   }
 
   function recTileStart(id,label,crimeRefreshIds=[]){
     const settings=id==="growth"?recIconButton("Energy settings",recGearIcon,"data-growth-settings"):
       id==="restock"?recIconButton("Restock settings (minimums)",recGearIcon,'data-restock-settings aria-haspopup="dialog"'):
       id==="crime"?recIconButton("Crime settings",recGearIcon,'data-rec-crime-settings aria-haspopup="dialog"'):
+      id==="calendar"?recIconButton("Calendar settings",recGearIcon,'data-activity-settings aria-haspopup="dialog"'):
       recIconButton(label+" settings",recGearIcon,"",false);
     const refresh=id==="crime"?recIconButton("Refresh crime progress",recRefreshIcon,'data-rec-crime-load="'+crimeRefreshIds.join(",")+'"',crimeRefreshIds.length>0):
       id==="growth"?recIconButton("Refresh Energy",recRefreshIcon,'data-growth-session="'+(loadTrainingSession()?"refresh":"war-refresh")+'"',!recoveryBusy):
       id==="money"?recIconButton("Refresh price history",recRefreshIcon,"data-rec-history"):
+      id==="calendar"?recIconButton("Refresh Calendar",recRefreshIcon,"data-activity-refresh",!recoveryBusy):
       recIconButton("Refresh "+label,recRefreshIcon,"",false);
     const refill=id==="crime"?refillIndicator("nerve"):id==="growth"?refillIndicator("energy"):"";
     return '<details class="rec-tile" data-rec-group="'+esc(id)+'" '+(recExpanded.has(id)?"open":"")+'><summary class="rec-tile-heading"><a class="rec-tile-link" href="'+recRoutes[id]+'" title="Open '+esc(label)+' guide">'+esc(label)+'</a>'+refill+'<span class="rec-header-actions">'+settings+refresh+'</span></summary><div class="rec-tile-body">';
@@ -473,21 +475,90 @@ const tornCrimeGuide = (() => {
     });
     return '<li class="rec-pickpocket"><div><strong>Recommended targets</strong>'+(rows.length?'<ul class="rec-pick-targets">'+rows.join("")+'</ul>':'<small>No incomplete unique targets at this risk level.</small>')+'</div></li>';
   }
+  function currentActivityWar(now=Date.now()){
+    const settings=energyWarSettings(),war=rankedWar(now);
+    if(settings.mode==="off"||settings.mode==="faction"&&!war?.mode)return null;
+    return tornActivityScheduler.warWindow(war,settings,now);
+  }
+  function activityLimits(now=Date.now()){
+    const war=currentActivityWar(now),limit=tornActivityScheduler.limits({war,now});
+    const profile=payload("profile","profile"),status=String(profile?.status?.state??profile?.status?.description??"").toLowerCase();
+    // A verified unavailable status blocks training even after a reservation
+    // expires. A stale or missing status is not proof that a trip is safe.
+    const away=/travel|abroad|hospital|jail/.test(status);
+    return {...limit,war,away,blocked:limit.blocked||away,reason:away?"Player "+status:limit.reason};
+  }
   function trainingRecommendationContext(prefs){
     const iconData=payload("icons","icons");
     const iconFresh=iconData&&!tornGuideApi.state.errors?.icons&&Date.now()-Number(tornGuideApi.state.fetchedAt?.icons||0)<15*60000;
     const iconTexts=iconFresh?Object.values(iconData).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")):[];
-    const addictionDebuff=iconTexts.filter(x=>/addict/i.test(x)).map(x=>{const m=x.match(/(?:reduced by|reduction of|[-−])\s*(\d+(?:\.\d+)?)\s*%/i);return m?Number(m[1]):null;}).filter(x=>x!==null);
-    const highAddiction=addictionDebuff.some(x=>x>=5);
-    const edu=educationModel(),enrolled=Boolean((edu.id!=null&&edu.id!==0&&edu.id!=="0"&&edu.id!=="")||(Number(edu.deadline)>Date.now()));
+    const now=Date.now(),activity=activityLimits(now),settings=tornActivityScheduler.settings();
+    const health=tornActivityScheduler.addiction(!!iconFresh,iconTexts,settings,activity.war);
+    const addictionDebuff=health.penalty==null?[]:[health.penalty],highAddiction=health.blockDrugs;
+    const edu=educationModel(),enrolled=Boolean((edu.id!=null&&edu.id!==0&&edu.id!=="0"&&edu.id!=="0"&&edu.id!=="")||(Number(edu.deadline)>now));
     const perks=payload("perks","perks"),jobPerks=Object.entries(perks||{}).filter(([key])=>/job|company/i.test(key)).flatMap(([,v])=>Array.isArray(v)?v:[]).map(x=>typeof x==="string"?x:[x?.name,x?.description,x?.effect].filter(Boolean).join(" "));
     const protectedEducation=jobPerks.some(x=>/\bRestraint\b|education is unaffected by drug addiction|education.*immune.*addiction/i.test(x));
-    const educationRisk=enrolled&&highAddiction&&!protectedEducation;
-    const blockDrugs=highAddiction&&(!enrolled||!protectedEducation);
+    const educationRisk=enrolled&&!protectedEducation&&health.penalty!=null&&health.penalty>=5;
+    const blockDrugs=highAddiction||educationRisk||health.penalty===null;
     const session=loadTrainingSession();
-    const budget=prefs.weeklyBudget==null?null:Math.max(0,prefs.weeklyBudget-trainingSpend().reduce((sum,entry)=>sum+entry.cost,0));
-    const plan=tornStatPlanner.homeTrainingAdvice(budget,prefs.risk,{blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth"});
-    return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan,budget,avoidWarDrugs:blockDrugs||prefs.odRisk==="low"};
+    const remaining=prefs.weeklyBudget==null?null:Math.max(0,prefs.weeklyBudget-trainingSpend().reduce((sum,entry)=>sum+entry.cost,0));
+    const reserves=tornActivityScheduler.budget(remaining,settings,activity.war,health),budget=reserves.training;
+    const warDeadline=activity.war?.cutoff??null;
+    const plan=tornStatPlanner.homeTrainingAdvice(budget,prefs.risk,{blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session||activity.blocked,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth",
+      deadline:activity.deadline,requireDrugClear:warDeadline!==null&&activity.deadline===warDeadline,warXanaxSeconds:activity.war?Math.max(28800,activity.war.cd/1000):28800,reserveXanax:activity.war&&activity.war.cutoff<now+604800000?4:0});
+    const scheduled=activityEventsForTraining(session,plan?.program,now);
+    const live=recoverySnapshot(),profile=payload("profile","profile"),st=tornGuideApi.state;
+    const status=String(profile?.status?.state??"").toLowerCase();
+    const travelAvailable=Number(st.identity?.level??profile?.level)>=15&&["okay","ok"].includes(status)&&!st.errors?.profile&&now-Number(st.fetchedAt?.profile||0)<15*60000&&!activity.blocked;
+    const rehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&e.end>now)?null:tornActivityScheduler.rehabWindow({now,health,war:activity.war,actions:scheduled.map(e=>e.start),drugReady:live?.drug>0?now+live.drug*1000:null,s:settings,travelAvailable});
+    return {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan,budget,avoidWarDrugs:blockDrugs||prefs.odRisk==="low",activity,health,rehab,reserves,scheduled};
+  }
+  function activityEventsForTraining(session,program,now=Date.now()){
+    const labels={xanax:"Xanax",ecstasy:"Ecstasy",train:"Gym training",candy:"Candy",dvd:"Erotic DVD",refill:"Energy refill",externalHappy:"Coordinated happiness boost"};
+    const rows=session?sessionSchedule(session,now).filter(x=>!x.done).map(x=>({step:x.step,at:x.due,source:"Active training cycle"})):
+      (program?.execution??[]).filter(actionable).map(step=>({step,at:program.generatedAt+step.at*1000,source:"Optimal Budget forecast"}));
+    return rows.filter(x=>Number.isFinite(x.at)&&labels[x.step.type]).map(({step,at,source},i)=>({id:"training-"+i,kind:"training",title:labels[step.type]+(step.type==="train"?" · "+number(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+number(step.quantity):""),start:at,end:at,source}));
+  }
+  function calendarEvents(training,now=Date.now()){
+    return tornActivityScheduler.schedule({now,war:training.activity.war,health:training.health,rehab:training.rehab,training:training.scheduled,limit:training.activity.blocked?now:training.activity.deadline});
+  }
+  function rehabPanel(training){
+    const {health,rehab,reserves}=training,fmt=tornActivityScheduler.time;
+    const warning=health.level==="restricted"?"Drug recommendations restricted until refreshed addiction data clears the threshold.":health.level==="unknown"?"Addiction status unavailable; drug recommendations paused until icons refresh.":health.level==="recommended"?"Rehabilitation recommended.":health.level==="preferred"?"Rehabilitation preferred when a suitable gap exists.":"";
+    const active=tornActivityScheduler.events().find(e=>e.kind==="rehab"&&e.end>Date.now());
+    return '<div class="activity-health"><strong>Addiction penalty: '+(health.penalty==null?"Unknown":esc(health.penalty+"%"))+'</strong>'+(warning?'<small>'+esc(warning)+'</small>':"")+
+      (active?'<small>Rehab reserved: '+esc(fmt(active.start))+' to '+esc(fmt(active.end))+'</small>':rehab?'<small>Suggested rehab: '+esc(fmt(rehab.start))+' to '+esc(fmt(rehab.end))+' · estimate $'+number(rehab.cost)+(rehab.overlapsCooldown?" · fits cooldown":"")+(rehab.requiresPause?" · pause training":"")+'</small><button type="button" data-activity-rehab>Reserve rehab window</button>':["preferred","recommended","restricted"].includes(health.level)?'<small>No verified travel window yet; check travel eligibility, live status and upcoming commitments.</small>':"")+
+      (reserves.warReserve||reserves.rehabReserve?'<small>Reserved cash: war $'+number(reserves.warReserve)+' · rehab $'+number(reserves.rehabReserve)+(reserves.shortfall?" · exceeds available budget":"")+'</small>':"")+'</div>';
+  }
+  function calendarCard(training,full=false){
+    return rehabPanel(training)+tornActivityScheduler.render(calendarEvents(training),{full})+(full?tornActivityScheduler.manualForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
+  }
+  function renderCalendar(){
+    loadOcFilters();loadRecFilters();
+    const training=trainingRecommendationContext(tornRoadmap.preferences());
+    activityContext=training;
+    return '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Calendar</h1><p>Shared TCT agenda for training, rehabilitation, faction commitments and account timers.</p></header><section class="panel"><div class="panel-heading"><h2>Activity schedule</h2><div class="activity-page-actions"><button type="button" data-activity-settings>Settings</button><button type="button" data-activity-refresh>Refresh</button></div></div><div class="panel-content">'+calendarCard(training,true)+'<p class="fine-print"><a href="https://github.com/vagabond1215/TORN/blob/main/docs/activity-scheduler-plan.md" target="_blank" rel="noopener noreferrer">Scheduling design and limitations</a></p></div></section>';
+  }
+  let activityContext=null;
+  function refreshActivityView(view){
+    if(!view?.isConnected)return;
+    if(tornGuideApi.routeName()==="calendar"){view.innerHTML=renderCalendar();wireActivity(view);}
+    else if(tornGuideApi.routeName()==="home")refreshRecommendations(view);
+  }
+  function wireActivity(view){
+    tornActivityScheduler.wire(view,()=>refreshActivityView(view));
+    if(view.dataset.activityActionsBound==="1")return;view.dataset.activityActionsBound="1";
+    view.addEventListener("click",e=>{
+      const gear=e.target.closest("[data-activity-settings]"),refresh=e.target.closest("[data-activity-refresh]"),rehab=e.target.closest("[data-activity-rehab]");
+      if(gear){e.preventDefault();tornActivityScheduler.settingsDialog(()=>refreshActivityView(view),gear);return;}
+      if(refresh&&!recoveryBusy){e.preventDefault();recoveryBusy=true;refresh.disabled=true;
+        Promise.resolve(tornGuideApi.loadPage("calendar",true)).catch(()=>{}).finally(()=>{recoveryBusy=false;refreshActivityView(view);});return;}
+      if(rehab&&activityContext?.rehab){const r=activityContext.rehab,now=Date.now(),start=Math.max(now,r.start),end=start+r.duration;
+        const limit=activityLimits(now),busy=tornActivityScheduler.events().some(x=>x.blocking&&start<x.end&&end>x.start);
+        if(limit.blocked||busy||limit.war&&end>limit.war.cutoff){refreshActivityView(view);return;}
+        if(tornActivityScheduler.saveEvent({id:"rehab-"+now,kind:"rehab",title:"Switzerland rehabilitation (reserved)",start,end,blocking:true}))refreshActivityView(view);
+      }
+    });
   }
   let growthTab="summary";
   let sessionOwner=null,trainingSession=null,trainingDraft=null;
@@ -609,6 +680,7 @@ const tornCrimeGuide = (() => {
     const cd=payload("cooldowns","cooldowns"),drug=cd?.drug;
     const remaining=drug==null?null:Math.max(0,Number(typeof drug==="object"?drug.remaining??drug.time_left:drug)-(Date.now()-Number(st.fetchedAt?.cooldowns||Date.now()))/1000);
     if(!program||!projected)return {ready:false,label:"Load training and Energy data",due:null};
+    if(activityLimits().blocked||program.deadline&&Date.now()>=program.deadline-60000)return {ready:false,label:"Scheduled activity prevents training",due:null};
     const e=projected.current,cap=projected.maximum,cost=Number(plan.gym?.energy)||10;
     const first=(program.cycleExecution??program.execution).find(actionable),startsZero=program.startEnergy==="zero"&&program.id!=="natural";
     if(program.source==="optimal-budget"||program.source==="natural"){
@@ -726,7 +798,7 @@ const tornCrimeGuide = (() => {
   function watchTraining(view,{resume=false}={}){
     if(!view||view.hidden||!view.isConnected||tornGuideApi.routeName()!=="home"||!autoTrainingWatch()||recoveryBusy)return;
     const session=loadTrainingSession();
-    if(!session||session.index>=session.actions.length||warTraining&&(energyWarAdvice(warTraining)?.active||warTraining.blockDrugs&&session.drugRisk))return;
+    if(!session||session.index>=session.actions.length||activityLimits().blocked||sessionDeadlineConflict(session,activityLimits())||warTraining&&(energyWarAdvice(warTraining)?.active||warTraining.blockDrugs&&session.drugRisk))return;
     const st=tornGuideApi.state;
     if(!st.identity)return;
     if(observeTrainingStep(session)){
@@ -843,7 +915,7 @@ const tornCrimeGuide = (() => {
   function growthPlanSequence(program){
     if(program?.source!=="optimal-budget"||!Array.isArray(program.sequence)||!program.sequence.length)return "";
     const names={natural:"Natural Training",maxenergy:"Maximum Energy",mini:"Mini Jump",low:"Low-stat Jump",jump:"Happy Jump",maxhappy:"99k Happy Jump",custom:"Custom"};
-    return '<div class="growth-optimal-plan"><strong class="growth-accent">Following the Optimal Budget Plan:</strong><ol aria-label="Projected seven-day training cycles">'+program.sequence.map((cycle,i)=>'<li'+(i===0?' class="growth-cycle-current" aria-current="step"':"")+'>'+esc(names[cycle.id]??cycle.id)+(cycle.partial?' <small>(partial)</small>':"")+'</li>').join("")+'</ol><small>Seven-day projection · Replanned after each cycle.</small></div>';
+    return '<div class="growth-optimal-plan"><strong class="growth-accent">Following the Optimal Budget Plan:</strong><ol aria-label="Projected seven-day training cycles">'+program.sequence.map((cycle,i)=>'<li'+(i===0?' class="growth-cycle-current" aria-current="step"':"")+'>'+esc(names[cycle.id]??cycle.id)+(cycle.partial?' <small>(partial)</small>':"")+'</li>').join("")+'</ol><small>'+(program.deadline?esc("Bounded projection until "+tornActivityScheduler.time(program.deadline)):"Seven-day projection")+' · Replanned after each cycle.</small></div>';
   }
   function growthPeriodSummary(periods,fmt,confirmed){
     const estimates=tornTrainSequence.periodPurchases(periods??[1,7,28].map(days=>({days})),confirmed);
@@ -898,39 +970,31 @@ const tornCrimeGuide = (() => {
   }
   function rankedWar(now){
     const state=tornGuideApi.state;
-    if(state.errors?.factionWars)return null;
     const war=payload("factionWars","wars")?.ranked;
     const start=Number(war?.start)*1000,end=Number(war?.end)*1000;
     if(!Number.isFinite(start)||start<=0||end>0&&end<=now||Number(war?.winner)>0)return null;
     const mode=typeof war.template?.mode==="string"?war.template.mode:null;
-    return {start,mode};
+    return {start,end:end>0?end:null,mode,source:state.errors?.factionWars?"Last known faction API (refresh failed)":"Faction API"};
   }
   function warStackAdvice(war,settings,live,held,avoidDrugs,now){
-    const interval=(420+settings.adjustment)*60000;
-    const desiredClear=war.start-settings.lead*60000;
-    const nominalFirst=desiredClear-4*interval;
-    const stocked=held==null?4:Math.min(4,held);
-    const preserveWindow=5*3600000;
-    const first=live?.energy>live?.cap&&now>=nominalFirst?nominalFirst:
-      avoidDrugs||stocked===0?war.start-preserveWindow:desiredClear-stocked*interval;
-    if(now>=war.start)return {first,due:null,label:"War started · use Energy as needed"};
+    const interval=war.cd,desiredClear=war.clear,first=war.cutoff;
+    if(now>=war.start)return {first,due:null,label:"War active · reserve Energy for faction combat",phase:"active"};
     if(!live||live.drug===null)return {first,due:first>now?first:null,label:"Refresh to verify Energy and drug cooldown"};
-    const stacked=live.energy>live.cap?Math.min(4,Math.floor(live.energy/250)):0;
-    if(stacked===4)return {first,due:live.drug>0?now+live.drug*1000:war.start,label:live.drug>0?"Hold 1,000 E · drug cooldown":"Hold 1,000 E for war"};
-    if(avoidDrugs)return {first,due:war.start,label:"Preserve Energy · drug use excluded by Focus or account restrictions"};
-    if(held===null)return {first,due:first>now?first:null,label:"Refresh to verify Xanax inventory"};
+    if(now<first)return {first,due:first,label:"Training until stacking deadline"};
+    const stacked=Math.min(4,Math.floor(live.energy/250));
+    if(live.energy>=1000)return {first,due:live.drug>0?now+live.drug*1000:war.start,label:live.drug>0?"Hold 1,000 E · drug cooldown":"Hold 1,000 E for war"};
+    if(avoidDrugs)return {first,due:war.start,label:"Preserve Energy · drug use excluded by Focus or addiction restrictions"};
+    if(held===null)return {first,due:null,label:"Refresh to verify Xanax inventory"};
     const ready=now+live.drug*1000,remaining=4-stacked;
-    const ifNeeded=Math.max(0,Math.floor((war.start-ready)/interval));
-    const doses=Math.min(remaining,held,ifNeeded);
-    if(!doses)return {first,due:war.start,label:held===0?"No Xanax on hand · preserve Energy for war":"Preserve Energy · another dose would clear after war starts"};
+    const fit=Math.max(0,Math.floor((desiredClear-ready)/interval));
+    const doses=Math.min(remaining,held,fit);
+    if(!doses)return {first,due:war.start,label:held===0?"No Xanax on hand · preserve Energy for war":"Preserve Energy · another dose cannot clear by buffer"};
     const due=Math.max(ready,desiredClear-doses*interval);
-    const action=stacked===0&&live.energy>0?"Spend to 0 E, then take Xanax":"Take Xanax";
-    const detail=doses<remaining?" · "+doses+" of "+remaining+" remaining doses fit":" · dose "+(stacked+1)+" of 4";
-    return {first,due,label:(due>now?"Wait, then ":"")+action+detail};
+    return {first,due,label:(due>now?"Wait, then ":"")+"Take Xanax"+(doses<remaining?" · "+doses+" of "+remaining+" remaining doses fit":" · dose "+(stacked+1)+" of 4")};
   }
   function energyWarAdvice(training,now=Date.now()){
-    const settings=energyWarSettings(),war=rankedWar(now);
-    if(settings.mode==="off"||!war||settings.mode==="faction"&&!war.mode)return null;
+    const settings=energyWarSettings(),war=currentActivityWar(now);
+    if(!war)return null;
     const state=tornGuideApi.state,inventory=state.inventory.Drug;
     const catalog=payload("itemCatalog","items"),items=Array.isArray(catalog)?catalog:Object.values(catalog||{});
     const xanax=items.find(item=>normalize(item.name)==="xanax");
@@ -940,27 +1004,27 @@ const tornCrimeGuide = (() => {
         sum+Math.max(0,Number(item.quantity??item.amount)||0):sum;
     },0):null;
     const advice=warStackAdvice(war,settings,recoverySnapshot(),held,training.avoidWarDrugs,now);
-    const session=loadTrainingSession();
-    const cycleEnd=now+((training.plan?.program?.cycleExecution??[]).at(-1)?.end??0)*1000;
-    const active=now>=advice.first||!session&&cycleEnd>advice.first;
-    return {...war,...advice,active};
+    return {...war,...advice,active:now>=war.cutoff};
   }
   function warCounter(advice){
     return '<div class="growth-next-step" data-war-counter><div class="growth-counter-actions">'+
       '<button type="button" data-growth-session="war-refresh" aria-label="Refresh war preparation" title="Refresh war preparation" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button></div>'+
       '<small>Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+
       (advice.mode?" · "+esc(advice.mode):"")+'</small><strong class="growth-next-clock" data-war-clock>'+
-      esc(advice.due&&advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
+      esc(advice.phase==="active"?"Active":advice.due&&advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
       '</strong><span data-war-step>'+esc(advice.label)+'</span>'+recoveryPanel()+'</div>';
   }
   let warTraining=null;
   function growthCard(training,prefs){
     const activeSession=loadTrainingSession();
     const p=training.plan;
-    let setup=growthSettings()+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
+    let setup=growthSettings()+rehabPanel(training)+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
     warTraining=training;
     const war=energyWarAdvice(training);
-    if(war?.active)return '<div class="growth-card">'+setup+warCounter(war)+'</div>';
+    if(war?.active)return '<div class="growth-card">'+setup+warCounter(war)+(activeSession?'<small>Training session held; reconciling before war preparation.</small>':"")+'</div>';
+    if(training.activity.blocked)return '<div class="growth-card">'+setup+'<div class="growth-warning">Training paused · '+esc(training.activity.reason??"reserved activity")+'</div><a href="#calendar">View calendar</a></div>';
+    if(activeSession&&sessionDeadlineConflict(activeSession,training.activity))return '<div class="growth-card">'+setup+'<div class="growth-warning">Current cycle conflicts with '+esc(training.activity.reason??"a scheduled activity")+'. Confirming completed actions and replanning the remainder.</div>'+recoveryPanel()+'</div>';
+    if(training.activity.deadline!=null)setup+='<small data-activity-cutoff="'+training.activity.deadline+'">Training cutoff: '+esc(tornActivityScheduler.time(training.activity.deadline))+' · '+esc(training.activity.reason??"activity")+'</small>';
     if(war)setup+='<small data-war-switch="'+war.first+'">Ranked war starts '+esc(new Date(war.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(war.mode?" · "+esc(war.mode):"")+'</small>';
     if(activeSession&&!p?.stats){const fmt=v=>v==null?"Unavailable":number(Math.round(v));const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",refill:"Points refill"};return '<div class="growth-card">'+setup+sessionPanel(p??{},training,names,fmt)+growthPlanSequence(activeSession)+replayPanel(activeSession,fmt)+growthPeriodSummary(activeSession.periods,fmt,activeSession.actions.slice(0,activeSession.index))+'<div class="growth-execution"><ol>'+sessionSteps(activeSession,names,fmt)+'</ol></div></div>';}
     if(p?.needsBuild)return setup+'<div class="growth-warning">Choose a stat build before receiving training recommendations. <a href="#stats">Select build</a></div>';
@@ -1003,8 +1067,48 @@ const tornCrimeGuide = (() => {
     const status=refillStatus(kind);
     return '<a class="rec-header-refill rec-'+kind+'-refill '+(status==="Refill Available"?"is-available":"")+'" data-rec-refill="'+kind+'" href="https://www.torn.com/page.php?sid=points" title="'+(kind==="energy"?"Energy":"Nerve")+' refill · Points shop" '+(status?"":"hidden")+'>'+esc(status)+'</a>';
   }
+  let deadlineRetryAt=0,lastActivityState=null;
+  function sessionDeadlineConflict(session,activity,now=Date.now()){
+    if(!session||session.index>=session.actions.length)return false;
+    return activity.blocked||tornActivityScheduler.conflicts(sessionSchedule(session,now),activity.deadline,now,activity.war?.cutoff===activity.deadline,Math.max(28800000,activity.war?.cd??0));
+  }
+  async function replanActivityConflict(view,session){
+    if(recoveryBusy||Date.now()<deadlineRetryAt)return;
+    recoveryBusy=true;const owner=sessionOwner,requested=Date.now();
+    recoveryMessage="Activity deadline · verifying completed training before replanning.";
+    try{
+      await tornGuideApi.loadPage("energy",true);
+      if(sessionOwner!==owner||loadTrainingSession()!==session)return;
+      const st=tornGuideApi.state;
+      if(["bars","cooldowns","battlestats"].some(k=>Number(st.fetchedAt?.[k]||0)<requested||st.errors?.[k]))throw Error("Fresh training data unavailable");
+      observeTrainingStep(session);reconcileTrainingProgress(session);
+      if(!sessionDeadlineConflict(session,activityLimits())&&session.index<session.actions.length)return;
+      // Preserve the completed prefix; unknown partial-cycle spend is
+      // conservatively charged at the old cycle estimate, never refunded.
+      const historyKey="torn-city-guide:activity-training-history:"+owner;
+      let history=[];try{history=JSON.parse(localStorage.getItem(historyKey))||[];}catch{}
+      if(!Array.isArray(history))history=[];
+      history.push({started:session.started,ended:Date.now(),reason:"activity deadline",label:session.label,confirmed:session.actions.slice(0,session.index),completed:session.completed??{},reservedSpend:session.cycleSpend??null});
+      localStorage.setItem(historyKey,JSON.stringify(history.slice(-30)));
+      accountForCycle(session);
+      trainingSession=null;saveTrainingSession();
+      recoveryMessage="Training reconciled · activity deadline applied.";readinessExpires=Date.now()+3500;
+    }catch(error){deadlineRetryAt=Date.now()+120000;recoveryMessage="Training paused: "+String(error.message??error)+". Refresh to retry.";}
+    finally{recoveryBusy=false;if(view.isConnected)refreshActivityView(view);}
+  }
   function tickGrowth(){
-    watchTraining(document.getElementById("topic-view"));
+    const view=document.getElementById("topic-view"),route=tornGuideApi.routeName();
+    if(view?.isConnected&&!view.hidden&&(route==="home"||route==="calendar")){
+      const activity=activityLimits(),session=loadTrainingSession();
+      const key=[activity.war?.phase??"",activity.deadline??"",activity.blocked,activity.reason??""].join("|");
+      // A deadline at 'now' changes each second; compare the reservation
+      // identity while blocked rather than rebuilding the UI every tick.
+      const stableKey=activity.blocked?[activity.war?.phase??"","blocked",activity.reason??""].join("|"):key;
+      if(lastActivityState!==null&&lastActivityState!==stableKey&&!recoveryBusy)refreshActivityView(view);
+      lastActivityState=stableKey;
+      if(sessionDeadlineConflict(session,activity)&&!recoveryBusy&&Date.now()>=deadlineRetryAt){void replanActivityConflict(view,session);return;}
+    }else lastActivityState=null;
+    watchTraining(view);
     for(const indicator of document.querySelectorAll("[data-rec-refill]")){
       const status=refillStatus(indicator.dataset.recRefill);
       indicator.hidden=!status;
@@ -1029,7 +1133,7 @@ const tornCrimeGuide = (() => {
       const war=energyWarAdvice(warTraining);
       if(war?.active){
         const clock=warPanel.querySelector("[data-war-clock]"),step=warPanel.querySelector("[data-war-step]");
-        const value=war.due&&war.due>Date.now()?tornTctClock.formatDuration((war.due-Date.now())/1000):"Ready";
+        const value=war.phase==="active"?"Active":war.due&&war.due>Date.now()?tornTctClock.formatDuration((war.due-Date.now())/1000):"Ready";
         if(clock.textContent!==value)clock.textContent=value;
         if(step.textContent!==war.label)step.textContent=war.label;
       }else refreshRecommendations(document.getElementById("topic-view"));
@@ -1203,7 +1307,7 @@ const tornCrimeGuide = (() => {
     if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
     if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
     if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label,crimeRefreshIds)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?crimeFilters():id==="money"?'<div class="rec-oc-filters"><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'+(id==="crime"?crimeFooter(crimeRefreshIds):"")))+recTileEnd).join("");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label,crimeRefreshIds)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="calendar"?calendarCard(trainingRecommendation):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?crimeFilters():id==="money"?'<div class="rec-oc-filters"><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'+(id==="crime"?crimeFooter(crimeRefreshIds):"")))+recTileEnd).join("");
   }
 
   function recommendations(){
@@ -1225,10 +1329,10 @@ const tornCrimeGuide = (() => {
       const owned=all.filter(x=>matches(x,name)).reduce((n,x)=>n+qty(x),0);
       return owned||null;
     }
-    const prefs=tornRoadmap.preferences(),trainingRecommendation=trainingRecommendationContext(prefs);
+    const prefs=tornRoadmap.preferences(),trainingRecommendation=trainingRecommendationContext(prefs);activityContext=trainingRecommendation;
     const program=trainingRecommendation.plan?.program,session=loadTrainingSession(),now=Date.now();
     const planCosts=session?{}:program?.restockCosts??{};
-    if(session&&!(session.drugRisk&&trainingRecommendation.blockDrugs)){
+    if(session&&!sessionDeadlineConflict(session,trainingRecommendation.activity)&&!(session.drugRisk&&trainingRecommendation.blockDrugs)){
       const end=now+restockForecastDays*86400000;
       for(const {step,done,due} of sessionSchedule(session,now)){
         if(!done&&due<=end&&["xanax","ecstasy","dvd","candy","alcohol","refill"].includes(step.type)){
@@ -1408,7 +1512,7 @@ const tornCrimeGuide = (() => {
     const pending=tornGuideApi.inventoryTypes.filter(c=>!["Book","Collectible"].includes(c)&&!ready(c));
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
     const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print restock-inventory-note">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
-    const priority=tornRoadmap.preferences().priority,first={growth:["growth","consume"],completion:["crime","merit"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
+    const priority=tornRoadmap.preferences().priority,first={growth:["growth","calendar","consume"],completion:["crime","merit"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
     return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
 
@@ -1451,6 +1555,7 @@ const tornCrimeGuide = (() => {
     layoutRecommendations(view);
   }
   function wireRecommendations(view){
+    wireActivity(view);
     layoutRecommendations(view);
     if(view.dataset.ocRecommendationsBound==="1")return;
     view.dataset.ocRecommendationsBound="1";
@@ -1492,7 +1597,7 @@ const tornCrimeGuide = (() => {
       if(key==="mode")settings.mode=event.target.value;
       else if(event.target.value!==""&&event.target.validity.valid)settings[key]=Number(event.target.value);
       else {event.target.value=settings[key];return;}
-      try{localStorage.setItem("torn-city-guide:energy-war:"+recOwner,JSON.stringify(settings));}catch{}
+      try{localStorage.setItem("torn-city-guide:energy-war:"+recOwner,JSON.stringify({...settings,version:2}));}catch{}
       refreshRecommendations(view);
       view.querySelector('[data-energy-war="'+key+'"]')?.focus();
     });
@@ -1551,7 +1656,7 @@ const tornCrimeGuide = (() => {
           if(current.index>=current.actions.length){recoveryBusy=false;await reviewNextCycle(view,current);}
         }else {recoveryMessage="Readiness updated.";readinessExpires=Date.now()+3500;}
       }catch(error){recoveryMessage="Refresh failed: "+String(error.message??error);}finally{recoveryBusy=false;if(view.isConnected)refreshRecommendations(view);}})();return;}
-      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recoveryMessage="";trainingSession={version:1,label:prog.label,source:prog.source,sequence:prog.sequence,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,periods:prog.periods,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:sessionActions(prog.cycleExecution??prog.execution),cycleSpend:prog.cycleSpend,notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};trainingSession.watch={index:0,sample:trainingWatchSnapshot(trainingSession)};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next&&!next.midnightRefill?now+Math.max(0,next.at-old.at)*1000:0;delete session.watch;saveTrainingSession();if(session.index>=session.actions.length){void reviewNextCycle(view,session);return;}}else if(action==="stop"){trainingSession=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
+      if(action==="start"&&!session&&trainingDraft?.owner===sessionOwner&&prepState(trainingDraft.plan,trainingDraft.training.blockDrugs).ready){const p=trainingDraft.plan,prog=p.program;recoveryMessage="";trainingSession={version:1,label:prog.label,source:prog.source,sequence:prog.sequence,deadline:prog.deadline,stat:p.stat,statKey:p.statKey,budget:tornRoadmap.preferences().weeklyBudget,excludeOwned:excludeOwned(),confirmedSpend:0,periods:prog.periods,drugRisk:prog.drugRisk,started:Date.now(),index:0,actions:sessionActions(prog.cycleExecution??prog.execution),cycleSpend:prog.cycleSpend,notBefore:0,completed:{},timing:prog.timing??{},gym:p.gym,maxEnergy:payload("bars","bars")?.energy?.maximum};trainingSession.watch={index:0,sample:trainingWatchSnapshot(trainingSession)};saveTrainingSession();}else if(action==="done"&&session&&session.actions[session.index]&&!sessionButton.disabled&&!sessionDeadlineConflict(session,activityLimits())){const old=session.actions[session.index],next=session.actions[session.index+1],now=Date.now(),timing=session.timing??{};session.completed??={};session.completed[session.index]=now;session.lastConfirmed=now;recoveryMessage="";if(old.type==="xanax"||old.type==="ecstasy")session.drugUntil=now+(old.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;if(["candy","dvd"].includes(old.type))session.boosterUntil=Math.max(now,session.boosterUntil||0)+(old.quantity??1)*(old.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600)*1000;if(old.type==="refill")session.refillDay=Math.floor(now/86400000);session.index++;session.notBefore=next&&!next.midnightRefill?now+Math.max(0,next.at-old.at)*1000:0;delete session.watch;saveTrainingSession();if(session.index>=session.actions.length){void reviewNextCycle(view,session);return;}}else if(action==="stop"){trainingSession=null;recoveryMessage="";saveTrainingSession();}refreshRecommendations(view);return;}
       const btn=e.target.closest("[data-rec-type],[data-rec-incomplete],[data-rec-uniques],[data-rec-history],[data-rec-crime-load]");
       if(!btn||!btn.closest("[data-home-recommendations]"))return;
       if(btn.hasAttribute("data-rec-crime-load")){
@@ -1616,5 +1721,5 @@ const tornCrimeGuide = (() => {
     const value=document.querySelector(".crime-nerve strong");
     if(nerve&&value)value.textContent=number(nerve.current)+" / "+number(nerve.maximum);
   }
-  return {render,crimes,syncNerve,recommendations,wireRecommendations,refreshRecommendations,tickGrowth};
+  return {render,renderCalendar,wireCalendar:wireActivity,crimes,syncNerve,recommendations,wireRecommendations,refreshRecommendations,tickGrowth};
 })();
