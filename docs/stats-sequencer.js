@@ -984,7 +984,7 @@ const tornTrainSequence=(()=>{
       '<label>Projection <select data-ts-chart-mode><option value="cycles" '+(chartMode==="cycles"?"selected":"")+'>Cycles</option><option value="continuous" '+(chartMode==="continuous"?"selected":"")+'>Continuous</option></select></label>'+
       (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
-      '<span class="fine-print" title="Each plan repeats within the same comparison window">'+fmt(hours,2)+'h shown</span>'+
+      '<span class="fine-print" title="The cycle window is based on all plans, including hidden plans">'+fmt(hours,2)+'h shown</span>'+
       '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" title="Maximize projected stat gain without a cash budget" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+
       '<button type="button" class="tc-stat-tab '+(showOptimalBudget?"is-selected":"")+'" title="Maximize projected stat gain within your weekly Energy budget" data-ts-optimal-budget aria-pressed="'+showOptimalBudget+'">Optimal Budget</button>'+
       '<button type="button" class="tc-stat-tab '+(showManual?"is-selected":"")+'" data-ts-manual aria-pressed="'+showManual+'">Manual</button>'+
@@ -996,24 +996,23 @@ const tornTrainSequence=(()=>{
     loadPlanPreferences();if(!keepClock)loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
     const active=activeTemplates();
     const optimize=showOptimal||showOptimalBudget;
-    const rangeTemplates=active.length||!optimize?active:templates;
     for(const [id] of templates)if(!editedPlans.has(id))steps[id]=cycleActions(id);
-    const rangeCycles=rangeTemplates.map(([id,,label])=>({id,label,data:projectCycles(id,1)}));
-    const oneCycle=active.length?rangeCycles:[];
+    const rangeCycles=templates.map(([id,,label])=>({id,label,data:projectCycles(id,1)}));
+    const oneCycle=rangeCycles.filter(({id})=>selected.has(id));
     const shortest=entries=>Math.max(60,...entries.map(({id,data})=>startingTime[id]+data.elapsed));
     p.hours=shortest(rangeCycles)/3600;
     const continuous=chartMode==="continuous",slots=continuous?28:chartCycles;
     const duration=continuous?Math.max(shortest(rangeCycles),continuousDays*86400):null;
     // The cycle count sets a common time window. Faster plans keep repeating
     // throughout that window, with the same cooldowns, refills and inventory.
-    const counted=continuous||chartCycles===1?rangeCycles:rangeTemplates.map(([id,,label])=>({
+    const counted=continuous||chartCycles===1?rangeCycles:templates.map(([id,,label])=>({
       id,label,data:projectCycles(id,chartCycles)
     }));
     let end=duration??shortest(counted);
     const overrides=cycleOverrides.slice(0,slots);
     const hasOverrides=showManual&&overrides.some(Boolean);
     if(!continuous&&hasOverrides){
-      const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||active[0]?.[0]||"natural"),Infinity);
+      const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||"natural"),Infinity);
       end=Math.max(end,forced.elapsed);
     }
     const results=active.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true})}));
