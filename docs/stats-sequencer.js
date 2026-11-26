@@ -1,5 +1,6 @@
 "use strict";
 const tornTrainSequence=(()=>{
+  const externalHappyCost=200_000_000;
   const names={externalHappy:"Poison Mistletoe",xanax:"Xanax (+250 E)",ecstasy:"Ecstasy (double Happy)",candy:"Candy (+Happy)",dvd:"Erotic DVD (+2,500 Happy)",train:"Train",refill:"Points energy refill",wait:"Wait minutes"};
   const make=(type,qty=1,minutes=0)=>({type,qty,minutes});
   const actionOptions=Object.entries(names);
@@ -231,7 +232,7 @@ const tornTrainSequence=(()=>{
     const mult=ctx.effectsFor(stat).multiplier;
     const initialE=cfg.startEnergy==="zero"?0:cfg.startEnergy==="full"?eCap:Math.min(Math.max(0,ctx.state.currentEnergy),1000);
     const v={time:0,stat:base,energy:initialE,happy:ctx.state.happy,drug:Math.round(cfg.startDrugMin*60),booster:Math.round(cfg.startBoosterMin*60),
-      costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0,warnings:[]};
+      costs:{xanax:0,ecstasy:0,dvd:0,candy:0,refill:0,externalHappy:0},used:0,log:[],errors:[],series:[{h:0,s:base}],days:new Set(),lostRegen:0,warnings:[]};
     const snap=()=>({time:v.time,energy:v.energy,happy:v.happy,drug:v.drug,booster:v.booster,stat:v.stat});
     if(cfg.refillUsedToday)v.days.add(Math.floor(cfg.tornClockMin*60/86400));
     const initial=snap();
@@ -362,7 +363,8 @@ const tornTrainSequence=(()=>{
         }
       }else if(type==="externalHappy"){
         v.happy=Math.max(v.happy,50000);
-        const warning="99k assumes coordinated Poison Mistletoe use; its cost is not included.";
+        v.costs.externalHappy++;
+        const warning="99k assumes coordinated Poison Mistletoe use at an estimated $200 million per boost.";
         if(!v.warnings.includes(warning))v.warnings.push(warning);
       }else if(type==="train")train();
       else if(type==="wait"){
@@ -420,10 +422,10 @@ const tornTrainSequence=(()=>{
       }
       point();
       if(cutoff)v.warnings.push("The "+cfg.hours+"-hour window ended before all actions could run.");
-      const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice]];
+      const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice],[v.costs.externalHappy,externalHappyCost]];
       const missingPrice=unknownCandyPrice||prices.some(([qty,price])=>qty>0&&price==null);
       return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,rowInfo,notices,actionStates,initial,
-        money:missingPrice||list.some(x=>x.type==="externalHappy")?null:candyCost+prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0)};
+        money:missingPrice?null:candyCost+prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0)};
     }
     return {state:v,limit,gymCost,canTrain,fullEnergyDelay,advance,waitFor,execute,run,finish};
   }
@@ -442,7 +444,8 @@ const tornTrainSequence=(()=>{
       ["xanax","Xanax",owned("Xanax","Drug"),p.xanaxPrice,1],
       ["ecstasy","Ecstasy",owned("Ecstasy","Drug"),p.ecstasyPrice,1],
       ["dvd","Erotic DVD",owned("Erotic DVD","Booster"),p.dvdPrice,1],
-      ["refill","Points",pointsHeld,p.pointPrice,30]
+      ["refill","Points",pointsHeld,p.pointPrice,30],
+      ["externalHappy","99k happiness boost",0,externalHappyCost,1]
     ];
     return costs=>{
       const items=supplies.map(([type,name,held,price,units])=>({name,quantity:Math.max(0,(costs[type]??0)*units-held),price})).filter(item=>item.quantity>0);
@@ -885,7 +888,7 @@ const tornTrainSequence=(()=>{
       const payments=[];
       let spent=0,previous=0,max=0,first=0;
       for(const event of data.log){
-        if(!["xanax","ecstasy","dvd","refill"].includes(event.type))continue;
+        if(!["xanax","ecstasy","dvd","refill","externalHappy"].includes(event.type))continue;
         costs[event.type]=(costs[event.type]??0)+(event.quantity??1);
         const cost=purchases(costs).cost;
         if(cost===null)return null;
