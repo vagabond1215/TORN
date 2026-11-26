@@ -952,7 +952,7 @@ const tornTrainSequence=(()=>{
       }
     }
     const data=fill?engine.finish(sequence.flatMap(actionsFor),{tail:!engine.state.errors.length}):cycleState;
-    return {...data,complete:data.complete&&segments.length===sequence.length,
+    return {...data,complete:data.complete&&segments.length>=sequence.length,
       elapsed:offset+data.time,offset,segments,firstCycle,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
   function chartPurchases(){
@@ -1006,24 +1006,24 @@ const tornTrainSequence=(()=>{
     if(!continuous)best=frontier[0]??null;
     return best;
   }
-  function optimizeChart(results,slots,end,budget=null,overrides=[],{projection={},priceOf,minDepth=0}={}){
+  function optimizeChart(results,slots,end,budget=null,overrides=[],{projection={},priceOf,minDepth=0,manualMode=false}={}){
     const weeklySpend=budget==null?null:priceOf??weeklyPurchaseCost();
     const lastOverride=overrides.findLastIndex(Boolean);
     const actionsFor=projection.actionsFor??(id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id]);
-    const ids=[...new Set([...(lastOverride>=0?["natural"]:[]),...results.map(({id})=>id)])].filter(id=>actionsFor(id).length);
+    const ids=[...new Set([...(manualMode&&!results.length?["natural"]:!manualMode&&lastOverride>=0?["natural"]:[]),...results.map(({id})=>id)])].filter(id=>actionsFor(id).length);
     const completed=new Map(results.map(({id,data})=>[id,data?.completed??0]));
     const natural=ids.includes("natural")&&!completed.has("natural")?projectCycles("natural",Infinity,{end,continuous:true}):null;
     if(natural)completed.set("natural",natural.completed);
     let best=null;
     const consider=(data,sequence)=>{
-      if(!best||data.gain>best.data.gain+1e-7)best={data,sequence};
+      if(!best||data.gain>best.data.gain+1e-7||(manualMode&&Math.abs(data.gain-best.data.gain)<=1e-7&&(sequence?.length??0)>(best.sequence?.length??0)))best={data,sequence};
     };
     const affordable=data=>{
       if(!weeklySpend)return true;
       const cost=weeklySpend(data);
       return cost!==null&&cost<=budget;
     };
-    if(lastOverride<0){
+    if(lastOverride<0&&!manualMode){
       for(const {data} of results)if(data&&affordable(data))consider(data);
       if(natural&&affordable(natural))consider(natural);
     }
@@ -1031,7 +1031,7 @@ const tornTrainSequence=(()=>{
     // promising prefixes from a search over plans that were already selected.
     for(const [i,first] of ids.entries())for(const second of ids.slice(i)){
       const pair=first===second?[first]:[first,second];
-      const maxDepth=lastOverride>=0?slots:Math.max(...pair.map(id=>completed.get(id)??0),1,minDepth)+5;
+      const maxDepth=manualMode||lastOverride>=0?slots:Math.max(...pair.map(id=>completed.get(id)??0),1,minDepth)+5;
       let frontier=[{sequence:[]}];
       for(let index=0;index<maxDepth&&frontier.length;index++){
         const next=[];
@@ -1040,10 +1040,10 @@ const tornTrainSequence=(()=>{
           const sequence=[...parent.sequence,id];
           // Manual slots choose the prefix. The last resolved slot then
           // repeats through the shared window, just like a standalone plan.
-          const repeatLast=lastOverride>=0&&sequence.length===slots;
+          const repeatLast=(manualMode||lastOverride>=0)&&sequence.length===slots;
           const data=mixedProjection(sequence,end,{...projection,actionsFor,repeatLast});
           if(!affordable(data))continue;
-          if(index>=lastOverride&&data.segments.length>lastOverride&&!data.errors.length)consider(data,sequence);
+          if(index>=lastOverride&&data.segments.length>Math.max(-1,lastOverride)&&data.segments.length>0&&!data.errors.length)consider(data,sequence);
           if(data.complete&&data.elapsed<end&&(!parent.data||data.elapsed>parent.data.elapsed||
             data.gain>parent.data.gain))next.push({sequence,data});
         }
@@ -1055,14 +1055,14 @@ const tornTrainSequence=(()=>{
   }
   function cycleOverrideControls(slots,mixed){
     return '<details class="ts-cycle-overrides" data-ts-manual-settings '+(overridesOpen?"open":"")+'><summary aria-label="Manual cycle settings" title="Manual cycle settings"><span aria-hidden="true">⚙</span></summary>'+
-      '<div class="ts-cycle-choices"><small>The last cycle repeats through the rest of the chart window.</small>'+Array.from({length:slots},(_,i)=>{
+      '<div class="ts-cycle-choices ts-manual-choices"><small class="ts-manual-note">Auto follows selected plans. Explicit choices are preserved. The last cycle repeats only within the chart window.</small>'+Array.from({length:slots},(_,i)=>{
         const picked=cycleOverrides[i]??"",segment=mixed?.data.segments[i];
         const automatic=templates.find(([id])=>id===segment?.id)?.[2];
         return '<label>Cycle '+(i+1)+' <select data-ts-cycle-override="'+i+'">'+
           '<option value="">'+$(automatic?"Auto · "+automatic:"Auto")+'</option>'+
           templates.map(([id,,name])=>'<option value="'+id+'" '+(id===picked?"selected":"")+'>'+$(name)+'</option>').join("")+'</select>'+
-          (segment?'<small>'+clock(segment.at)+' · +'+fmt(segment.gain,2)+'</small>':"")+'</label>';
-      }).join("")+'</div></details>';
+          (segment?'<small>End '+clock(segment.at)+' · Duration '+clock(segment.at-segment.start)+'<br>+'+fmt(segment.gain,2)+'</small>':"")+'</label>';
+      }).join("")+(mixed?'<small class="ts-manual-note">Completed: '+mixed.data.segments.length+' · Repeated: '+Math.max(0,mixed.data.segments.length-slots)+'</small>':"")+'</div></details>';
   }
   function optimizerSettings(key,label){
     return '<details class="ts-cycle-overrides" data-ts-optimizer-settings="'+key+'" '+(optimizerSettingsOpen===key?"open":"")+'>'+
@@ -1076,7 +1076,7 @@ const tornTrainSequence=(()=>{
       '<label>Projection <select data-ts-chart-mode><option value="cycles" '+(chartMode==="cycles"?"selected":"")+'>Cycles</option><option value="continuous" '+(chartMode==="continuous"?"selected":"")+'>Continuous</option></select></label>'+
       (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
-      '<span class="fine-print" title="In Cycles mode, the slowest selected plan sets the window. With no plans selected, all plans set the window.">'+fmt(hours,2)+'h shown</span>'+
+      '<span class="fine-print" title="In Cycles mode, the slowest selected plan sets the window. With only Manual visible, its configured sequence sets the window.">'+fmt(hours,2)+'h shown</span>'+
       '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" title="Maximize projected stat gain without a cash budget" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+optimizerSettings("optimal","Optimal")+
       '<button type="button" class="tc-stat-tab '+(showOptimalBudget?"is-selected":"")+'" title="Maximize projected stat gain within your weekly Energy budget" data-ts-optimal-budget aria-pressed="'+showOptimalBudget+'">Optimal Budget</button>'+optimizerSettings("budget","Optimal Budget")+
       '<button type="button" class="tc-stat-tab '+(showManual?"is-selected":"")+'" data-ts-manual aria-pressed="'+showManual+'">Manual</button>'+
@@ -1097,19 +1097,19 @@ const tornTrainSequence=(()=>{
     const duration=continuous?Math.max(shortest(rangeCycles),continuousDays*86400):null;
     // The cycle count sets a common time window. Faster plans keep repeating
     // throughout that window, with the same cooldowns, refills and inventory.
-    const rangePlans=active.length?active:templates;
-    const counted=continuous||chartCycles===1?(oneCycle.length?oneCycle:rangeCycles):
-      rangePlans.map(([id,,label])=>({id,label,data:projectCycles(id,chartCycles)}));
-    let end=duration??shortest(counted);
     const overrides=cycleOverrides.slice(0,slots);
-    const hasOverrides=showManual&&overrides.some(Boolean);
-    if(!continuous&&hasOverrides&&!active.length){
-      const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||"natural"),Infinity,{matchTemplateStart:true});
-      end=Math.max(end,forced.elapsed);
-    }
+    const manualOnly=showManual&&!active.length&&!optimize;
+    const manualSequence=manualOnly?Array.from({length:slots},(_,i)=>overrides[i]||"natural"):null;
+    const rangePlans=active.length?active:manualOnly?templates.filter(([id])=>id==="natural"):templates;
+    const counted=rangePlans.map(([id,,label])=>({id,label,data:chartCycles===1||continuous?rangeCycles.find(entry=>entry.id===id).data:projectCycles(id,chartCycles)}));
+    const forced=!continuous&&manualOnly?mixedProjection(manualSequence,Infinity,{matchTemplateStart:true,actionsFor:id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id]}):null;
+    const end=duration??(forced?Math.max(60,forced.elapsed):shortest(counted));
     const results=active.map(([id,,label])=>{
       const countedPlan=!continuous&&counted.find(plan=>plan.id===id);
-      const data=countedPlan&&countedPlan.data.completed===chartCycles&&startingTime[id]+countedPlan.data.elapsed===end
+      // A single selected plan must never repeat beyond its requested cycle count.
+      // Faster plans may repeat only when another visible plan defines the window.
+      const data=countedPlan&&(active.length===1||countedPlan.data.completed<chartCycles||
+        startingTime[id]+countedPlan.data.elapsed===end)
         ?countedPlan.data:projectCycles(id,Infinity,{end,continuous:true});
       return {id,label,data};
     });
@@ -1118,14 +1118,17 @@ const tornTrainSequence=(()=>{
       {id,label,data:projectCycles(id,Infinity,{end,continuous:true})}):[];
     const mixed=showOptimal?optimizeChart(candidates.filter(({id})=>!excludedPlans.optimal.has(id)),slots,end):null;
     const budgeted=showOptimalBudget?optimizeChart(candidates.filter(({id})=>!excludedPlans.budget.has(id)),slots,end,budget):null;
-    const manual=hasOverrides?optimizeChart(results,slots,end,null,overrides,{projection:{matchTemplateStart:true}}):null;
+    const samePlan=results.length===1&&Array.from({length:slots},(_,i)=>!overrides[i]||overrides[i]===results[0].id).every(Boolean);
+    const manual=showManual?(samePlan?{data:results[0].data,sequence:Array(slots).fill(results[0].id)}:
+      forced?{data:forced,sequence:manualSequence}:
+      optimizeChart(results,slots,end,null,overrides,{manualMode:true,projection:{matchTemplateStart:true}})):null;
     if(mixed)results.push({id:"mixed",label:"Optimal sequence",data:mixed.data});
     if(manual)results.push({id:"manual",label:"Manual",data:manual.data});
     if(budgeted)results.push({id:"budget",label:"Optimal Budget",data:budgeted.data});
     const chartHours=end/3600;
-    return controls()+(results.length||hasOverrides||optimize?'<div class="ts-layout" data-template-count="'+(oneCycle.length+Number(Boolean(mixed))+Number(Boolean(budgeted)))+'">'+oneCycle.map(x=>section(x.id,x.data,results.find(({id})=>id===x.id).data,chartHours,budget)).join("")+
+    return controls()+(results.length||showManual||optimize?'<div class="ts-layout" data-template-count="'+(oneCycle.length+Number(Boolean(mixed))+Number(Boolean(budgeted)))+'">'+oneCycle.map(x=>section(x.id,x.data,results.find(({id})=>id===x.id).data,chartHours,budget)).join("")+
       (mixed?optimizerCard("optimal","Optimal",mixed.data,chartHours):"")+(budgeted?optimizerCard("optimal-budget","Optimal Budget",budgeted.data,chartHours):"")+'</div>'+
-      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,manual)+(showManual&&!manual?'<p class="fine-print">'+(hasOverrides?"The manual sequence does not fit this window.":"Choose at least one cycle in Manual settings.")+'</p>':"")+
+      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,manual)+(showManual&&!manual?'<p class="fine-print">'+"The manual sequence does not fit this window."+'</p>':"")+
       (showOptimal&&!mixed?'<p class="fine-print">No plans included in Optimal.</p>':"")+(showOptimalBudget&&!budgeted?'<p class="fine-print">No sequence fits the weekly budget.</p>':"")+(results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
   }
@@ -1180,7 +1183,7 @@ const tornTrainSequence=(()=>{
         cycleOverrides[index]=templates.some(([id])=>id===el.value)?el.value:"";
         overridesOpen=true;
         savePlanPreferences();
-        rebuild('[data-ts-cycle-override="'+index+'"]');
+        rebuild('[data-ts-cycle-override="'+index+'"]',{keepClock:true});
         return;
       }
       if(el.matches("[data-ts-chart-mode],[data-ts-chart-cycles],[data-ts-chart-days]")){
@@ -1188,7 +1191,7 @@ const tornTrainSequence=(()=>{
         if(el.hasAttribute("data-ts-chart-cycles"))chartCycles=Math.floor(clamp(el.value,1,28));
         if(el.hasAttribute("data-ts-chart-days"))continuousDays=Math.floor(clamp(el.value,1,28));
         savePlanPreferences();
-        rebuild(el.hasAttribute("data-ts-chart-mode")?"[data-ts-chart-mode]":el.hasAttribute("data-ts-chart-cycles")?"[data-ts-chart-cycles]":"[data-ts-chart-days]");
+        rebuild(el.hasAttribute("data-ts-chart-mode")?"[data-ts-chart-mode]":el.hasAttribute("data-ts-chart-cycles")?"[data-ts-chart-cycles]":"[data-ts-chart-days]",{keepClock:true});
         return;
       }
       if(el.matches("[data-ts-choice]")){const button=el.closest(".ts-add")?.querySelector('[data-ts-op="add"]');if(button)button.disabled=!Object.hasOwn(names,el.value);return;}
