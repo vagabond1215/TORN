@@ -1498,11 +1498,23 @@ function inventoryRwMarket(uid,id){
   const data=passiveModel?.estimate!=null&&Date.now()-passive.at<24*60*60*1000?passive:api??passive;
   const model=data===passive?passiveModel:data?rwComparableEstimate(gear,data.rows,uid):null;
   const money=n=>"$"+formatNumber(n);
+  const catalog=payload("itemCatalog","items");
+  const name=gear.name??(Array.isArray(catalog)?catalog.find(item=>Number(item.id)===id)?.name:catalog?.[id]?.name)??"Item #"+id;
+  const stat=value=>typeof value==="number"&&Number.isFinite(value)?formatNumber(value):"—";
+  const listing=r=>{
+    const quality=stat(r.stats?.quality);
+    const armor=Number.isFinite(r.stats?.armor);
+    const combat=armor?stat(r.stats.armor):stat(r.stats?.damage)+"/"+stat(r.stats?.accuracy);
+    const effects=r.bonuses.map(b=>'<span>'+safe(b.title??b.id)+' '+safe(stat(b.value))+'%</span>').join(" · ");
+    return '<p class="inventory-rw-comparable"><strong class="inventory-title-content rarity-'+rarity+'">'+safe(name)+'</strong> '+
+      '<span title="Quality">'+safe(quality==="—"?quality:quality+"%")+'</span> <span title="'+(armor?"Armor rating":"Damage / Accuracy")+'">'+safe(combat)+'</span> '+
+      effects+' <strong>'+safe(money(r.price))+'</strong></p>';
+  };
   return '<section class="inventory-rw-market"><h4>RW comparable asking prices</h4><button type="button" class="button secondary" data-rw-query>'+ (data?"Query API comparables":"Check RW value")+'</button>'+
     (data?'<p class="fine-print">Checked '+safe(tornGuidePreferences.formatDate(data.at))+(data.source==="passive"?" · passive observations, not a complete market scan":data.truncated?" · first 500 listings only":"")+'</p>':"")+
     (passive?'<p class="fine-print">Passive market: '+passive.observations+' observations · '+passive.rows.length+' full-detail records</p>':"")+
     (model?.estimate!=null?'<p><strong>'+safe(money(model.estimate))+'</strong> · '+safe(model.confidence)+' · '+model.count+' matches</p><p>Middle asking-price range: '+safe(money(model.low))+' – '+safe(money(model.high))+'</p>':data?'<p>Insufficient exact bonus matches ('+(model?.count??0)+'). No estimated RW value.</p>':"")+
-    (model?.rows.length?'<details><summary>Comparable listings</summary>'+model.rows.map(r=>'<p>'+safe(money(r.price))+' · '+safe(r.stats?.quality??"—")+'% · '+safe(r.bonuses.map(b=>b.value+"% "+(b.title??b.id)).join(", "))+'</p>').join("")+'</details>':"")+
+    (model?.rows.length?'<details><summary>Comparable listings</summary>'+model.rows.map(listing).join("")+'</details>':"")+
     '<small>Active asking prices, not completed sales. Generic MV remains separate.</small><p class="inventory-rw-status" role="status"></p></section>';
 }
 if(typeof document!=="undefined")document.addEventListener("click",async event=>{

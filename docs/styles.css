@@ -1707,9 +1707,13 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .home-activities>.panel-content>.roadmap-styles{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr))}
 .home-activities .home-pref-row{margin-top:.25rem;padding-top:.25rem;gap:.35rem .65rem}
 .home-pref-group,.home-budget{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
-.home-pref-group>strong,.home-budget>strong{color:var(--muted);white-space:nowrap}
+.home-pref-group>strong,.home-budget>label>strong{color:var(--muted);white-space:nowrap}
 .home-pref-group .roadmap-style{min-width:86px}
-.home-budget input{width:8rem;min-height:28px;box-sizing:border-box;padding:.15rem .35rem;background:var(--canvas);border:1px solid var(--border);border-radius:3px;color:var(--text);font:inherit}
+.home-budget>label{flex-basis:100%}
+.home-budget>[data-home-budget-set]{padding:.2rem .55rem;min-height:28px}
+.inventory-rw-comparable{display:flex;align-items:baseline;flex-wrap:wrap;gap:.25rem .55rem}
+.inventory-rw-comparable>.inventory-title-content{display:inline}
+.home-budget input{flex:1 1 5rem;min-width:0;width:8rem;min-height:28px;box-sizing:border-box;padding:.15rem .35rem;background:var(--canvas);border:1px solid var(--border);border-radius:3px;color:var(--text);font:inherit}
 .tc-selected-gym .tc-train-control .tc-happy-mode{box-sizing:border-box;height:32px;min-height:32px;min-width:62px;margin:0;padding-block:0}
 .tc-candy-control{flex-wrap:wrap}
 

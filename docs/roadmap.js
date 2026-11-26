@@ -141,6 +141,7 @@ const tornRoadmap=(()=>{
  let openFallback=true;
  function activitiesOpen(){try{return localStorage.getItem("torn-city-guide:home-activities-open")!=="false";}catch{return openFallback;}}
  function toggleActivities(){const open=!activitiesOpen();openFallback=open;try{localStorage.setItem("torn-city-guide:home-activities-open",String(open));}catch{}tornRightRail.render(tornGuideApi.routeName());const button=document.querySelector("[data-home-activities-toggle]");if(button){button.setAttribute("aria-pressed",String(open));button.setAttribute("aria-expanded",String(open));}}
+ const formatWeeklyBudget=value=>value==null?"":value.toLocaleString("en-US",{maximumFractionDigits:20});
  function renderActivities(){
   const p=preferences();
   const riskIcon=id=>{const level={low:1,medium:2,high:3}[id];return '<svg width="18" height="16" viewBox="0 0 18 16" aria-hidden="true" class="home-risk-icon risk-'+id+'">'+[1,2,3].map((n,i)=>'<rect x="'+(i*6)+'" y="'+(16-n*5)+'" width="4" height="'+(n*5)+'" rx="1" fill="currentColor" opacity="'+(n<=level?1:.22)+'"/>').join("")+'</svg>';};
@@ -155,17 +156,38 @@ const tornRoadmap=(()=>{
    '<div class="home-risk-groups">'+riskGroup("risk","Financial Risk","Carried cash, trade settlement, gambling losses and investment volatility.")+
    riskGroup("odRisk","OD Risk","Low avoids drug recommendations for new training plans and independent consumable use. Medium and High allow drugs subject to existing safeguards.")+
    riskGroup("jailRisk","Jail Risk","Changes the range of crime difficulty considered for recommendations.")+'</div>'+
-   '<label class="home-budget"><strong>Weekly budget</strong><span>$</span><input type="number" min="0" step="any" data-home-pref="weeklyBudget" value="'+(p.weeklyBudget??"")+'" placeholder="Not set" aria-label="Weekly training budget"></label></div></div></section>';
+   '<div class="home-budget"><label for="home-weekly-budget"><strong>Weekly budget</strong> $</label><input id="home-weekly-budget" type="text" inputmode="decimal" data-home-pref="weeklyBudget" value="'+formatWeeklyBudget(p.weeklyBudget)+'" placeholder="Not set"><button type="button" class="button secondary" data-home-budget-set>Set</button></div></div></div></section>';
  }
  function wireActivities(view){
   if(view.dataset.activitiesBound==="1")return;
   view.dataset.activitiesBound="1";
   const updateBudget=el=>{
-   const p=preferences();p.weeklyBudget=el.value===""?null:Math.max(0,Number(el.value)||0);
+   if(!el)return;
+   const raw=el.value.trim().replaceAll(",","");
+   const amount=raw===""?null:Number(raw);
+   const valid=amount===null||(/^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(raw)&&Number.isFinite(amount));
+   el.setCustomValidity(valid?"":"Enter a nonnegative budget or leave it blank.");
+   if(!el.reportValidity())return;
+   const p=preferences();p.weeklyBudget=amount;
    write(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences",JSON.stringify(p));
+   el.value=formatWeeklyBudget(amount);
    tornCrimeGuide.refreshRecommendations(document.getElementById("topic-view"));
+   const planner=document.querySelector('#tc-sequencer:has([data-ts-optimal-budget][aria-pressed="true"])');
+   if(planner&&!planner.closest("[hidden]"))planner.innerHTML=tornTrainSequence.render();
   };
-  view.addEventListener("input",event=>{if(event.target.dataset.homePref==="weeklyBudget"&&event.target.closest(".home-activities")&&event.target.validity.valid)updateBudget(event.target);});
+  view.addEventListener("click",event=>{
+   const button=event.target.closest("[data-home-budget-set]");
+   if(button)updateBudget(button.closest(".home-budget")?.querySelector("input"));
+  });
+  view.addEventListener("keydown",event=>{
+   if(event.key==="Enter"&&event.target.dataset.homePref==="weeklyBudget"){
+    event.preventDefault();
+    updateBudget(event.target);
+   }
+  });
+  view.addEventListener("input",event=>{
+   if(event.target.dataset.homePref==="weeklyBudget")event.target.setCustomValidity("");
+  });
   view.addEventListener("change",event=>{
    const el=event.target,value=el.dataset.roadmapStyle;
    if(!el.closest(".home-activities"))return;
@@ -173,11 +195,6 @@ const tornRoadmap=(()=>{
     selected=selectedStyles().filter(x=>x!==value);
     if(el.checked)selected.push(value);
     write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
-   }else if(el.dataset.homePref==="weeklyBudget"){
-    updateBudget(el);
-    const planner=document.querySelector('#tc-sequencer:has([data-ts-optimal-budget][aria-pressed="true"])');
-    if(planner&&!planner.closest("[hidden]"))planner.innerHTML=tornTrainSequence.render();
-    return;
    }else if(el.dataset.homePref&&el.checked){
     const p=preferences(),key=el.dataset.homePref;
     if(allowedPreference(key,el.value)){
