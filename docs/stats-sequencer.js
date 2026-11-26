@@ -808,9 +808,10 @@ const tornTrainSequence=(()=>{
     return id==="natural"?[{...make("train"),when:"full"}]:defaults[id]();
   }
   function projectCycles(id,cycles,{end=Infinity,continuous=false}={}){
-    const list=steps[id],offset=startingTime[id],clockSeconds=Math.round(p.tornClockMin*60)+offset;
+    const list=id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id];
+    const offset=startingTime[id],clockSeconds=Math.round(p.tornClockMin*60)+offset;
     const engine=createEngine({
-      limitSeconds:end-offset,startEnergy:startingEnergy[id],midnightJump:midnightJumps.has(id),
+      limitSeconds:Math.max(0,end-offset),startEnergy:startingEnergy[id],midnightJump:midnightJumps.has(id),
 
       startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
       tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900
@@ -934,7 +935,7 @@ const tornTrainSequence=(()=>{
       '<label>Projection <select data-ts-chart-mode><option value="cycles" '+(chartMode==="cycles"?"selected":"")+'>Cycles</option><option value="continuous" '+(chartMode==="continuous"?"selected":"")+'>Continuous</option></select></label>'+
       (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
-      '<span class="fine-print">'+fmt(hours,2)+'h shown</span>'+
+      '<span class="fine-print" title="Each plan repeats within the same comparison window">'+fmt(hours,2)+'h shown</span>'+
       '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+
       cycleOverrideControls(slots,mixed)+'</div></div>';
   }
@@ -949,16 +950,19 @@ const tornTrainSequence=(()=>{
     p.hours=shortest(oneCycle)/3600;
     const continuous=chartMode==="continuous",slots=continuous?28:chartCycles;
     const duration=continuous?Math.max(shortest(oneCycle),continuousDays*86400):null;
-    const results=!continuous&&chartCycles===1?[...oneCycle]:active.map(([id,,label])=>({
-      id,label,data:continuous?projectCycles(id,Infinity,{end:duration,continuous:true}):projectCycles(id,chartCycles)
+    // The cycle count sets a common time window. Faster plans keep repeating
+    // throughout that window, with the same cooldowns, refills and inventory.
+    const counted=continuous||chartCycles===1?oneCycle:active.map(([id,,label])=>({
+      id,label,data:projectCycles(id,chartCycles)
     }));
-    let end=duration??shortest(results);
+    let end=duration??shortest(counted);
     const overrides=cycleOverrides.slice(0,slots);
     const hasOverrides=overrides.some(Boolean);
     if(!continuous&&hasOverrides){
       const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||active[0]?.[0]||"natural"),Infinity);
       end=Math.max(end,forced.elapsed);
     }
+    const results=active.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true})}));
     const mixed=((showOptimal&&results.length)||hasOverrides)?optimizeCycles([...new Set(["natural",...active.map(([id])=>id)])],slots,end,continuous):null;
     if(mixed)results.push({id:"mixed",label:hasOverrides?"Mixed plan":"Optimized plan",data:mixed.data});
     const chartHours=end/3600;
