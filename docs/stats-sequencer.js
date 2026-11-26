@@ -481,7 +481,7 @@ const tornTrainSequence=(()=>{
       point();
       const executed=!v.errors.length&&!cutoff,end=snap();
       actionStates[i]={start,end,executed};
-      if(executed)v.log.push({i:i+1,type,parent:i,editable:!automatic,midnightRefill,start,end,consumedValue:type==="candy"?(Object.entries(rowUsed).some(([name,q])=>q>0&&pool.find(x=>x.name===name)?.price==null)?null:Object.entries(rowUsed).reduce((sum,[name,q])=>sum+q*(pool.find(x=>x.name===name)?.price??0),0)):undefined,reason:type==="wait"&&a.untilDrug?"Drug cooldown":undefined,quantity:isBooster?(type==="candy"?Object.values(rowUsed).reduce((sum,q)=>sum+q,0):v.costs.dvd-rowInfo[i].dvdBefore):1});
+      if(executed)v.log.push({i:i+1,type,parent:i,editable:!automatic,midnightRefill,start,end,consumedValue:type==="candy"?(Object.entries(rowUsed).some(([name,q])=>q>0&&pool.find(x=>x.name===name)?.price==null)?null:Object.entries(rowUsed).reduce((sum,[name,q])=>sum+q*(pool.find(x=>x.name===name)?.price??0),0)):undefined,calendarCandy:type==="candy"?Object.entries(rowUsed).filter(([,quantity])=>quantity>0).map(([name,quantity])=>({name,quantity,price:pool.find(x=>x.name===name)?.price??null})):undefined,reason:type==="wait"&&a.untilDrug?"Drug cooldown":undefined,quantity:isBooster?(type==="candy"?Object.values(rowUsed).reduce((sum,q)=>sum+q,0):v.costs.dvd-rowInfo[i].dvdBefore):1});
       return executed;
     }
     function tornDay(){return Math.floor((cfg.tornClockMin*60+v.time)/86400);}
@@ -579,6 +579,27 @@ const tornTrainSequence=(()=>{
       return {items,cost};
     };
   }
+  // Full replacement value, including owned supplies; not cash needed.
+  function calendarValuation(live){
+    const old={...p},previous=ctx;
+    let prices;
+    try{
+      ctx={...ctx,liveSources:live?.sources??{}};
+      marketInputs();
+      prices={xanax:p.xanaxPrice,ecstasy:p.ecstasyPrice,dvd:p.dvdPrice,refill:p.pointPrice,externalHappy:externalHappyCost};
+    }finally{ctx=previous;Object.assign(p,old);}
+    return (step,candy=null)=>{
+      const type=step?.type,qty=Number(step?.quantity??1);
+      if(!Number.isFinite(qty)||qty<=0)return [];
+      if(type==="candy"){
+        if(Array.isArray(candy)&&candy.length&&candy.every(x=>typeof x.name==="string"&&Number.isFinite(x.quantity)&&x.quantity>0)&&candy.reduce((n,x)=>n+x.quantity,0)===qty)
+          return candy.map(x=>({name:x.name,quantity:x.quantity,price:x.price??null}));
+        return [{name:"Candy (type unspecified)",quantity:qty,price:null}];
+      }
+      const name={xanax:"Xanax",ecstasy:"Ecstasy",dvd:"Erotic DVD",refill:"Points",externalHappy:"99k happiness boost (service estimate)"}[type];
+      return name?[{name,quantity:qty*(type==="refill"?30:1),price:prices[type]??null}]:[];
+    };
+  }
   function periodPurchases(periods,confirmed=[],{liveInputs:live,reserveXanax=0}={}){
     const old={...p},previous=ctx;
     try{
@@ -638,6 +659,8 @@ const tornTrainSequence=(()=>{
       if(!cycleExecution.some(x=>x.type==="train"&&x.energy>0))return [];
       const id=first.id,label=templates.find(x=>x[0]===id)?.[2]??id;
       const selected={id,label,source:options.naturalOnly?"natural":"optimal-budget",sequence,gain:data.gain,money:data.money,cashCost:cashCost(data),excludeOwned,used:data.used,costs:data.costs,cycles:data.segments.length,drugRisk:firstData.costs.xanax+firstData.costs.ecstasy>0,startEnergy:"current",generatedAt:now.getTime(),horizonSeconds:end,deadline:bounded?deadline:null,execution,cycleExecution,cycleSpend:cashCost(firstData),timing:{xanaxCD:Math.round(p.xanaxCDMin*60),ecstasyCD:Math.round(p.ecstasyCDMin*60),boosterCap:p.boosterCapH*3600,candyCD:Math.round(1800*p.candyCDMultiplier),dvdCD:Math.round(21600*p.dvdCDMultiplier)}};
+      // Transient calendar metadata, outside the persisted action schema.
+      selected.calendarCandy=data.log.filter(x=>x.type!=="happyReset").map(x=>x.calendarCandy??null);
       const forecastDays=options.restockForecastDays;
       const horizons=[...new Set([1,7,28,...(Number.isInteger(forecastDays)&&forecastDays>=1&&forecastDays<=28?[forecastDays]:[])])];
       const periodFor=days=>{
@@ -1560,5 +1583,5 @@ const tornTrainSequence=(()=>{
       rebuild(el===document.activeElement?focusTarget:null);
     });
   }
-  return {render,wire,simulate,weeklyPrograms,liveInputs,liveSourceState,liveAccountStatus,periodPurchases,replayRemaining,waitTitle,happyResetWait,energyRefillUsedToday,steps,settings:p,loadLive,templateButtons};
+  return {render,wire,simulate,weeklyPrograms,liveInputs,liveSourceState,liveAccountStatus,calendarValuation,periodPurchases,replayRemaining,waitTitle,happyResetWait,energyRefillUsedToday,steps,settings:p,loadLive,templateButtons};
 })();

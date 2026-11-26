@@ -100,3 +100,5 @@ Conservative read-only merge preview implemented: digest verification, proven de
 Explicit eligible preference-only merge implemented with verified owner, Web Locks, no active/held training session, before/after journal rollback, and unchanged snapshot/manifest recheck. Protected sections and divergent/untracked records remain review-only. Next: stable-ID calendar/ledger/history merge and conflict resolution; activation and companion vault remain gated.
 
 Timeline refinement: exact edge-post flags for point events, filled duration blocks for projected and recently observed remaining drug cooldowns; display-only, no change to scheduling or persistence. See activity-scheduler-plan.md.
+
+Home calendar refinement: standalone full-center-width timeline, Agenda/Week-only Home Calendar tile, and Week package item-value summaries with explicit unknown-price handling. Full Calendar views and account recovery roadmap retained.

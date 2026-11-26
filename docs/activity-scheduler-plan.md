@@ -54,3 +54,6 @@ Short cooldown follow-up: cooldown ranges use an 8 px minimum interactive width 
 
 ### Standalone Home timeline
 Placed directly below recommendation toggles, outside the masonry grid, within the bounded center workspace. Always visible independently of the Calendar tile. Home Calendar offers Agenda and Week only; full Calendar retains all four views. Home panels share a single schedule snapshot. Standalone timeline omits duplicate Agenda. No persisted setting migration; an existing Timeline preference falls back to Agenda on Home only. Native browser validation pending.
+
+### Week daily item values
+Package buttons on each Week tile support hover/focus and persistent tap details, showing forecast item quantities and full replacement value (owned items included), not cash purchases or confirmed consumption. Prices use shared fresh item/points market logic; unknown prices or unspecified locked-session candy remain unknown, with known subtotal disclosed. Forecast candy breakdown is transient simulator metadata, not persisted session schema. War doses are valued as planned Xanax; cooldowns, manual spans and generic events do not manufacture item use. UTC day boundaries; sum all scheduled entries, not just eight visible labels. No added API calls or storage migration. Native browser/Node verification remains open.

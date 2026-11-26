@@ -2523,3 +2523,19 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .home-activity-timeline-header a{font-size:.72rem;color:var(--accent-strong)}
 .home-activity-timeline .activity-unified-timeline{margin:.25rem 0;grid-template-columns:minmax(0,1fr)}
 .home-activity-timeline .activity-timeline-scroll{width:100%;box-sizing:border-box}
+
+/* Daily item valuation is a forecast, accessible by hover, focus or tap. */
+.activity-week{min-width:0;max-width:100%;box-sizing:border-box}
+.activity-day-heading{display:flex;align-items:center;justify-content:space-between;gap:.15rem;min-width:0}
+.activity-day-heading>strong{font-size:.7rem;color:var(--muted);white-space:nowrap}
+.activity-grid section{min-width:0}
+.activity-day-package{flex:none;display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:3px;background:transparent;color:var(--accent-strong);cursor:pointer}
+.activity-day-package:is(:hover,:focus-visible,[aria-pressed="true"]){background:var(--raised);outline:1px solid var(--accent);outline-offset:-1px}
+.activity-week-inspector{margin:.4rem 0}
+.activity-day-value{display:grid;gap:.35rem;font-size:.76rem}
+.activity-day-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:baseline}
+.activity-day-item span{overflow-wrap:anywhere}
+.activity-day-item strong{font-variant-numeric:tabular-nums;text-align:right}
+.activity-day-total{border-top:1px solid var(--border);padding-top:.35rem}
+.activity-day-value small{color:var(--muted);font-size:.7rem;line-height:1.35}
+@media(max-width:600px){.activity-week .activity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

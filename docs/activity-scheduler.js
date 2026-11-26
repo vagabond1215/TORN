@@ -365,16 +365,51 @@ const tornActivityScheduler=(()=>{
       populate(b,inspector);hide();
     });
   }
+  // Only action starts within the UTC day contribute to planned item use.
+  function dailyItemValues(list,at){
+    const groups=new Map(),seen=new Set();
+    for(const e of list){
+      if(!e||!Number.isFinite(e.start)||e.start<at||e.start>=at+D||!Array.isArray(e.items)||seen.has(e.id))continue;
+      seen.add(e.id);
+      for(const row of e.items){
+        if(!row||typeof row.name!=="string"||!row.name.trim()||!Number.isFinite(row.quantity)||row.quantity<=0)continue;
+        const price=Number.isFinite(row.price)&&row.price>=0?row.price:null;
+        const item=groups.get(row.name)??{name:row.name,quantity:0,known:0,unknownQuantity:0};
+        const value=price===null?null:price*row.quantity;
+        item.quantity+=row.quantity;
+        if(value===null||!Number.isFinite(value))item.unknownQuantity+=row.quantity;
+        else item.known+=value;
+        groups.set(row.name,item);
+      }
+    }
+    const items=[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name));
+    const known=items.reduce((n,i)=>n+i.known,0),complete=items.every(i=>i.unknownQuantity===0);
+    return {items,known,total:complete?known:null};
+  }
+  const itemMoney=n=>"$"+Math.round(n).toLocaleString("en-US");
+  const packageIcon='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10M7.5 5l9 4"/></svg>';
+  function dayItemDetail(summary,at){
+    const rows=summary.items.map(i=>'<div class="activity-day-item"><span>'+esc(i.name)+' × '+esc(i.quantity.toLocaleString("en-US"))+'</span><strong>'+esc(i.unknownQuantity?i.known?itemMoney(i.known)+" + unknown":"Unknown":itemMoney(i.known))+'</strong></div>').join("");
+    return '<div class="activity-day-value"><strong>'+esc(dateLabel(at))+' · Planned item use</strong>'+(rows||'<small>No item use scheduled.</small>')+'<div class="activity-day-item activity-day-total"><strong>Daily total value</strong><strong>'+esc(summary.total===null?(summary.known?itemMoney(summary.known)+" + unknown":"Unknown"):itemMoney(summary.total))+'</strong></div><small>Projected replacement value, including owned supplies; not actual spending or confirmed use.</small></div>';
+  }
   function renderGrid(list,now,days){
-    const start=Math.floor(now/D)*D;
-    return '<div class="activity-grid">'+Array.from({length:days},(_,i)=>{const at=start+i*D;return '<section><strong>'+dateLabel(at).slice(5)+'</strong>'+list.filter(e=>e.start<at+D&&e.end>=at).slice(0,8).map(e=>'<small class="activity-'+esc(e.kind)+'">'+esc(shortTime(Math.max(e.start,at))+" "+e.title)+'</small>').join("")+'</section>';}).join("")+'</div>';
+    const start=Math.floor(now/D)*D,week=days===7,templates=[];
+    const tiles=Array.from({length:days},(_,i)=>{
+      const at=start+i*D,id="day-"+i,summary=week?dailyItemValues(list,at):null;
+      if(week)templates.push('<template data-activity-timeline-content="'+id+'">'+dayItemDetail(summary,at)+'</template>');
+      const control=week?'<button type="button" class="activity-day-package" data-activity-timeline-item="'+id+'" aria-pressed="false" aria-label="'+esc(dateLabel(at)+" planned item value: "+(summary.total===null?"incomplete":itemMoney(summary.total)))+'">'+packageIcon+'</button>':"";
+      const entries=list.filter(e=>e.start<at+D&&(e.end>e.start?e.end>at:e.start>=at)).slice(0,8);
+      return '<section><div class="activity-day-heading"><strong>'+dateLabel(at).slice(5)+'</strong>'+control+'</div>'+entries.map(e=>'<small class="activity-'+esc(e.kind)+'">'+esc(shortTime(Math.max(e.start,at))+" "+e.title)+'</small>').join("")+'</section>';
+    }).join("");
+    const grid='<div class="activity-grid">'+tiles+'</div>';
+    return week?'<div class="activity-week" data-activity-timeline>'+grid+'<div class="activity-timeline-inspector activity-week-inspector" data-activity-timeline-inspector aria-live="polite"><small>Hover or select a package icon for the day’s projected item value.</small></div><div class="activity-timeline-tooltip" data-activity-timeline-tooltip hidden aria-hidden="true"></div>'+templates.join("")+'</div>':grid;
   }
   function render(list,{full=false,homeTile=false,now=Date.now(),view=settings().view,war=null,liveDrugSeconds=null}={}){
     const modes=full?["agenda","timeline","week","month"]:homeTile?["agenda","week"]:["agenda","timeline","week"];
     if(!modes.includes(view))view="agenda";
     const visible=list.filter(e=>e.start<now+(view==="month"?30:7)*D&&e.end>=now);
     return '<div class="activity-calendar"><div class="activity-tabs">'+modes.map(m=>'<button type="button" data-activity-view="'+m+'" aria-pressed="'+(view===m)+'">'+m[0].toUpperCase()+m.slice(1)+'</button>').join("")+'</div>'+
-      (view==="timeline"?renderTimeline(list,now,7,war,liveDrugSeconds):!visible.length?'<p class="fine-print">No scheduled activities in this window.</p>':view==="agenda"?renderAgenda(visible):renderGrid(visible,now,view==="month"?30:7))+
+      (view==="timeline"?renderTimeline(list,now,7,war,liveDrugSeconds):view==="week"?renderGrid(visible,now,7):!visible.length?'<p class="fine-print">No scheduled activities in this window.</p>':view==="agenda"?renderAgenda(visible):renderGrid(visible,now,30))+
       '<small>Forecasts are tentative. The Energy tile remains the action and confirmation interface.</small></div>';
   }
   function settingsDialog(onChange,button){
@@ -417,5 +452,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineLayout,renderTimeline,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineLayout,renderTimeline,dailyItemValues,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
 })();

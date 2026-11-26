@@ -533,27 +533,29 @@ const tornCrimeGuide = (() => {
     const context=liveOptimizationContext(prefs,now);
     const {settings,session,activity,health,iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,budget,reserves,options}=context;
     const plan=tornStatPlanner.homeTrainingAdvice(budget,prefs.risk,options);
-    const scheduled=context.recoveryHeld||activity.statusBlocked?[]:activityEventsForTraining(session,plan?.program,now);
+    const scheduled=context.recoveryHeld||activity.statusBlocked?[]:activityEventsForTraining(session,plan?.program,now,context.inputs);
     const live=recoverySnapshot(now),profile=payload("profile","profile"),st=tornGuideApi.state;
     const status=String(profile?.status?.state??"").toLowerCase();
     const travelAvailable=Number(st.identity?.level??profile?.level)>=15&&["okay","ok"].includes(status)&&!st.errors?.profile&&now-Number(st.fetchedAt?.profile||0)<15*60000&&!activity.blocked;
     const rehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&e.end>now)?null:tornActivityScheduler.rehabWindow({now,health,war:activity.war,actions:scheduled.map(e=>e.start),drugReady:live?.drug>0?now+live.drug*1000:null,s:settings,travelAvailable});
     return {...context,plan,avoidWarDrugs:blockDrugs||prefs.odRisk==="low",rehab,scheduled};
   }
-  function activityEventsForTraining(session,program,now=Date.now()){
+  function activityEventsForTraining(session,program,now=Date.now(),inputs=null){
+    const valueItems=tornTrainSequence.calendarValuation(inputs);
     const labels={xanax:"Xanax",ecstasy:"Ecstasy",train:"Gym training",candy:"Candy",dvd:"Erotic DVD",refill:"Energy refill",externalHappy:"Coordinated happiness boost"};
     const rows=session?sessionSchedule(session,now).filter(x=>!x.done).map(x=>({step:x.step,at:x.due,source:"Active training cycle"})):
-      (program?.execution??[]).filter(actionable).map(step=>({step,at:program.generatedAt+step.at*1000,source:"Optimal Budget forecast"}));
-    return rows.filter(x=>Number.isFinite(x.at)&&labels[x.step.type]).map(({step,at,source},i)=>{
+      (program?.execution??[]).map((step,i)=>({step,at:program.generatedAt+step.at*1000,source:"Optimal Budget forecast",candy:program.calendarCandy?.[i]})).filter(x=>actionable(x.step));
+    return rows.filter(x=>Number.isFinite(x.at)&&labels[x.step.type]).map(({step,at,source,candy},i)=>{
       // Match sessionSchedule for locked sessions; the simulator's post-action
       // drug balance is the duration for a new forecast. No extra gameplay logic.
       const drugCooldownSeconds=step.type==="xanax"||step.type==="ecstasy"?
         session?(step.type==="xanax"?session.timing?.xanaxCD??25200:session.timing?.ecstasyCD??12900):step.after?.drug:null;
-      return {id:"training-"+i,kind:"training",title:labels[step.type]+(step.type==="train"?" · "+number(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+number(step.quantity):""),start:at,end:at,source,drugCooldownSeconds};
+      return {id:"training-"+i,kind:"training",title:labels[step.type]+(step.type==="train"?" · "+number(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+number(step.quantity):""),start:at,end:at,source,drugCooldownSeconds,items:valueItems(step,candy)};
     });
   }
   function calendarEvents(training,now=Date.now()){
-    return tornActivityScheduler.schedule({now,war:training.activity.war,preparation:energyWarAdvice(training,now),health:training.health,rehab:training.rehab,training:training.scheduled,limit:training.activity.blocked?now:training.activity.deadline});
+    const valueItems=tornTrainSequence.calendarValuation(training.inputs);
+    return tornActivityScheduler.schedule({now,war:training.activity.war,preparation:energyWarAdvice(training,now),health:training.health,rehab:training.rehab,training:training.scheduled,limit:training.activity.blocked?now:training.activity.deadline}).map(e=>/^war-dose-\d+$/.test(e.id)?{...e,items:valueItems({type:"xanax",quantity:1})}:e);
   }
   function rehabPanel(training){
     const {health,rehab,reserves}=training,fmt=tornActivityScheduler.time;
