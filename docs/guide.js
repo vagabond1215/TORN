@@ -486,7 +486,7 @@ function closeSettings(){
 }
 function toggleSettings(){
   const panel=byId("settings-panel"),next=panel.hidden;
-  if(next)syncSettingsControls();
+  if(next){syncSettingsControls();tornGuideLocalBridge.checkVersion();}
   panel.hidden=!next;
   byId("settings-toggle").setAttribute("aria-expanded",String(next));
 }
