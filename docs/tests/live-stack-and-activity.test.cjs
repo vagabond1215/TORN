@@ -1,0 +1,24 @@
+"use strict";
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const read=name=>fs.readFileSync(path.join(__dirname,"..",name),"utf8");
+const seqSrc=read("stats-sequencer.js").replace("return {render,wire,simulate,weeklyPrograms,","return {projectCycles,mixedProjection,render,wire,simulate,weeklyPrograms,");
+const state={identity:{id:1},data:{},inventory:{Candy:[{name:"Lollipop",amount:3000}],Booster:[{name:"Erotic DVD",amount:100}],Drug:[{name:"Xanax",amount:100},{name:"Ecstasy",amount:100}]},inventoryErrors:{},errors:{},fetchedAt:{}};
+const storage=new Map(),store={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
+storage.set("torn-city-guide:plan-view:1",JSON.stringify({showOptimal:false,selected:["mini"]}));
+const ctx={state:{statValues:{strength:175058},compareStat:"strength",currentEnergy:150,maxEnergy:150,happy:5000,maxHappy:5000},gym:{energy:10,strength:10},effectsFor:()=>({multiplier:1}),trainBlock:(stat,happy,energy)=>({stat:stat+Math.floor(energy/10)*(10+happy/1000),happy,used:Math.floor(energy/10)*10})};
+const seq=new Function("tornGuideApi","localStorage","payload","tornHappinessBook","tornBookTileStatus",seqSrc+"\nreturn tornTrainSequence;")({state},store,()=>null,()=>({active:false}),()=>"");
+seq.render(ctx,{keepClock:true});
+for(const id of ["jump","maxhappy"])for(const energy of [0,150,250,280,500,540,750,790,1000,257]){
+ ctx.state.currentEnergy=energy; const d=seq.mixedProjection([id],Infinity,{respectOffset:false});
+ assert.equal(d.initial.energy,energy);assert.equal(d.errors.length,0);assert.equal(d.costs.xanax,4-Math.floor(energy/250));
+ const trains=d.log.filter(x=>x.type==="train"&&x.start.energy>x.end.energy);assert.ok(trains.some(x=>x.start.energy===1000));
+ const surplus=energy%250;if(surplus>=10)assert.equal(trains[0].start.energy-trains[0].end.energy,Math.floor(surplus/10)*10);
+ const same=seq.projectCycles(id,1,{liveStart:true});assert.equal(same.initial.energy,energy);assert.equal(same.costs.xanax,d.costs.xanax);assert.equal(same.gain,d.gain);
+}
+for(const id of ["natural","maxenergy","mini","low","custom"]){ctx.state.currentEnergy=1000;const d=seq.mixedProjection([id],Infinity,{respectOffset:false,actionsFor:id=>id==="natural"?[{type:"train",when:"full"}]:seq.steps[id]});assert.equal(d.initial.energy,1000);assert.ok(d.used>=1000);if(["mini","maxenergy"].includes(id))assert.equal(d.log.find(x=>x.type==="train"&&x.start.energy>x.end.energy).start.energy,1000);}
+const h=3600000,day=24*h,now=Date.now(),next=Math.floor((now+2*day)/day)*day,sec=x=>Math.floor(x/1000);
+Object.assign(state,{errors:{},fetchedAt:Object.fromEntries(["rehabStats","profile","factionChain","races","calendarCatalog","calendar","warAttacks"].map(k=>[k,now])),data:{rehabStats:{personalstats:{drugs:{rehabilitations:{amount:5,fees:1250000}}}},profile:{profile:{status:{state:"Okay"}}},factionChain:{chain:{id:1,current:42,max:100,timeout:240}},races:{races:[{id:1,title:"Race",status:"open",schedule:{start:sec(now+h),end:null}},{id:2,status:"finished",schedule:{start:sec(now-h),end:sec(now)}}]},calendarCatalog:{calendar:{events:[{title:"Test event",start:sec(next+12*h),end:sec(next+60*h),earliest_start:sec(next+10*h),latest_end:sec(next+64*h),fixed_start_time:false}],competitions:[]}},calendar:{calendar:{start_time:"14:15"}},warAttacks:{attacks:[{attacker:{id:1},started:sec(now-10000),is_ranked_war:true,respect_gain:3},{attacker:{id:2},started:sec(now-10000),is_ranked_war:true,respect_gain:9}]}}});
+const sc=new Function("tornGuideApi","localStorage",read("activity-scheduler.js")+"\nreturn tornActivityScheduler;")({state},store);
+const baseline=sc.rehabSnapshot(now-500);assert.equal(baseline.count,5);assert.ok(sc.saveEvent({id:"rehab-test",kind:"rehab",title:"Rehab",start:now-100,end:now+h,blocking:true,rehabBaseline:{...baseline,at:now-1000}}));state.data.rehabStats.personalstats.drugs.rehabilitations={amount:6,fees:1500000};assert.equal(sc.reconcileRehab(now)?.cost,250000);assert.equal(sc.weeklySpend(now),250000);assert.equal(sc.reconcileRehab(now),null);
+const events=sc.externalEvents(now);assert.equal(events.length,3);assert.equal(events.find(x=>x.kind==="event").start,next+14.25*h);assert.equal(events.find(x=>x.kind==="chain").end,now+240000);assert.equal(events.find(x=>x.kind==="racing").end,events.find(x=>x.kind==="racing").start);assert.equal(sc.warAttackSummary({phase:"active",start:now-h},now).attacks,1);assert.ok(sc.recordSpend({id:"war-test",kind:"war",at:now,cost:500000,source:"manual"}));assert.equal(sc.weeklySpend(now),750000);assert.ok(sc.expenseForm().includes("Record actual war / rehab expense"));state.errors.calendarCatalog="Permission denied";assert.ok(!sc.externalEvents(now).some(x=>x.kind==="event"));
+console.log("25 live Energy cases, same-start projections, rehab and activity feed assertions passed.");
