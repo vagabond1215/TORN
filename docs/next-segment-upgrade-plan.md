@@ -64,3 +64,5 @@ See [persistence-implementation-plan.md](persistence-implementation-plan.md). 1P
 1P.3a implemented: typed portable backup coverage for legacy training-spend estimates, existing activity spend and rehab event evidence. Restore remains empty-account only. Next 1P.3b session/history adapters and staged recovery, then revisioned merge and companion vault. No actual-expenditure reclassification yet.
 
 1P.3a follow-up: pending rehab reservations restored from portable backups require manual review and cannot auto-confirm from historical counter baselines. Invalid calendar/spend records stop export; competing-write rollback is best effort only. Next 1P.3b active session/history recovery; see persistence implementation plan for validation and dependencies.
+
+1P.3b source audit recorded: active-session import requires staged recovery isolated from all runnable session consumers (Energy, Calendar, Restock, watch, deadline replan and expense deduction); see persistence implementation plan for schema map and acceptance matrix. Runtime implementation not yet enabled.
