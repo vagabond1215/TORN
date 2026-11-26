@@ -38,7 +38,7 @@ const tornGuideApi=(()=>{
     stocks:["stocks","stockCatalog","itemCatalog"],
     education:["education","educationCatalog","merits","meritCatalog","stocks","stockCatalog","perks"],
     inventory:["itemCatalog"],
-    racing:[], faction:[], attacking:[], war:[], tools:[]
+    log:[], racing:[], faction:[], attacking:[], war:[], tools:[]
   };
   const state={identity:null,data:{},inventory:{},errors:{},inventoryErrors:{},
     fetchedAt:{},failedAt:{},updated:null,loading:false,cached:false,
