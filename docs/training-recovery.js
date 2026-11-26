@@ -99,7 +99,7 @@ const tornTrainingRecovery=(()=>{
   }
   function held(store,playerId){
     if(!/^[1-9][0-9]{0,14}$/.test(String(playerId??"")))return false;
-    try{return store.getItem(reviewKey(playerId))!==null;}catch{return true;}
+    try{return store.getItem(reviewKey(playerId))!==null||store.getItem(prefix+"restore-journal:v1:"+playerId)!==null;}catch{return true;}
   }
   function discardStage(store,playerId,raw,isCurrent){
     if(typeof raw!=="string"||!isCurrent())throw Error("Account changed before review");

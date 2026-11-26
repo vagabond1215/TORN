@@ -108,6 +108,7 @@ const tornAccountStorage=(()=>{
   }
   function snapshot(store,playerId){
     const id=owner(playerId),records=[],omitted=[];
+    if(journalPending(store,id))throw Error("Resolve the pending restore journal before export or import");
     for(const [section,k] of keys(store,id)){const value=store.getItem(k);if(value===null)continue;const d=descriptor(id,section);if(str(value,maxValue)&&d.valid(value))records.push({section,value});else omitted.push(section);}
     const live=store.getItem(prefix+"training-session:"+id),stage=store.getItem(tornTrainingRecovery.reviewKey(id));
     if(live!==null||stage!==null){
@@ -141,5 +142,96 @@ const tornAccountStorage=(()=>{
     catch(error){let rollbackFailed=false;for(const [k,value] of added.reverse())try{if(store.getItem(k)===value)store.removeItem(k);else rollbackFailed=true;}catch{rollbackFailed=true;}if(rollbackFailed)throw Error("Restore incomplete; rollback failed or a concurrent edit was detected. Keep the backup and inspect local storage.");throw error;}
     return records.length;
   }
-  return {owner,snapshot,validRecords,restoreEmpty,maxBytes};
+  const journalKey=id=>prefix+"restore-journal:v1:"+owner(id);
+  function journalPending(store,playerId){
+    try{return store.getItem(journalKey(playerId))!==null;}catch{return true;}
+  }
+  // Journal rows contain validated destination values, not arbitrary keys.
+  // A pending journal is local recovery data and never exported.
+  function parseJournal(raw,id){
+    if(typeof raw!=="string"||raw.length>maxBytes*3+100000)throw Error("Invalid restore journal size");
+    const j=JSON.parse(raw);
+    if(!shape(j,["version","playerId","createdAt","rows"])||j.version!==1||j.playerId!==id||!observedDate(j.createdAt)||!Array.isArray(j.rows)||!j.rows.length||j.rows.length>maxRecords)throw Error("Invalid restore journal");
+    let size=0;const seen=new Set();
+    for(const row of j.rows){
+      if(!shape(row,["section","value"])||!str(row.section,160)||!str(row.value,maxValue+1000)||seen.has(row.section))throw Error("Invalid journal section");
+      const d=descriptor(id,row.section);
+      if(!d)throw Error("Unknown journal section");
+      if(row.section==="training-session-review")tornTrainingRecovery.parseStage(row.value,id);
+      else if(!d.valid(row.value))throw Error("Invalid journal value");
+      seen.add(row.section);size+=row.section.length+row.value.length;
+      if(size>maxBytes+1000)throw Error("Restore journal exceeds size limit");
+    }
+    return j;
+  }
+  function readJournal(store,playerId){
+    const id=owner(playerId),raw=store.getItem(journalKey(id));
+    if(raw===null)return null;
+    const j=parseJournal(raw,id);
+    const rows=j.rows.map(row=>{
+      const key=descriptor(id,row.section).key,current=store.getItem(key);
+      return {section:row.section,state:current===null?"missing":current===row.value?"matched":"conflict"};
+    });
+    // A local runnable session is never part of the journal.
+    if(store.getItem(prefix+"training-session:"+id)!==null)rows.push({section:"local-training-session",state:"conflict"});
+    return {raw,createdAt:j.createdAt,rows,complete:rows.every(row=>row.state==="matched"),conflict:rows.some(row=>row.state==="conflict")};
+  }
+  function assertJournal(store,id,raw,isCurrent){
+    if(!isCurrent()||store.getItem(journalKey(id))!==raw)throw Error("Account or restore journal changed");
+  }
+  function finishJournal(store,playerId,raw,isCurrent){
+    const id=owner(playerId);assertJournal(store,id,raw,isCurrent);
+    const status=readJournal(store,id);
+    if(!status?.complete||status.conflict)throw Error("Restore is incomplete or has conflicting changes");
+    assertJournal(store,id,raw,isCurrent);store.removeItem(journalKey(id));
+    if(journalPending(store,id))throw Error("Restore journal could not be cleared");
+  }
+  function rollbackJournal(store,playerId,raw,isCurrent){
+    const id=owner(playerId);assertJournal(store,id,raw,isCurrent);
+    const status=readJournal(store,id);
+    if(!status||status.conflict)throw Error("Conflicting changes; preserve the journal and original backup");
+    const j=parseJournal(raw,id);
+    for(const row of [...j.rows].reverse()){
+      assertJournal(store,id,raw,isCurrent);
+      const key=descriptor(id,row.section).key,current=store.getItem(key);
+      if(current!==null&&current!==row.value)throw Error("Concurrent change during rollback; journal retained");
+      if(current!==null)store.removeItem(key);
+    }
+    assertJournal(store,id,raw,isCurrent);
+    if(readJournal(store,id).rows.some(row=>row.state!=="missing"))throw Error("Rollback incomplete; journal retained");
+    store.removeItem(journalKey(id));
+    if(journalPending(store,id))throw Error("Restore journal could not be cleared");
+  }
+  function restoreJournaled(store,playerId,records,isCurrent,{createdAt=Date.now()}={}){
+    const id=owner(playerId);validRecords(records,id);
+    if(!records.length||journalPending(store,id))throw Error("Resolve the pending restore journal first");
+    const existing=snapshot(store,id);
+    if(existing.records.length||existing.omitted.length||store.getItem(prefix+"training-session:"+id)!==null)throw Error("Account already has local data; merge is not available yet");
+    if(!isCurrent())throw Error("Account changed before restore");
+    const ordered=[...records].sort((a,b)=>Number(b.section==="training-session-review")-Number(a.section==="training-session-review"));
+    const rows=ordered.map(row=>({section:row.section,value:row.section==="training-session-review"?tornTrainingRecovery.stageValue(id,JSON.parse(row.value),createdAt):restoredValue(row)}));
+    const raw=JSON.stringify({version:1,playerId:id,createdAt:Date.now(),rows});
+    parseJournal(raw,id);
+    if(!isCurrent()||journalPending(store,id))throw Error("Account or journal changed before restore");
+    // Write-ahead journal: quota failure here leaves destinations untouched.
+    store.setItem(journalKey(id),raw);
+    assertJournal(store,id,raw,isCurrent);
+    try{
+      for(const row of rows){
+        assertJournal(store,id,raw,isCurrent);
+        const key=descriptor(id,row.section).key;
+        if(store.getItem(key)!==null||store.getItem(prefix+"training-session:"+id)!==null)throw Error("Concurrent account write");
+        store.setItem(key,row.value);
+      }
+      finishJournal(store,id,raw,isCurrent);
+    }catch(error){throw Error("Restore interrupted; journal retained for review. "+String(error?.message??error));}
+    return rows.length;
+  }
+  // Cooperative cross-tab serialization where Web Locks is available.
+  // Older scripts and other ordinary writers do not participate yet.
+  async function withRecoveryLock(playerId,locks,fn){
+    const id=owner(playerId);
+    return locks?.request?locks.request(prefix+"account-recovery:"+id,{mode:"exclusive"},fn):fn();
+  }
+  return {owner,snapshot,validRecords,restoreEmpty,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
 })();

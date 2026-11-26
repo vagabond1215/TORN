@@ -13,10 +13,36 @@ const tornBackupUI=(()=>{
     const exportButton=get("backup-export"),importButton=get("backup-import"),close=get("backup-close");
     if(!open||!dialog||!form)return;
     const message=x=>{status.textContent=x;};
-    const controls=()=>{exportButton.disabled=busy;importButton.disabled=busy;close.disabled=busy;inspect.disabled=busy||!presented?.session;discard.disabled=busy||!presented?.session;preview.disabled=busy||!presented?.session||!attest.checked;count.disabled=busy||!presented?.session;attest.disabled=busy||!presented?.session;sync();};
+    const controls=()=>{const pending=!journalPanel.hidden;exportButton.disabled=busy||pending;importButton.disabled=busy||pending;journalFinish.disabled=busy||!journal?.complete||journal.conflict;journalRollback.disabled=busy||!journal||journal.conflict;close.disabled=busy;inspect.disabled=busy||pending||!presented?.session;discard.disabled=busy||pending||!presented?.session;preview.disabled=busy||pending||!presented?.session||!attest.checked;count.disabled=busy||!presented?.session;attest.disabled=busy||!presented?.session;sync();};
     const review=get("backup-recovery-review"),summary=get("backup-review-summary"),evidence=get("backup-review-evidence"),inspect=get("backup-review-inspect"),discard=get("backup-review-discard");
     const count=get("backup-review-count"),attest=get("backup-review-attest"),preview=get("backup-review-preview"),actionList=get("backup-review-action-list"),previewList=get("backup-review-preview-list");
-    let presented=null;
+    const journalPanel=get("backup-journal"),journalStatus=get("backup-journal-status"),journalFinish=get("backup-journal-finish"),journalRollback=get("backup-journal-rollback");
+    let presented=null,journal=null;
+    function showJournal(){
+      journal=null;
+      const id=tornGuideApi.state.identity?.id;
+      try{
+        journal=tornAccountStorage.readJournal(localStorage,id);
+        journalPanel.hidden=!journal;
+        journalStatus.textContent=journal?journal.rows.filter(x=>x.state==="matched").length+" of "+journal.rows.length+" destinations match the interrupted restore. "+(journal.conflict?"Conflicting changes detected; preserve the original backup and journal.":journal.complete?"All values match; you can finalize or roll back.":"Restore incomplete; roll back before trying again."):"";
+      }catch(error){journalPanel.hidden=false;journalStatus.textContent=String(error?.message??error);}
+    }
+    async function resolveJournal(mode){
+      if(busy||!journal||journal.conflict)return;
+      const initial=journal;busy=true;controls();
+      try{
+        const verified=await tornGuideApi.verifyBackupOwner();
+        if(!window.confirm(mode==="finish"?"Finalize this fully matched restore?":"Roll back the interrupted restore? Only matching destination values will be removed; keep your original backup."))return;
+        await tornAccountStorage.withRecoveryLock(verified.playerId,navigator.locks,()=>{
+          if(mode==="finish")tornAccountStorage.finishJournal(localStorage,verified.playerId,initial.raw,verified.isCurrent);
+          else tornAccountStorage.rollbackJournal(localStorage,verified.playerId,initial.raw,verified.isCurrent);
+        });
+        location.reload();
+      }catch(error){journalStatus.textContent=String(error?.message??error);}
+      finally{busy=false;controls();}
+    }
+    journalFinish.addEventListener("click",()=>void resolveJournal("finish"));
+    journalRollback.addEventListener("click",()=>void resolveJournal("rollback"));
     function clearPreview(){previewList.replaceChildren();evidence.textContent="";}
     function actionText(x){const name={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",train:"Train",refill:"Energy refill",externalHappy:"External Happiness boost"}[x.type]??x.type;return name+(x.type==="train"?" "+x.energy+" E":x.quantity>1?" × "+x.quantity:"");}
     function append(list,text){const li=document.createElement("li");li.textContent=text;list.append(li);}
@@ -35,7 +61,7 @@ const tornBackupUI=(()=>{
       summary.textContent=x?"Player #"+presented.playerId+" · "+x.label+" · "+x.index+"/"+x.actions.length+" confirmed. Backup "+new Date(presented.backupCreatedAt).toLocaleString()+". Last confirmation "+(x.lastConfirmed==null?"unknown":new Date(x.lastConfirmed).toLocaleString())+". Estimated cycle cost "+(x.cycleSpend==null?"unknown":"$"+x.cycleSpend.toLocaleString())+".":presented?.error??"";
     }
     async function reviewAction(mode){
-      if(busy||!presented?.session)return;
+      if(busy||!presented?.session||tornAccountStorage.journalPending(localStorage,presented.playerId))return;
       const stage=presented,reviewed=count.value===""?NaN:Number(count.value),attested=attest.checked;clearPreview();busy=true;controls();
       try{
         const verified=await tornGuideApi.verifyBackupOwner();
@@ -43,7 +69,10 @@ const tornBackupUI=(()=>{
         if(!stillCurrent())throw Error("Account or recovery record changed");
         if(mode==="discard"){
           if(!window.confirm("Release the hold and discard this staged session without resuming or charging its estimated cycle cost? Keep your backup and manually reconcile any uncertain spending."))return;
-          tornTrainingRecovery.discardStage(localStorage,verified.playerId,stage.raw,stillCurrent);
+          await tornAccountStorage.withRecoveryLock(verified.playerId,navigator.locks,()=>{
+            if(tornAccountStorage.journalPending(localStorage,verified.playerId))throw Error("Resolve the restore journal first");
+            tornTrainingRecovery.discardStage(localStorage,verified.playerId,stage.raw,stillCurrent);
+          });
           location.reload();return;
         }
         const requested=Date.now();await tornGuideApi.loadPage("energy",true);
@@ -67,7 +96,7 @@ const tornBackupUI=(()=>{
     open.addEventListener("click",()=>{
       if(!tornGuideApi.isConnected()||busy)return;
       clear();message("Verified account required. Version 1 covers supported settings, notes, checklists, calendar events, existing expenditure records, validated training sessions and cycle history.");
-      showReview();dialog.showModal();
+      showJournal();showReview();dialog.showModal();
     });
     close.addEventListener("click",()=>{if(!busy)dialog.close();});
     dialog.addEventListener("cancel",event=>{if(busy)event.preventDefault();});
@@ -107,12 +136,13 @@ const tornBackupUI=(()=>{
           if(!verified.isCurrent())throw Error("Account changed before recovery");
           // Explicit approval, no silent overwrite or partial account merge.
           if(!window.confirm("Restore "+data.records.length+" supported records for Torn player "+id+"? Existing supported account data or session/history will prevent recovery. Restored training sessions will be held for review and cannot resume yet. Restored pending rehab will not auto-confirm; review reservations manually. The guide will reload; session-only API connections must reconnect.")){message("Recovery cancelled; no changes made.");return;}
-          const count=tornAccountStorage.restoreEmpty(localStorage,id,data.records,verified.isCurrent,{createdAt:data.createdAt});
+          if(!navigator.locks?.request&&!window.confirm("This browser does not support cross-tab recovery locking. Close other guide tabs before restoring. Continue in this tab?")){message("Restore cancelled.");return;}
+          const count=await tornAccountStorage.withRecoveryLock(id,navigator.locks,()=>tornAccountStorage.restoreJournaled(localStorage,id,data.records,verified.isCurrent,{createdAt:data.createdAt}));
           message("Restored "+count+" supported records. Reloading guide…");
           location.reload();
         }
       }catch(error){message(String(error?.message??"Backup operation failed"));}
-      finally{password="";file.value="";busy=false;controls();}
+      finally{password="";file.value="";busy=false;showJournal();controls();}
     }
     exportButton.addEventListener("click",()=>void run("export"));
     importButton.addEventListener("click",()=>void run("import"));

@@ -343,7 +343,7 @@ window.addEventListener("hashchange", renderRoute);
 // Reload resets cached account settings after an import or explicit release.
 window.addEventListener("storage",event=>{
   const id=tornGuideApi.state.identity?.id;
-  if(id!=null&&(event.key===null||event.key==="torn-city-guide:training-session-review:v1:"+id)){
+  if(id!=null&&(event.key===null||event.key==="torn-city-guide:training-session-review:v1:"+id||event.key==="torn-city-guide:restore-journal:v1:"+id)){
     renderRoute();
   }
 });

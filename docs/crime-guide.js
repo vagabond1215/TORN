@@ -647,7 +647,7 @@ const tornCrimeGuide = (() => {
     if(typeof tornTrainingRecovery!=="undefined")return tornTrainingRecovery.held(localStorage,id);
     // Mixed cached assets must not silently release a stored hold.
     if(!/^[1-9][0-9]{0,14}$/.test(String(id??"")))return false;
-    try{return localStorage.getItem("torn-city-guide:training-session-review:v1:"+id)!==null;}catch{return true;}
+    try{return localStorage.getItem("torn-city-guide:training-session-review:v1:"+id)!==null||localStorage.getItem("torn-city-guide:restore-journal:v1:"+id)!==null;}catch{return true;}
   }
   function loadTrainingSession(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
@@ -1187,6 +1187,8 @@ const tornCrimeGuide = (() => {
   }
   let warTraining=null;
   function recoveryHoldPanel(){
+    const id=tornGuideApi.state.identity?.id;
+    try{if(localStorage.getItem("torn-city-guide:restore-journal:v1:"+id)!==null)return '<div class="growth-card"><div class="growth-warning"><strong>Account Restore Interrupted</strong><p>Training is held until the restore journal is resolved in Settings → Data &amp; Backup.</p></div></div>';}catch{}
     const stage=typeof tornTrainingRecovery==="undefined"?{error:"Recovery module unavailable; reload the guide."}:tornTrainingRecovery.readStage(localStorage,tornGuideApi.state.identity?.id),session=stage?.session;
     return '<div class="growth-card"><div class="growth-warning"><strong>Restored Training Session Held</strong><p>Training recommendations, detection and cycle accounting are paused. Imported actions will not resume automatically.</p>'+
       (session?'<p>'+esc(session.label)+' · '+esc(session.stat)+' · '+session.index+' / '+session.actions.length+' confirmed</p><small>Backup created: '+esc(sessionTime(stage.backupCreatedAt))+' · Last confirmation: '+esc(session.lastConfirmed==null?"Unknown":sessionTime(session.lastConfirmed))+' · Estimated cycle cost: '+esc(session.cycleSpend==null?"Unknown":"$"+number(session.cycleSpend))+'</small>':'<p>'+esc(stage?.error??"Recovery state unavailable")+'</p>')+

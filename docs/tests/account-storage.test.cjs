@@ -31,3 +31,26 @@ assert.throws(()=>a.validRecords([{section:"activity-spend",value:JSON.stringify
 assert.throws(()=>a.validRecords([{section:"training-spend-estimates",value:'[{"started":100,"at":200,"cost":1000,"actual":true}]'}],String(id)),/invalid section/);
 assert.throws(()=>a.restoreEmpty(recovered,id,saved.records),/already/);
 console.log("Legacy estimated spend, manual/API activity expenditure, rehab evidence and duplicate rejection passed.");
+
+const batch=[{section:"build",value:'{"choice":"balanced","total":500}'},{section:"notes:gym",value:"restore note"}],jkey=a.journalKey(id);
+const journaled=storage();assert.equal(a.restoreJournaled(journaled,id,batch,()=>true),2);assert.equal(journaled.getItem(jkey),null);assert.equal(a.snapshot(journaled,id).records.length,2);
+const interrupted=storage(),set=interrupted.setItem;let writes=0;interrupted.setItem=(k,v)=>{if(++writes===3)throw Error("quota");set(k,v)};
+assert.throws(()=>a.restoreJournaled(interrupted,id,batch,()=>true),/journal retained/);
+const journal=a.readJournal(interrupted,id);assert.equal(journal.complete,false);assert.equal(journal.conflict,false);assert.equal(journal.rows.filter(x=>x.state==="matched").length,1);
+assert.throws(()=>a.snapshot(interrupted,id),/pending restore journal/);
+assert.throws(()=>a.finishJournal(interrupted,id,journal.raw,()=>true),/incomplete/);
+assert.throws(()=>a.rollbackJournal(interrupted,id,journal.raw,()=>false),/changed/);
+a.rollbackJournal(interrupted,id,journal.raw,()=>true);assert.equal(interrupted.length,0);
+const competing=storage(),w=competing.setItem;let count=0;competing.setItem=(k,v)=>{if(++count===3){w(p+"build:123","other-tab");throw Error("quota");}w(k,v)};
+assert.throws(()=>a.restoreJournaled(competing,id,batch,()=>true),/journal retained/);
+const conflict=a.readJournal(competing,id);assert.equal(conflict.conflict,true);
+assert.throws(()=>a.rollbackJournal(competing,id,conflict.raw,()=>true),/Conflicting/);
+assert.equal(competing.getItem(p+"build:123"),"other-tab");
+const finish=storage(),remove=finish.removeItem;finish.removeItem=k=>{if(k===jkey)throw Error("interruption");remove(k)};
+assert.throws(()=>a.restoreJournaled(finish,id,batch,()=>true),/journal retained/);
+const finished=a.readJournal(finish,id);assert.equal(finished.complete,true);
+finish.removeItem=remove;a.finishJournal(finish,id,finished.raw,()=>true);assert.equal(finish.getItem(jkey),null);
+assert.equal(a.snapshot(finish,id).records.length,2);
+const badJournal=storage({[jkey]:JSON.stringify({version:1,playerId:String(id),createdAt:Date.now(),rows:[{section:"api:v2:remember",value:"key"}]})});
+assert.throws(()=>a.readJournal(badJournal,id),/Unknown journal section/);
+console.log("Write-ahead restore journal, quota interruption, conflict preservation, rollback, finalization and strict section validation passed.");
