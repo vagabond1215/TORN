@@ -210,7 +210,7 @@ const tornActivityScheduler=(()=>{
         if(war.cutoff>=now)list.push({id:"war-cutoff",kind:"war",title:"Training cutoff / stack begins",start:war.cutoff,end:war.cutoff,source:"Calculated deadline"});
         const prep=preparation??warPreparation(war,null,null,false,now);
         for(const [i,dose] of (prep?.doses??[]).entries()){
-          if(dose.at>=now)list.push({id:"war-dose-"+i,kind:"war",title:"War stack · Xanax "+(i+1)+" of "+prep.doses.length,start:dose.at,end:dose.at,source:prep.tentative?"Tentative; verify live cooldown":"Projected from current account state",detail:dose.energy==null?"":dose.energy+" E projected"});
+          if(dose.at>=now)list.push({id:"war-dose-"+i,kind:"war",title:"War stack · Xanax "+(i+1)+" of "+prep.doses.length,start:dose.at,end:dose.at,drugCooldownSeconds:!war.stale&&Number.isFinite(war.cd)&&war.cd>0?war.cd/1000:null,source:prep.tentative?"Tentative; verify live cooldown":"Projected from current account state",detail:dose.energy==null?"":dose.energy+" E projected"});
         }
         if(prep?.clearAt!=null&&prep.clearAt>=now&&prep.clearAt<=war.start)
           list.push({id:"war-clear",kind:"war",title:"Projected drug cooldown clear",start:prep.clearAt,end:prep.clearAt,source:prep.tentative?"Target":prep.bufferReduced?"Estimated · clearance buffer reduced":"Estimated"});
@@ -239,7 +239,19 @@ const tornActivityScheduler=(()=>{
     if(/proposal|tentative|forecast|projected|estimated|target|calculated/i.test(e.source??""))return "Tentative / calculated";
     return "Scheduled / informational";
   }
-  function timelineLayout(list,now,days=7,war=null){
+  // Display-only intervals: a planned action is not proof of consumption.
+  function timelineDrugCooldowns(rows,now,liveDrugSeconds){
+    const intervals=[];
+    if(Number.isFinite(liveDrugSeconds)&&liveDrugSeconds>0)
+      intervals.push({id:"timeline-drug-current",kind:"health",title:"Drug cooldown · remaining",start:now,end:now+liveDrugSeconds*1000,source:"Recent API snapshot",detail:"Remaining cooldown from the current view time; original dose time is unknown. Refresh to verify.",cooldown:true,blocking:false});
+    for(const e of rows){
+      const seconds=e.drugCooldownSeconds;
+      if(e.start!==e.end||e.start<now||!Number.isFinite(seconds)||seconds<=0||e.stale||e.recoveryReview)continue;
+      intervals.push({id:"timeline-drug-"+e.id,kind:"health",title:"Drug cooldown · "+e.title,start:e.start,end:e.start+seconds*1000,source:"Projected cooldown · "+(e.source??"Training plan"),detail:"Estimated duration after this planned action, not a confirmed dose. Actual cooldown may vary; gym training is not inherently blocked.",cooldown:true,blocking:false});
+    }
+    return intervals;
+  }
+  function timelineLayout(list,now,days=7,war=null,liveDrugSeconds=null){
     const end=now+days*D,width=days*240,bin=48,maxLanes=3;
     const x=at=>Math.max(0,Math.min(width,(at-now)/(end-now)*width));
     const valid=at=>Number.isFinite(at)&&Math.abs(at)<=8640000000000000;
@@ -257,9 +269,10 @@ const tornActivityScheduler=(()=>{
       }
     }
     for(const e of rows)if(e.kind==="racing"&&e.detail==="End not supplied"){e.originalStart=e.start;e.start=e.end=Math.max(now,e.start);}
-    const visible=rows.filter(e=>e.start<end&&e.end>=now&&!(e.end===now&&e.start<now));
+    rows.push(...timelineDrugCooldowns(rows,now,liveDrugSeconds));
+    const visible=rows.filter(e=>valid(e.start)&&valid(e.end)&&e.start<end&&e.end>=now&&!(e.end===now&&e.start<now));
     const spans=[],pins=[],lanes=Array.from({length:maxLanes},()=>[]);
-    for(const e of visible.slice().sort((a,b)=>Number(b.blocking===true)-Number(a.blocking===true)||a.start-b.start||b.end-a.end||String(a.id).localeCompare(String(b.id)))){
+    for(const e of visible.slice().sort((a,b)=>Number(b.blocking===true)-Number(a.blocking===true)||Number(b.cooldown===true)-Number(a.cooldown===true)||a.start-b.start||b.end-a.end||String(a.id).localeCompare(String(b.id)))){
       const left=x(e.start),right=x(e.end),range=e.end>e.start;
       const lane=range&&right-left>=30?lanes.findIndex(items=>items.every(i=>right+2<=i.left||left>=i.right+2)):-1;
       if(lane>=0){const item={event:e,left,right,lane,clippedStart:e.start<now,clippedEnd:e.end>end};spans.push(item);lanes[lane].push(item);}
@@ -271,10 +284,20 @@ const tornActivityScheduler=(()=>{
       const i=Math.min(Math.ceil(width/bin)-1,Math.floor(p.x/bin));
       if(!groups.has(i))groups.set(i,[]);groups.get(i).push(p);
     }
-    const annotations=[...groups].map(([i,items])=>({items,side:i%2?"bottom":"top",x:(items[0].x+items.at(-1).x)/2,label:true}));
-    for(const side of ["top","bottom"]){
-      const same=annotations.filter(a=>a.side===side);
-      for(let i=0;i<same.length;i++){const a=same[i];a.label=(!same[i-1]||a.x-same[i-1].x>=136)&&(!same[i+1]||same[i+1].x-a.x>=136);}
+    // The post, not the label center, is the timestamp. Cluster flags use the
+    // first (left post) or last (right post) event anchor; all times remain listed.
+    const geometry=(a,w)=>{
+      const first=a.items[0].x,last=a.items.at(-1).x;
+      const post=first+w<=width?"left":"right",x=post==="left"?first:last;
+      return {post,x,labelWidth:w,left:post==="left"?x:x-w,right:post==="left"?x+w:x};
+    };
+    const annotations=[...groups].map(([i,items])=>({items,side:i%2?"bottom":"top",label:false,...geometry({items},24)}));
+    // Reserve all compact flags before growing labels. This preserves exact posts
+    // and prevents labels on either edge from hiding a neighboring marker.
+    for(const a of annotations){
+      const g=geometry(a,112);
+      if(g.left<0||g.right>width||annotations.some(b=>b!==a&&b.side===a.side&&g.left<b.right+4&&g.right>b.left-4))continue;
+      Object.assign(a,g,{label:true});
     }
     return {now,end,width,spans,annotations,laneCount:Math.max(1,...spans.map(i=>i.lane+1)),count:visible.length};
   }
@@ -282,8 +305,8 @@ const tornActivityScheduler=(()=>{
     const timing=e.originalStart!=null?"Start "+time(e.originalStart)+" · end unknown":e.end>e.start?time(e.start)+" → "+time(e.end):time(e.start);
     return '<div class="activity-timeline-detail-row activity-'+e.kind+'"><strong>'+esc(timelineIcons[e.kind]+" "+e.title)+'</strong><span>'+esc(timing)+'</span><small>'+esc(kinds[e.kind]+" · "+timelineStatus(e)+" · "+(e.source??"Not supplied"))+'</small>'+(e.detail?'<small>'+esc(e.detail)+'</small>':"")+'</div>';
   }
-  function renderTimeline(list,now,days=7,war=null){
-    const layout=timelineLayout(list,now,days,war),{width,end}=layout,pct=v=>(v/width*100).toFixed(5)+"%";
+  function renderTimeline(list,now,days=7,war=null,liveDrugSeconds=null){
+    const layout=timelineLayout(list,now,days,war,liveDrugSeconds),{width,end}=layout,pct=v=>(v/width*100).toFixed(5)+"%";
     const ticks=[];
     for(let at=Math.ceil(now/(6*H))*6*H;at<end;at+=6*H){
       const major=at%D===0;
@@ -296,20 +319,19 @@ const tornActivityScheduler=(()=>{
       return '<button type="button" class="'+cls+'" style="'+style+'" data-activity-timeline-item="'+id+'" aria-pressed="false" aria-label="'+esc(label)+'">'+body+'</button>';
     };
     const spans=layout.spans.slice().sort((a,b)=>a.event.start-b.event.start||a.lane-b.lane).map(i=>{
-      const e=i.event,cls="activity-time-span activity-"+e.kind+(e.blocking?" is-blocking":" is-advisory")+(e.stale||e.recoveryReview?" is-review":"")+(i.clippedStart?" continues-left":"")+(i.clippedEnd?" continues-right":"");
+      const e=i.event,cls="activity-time-span activity-"+e.kind+(e.blocking?" is-blocking":" is-advisory")+(e.cooldown?" is-cooldown":"")+(e.stale||e.recoveryReview?" is-review":"")+(i.clippedStart?" continues-left":"")+(i.clippedEnd?" continues-right":"");
       return button([e],'<span aria-hidden="true">'+timelineIcons[e.kind]+'</span><span class="activity-time-span-title">'+esc(e.title)+'</span>',cls,"--x:"+pct(i.left)+";--w:"+pct(i.right-i.left)+";--lane:"+i.lane);
     }).join("");
     const markers=layout.annotations.map(a=>{
       const events=a.items.map(i=>i.event),e=events[0],cluster=events.length>1,label=cluster?events.length+" events":e.title;
-      const half=a.label?56:18,center=Math.max(half,Math.min(width-half,a.x));
-      const cls="activity-time-pin activity-"+(cluster?"event":e.kind)+" is-"+a.side+(a.label?" has-label":"")+(cluster?" is-cluster":"")+(events.some(x=>x.recoveryReview||x.stale)?" is-review":"")+(events.some(x=>x.blocking===true)?" is-reserved":"");
-      const anchors=a.items.map(i=>'<i class="activity-pin-anchor is-'+a.side+' activity-'+i.event.kind+'" style="--x:'+pct(i.x)+'" aria-hidden="true"></i>').join("");
-      const body='<span class="activity-time-pin-icon" aria-hidden="true">'+(cluster?String(events.length):timelineIcons[e.kind])+'</span>'+(a.label?'<span class="activity-time-pin-label">'+esc(label)+'</span>':"");
-      return anchors+button(events,body,cls,"--x:"+pct(center));
+      const cls="activity-time-pin activity-"+(cluster?"event":e.kind)+" is-"+a.side+" post-"+a.post+(a.label?" has-label":"")+(cluster?" is-cluster":"")+(a.items.some(i=>i.range)?" is-range-flag":"")+(events.some(x=>x.recoveryReview||x.stale)?" is-review":"")+(events.some(x=>x.blocking===true)?" is-reserved":"");
+      const anchors=cluster?a.items.filter(i=>i.x!==a.x).map(i=>'<i class="activity-pin-anchor is-'+a.side+' activity-'+i.event.kind+'" style="--x:'+pct(i.x)+'" aria-hidden="true"></i>').join(""):"";
+      const body='<span class="activity-time-pin-icon" aria-hidden="true">'+(cluster?String(events.length):a.items[0].range?"↔":timelineIcons[e.kind])+'</span>'+(a.label?'<span class="activity-time-pin-label">'+esc(label)+'</span>':"");
+      return anchors+button(events,body,cls,"--x:"+pct(a.x)+";--flag-width:"+a.labelWidth+"px");
     }).join("");
     return '<div class="activity-unified-timeline" data-activity-timeline><div class="activity-timeline-heading"><strong>Next '+days+' days · TCT</strong><small>Scroll to explore · select an event for details</small></div>'+
       '<div class="activity-timeline-scroll" tabindex="0" role="region" aria-label="Scrollable '+days+' day activity timeline"><div class="activity-time-canvas" style="--canvas-width:'+width+'px;--lanes:'+layout.laneCount+'"><div class="activity-time-ruler">'+ticks.join("")+'</div><div class="activity-time-track"><div class="activity-time-grid" aria-hidden="true">'+ticks.join("")+'</div><div class="activity-time-now" aria-hidden="true"><span>NOW</span></div><div class="activity-time-spans">'+spans+'</div>'+markers+'</div></div></div>'+
-      '<div class="activity-timeline-legend"><span><i class="activity-legend-block"></i> Training reservation</span><span><i class="activity-legend-advisory"></i> Informational / forecast</span><span><i class="activity-legend-pin"></i> Timed event / short range</span><span><i class="activity-legend-review"></i> Review / stale</span></div>'+
+      '<div class="activity-timeline-legend"><span><i class="activity-legend-block"></i> Training reservation</span><span><i class="activity-legend-advisory"></i> Informational / forecast</span><span><i class="activity-legend-pin"></i> Event flag / compact range</span><span><i class="activity-legend-cooldown"></i> Drug cooldown</span><span><i class="activity-legend-review"></i> Review / stale</span></div>'+
       '<div class="activity-timeline-inspector" data-activity-timeline-inspector aria-live="polite"><small>'+(layout.count?"Select a block or pin to keep its source, TCT timing and status visible. Clustered pins list every included event.":"No scheduled activities in this window.")+'</small></div>'+
       '<div class="activity-timeline-tooltip" data-activity-timeline-tooltip hidden aria-hidden="true"></div>'+templates.join("")+'</div>'+
       '<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&e.end>=now))+'</details>';
@@ -346,12 +368,12 @@ const tornActivityScheduler=(()=>{
     const start=Math.floor(now/D)*D;
     return '<div class="activity-grid">'+Array.from({length:days},(_,i)=>{const at=start+i*D;return '<section><strong>'+dateLabel(at).slice(5)+'</strong>'+list.filter(e=>e.start<at+D&&e.end>=at).slice(0,8).map(e=>'<small class="activity-'+esc(e.kind)+'">'+esc(shortTime(Math.max(e.start,at))+" "+e.title)+'</small>').join("")+'</section>';}).join("")+'</div>';
   }
-  function render(list,{full=false,now=Date.now(),view=settings().view,war=null}={}){
+  function render(list,{full=false,now=Date.now(),view=settings().view,war=null,liveDrugSeconds=null}={}){
     const modes=full?["agenda","timeline","week","month"]:["agenda","timeline","week"];
     if(!modes.includes(view))view="agenda";
     const visible=list.filter(e=>e.start<now+(view==="month"?30:7)*D&&e.end>=now);
     return '<div class="activity-calendar"><div class="activity-tabs">'+modes.map(m=>'<button type="button" data-activity-view="'+m+'" aria-pressed="'+(view===m)+'">'+m[0].toUpperCase()+m.slice(1)+'</button>').join("")+'</div>'+
-      (view==="timeline"?renderTimeline(list,now,7,war):!visible.length?'<p class="fine-print">No scheduled activities in this window.</p>':view==="agenda"?renderAgenda(visible):renderGrid(visible,now,view==="month"?30:7))+
+      (view==="timeline"?renderTimeline(list,now,7,war,liveDrugSeconds):!visible.length?'<p class="fine-print">No scheduled activities in this window.</p>':view==="agenda"?renderAgenda(visible):renderGrid(visible,now,view==="month"?30:7))+
       '<small>Forecasts are tentative. The Energy tile remains the action and confirmation interface.</small></div>';
   }
   function settingsDialog(onChange,button){

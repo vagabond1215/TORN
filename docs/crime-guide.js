@@ -544,7 +544,13 @@ const tornCrimeGuide = (() => {
     const labels={xanax:"Xanax",ecstasy:"Ecstasy",train:"Gym training",candy:"Candy",dvd:"Erotic DVD",refill:"Energy refill",externalHappy:"Coordinated happiness boost"};
     const rows=session?sessionSchedule(session,now).filter(x=>!x.done).map(x=>({step:x.step,at:x.due,source:"Active training cycle"})):
       (program?.execution??[]).filter(actionable).map(step=>({step,at:program.generatedAt+step.at*1000,source:"Optimal Budget forecast"}));
-    return rows.filter(x=>Number.isFinite(x.at)&&labels[x.step.type]).map(({step,at,source},i)=>({id:"training-"+i,kind:"training",title:labels[step.type]+(step.type==="train"?" · "+number(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+number(step.quantity):""),start:at,end:at,source}));
+    return rows.filter(x=>Number.isFinite(x.at)&&labels[x.step.type]).map(({step,at,source},i)=>{
+      // Match sessionSchedule for locked sessions; the simulator's post-action
+      // drug balance is the duration for a new forecast. No extra gameplay logic.
+      const drugCooldownSeconds=step.type==="xanax"||step.type==="ecstasy"?
+        session?(step.type==="xanax"?session.timing?.xanaxCD??25200:session.timing?.ecstasyCD??12900):step.after?.drug:null;
+      return {id:"training-"+i,kind:"training",title:labels[step.type]+(step.type==="train"?" · "+number(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+number(step.quantity):""),start:at,end:at,source,drugCooldownSeconds};
+    });
   }
   function calendarEvents(training,now=Date.now()){
     return tornActivityScheduler.schedule({now,war:training.activity.war,preparation:energyWarAdvice(training,now),health:training.health,rehab:training.rehab,training:training.scheduled,limit:training.activity.blocked?now:training.activity.deadline});
@@ -561,7 +567,7 @@ const tornCrimeGuide = (() => {
       (reserves.warReserve||reserves.rehabReserve?'<small>Reserved cash: war $'+number(reserves.warReserve)+' · rehab $'+number(reserves.rehabReserve)+(reserves.shortfall?" · exceeds available budget":"")+'</small>':"")+'</div>';
   }
   function calendarCard(training,full=false){
-    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(calendarEvents(training,training.now),{full,now:training.now,war:training.activity.war})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
+    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(calendarEvents(training,training.now),{full,now:training.now,war:training.activity.war,liveDrugSeconds:training.inputs?.owner!=null?training.inputs.drug:null})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
   }
   function renderCalendar(){
     loadOcFilters();loadRecFilters();

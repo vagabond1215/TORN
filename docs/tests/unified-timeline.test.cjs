@@ -29,3 +29,29 @@ assert.ok(html.includes("data-activity-remove")&&html.includes("Agenda · all sc
 assert.ok(scheduler.render([],{now,view:"timeline"}).includes("No scheduled activities"));
 for(const view of ["agenda","week","month"])assert.ok(!scheduler.render(events.slice(0,8),{now,full:true,view}).includes("activity-time-track"));
 console.log("Unified timeline geometry, overlap, marker clustering, unknown ends, escaping and existing views passed.");
+
+// A point flag has a true edge post, not a centered pill or a padded timestamp.
+const flags=scheduler.timelineLayout([event("early",0,0),event("middle",24,24),event("near-right",167,167)],now);
+assert.equal(flags.annotations[0].post,"left");assert.equal(flags.annotations[0].x,0);assert.equal(flags.annotations[0].left,0);
+const last=flags.annotations.at(-1);assert.equal(last.post,"right");assert.equal(last.x,1670);assert.equal(last.right,1670);
+const dense=scheduler.timelineLayout(Array.from({length:168},(_,i)=>event("p"+i,i,i)),now);
+for(const a of dense.annotations){
+  assert.ok(a.left>=0&&a.right<=dense.width);assert.ok(a.items.some(i=>i.x===a.x));
+  assert.ok(dense.annotations.every(b=>a===b||a.side!==b.side||a.right<=b.left||a.left>=b.right));
+}
+const dose=event("dose",4,4,{kind:"training",title:"Xanax",source:"Optimal Budget forecast",drugCooldownSeconds:8*3600});
+const cd=scheduler.timelineLayout([dose,event("bad-cd",12,12,{drugCooldownSeconds:null}),event("past-dose",-1,-1,{drugCooldownSeconds:3600}),event("stale-dose",15,15,{drugCooldownSeconds:3600,stale:true})],now,7,null,2*3600);
+assert.ok(cd.annotations.flatMap(a=>a.items).some(i=>i.event.id==="dose"&&i.event.start===i.event.end));
+const projected=cd.spans.find(i=>i.event.id==="timeline-drug-dose");assert.equal(projected.left,40);assert.equal(projected.right,120);assert.equal(projected.event.blocking,false);
+const current=cd.annotations.flatMap(a=>a.items).find(i=>i.event.id==="timeline-drug-current");assert.ok(current&&current.range);assert.equal(current.event.start,now);assert.equal(current.event.end,now+2*H);
+assert.equal(cd.spans.filter(i=>i.event.cooldown).length,1);
+const warPlan=scheduler.warWindow({start:now+48*H,end:now+72*H},{mode:"scheduled",adjustment:60,lead:120},now);
+const warRows=scheduler.schedule({now,war:warPlan,manual:[]});
+const warCds=scheduler.timelineLayout(warRows,now,7,warPlan);
+assert.equal(warCds.spans.filter(i=>i.event.cooldown).length,4);
+assert.ok(warCds.spans.filter(i=>i.event.cooldown).every(i=>i.event.end-i.event.start===warPlan.cd));
+const flagHtml=scheduler.render([dose,event("right",167,167)],{now,view:"timeline",liveDrugSeconds:8*3600});
+assert.ok(flagHtml.includes("post-left")&&flagHtml.includes("post-right")&&flagHtml.includes("is-cooldown"));
+assert.ok(flagHtml.includes("Projected cooldown")&&flagHtml.includes("Recent API snapshot"));
+assert.ok(!scheduler.render([dose],{now,view:"agenda",liveDrugSeconds:8*3600}).includes("Drug cooldown · remaining"));
+console.log("Edge-post flags, collision bounds, planned drug windows and observed remaining cooldown passed.");

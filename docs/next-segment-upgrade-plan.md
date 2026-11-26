@@ -98,3 +98,5 @@ Ordinary supported writers and coalesced local capture now preserve durable obse
 Conservative read-only merge preview implemented: digest verification, proven descendants of eligible preferences, protected calendar/financial/session sections, divergent/untracked review. Next: before/after journal and explicit eligible-only application; no automatic sync or activation.
 
 Explicit eligible preference-only merge implemented with verified owner, Web Locks, no active/held training session, before/after journal rollback, and unchanged snapshot/manifest recheck. Protected sections and divergent/untracked records remain review-only. Next: stable-ID calendar/ledger/history merge and conflict resolution; activation and companion vault remain gated.
+
+Timeline refinement: exact edge-post flags for point events, filled duration blocks for projected and recently observed remaining drug cooldowns; display-only, no change to scheduling or persistence. See activity-scheduler-plan.md.

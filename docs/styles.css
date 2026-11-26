@@ -2476,23 +2476,34 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .activity-time-span-title{overflow:hidden;text-overflow:ellipsis}
 .activity-time-span.continues-left{border-top-left-radius:0;border-bottom-left-radius:0}
 .activity-time-span.continues-right{border-top-right-radius:0;border-bottom-right-radius:0}
-.activity-time-pin{left:var(--x);transform:translateX(-50%);width:36px;height:28px;padding:0 .25rem;justify-content:center;font-size:.68rem;z-index:2}
-.activity-time-pin.has-label{width:112px;justify-content:flex-start}
+.activity-time-pin{left:var(--x);width:var(--flag-width,24px);height:28px;padding:0 .2rem;justify-content:center;font-size:.68rem;z-index:2;background:transparent;border:0;border-bottom:1px solid var(--activity-color,var(--accent-strong));border-radius:0;color:var(--text)}
+.activity-time-pin.has-label{justify-content:flex-start}
+.activity-time-pin.post-right{transform:translateX(-100%);justify-content:flex-end}
+.activity-time-pin.post-left{border-left:2px solid var(--activity-color,var(--accent-strong))}
+.activity-time-pin.post-right{border-right:2px solid var(--activity-color,var(--accent-strong))}
 .activity-time-pin.is-top{top:6px}.activity-time-pin.is-bottom{bottom:6px}
+.activity-time-pin::after{content:"";position:absolute;width:2px;height:10px;background:var(--activity-color,var(--accent-strong));pointer-events:none}
+.activity-time-pin.post-left::after{left:-2px}.activity-time-pin.post-right::after{right:-2px}
+.activity-time-pin.is-top::after{top:100%}.activity-time-pin.is-bottom::after{bottom:100%}
 .activity-time-pin-icon{color:var(--activity-color,var(--accent-strong));font-weight:750;font-size:.84rem;flex:none}
 .activity-time-pin-label{overflow:hidden;text-overflow:ellipsis}
-.activity-time-pin.is-reserved{border-width:2px}
-.activity-time-pin.is-cluster{border-radius:14px}
+.activity-time-pin.is-reserved{border-bottom-width:2px;font-weight:700}
+.activity-time-pin.is-cluster{font-weight:700}
+.activity-time-pin.is-range-flag{border-bottom-style:dashed}
+.activity-time-span.is-cooldown{--activity-color:#d49b5e;background:color-mix(in srgb,var(--activity-color) 20%,var(--surface))}
+:root[data-theme="light"] .activity-time-span.is-cooldown{--activity-color:#85501c}
 .activity-pin-anchor{position:absolute;left:var(--x);width:2px;background:var(--activity-color,var(--accent-strong));height:9px;pointer-events:none;opacity:.9}
 .activity-pin-anchor.is-top{top:35px}.activity-pin-anchor.is-bottom{bottom:35px}
-.activity-time-span.is-review,.activity-time-pin.is-review{border-style:dashed;box-shadow:inset 0 0 0 1px var(--activity-color,var(--accent-strong));background:repeating-linear-gradient(135deg,var(--raised) 0 5px,var(--surface) 5px 9px)}
+.activity-time-span.is-review{border-style:dashed;box-shadow:inset 0 0 0 1px var(--activity-color,var(--accent-strong));background:repeating-linear-gradient(135deg,var(--raised) 0 5px,var(--surface) 5px 9px)}
+.activity-time-pin.is-review{border-bottom-style:dashed;font-style:italic}
 .activity-time-span:is(:hover,:focus-visible,[aria-pressed="true"]),.activity-time-pin:is(:hover,:focus-visible,[aria-pressed="true"]){outline:2px solid var(--accent-strong);outline-offset:1px;z-index:4}
 .activity-timeline-legend{display:flex;flex-wrap:wrap;gap:.4rem 1rem}
 .activity-timeline-legend span{display:inline-flex;align-items:center;gap:.35rem}
 .activity-timeline-legend i{display:inline-block;width:16px;height:10px;border:1px solid var(--accent-strong);border-radius:3px}
 .activity-timeline-legend .activity-legend-block{background:color-mix(in srgb,var(--accent-strong) 35%,var(--surface));border-left-width:3px}
 .activity-timeline-legend .activity-legend-advisory{border-style:dashed}
-.activity-timeline-legend .activity-legend-pin{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.activity-timeline-legend .activity-legend-pin{width:16px;height:10px;border:0;border-left:2px solid var(--accent-strong);border-bottom:1px solid var(--accent-strong);border-radius:0;background:transparent}
+.activity-timeline-legend .activity-legend-cooldown{border:1px dashed #d49b5e;background:color-mix(in srgb,#d49b5e 20%,var(--surface))}
 .activity-timeline-legend .activity-legend-review{border-style:dashed;background:repeating-linear-gradient(135deg,var(--raised) 0 3px,var(--surface) 3px 6px)}
 .activity-timeline-inspector,.activity-timeline-tooltip{display:grid;gap:.45rem;padding:.6rem .7rem;border:1px solid var(--border);border-radius:6px;background:var(--raised);overflow-wrap:anywhere}
 .activity-timeline-tooltip{position:fixed;z-index:1000;width:min(300px,calc(100vw - 16px));max-height:min(260px,60vh);overflow:hidden;box-shadow:0 5px 18px #0005;pointer-events:none}
