@@ -1,0 +1,24 @@
+"use strict";
+// Run from root: node docs/tests/quick-status.test.cjs
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const read=name=>fs.readFileSync(path.join(__dirname,"..",name),"utf8");
+const clock={formatDuration:s=>s<=0?"Ready":String(Math.ceil(s)),utcTime:()=>0};
+const now=Date.UTC(2026,10,26,12),sec=x=>x/1000;
+const state={identity:{id:1},fetchedAt:{icons:now,travel:now,races:now,cooldowns:now},errors:{},data:{icons:{icons:{drug:{description:"Battle stats reduced by 3% due to addiction"}}},travel:{travel:{destination:"Switzerland",time_left:1800}},races:{races:[{status:"open",title:"Race",schedule:{start:sec(now+3600000)}}]},cooldowns:{cooldowns:{drug:3600,booster:0,medical:90}}}};
+const api={state,isConnected:()=>true,crimeVersion:()=>2},store={getItem:()=>null,setItem:()=>{}};
+const scheduler=new Function("tornGuideApi","localStorage",read("activity-scheduler.js")+"\nreturn tornActivityScheduler;")(api,store);
+const t=new Function("tornTctClock","tornGuideApi","tornActivityScheduler","tornRightRail","tornRoadmap","localStorage",read("tools-guide.js")+"\nreturn tornToolsGuide;")(clock,api,scheduler,{controls:()=>""},{activitiesOpen:()=>false},store);
+const health=scheduler.addictionSnapshot(now);assert.equal(health.penalty,3);
+let rows=t.quickStatusModel(state,health,now,now+60000),v=id=>rows.find(x=>x.id===id);
+assert.equal(rows.length,6);assert.equal(v("addiction").value,"3% · 60");assert.equal(v("addiction").tone,"warning");
+assert.equal(v("travel").value,"1800");assert.equal(v("racing").value,"3600");assert.equal(v("drug").value,"3600");assert.equal(v("booster").value,"Ready");
+rows=t.quickStatusModel(state,health,now+60000);assert.equal(v("travel").value,"1740");assert.equal(v("drug").value,"3540");
+rows=t.quickStatusModel(state,health,now+1801000);assert.equal(v("travel").value,"Verify");assert.equal(v("addiction").value,"—");assert.equal(v("drug").tone,"stale");
+state.errors.cooldowns="Unavailable";rows=t.quickStatusModel(state,health,now);assert.equal(v("drug").value,"—");
+rows=t.quickStatusModel(state,health,now,null,false);assert.ok(rows.every(x=>x.value==="—"));
+state.data.races.races=[{status:"in_progress",title:"Race",schedule:{start:sec(now-60000),end:null}}];rows=t.quickStatusModel(state,health,now);assert.equal(v("racing").value,"Active");
+state.data.travel.travel={destination:"Torn",time_left:0};rows=t.quickStatusModel(state,health,now);assert.equal(v("travel").value,"In Torn");
+const markup=t.quickLinks("home");assert.ok(markup.includes('aria-controls="quick-tools-menu"')&&markup.includes('id="quick-tools-menu"')&&markup.includes("Manage bookmarks")&&markup.includes("Torn Report")&&markup.includes("data-quick-status-refresh"));
+assert.equal((markup.match(/data-quick-status="/g)||[]).length,6);
+assert.ok(markup.includes('aria-expanded="false"'));
+console.log("Quick status countdown, shared addiction, unknown/stale states and bookmark menu markup passed.");
