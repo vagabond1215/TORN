@@ -39,3 +39,6 @@ Scope: `vagabond1215/TORN`, `docs/` only. Energy remains the current-action and 
 4. Actual expense ledger: rehab counter delta and manual war/rehab cash entries; deduct only in shared-budget mode.
 5. Active war: opt-in recent outgoing ranked-war attack read, explicit truncated-history label; no automated attacks.
 6. Test live API shapes, permissions, current-energy combinations, return from rehab, and mobile/browser interactions. Source: https://www.torn.com/swagger.php and https://wiki.torn.com/wiki/Calendar.
+
+## Phase 1 shared live context
+Stats → Plan → Live now delegates to the same training recommendation entrypoint as Home, Calendar and Restock. Theoretical remains separate. New plans require current projected bars and known paid-program cooldowns; today's unknown refill is conservatively excluded. See next-segment-upgrade-plan.md for pending source normalization and numerical/browser/API gates.

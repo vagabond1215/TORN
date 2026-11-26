@@ -168,9 +168,9 @@ const tornStatPlanner = (() => {
       return {group,items:matches,total:matches.reduce((sum,item)=>sum+item.value,0)};
     });
   }
-  function effectsFor(stat) {
+  function effectsFor(stat,{live=false}={}) {
     const loaded=gainPerks(stat);
-    const manual=clamp(state.extra[stat],-95,300);
+    const manual=live?0:clamp(state.extra[stat],-95,300);
     const groupsData=loaded||groups.map(group=>({group,items:[],total:0}));
     const multiplier=groupsData.reduce((result,entry)=>result*Math.max(0,1+entry.total/100),1)*(1+manual/100);
     return {sourceAvailable:loaded!==null,groups:groupsData,manual,multiplier};
@@ -400,7 +400,7 @@ const tornStatPlanner = (() => {
     if(actual.some(x=>x===null))return null;
     const option=buildOptions.find(x=>x[0]===buildChoice)||buildOptions[0],weights=option[2],sum=weights.reduce((a,b)=>a+b,0),shares=weights.map(x=>x/sum);
     const total=Math.max(buildTotal||actual.reduce((a,b)=>a+b,0)*1.1,1,...actual.map((v,i)=>v/shares[i]));
-    const rows=statNames.map((stat,i)=>({stat,remaining:Math.max(0,Math.ceil(total*shares[i])-actual[i]),progress:actual[i]/Math.max(1,total*shares[i]),effects:effectsFor(stat)}));
+    const rows=statNames.map((stat,i)=>({stat,remaining:Math.max(0,Math.ceil(total*shares[i])-actual[i]),progress:actual[i]/Math.max(1,total*shares[i]),effects:effectsFor(stat,{live:true})}));
     const active=activeGym(),book=row=>row.effects.groups.find(g=>g.group==="book")?.total||0;
     const next=rows.filter(x=>x.remaining>0).sort((a,b)=>a.progress-b.progress||book(b)-book(a)||b.effects.multiplier-a.effects.multiplier)[0];
     if(!next)return {stat:"your selected build",detail:"Current target reached; set the next milestone."};
@@ -410,9 +410,9 @@ const tornStatPlanner = (() => {
       const at=live.bridge?.fields?.includes(key)?Math.max(live.bridge.timestamp,apiAt??0):apiAt;
       return tornBarProjection(key,bars?.[key],at);
     };
-    const energy=project("energy"),happy=project("happy");
+    const energy=options.liveInputs?options.liveInputs.energy:project("energy"),happy=options.liveInputs?options.liveInputs.happy:project("happy");
     const programs=!options.skipPrograms&&(budget!=null||options.naturalOnly)&&active&&energy&&happy&&active[next.stat]>0?
-      tornTrainSequence.weeklyPrograms({state:{...state,statValues:Object.fromEntries(statNames.map((stat,i)=>[stat,actual[i]])),compareStat:next.stat,currentEnergy:energy.current,maxEnergy:energy.maximum,happy:happy.current,maxHappy:happy.maximum},gym:active,trainBlock,effectsFor},budget,risk,options):[];
+      tornTrainSequence.weeklyPrograms({state:{...state,statValues:Object.fromEntries(statNames.map((stat,i)=>[stat,actual[i]])),compareStat:next.stat,currentEnergy:energy.current,maxEnergy:energy.maximum,happy:happy.current,maxHappy:happy.maximum},gym:active,trainBlock,effectsFor:stat=>effectsFor(stat,{live:true})},budget,risk,options):[];
     return {stat:readable[next.stat],statKey:next.stat,build:option[1],remaining:next.remaining,gym:active?{name:active.name,energy:active.energy}:null,stats:rows.map((row,i)=>({key:row.stat,label:shorthand[row.stat],current:actual[i],target:Math.ceil(total*shares[i]),progress:row.progress})),perks:next.effects.groups.filter(g=>g.total!==0).map(g=>({group:g.group,total:g.total,items:g.items})),modifier:next.effects.sourceAvailable?(next.effects.multiplier-1)*100:null,bliss:tornHappinessBook().active,happy:bars?.happy?.current??null,maxHappy:bars?.happy?.maximum??null,program:programs[0]??null,detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name:"")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")+(tornHappinessBook().active?" · Ignorance Is Bliss active":"")};
   }
   function replayTrainingSession(session,options={}){
@@ -426,7 +426,7 @@ const tornStatPlanner = (() => {
     if(stamp("energy")<last||stamp("happy")<last||Number(st.fetchedAt?.cooldowns||0)<last||Number(st.fetchedAt?.battlestats||0)<last)return {error:"Waiting for a fresh post-action Energy, Happy, cooldown and stat snapshot"};
     const energy=tornBarProjection("energy",bars.energy,stamp("energy")),happy=tornBarProjection("happy",bars.happy,stamp("happy"));
     if(!energy||!happy)return {error:"Energy or happiness unavailable"};
-    return tornTrainSequence.replayRemaining({state:{...state,statValues:Object.fromEntries(statNames.map((key,i)=>[key,actual[i]])),compareStat:stat,currentEnergy:energy.current,maxEnergy:energy.maximum,happy:happy.current,maxHappy:happy.maximum},gym,trainBlock,effectsFor},session,options);
+    return tornTrainSequence.replayRemaining({state:{...state,statValues:Object.fromEntries(statNames.map((key,i)=>[key,actual[i]])),compareStat:stat,currentEnergy:energy.current,maxEnergy:energy.maximum,happy:happy.current,maxHappy:happy.maximum},gym,trainBlock,effectsFor:stat=>effectsFor(stat,{live:true})},session,options);
   }
   function homeCandyAdvice(){return calcCandyStock()?.[0]||null;}
   function renderBuild(gym,active){
@@ -490,6 +490,33 @@ const tornStatPlanner = (() => {
     const title="Simulated Happy: "+nice(happy)+" / "+nice(state.maxHappy)+" normal maximum"+(book.active?" · Ignorance Is Bliss active; 99,999 ceiling":"");
     return '<div class="tc-happy-inline">'+(happy<state.maxHappy?'<span class="tc-low-happy" role="status" title="'+esc(title)+'">Low Happy</span>':"")+'</div>';
   }
+  // Theoretical settings stay in the existing sequencer. Live uses precisely
+  // the same build, constraints and weekly recommendation as Home/Calendar.
+  let comparisonMode="theoretical",comparisonOwner=null;
+  function loadComparisonMode(){
+    const owner=String(tornGuideApi.state.identity?.id??"guest");
+    if(owner===comparisonOwner)return;
+    comparisonOwner=owner;comparisonMode="theoretical";
+    try{if(localStorage.getItem("torn-city-guide:comparison-mode:"+owner)==="live")comparisonMode="live";}catch{}
+  }
+  function liveComparison(){
+    if(!tornGuideApi.isConnected())return '<p class="tc-notice">Connect your Torn account to compare live training recommendations.</p>';
+    const t=tornCrimeGuide.trainingRecommendationContext(),p=t.plan,program=p?.program;
+    const cash=v=>v==null?"Unavailable":"$"+nice(v);
+    const input=t.inputs,energy=input.energy,happy=input.happy;
+    const details='<p class="fine-print">Energy: '+(energy?nice(energy.current)+" / "+nice(energy.maximum):"Unavailable")+' · Happy: '+(happy?nice(happy.current)+" / "+nice(happy.maximum):"Unavailable")+' · Available training budget: '+cash(t.budget)+'</p>'+
+      '<p class="fine-print">Drug CD: '+(input.drug==null?"Unknown":nice(Math.ceil(input.drug/60))+" min")+' · Booster CD: '+(input.booster==null?"Unknown":nice(Math.ceil(input.booster/60))+" min")+' · Today’s refill: '+(input.refillUsed===null?"Unknown (excluded)":input.refillUsed?"Used":"Available")+'</p>'+
+      (t.reserves.warReserve||t.reserves.rehabReserve?'<p class="fine-print">War reserve: '+cash(t.reserves.warReserve)+' · Rehab reserve: '+cash(t.reserves.rehabReserve)+'</p>':"")+
+      input.issues.map(x=>'<p class="fine-print">'+esc(x)+'</p>').join("");
+    let result;
+    if(t.session)result='<p><strong>'+esc(t.session.label)+'</strong> · '+t.session.index+' / '+t.session.actions.length+' actions confirmed. Active cycle is locked; <a href="#home">continue in Home</a>.</p>';
+    else if(t.activity.blocked)result='<p class="tc-notice">'+esc(t.activity.reason||"A scheduled activity blocks training.")+'</p>';
+    else if(!program)result='<p class="tc-notice">'+esc(p?.needsBuild?p.detail:"No live training sequence is currently available. Check build, account data, Focus and available budget.")+'</p>';
+    else result='<h3>'+esc(t.options.naturalOnly?"Natural training":"Optimal Budget")+' · '+esc(p.stat)+'</h3><p><strong>'+esc(program.label)+'</strong> · '+nice(program.horizonSeconds/3600,2)+'h projection · '+esc(p.gym?.name||"Current gym")+'</p>'+
+      '<p>Projected gain: <strong>'+nice(program.gain)+'</strong> · Energy: '+nice(program.used)+' · Estimated cash cost: '+cash(program.cashCost)+'</p>'+
+      '<ol aria-label="Live projected training cycles">'+program.sequence.map(x=>'<li>'+esc(({natural:"Natural training",maxenergy:"Maximum Energy",mini:"Mini jump",low:"Low-stat jump",jump:"Happy jump",maxhappy:"99k Happy jump",custom:"Custom"})[x.id]||x.id)+(x.partial?" (partial)":"")+'</li>').join("")+'</ol>';
+    return '<div class="tc-live-comparison">'+details+result+'<p class="fine-print">Same rolling seven-day objective and hard deadlines as Home; projections are estimates, not confirmed actions. <a href="#home">Home Energy</a> · <a href="#calendar">Calendar</a></p></div>';
+  }
   function render() {
     hydrateFromApi();
     const gym=selectedGym();
@@ -525,9 +552,12 @@ const tornStatPlanner = (() => {
       '</div></section>';
     }
     if(state.subpage==="compare"){
+      loadComparisonMode();
       markup+='<section class="panel tc-calc-panel tc-plan-panel"><div class="panel-content">'+
-      '<div class="ts-plan-toolbar">'+'<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+shorthand[stat]+'</button>').join("")+'</div>'+tornTrainSequence.templateButtons()+'</div>'+
-      '<div id="tc-sequencer">'+tornTrainSequence.render({state,gym,trainBlock,effectsFor})+'</div></div></section>';
+      '<div class="tc-stat-tabs" role="group" aria-label="Comparison mode">'+["live","theoretical"].map(mode=>'<button type="button" class="tc-stat-tab '+(comparisonMode===mode?"is-selected":"")+'" data-tc-comparison="'+mode+'" aria-pressed="'+(comparisonMode===mode)+'">'+(mode==="live"?"Live":"Theoretical")+'</button>').join("")+'</div>'+
+      (comparisonMode==="live"?liveComparison():
+      '<p class="fine-print">Theoretical comparison: editable assumptions and projection windows; not the Home live recommendation.</p><div class="ts-plan-toolbar">'+'<div class="tc-stat-tabs" role="group" aria-label="Compare stat">'+statNames.map(stat=>'<button type="button" class="tc-stat-tab '+(state.compareStat===stat?"is-selected":"")+'" data-tc-pick="'+stat+'">'+shorthand[stat]+'</button>').join("")+'</div>'+tornTrainSequence.templateButtons()+'</div>'+
+      '<div id="tc-sequencer">'+tornTrainSequence.render({state,gym,trainBlock,effectsFor})+'</div>')+'</div></section>';
     }
     return markup;
   }
@@ -569,6 +599,8 @@ const tornStatPlanner = (() => {
     view.addEventListener("click",event=>{
       if(location.hash!=="#stats") return;
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
+      const comparison=event.target.closest("[data-tc-comparison]");
+      if(comparison){loadComparisonMode();comparisonMode=comparison.dataset.tcComparison==="live"?"live":"theoretical";try{localStorage.setItem("torn-city-guide:comparison-mode:"+comparisonOwner,comparisonMode);}catch{}view.innerHTML=render();view.querySelector('[data-tc-comparison="'+comparisonMode+'"]')?.focus();return;}
       if(event.target.closest("[data-tc-build-reset]")){loadBuild();buildTotal=0;saveBuild();view.innerHTML=render();return;}
       const tab=event.target.closest("[data-tc-view]");
       if(tab){

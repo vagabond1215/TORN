@@ -152,6 +152,36 @@ const tornTrainSequence=(()=>{
     const stock=candyStock();
     return stock.rows.filter(x=>cfg.candyHappy==="any"||x.happy===cfg.candyHappy).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity)).map(x=>({...x}));
   }
+  // One fixed-clock snapshot for all live consumers. Unknown refill status
+  // reserves today's refill; a stale bar or cooldown is not a verified zero.
+  function liveInputs(state,now=Date.now(),project){
+    const stamps=state.fetchedAt??{},errors=state.errors??{},data=state.data??{};
+    const bars=data.bars?.bars??data.bars,cd=data.cooldowns?.cooldowns??data.cooldowns;
+    const number=x=>x==null||x===""||!Number.isFinite(Number(x))||Number(x)<0?null:Number(x);
+    const stamp=k=>Number(stamps[k])||0;
+    const fresh=(at,maxAge)=>at>0&&at<=now&&now-at<=maxAge;
+    const bar=k=>{
+      const bridge=state.bridge?.fields?.includes(k)&&Number(state.bridge.timestamp)>stamp("bars");
+      const at=bridge?Number(state.bridge.timestamp):stamp("bars"),raw=bars?.[k];
+      if((!bridge&&errors.bars)||!fresh(at,300000)||number(raw?.current)===null||!(number(raw?.maximum)>0))return null;
+      const value=project(k,raw,at,now);
+      return value?{...value,source:bridge?"bridge":"API",observedAt:at}:null;
+    };
+    const energy=bar("energy"),happy=bar("happy");
+    const cooldown=k=>{
+      const raw=cd?.[k],seconds=number(typeof raw==="object"?raw?.remaining??raw?.time_left:raw);
+      return errors.cooldowns||!fresh(stamp("cooldowns"),300000)||seconds===null?null:Math.max(0,seconds-(now-stamp("cooldowns"))/1000);
+    };
+    const drug=cooldown("drug"),booster=cooldown("booster");
+    const refill=data.refills?.refills??data.refills;
+    const rawUsed=refill?.energy_refill_used??refill?.energy?.used;
+    const refillUsed=!errors.refills&&fresh(stamp("refills"),86400000)&&Math.floor(stamp("refills")/86400000)===Math.floor(now/86400000)&&typeof rawUsed==="boolean"?rawUsed:null;
+    const issues=[];
+    if(!energy||!happy)issues.push("Energy or Happiness is missing or stale");
+    if(drug===null||booster===null)issues.push("Drug or booster cooldown is missing or stale");
+    if(refillUsed===null)issues.push("Today's refill status is unknown; today's refill is excluded");
+    return {now,energy,happy,drug,booster,refillUsed,issues};
+  }
   function readCooldowns(){
     const data=tornGuideApi.state.data.cooldowns;
     const cd=data?.cooldowns??data;
@@ -521,10 +551,11 @@ const tornTrainSequence=(()=>{
     const previous=ctx,old={...p};
     try{
       ctx=context;loadPlanPreferences();marketInputs();applyCooldownPerks();
-      const now=new Date(),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(now-stamp)/60000):0;
-      if(!options.naturalOnly&&(budget==null||cd?.drug==null||cd?.booster==null||!stamp||tornGuideApi.state.errors?.cooldowns))return [];
+      const live=options.liveInputs,now=new Date(live?.now??Date.now()),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(now-stamp)/60000):0;
+      if(live&&(!live.energy||!live.happy))return [];
+      if(!options.naturalOnly&&(budget==null||(live?(live.drug===null||live.booster===null):(cd?.drug==null||cd?.booster==null||!stamp||tornGuideApi.state.errors?.cooldowns))))return [];
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
-      Object.assign(p,{startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
+      Object.assign(p,{startDrugMin:live?(live.drug??0)/60:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:live?(live.booster??0)/60:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??24,candyHappy:"any",tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
       const cash=Math.max(0,Number(budget)||0),excludeOwned=options.excludeOwned!==false;
       const deadline=Number.isFinite(options.deadline)?options.deadline:null;
       const end=deadline===null?604800:Math.min(604800,Math.floor((deadline-now.getTime())/1000)-60);
@@ -534,7 +565,7 @@ const tornTrainSequence=(()=>{
       const cashCost=(result,engine)=>excludeOwned?purchases(result.costs).cost:engine?engine.finish([],{tail:false}).money:result.money;
       const actionsFor=id=>id==="natural"?cycleActions("natural"):editedPlans.has(id)?steps[id]:cycleActions(id);
       const ids=templates.map(([id])=>id).filter(id=>id==="natural"||!options.naturalOnly&&!excludedPlans.budget.has(id)&&(id!=="custom"||editedPlans.has(id))&&actionsFor(id).length&&!actionsFor(id).some(x=>options.blockDrugs&&["xanax","ecstasy"].includes(x.type)||x.type==="dvd"&&id!=="jump"||x.type==="externalHappy"&&id!=="maxhappy"));
-      const projection={actionsFor,respectOffset:false,refillUsedToday:energyRefillUsedToday(now),skipUsedRefill:true,requireDrugClear,warXanaxSeconds:options.warXanaxSeconds??28800,partialBudget:cash,partialOptions:{priceOf:cashCost,blockDrugs:!!options.blockDrugs}};
+      const projection={actionsFor,respectOffset:false,refillUsedToday:live?live.refillUsed!==false:energyRefillUsedToday(now),skipUsedRefill:true,requireDrugClear,warXanaxSeconds:options.warXanaxSeconds??28800,partialBudget:cash,partialOptions:{priceOf:cashCost,blockDrugs:!!options.blockDrugs}};
       const natural=mixedProjection(["natural"],end,{...projection,repeatLast:true});
       const candidates=ids.map(id=>id==="natural"?{id,data:natural}:{id});
       const proposal=ids.length===1?{data:natural}:optimizeChart(candidates,48,end,cash,[],{projection,priceOf:cashCost,minDepth:Math.max(4,Math.ceil(end/18000)),finishWindow:true});
@@ -1467,5 +1498,5 @@ const tornTrainSequence=(()=>{
       rebuild(el===document.activeElement?focusTarget:null);
     });
   }
-  return {render,wire,simulate,weeklyPrograms,periodPurchases,replayRemaining,waitTitle,happyResetWait,energyRefillUsedToday,steps,settings:p,loadLive,templateButtons};
+  return {render,wire,simulate,weeklyPrograms,liveInputs,periodPurchases,replayRemaining,waitTitle,happyResetWait,energyRefillUsedToday,steps,settings:p,loadLive,templateButtons};
 })();
