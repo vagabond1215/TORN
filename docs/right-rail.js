@@ -11,7 +11,7 @@ const tornRightRail=(()=>{
   try{const saved=localStorage.getItem(tabKey);if(tabs.some(([id])=>id===saved))activeTab=saved;}catch{}
   const collapsed=new Set();
   const sectionKey="torn-city-guide:right-rail:hidden:v1";
-  const sections=[["timers","Cooldowns, timers and stocks",'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/>'],["networth","Net worth",'<path d="M3 3v18h18M6 15l5-5 4 3 6-8M16 5h5v5"/>'],["property","Property",'<path d="m3 10 9-7 9 7M5 9v12h14V9M10 21v-7h4v7"/>']];
+  const sections=[["timers","Cooldowns, timers and stocks",'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/>'],["networth","Net worth",'<path d="M3 3v18h18M6 15l5-5 4 3 6-8M16 5h5v5"/>'],["property","Property",'<path d="m3 10 9-7 9 7M5 9v12h14V9M10 21v-7h4v7"/>'],["merits","Merits",'<circle cx="12" cy="8" r="5"/><path d="m8 12-2 10 6-4 6 4-2-10"/>']];
   const hiddenSections=new Set();
   try{const saved=JSON.parse(localStorage.getItem(sectionKey)||"[]");if(Array.isArray(saved))for(const [id] of sections)if(saved.includes(id))hiddenSections.add(id);}catch{}
   function controls(){
@@ -85,6 +85,11 @@ const tornRightRail=(()=>{
       '<div class="panel-content" id="rail-timer-content">'+(activeTab==="stocks"?stockTimers():'<dl class="rail-timer-list">'+rows+'</dl>')+
       '<span id="rail-refresh-status" class="sr-only" role="status">'+safe(refreshStatus)+'</span></div></section>';
   }
+  function merits(){
+    const rows=tornMeritGuide.recommendations();
+    const body=rows.length?'<ul class="rail-merit-list">'+rows.map(x=>'<li><div class="rail-merit-row"><div><strong>'+safe(x.name)+'</strong><small>'+safe(x.detail)+' · '+safe(x.effort)+'</small></div>'+(x.link?'<a href="'+safe(x.link)+'" aria-label="View '+safe(x.name)+'">View</a>':"")+'</div>'+tornMeritGuide.affrontedDetails(x.name,"rail")+'</li>').join("")+'</ul>':'<p class="rail-snapshot-note">No confirmed unearned recommendations loaded. Open Merits or use the main Refresh button.</p>';
+    return '<section class="panel rail-merits"><div class="panel-heading"><h2>Merits</h2><a href="#merits">View all</a></div><div class="panel-content">'+body+'</div></section>';
+  }
   function property(){
     const raw=payload("property","property");
     // user/property returns UserPropertyDetails whose property.name is a
@@ -144,7 +149,7 @@ const tornRightRail=(()=>{
       el.append(content);
     }
     content.hidden=!showSections;
-    content.innerHTML=showSections?[["timers",clocks],["networth",networthPanel],["property",property]]
+    content.innerHTML=showSections?[["timers",clocks],["networth",networthPanel],["property",property],["merits",merits]]
       .filter(([id])=>!hiddenSections.has(id)).map(([id,fn])=>id==="timers"?fn():collapsible(fn(),id)).join(""):"";
   }
   function tick(){
@@ -176,8 +181,10 @@ const tornRightRail=(()=>{
       if(hiddenSections.has(id))hiddenSections.delete(id);else hiddenSections.add(id);
       try{localStorage.setItem(sectionKey,JSON.stringify([...hiddenSections]));}catch{}
       render();
+      if(id==="merits"&&!hiddenSections.has(id)&&tornGuideApi.isConnected()&&!tornGuideApi.state.loading&&(!tornGuideApi.state.data.honors||!tornGuideApi.state.data.honorCatalog))void tornGuideApi.loadPage("merits").catch(()=>{});
     });
     tornRoadmap.wireActivities(host());
+    if(host())tornMeritGuide.wireAffronted(host());
     host()?.addEventListener("toggle",event=>{const section=event.target;if(!section.matches?.("details[data-rail-section]")||!section.isConnected)return; if(section.open)collapsed.delete(section.dataset.railSection);else collapsed.add(section.dataset.railSection);},true);
     host()?.addEventListener("click",event=>{
       const tab=event.target.closest("[data-rail-tab]");
@@ -190,5 +197,5 @@ const tornRightRail=(()=>{
       }
     });
   }
-  return {init,render,tick,order,controls};
+  return {init,render,tick,order,controls,meritsVisible:()=>!hiddenSections.has("merits")};
 })();
