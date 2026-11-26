@@ -102,3 +102,5 @@ Explicit eligible preference-only merge implemented with verified owner, Web Loc
 Timeline refinement: exact edge-post flags for point events, filled duration blocks for projected and recently observed remaining drug cooldowns; display-only, no change to scheduling or persistence. See activity-scheduler-plan.md.
 
 Home calendar refinement: standalone full-center-width timeline, Agenda/Week-only Home Calendar tile, and Week package item-value summaries with explicit unknown-price handling. Full Calendar views and account recovery roadmap retained.
+
+Idle log collection initial segment: opt-in one-page-per-idle-minute API worker, foreground interruption, account verification, exact pagination, bounded session archive and companion source separation. Next: native authenticated/browser validation, durable opt-in log archive with typed full log records and validated recovery, then transaction/consumption reconciliation; do not treat partial session coverage as a complete ledger.

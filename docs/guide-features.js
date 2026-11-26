@@ -6,6 +6,9 @@
 const tornGuideApi=(()=>{
   let secret=null,remember=false,epoch=0,timer=null,inFlight=null,queued=null,batchMode="unknown";
   const quarter=15*60*1000;
+  // All Torn requests share these counters, including direct equipment/crime calls.
+  let activeRequests=0,lastApiEnd=0,idleLastStart=0,idleAbort=null,idleVerifiedEpoch=-1,idleBlockedUntil=0;
+  const idleEligible=(at,active,lastEnd,lastStart,busy,blocked=0)=>!busy&&active===0&&at>=blocked&&at-lastEnd>=15000&&at-lastStart>=60000;
   const authKey="torn-city-guide:api:v2:remember";
   const cachePrefix="torn-city-guide:api:v2:cache:";
   const inventoryTypes=["Primary","Secondary","Melee","Temporary","Defensive","Clothing","Medical","Drug","Energy Drink","Alcohol","Candy","Supply Pack","Booster","Enhancer","Tool","Material","Jewelry","Flower","Plushie","Car","Book","Special","Other","Artifact","Collectible"];
@@ -129,8 +132,11 @@ const tornGuideApi=(()=>{
     if(document.visibilityState==="visible")refreshOnResume();
   });
   if(typeof window!=="undefined")window.addEventListener("focus",refreshOnResume);
-  async function request(path,key){
+  async function request(path,key,{idle=false}={}){
+    if(!idle)idleAbort?.abort();
     const controller=new AbortController();
+    if(idle)idleAbort=controller;
+    activeRequests++;
     const timeout=setTimeout(()=>controller.abort(),15000);
     try{
       const response=await fetch("https://api.torn.com/v2/"+path,{
@@ -138,15 +144,60 @@ const tornGuideApi=(()=>{
         credentials:"omit",cache:"no-store",referrerPolicy:"no-referrer",signal:controller.signal
       });
       const payload=await response.json();
-      if(payload&&payload.error)throw Error("Torn API: "+String(payload.error.error||payload.error.message||payload.error.code||"request rejected"));
-      if(!response.ok)throw Error("Torn API HTTP "+response.status);
+      if(payload&&payload.error){
+        const error=Error("Torn API: "+String(payload.error.error||payload.error.message||payload.error.code||"request rejected"));
+        error.tornCode=Number(payload.error.code);throw error;
+      }
+      if(!response.ok){const error=Error("Torn API HTTP "+response.status);error.httpStatus=response.status;throw error;}
       state.requests++;state.lastRequest=now();
       return payload;
     }catch(error){
-      if(error.name==="AbortError")throw Error("Torn API request timed out");
+      if([5,8,9,14].includes(error.tornCode)||error.httpStatus===429)
+        idleBlockedUntil=Math.max(idleBlockedUntil,now()+(error.tornCode===14?24*hrs:10*mins));
+      if(error.name==="AbortError"){const failure=Error("Torn API request timed out");failure.interrupted=idle&&controller.signal.aborted;throw failure;}
       if(error instanceof TypeError)throw Error("Cannot reach Torn API. Check network/CORS.");
       throw error;
-    }finally{clearTimeout(timeout);}
+    }finally{clearTimeout(timeout);activeRequests--;lastApiEnd=now();if(idleAbort===controller)idleAbort=null;}
+  }
+  // At most one idle attempt per minute across cooperating Guide tabs. No
+  // foreground request waits for this worker. Never follow a response URL.
+  async function idleLogPage(cursor=null){
+    const id=state.identity?.id,key=secret,accountEpoch=epoch;
+    if(!key||!Number.isSafeInteger(id)||id<=0)return {status:"disconnected"};
+    if(cursor!==null&&(typeof cursor!=="string"||!/^\d{1,30}$/.test(cursor)))return {status:"stopped",reason:"Invalid pagination cursor"};
+    if(typeof document==="undefined"||document.visibilityState!=="visible")return {status:"busy"};
+    const eligible=()=>idleEligible(now(),activeRequests,lastApiEnd,idleLastStart,!!(inFlight||queued||state.loading||idleAbort),idleBlockedUntil);
+    const current=()=>epoch===accountEpoch&&secret===key&&state.identity?.id===id;
+    if(!eligible())return {status:"busy"};
+    if(typeof navigator==="undefined"||!navigator.locks?.request)return {status:"stopped",reason:"Safe multi-tab coordination unavailable in this browser"};
+    try{return await navigator.locks.request("torn-guide-idle-log:"+id,{ifAvailable:true},async lock=>{
+      if(!lock||!current()||!eligible()||document.visibilityState!=="visible")return {status:"busy"};
+      const storageKey="torn-city-guide:idle-log-at:"+id;
+      try{
+        const last=Number(localStorage.getItem(storageKey))||0;
+        if(now()-last<60000)return {status:"busy"};
+        localStorage.setItem(storageKey,String(now()));
+      }catch{return {status:"stopped",reason:"Safe request coordination storage unavailable"};}
+      idleLastStart=now();
+      try{
+        if(idleVerifiedEpoch!==accountEpoch){
+          const result=await request("user/basic",key,{idle:true});
+          if(!current())return {status:"changed"};
+          if(result?.profile?.id!==id)return {status:"stopped",reason:"Account identity verification failed"};
+          idleVerifiedEpoch=accountEpoch;return {status:"verified"};
+        }
+        const payload=await request("user/log?limit=100"+(cursor===null?"":"&nanostamp="+cursor),key,{idle:true});
+        return current()?{status:"ok",payload}:{status:"changed"};
+      }catch(error){
+        if(!current())return {status:"changed"};
+        if([1,2,7,10,13,16,18].includes(error.tornCode)||[401,403].includes(error.httpStatus))
+          return {status:"stopped",reason:"API key cannot read logs. Verify its permissions before resuming."};
+        if(error.tornCode===14)return {status:"stopped",reason:"Torn daily read limit reached; resume after reset."};
+        if(error.interrupted)return {status:"busy"};
+        idleBlockedUntil=Math.max(idleBlockedUntil,now()+10*mins);
+        return {status:"backoff",reason:"API unavailable or rate limited; retry after 10 minutes."};
+      }
+    });}catch{return {status:"stopped",reason:"Safe multi-tab coordination unavailable"};}
   }
   async function connect(raw,stay=false){
     const key=String(raw||"").trim();
@@ -155,7 +206,7 @@ const tornGuideApi=(()=>{
     const profile=basic.profile;
     if(!profile||!Number.isInteger(profile.id)||!profile.name)throw Error("Torn returned an unexpected identity.");
     if(remember)clearSaved(state.identity&&state.identity.id);
-    epoch++;secret=key;remember=Boolean(stay);batchMode="unknown";
+    epoch++;secret=key;remember=Boolean(stay);batchMode="unknown";idleVerifiedEpoch=epoch;idleBlockedUntil=0;
     state.identity={id:profile.id,name:profile.name,level:profile.level};
     state.data={basic};state.inventory={};state.errors={};state.inventoryErrors={};
     state.fetchedAt={basic:now()};state.failedAt={};state.cachedSources={};state.updated=now();
@@ -171,6 +222,7 @@ const tornGuideApi=(()=>{
     const isCurrent=()=>epoch===connectionEpoch&&secret===key&&state.identity?.id===id;
     const result=await request("user/basic",key);
     if(!isCurrent()||result?.profile?.id!==id)throw Error("Account changed or identity could not be verified");
+    idleVerifiedEpoch=connectionEpoch;
     return {playerId:String(id),isCurrent};
   }
   // Keep the newest observation; older stored packets never overwrite newer API data.
@@ -625,7 +677,7 @@ const tornGuideApi=(()=>{
   function loadInventory(cat,force=false){return refresh({route:"inventory",force,category:cat});}
   function disconnect(){
     const id=state.identity&&state.identity.id;
-    epoch++;secret=null;remember=false;stopTimer();queued=null;
+    epoch++;idleAbort?.abort();secret=null;remember=false;stopTimer();queued=null;
     clearSaved(id);clearGear(id);
     state.identity=null;state.data={};state.inventory={};state.errors={};
     state.inventoryErrors={};state.fetchedAt={};state.failedAt={};state.cachedSources={};
@@ -634,7 +686,7 @@ const tornGuideApi=(()=>{
   }
   return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,passiveRwReport,readCrimeProgress,loadCrimeProgress,refreshCrimeProgress,crimeVersion,
     disconnect,restore,setRemember,isRemembering:()=>remember,
-    isConnected:()=>Boolean(secret),verifyBackupOwner,refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
+    isConnected:()=>Boolean(secret),verifyBackupOwner,refreshOnResume,idleLogPage,idleEligible,inventoryTypes,routeName,TTL,ROUTES};
 })();
 
 const guideSteps = [
