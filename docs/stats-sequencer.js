@@ -41,7 +41,7 @@ const tornTrainSequence=(()=>{
   const startingTime=Object.fromEntries(templates.map(([id])=>[id,0]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openTimelines=new Set(),editedPlans=new Set();
-  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7,cycleOverrides=[],overridesOpen=false,showOptimal=true,showOptimalBudget=false;
+  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7,cycleOverrides=[],overridesOpen=false,showOptimal=true,showOptimalBudget=false,showManual=false;
   let planPreferenceOwner;
   function restoreAction(saved){
     if(!saved||typeof saved.type!=="string"||!Object.hasOwn(names,saved.type))return null;
@@ -63,6 +63,7 @@ const tornTrainSequence=(()=>{
     const valid=new Set(templates.map(([id])=>id));
     cycleOverrides=Array.isArray(saved?.cycleOverrides)?saved.cycleOverrides.slice(0,28).map(id=>valid.has(id)?id:""):[];
     overridesOpen=false;
+    showManual=saved?.showManual??cycleOverrides.some(Boolean);
     showOptimal=saved?.showOptimal!==false;
     showOptimalBudget=saved?.showOptimalBudget===true;
     selected.clear();openTimelines.clear();editedPlans.clear();
@@ -84,7 +85,7 @@ const tornTrainSequence=(()=>{
     const plans=Object.fromEntries(templates.map(([id])=>[id,{
       energy:startingEnergy[id],time:startingTime[id],actions:editedPlans.has(id)?steps[id]:undefined
     }]));
-    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays,cycleOverrides,showOptimal,showOptimalBudget}));}catch{}
+    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays,cycleOverrides,showOptimal,showOptimalBudget,showManual}));}catch{}
   }
   function templateButtons(){loadPlanPreferences();return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'<button type="button" class="tc-stat-tab ts-settings-toggle '+(settingsOpen?"is-selected":"")+'" data-ts-settings aria-expanded="'+settingsOpen+'" aria-controls="ts-plan-settings" title="Time, cooldowns, effects, prices"><span aria-hidden="true">⚙</span> Settings</button></div>';}
   function activeTemplates(){return templates.filter(([id])=>selected.has(id));}
@@ -924,9 +925,8 @@ const tornTrainSequence=(()=>{
     if(!continuous)best=frontier[0]??null;
     return best;
   }
-  function optimizeChart(results,slots,end,budget=null){
+  function optimizeChart(results,slots,end,budget=null,overrides=[]){
     const weeklySpend=budget==null?null:weeklyPurchaseCost();
-    const overrides=cycleOverrides.slice(0,slots);
     const lastOverride=overrides.findLastIndex(Boolean);
     const actionsFor=id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id];
     const ids=[...new Set(["natural",...results.map(({id})=>id)])].filter(id=>actionsFor(id).length);
@@ -969,7 +969,7 @@ const tornTrainSequence=(()=>{
     return best;
   }
   function cycleOverrideControls(slots,mixed){
-    return '<details class="ts-cycle-overrides" '+(overridesOpen?"open":"")+'><summary>Cycle overrides</summary>'+
+    return '<details class="ts-cycle-overrides" '+(overridesOpen?"open":"")+'><summary aria-label="Manual cycle settings" title="Manual cycle settings"><span aria-hidden="true">⚙</span></summary>'+
       '<div class="ts-cycle-choices">'+Array.from({length:slots},(_,i)=>{
         const picked=cycleOverrides[i]??"",segment=mixed?.data.segments[i];
         const automatic=templates.find(([id])=>id===segment?.id)?.[2];
@@ -987,6 +987,7 @@ const tornTrainSequence=(()=>{
       '<span class="fine-print" title="Each plan repeats within the same comparison window">'+fmt(hours,2)+'h shown</span>'+
       '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" title="Maximize projected stat gain without a cash budget" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+
       '<button type="button" class="tc-stat-tab '+(showOptimalBudget?"is-selected":"")+'" title="Maximize projected stat gain within your weekly Energy budget" data-ts-optimal-budget aria-pressed="'+showOptimalBudget+'">Optimal Budget</button>'+
+      '<button type="button" class="tc-stat-tab '+(showManual?"is-selected":"")+'" data-ts-manual aria-pressed="'+showManual+'">Manual</button>'+
       cycleOverrideControls(slots,mixed)+'</div></div>';
   }
   function render(context,{keepClock=false}={}){
@@ -1007,21 +1008,23 @@ const tornTrainSequence=(()=>{
     }));
     let end=duration??shortest(counted);
     const overrides=cycleOverrides.slice(0,slots);
-    const hasOverrides=overrides.some(Boolean);
+    const hasOverrides=showManual&&overrides.some(Boolean);
     if(!continuous&&hasOverrides){
       const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||active[0]?.[0]||"natural"),Infinity);
       end=Math.max(end,forced.elapsed);
     }
     const results=active.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true})}));
     const budget=typeof tornRoadmap==="undefined"?null:tornRoadmap.preferences().weeklyBudget;
-    const mixed=(showOptimal||(hasOverrides&&!showOptimalBudget))&&(results.length||hasOverrides)?optimizeChart(results,slots,end):null;
+    const mixed=showOptimal&&(results.length||hasOverrides)?optimizeChart(results,slots,end):null;
     const budgeted=showOptimalBudget&&(results.length||hasOverrides)?optimizeChart(results,slots,end,budget):null;
-    if(mixed)results.push({id:"mixed",label:hasOverrides?"Mixed plan":"Optimal sequence",data:mixed.data});
+    const manual=hasOverrides?optimizeChart(results,slots,end,null,overrides):null;
+    if(mixed)results.push({id:"mixed",label:"Optimal sequence",data:mixed.data});
+    if(manual)results.push({id:"manual",label:"Manual",data:manual.data});
     if(budgeted)results.push({id:"budget",label:"Optimal Budget",data:budgeted.data});
     const chartHours=end/3600;
     return controls()+(results.length||hasOverrides?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
-      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,mixed??budgeted)+(mixed||budgeted||(!showOptimal&&(showOptimalBudget||!hasOverrides))?"" : '<p class="fine-print">No complete mixed sequence fits these settings.</p>')+
-      (showOptimalBudget&&!budgeted?'<p class="fine-print">No sequence fits the weekly budget and cycle overrides.</p>':"")+(results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
+      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,manual)+(showManual&&!manual?'<p class="fine-print">'+(hasOverrides?"The manual sequence does not fit this window.":"Choose at least one cycle in Manual settings.")+'</p>':"")+
+      (showOptimalBudget&&!budgeted?'<p class="fine-print">No sequence fits the weekly budget.</p>':"")+(results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
   }
   function wire(view){
@@ -1110,6 +1113,12 @@ const tornTrainSequence=(()=>{
       }
     });
     view.addEventListener("click",event=>{
+      if(event.target.closest("[data-ts-manual]")){
+        showManual=!showManual;
+        savePlanPreferences();
+        rebuild("[data-ts-manual]",{keepClock:true});
+        return;
+      }
       if(event.target.closest("[data-ts-optimal-budget]")){
         showOptimalBudget=!showOptimalBudget;
         savePlanPreferences();
