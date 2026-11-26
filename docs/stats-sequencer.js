@@ -81,7 +81,7 @@ const tornTrainSequence=(()=>{
     for(const id of (Array.isArray(saved?.expanded)?saved.expanded:[]))if(valid.has(id)||["optimal","optimal-budget"].includes(id))openTimelines.add(id);
     for(const [id] of templates){
       const plan=saved?.plans?.[id];
-      startingEnergy[id]=["zero","full"].includes(plan?.energy)?plan.energy:defaultEnergy[id];
+      startingEnergy[id]=["zero","full","current"].includes(plan?.energy)?plan.energy:defaultEnergy[id];
       startingTime[id]=Math.floor(clamp(plan?.time,0,3600*10000-1));
       steps[id]=defaults[id]();
       if(Array.isArray(plan?.actions)){
@@ -253,9 +253,11 @@ const tornTrainSequence=(()=>{
     }
     v.peakHappy=v.happy;
     const point=()=>{v.peakHappy=Math.max(v.peakHappy,v.happy);const last=v.series[v.series.length-1],h=v.time/3600;if(Math.abs(last.h-h)<1e-8)last.s=v.stat;else v.series.push({h,s:v.stat});};
-    function train(){
+    function train(maxEnergy=Infinity){
       if(v.energy<gymCost || n(gym[stat])<=0)return 0;
-      const out=ctx.trainBlock(v.stat,v.happy,v.energy,gym,stat,mult);
+      const available=Math.min(v.energy,Math.max(0,Math.floor(maxEnergy/gymCost)*gymCost));
+      if(available<gymCost)return 0;
+      const out=ctx.trainBlock(v.stat,v.happy,available,gym,stat,mult);
       v.energy-=out.used;v.happy=out.happy;v.stat=out.stat;v.used+=out.used;
       return out.used;
     }
@@ -380,7 +382,7 @@ const tornTrainSequence=(()=>{
         v.costs.externalHappy++;
         const warning="99k assumes coordinated Poison Mistletoe use at an estimated $200 million per boost.";
         if(!v.warnings.includes(warning))v.warnings.push(warning);
-      }else if(type==="train")train();
+      }else if(type==="train")train(a.energyLimit??Infinity);
       else if(type==="wait"){
         const seconds=a.untilDrug?v.drug:Math.max(0,Math.ceil(n(a.minutes)*60));
         cutoff=v.time+seconds>limit;
@@ -601,13 +603,15 @@ const tornTrainSequence=(()=>{
         const prev=remaining[i-1];
         if(prev&&!["xanax","ecstasy","candy","dvd","refill"].includes(type)&&type!=="train")engine.advance(Math.max(0,row.at-prev.at));
         if(type==="train"){
-          const wanted=Math.min(context.state.maxEnergy,Math.max(engine.gymCost,Number(row.energy)||engine.gymCost));
+          const wanted=Math.max(engine.gymCost,Number(row.energy)||engine.gymCost);
+          if(wanted>context.state.maxEnergy&&v.energy<wanted)return {error:"Stacked Energy changed; refresh and replan"};
           if(next?.type==="xanax"&&Number(next.at)===Number(row.at))engine.advance(v.drug);
           if(v.energy<wanted)engine.advance(Math.max(0,Math.ceil((wanted-v.energy)/5))*energyRules().minutes*60);
         }
         if(type==="refill"&&v.energy>=context.state.maxEnergy)continue; // no benefit from refilling full energy
         const a=make(type,Math.max(1,Math.floor(Number(row.quantity)||1)));
         if(type==="candy")a.candyHappy="any";
+        if(type==="train"&&Number(row.energy)>0)a.energyLimit=Number(row.energy);
         if(!engine.execute(a,i,{beforeEcstasy:next?.type==="ecstasy",beforeXanax:next?.type==="xanax"}))return {error:v.errors[0]??"Remaining plan exceeds simulation window"};
         executed.push(a);
       }
@@ -627,7 +631,8 @@ const tornTrainSequence=(()=>{
   function simulate(list,overrides={}){
     const side=Object.keys(steps).find(id=>steps[id]===list);
     const engine=createEngine({startEnergy:startingEnergy[side],midnightJump:midnightJumps.has(side),...overrides});
-    engine.run(list);
+    const prepared=side?cycleStart(side,list,engine,{adaptive:startingEnergy[side]==="current"||overrides.startEnergy==="current",prepare:startingEnergy[side]==="current"||overrides.startEnergy==="current"}):list;
+    if(prepared)engine.run(prepared);
     return engine.finish(list);
   }
   function defaultActions(id){
@@ -733,7 +738,7 @@ const tornTrainSequence=(()=>{
       }
       const parent=e.parent??-1;if(!byParent.has(parent))byParent.set(parent,[]);byParent.get(parent).push(e);
     }
-    let rows='<tr class="ts-initial"><td><input class="ts-start-time" type="text" inputmode="numeric" data-ts-start-time="'+side+'" value="'+clock(offset)+'" aria-label="Starting time in hours, minutes and seconds" title="Timeline start (H:MM:SS)"></td><td><div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'" aria-label="Starting Energy"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option></select></div></td>'+timelineCells(data.initial)+'</tr>';
+    let rows='<tr class="ts-initial"><td><input class="ts-start-time" type="text" inputmode="numeric" data-ts-start-time="'+side+'" value="'+clock(offset)+'" aria-label="Starting time in hours, minutes and seconds" title="Timeline start (H:MM:SS)"></td><td><div class="ts-start-energy"><strong>Starting Energy</strong><select data-ts-start-energy="'+side+'" aria-label="Starting Energy"><option value="zero" '+(startingEnergy[side]==="zero"?"selected":"")+'>0 E</option><option value="full" '+(startingEnergy[side]==="full"?"selected":"")+'>'+energyRules().cap+' E</option><option value="current" '+(startingEnergy[side]==="current"?"selected":"")+'>Live '+fmt(ctx.state.currentEnergy,0)+' E</option></select></div></td>'+timelineCells(data.initial)+'</tr>';
     rows+=(byParent.get(-1)||[]).map(e=>dependencyRow(e,offset)).join("");
     list.forEach((action,i)=>{
       const events=byParent.get(i)||[],main=events.find(e=>e.editable);
@@ -869,6 +874,39 @@ const tornTrainSequence=(()=>{
   }
   // Track only real progress in an unfinished cycle; a failed zero-time
   // attempt at the boundary is not an additional program.
+  // Built-in templates consume the actual stack rather than manufacturing
+  // a zero/full starting balance. Explicit custom action lists stay literal.
+  function cycleStart(id,actions,engine,{adaptive=true,prepare=true}={}){
+    const v=engine.state,stackPlan=id==="jump"||id==="maxhappy";
+    if(adaptive&&!editedPlans.has(id)&&stackPlan){
+      const leading=actions.findIndex(a=>a.type!=="xanax");
+      if(leading>0){
+        // When no further dose is needed, keep the entire stack. Otherwise
+        // trim only the surplus above the last complete 250-E tier, after
+        // any pending cooldown (which may regenerate Energy below cap).
+        if(v.energy<1000&&!engine.waitFor(v.drug,"Drug cooldown"))return null;
+        const tier=Math.min(1000,Math.floor(v.energy/250)*250);
+        const surplus=v.energy-tier;
+        if(surplus>=engine.gymCost&&!engine.execute({...make("train"),energyLimit:surplus},-1,{automatic:true}))return null;
+        // If gym increments cannot reach the exact tier, leave the remainder
+        // rather than spending Energy that belongs to the retained stack.
+        const doses=Math.max(0,Math.min(leading,Math.ceil((1000-v.energy)/250)));
+        return [...actions.slice(0,doses),...actions.slice(leading)];
+      }
+    }
+    if(adaptive&&!editedPlans.has(id)&&["maxenergy","mini"].includes(id)&&actions[0]?.type==="xanax"){
+      // A full stack is already better than the normal opening Xanax.
+      // Preserve it for the planned happiness boost and training.
+      if(v.energy>=1000)return actions.slice(1);
+      if(v.energy>750){
+        if(!engine.waitFor(v.drug,"Drug cooldown"))return null;
+        if(!engine.execute({...make("train"),energyLimit:v.energy-750},-1,{automatic:true}))return null;
+      }
+    }
+    if(prepare&&id!=="custom"&&startingEnergy[id]==="full"&&v.energy<energyRules().cap&&
+      !engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false))return null;
+    return actions;
+  }
   function cycleCheckpoint(v,offset,id){
     return {id,start:offset+v.time,logStart:v.log.length,stat:v.stat,used:v.used,costs:{...v.costs}};
   }
@@ -1006,11 +1044,11 @@ const tornTrainSequence=(()=>{
     return {id,start:checkpoint.start,at:offset+v.time,logStart:checkpoint.logStart,gain:v.stat-checkpoint.stat,
       used:v.used-checkpoint.used,costs,reason:"window",optimized:true};
   }
-  function projectCycles(id,cycles,{end=Infinity,continuous=false,partialBudget=null}={}){
+  function projectCycles(id,cycles,{end=Infinity,continuous=false,partialBudget=null,liveStart=false}={}){
     const list=id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id];
-    const offset=startingTime[id],clockSeconds=Math.round(p.tornClockMin*60)+offset;
+    const offset=liveStart?0:startingTime[id],clockSeconds=Math.round(p.tornClockMin*60)+offset;
     const engine=createEngine({
-      limitSeconds:Math.max(0,end-offset),startEnergy:startingEnergy[id],midnightJump:midnightJumps.has(id),
+      limitSeconds:Math.max(0,end-offset),startEnergy:liveStart?"current":startingEnergy[id],midnightJump:midnightJumps.has(id),
 
       startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
       tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900
@@ -1020,11 +1058,8 @@ const tornTrainSequence=(()=>{
     const segments=[];
     while(list.length&&completed<cycles&&v.time<=engine.limit){
       const before=v.time,statBefore=v.stat,logStart=v.log.length,checkpoint=cycleCheckpoint(v,offset,id),prefix=Number.isFinite(end)?engine.snapshot():null;
-      if(completed>0){
-        const delay=startingEnergy[id]==="full"?engine.fullEnergyDelay():0;
-        if(delay&&!engine.waitFor(delay,"Full Energy",false)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
-      }
-      if(!engine.run(list)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
+      const actions=cycleStart(id,list,engine,{adaptive:liveStart||startingEnergy[id]==="current"||completed>0,prepare:liveStart||completed>0||startingEnergy[id]==="current"});
+      if(!actions||!engine.run(actions)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
       completed++;
       segments.push({id,at:offset+v.time,start:offset+before,logStart,gain:v.stat-statBefore});
       if(continuous&&v.time===before){
@@ -1053,15 +1088,9 @@ const tornTrainSequence=(()=>{
       const actions=actionsFor(id),v=engine.state;
       if(!actions.length||v.time>engine.limit)break;
       const before=v.stat,start=offset+v.time,logStart=v.log.length,checkpoint=cycleCheckpoint(v,offset,id),prefix=Number.isFinite(end)?engine.snapshot():null;
-      const prepare=!matchTemplateStart||index>0;
-      const switching=index<sequence.length&&sequence[index-1]!==id;
-      if(prepare&&(!matchTemplateStart||switching)&&startingEnergy[id]==="zero"&&actions[0]?.type==="xanax"){
-        if(!engine.waitFor(v.drug,"Drug cooldown")){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
-        if(v.energy>=engine.gymCost&&!engine.execute(make("train"),0)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
-      }
-      if(prepare&&startingEnergy[id]==="full"&&v.energy<energyRules().cap&&
-        !engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
-      if(!engine.run(actions,{midnightJump:midnightJumps.has(id)})){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
+      const prepare=!matchTemplateStart||index>0||startingEnergy[id]==="current";
+      const prepared=cycleStart(id,actions,engine,{adaptive:prepare,prepare});
+      if(!prepared||!engine.run(prepared,{midnightJump:midnightJumps.has(id)})){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
       segments.push({id,at:offset+v.time,start,logStart,gain:v.stat-before});
       if(matchTemplateStart&&start===offset+v.time){
         const delay=engine.fullEnergyDelay()||energyRules().minutes*60;
@@ -1226,8 +1255,8 @@ const tornTrainSequence=(()=>{
       (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
       '<span class="fine-print" title="In Cycles mode, the slowest selected plan sets the window. With only Manual visible, its configured sequence sets the window.">'+fmt(hours,2)+'h shown</span>'+
-      '<div class="ts-cycle-actions">'+cycleBoundaryButton()+'<button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" title="Maximize projected stat gain without a cash budget" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+optimizerSettings("optimal","Optimal")+
-      '<button type="button" class="tc-stat-tab '+(showOptimalBudget?"is-selected":"")+'" title="Maximize projected stat gain within your weekly Energy budget" data-ts-optimal-budget aria-pressed="'+showOptimalBudget+'">Optimal Budget</button>'+optimizerSettings("budget","Optimal Budget")+
+      '<div class="ts-cycle-actions">'+cycleBoundaryButton()+'<button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" title="Maximize projected stat gain from live Energy without a cash budget" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+optimizerSettings("optimal","Optimal")+
+      '<button type="button" class="tc-stat-tab '+(showOptimalBudget?"is-selected":"")+'" title="Maximize projected stat gain from live Energy within your weekly budget" data-ts-optimal-budget aria-pressed="'+showOptimalBudget+'">Optimal Budget</button>'+optimizerSettings("budget","Optimal Budget")+
       '<button type="button" class="tc-stat-tab '+(showManual?"is-selected":"")+'" data-ts-manual aria-pressed="'+showManual+'">Manual</button>'+
       cycleOverrideControls(slots,mixed)+'</div></div>';
   }
@@ -1263,10 +1292,10 @@ const tornTrainSequence=(()=>{
         ?countedPlan.data:projectCycles(id,Infinity,{end,continuous:true,partialBudget:budget});
       return {id,label,data};
     });
-    const candidates=optimize?templates.map(([id,,label])=>{const visible=results.find(entry=>entry.id===id);return visible&&!visible.data.partialSegment?visible:{id,label,data:projectCycles(id,Infinity,{end,continuous:true})};}):[];
-    const budgetCandidates=showOptimalBudget?candidates.map(entry=>entry.data.partialSegment?{...entry,data:projectCycles(entry.id,Infinity,{end,continuous:true,partialBudget:budget})}:entry):[];
-    const mixed=showOptimal?optimizeChart(candidates.filter(({id})=>!excludedPlans.optimal.has(id)),slots,end):null;
-    const budgeted=showOptimalBudget?optimizeChart(budgetCandidates.filter(({id})=>!excludedPlans.budget.has(id)),slots,end,budget):null;
+    const candidates=optimize?templates.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true,liveStart:true})})):[];
+    const budgetCandidates=showOptimalBudget?candidates.map(entry=>entry.data.partialSegment?{...entry,data:projectCycles(entry.id,Infinity,{end,continuous:true,partialBudget:budget,liveStart:true})}:entry):[];
+    const mixed=showOptimal?optimizeChart(candidates.filter(({id})=>!excludedPlans.optimal.has(id)),slots,end,null,[],{projection:{respectOffset:false}}):null;
+    const budgeted=showOptimalBudget?optimizeChart(budgetCandidates.filter(({id})=>!excludedPlans.budget.has(id)),slots,end,budget,[],{projection:{respectOffset:false}}):null;
     const samePlan=results.length===1&&Array.from({length:slots},(_,i)=>!overrides[i]||overrides[i]===results[0].id).every(Boolean);
     const manual=showManual?(samePlan?{data:results[0].data,sequence:Array(slots).fill(results[0].id)}:
       forced?{data:forced,sequence:manualSequence}:
@@ -1355,7 +1384,7 @@ const tornTrainSequence=(()=>{
         return;
       }
       if(tsStartEnergy&&Object.hasOwn(startingEnergy,tsStartEnergy)){
-        startingEnergy[tsStartEnergy]=el.value==="zero"?"zero":"full";
+        startingEnergy[tsStartEnergy]=["zero","full","current"].includes(el.value)?el.value:defaultEnergy[tsStartEnergy];
         savePlanPreferences();
         rebuild(el===document.activeElement?'[data-ts-start-energy="'+tsStartEnergy+'"]':null);
         return;
