@@ -383,6 +383,7 @@ const tornCrimeGuide = (() => {
   }
   function crimeOptionRows(name,cs,risk,only,allCollected){
     if(name==="Burglary")return burglaryRows(cs,risk,only,allCollected);
+    if(tornCrimeStates.data[name])return tornCrimeStates.render(name,{cs,only,allCollected,uniques:crimeProgress(name)?.uniques,catalog:payload("itemCatalog","items"),itemStatus:crimeItemStatus,owner:String(tornGuideApi.state.identity?.id??"guest")});
     const groups=crimeOptions[name];
     if(!groups)return "";
     return '<li class="rec-crime-options"><div><strong>Available activities &amp; reference options</strong><small>Static in-game reference; check live availability and requirements. Unique examples are not a complete collected-reward list.</small>'+groups.map(([heading,rows])=>'<details class="rec-crime-option-group" open><summary><strong>'+esc(heading)+'</strong></summary><ul>'+rows.map(([label,meta,detail])=>'<li class="rec-crime-option"><div class="rec-crime-option-head"><strong>'+esc(label)+'</strong><small>'+esc(meta)+'</small></div>'+(detail?'<div class="rec-crime-option-reward">'+esc(detail)+'</div>':"")+'</li>').join("")+'</ul></details>').join("")+'</div></li>';
@@ -1117,6 +1118,17 @@ const tornCrimeGuide = (() => {
   }
   function tickGrowth(){
     const view=document.getElementById("topic-view"),route=tornGuideApi.routeName();
+    if(route==="home"&&view?.isConnected&&!view.hidden){
+      const now=Date.now();
+      for(const board of view.querySelectorAll("[data-crime-state-expires]")){
+        if(Number(board.dataset.crimeStateExpires)>now||board.contains(document.activeElement))continue;
+        const name=board.querySelector("[data-crime-observation]")?.dataset.crimeName;
+        if(!name)continue;
+        const progress=crimeProgress(name),cs=skill(name)??(Number.isFinite(progress?.skill)?progress.skill:null),total=reference.find(x=>x[0]===name)?.[2]??0;
+        const count=Array.isArray(progress?.uniques)?new Set(progress.uniques.map(x=>x.id)).size:null;
+        board.outerHTML=crimeOptionRows(name,cs,tornRoadmap.preferences().jailRisk,incompleteUniquesOnly,count!==null&&total>0&&count>=total);
+      }
+    }
     if(view?.isConnected&&!view.hidden&&(route==="home"||route==="calendar")){
       const activity=activityLimits(),session=loadTrainingSession();
       const now=Date.now(),pendingRehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&e.end+86400000>now);
@@ -1597,6 +1609,20 @@ const tornCrimeGuide = (() => {
     },true);
     view.addEventListener("change",e=>{if(e.target.matches("[data-growth-exclude-owned]")){try{localStorage.setItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"),String(e.target.checked));}catch{}refreshRecommendations(view);}});
     view.addEventListener("change",event=>{
+      if(event.target.matches("[data-crime-observation]")){
+        const el=event.target,{crimeName,crimeTarget,crimeField}=el.dataset;
+        const owner=String(tornGuideApi.state.identity?.id??"guest");
+        if(!tornCrimeStates.save(owner,localStorage,crimeName,crimeTarget,crimeField,el.value)){
+          el.setCustomValidity("Enter a whole percentage from 0 to 100, or clear the reading.");el.reportValidity();return;
+        }
+        el.setCustomValidity("");
+        const board=el.closest(".crime-state-board"),active=el===document.activeElement;
+        const progress=crimeProgress(crimeName),cs=skill(crimeName)??(Number.isFinite(progress?.skill)?progress.skill:null),total=reference.find(x=>x[0]===crimeName)?.[2]??0;
+        const count=Array.isArray(progress?.uniques)?new Set(progress.uniques.map(u=>u.id)).size:null;
+        const next=tornCrimeStates.render(crimeName,{cs,only:incompleteUniquesOnly,allCollected:count!==null&&total>0&&count>=total,uniques:progress?.uniques,catalog:payload("itemCatalog","items"),itemStatus:crimeItemStatus,owner});
+        if(board){board.outerHTML=next;if(active){const input=[...view.querySelectorAll("[data-crime-observation]")].find(x=>x.dataset.crimeName===crimeName&&x.dataset.crimeTarget===crimeTarget&&x.dataset.crimeField===crimeField);input?.focus({preventScroll:true});}}
+        return;
+      }
       if(event.target.matches("[data-growth-watch]")){
         try{localStorage.setItem("torn-city-guide:growth-watch:"+String(tornGuideApi.state.identity?.id??"guest"),String(event.target.checked));}catch{}
         const session=loadTrainingSession();if(session){delete session.watch;saveTrainingSession();}
