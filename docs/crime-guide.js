@@ -227,7 +227,7 @@ const tornCrimeGuide = (() => {
     });
     dialog.showModal();
   }
-  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Energy"],["calendar","Calendar"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
+  const recommendationTypes=[["restock","Restock"],["growth","Energy"],["calendar","Calendar"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
   let recIncomplete=true,recUniques=false,incompleteUniquesOnly=true,crimeOverride="auto";
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id)),recExpanded=new Set();
   function loadRecFilters(){
@@ -240,7 +240,7 @@ const tornCrimeGuide = (() => {
   function excludeOwned(){try{return localStorage.getItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"))!=="false";}catch{return true;}}
   const recGearIcon='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
   const recRefreshIcon='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.5 8a7 7 0 0 1 11.6-2L20 12M4 12l2.9 6A7 7 0 0 0 18.5 16"/></svg>';
-  const recRoutes={restock:"#inventory",merit:"#merits",growth:"#stats",calendar:"#calendar",consume:"#inventory",crime:"#crime",education:"#education",money:"#stocks"};
+  const recRoutes={restock:"#inventory",growth:"#stats",calendar:"#calendar",consume:"#inventory",crime:"#crime",education:"#education",money:"#stocks"};
   const recIconButton=(label,icon,attributes="",available=true)=>'<button type="button" class="rec-header-button" aria-label="'+esc(label)+'" title="'+esc(label+(available?"":" (not configured)"))+'" '+attributes+(available?"":" disabled")+'>'+icon+'</button>';
   function energyWarSettings(){
     const defaults={mode:"scheduled",adjustment:60,lead:120};
@@ -1286,14 +1286,9 @@ const tornCrimeGuide = (() => {
   }
   function adviceSections(count,trainingRecommendation){
     const prefs=tornRoadmap.preferences(),activities=tornRoadmap.selectedStyles(),growth=prefs.priority==="growth",completion=prefs.priority==="completion",risk=prefs.risk;
-    const rows={merit:[],growth:[],consume:[],crime:[],education:[],money:[]};
+    const rows={growth:[],consume:[],crime:[],education:[],money:[]};
     const add=(key,title,detail,link)=>rows[key].push(recItem(title,detail,link));
     const n=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
-    for(const x of tornMeritGuide.recommendations()){
-      const row=recItem(x.name,x.detail+" · "+x.effort,x.link),details=tornMeritGuide.affrontedDetails(x.name,"home");
-      rows.merit.push(details?row.slice(0,-5)+details+"</li>":row);
-    }
-    if(!rows.merit.length)add("merit","Award shortlist unavailable","Open Merits to load the award catalog and compare unearned honors.","#merits");
     const {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan}=trainingRecommendation;
     if(educationRisk){
       const detail="Active education course · addiction-related battle-stat penalty "+Math.max(...addictionDebuff)+"%. Avoid all drugs until addiction is reduced. Course dismissal can occur at 5%; restarting loses progress.";
@@ -1591,7 +1586,7 @@ const tornCrimeGuide = (() => {
     const pending=tornGuideApi.inventoryTypes.filter(c=>!["Book","Collectible"].includes(c)&&!ready(c));
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
     const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print restock-inventory-note">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
-    const priority=tornRoadmap.preferences().priority,first={growth:["growth","calendar","consume"],completion:["crime","merit"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
+    const priority=tornRoadmap.preferences().priority,first={growth:["growth","calendar","consume"],completion:["crime"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
     return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
 
@@ -1634,7 +1629,6 @@ const tornCrimeGuide = (() => {
     layoutRecommendations(view);
   }
   function wireRecommendations(view){
-    tornMeritGuide.wireAffronted(view);
     wireActivity(view);
     layoutRecommendations(view);
     if(view.dataset.ocRecommendationsBound==="1")return;
