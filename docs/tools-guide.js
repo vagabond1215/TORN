@@ -165,15 +165,21 @@ const tornToolsGuide=(()=>{
  }
  // Global quick bar: cached account status, no additional polling.
  const statusIcons={
-   addiction:'<path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="7"/><path d="M9 11h.01M15 11h.01M9 15h6"/>',
+   addiction:'<path d="M12 5a3 3 0 0 0-5.8-1A4 4 0 0 0 3 9a4 4 0 0 0 .5 6.5A4 4 0 0 0 8 21a4 4 0 0 0 4-4V5Zm0 0a3 3 0 0 1 5.8-1A4 4 0 0 1 21 9a4 4 0 0 1-.5 6.5A4 4 0 0 1 16 21a4 4 0 0 1-4-4M7 4c0 2 1 3 3 3M3 9c2-1 4 0 4 2m-3.5 4.5C5 14 7 14 8 16m9-12c0 2-1 3-3 3m7 2c-2-1-4 0-4 2m3.5 4.5C19 14 17 14 16 16"/>',
    travel:'<path d="M17 21v-8l-5-3V4a2 2 0 0 0-4 0v6l-5 3v8l7-4z" transform="translate(2 0)"/><path d="M10 17v5"/>',
    racing:'<path d="M4.5 19a10 10 0 1 1 15 0zM12 15l4-5M6 12h.01M12 6h.01M18 12h.01"/><circle cx="12" cy="15" r="1"/>',
-   drug:'<path d="M5 19a5 5 0 0 1 0-7l7-7a5 5 0 0 1 7 7l-7 7a5 5 0 0 1-7 0zM8 9l7 7"/>',
+   drug:'<path d="M5 19a5 5 0 0 1 0-7l7-7a5 5 0 0 1 7 7l-7 7a5 5 0 0 1-7 0zM8.5 8.5l7 7"/>',
    booster:'<path d="m13 2-9 12h7l-1 8 10-12h-7l1-8z"/>',
    medical:'<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
    refresh:'<path d="M20 7v5h-5M4 17v-5h5M6 8a7 7 0 0 1 12-2l2 6M18 16a7 7 0 0 1-12 2l-2-6"/>',
    tools:'<path d="M4 6h16M4 12h16M4 18h16"/>'
  };
+ // These are fixed internal SVG fragments, not external or user input.
+ // reportIcon expects a path-data string, not markup.
+ function statusIcon(name){
+   const fragment=Object.hasOwn(statusIcons,name)?statusIcons[name]:"";
+   return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+fragment+'</svg>';
+ }
  const timeValue=v=>{if(v==null||v==="")return null;const n=Number(v);return Number.isFinite(n)&&n>=1e9?(n>=1e12?n:n*1000):null;};
  const nonnegative=v=>v!=null&&v!==""&&Number.isFinite(Number(v))&&Number(v)>=0?Number(v):null;
  const ttlStatus={icons:900000,travel:900000,races:1800000,cooldowns:120000};
@@ -187,10 +193,6 @@ const tornToolsGuide=(()=>{
    const item=(id,label,value,tip,href,tone="normal")=>({id,label,value,tip,href,tone});
    const duration=at=>tornTctClock.formatDuration((at-now)/1000);
    const items=[];
-   if(connected&&health.penalty!=null&&fresh("icons")){
-     const p=health.penalty,level=health.level,detail=level==="restricted"?"Drug recommendations restricted":level==="recommended"?"Rehab recommended":level==="preferred"?"Rehab preferred":"Observed battle-stat penalty";
-     items.push(item("addiction","Addiction",p+"%"+(decayAt&&decayAt>now?" · "+duration(decayAt):""), "Addiction penalty "+p+"% · "+detail+(decayAt?" · Next approximate natural decay in "+duration(decayAt):"")+" · Open Calendar for rehab", "#calendar",level==="restricted"?"danger":["preferred","recommended"].includes(level)?"warning":"ready"));
-   }else items.push(unknown("addiction","Addiction","#calendar"));
    // One stable slot: a reported flight takes precedence over cached race data.
    // An expired flight is not proof of arrival; wait for a new snapshot.
    const travel=data("travel"),remaining=nonnegative(travel?.time_left??travel?.remaining??travel?.remaining_seconds);
@@ -217,6 +219,10 @@ const tornToolsGuide=(()=>{
      else if(noFlight&&fresh("races")&&Array.isArray(races))items.push(activity("racing","Racing","Not Racing","No active flight or scheduled race reported","#racing","ready"));
      else items.push(activity("racing","Racing / travel","Not Racing","Default display · Racing or flight status not verified; refresh to check","#racing","unknown"));
    }
+   if(connected&&health.penalty!=null&&fresh("icons")){
+     const p=health.penalty,level=health.level,detail=level==="restricted"?"Drug recommendations restricted":level==="recommended"?"Rehab recommended":level==="preferred"?"Rehab preferred":"Observed battle-stat penalty";
+     items.push(item("addiction","Addiction",p+"%"+(decayAt&&decayAt>now?" · "+duration(decayAt):""), "Addiction penalty "+p+"% · "+detail+(decayAt?" · Next approximate natural decay in "+duration(decayAt):"")+" · Open Calendar for rehab", "#calendar",p>=5?"danger":p>0?"warning":"ready"));
+   }else items.push(unknown("addiction","Addiction","#calendar"));
    const cooldowns=data("cooldowns");
    for(const id of ["drug","booster","medical"]){
      const label=id[0].toUpperCase()+id.slice(1)+" cooldown",raw=cooldowns?.[id],left=nonnegative(raw&&typeof raw==="object"?raw.remaining??raw.time_left??raw.seconds:raw);
@@ -232,14 +238,14 @@ const tornToolsGuide=(()=>{
    return quickStatusModel(tornGuideApi.state,health,now,decayAt,connected);
  }
  function statusMarkup(){
-   return '<div class="quick-status-strip" aria-label="Account status">'+statusRows().map(x=>'<a class="quick-status" data-quick-status="'+x.id+'" data-status-icon="'+(x.icon??x.id)+'" data-tone="'+x.tone+'" href="'+x.href+'" title="'+esc(x.tip)+'" aria-label="'+esc(x.label+": "+x.value+" · "+x.tip)+'">'+reportIcon(statusIcons[x.icon??x.id])+'<span>'+esc(x.value)+'</span></a>').join("")+'</div><button type="button" class="rail-visibility-toggle quick-status-refresh" data-quick-status-refresh title="Refresh addiction, travel, racing and cooldowns" aria-label="Refresh account status" '+(!tornGuideApi.isConnected()||tornGuideApi.state.loading?"disabled":"")+'>'+reportIcon(statusIcons.refresh)+'</button>';
+   return '<div class="quick-status-strip" aria-label="Account status">'+statusRows().map(x=>'<a class="quick-status" data-quick-status="'+x.id+'" data-status-icon="'+(x.icon??x.id)+'" data-tone="'+x.tone+'" href="'+x.href+'" title="'+esc(x.tip)+'" aria-label="'+esc(x.label+": "+x.value+" · "+x.tip)+'">'+statusIcon(x.icon??x.id)+'<span>'+esc(x.value)+'</span></a>').join("")+'</div><button type="button" class="rail-visibility-toggle quick-status-refresh" data-quick-status-refresh title="Refresh addiction, travel, racing and cooldowns" aria-label="Refresh account status" '+(!tornGuideApi.isConnected()||tornGuideApi.state.loading?"disabled":"")+'>'+statusIcon("refresh")+'</button>';
  }
  function tickStatus(){
    const host=document.getElementById("tool-quickbar");if(!host)return;
    for(const x of statusRows()){
      const node=host.querySelector('[data-quick-status="'+x.id+'"]');if(!node)continue;
      const icon=x.icon??x.id;
-     if(node.dataset.statusIcon!==icon){node.querySelector("svg")?.remove();node.insertAdjacentHTML("afterbegin",reportIcon(statusIcons[icon]));node.dataset.statusIcon=icon;}
+     if(node.dataset.statusIcon!==icon){node.querySelector("svg")?.remove();node.insertAdjacentHTML("afterbegin",statusIcon(icon));node.dataset.statusIcon=icon;}
      if(node.getAttribute("href")!==x.href)node.setAttribute("href",x.href);
      const span=node.querySelector("span");
      if(span.textContent!==x.value)span.textContent=x.value;
@@ -276,7 +282,7 @@ const tornToolsGuide=(()=>{
   const reportToggle=context==="home"?'<button type="button" class="rail-visibility-toggle" data-report-toggle aria-controls="torn-reports-strip" aria-label="Torn Reports" title="Torn Reports" aria-pressed="'+reportPrefs().open+'">'+reportIcon("M4 3h16v18H4z M8 16v-4m4 4V8m4 8v-6")+'</button>':"";
   const open=tornRoadmap.activitiesOpen();
   const gear='<button type="button" class="rail-visibility-toggle" data-home-activities-toggle aria-controls="home-activities" aria-label="Focus" title="Focus" aria-pressed="'+open+'" aria-expanded="'+open+'"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>';
-  return '<div class="quick-inner"><div class="quick-tools"><button class="quick-tools-toggle" type="button" data-tools-toggle aria-controls="quick-tools-menu" aria-expanded="'+toolsOpen+'">'+reportIcon(statusIcons.tools)+'<span>Tools</span><span class="quick-tools-chevron" aria-hidden="true">▾</span></button><div id="quick-tools-menu" class="quick-tools-menu" '+(toolsOpen?"":"hidden")+' aria-label="Quick access bookmarks">'+(links||'<small>No pinned tools for this page.</small>')+'<a class="quick-tools-manage" href="#tools">Manage bookmarks</a></div></div>'+statusMarkup()+'<div class="home-settings-toggle-wrap">'+reportToggle+gear+'</div>'+rail+'</div>';
+  return '<div class="quick-inner"><div class="quick-tools"><button class="quick-tools-toggle" type="button" data-tools-toggle aria-controls="quick-tools-menu" aria-expanded="'+toolsOpen+'">'+statusIcon("tools")+'<span>Tools</span><span class="quick-tools-chevron" aria-hidden="true">▾</span></button><div id="quick-tools-menu" class="quick-tools-menu" '+(toolsOpen?"":"hidden")+' aria-label="Quick access bookmarks">'+(links||'<small>No pinned tools for this page.</small>')+'<a class="quick-tools-manage" href="#tools">Manage bookmarks</a></div></div>'+statusMarkup()+'<div class="home-settings-toggle-wrap">'+reportToggle+gear+'</div>'+rail+'</div>';
  }
  function updateBar(route){
   ensureIconHandler();ensureToolsMenu();
