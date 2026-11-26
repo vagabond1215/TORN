@@ -9,12 +9,13 @@ const tornBackupUI=(()=>{
   }
   function wire(){
     const open=get("backup-open"),dialog=get("backup-dialog"),form=get("backup-form");
-    const comparison=get("backup-comparison");
+    const comparison=get("backup-comparison"),mergeButton=get("backup-merge");
+    let pendingMerge=null;
     const status=get("backup-status"),secret=get("backup-passphrase"),confirmation=get("backup-confirm"),file=get("backup-file");
     const exportButton=get("backup-export"),importButton=get("backup-import"),close=get("backup-close");
     if(!open||!dialog||!form)return;
     const message=x=>{status.textContent=x;};
-    const controls=()=>{const pending=!journalPanel.hidden;exportButton.disabled=busy||pending;importButton.disabled=busy||pending;journalFinish.disabled=busy||!journal?.complete||journal.conflict;journalRollback.disabled=busy||!journal||journal.conflict;close.disabled=busy;inspect.disabled=busy||pending||!presented?.session;discard.disabled=busy||pending||!presented?.session;preview.disabled=busy||pending||!presented?.session||!attest.checked;count.disabled=busy||!presented?.session;attest.disabled=busy||!presented?.session;sync();};
+    const controls=()=>{const pending=!journalPanel.hidden;mergeButton.hidden=!pendingMerge;mergeButton.disabled=busy||pending||!pendingMerge||!comparison.querySelector("input:checked");for(const input of comparison.querySelectorAll("input"))input.disabled=busy||pending;exportButton.disabled=busy||pending;importButton.disabled=busy||pending;journalFinish.disabled=busy||!journal?.complete||journal.conflict;journalRollback.disabled=busy||!journal||journal.conflict;close.disabled=busy;inspect.disabled=busy||pending||!presented?.session;discard.disabled=busy||pending||!presented?.session;preview.disabled=busy||pending||!presented?.session||!attest.checked;count.disabled=busy||!presented?.session;attest.disabled=busy||!presented?.session;sync();};
     const review=get("backup-recovery-review"),summary=get("backup-review-summary"),evidence=get("backup-review-evidence"),inspect=get("backup-review-inspect"),discard=get("backup-review-discard");
     const count=get("backup-review-count"),attest=get("backup-review-attest"),preview=get("backup-review-preview"),actionList=get("backup-review-action-list"),previewList=get("backup-review-preview-list");
     const journalPanel=get("backup-journal"),journalStatus=get("backup-journal-status"),journalFinish=get("backup-journal-finish"),journalRollback=get("backup-journal-rollback");
@@ -33,7 +34,7 @@ const tornBackupUI=(()=>{
       const initial=journal;busy=true;controls();
       try{
         const verified=await tornGuideApi.verifyBackupOwner();
-        if(!window.confirm(mode==="finish"?"Finalize this fully matched restore?":"Roll back the interrupted restore? Only matching destination values will be removed; keep your original backup."))return;
+        if(!window.confirm(mode==="finish"?"Finalize this fully matched restore?":"Roll back the interrupted operation? Previous matching values will be restored; conflicting changes will not be overwritten. Keep your original backup."))return;
         await tornAccountStorage.withRecoveryLock(verified.playerId,navigator.locks,()=>{
           if(mode==="finish")tornAccountStorage.finishJournal(localStorage,verified.playerId,initial.raw,verified.isCurrent);
           else tornAccountStorage.rollbackJournal(localStorage,verified.playerId,initial.raw,verified.isCurrent);
@@ -93,7 +94,28 @@ const tornBackupUI=(()=>{
     }
     inspect.addEventListener("click",()=>void reviewAction("inspect"));
     discard.addEventListener("click",()=>void reviewAction("discard"));
-    const clear=()=>{secret.value="";confirmation.value="";file.value="";comparison.replaceChildren();};
+    function clearMerge(){pendingMerge=null;comparison.replaceChildren();mergeButton.hidden=true;}
+    comparison.addEventListener("change",controls);
+    mergeButton.addEventListener("click",async()=>{
+      if(busy||!pendingMerge)return;
+      const selected=[...comparison.querySelectorAll("input:checked")].map(input=>input.value),pending=pendingMerge;
+      if(!selected.length)return;
+      if(!navigator.locks?.request){message("Preference merge requires browser Web Locks support. Keep the backup for use in a supported browser.");return;}
+      if(!window.confirm("Apply "+selected.length+" selected preference revisions? Conflicting, untracked and protected sections remain unchanged. Keep both backup copies. The guide will reload."))return;
+      busy=true;controls();
+      try{
+        const verified=await tornGuideApi.verifyBackupOwner();
+        if(verified.playerId!==pending.id||!verified.isCurrent())throw Error("Account changed; preview again");
+        const count=await tornAccountStorage.withRecoveryLock(pending.id,navigator.locks,async()=>{
+          const current=await tornAccountRevisions.capture(localStorage,pending.id,verified.isCurrent);
+          if(JSON.stringify(current)!==JSON.stringify(pending.local))throw Error("Local data changed; preview again");
+          return tornAccountRevisions.applyMerge(localStorage,pending.id,current,pending.incoming,selected,verified.isCurrent);
+        });
+        clearMerge();message("Applied "+count+" preference revisions; reloading guide.");location.reload();
+      }catch(error){clearMerge();message(String(error?.message??error));}
+      finally{busy=false;showJournal();controls();}
+    });
+    const clear=()=>{secret.value="";confirmation.value="";file.value="";clearMerge();};
     open.addEventListener("click",()=>{
       if(!tornGuideApi.isConnected()||busy)return;
       clear();message("Verified account required. Version 2 adds section revision tracking to supported settings, notes, checklists, calendar events, expenditure records, validated training sessions and cycle history. Version 1 files remain readable.");
@@ -105,7 +127,7 @@ const tornBackupUI=(()=>{
     form.addEventListener("submit",event=>event.preventDefault());
     async function run(mode){
       if(busy)return;
-      comparison.replaceChildren();
+      clearMerge();
       let password=secret.value,repeat=confirmation.value;
       const chosen=file.files?.[0];
       // Clear the DOM fields promptly; keep no persistent passphrase state.
@@ -145,8 +167,14 @@ const tornBackupUI=(()=>{
             if(!verified.isCurrent())throw Error("Account changed during comparison");
             const labels={"keep-local":"Keep local","unchanged":"Identical","eligible":"Eligible preference update","review":"Conflict or untracked; review required","protected-review":"Protected section; specialized review required"};
             comparison.replaceChildren();
-            for(const row of plan.rows)append(comparison,row.section+" · "+labels[row.action]+" ("+row.status+")"+(row.localDeleted?" · local deletion":"")+(row.incomingDeleted?" · backup deletion":""));
-            message("Read-only merge preview: "+plan.eligible.length+" eligible preference updates, "+plan.review.length+" sections require review. No incoming records applied. Keep the original encrypted backup.");return;
+            const blocked=Boolean(localStorage.getItem("torn-city-guide:training-session:"+id)||tornTrainingRecovery.readStage(localStorage,id)||!navigator.locks?.request);
+            for(const row of plan.rows){
+              const text=row.section+" · "+labels[row.action]+" ("+row.status+")"+(row.localDeleted?" · local deletion":"")+(row.incomingDeleted?" · backup deletion":"");
+              if(row.action==="eligible"&&!blocked){const li=document.createElement("li"),label=document.createElement("label"),input=document.createElement("input");input.type="checkbox";input.value=row.section;label.append(input,document.createTextNode(" "+text));li.append(label);comparison.append(li);}
+              else append(comparison,text);
+            }
+            if(plan.eligible.length&&!blocked)pendingMerge={id,local:current,incoming:{records:data.records,manifest:data.manifest}};
+            message("Merge preview: "+plan.eligible.length+" eligible preference updates, "+plan.review.length+" sections require review. "+(blocked?"Application blocked by training state or missing Web Locks. ":"Select eligible preferences to apply explicitly. ")+"No incoming records applied yet. Keep the original encrypted backup.");return;
           }
           // Explicit approval, no silent overwrite or partial account merge.
           if(!window.confirm("Restore "+data.records.length+" supported records for Torn player "+id+"? Existing supported account data or session/history will prevent recovery. Restored training sessions will be held for review and cannot resume yet. Restored pending rehab will not auto-confirm; review reservations manually. The guide will reload; session-only API connections must reconnect.")){message("Recovery cancelled; no changes made.");return;}

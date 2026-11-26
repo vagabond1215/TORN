@@ -116,6 +116,27 @@ const tornAccountRevisions=(()=>{
     if(!isCurrent())throw Error("Account changed before restore");
     return tornAccountStorage.restoreJournaled(store,id,records,isCurrent,{createdAt,manifest});
   }
+  async function applyMerge(store,id,local,incoming,selected,isCurrent,{digest=hash}={}){
+    id=owner(id);
+    const plan=await planMerge(local,incoming,id,{digest});
+    if(!Array.isArray(selected)||!selected.length||new Set(selected).size!==selected.length||selected.some(section=>!plan.eligible.includes(section)))throw Error("Select only eligible preference sections");
+    const before=JSON.stringify({records:local.records,omitted:local.omitted??[]}),manifestBefore=JSON.stringify(local.manifest),markers=JSON.stringify(tornAccountStorage.deletionMarkers(store,id));
+    const unchanged=()=>isCurrent()&&store.getItem(key(id))===manifestBefore&&JSON.stringify(tornAccountStorage.snapshot(store,id))===before&&JSON.stringify(tornAccountStorage.deletionMarkers(store,id))===markers;
+    if(!unchanged())throw Error("Local account changed; preview again");
+    if(store.getItem("torn-city-guide:training-session:"+id)!==null||store.getItem(tornTrainingRecovery.reviewKey(id))!==null)throw Error("Finish or review the training session before merging preferences");
+    const values=new Map(local.records.map(row=>[row.section,row.value])),remote=new Map(incoming.records.map(row=>[row.section,row.value])),entries=map(local.manifest),remoteEntries=map(incoming.manifest),changes=[];
+    for(const section of [...selected].sort()){
+      const value=remote.get(section)??null;
+      changes.push({section,before:values.get(section)??null,value});
+      if(value===null)values.delete(section);else values.set(section,value);
+      entries.set(section,remoteEntries.get(section));
+    }
+    const next={version,playerId:id,entries:[...entries.values()].sort((a,b)=>a.section.localeCompare(b.section))};
+    const records=[...values.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([section,value])=>({section,value}));
+    await verify(next,records,id,{digest});
+    if(!unchanged())throw Error("Local account changed during merge verification; preview again");
+    return tornAccountStorage.mergeJournaled(store,id,changes,local.manifest,next,isCurrent);
+  }
   // Normal usage capture coalesces writes and retries on a later signal.
   // No API requests or secret persistence; the connection/owner guard is
   // supplied by the page. Capture is not an atomic per-mutation transaction.
@@ -135,5 +156,5 @@ const tornAccountRevisions=(()=>{
     }
     return {request,flush};
   }
-  return {empty,key,read,validate,verify,observe,compare,planMerge,capture,restore,createCaptureQueue};
+  return {empty,key,read,validate,verify,observe,compare,planMerge,applyMerge,capture,restore,createCaptureQueue};
 })();

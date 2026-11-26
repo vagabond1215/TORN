@@ -206,30 +206,40 @@ const tornAccountStorage=(()=>{
   function parseJournal(raw,id){
     if(typeof raw!=="string"||raw.length>maxBytes*5+100000)throw Error("Invalid restore journal size");
     const j=JSON.parse(raw);
-    if(!shape(j,["version","playerId","createdAt","rows"])||j.version!==1||j.playerId!==id||!observedDate(j.createdAt)||!Array.isArray(j.rows)||!j.rows.length||j.rows.length>maxRecords+1)throw Error("Invalid restore journal");
+    if(!shape(j,["version","playerId","createdAt","rows"])||![1,2].includes(j.version)||j.playerId!==id||!observedDate(j.createdAt)||!Array.isArray(j.rows)||!j.rows.length||j.rows.length>maxRecords+1)throw Error("Invalid restore journal");
     let size=0;const seen=new Set();
     for(const row of j.rows){
-      if(!shape(row,["section","value"])||!str(row.section,160)||!str(row.value,row.section===manifestSection?maxBytes:maxValue+1000)||seen.has(row.section))throw Error("Invalid journal section");
+      const merge=j.version===2,limit=row?.section===manifestSection?maxBytes:maxValue+1000;
+      if(!shape(row,merge?["section","before","value"]:["section","value"])||!str(row.section,160)||seen.has(row.section))throw Error("Invalid journal section");
       const d=journalDescriptor(id,row.section);
       if(!d)throw Error("Unknown journal section");
-      if(row.section==="training-session-review")tornTrainingRecovery.parseStage(row.value,id);
-      else if(!d.valid(row.value))throw Error("Invalid journal value");
-      seen.add(row.section);size+=row.section.length+row.value.length;
-      if(size>2*maxBytes+2000)throw Error("Restore journal exceeds size limit");
+      if(merge&&row.section!==manifestSection&&!mergePreference(row.section))throw Error("Protected journal section");
+      const validValue=value=>str(value,limit)&&d.valid(value);
+      if(merge){
+        if(!own(row,"before")||!own(row,"value")||row.section===manifestSection&&(row.before===null||row.value===null)||!(row.before===null||validValue(row.before))||!(row.value===null||validValue(row.value)))throw Error("Invalid merge journal value");
+      }else if(row.section==="training-session-review"){
+        if(!str(row.value,limit))throw Error("Invalid journal value");
+        tornTrainingRecovery.parseStage(row.value,id);
+      }else if(!validValue(row.value))throw Error("Invalid journal value");
+      seen.add(row.section);size+=row.section.length+(row.value?.length??0)+(merge?(row.before?.length??0):0);
+      if(size>(merge?4:2)*maxBytes+2000)throw Error("Restore journal exceeds size limit");
     }
+    if(j.version===2&&(j.rows.length<2||j.rows.at(-1).section!==manifestSection||j.rows.at(-1).before===j.rows.at(-1).value))throw Error("Merge journal must end with a changed revision manifest");
     return j;
   }
+  const previousValue=(j,row)=>j.version===2?row.before:null;
+  const writeValue=(store,key,value)=>value===null?store.removeItem(key):store.setItem(key,value);
   function readJournal(store,playerId){
     const id=owner(playerId),raw=store.getItem(journalKey(id));
     if(raw===null)return null;
     const j=parseJournal(raw,id);
     const rows=j.rows.map(row=>{
       const key=journalDescriptor(id,row.section).key,current=store.getItem(key);
-      return {section:row.section,state:current===null?"missing":current===row.value?"matched":"conflict"};
+      return {section:row.section,state:current===row.value?"matched":current===previousValue(j,row)?(j.version===2?"previous":"missing"):"conflict"};
     });
     // A local runnable session is never part of the journal.
-    if(store.getItem(prefix+"training-session:"+id)!==null)rows.push({section:"local-training-session",state:"conflict"});
-    return {raw,createdAt:j.createdAt,rows,complete:rows.every(row=>row.state==="matched"),conflict:rows.some(row=>row.state==="conflict")};
+    if(store.getItem(prefix+"training-session:"+id)!==null||j.version===2&&store.getItem(tornTrainingRecovery.reviewKey(id))!==null)rows.push({section:"local-training-session",state:"conflict"});
+    return {raw,version:j.version,createdAt:j.createdAt,rows,complete:rows.every(row=>row.state==="matched"),conflict:rows.some(row=>row.state==="conflict")};
   }
   function assertJournal(store,id,raw,isCurrent){
     if(!isCurrent()||store.getItem(journalKey(id))!==raw)throw Error("Account or restore journal changed");
@@ -249,11 +259,12 @@ const tornAccountStorage=(()=>{
     for(const row of [...j.rows].reverse()){
       assertJournal(store,id,raw,isCurrent);
       const key=journalDescriptor(id,row.section).key,current=store.getItem(key);
-      if(current!==null&&current!==row.value)throw Error("Concurrent change during rollback; journal retained");
-      if(current!==null)store.removeItem(key);
+      const before=previousValue(j,row);
+      if(current!==before&&current!==row.value)throw Error("Concurrent change during rollback; journal retained");
+      if(current!==before)writeValue(store,key,before);
     }
     assertJournal(store,id,raw,isCurrent);
-    if(readJournal(store,id).rows.some(row=>row.state!=="missing"))throw Error("Rollback incomplete; journal retained");
+    if(j.rows.some(row=>store.getItem(journalDescriptor(id,row.section).key)!==previousValue(j,row))||readJournal(store,id).conflict)throw Error("Rollback incomplete; journal retained");
     store.removeItem(journalKey(id));
     if(journalPending(store,id))throw Error("Restore journal could not be cleared");
   }
@@ -284,11 +295,35 @@ const tornAccountStorage=(()=>{
     }catch(error){throw Error("Restore interrupted; journal retained for review. "+String(error?.message??error));}
     return records.length;
   }
+  // First merge tier: only allowlisted preferences, journaled before/after
+  // values and exact optimistic account/manifest checks. No active session.
+  function mergeJournaled(store,playerId,changes,oldManifest,newManifest,isCurrent){
+    const id=owner(playerId);
+    if(!isCurrent()||journalPending(store,id)||store.getItem(prefix+"training-session:"+id)!==null||store.getItem(tornTrainingRecovery.reviewKey(id))!==null)throw Error("Account or training state blocks merge");
+    if(!Array.isArray(changes)||!changes.length||changes.some(row=>!mergePreference(row.section)))throw Error("Unsupported merge selection");
+    const rows=[...changes,{section:manifestSection,before:JSON.stringify(oldManifest),value:JSON.stringify(newManifest)}];
+    const raw=JSON.stringify({version:2,playerId:id,createdAt:Date.now(),rows});
+    parseJournal(raw,id);
+    if(rows.some(row=>store.getItem(journalDescriptor(id,row.section).key)!==row.before))throw Error("Local values changed before merge");
+    if(!isCurrent()||journalPending(store,id))throw Error("Account or journal changed before merge");
+    store.setItem(journalKey(id),raw);
+    assertJournal(store,id,raw,isCurrent);
+    try{
+      for(const row of rows){
+        assertJournal(store,id,raw,isCurrent);
+        const key=journalDescriptor(id,row.section).key;
+        if(store.getItem(key)!==row.before||store.getItem(prefix+"training-session:"+id)!==null||store.getItem(tornTrainingRecovery.reviewKey(id))!==null)throw Error("Concurrent account write");
+        writeValue(store,key,row.value);
+      }
+      finishJournal(store,id,raw,isCurrent);
+    }catch(error){throw Error("Merge interrupted; journal retained for review. "+String(error?.message??error));}
+    return changes.length;
+  }
   // Cooperative cross-tab serialization where Web Locks is available.
   // Older scripts and other ordinary writers do not participate yet.
   async function withRecoveryLock(playerId,locks,fn){
     const id=owner(playerId);
     return locks?.request?locks.request(prefix+"account-recovery:"+id,{mode:"exclusive"},fn):fn();
   }
-  return {owner,sectionForKey,deletionMarkers,trackedWrite,mergePreference,knownSection:(id,section)=>typeof section==="string"&&section.length<=160&&Boolean(descriptor(owner(id),section)),snapshot,validRecords,restoreEmpty,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
+  return {owner,sectionForKey,deletionMarkers,trackedWrite,mergePreference,knownSection:(id,section)=>typeof section==="string"&&section.length<=160&&Boolean(descriptor(owner(id),section)),snapshot,validRecords,restoreEmpty,mergeJournaled,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
 })();

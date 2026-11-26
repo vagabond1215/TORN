@@ -96,3 +96,5 @@ Implemented presentation-only shared TCT timeline on Home and Calendar, with lay
 Ordinary supported writers and coalesced local capture now preserve durable observed deletion markers even before first hash capture. Existing calendar timeline changes retained. Merge planning/application and native tests remain open; no automatic sync.
 
 Conservative read-only merge preview implemented: digest verification, proven descendants of eligible preferences, protected calendar/financial/session sections, divergent/untracked review. Next: before/after journal and explicit eligible-only application; no automatic sync or activation.
+
+Explicit eligible preference-only merge implemented with verified owner, Web Locks, no active/held training session, before/after journal rollback, and unchanged snapshot/manifest recheck. Protected sections and divergent/untracked records remain review-only. Next: stable-ID calendar/ledger/history merge and conflict resolution; activation and companion vault remain gated.
