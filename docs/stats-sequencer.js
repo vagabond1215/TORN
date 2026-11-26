@@ -806,7 +806,7 @@ const tornTrainSequence=(()=>{
     const metric=(label,value,extra="")=>'<span class="ts-title-metric '+extra+'"><small>'+label+'</small><strong>'+value+'</strong></span>';
     const purchases=chartPurchases()(projection.costs),weekly=weeklyPurchaseCost()(projection);
     return '<details class="ts-side ts-template-card" data-ts-timeline="'+side+'" '+(openTimelines.has(side)?"open":"")+'><summary class="ts-template-header"><span class="ts-template-name">'+$(heading)+'</span>'+
-      metric("Window",fmt(hours,2)+"h · "+projection.segments.length+" cycles")+metric("Energy used",fmt(projection.used)+" E")+metric("Stat change","+"+fmt(projection.gain,2),"ts-title-gain")+metric("Ending stat",fmt(projection.final,2))+costMetric(side,purchases.cost,purchases.items,"Items to purchase")+
+      metric("Window",fmt(hours,2)+"h · "+projection.segments.length+(projection.segments.length===1?" cycle":" cycles"))+metric("Energy used",fmt(projection.used)+" E")+metric("Stat change","+"+fmt(projection.gain,2),"ts-title-gain")+metric("Ending stat",fmt(projection.final,2))+costMetric(side,purchases.cost,purchases.items,"Items to purchase")+
       '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+
       '<p class="fine-print">Peak rolling 7-day spend '+(weekly==null?"Unavailable":"$"+fmt(weekly)+(budget!=null&&weekly>budget?" · Over weekly budget":""))+
       ' · Consumed value '+(projection.money==null?"Unavailable":"$"+fmt(projection.money))+' · One-cycle editor ('+fmt(data.elapsed/3600,2)+'h)</p>'+mergedTimeline(side,data)+
@@ -836,7 +836,7 @@ const tornTrainSequence=(()=>{
     const purchases=chartPurchases()(data.costs),cash=purchases.cost,weekly=weeklyPurchaseCost()(data);
     return '<details class="ts-side ts-template-card" data-ts-timeline="'+id+'" '+(openTimelines.has(id)?"open":"")+'>'+
       '<summary class="ts-template-header"><span class="ts-template-name">'+title+'</span>'+
-      metric("Window",fmt(hours,2)+"h · "+data.segments.length+" cycles")+
+      metric("Window",fmt(hours,2)+"h · "+data.segments.length+(data.segments.length===1?" cycle":" cycles"))+
       metric("Energy used",fmt(data.used)+" E")+metric("Stat change","+"+fmt(data.gain,2))+
       metric("Ending stat",fmt(data.final,2))+costMetric(id,cash,purchases.items,"Items to purchase")+
       '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+
@@ -1076,7 +1076,7 @@ const tornTrainSequence=(()=>{
       '<label>Projection <select data-ts-chart-mode><option value="cycles" '+(chartMode==="cycles"?"selected":"")+'>Cycles</option><option value="continuous" '+(chartMode==="continuous"?"selected":"")+'>Continuous</option></select></label>'+
       (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
-      '<span class="fine-print" title="The cycle window is based on all plans, including hidden plans">'+fmt(hours,2)+'h shown</span>'+
+      '<span class="fine-print" title="In Cycles mode, the slowest selected plan sets the window. With no plans selected, all plans set the window.">'+fmt(hours,2)+'h shown</span>'+
       '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" title="Maximize projected stat gain without a cash budget" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+optimizerSettings("optimal","Optimal")+
       '<button type="button" class="tc-stat-tab '+(showOptimalBudget?"is-selected":"")+'" title="Maximize projected stat gain within your weekly Energy budget" data-ts-optimal-budget aria-pressed="'+showOptimalBudget+'">Optimal Budget</button>'+optimizerSettings("budget","Optimal Budget")+
       '<button type="button" class="tc-stat-tab '+(showManual?"is-selected":"")+'" data-ts-manual aria-pressed="'+showManual+'">Manual</button>'+
@@ -1097,17 +1097,22 @@ const tornTrainSequence=(()=>{
     const duration=continuous?Math.max(shortest(rangeCycles),continuousDays*86400):null;
     // The cycle count sets a common time window. Faster plans keep repeating
     // throughout that window, with the same cooldowns, refills and inventory.
-    const counted=continuous||chartCycles===1?rangeCycles:templates.map(([id,,label])=>({
-      id,label,data:projectCycles(id,chartCycles)
-    }));
+    const rangePlans=active.length?active:templates;
+    const counted=continuous||chartCycles===1?(oneCycle.length?oneCycle:rangeCycles):
+      rangePlans.map(([id,,label])=>({id,label,data:projectCycles(id,chartCycles)}));
     let end=duration??shortest(counted);
     const overrides=cycleOverrides.slice(0,slots);
     const hasOverrides=showManual&&overrides.some(Boolean);
-    if(!continuous&&hasOverrides){
+    if(!continuous&&hasOverrides&&!active.length){
       const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||"natural"),Infinity,{matchTemplateStart:true});
       end=Math.max(end,forced.elapsed);
     }
-    const results=active.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true})}));
+    const results=active.map(([id,,label])=>{
+      const countedPlan=!continuous&&counted.find(plan=>plan.id===id);
+      const data=countedPlan&&countedPlan.data.completed===chartCycles&&startingTime[id]+countedPlan.data.elapsed===end
+        ?countedPlan.data:projectCycles(id,Infinity,{end,continuous:true});
+      return {id,label,data};
+    });
     const budget=typeof tornRoadmap==="undefined"?null:tornRoadmap.preferences().weeklyBudget;
     const candidates=optimize?templates.map(([id,,label])=>results.find(entry=>entry.id===id)??
       {id,label,data:projectCycles(id,Infinity,{end,continuous:true})}):[];
