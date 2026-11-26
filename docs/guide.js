@@ -58,6 +58,7 @@ const topics = {
 };
 
 const icons = {
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18M7 14h2m3 0h2m3 0h1M7 17h2m3 0h2"/>',
   merits: '<circle cx="12" cy="8" r="5"/><path d="m8 12-2 10 6-4 6 4-2-10"/>',
   education: '<path d="m2 9 10-5 10 5-10 5zM6 11v6c4 3 8 3 12 0v-6M22 9v7"/>',
   stocks: '<path d="M3 3v18h18M5 15l5-5 4 3 7-8M16 5h5v5"/>',
