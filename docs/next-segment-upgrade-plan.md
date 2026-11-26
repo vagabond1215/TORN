@@ -69,3 +69,5 @@ See [persistence-implementation-plan.md](persistence-implementation-plan.md). 1P
 
 ### Energy tile clarity and mobile companion onboarding
 Gym membership and Energy/train replace the stat directive. Primary phase and countdown use the same typography and readiness color; a separate Next line names the action. Confirmed progress remains secondary. Waiting labels derive from schedule constraints; no optimization policy changed. Settings includes desktop and Android/iPhone Torn PDA URL installation and manual remote configuration fallback. PDA cross-origin compatibility and native durable storage remain test gates for 1P.4. Resume 1P.3b typed session validation/staging.
+
+1P.3b first implementation gate: typed session and historical-cycle validator plus inert account-scoped review preparation, actual natural optimizer producer regression. Not yet exposed in runtime backup or training actions. Continue paid/custom/premium producer fixtures and staged restore gates before enabling recovery.
