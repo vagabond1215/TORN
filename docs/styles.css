@@ -354,7 +354,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 :root[data-theme="light"] .ts-refill-caution{color:#8a5400}
 .ts-refill-caution [role="tooltip"]{display:none;position:absolute;z-index:4;top:calc(100% + .25rem);right:0;width:12rem;padding:.35rem .5rem;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:.72rem}
 .ts-refill-caution:is(:hover,:focus) [role="tooltip"]{display:block}
-.ts-cycle-overrides{position:relative;margin-left:auto}
+.ts-cycle-actions{display:flex;align-items:center;gap:.5rem;margin-left:auto}
+.ts-cycle-actions .tc-stat-tab{padding:.3rem .55rem;border-radius:4px;font-size:.8rem}
+.ts-cycle-overrides{position:relative}
 .ts-cycle-overrides summary{cursor:pointer;padding:.3rem .55rem;border:1px solid var(--border);border-radius:4px;color:var(--accent-strong);font-size:.8rem}
 .ts-cycle-choices{position:absolute;right:0;top:calc(100% + .25rem);z-index:3;width:min(20rem,75vw);max-height:18rem;overflow:auto;display:grid;gap:.4rem;padding:.6rem;background:var(--surface);border:1px solid var(--border);border-radius:4px}
 .ts-cycle-choices label{display:grid;grid-template-columns:3.7rem minmax(0,1fr)}

@@ -9,7 +9,7 @@ const tornTrainSequence=(()=>{
     natural:()=>[],
     maxenergy:()=>[make("xanax"),maxCandyAction(),make("train"),make("refill"),make("train"),make("xanax"),make("train")],
     mini:()=>[make("xanax"),maxCandyAction(),make("ecstasy"),make("train"),make("refill"),make("train"),make("xanax"),make("train")],
-    low:()=>[maxCandyAction(),make("ecstasy"),make("train"),make("refill"),make("train")],
+    low:()=>[maxCandyAction(),make("ecstasy"),make("train"),make("refill"),make("train"),{...make("wait"),untilDrug:true}],
     jump:()=>[...jumpStart(),make("dvd",5),make("ecstasy"),make("train"),make("refill"),make("train")],
     maxhappy:()=>[...jumpStart(),make("externalHappy"),make("ecstasy"),make("train"),make("refill"),make("train")],
     custom:()=>[make("train")]
@@ -41,7 +41,7 @@ const tornTrainSequence=(()=>{
   const startingTime=Object.fromEntries(templates.map(([id])=>[id,0]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openTimelines=new Set(),editedPlans=new Set();
-  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7,cycleOverrides=[],overridesOpen=false;
+  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7,cycleOverrides=[],overridesOpen=false,showOptimal=true;
   let planPreferenceOwner;
   function restoreAction(saved){
     if(!saved||typeof saved.type!=="string"||!Object.hasOwn(names,saved.type))return null;
@@ -49,6 +49,7 @@ const tornTrainSequence=(()=>{
     if(saved.type==="train"&&["full","drug"].includes(saved.when))action.when=saved.when;
     if(["candy","dvd"].includes(saved.type)&&saved.max===true)action.max=true;
     if(saved.type==="candy"&&(saved.candyHappy==="any"||positive(saved.candyHappy)))action.candyHappy=saved.candyHappy==="any"?"any":Number(saved.candyHappy);
+    if(saved.type==="wait"&&saved.untilDrug===true)action.untilDrug=true;
     return action;
   }
   function loadPlanPreferences(){
@@ -62,6 +63,7 @@ const tornTrainSequence=(()=>{
     const valid=new Set(templates.map(([id])=>id));
     cycleOverrides=Array.isArray(saved?.cycleOverrides)?saved.cycleOverrides.slice(0,28).map(id=>valid.has(id)?id:""):[];
     overridesOpen=false;
+    showOptimal=saved?.showOptimal!==false;
     selected.clear();openTimelines.clear();editedPlans.clear();
     for(const id of (Array.isArray(saved?.selected)?saved.selected:["natural","jump"]))if(valid.has(id))selected.add(id);
     for(const id of (Array.isArray(saved?.expanded)?saved.expanded:[]))if(valid.has(id))openTimelines.add(id);
@@ -81,7 +83,7 @@ const tornTrainSequence=(()=>{
     const plans=Object.fromEntries(templates.map(([id])=>[id,{
       energy:startingEnergy[id],time:startingTime[id],actions:editedPlans.has(id)?steps[id]:undefined
     }]));
-    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays,cycleOverrides}));}catch{}
+    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays,cycleOverrides,showOptimal}));}catch{}
   }
   function templateButtons(){loadPlanPreferences();return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'<button type="button" class="tc-stat-tab ts-settings-toggle '+(settingsOpen?"is-selected":"")+'" data-ts-settings aria-expanded="'+settingsOpen+'" aria-controls="ts-plan-settings" title="Time, cooldowns, effects, prices"><span aria-hidden="true">⚙</span> Settings</button></div>';}
   function activeTemplates(){return templates.filter(([id])=>selected.has(id));}
@@ -362,7 +364,7 @@ const tornTrainSequence=(()=>{
         if(!v.warnings.includes(warning))v.warnings.push(warning);
       }else if(type==="train")train();
       else if(type==="wait"){
-        const seconds=Math.max(0,Math.ceil(n(a.minutes)*60));
+        const seconds=a.untilDrug?v.drug:Math.max(0,Math.ceil(n(a.minutes)*60));
         cutoff=v.time+seconds>limit;
         advance(seconds);
       }
@@ -373,7 +375,7 @@ const tornTrainSequence=(()=>{
       point();
       const executed=!v.errors.length&&!cutoff,end=snap();
       actionStates[i]={start,end,executed};
-      if(executed)v.log.push({i:i+1,type,parent:i,editable:!automatic,midnightRefill,start,end,quantity:isBooster?(type==="candy"?Object.values(rowUsed).reduce((sum,q)=>sum+q,0):v.costs.dvd-rowInfo[i].dvdBefore):1});
+      if(executed)v.log.push({i:i+1,type,parent:i,editable:!automatic,midnightRefill,start,end,reason:type==="wait"&&a.untilDrug?"Drug cooldown":undefined,quantity:isBooster?(type==="candy"?Object.values(rowUsed).reduce((sum,q)=>sum+q,0):v.costs.dvd-rowInfo[i].dvdBefore):1});
       return executed;
     }
     function tornDay(){return Math.floor((cfg.tornClockMin*60+v.time)/86400);}
@@ -711,13 +713,13 @@ const tornTrainSequence=(()=>{
       '<div class="ts-market-prices"><span>Xanax '+priceText(p.xanaxPrice)+'</span><span>Ecstasy '+priceText(p.ecstasyPrice)+'</span><span>eDVD '+priceText(p.dvdPrice)+'</span><span>Point '+priceText(p.pointPrice)+'</span></div>'+
       '<label class="ts-switch"><input type="checkbox" data-ts-auto '+(p.autoWait?"checked":"")+'>Automatically wait when a cooldown blocks an action</label></div>';
   }
-  function row(side,a,index,info){
+  function row(side,a,index,info,event){
     const booster=["candy","dvd"].includes(a.type),wait=a.type==="wait";
     const ceiling=a.type==="candy"?maxCandy(p):maxDvd(p);
     const tier=a.candyHappy??p.candyHappy,attr=' data-ts-side="'+side+'" data-ts-index="'+index+'"';
     const candyOptions=["any",...new Set([25,35,50,75,100,150,250,...candyStock().tiers])];
-    const configurable=booster||wait,editorId="ts-editor-"+side+"-"+index;
-    const short=a.type==="candy"?"Candy ×"+(info?.qty??a.qty):a.type==="dvd"?"eDVD ×"+(info?.qty??a.qty):wait?"Wait "+fmt(a.minutes,2)+"m":"";
+    const configurable=booster||(wait&&!a.untilDrug),editorId="ts-editor-"+side+"-"+index;
+    const short=a.type==="candy"?"Candy ×"+(info?.qty??a.qty):a.type==="dvd"?"eDVD ×"+(info?.qty??a.qty):wait?(a.untilDrug?waitTitle("Drug cooldown")+(event?" "+clock(event.end.time-event.start.time):""):"Wait "+fmt(a.minutes,2)+"m"):"";
     const types=actionOptions.map(([id,label])=>'<option value="'+id+'" '+(a.type===id?"selected":"")+'>'+$(a.type===id&&short?short:label)+'</option>').join("");
     const detail=booster?'<div class="ts-booster-row"><label>'+(a.type==="candy"?"Candy:":"eDVD:")+'</label><input type="number" min="0" max="'+ceiling+'" step="1" value="'+(info?.qty??a.qty)+'"'+attr+' data-ts-edit="qty" aria-label="Quantity"><button type="button" class="button secondary" data-ts-op="max"'+attr+' aria-pressed="'+Boolean(a.max)+'" '+(info?.maximum==null?"disabled":"")+'>MAX</button>'+(a.type==="candy"?'<select'+attr+' data-ts-edit="candy-tier" aria-label="Candy happiness">'+candyOptions.map(h=>'<option value="'+h+'" '+(h===tier?"selected":"")+'>'+(h==="any"?"Any":h+" Happy")+'</option>').join("")+'</select>':'<small>'+fmt(p.dvdHappy)+' Happy each</small>')+'</div><div class="ts-booster-summary">'+(a.type==="candy"&&tier==="any"?Object.entries(info?.used??{}).map(([name,q])=>$(q+"× "+name)).join(" · "):"")+(info?.happy?' <strong>+'+fmt(info.happy)+' Happy</strong>':"")+(info?.held==null?' <small>Inventory or preceding step unavailable</small>':' <small>'+fmt(info.held)+' held · '+fmt(info.allowance)+' CD allowance'+(a.type==="dvd"&&info.qty>info.held?' · '+fmt(info.qty-info.held)+' to purchase':"")+'</small>')+'</div>':"";
     const editor= configurable?'<div class="ts-row-editor" id="'+editorId+'" popover="auto" data-ts-editor="'+editorId+'" role="dialog" aria-label="'+$(names[a.type])+' settings"><div class="ts-row-editor-title"><strong>'+$(names[a.type])+'</strong><button type="button" class="ts-editor-close" popovertarget="'+editorId+'" popovertargetaction="hide" aria-label="Close settings">×</button></div>'+
@@ -754,7 +756,7 @@ const tornTrainSequence=(()=>{
     list.forEach((action,i)=>{
       const events=byParent.get(i)||[],main=events.find(e=>e.editable);
       rows+=events.filter(e=>!e.editable).map(e=>dependencyRow(e,offset)).join("");
-      rows+='<tr class="ts-editable-row"><td>'+(main?clock(offset+main.end.time):"—")+'</td><td>'+data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,action,i,data.rowInfo[i])+'</td>'+timelineCells(main?.end,main?.start)+'</tr>';
+      rows+='<tr class="ts-editable-row"><td>'+(main?clock(offset+main.end.time):"—")+'</td><td>'+data.notices.filter(x=>x.index===i).map(x=>'<div class="ts-cd-notice '+(x.critical?"critical":"hazard")+'">'+(x.critical?"":"⚠ ")+$(x.text)+'</div>').join("")+row(side,action,i,data.rowInfo[i],main)+'</td>'+timelineCells(main?.end,main?.start)+'</tr>';
     });
     rows+=(byParent.get(list.length)||[]).map(e=>dependencyRow(e,offset)).join("");
     return '<div class="ts-log ts-merged"><div class="ts-log-scroller"><table><thead><tr><th>Time</th><th>Action</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th><th>Stat change</th><th>Current stat</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
@@ -934,7 +936,8 @@ const tornTrainSequence=(()=>{
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
       '<span class="fine-print">'+fmt(hours,2)+'h shown</span>'+
       (energyRefillUsedToday()?'<span class="ts-refill-caution" tabindex="0" aria-label="Refill caution" aria-describedby="ts-refill-caution-note"><span aria-hidden="true">⚠</span><span id="ts-refill-caution-note" role="tooltip">Today’s Points Energy refill has already been used.</span></span>':"")+
-      cycleOverrideControls(slots,mixed)+'</div>';
+      '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+
+      cycleOverrideControls(slots,mixed)+'</div></div>';
   }
   function render(context){
     if(context)ctx=context;
@@ -957,11 +960,11 @@ const tornTrainSequence=(()=>{
       const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||active[0]?.[0]||"natural"),Infinity);
       end=Math.max(end,forced.elapsed);
     }
-    const mixed=results.length||hasOverrides?optimizeCycles([...new Set(["natural",...active.map(([id])=>id)])],slots,end,continuous):null;
+    const mixed=((showOptimal&&results.length)||hasOverrides)?optimizeCycles([...new Set(["natural",...active.map(([id])=>id)])],slots,end,continuous):null;
     if(mixed)results.push({id:"mixed",label:hasOverrides?"Mixed plan":"Optimized plan",data:mixed.data});
     const chartHours=end/3600;
     return controls()+(results.length||hasOverrides?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
-      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,mixed)+(mixed?"" : '<p class="fine-print">No complete mixed sequence fits these settings.</p>')+
+      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,mixed)+(mixed||(!showOptimal&&!hasOverrides)?"" : '<p class="fine-print">No complete mixed sequence fits these settings.</p>')+
       (results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
   }
@@ -1051,6 +1054,12 @@ const tornTrainSequence=(()=>{
       }
     });
     view.addEventListener("click",event=>{
+      if(event.target.closest("[data-ts-optimal]")){
+        showOptimal=!showOptimal;
+        savePlanPreferences();
+        rebuild("[data-ts-optimal]");
+        return;
+      }
       const settings=event.target.closest("[data-ts-settings]");if(settings){settingsOpen=!settingsOpen;settings.setAttribute("aria-expanded",String(settingsOpen));settings.classList.toggle("is-selected",settingsOpen);const panel=view.querySelector("#ts-plan-settings");if(panel)panel.hidden=!settingsOpen;return;}
       const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);savePlanPreferences();rebuild();view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
       const mode=event.target.closest("[data-ts-cooldown-mode]");
