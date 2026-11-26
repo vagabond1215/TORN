@@ -18,7 +18,7 @@ const tornGuideApi=(()=>{
     honors:24*hrs,medals:24*hrs,honorCatalog:30*days,medalCatalog:30*days,gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
-    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog","missions","factionWars"],
+    home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog","missions","factionWars","travel","races"],
     trainingProgress:["bars","cooldowns","battlestats","refills"],
     energy:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel"],
     calendar:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel","education","organizedcrime","virus","rehabStats","factionChain","races","calendarCatalog","calendar"],
@@ -30,6 +30,7 @@ const tornGuideApi=(()=>{
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
     railTimers:["education","virus","itemCatalog","cooldowns","organizedcrime","factionWars","factionRankedWars","travel","money"],
     activity:["virus","travel","racingrecords","races"],
+    quickStatus:["icons","travel","races","cooldowns"],
     crime:["bars","skills","itemCatalog"],
     merits:["honors","medals","honorCatalog","medalCatalog","merits","meritCatalog"],
     checklist:["bars","merits","meritCatalog","job","education","educationCatalog","money","icons","profile","organizedcrime","virus"],
