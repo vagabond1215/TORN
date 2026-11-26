@@ -174,7 +174,10 @@ const tornRoadmap=(()=>{
     if(el.checked)selected.push(value);
     write(activeProfile?activeKey("playstyle:selection"):"playstyle:guest",JSON.stringify(selected));
    }else if(el.dataset.homePref==="weeklyBudget"){
-    updateBudget(el);return;
+    updateBudget(el);
+    const planner=document.querySelector('#tc-sequencer:has([data-ts-optimal-budget][aria-pressed="true"])');
+    if(planner&&!planner.closest("[hidden]"))planner.innerHTML=tornTrainSequence.render();
+    return;
    }else if(el.dataset.homePref&&el.checked){
     const p=preferences(),key=el.dataset.homePref;
     if(allowedPreference(key,el.value)){

@@ -41,7 +41,7 @@ const tornTrainSequence=(()=>{
   const startingTime=Object.fromEntries(templates.map(([id])=>[id,0]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openTimelines=new Set(),editedPlans=new Set();
-  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7,cycleOverrides=[],overridesOpen=false,showOptimal=true;
+  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7,cycleOverrides=[],overridesOpen=false,showOptimal=true,showOptimalBudget=false;
   let planPreferenceOwner;
   function restoreAction(saved){
     if(!saved||typeof saved.type!=="string"||!Object.hasOwn(names,saved.type))return null;
@@ -64,6 +64,7 @@ const tornTrainSequence=(()=>{
     cycleOverrides=Array.isArray(saved?.cycleOverrides)?saved.cycleOverrides.slice(0,28).map(id=>valid.has(id)?id:""):[];
     overridesOpen=false;
     showOptimal=saved?.showOptimal!==false;
+    showOptimalBudget=saved?.showOptimalBudget===true;
     selected.clear();openTimelines.clear();editedPlans.clear();
     for(const id of (Array.isArray(saved?.selected)?saved.selected:["natural","jump"]))if(valid.has(id))selected.add(id);
     for(const id of (Array.isArray(saved?.expanded)?saved.expanded:[]))if(valid.has(id))openTimelines.add(id);
@@ -83,7 +84,7 @@ const tornTrainSequence=(()=>{
     const plans=Object.fromEntries(templates.map(([id])=>[id,{
       energy:startingEnergy[id],time:startingTime[id],actions:editedPlans.has(id)?steps[id]:undefined
     }]));
-    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays,cycleOverrides,showOptimal}));}catch{}
+    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays,cycleOverrides,showOptimal,showOptimalBudget}));}catch{}
   }
   function templateButtons(){loadPlanPreferences();return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'<button type="button" class="tc-stat-tab ts-settings-toggle '+(settingsOpen?"is-selected":"")+'" data-ts-settings aria-expanded="'+settingsOpen+'" aria-controls="ts-plan-settings" title="Time, cooldowns, effects, prices"><span aria-hidden="true">⚙</span> Settings</button></div>';}
   function activeTemplates(){return templates.filter(([id])=>selected.has(id));}
@@ -875,13 +876,10 @@ const tornTrainSequence=(()=>{
     return {...data,complete:data.complete&&segments.length===sequence.length,
       elapsed:offset+data.time,segments,firstCycle,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
-  function optimizeCycles(ids,slots,end,continuous,{cap,priceOf,overrides=cycleOverrides,projection={}}={}){
-    const actionsFor=projection.actionsFor??(id=>steps[id]);
+  function weeklyPurchaseCost(){
     const credits=payload("money","money")?.points;
     const purchases=trainingPurchases(Math.floor(positive(credits?.current??credits)??0));
-    const budget=cap!==undefined?cap:typeof tornRoadmap==="undefined"?null:tornRoadmap.preferences().weeklyBudget;
-    const weeklySpend=data=>{
-      if(priceOf)return priceOf(data);
+    return data=>{
       const costs={};
       const payments=[];
       let spent=0,previous=0,max=0,first=0;
@@ -898,6 +896,11 @@ const tornTrainSequence=(()=>{
       }
       return max;
     };
+  }
+  function optimizeCycles(ids,slots,end,continuous,{cap,priceOf,overrides=cycleOverrides,projection={}}={}){
+    const actionsFor=projection.actionsFor??(id=>steps[id]);
+    const budget=cap!==undefined?cap:typeof tornRoadmap==="undefined"?null:tornRoadmap.preferences().weeklyBudget;
+    const weeklySpend=priceOf??weeklyPurchaseCost();
     const rank=(a,b)=>b.data.gain-a.data.gain||a.data.elapsed-b.data.elapsed||a.cost-b.cost;
     const choices=ids.filter(id=>actionsFor(id).length&&!actionsFor(id).some(step=>step.type==="externalHappy"));
     let frontier=[{sequence:[]}],best=null;
@@ -921,7 +924,8 @@ const tornTrainSequence=(()=>{
     if(!continuous)best=frontier[0]??null;
     return best;
   }
-  function optimizeChart(results,slots,end){
+  function optimizeChart(results,slots,end,budget=null){
+    const weeklySpend=budget==null?null:weeklyPurchaseCost();
     const overrides=cycleOverrides.slice(0,slots);
     const lastOverride=overrides.findLastIndex(Boolean);
     const actionsFor=id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id];
@@ -931,12 +935,24 @@ const tornTrainSequence=(()=>{
     const consider=data=>{
       if(!best||data.gain>best.data.gain)best={data};
     };
-    if(lastOverride<0)for(const {data} of results)consider(data);
+    const affordable=data=>{
+      if(!weeklySpend)return true;
+      const cost=weeklySpend(data);
+      return cost!==null&&cost<=budget;
+    };
+    if(lastOverride<0){
+      for(const {data} of results)if(affordable(data))consider(data);
+      if(weeklySpend&&ids.includes("natural")&&!results.some(({id})=>id==="natural")){
+        const natural=projectCycles("natural",Infinity,{end,continuous:true});
+        if(affordable(natural))consider(natural);
+      }
+    }
     for(let index=0;index<maxDepth&&frontier.length;index++){
       const next=[];
       const choices=overrides[index]?[overrides[index]]:ids;
       for(const parent of frontier)for(const id of choices){
         const sequence=[...parent.sequence,id],data=mixedProjection(sequence,end,{actionsFor});
+        if(!affordable(data))continue;
         if(index>=lastOverride&&data.segments.length>lastOverride&&!data.errors.length)consider(data);
         if(data.complete&&data.elapsed<end&&(!parent.data||data.elapsed>parent.data.elapsed||
           data.gain>parent.data.gain))next.push({sequence,data});
@@ -964,6 +980,7 @@ const tornTrainSequence=(()=>{
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
       '<span class="fine-print" title="Each plan repeats within the same comparison window">'+fmt(hours,2)+'h shown</span>'+
       '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" title="Maximize projected stat gain without a cash budget" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+
+      '<button type="button" class="tc-stat-tab '+(showOptimalBudget?"is-selected":"")+'" title="Maximize projected stat gain within your weekly Energy budget" data-ts-optimal-budget aria-pressed="'+showOptimalBudget+'">Optimal Budget</button>'+
       cycleOverrideControls(slots,mixed)+'</div></div>';
   }
   function render(context){
@@ -990,12 +1007,15 @@ const tornTrainSequence=(()=>{
       end=Math.max(end,forced.elapsed);
     }
     const results=active.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true})}));
-    const mixed=((showOptimal&&results.length)||hasOverrides)?optimizeChart(results,slots,end):null;
+    const budget=typeof tornRoadmap==="undefined"?null:tornRoadmap.preferences().weeklyBudget;
+    const mixed=(showOptimal||(hasOverrides&&!showOptimalBudget))&&(results.length||hasOverrides)?optimizeChart(results,slots,end):null;
+    const budgeted=showOptimalBudget&&(results.length||hasOverrides)?optimizeChart(results,slots,end,budget):null;
     if(mixed)results.push({id:"mixed",label:hasOverrides?"Mixed plan":"Optimal sequence",data:mixed.data});
+    if(budgeted)results.push({id:"budget",label:"Optimal Budget",data:budgeted.data});
     const chartHours=end/3600;
     return controls()+(results.length||hasOverrides?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
-      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,mixed)+(mixed||(!showOptimal&&!hasOverrides)?"" : '<p class="fine-print">No complete mixed sequence fits these settings.</p>')+
-      (results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
+      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,mixed??budgeted)+(mixed||budgeted||(!showOptimal&&(showOptimalBudget||!hasOverrides))?"" : '<p class="fine-print">No complete mixed sequence fits these settings.</p>')+
+      (showOptimalBudget&&!budgeted?'<p class="fine-print">No sequence fits the weekly budget and cycle overrides.</p>':"")+(results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
   }
   function wire(view){
@@ -1084,6 +1104,12 @@ const tornTrainSequence=(()=>{
       }
     });
     view.addEventListener("click",event=>{
+      if(event.target.closest("[data-ts-optimal-budget]")){
+        showOptimalBudget=!showOptimalBudget;
+        savePlanPreferences();
+        rebuild("[data-ts-optimal-budget]");
+        return;
+      }
       if(event.target.closest("[data-ts-optimal]")){
         showOptimal=!showOptimal;
         savePlanPreferences();

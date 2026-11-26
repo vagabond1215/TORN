@@ -17,10 +17,10 @@ const tornRightRail=(()=>{
   function controls(){
     return '<div class="rail-visibility-controls" role="group" aria-label="Right pane visibility">'+sections.map(([id,label,icon])=>'<button type="button" class="rail-visibility-toggle" data-rail-visibility="'+id+'" aria-pressed="'+!hiddenSections.has(id)+'" aria-label="Toggle '+label+'" title="Toggle '+label+'"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg></button>').join("")+'</div>';
   }
-  function syncControls(route){
+  function syncControls(){
     const controls=document.querySelector(".rail-visibility-controls");
     if(!controls)return;
-    controls.hidden=!tornGuideApi.isConnected()||route==="profile";
+    controls.hidden=!tornGuideApi.isConnected();
     for(const btn of controls.querySelectorAll("[data-rail-visibility]")){
       const enabled=!hiddenSections.has(btn.dataset.railVisibility);
       btn.setAttribute("aria-pressed",String(enabled));
@@ -123,12 +123,12 @@ const tornRightRail=(()=>{
       (_,classes,title,actions)=>'<details class="'+classes+' rail-section" data-rail-section="'+key+'" '+(collapsed.has(key)?"":"open")+'><summary class="panel-heading"><span class="rail-section-title">'+title+'</span>'+actions+'</summary>')
       .replace(/<\/section>$/,"</details>");
   }
-  function render(route=tornGuideApi.routeName()){
+  function render(){
     const el=host();if(!el)return;
-    syncControls(route);
+    syncControls();
     const connected=tornGuideApi.isConnected();
-    const showFocus=route==="home"&&tornRoadmap.activitiesOpen();
-    const showSections=connected&&route!=="profile"&&sections.some(([id])=>!hiddenSections.has(id));
+    const showFocus=tornRoadmap.activitiesOpen();
+    const showSections=connected&&sections.some(([id])=>!hiddenSections.has(id));
     el.hidden=!showFocus&&!showSections;
     let focus=el.querySelector("#home-activities");
     const owner=String(tornGuideApi.state.identity?.id??"guest");
