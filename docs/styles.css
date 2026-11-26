@@ -1566,6 +1566,12 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 :root[data-theme="light"] .ts-series-maxhappy{--ts-series-color:#ad2865}
 :root[data-theme="light"] .ts-series-custom{--ts-series-color:#686868}
 .ts-series-stroke{fill:none;stroke:var(--ts-series-color);stroke-width:2.5;stroke-dasharray:var(--ts-series-dash,none);stroke-linecap:var(--ts-series-cap,butt);stroke-linejoin:round}
+.ts-cycle-actions .ts-cycle-eye{display:inline-flex;align-items:center;justify-content:center;min-width:2rem;align-self:stretch}
+.ts-cycle-boundaries{display:none;pointer-events:none}
+.ts-chart.show-cycle-boundaries .ts-cycle-boundaries{display:inline}
+.ts-cycle-marker{stroke:var(--ts-series-color);stroke-width:1;vector-effect:non-scaling-stroke;opacity:.32}
+.ts-cycle-marker-start{opacity:.20}
+.ts-cycle-marker-partial-start,.ts-cycle-marker-partial-end{stroke-dasharray:2 3;opacity:.48}
 .ts-series-end{fill:var(--ts-series-color);stroke:var(--ts-chart-surface);stroke-width:1}
 .ts-series.is-blocked .ts-series-end{fill:var(--ts-chart-surface);stroke:var(--ts-series-color);stroke-width:1.5}
 
