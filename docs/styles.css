@@ -350,6 +350,12 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-cycle-controls label{display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:650}
 .ts-cycle-controls :is(select,input){padding:.25rem .4rem;background:var(--canvas);color:var(--text);border:1px solid var(--border);border-radius:4px}
 .ts-cycle-controls input{width:4rem}
+.ts-cycle-overrides{position:relative;margin-left:auto}
+.ts-cycle-overrides summary{cursor:pointer;padding:.3rem .55rem;border:1px solid var(--border);border-radius:4px;color:var(--accent-strong);font-size:.8rem}
+.ts-cycle-choices{position:absolute;right:0;top:calc(100% + .25rem);z-index:3;width:min(20rem,75vw);max-height:18rem;overflow:auto;display:grid;gap:.4rem;padding:.6rem;background:var(--surface);border:1px solid var(--border);border-radius:4px}
+.ts-cycle-choices label{display:grid;grid-template-columns:3.7rem minmax(0,1fr)}
+.ts-cycle-choices small{grid-column:2;color:var(--muted)}
+.ts-series-mixed{--ts-series-color:var(--accent-strong);--ts-series-dash:14 4 3 4}
 .ts-outcomes>p{margin:.4rem 0}
 .ts-chart{display:block;width:100%;height:auto;background:var(--ts-chart-surface);border:1px solid var(--border);border-radius:6px;margin:.9rem auto 0}
 .ts-legend{text-align:center;color:var(--muted);font-size:.78rem;margin-top:.35rem}
@@ -1016,13 +1022,12 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .guide-right-rail .home-work .home-pair dd{max-width:100%;font-size:.76rem;white-space:nowrap}
 .guide-right-rail .home-battle .panel-heading a,
 .guide-right-rail .home-work .panel-heading a{font-size:.7rem;color:var(--accent-strong)}
-.rail-timer-header{display:flex;align-items:stretch;border-bottom:1px solid var(--border)}
-.rail-timer-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:1;min-width:0}
-.rail-timer-header button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font:inherit;font-size:.72rem;font-weight:650;padding:.4rem .1rem;cursor:pointer}
-.rail-timer-header button:hover,.rail-timer-header button:focus-visible,.rail-timer-header button[aria-pressed="true"]{color:var(--accent-strong);background:var(--raised)}
-.rail-timer-header button[aria-pressed="true"]{border-bottom-color:var(--accent)}
-.rail-timer-header .rail-timer-refresh{padding-inline:.45rem;font-size:1rem;line-height:1}
-.rail-timer-header button:disabled{opacity:.5;cursor:wait}
+.rail-timers .panel-heading button{
+  border:1px solid var(--border);background:transparent;border-radius:4px;
+  padding:.2rem .35rem;font-size:.68rem;color:var(--accent-strong);
+}
+.rail-timers .panel-heading button:hover{border-color:var(--accent)}
+.rail-timers .panel-heading button:disabled{opacity:.5;cursor:wait}
 .rail-timer-list{margin:0}
 .rail-timer-row{
   display:flex;align-items:baseline;justify-content:space-between;gap:.3rem;
@@ -1989,9 +1994,6 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 #reports-dock .report-icon{display:grid;place-items:center;flex:0 0 36px;width:36px;height:var(--guide-bar-height);border:0;border-radius:0;background:transparent;color:var(--accent-strong);padding:0;cursor:pointer}
 #reports-dock .report-icon:hover,#reports-dock .report-icon:focus-visible{background:var(--raised);outline:1px solid var(--accent);outline-offset:-1px}
 #reports-dock .report-customize{padding-inline:.4rem;gap:.35rem}
-.rec-tile[data-rec-group="restock"]>.rec-tile-body{padding:0}
-.restock-tab-panel,.restock-inventory-note{padding:0 .7rem}
-.restock-inventory-note{margin-bottom:.7rem}
 .restock-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--border)}
 .restock-tabs button{padding:.45rem .15rem;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font:inherit;font-size:.78rem;font-weight:650;cursor:pointer}
 .restock-tabs button:hover,.restock-tabs button:focus-visible,.restock-tabs button[aria-pressed="true"]{background:var(--surface);color:var(--accent-strong)}
@@ -1999,10 +2001,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .restock-tab-panel .crime-recommendations{margin-top:0}
 .restock-tab-panel .restock-row{display:grid;grid-template-columns:minmax(0,1fr);gap:.25rem}
 .restock-row>.restock-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:.45rem;align-items:baseline}
-.restock-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:.15rem .4rem;min-width:0}
-.restock-item strong{min-width:0;overflow-wrap:anywhere}
-.restock-item .restock-stock{font-size:.72rem;color:var(--muted)}
-.restock-line>span,.restock-stock{white-space:nowrap;font-variant-numeric:tabular-nums}
+.restock-line>span{white-space:nowrap;font-variant-numeric:tabular-nums}
 .restock-row>.restock-source{grid-template-columns:minmax(0,1fr) auto;color:var(--muted)}
 .restock-forecast{display:flex;align-items:center;gap:.5rem;margin:0 0 .65rem}
 .restock-forecast input{width:4.5rem}

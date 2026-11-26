@@ -36,7 +36,7 @@ const tornTrainSequence=(()=>{
   const startingTime=Object.fromEntries(templates.map(([id])=>[id,0]));
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openTimelines=new Set(),editedPlans=new Set();
-  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7;
+  let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7,cycleOverrides=[],overridesOpen=false;
   let planPreferenceOwner;
   function restoreAction(saved){
     if(!saved||typeof saved.type!=="string"||!Object.hasOwn(names,saved.type))return null;
@@ -55,6 +55,8 @@ const tornTrainSequence=(()=>{
     chartCycles=Math.floor(clamp(saved?.chartCycles,1,28));
     continuousDays=Math.floor(clamp(saved?.continuousDays??7,1,28));
     const valid=new Set(templates.map(([id])=>id));
+    cycleOverrides=Array.isArray(saved?.cycleOverrides)?saved.cycleOverrides.slice(0,28).map(id=>valid.has(id)?id:""):[];
+    overridesOpen=false;
     selected.clear();openTimelines.clear();editedPlans.clear();
     for(const id of (Array.isArray(saved?.selected)?saved.selected:["natural","jump"]))if(valid.has(id))selected.add(id);
     for(const id of (Array.isArray(saved?.expanded)?saved.expanded:[]))if(valid.has(id))openTimelines.add(id);
@@ -74,7 +76,7 @@ const tornTrainSequence=(()=>{
     const plans=Object.fromEntries(templates.map(([id])=>[id,{
       energy:startingEnergy[id],time:startingTime[id],actions:editedPlans.has(id)?steps[id]:undefined
     }]));
-    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays}));}catch{}
+    try{localStorage.setItem("torn-city-guide:plan-view:"+planPreferenceOwner,JSON.stringify({selected:[...selected],expanded:[...openTimelines],plans,chartMode,chartCycles,continuousDays,cycleOverrides}));}catch{}
   }
   function templateButtons(){loadPlanPreferences();return '<div class="ts-template-toggles" role="group" aria-label="Compare templates">'+templates.map(([id,short,label])=>'<button type="button" class="tc-stat-tab '+(selected.has(id)?"is-selected":"")+'" data-ts-template="'+id+'" aria-pressed="'+selected.has(id)+'" title="'+label+'">'+short+'</button>').join("")+'<button type="button" class="tc-stat-tab ts-settings-toggle '+(settingsOpen?"is-selected":"")+'" data-ts-settings aria-expanded="'+settingsOpen+'" aria-controls="ts-plan-settings" title="Time, cooldowns, effects, prices"><span aria-hidden="true">⚙</span> Settings</button></div>';}
   function activeTemplates(){return templates.filter(([id])=>selected.has(id));}
@@ -355,7 +357,7 @@ const tornTrainSequence=(()=>{
       midnightRefillDays.add(tornDay());
       execute(make("train"),parent,{automatic:true});
     }
-    function run(list){
+    function run(list,{midnightJump=cfg.midnightJump}={}){
       let jumpBoosted=false,refillDay=null;
       for(let i=0;i<list.length;i++){
         const type=list[i].type;
@@ -365,7 +367,7 @@ const tornTrainSequence=(()=>{
         if(!execute(list[i],i,{beforeEcstasy:next?.type==="ecstasy",beforeXanax:list[i+1]?.type==="xanax"}))return false;
         if(["candy","dvd","externalHappy"].includes(type)&&v.happy>happyBefore)jumpBoosted=true;
         if(type==="refill")refillDay=jumpBoosted&&!usedBefore&&dayBefore===tornDay()?dayBefore:null;
-        if(type==="train"&&list[i-1]?.type==="refill"&&refillDay===tornDay()&&cfg.midnightJump&&cfg.autoWait){
+        if(type==="train"&&list[i-1]?.type==="refill"&&refillDay===tornDay()&&midnightJump&&cfg.autoWait){
           addMidnightRefill(i+1);
           refillDay=null;
         }
@@ -464,9 +466,8 @@ const tornTrainSequence=(()=>{
         }
         if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
       }
-      function runProgram(id,actions,cycles,hours,captureCycle=false){
+      function runProgram(id,actions,cycles,hours){
         const engine=createEngine({...cfg,hours,midnightJump:midnightJumps.has(id)}),v=engine.state,executed=[];
-        let cycle=null;
         for(let week=0;week<hours/168&&!v.errors.length;week++){
           const weekEnd=Math.min(engine.limit,(week+1)*604800);
           for(let k=0;k<cycles&&!v.errors.length&&v.time<weekEnd;k++){
@@ -478,16 +479,12 @@ const tornTrainSequence=(()=>{
             }else if(startingEnergy[id]==="full"&&v.energy<energyRules().cap)engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false);
             if(!engine.run(actions))break;
             executed.push(...actions);
-            if(captureCycle&&id!=="natural"&&!cycle){
-              const first=engine.finish(executed,{tail:false});
-              cycle={length:first.log.filter(step=>step.type!=="happyReset").length,spend:cashCost(first)};
-            }
             if(v.time<end)naturalUntil(engine,end);
             else if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
           }
           if(!v.errors.length)naturalUntil(engine,weekEnd);
         }
-        return {result:engine.finish(executed),executed,cycle};
+        return {result:engine.finish(executed),executed};
       }
       const templatesById=new Map();
       for(const [id,short,label] of candidates){
@@ -510,15 +507,6 @@ const tornTrainSequence=(()=>{
       results.sort((a,b)=>b.gain-a.gain||a.cashCost-b.cashCost);
       const selected=results[0];
       if(selected){
-        if(selected.id==="natural"){
-          const train=selected.execution.findIndex(step=>step.type==="train"&&step.energy>0);
-          selected.cycleExecution=train<0?[]:selected.execution.slice(0,train+1);
-          selected.cycleSpend=0;
-        }else{
-          const {cycle}=runProgram(selected.id,templatesById.get(selected.id),selected.cycles,168,true);
-          selected.cycleExecution=cycle?selected.execution.slice(0,cycle.length):selected.execution;
-          selected.cycleSpend=cycle?.spend??null;
-        }
         const forecastDays=options.restockForecastDays;
         const horizons=[...new Set([1,7,28,...(Number.isInteger(forecastDays)&&forecastDays>=1&&forecastDays<=28?[forecastDays]:[])])];
         const periods=horizons.map(days=>{
@@ -769,31 +757,111 @@ const tornTrainSequence=(()=>{
     const data=engine.finish(list,{tail:false});
     return {...data,elapsed:v.time,completed,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
-  function comparisonControls(hours){
+  function mixedProjection(sequence,end,{fill=false}={}){
+    const first=sequence[0],offset=Math.min(end,startingTime[first]??0);
+    const clockSeconds=Math.round(p.tornClockMin*60)+offset;
+    const engine=createEngine({limitSeconds:end-offset,startEnergy:"current",
+      refillUsedToday:clockSeconds<86400&&energyRefillUsedToday(),
+      startDrugMin:Math.max(0,p.startDrugMin-offset/60),startBoosterMin:Math.max(0,p.startBoosterMin-offset/60),
+      tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900});
+    const segments=[];
+    for(const id of sequence){
+      const actions=steps[id],v=engine.state;
+      if(!actions.length||v.time>engine.limit)break;
+      const before=v.stat;
+      if(startingEnergy[id]==="zero"&&actions[0]?.type==="xanax"){
+        if(!engine.waitFor(v.drug,"Drug cooldown"))break;
+        if(v.energy>=engine.gymCost&&!engine.execute(make("train"),0))break;
+      }
+      if(startingEnergy[id]==="full"&&v.energy<energyRules().cap&&
+        !engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false))break;
+      if(!engine.run(actions,{midnightJump:midnightJumps.has(id)}))break;
+      segments.push({id,at:offset+v.time,gain:v.stat-before});
+    }
+    const cycleState=engine.finish(sequence.flatMap(id=>steps[id]),{tail:false});
+    if(fill&&segments.length===sequence.length){
+      while(engine.canTrain){
+        const delay=engine.fullEnergyDelay();
+        if(engine.state.time+delay>engine.limit)break;
+        if(!engine.waitFor(delay,"Full Energy",false)||!engine.execute(make("train"),0))break;
+      }
+    }
+    const data=fill?engine.finish(sequence.flatMap(id=>steps[id]),{tail:false}):cycleState;
+    return {...data,complete:data.complete&&segments.length===sequence.length,
+      elapsed:offset+data.time,segments,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
+  }
+  function optimizeCycles(ids,slots,end,continuous){
+    const credits=payload("money","money")?.points;
+    const purchases=trainingPurchases(Math.floor(positive(credits?.current??credits)??0));
+    const budget=typeof tornRoadmap==="undefined"?null:tornRoadmap.preferences().weeklyBudget;
+    const rank=(a,b)=>b.data.gain-a.data.gain||a.data.elapsed-b.data.elapsed||a.cost-b.cost;
+    const choices=ids.filter(id=>steps[id].length&&!steps[id].some(step=>step.type==="externalHappy"));
+    let frontier=[{sequence:[]}],best=null;
+    const lastOverride=cycleOverrides.slice(0,slots).findLastIndex(Boolean);
+    for(let index=0;index<slots&&frontier.length;index++){
+      const required=cycleOverrides[index],next=[];
+      for(const parent of frontier)for(const id of required?[required]:choices){
+        const sequence=[...parent.sequence,id],data=mixedProjection(sequence,end);
+        const cost=purchases(data.costs).cost;
+        if(data.complete&&(required||cost!==null&&(budget==null||cost<=budget)))next.push({sequence,data,cost:cost??Infinity});
+      }
+      next.sort(rank);
+      frontier=next.slice(0,5);
+      if(continuous&&index>=lastOverride){
+        for(const candidate of frontier){
+          const sample={...candidate,data:mixedProjection(candidate.sequence,end,{fill:true})};
+          if(!best||rank(sample,best)<0)best=sample;
+        }
+      }
+    }
+    if(!continuous)best=frontier[0]??null;
+    return best;
+  }
+  function cycleOverrideControls(slots,mixed){
+    return '<details class="ts-cycle-overrides" '+(overridesOpen?"open":"")+'><summary>Cycle overrides</summary>'+
+      '<div class="ts-cycle-choices">'+Array.from({length:slots},(_,i)=>{
+        const picked=cycleOverrides[i]??"",segment=mixed?.data.segments[i];
+        const automatic=templates.find(([id])=>id===segment?.id)?.[2];
+        return '<label>Cycle '+(i+1)+' <select data-ts-cycle-override="'+i+'">'+
+          '<option value="">'+$(automatic?"Auto · "+automatic:"Auto")+'</option>'+
+          templates.map(([id,,name])=>'<option value="'+id+'" '+(id===picked?"selected":"")+'>'+$(name)+'</option>').join("")+'</select>'+
+          (segment?'<small>'+clock(segment.at)+' · +'+fmt(segment.gain,2)+'</small>':"")+'</label>';
+      }).join("")+'</div></details>';
+  }
+  function comparisonControls(hours,slots,mixed){
     return '<div class="ts-cycle-controls" aria-label="Stat growth chart range">'+
       '<label>Projection <select data-ts-chart-mode><option value="cycles" '+(chartMode==="cycles"?"selected":"")+'>Cycles</option><option value="continuous" '+(chartMode==="continuous"?"selected":"")+'>Continuous</option></select></label>'+
       (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
-      '<span class="fine-print">'+fmt(hours,2)+'h shown</span></div>';
+      '<span class="fine-print">'+fmt(hours,2)+'h shown</span>'+cycleOverrideControls(slots,mixed)+'</div>';
   }
   function render(context){
     if(context)ctx=context;
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
     loadPlanPreferences();loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
     const active=activeTemplates();
-    for(const [id] of active)if(!editedPlans.has(id))steps[id]=cycleActions(id);
+    for(const [id] of templates)if(!editedPlans.has(id))steps[id]=cycleActions(id);
     const oneCycle=active.map(([id,,label])=>({id,label,data:projectCycles(id,1)}));
     const shortest=entries=>Math.max(60,...entries.map(({id,data})=>startingTime[id]+data.elapsed));
     p.hours=shortest(oneCycle)/3600;
-    const continuous=chartMode==="continuous";
+    const continuous=chartMode==="continuous",slots=continuous?28:chartCycles;
     const duration=continuous?Math.max(shortest(oneCycle),continuousDays*86400):null;
-    const results=!continuous&&chartCycles===1?oneCycle:active.map(([id,,label])=>({
+    const results=!continuous&&chartCycles===1?[...oneCycle]:active.map(([id,,label])=>({
       id,label,data:continuous?projectCycles(id,Infinity,{end:duration,continuous:true}):projectCycles(id,chartCycles)
     }));
-    const chartHours=(duration??shortest(results))/3600;
-    return controls()+(results.length?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
-      '<div class="ts-outcomes">'+comparisonControls(chartHours)+'<div class="ts-comparison-results">'+results.map(({label,data})=>'<span>'+$(label)+': <strong>'+(data.complete?fmt(data.final,2):"Blocked")+'</strong> ('+fmt(data.used)+' E)</span>').join("")+
-      '</div>'+chart(results,chartHours)+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
+    let end=duration??shortest(results);
+    const overrides=cycleOverrides.slice(0,slots);
+    const hasOverrides=overrides.some(Boolean);
+    if(!continuous&&hasOverrides){
+      const forced=mixedProjection(Array.from({length:slots},(_,i)=>overrides[i]||active[0]?.[0]||"natural"),Infinity);
+      end=Math.max(end,forced.elapsed);
+    }
+    const mixed=results.length||hasOverrides?optimizeCycles([...new Set(["natural",...active.map(([id])=>id)])],slots,end,continuous):null;
+    if(mixed)results.push({id:"mixed",label:hasOverrides?"Mixed plan":"Optimized plan",data:mixed.data});
+    const chartHours=end/3600;
+    return controls()+(results.length||hasOverrides?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
+      '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,mixed)+(mixed?"" : '<p class="fine-print">No complete mixed sequence fits these settings.</p>')+
+      (results.length?chart(results,chartHours):"")+'</div>':'<p class="fine-print">Select one or more templates above.</p>')+
       '<p class="fine-print">Simulated actions only. Drug cooldown varies; overdoses and addiction are not predicted. '+(tornHappinessBook().active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. Active effect assumed for the comparison window.":"Happiness resets on Torn quarter-hours.")+' Points refills are limited to one per Torn day.</p>';
   }
   function wire(view){
@@ -809,6 +877,7 @@ const tornTrainSequence=(()=>{
     }
     view.addEventListener("toggle",event=>{
       const editor=event.target;
+      if(editor.matches?.(".ts-cycle-overrides")&&editor.isConnected)overridesOpen=editor.open;
       if(editor.matches?.(".ts-row-editor")&&editor.matches(":popover-open")){
         const gear=view.querySelector('[data-ts-gear="'+editor.id+'"]');
         positionEditor(editor,gear);
@@ -827,6 +896,14 @@ const tornTrainSequence=(()=>{
     };
     view.addEventListener("change",event=>{
       const el=event.target;
+      if(el.matches("[data-ts-cycle-override]")){
+        const index=Number(el.dataset.tsCycleOverride);
+        cycleOverrides[index]=templates.some(([id])=>id===el.value)?el.value:"";
+        overridesOpen=true;
+        savePlanPreferences();
+        rebuild('[data-ts-cycle-override="'+index+'"]');
+        return;
+      }
       if(el.matches("[data-ts-chart-mode],[data-ts-chart-cycles],[data-ts-chart-days]")){
         if(el.hasAttribute("data-ts-chart-mode"))chartMode=el.value==="continuous"?"continuous":"cycles";
         if(el.hasAttribute("data-ts-chart-cycles"))chartCycles=Math.floor(clamp(el.value,1,28));
