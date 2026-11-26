@@ -2209,3 +2209,19 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .growth-optimal-plan li{padding:.12rem 0}
 .growth-cycle-current{color:var(--accent-strong);font-weight:650}
 .growth-optimal-plan small{color:var(--muted)}
+
+/* Crime/Energy header refills: keep links and controls independent of summary toggle. */
+.rec-tile[data-rec-group="crime"]>.rec-tile-heading,.rec-tile[data-rec-group="growth"]>.rec-tile-heading{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.35rem;padding:.35rem .35rem .35rem 1.6rem}
+.rec-tile[data-rec-group="crime"] .rec-header-actions,.rec-tile[data-rec-group="growth"] .rec-header-actions{position:static;transform:none}
+.rec-tile[data-rec-group="crime"] .rec-tile-link,.rec-tile[data-rec-group="growth"] .rec-tile-link{justify-self:center}
+.rec-header-refill{font-size:.7rem;font-weight:600;line-height:1.15;white-space:nowrap;color:var(--muted);margin:0}
+.rec-header-refill[hidden]{display:none}
+.rec-header-refill.rec-nerve-refill.is-available{color:var(--nerve-color)}
+.rec-header-refill.rec-energy-refill.is-available{color:#73bb40}
+:root[data-theme="light"] .rec-header-refill.rec-energy-refill.is-available{color:#417c20}
+.rec-crime-settings:not([hidden]){width:100%;flex-wrap:nowrap}
+.rec-crime-settings select{margin-left:auto;min-width:0;max-width:48%;font-size:.75rem;padding:.2rem .3rem}
+.rec-crime-footer{margin-top:.65rem;padding-top:.5rem;border-top:1px solid var(--border);justify-content:space-between;font-size:.78rem}
+.rec-unique-links summary{cursor:pointer;color:var(--accent-strong)}
+.rec-unique-links>a{display:block;padding:.15rem 0}
+@media(max-width:380px){.rec-header-refill{white-space:normal;max-width:7rem}.rec-crime-settings{gap:.2rem}.rec-crime-settings select{max-width:42%}}
