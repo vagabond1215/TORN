@@ -913,7 +913,7 @@ const tornTrainSequence=(()=>{
     const data=engine.finish(list,{tail:false});
     return {...data,elapsed:v.time,offset,completed,segments,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
-  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false,matchTemplateStart=false}={}){
+  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false,matchTemplateStart=false,repeatLast=false}={}){
     const first=sequence[0],offset=respectOffset?Math.min(end,startingTime[first]??0):0;
     const clockSeconds=Math.round(p.tornClockMin*60)+offset;
     const engine=createEngine({limitSeconds:end-offset,startEnergy:matchTemplateStart?startingEnergy[first]:"current",allowPartialDvd,skipUsedRefill,
@@ -922,12 +922,13 @@ const tornTrainSequence=(()=>{
       tornClockMin:clockSeconds/60,resetAfterSec:900-clockSeconds%900});
     const segments=[];
     let firstCycle=null;
-    for(const [index,id] of sequence.entries()){
+    for(let index=0;index<sequence.length||(repeatLast&&sequence.length);index++){
+      const id=sequence[Math.min(index,sequence.length-1)];
       const actions=actionsFor(id),v=engine.state;
       if(!actions.length||v.time>engine.limit)break;
       const before=v.stat,start=offset+v.time,logStart=v.log.length;
       const prepare=!matchTemplateStart||index>0;
-      const switching=sequence[index-1]!==id;
+      const switching=index<sequence.length&&sequence[index-1]!==id;
       if(prepare&&(!matchTemplateStart||switching)&&startingEnergy[id]==="zero"&&actions[0]?.type==="xanax"){
         if(!engine.waitFor(v.drug,"Drug cooldown"))break;
         if(v.energy>=engine.gymCost&&!engine.execute(make("train"),0))break;
@@ -1030,13 +1031,17 @@ const tornTrainSequence=(()=>{
     // promising prefixes from a search over plans that were already selected.
     for(const [i,first] of ids.entries())for(const second of ids.slice(i)){
       const pair=first===second?[first]:[first,second];
-      const maxDepth=Math.max(lastOverride+1,...pair.map(id=>completed.get(id)??0),1,minDepth)+5;
+      const maxDepth=lastOverride>=0?slots:Math.max(...pair.map(id=>completed.get(id)??0),1,minDepth)+5;
       let frontier=[{sequence:[]}];
       for(let index=0;index<maxDepth&&frontier.length;index++){
         const next=[];
         const choices=overrides[index]?[overrides[index]]:pair;
         for(const parent of frontier)for(const id of choices){
-          const sequence=[...parent.sequence,id],data=mixedProjection(sequence,end,{...projection,actionsFor});
+          const sequence=[...parent.sequence,id];
+          // Manual slots choose the prefix. The last resolved slot then
+          // repeats through the shared window, just like a standalone plan.
+          const repeatLast=lastOverride>=0&&sequence.length===slots;
+          const data=mixedProjection(sequence,end,{...projection,actionsFor,repeatLast});
           if(!affordable(data))continue;
           if(index>=lastOverride&&data.segments.length>lastOverride&&!data.errors.length)consider(data,sequence);
           if(data.complete&&data.elapsed<end&&(!parent.data||data.elapsed>parent.data.elapsed||
@@ -1050,7 +1055,7 @@ const tornTrainSequence=(()=>{
   }
   function cycleOverrideControls(slots,mixed){
     return '<details class="ts-cycle-overrides" data-ts-manual-settings '+(overridesOpen?"open":"")+'><summary aria-label="Manual cycle settings" title="Manual cycle settings"><span aria-hidden="true">⚙</span></summary>'+
-      '<div class="ts-cycle-choices">'+Array.from({length:slots},(_,i)=>{
+      '<div class="ts-cycle-choices"><small>The last cycle repeats through the rest of the chart window.</small>'+Array.from({length:slots},(_,i)=>{
         const picked=cycleOverrides[i]??"",segment=mixed?.data.segments[i];
         const automatic=templates.find(([id])=>id===segment?.id)?.[2];
         return '<label>Cycle '+(i+1)+' <select data-ts-cycle-override="'+i+'">'+
