@@ -876,7 +876,7 @@ const tornTrainSequence=(()=>{
   // attempt at the boundary is not an additional program.
   // Built-in templates consume the actual stack rather than manufacturing
   // a zero/full starting balance. Explicit custom action lists stay literal.
-  function cycleStart(id,actions,engine,{adaptive=true,prepare=true}={}){
+  function cycleStart(id,actions,engine,{adaptive=true,prepare=true,livePolicy=false}={}){
     const v=engine.state,stackPlan=id==="jump"||id==="maxhappy";
     if(adaptive&&!editedPlans.has(id)&&stackPlan){
       const leading=actions.findIndex(a=>a.type!=="xanax");
@@ -903,7 +903,7 @@ const tornTrainSequence=(()=>{
         if(!engine.execute({...make("train"),energyLimit:v.energy-750},-1,{automatic:true}))return null;
       }
     }
-    if(prepare&&id!=="custom"&&startingEnergy[id]==="full"&&v.energy<energyRules().cap&&
+    if(prepare&&id!=="custom"&&(livePolicy?defaultEnergy[id]:startingEnergy[id])==="full"&&v.energy<energyRules().cap&&
       !engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false))return null;
     return actions;
   }
@@ -1058,7 +1058,7 @@ const tornTrainSequence=(()=>{
     const segments=[];
     while(list.length&&completed<cycles&&v.time<=engine.limit){
       const before=v.time,statBefore=v.stat,logStart=v.log.length,checkpoint=cycleCheckpoint(v,offset,id),prefix=Number.isFinite(end)?engine.snapshot():null;
-      const actions=cycleStart(id,list,engine,{adaptive:liveStart||startingEnergy[id]==="current"||completed>0,prepare:liveStart||completed>0||startingEnergy[id]==="current"});
+      const actions=cycleStart(id,list,engine,{adaptive:liveStart||startingEnergy[id]==="current"||completed>0,prepare:liveStart||completed>0||startingEnergy[id]==="current",livePolicy:liveStart});
       if(!actions||!engine.run(actions)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
       completed++;
       segments.push({id,at:offset+v.time,start:offset+before,logStart,gain:v.stat-statBefore});
@@ -1089,7 +1089,7 @@ const tornTrainSequence=(()=>{
       if(!actions.length||v.time>engine.limit)break;
       const before=v.stat,start=offset+v.time,logStart=v.log.length,checkpoint=cycleCheckpoint(v,offset,id),prefix=Number.isFinite(end)?engine.snapshot():null;
       const prepare=!matchTemplateStart||index>0||startingEnergy[id]==="current";
-      const prepared=cycleStart(id,actions,engine,{adaptive:prepare,prepare});
+      const prepared=cycleStart(id,actions,engine,{adaptive:prepare,prepare,livePolicy:!matchTemplateStart});
       if(!prepared||!engine.run(prepared,{midnightJump:midnightJumps.has(id)})){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
       segments.push({id,at:offset+v.time,start,logStart,gain:v.stat-before});
       if(matchTemplateStart&&start===offset+v.time){
