@@ -2,6 +2,7 @@
 
 const topics = {
   calendar:{title:"Calendar",summary:"Training, rehab and faction schedule",intro:"Shared activity schedule in Torn City Time."},
+  log:{title:"Log",summary:"Personal activity history",intro:"Browse locally captured Torn activity entries."},
   checklist: {
     title: "Checklist",
     summary: "Milestones and daily routine",
@@ -58,6 +59,7 @@ const topics = {
 };
 
 const icons = {
+  log: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5M8 18h3"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18M7 14h2m3 0h2m3 0h1M7 17h2m3 0h2"/>',
   merits: '<circle cx="12" cy="8" r="5"/><path d="m8 12-2 10 6-4 6 4-2-10"/>',
   education: '<path d="m2 9 10-5 10 5-10 5zM6 11v6c4 3 8 3 12 0v-6M22 9v7"/>',
@@ -224,6 +226,7 @@ function renderTopic(route) {
   const view = byId("topic-view");
   if (route === "checklist") { view.innerHTML = tornRoadmap.render(); tornRoadmap.wire(view); return; }
   if (route === "calendar") {view.innerHTML=tornCrimeGuide.renderCalendar();tornCrimeGuide.wireCalendar(view);return;}
+  if (route === "log") {view.innerHTML=tornLogGuide.render();tornLogGuide.wire(view);tornLogGuide.request();return;}
   if (route === "stats") { view.innerHTML = tornStatPlanner.render()+tornToolsGuide.contextLinks("stats"); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render()+tornToolsGuide.contextLinks("racing"); tornRacingGuide.wire(view); return; }
   if (route === "crime") { view.innerHTML = tornCrimeGuide.render()+tornToolsGuide.contextLinks("crime"); if(activeProfile)wireNotes("crime"); return; }
