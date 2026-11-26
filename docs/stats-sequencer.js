@@ -978,8 +978,12 @@ const tornTrainSequence=(()=>{
     const retain=()=>{if(!affordable()||v.errors.length)return;const s=score();if(better(s,bestScore)){bestScore=s;best=engine.snapshot();}};
     // Keep the conventional truncated execution as a fallback only if it
     // respects the budget and the consumable locks.
-    engine.restore(baseline);retain();
     const row=10000;
+    // The truncated template can have a useful stack at the boundary.
+    // Train it before comparison rather than valuing unspent Energy.
+    engine.restore({...baseline,cutoff:false});
+    if(v.energy>=engine.gymCost)engine.execute(make("train"),row,{automatic:true});
+    retain();
     const runBatch=(drug,boost,refill)=>{
       const before=v.stat,used=v.used;
       if(drug==="xanax"&&!engine.execute(make("xanax"),row,{automatic:true}))return false;
@@ -997,8 +1001,25 @@ const tornTrainSequence=(()=>{
     // Each policy makes different tradeoffs between immediate training,
     // conserving boost/drug cooldown for a larger Energy pool, and using
     // ordinary consumables versus the plan's premium boost.
-    for(const policy of ["immediate","stack","ordinary","natural"]){
+    const policies=["immediate","reserve","ordinary","natural"];
+    // A genuinely stacked jump can beat repeated small trains, especially
+    // when an existing stack or a premium boost is available.
+    if(allowOrdinary&&limit-prefix.state.time>=p.xanaxCDMin*60)policies.push("stack2","stack3","stack4");
+    for(const policy of policies){
       engine.restore(prefix);
+      const stack=policy.startsWith("stack")?Number(policy.slice(5)):0;
+      if(stack){
+        let valid=true;
+        for(let k=0;k<stack;k++){
+          if(v.energy>=1000)break;
+          if(v.time+v.drug>limit||!engine.waitFor(v.drug,"Drug cooldown")||
+            !engine.execute(make("xanax"),row,{automatic:true})||!affordable()){valid=false;break;}
+        }
+        // Reserve the drug cooldown for a potential Ecstasy boost, but
+        // never sacrifice the final train just to wait for it.
+        if(valid&&v.drug>0&&v.time+v.drug<=limit)valid=engine.waitFor(v.drug,"Drug cooldown");
+        if(!valid)continue;
+      }
       let events=0;
       while(v.time<=limit&&events++<120){
         const base=engine.snapshot(),remaining=limit-v.time,cap=energyRules().cap;
@@ -1007,9 +1028,13 @@ const tornTrainSequence=(()=>{
         const boostReady=allowOrdinary&&v.booster<=p.boosterCapH*3600;
         const enough=v.energy>=cap||remaining<engine.fullEnergyDelay()||remaining===0;
         const canSpend=policy!=="natural"&&allowOrdinary;
-        const canBoost=canSpend&&(policy!=="stack"||enough||refillReady);
+        const canBoost=canSpend&&(policy!=="reserve"||enough||refillReady);
         const drugs=[""];
-        if(canSpend&&drugReady){if(policy!=="stack"||enough||v.energy+250>=cap)drugs.push("xanax");if(canBoost&&(v.energy>=engine.gymCost||refillReady))drugs.push("ecstasy");}
+        if(canSpend&&drugReady){
+          const readyToBoost=canBoost&&(v.energy>=engine.gymCost||refillReady);
+          if(policy!=="reserve"||!readyToBoost)drugs.push("xanax");
+          if(readyToBoost)drugs.push("ecstasy");
+        }
         const boosts=[""];
         if(canBoost&&boostReady&&candyStock().loaded)boosts.push("candy");
         if(canBoost&&boostReady&&allowDvd&&policy!=="ordinary")for(let qty=1;qty<=5;qty++)boosts.push(qty);
@@ -1018,10 +1043,10 @@ const tornTrainSequence=(()=>{
         // A batch is atomic for budget purposes: no untrained consumable
         // purchase or unaffordable partial refill can leak into the result.
         for(const drug of drugs)for(const boost of boosts){
-          if(drug==="xanax"&&boost&&policy==="stack")continue;
+          if(drug==="xanax"&&boost&&policy==="reserve")continue;
           for(const refill of canSpend&&refillReady?[false,true]:[false]){
             if(!drug&&!boost&&!refill&&!enough&&policy!=="immediate")continue;
-            if(!drug&&!boost&&!refill&&v.energy<engine.gymCost)continue;
+            if(!drug&&!boost&&!refill&&base.state.energy<engine.gymCost)continue;
             engine.restore(base);
             if(!runBatch(drug,boost,refill))continue;
             const s=score();
