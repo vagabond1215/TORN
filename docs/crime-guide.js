@@ -348,12 +348,14 @@ const tornCrimeGuide = (() => {
     };
     if(manual){refreshIds.push(crimeIds[manual.name]);return card(manual);}
     if(recUniques){
-      const missing=allowed.filter(x=>x.total>0&&x.uniqueCount!==null&&x.uniqueCount<x.total).sort((a,b)=>a.rank-b.rank||b.cs-a.cs||a.i-b.i);
-      const unknown=allowed.filter(x=>x.total>0&&x.uniqueCount===null);
-      const shown=incompleteUniquesOnly?missing:allowed.filter(x=>x.total>0&&x.uniqueCount!==null).sort((a,b)=>a.rank-b.rank||b.cs-a.cs||a.i-b.i);
-      refreshIds.push(...new Set([...shown,...unknown].map(x=>crimeIds[x.name])));
-      const summary='<li><div><strong>Unique hunt</strong><small>'+missing.length+' crimes with remaining documented uniques · '+unknown.length+' awaiting collection data. CS 100 crimes are included. Check in-game stars and requirements; counts are not a mapping of individual missing rewards.</small></div></li>';
-      return summary+shown.map(card).join("")+(unknown.length?'<li><div><strong>Awaiting unique data</strong><small>'+esc(unknown.map(x=>x.name).join(", "))+'</small></div></li>':"")+(!missing.length&&!unknown.length?'<li><div><strong>All documented unique counts reached for the selected risk.</strong></div></li>':"");
+      const scope=allowed.filter(x=>!recIncomplete||x.cs!==null&&x.cs<100);
+      const unknownSkill=recIncomplete?allowed.filter(x=>x.total>0&&x.cs===null):[];
+      const missing=scope.filter(x=>x.total>0&&x.uniqueCount!==null&&x.uniqueCount<x.total).sort((a,b)=>a.rank-b.rank||b.cs-a.cs||a.i-b.i);
+      const unknown=scope.filter(x=>x.total>0&&x.uniqueCount===null);
+      const shown=incompleteUniquesOnly?missing:scope.filter(x=>x.total>0&&x.uniqueCount!==null).sort((a,b)=>a.rank-b.rank||b.cs-a.cs||a.i-b.i);
+      refreshIds.push(...new Set([...shown,...unknown,...unknownSkill].map(x=>crimeIds[x.name])));
+      const summary='<li><div><strong>Unique hunt</strong><small>'+missing.length+' crimes with remaining documented uniques · '+unknown.length+' awaiting collection data. '+(recIncomplete?"Only crimes below 100 CS are included.":"CS 100 crimes are included.")+' Check in-game stars and requirements; counts are not a mapping of individual missing rewards.</small></div></li>';
+      return summary+shown.map(card).join("")+(unknown.length?'<li><div><strong>Awaiting unique data</strong><small>'+esc(unknown.map(x=>x.name).join(", "))+'</small></div></li>':"")+(unknownSkill.length?'<li><div><strong>Awaiting crime skill data</strong><small>'+esc(unknownSkill.map(x=>x.name).join(", "))+'</small></div></li>':"")+(!missing.length&&!unknown.length&&!unknownSkill.length?'<li><div><strong>No remaining documented uniques in the selected filters.</strong></div></li>':"");
     }
     const eligible=allowed.filter(x=>x.cs!==null&&(!recIncomplete||x.cs<100));
     const rank=(a,b)=>(risk==="low"?a.rank-b.rank:b.cs-a.cs)||a.rank-b.rank||a.i-b.i;
@@ -402,7 +404,7 @@ const tornCrimeGuide = (() => {
     dialog.showModal();
   }
   function crimeFilters(){
-    return '<div class="rec-oc-filters"><div class="rec-crime-settings"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button><select data-rec-crime-override aria-label="Manual crime override" title="Manual crime override"><option value="auto" '+(crimeOverride==="auto"?"selected":"")+'>Auto</option>'+crimes.map(([name])=>'<option value="'+esc(name)+'" '+(crimeOverride===name?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></div></div>';
+    return '<div class="rec-oc-filters"><div class="rec-crime-settings"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+recIncomplete+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button><select data-rec-crime-override aria-label="Manual crime override" title="Manual crime override"><option value="auto" '+(crimeOverride==="auto"?"selected":"")+'>Auto</option>'+crimes.map(([name])=>'<option value="'+esc(name)+'" '+(crimeOverride===name?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></div></div>';
   }
   function pickpocketRows(cs,risk,uniqueOnly=false,allCollected=false){
     const maxTier={low:0,medium:1,high:3}[risk]??0;
@@ -1515,7 +1517,7 @@ const tornCrimeGuide = (() => {
         return;
       }
       if(btn.hasAttribute("data-rec-uniques")){recUniques=!recUniques;try{localStorage.setItem("torn-city-guide:crime-uniques:"+recOwner,String(recUniques));}catch{}refreshRecommendations(view);view.querySelector("[data-rec-uniques]")?.focus();return;}
-      if(btn.hasAttribute("data-rec-incomplete")){if(recUniques){recUniques=false;recIncomplete=true;try{localStorage.setItem("torn-city-guide:crime-uniques:"+recOwner,"false");}catch{}}else recIncomplete=!recIncomplete;try{localStorage.setItem("torn-city-guide:crime-incomplete:"+recOwner,String(recIncomplete));}catch{}refreshRecommendations(view);return;}
+      if(btn.hasAttribute("data-rec-incomplete")){recIncomplete=!recIncomplete;try{localStorage.setItem("torn-city-guide:crime-incomplete:"+recOwner,String(recIncomplete));}catch{}refreshRecommendations(view);view.querySelector("[data-rec-incomplete]")?.focus();return;}
       if(btn.hasAttribute("data-rec-history")){btn.disabled=true;tornInvestmentHistory.refresh().finally(()=>{if(location.hash==="#home")refreshRecommendations(view);});return;}
       if(btn.dataset.recType){
         const id=btn.dataset.recType;
