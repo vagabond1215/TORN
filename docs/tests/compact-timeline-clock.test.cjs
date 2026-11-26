@@ -1,0 +1,17 @@
+"use strict";
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
+const clock=new Function(read("tct-timers.js")+"\nreturn tornTctClock;")();
+const at=Date.UTC(2026,10,26,8,47,9),local=new Date(at),pad=n=>String(n).padStart(2,"0");
+assert.equal(clock.formatClock(at),"26NOV 08:47:09 TCT");
+assert.equal(clock.formatClock(Date.UTC(2026,0,1,0,0,0)),"01JAN 00:00:00 TCT");
+assert.equal(clock.formatClock(at,"local"),pad(local.getDate())+["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][local.getMonth()]+" "+[local.getHours(),local.getMinutes(),local.getSeconds()].map(pad).join(":")+" Local");
+const data=new Map(),store={getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)};
+const build=new Function("localStorage",read("preferences.js")+"\nreturn tornGuidePreferences;");
+const prefs=build(store);
+assert.equal(prefs.get("clockMode"),"tct");assert.equal(prefs.set("clockMode","local"),true);
+assert.equal(build(store).get("clockMode"),"local");assert.equal(prefs.set("clockMode","invalid"),false);
+assert.equal(prefs.get("timeZone"),"local");
+const html=read("index.html");assert.ok(html.includes('data-tct-clock-mode="tct"')&&html.includes('data-tct-clock-mode="local"'));
+assert.ok(html.indexOf('data-tct-clock-mode="local"')<html.indexOf('id="tct-countdowns"'));
+console.log("Header TCT/local date and seconds, persisted preference and reset timer placement passed.");

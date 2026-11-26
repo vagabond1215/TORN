@@ -11,10 +11,18 @@ const tornTctClock=(()=>{
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
   const seconds=v=>Number.isFinite(Number(v))?Math.max(0,Number(v)):null;
-  const clock=()=>{
-    const d=new Date();
-    return [d.getUTCHours(),d.getUTCMinutes(),d.getUTCSeconds()].map(v=>String(v).padStart(2,"0")).join(":");
-  };
+  const months=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  function formatClock(at=Date.now(),mode="tct"){
+    const d=new Date(at),local=mode==="local",pad=n=>String(n).padStart(2,"0");
+    const day=local?d.getDate():d.getUTCDate(),month=local?d.getMonth():d.getUTCMonth();
+    const parts=local?[d.getHours(),d.getMinutes(),d.getSeconds()]:[d.getUTCHours(),d.getUTCMinutes(),d.getUTCSeconds()];
+    return pad(day)+months[month]+" "+parts.map(pad).join(":")+(local?" Local":" TCT");
+  }
+  const clockMode=()=>typeof tornGuidePreferences!=="undefined"&&tornGuidePreferences.get("clockMode")==="local"?"local":"tct";
+  function syncClockMode(){
+    const mode=clockMode();
+    for(const button of document.querySelectorAll("[data-tct-clock-mode]"))button.setAttribute("aria-pressed",String(button.dataset.tctClockMode===mode));
+  }
   const formatDuration=sec=>{
     if(!Number.isFinite(sec))return "Unavailable";
     if(sec<=0)return "Ready";
@@ -155,7 +163,7 @@ const tornTctClock=(()=>{
     tick();
   }
   function tick(){
-    const time=get("tct-time");if(time)time.textContent=clock();
+    const time=get("tct-time");if(time)time.textContent=formatClock(Date.now(),clockMode());
     if(!opened)return;
     const data=entries();
     for(const item of data){
@@ -169,7 +177,7 @@ const tornTctClock=(()=>{
     if(!panel||!button)return;
     opened=Boolean(value);panel.hidden=!opened;
     button.setAttribute("aria-expanded",String(opened));
-    if(opened)renderRows();
+    if(opened){syncClockMode();renderRows();}
   }
   async function load(){
     if(busy)return;
@@ -202,6 +210,12 @@ const tornTctClock=(()=>{
     const button=get("tct-toggle");
     if(!button)return;
     button.addEventListener("click",()=>open(!opened));
+    for(const control of document.querySelectorAll("[data-tct-clock-mode]"))control.addEventListener("click",()=>{
+      if(typeof tornGuidePreferences!=="undefined")tornGuidePreferences.set("clockMode",control.dataset.tctClockMode);
+      syncClockMode();tick();
+    });
+    window.addEventListener("torn-guide-preferences",()=>{syncClockMode();tick();});
+    syncClockMode();
 
     document.addEventListener("click",event=>{
       if(opened&&!event.target.closest("#tct-widget"))open(false);
@@ -213,5 +227,5 @@ const tornTctClock=(()=>{
     tick();
     interval=setInterval(tick,1000);
   }
-  return {init,tick,entries,formatDuration,utcTime,findEnd,loadManual,renderRows};
+  return {init,tick,entries,formatClock,formatDuration,utcTime,findEnd,loadManual,renderRows};
 })();

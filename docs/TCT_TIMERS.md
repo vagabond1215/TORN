@@ -46,3 +46,5 @@ Browser timers update the visible countdown locally every second. No background 
 - [Torn community schedule of TCT resets](https://www.torn.com/forums.php?p=threads&t=16204780)
 
 Timing and field compatibility checked against available documentation November 23, 2026; direct live authenticated API validation is still required.
+
+Header clock displays `DDMMM HH:MM:SS TCT` (e.g. 26NOV 08:47:09 TCT). TCT/Local mode buttons above the countdown list persist a browser-local clockMode preference independent of the general display timezone; Local uses the browser's own timezone and date. Countdown targets, calendar boundaries and manual war deadlines remain TCT/UTC. Local tick only, no API requests.

@@ -4,7 +4,7 @@
 const tornGuidePreferences=(()=>{
   const key="torn-city-guide:interface:v1";
   const defaults=Object.freeze({
-    theme:"dark",timeZone:"local",externalMode:"tab",contextualQuickAccess:false
+    theme:"dark",timeZone:"local",externalMode:"tab",contextualQuickAccess:false,clockMode:"tct"
   });
   const zones=Object.freeze([
     ["local","Browser local time"],
@@ -23,7 +23,7 @@ const tornGuidePreferences=(()=>{
     theme:new Set(["dark","light","system"]),
     timeZone:new Set(zones.map(([id])=>id)),
     externalMode:new Set(["tab","window"]),
-    contextualQuickAccess:new Set([true,false])
+    contextualQuickAccess:new Set([true,false]),clockMode:new Set(["tct","local"])
   };
   const load=()=>{
     try{

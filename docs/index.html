@@ -6,10 +6,10 @@
   <meta name="description" content="Torn City interactive guide with API-backed character stats, inventory and a beginner progression checklist.">
   <meta name="theme-color" content="#30363a">
   <title>Torn City Guide</title>
-  <link rel="stylesheet" href="./styles.css?v=20261126-compact-timeline1">
+  <link rel="stylesheet" href="./styles.css?v=20261126-date-clock1">
   <script src="./education-reference.js?v=20261124-edu-wiki1" defer></script>
   <script src="./guide-features.js?v=20261126-idle-logs2" defer></script>
-  <script src="./tct-timers.js?v=20261126-revisions2" defer></script>
+  <script src="./tct-timers.js?v=20261126-date-clock1" defer></script>
   <script src="./local-bridge.js?v=20261126-rail-settings1" defer></script>
   <script src="./stats-calculator.js?v=20261126-revisions2" defer></script>
   <script src="./stats-sequencer.js?v=20261126-week-values1" defer></script>
@@ -17,7 +17,7 @@
   <script src="./company-catalog.js?v=20261124-job-filter2" defer></script>
   <script src="./job-guide.js?v=20261125-focus-restock1" defer></script>
   <script src="./roadmap.js?v=20261126-focus-persist1" defer></script>
-  <script src="./preferences.js?v=20261124-live-bars-activity1" defer></script>
+  <script src="./preferences.js?v=20261126-date-clock1" defer></script>
   <script src="./tools-guide.js?v=20261126-rail-merits1" defer></script>
   <script src="./merit-guide.js?v=20261126-merit-calendar1" defer></script>
   <script src="./investment-history.js?v=20261124-history1" defer></script>
@@ -47,10 +47,11 @@
       </button>
       <div class="top-account">
         <div class="tct-widget" id="tct-widget">
-          <button type="button" class="tct-button" id="tct-toggle" aria-controls="tct-dropdown" aria-expanded="false" aria-label="Torn City Time and countdowns">TCT <time id="tct-time">--:--:--</time> <span aria-hidden="true">▾</span></button>
+          <button type="button" class="tct-button" id="tct-toggle" aria-controls="tct-dropdown" aria-expanded="false" aria-label="Date, clock and Torn countdowns"><time id="tct-time">--MMM --:--:-- TCT</time> <span aria-hidden="true">▾</span></button>
           <section class="tct-dropdown" id="tct-dropdown" aria-label="Torn timers" hidden>
-            <h2>Torn countdowns</h2>
-            <p class="fine-print">TCT uses UTC. Scheduled events are approximate where noted.</p>
+            <h2>Clock &amp; countdowns</h2>
+            <div class="tct-clock-modes" role="group" aria-label="Header clock time zone"><button type="button" data-tct-clock-mode="tct" aria-pressed="true">TCT</button><button type="button" data-tct-clock-mode="local" aria-pressed="false">Local</button></div>
+            <p class="fine-print">Reset timers remain based on TCT (UTC). Scheduled events are approximate where noted.</p>
             <div class="tct-countdowns" id="tct-countdowns"></div>
           </section>
         </div>
