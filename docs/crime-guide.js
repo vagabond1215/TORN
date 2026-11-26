@@ -529,7 +529,7 @@ const tornCrimeGuide = (() => {
     const active=tornActivityScheduler.events().find(e=>e.kind==="rehab"&&!e.completedAt&&e.end>Date.now());
     const confirmed=tornActivityScheduler.events().filter(e=>e.kind==="rehab"&&e.completedAt).sort((a,b)=>b.completedAt-a.completedAt)[0];
     if(!active&&!rehab&&!confirmed&&!reserves.warReserve&&!reserves.rehabReserve&&!["preferred","recommended","restricted"].includes(health.level))return "";
-    return '<div class="activity-health activity-rehab-details"><strong>Rehabilitation &amp; activity reserves</strong>'+(warning&&health.level!=="unknown"?'<small>'+esc(warning)+'</small>':"")+
+    return '<div class="activity-rehab-details"><strong>Rehabilitation &amp; activity reserves</strong>'+(warning&&health.level!=="unknown"?'<small>'+esc(warning)+'</small>':"")+
       (active?'<small>Rehab reserved: '+esc(fmt(active.start))+' to '+esc(fmt(active.end))+'</small>':rehab?'<small>Suggested rehab: '+esc(fmt(rehab.start))+' to '+esc(fmt(rehab.end))+' · estimate $'+number(rehab.cost)+(rehab.overlapsCooldown?" · fits cooldown":"")+(rehab.requiresPause?" · pause training":"")+'</small><button type="button" data-activity-rehab>Reserve rehab window</button>':["preferred","recommended","restricted"].includes(health.level)?'<small>No verified travel window yet; check travel eligibility, live status and upcoming commitments.</small>':"")+
       (confirmed?'<small>Last rehab confirmed '+esc(fmt(confirmed.completedAt))+(confirmed.rehabCost==null?" · cost unknown":" · $"+number(confirmed.rehabCost))+'</small>':"")+
       (reserves.warReserve||reserves.rehabReserve?'<small>Reserved cash: war $'+number(reserves.warReserve)+' · rehab $'+number(reserves.rehabReserve)+(reserves.shortfall?" · exceeds available budget":"")+'</small>':"")+'</div>';
@@ -1282,7 +1282,10 @@ const tornCrimeGuide = (() => {
     const rows={merit:[],growth:[],consume:[],crime:[],education:[],money:[]};
     const add=(key,title,detail,link)=>rows[key].push(recItem(title,detail,link));
     const n=v=>v!=null&&v!==""&&Number.isFinite(Number(v))?Number(v):null;
-    for(const x of tornMeritGuide.recommendations())add("merit",x.name,x.detail+" · "+x.effort,x.link);
+    for(const x of tornMeritGuide.recommendations()){
+      const row=recItem(x.name,x.detail+" · "+x.effort,x.link),details=tornMeritGuide.affrontedDetails(x.name,"home");
+      rows.merit.push(details?row.slice(0,-5)+details+"</li>":row);
+    }
     if(!rows.merit.length)add("merit","Award shortlist unavailable","Open Merits to load the award catalog and compare unearned honors.","#merits");
     const {iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,plan}=trainingRecommendation;
     if(educationRisk){
@@ -1624,6 +1627,7 @@ const tornCrimeGuide = (() => {
     layoutRecommendations(view);
   }
   function wireRecommendations(view){
+    tornMeritGuide.wireAffronted(view);
     wireActivity(view);
     layoutRecommendations(view);
     if(view.dataset.ocRecommendationsBound==="1")return;
