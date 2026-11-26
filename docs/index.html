@@ -23,12 +23,13 @@
   <script src="./investment-history.js?v=20261124-history1" defer></script>
   <script src="./activity-scheduler.js?v=20261126-backup3" defer></script>
   <script src="./crime-states.js?v=20261126-crime-states1" defer></script>
-  <script src="./crime-guide.js?v=20261126-energy-clarity2" defer></script>
+  <script src="./training-recovery.js?v=20261126-backup4" defer></script>
+  <script src="./crime-guide.js?v=20261126-backup4" defer></script>
   <script src="./right-rail.js?v=20261126-rail-settings1" defer></script>
   <script src="./log-guide.js?v=20261126-log1" defer></script>
-  <script src="./account-storage.js?v=20261126-backup3" defer></script>
+  <script src="./account-storage.js?v=20261126-backup4" defer></script>
   <script src="./account-backup.js?v=20261126-backup1" defer></script>
-  <script src="./account-backup-ui.js?v=20261126-backup3" defer></script>
+  <script src="./account-backup-ui.js?v=20261126-backup4" defer></script>
   <script src="./guide.js?v=20261126-backup1" defer></script>
 </head>
 <body>
@@ -83,7 +84,7 @@
                 <p>Reload Torn and this guide in the same browser after installation. Torn PDA compatibility and persistent native storage are still being validated; data does not automatically cross apps or devices. The guide works without the companion.</p>
               </details>
             </div>
-            <div class="settings-field"><strong>Data &amp; Backup</strong><button type="button" class="button secondary" id="backup-open" disabled>Encrypted portable backup</button><p class="settings-hint">Export supported account settings and notes. Recovery is currently limited to empty accounts. Existing expenditure records are included; active sessions and archives are not.</p></div>
+            <div class="settings-field"><strong>Data &amp; Backup</strong><button type="button" class="button secondary" id="backup-open" disabled>Encrypted portable backup</button><p class="settings-hint">Export supported account settings and notes. Recovery is currently limited to empty accounts. Existing expenditure records, validated training sessions and cycle history are included. Restored sessions stay on hold.</p></div>
             <div class="settings-footer">
               <a href="#profile" id="settings-account">Account &amp; API</a>
               <button type="button" class="settings-signout" id="settings-signout" disabled>Sign out</button>
@@ -95,7 +96,7 @@
     </div>
   </header>
 
-  <dialog class="restock-settings-dialog" id="backup-dialog" aria-labelledby="backup-title"><form id="backup-form"><header><h2 id="backup-title">Account backup &amp; recovery</h2><button type="button" id="backup-close" aria-label="Close">×</button></header><div class="restock-settings-content"><p class="fine-print">Portable encrypted backup (version 1). Supported account settings, notes, checklists, calendar events and existing expenditure records. Training cycle deductions remain estimates. Restored pending rehab requires manual review. Active sessions and archives are excluded. No API credentials. Use an independent passphrase, not your API key. Keep the backup file and passphrase outside this browser.</p><label>Recovery passphrase <input id="backup-passphrase" type="password" autocomplete="off" minlength="12" maxlength="1024"></label><label>Confirm passphrase (export only) <input id="backup-confirm" type="password" autocomplete="off" maxlength="1024"></label><label>Backup file (restore only) <input id="backup-file" type="file" accept=".tornbackup,application/json"></label><p class="fine-print">Restore requires fresh Torn identity verification and an empty supported account state. No merging, automatic backups or companion recovery yet.</p><p id="backup-status" role="status" aria-live="polite"></p></div><footer><button type="button" class="button secondary" id="backup-export">Export encrypted backup</button><button type="button" id="backup-import">Restore selected backup</button></footer></form></dialog>
+  <dialog class="restock-settings-dialog" id="backup-dialog" aria-labelledby="backup-title"><form id="backup-form"><header><h2 id="backup-title">Account backup &amp; recovery</h2><button type="button" id="backup-close" aria-label="Close">×</button></header><div class="restock-settings-content"><p class="fine-print">Portable encrypted backup (version 1). Supported account settings, notes, checklists, calendar events and existing expenditure records. Training cycle deductions remain estimates. Restored pending rehab requires manual review. Validated training sessions and cycle history are included. Sessions restore on hold; personal/market archives are excluded. No API credentials. Use an independent passphrase, not your API key. Keep the backup file and passphrase outside this browser.</p><label>Recovery passphrase <input id="backup-passphrase" type="password" autocomplete="off" minlength="12" maxlength="1024"></label><label>Confirm passphrase (export only) <input id="backup-confirm" type="password" autocomplete="off" maxlength="1024"></label><label>Backup file (restore only) <input id="backup-file" type="file" accept=".tornbackup,application/json"></label><p class="fine-print">Restore requires fresh Torn identity verification and an empty supported account state. No merging, automatic backups or companion recovery yet.</p><section id="backup-recovery-review" hidden><h3>Restored training session</h3><p id="backup-review-summary"></p><button type="button" id="backup-review-inspect">Refresh and inspect account evidence</button> <button type="button" id="backup-review-discard">Release hold without resuming</button><p class="fine-print">No automatic continuation or expense deduction. Keep the original backup. Releasing the hold discards the staged session, not existing expenditure records; manually reconcile uncertain spending.</p><p id="backup-review-evidence" role="status"></p></section><p id="backup-status" role="status" aria-live="polite"></p></div><footer><button type="button" class="button secondary" id="backup-export">Export encrypted backup</button><button type="button" id="backup-import">Restore selected backup</button></footer></form></dialog>
 
   <nav class="quick-access" id="tool-quickbar" aria-label="Favorite Torn tools and right pane controls"></nav>
 

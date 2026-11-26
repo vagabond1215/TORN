@@ -83,5 +83,30 @@ const tornTrainingRecovery=(()=>{
     if(!validSession(session,now))throw Error("Invalid saved training session; preserve original for review");
     return {key,value:JSON.stringify(session),summary:{label:session.label,stat:session.stat,started:session.started,confirmed:session.index,total:session.actions.length,estimatedCycleSpend:session.cycleSpend,lastConfirmed:session.lastConfirmed??null}};
   }
-  return {validSession,validHistory,prepareReview,reviewKey};
+  function stageValue(playerId,session,createdAt,now=Date.now()){
+    prepareReview(playerId,session,now);
+    if(!observed(createdAt,now))throw Error("Invalid backup creation time");
+    return JSON.stringify({version:1,playerId:String(playerId),backupCreatedAt:createdAt,restoredAt:now,session});
+  }
+  function parseStage(raw,playerId,now=Date.now()){
+    const v=JSON.parse(raw);
+    if(!shape(v,["version","playerId","backupCreatedAt","restoredAt","session"])||v.version!==1||v.playerId!==String(playerId)||!observed(v.backupCreatedAt,now)||!observed(v.restoredAt,now)||v.backupCreatedAt>v.restoredAt+1000||!validSession(v.session,now))throw Error("Invalid recovered training record");
+    return v;
+  }
+  function readStage(store,playerId){
+    if(!/^[1-9][0-9]{0,14}$/.test(String(playerId??"")))return null;
+    try{const raw=store.getItem(reviewKey(playerId));if(raw===null)return null;try{return {...parseStage(raw,playerId),raw};}catch{return {raw,error:"Recovered training record is invalid. Preserve the backup; do not resume."};}}catch{return {error:"Recovery storage unavailable. Check browser storage before training."};}
+  }
+  function held(store,playerId){
+    if(!/^[1-9][0-9]{0,14}$/.test(String(playerId??"")))return false;
+    try{return store.getItem(reviewKey(playerId))!==null;}catch{return true;}
+  }
+  function discardStage(store,playerId,raw,isCurrent){
+    if(typeof raw!=="string"||!isCurrent())throw Error("Account changed before review");
+    const key=reviewKey(playerId);
+    if(store.getItem(key)!==raw||store.getItem(prefix+"training-session:"+playerId)!==null)throw Error("Recovery record changed or a local session exists; preserve both for review");
+    store.removeItem(key);
+    if(store.getItem(key)!==null)throw Error("Could not release recovery hold");
+  }
+  return {validSession,validHistory,prepareReview,reviewKey,stageValue,parseStage,readStage,held,discardStage};
 })();

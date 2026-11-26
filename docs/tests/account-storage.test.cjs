@@ -1,6 +1,6 @@
 "use strict";
 const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
-const source=fs.readFileSync(path.join(__dirname,"..","account-storage.js"),"utf8");
+const source=fs.readFileSync(path.join(__dirname,"..","training-recovery.js"),"utf8")+"\n"+fs.readFileSync(path.join(__dirname,"..","account-storage.js"),"utf8");
 const a=new Function(source+"\nreturn tornAccountStorage;")();
 function storage(entries={}){const m=new Map(Object.entries(entries));return {get length(){return m.size},key:i=>[...m.keys()][i]??null,getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)};}
 const p="torn-city-guide:",id=123;
@@ -10,7 +10,7 @@ assert.deepEqual(snap.records.map(x=>x.section),["build","calendar-events","note
 const dst=storage();assert.equal(a.restoreEmpty(dst,id,snap.records),3);assert.equal(dst.getItem(p+"build:123"),s.getItem(p+"build:123"));
 assert.equal(dst.getItem(p+"build:456"),null);
 assert.throws(()=>a.restoreEmpty(dst,id,snap.records),/already/);
-assert.throws(()=>a.restoreEmpty(storage({[p+"training-session:123"]:"{}"}),id,snap.records),/history/);
+assert.throws(()=>a.restoreEmpty(storage({[p+"training-session:123"]:"{}"}),id,snap.records),/already/);
 for(const bad of [{section:"api:v2:remember",value:"key"},{section:"build",value:'{"choice":"bad","total":1}'},{section:"notes:__proto__",value:"x"},{section:"calendar-events",value:'[{"title":"bad"}]'}])assert.throws(()=>a.validRecords([bad],String(id)));
 assert.throws(()=>a.validRecords([snap.records[0],snap.records[0]],String(id)),/duplicate/);
 assert.throws(()=>a.restoreEmpty(storage(),id,snap.records,()=>false),/changed/);

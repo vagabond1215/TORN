@@ -2,7 +2,7 @@
 const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
 const {webcrypto}=require("node:crypto");
 const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
-const api=new Function("globalThis",read("account-storage.js")+"\n"+read("account-backup.js")+"\nreturn tornAccountBackup;")({crypto:webcrypto});
+const api=new Function("globalThis",read("training-recovery.js")+"\n"+read("account-storage.js")+"\n"+read("account-backup.js")+"\nreturn tornAccountBackup;")({crypto:webcrypto});
 (async()=>{
  const records=[{section:"build",value:'{"choice":"balanced","total":1000}'},{section:"notes:gym",value:"private note"}];
  const pass="a separate recovery passphrase";

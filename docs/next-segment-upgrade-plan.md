@@ -75,3 +75,5 @@ Gym membership and Energy/train replace the stat directive. Primary phase and co
 Training recovery validator now passes generated output for all seven cycle templates and watch evidence checks. Active session backup/restore remains disabled until the independent staged-storage/UI hold and fresh reconciliation gate is wired.
 
 Energy clarity follow-up: structured preparation wait reasons, rechecked Start readiness on countdown expiry, active cooldown priority over future Happiness-reset waits, and equivalent ranked-war phase/Next hierarchy. No war planning-policy changes. Related CJS bodies passed adapted harness; actual mobile and responsive browser checks remain open.
+
+1P.3b staged portable recovery: encrypted backups now include validated training sessions and cycle history; imported sessions are held in a separate account namespace, with Settings inspection/discard and no runnable activation. Next: robust review/reconciliation and serialized revision/merge journal before allowing continuation or companion recovery.

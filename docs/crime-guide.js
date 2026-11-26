@@ -506,15 +506,17 @@ const tornCrimeGuide = (() => {
     const profile=payload("profile","profile"),factionId=Number(profile?.faction_id??profile?.faction?.id);
     if(energyWarSettings().mode!=="off"&&factionId>0&&!inputs.sources.factionWars.ready)
       inputs.criticalIssues.push("Faction war schedule "+inputs.sources.factionWars.status+"; refresh before planning");
-    const options={blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session||activity.blocked||inputs.criticalIssues.length>0,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth",
+    const recoveryHeld=trainingRecoveryHeld();
+    if(recoveryHeld)inputs.criticalIssues.push("Restored training session held for manual review");
+    const options={blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:recoveryHeld||!!session||activity.blocked||inputs.criticalIssues.length>0,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth",
       deadline:activity.deadline,requireDrugClear:warDeadline!==null&&activity.deadline===warDeadline,warXanaxSeconds:activity.war?Math.max(28800,activity.war.cd/1000):28800,reserveXanax:activity.war&&activity.war.cutoff<now+604800000?4:0,liveInputs:inputs};
-    return {now,prefs,settings,session,activity,health,iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,budget,reserves,options,inputs};
+    return {now,prefs,settings,session,recoveryHeld,activity,health,iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,budget,reserves,options,inputs};
   }
   function trainingRecommendationContext(prefs=tornRoadmap.preferences(),now=Date.now()){
     const context=liveOptimizationContext(prefs,now);
     const {settings,session,activity,health,iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,budget,reserves,options}=context;
     const plan=tornStatPlanner.homeTrainingAdvice(budget,prefs.risk,options);
-    const scheduled=activity.statusBlocked?[]:activityEventsForTraining(session,plan?.program,now);
+    const scheduled=context.recoveryHeld||activity.statusBlocked?[]:activityEventsForTraining(session,plan?.program,now);
     const live=recoverySnapshot(now),profile=payload("profile","profile"),st=tornGuideApi.state;
     const status=String(profile?.status?.state??"").toLowerCase();
     const travelAvailable=Number(st.identity?.level??profile?.level)>=15&&["okay","ok"].includes(status)&&!st.errors?.profile&&now-Number(st.fetchedAt?.profile||0)<15*60000&&!activity.blocked;
@@ -599,14 +601,14 @@ const tornCrimeGuide = (() => {
     }catch{return [];}
   }
   function accountForCycle(session){
-    if(!(session.cycleSpend>0))return;
+    if(trainingRecoveryHeld()||!(session.cycleSpend>0))return;
     const entries=trainingSpend();
     if(entries.some(entry=>entry.started===session.started))return;
     entries.push({started:session.started,at:Date.now(),cost:session.cycleSpend});
     localStorage.setItem(trainingSpendKey(),JSON.stringify(entries));
   }
   async function reviewNextCycle(view,session){
-    if(recoveryBusy)return;
+    if(trainingRecoveryHeld()||recoveryBusy)return;
     const owner=sessionOwner,requested=Date.now();
     recoveryBusy=true;recoveryMessage="Cycle complete · updating the next recommendation…";
     refreshRecommendations(view);
@@ -623,12 +625,16 @@ const tornCrimeGuide = (() => {
     }catch(error){recoveryMessage="Could not review the next cycle: "+String(error.message??error);}
     finally{recoveryBusy=false;if(view.isConnected)refreshRecommendations(view);}
   }
+  function trainingRecoveryHeld(){
+    return typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.held(localStorage,tornGuideApi.state.identity?.id);
+  }
   function loadTrainingSession(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
+    if(trainingRecoveryHeld()){sessionOwner=null;trainingSession=null;trainingDraft=null;return null;}
     if(sessionOwner!==owner){sessionOwner=owner;trainingSession=null;try{const x=JSON.parse(localStorage.getItem("torn-city-guide:training-session:"+owner));if(x?.version===1&&Array.isArray(x.actions)&&x.actions.length<=2000&&Number.isFinite(x.started)&&Number.isInteger(x.index)&&x.index>=0&&x.index<=x.actions.length)trainingSession=x;}catch{}}
     return trainingSession;
   }
-  function saveTrainingSession(){try{const key="torn-city-guide:training-session:"+sessionOwner;if(trainingSession)localStorage.setItem(key,JSON.stringify(trainingSession));else localStorage.removeItem(key);}catch{}}
+  function saveTrainingSession(){if(trainingRecoveryHeld()||sessionOwner!==String(tornGuideApi.state.identity?.id??"guest"))return;try{const key="torn-city-guide:training-session:"+sessionOwner;if(trainingSession)localStorage.setItem(key,JSON.stringify(trainingSession));else localStorage.removeItem(key);}catch{}}
   const actionable=x=>Number.isFinite(x.at)&&x.at>=0&&!["wait","autoWait","happyReset"].includes(x.type)&&(x.type!=="train"||x.energy>0)&&(!["candy","dvd"].includes(x.type)||x.quantity>0);
   // Reconcile only future actions. Confirmed steps are immutable; missing live
   // snapshots never imply that an action happened.
@@ -708,6 +714,7 @@ const tornCrimeGuide = (() => {
     }).join("");
   }
   function prepState(plan,blockDrugs){
+    if(trainingRecoveryHeld())return {ready:false,label:"Restored training session held for review",due:null};
     const program=plan?.program,raw=payload("bars","bars"),st=tornGuideApi.state;
     const inputs=tornTrainSequence.liveInputs(st,Date.now(),tornBarProjection),projected=inputs.energy;
     const cd=payload("cooldowns","cooldowns"),drug=cd?.drug;
@@ -803,7 +810,7 @@ const tornCrimeGuide = (() => {
     return false;
   }
   function observeTrainingStep(session,sample=trainingWatchSnapshot(session)){
-    if(!session||!sample||session.index>=session.actions.length)return false;
+    if(trainingRecoveryHeld()||!session||!sample||session.index>=session.actions.length)return false;
     const step=session.actions[session.index],after=Math.max(session.started,session.lastConfirmed??0);
     const watch=session.watch;
     if(!watch||watch.index!==session.index||!watch.sample){session.watch={index:session.index,sample};saveTrainingSession();return false;}
@@ -903,7 +910,7 @@ const tornCrimeGuide = (() => {
     return best;
   }
   function reconcileTrainingProgress(session,live=recoverySnapshot()){
-    if(!session||session.index>=session.actions.length||!live||!session.statKey)return false;
+    if(trainingRecoveryHeld()||!session||session.index>=session.actions.length||!live||!session.statKey)return false;
     const state=tornGuideApi.state;
     if(state.errors?.battlestats)return false;
     const entry=payload("battlestats","battlestats")?.[session.statKey],raw=typeof entry==="object"?entry?.value:entry;
@@ -1157,7 +1164,14 @@ const tornCrimeGuide = (() => {
       (advice.phase==="active"&&!advice.stale?warAttackPanel(advice.attacks):'<small data-war-progress>'+esc(warProgressText(advice))+'</small>')+recoveryPanel()+'</div>';
   }
   let warTraining=null;
+  function recoveryHoldPanel(){
+    const stage=tornTrainingRecovery.readStage(localStorage,tornGuideApi.state.identity?.id),session=stage?.session;
+    return '<div class="growth-card"><div class="growth-warning"><strong>Restored Training Session Held</strong><p>Training recommendations, detection and cycle accounting are paused. Imported actions will not resume automatically.</p>'+
+      (session?'<p>'+esc(session.label)+' · '+esc(session.stat)+' · '+session.index+' / '+session.actions.length+' confirmed</p><small>Backup created: '+esc(sessionTime(stage.backupCreatedAt))+' · Last confirmation: '+esc(session.lastConfirmed==null?"Unknown":sessionTime(session.lastConfirmed))+' · Estimated cycle cost: '+esc(session.cycleSpend==null?"Unknown":"$"+number(session.cycleSpend))+'</small>':'<p>'+esc(stage?.error??"Recovery state unavailable")+'</p>')+
+      '<p>Open Settings → Data &amp; Backup to inspect recovery evidence or release the hold without resuming.</p></div></div>';
+  }
   function growthCard(training,prefs){
+    if(trainingRecoveryHeld())return recoveryHoldPanel();
     const activeSession=loadTrainingSession();
     const p=training.plan;
     let setup=growthSettings()+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
@@ -1207,11 +1221,11 @@ const tornCrimeGuide = (() => {
   }
   let deadlineRetryAt=0,lastActivityState=null,lastRehabCheck=0,lastWarCheck=0;
   function sessionDeadlineConflict(session,activity,now=Date.now()){
-    if(!session||session.index>=session.actions.length)return false;
+    if(trainingRecoveryHeld()||!session||session.index>=session.actions.length)return false;
     return activity.blocked||tornActivityScheduler.conflicts(sessionSchedule(session,now),activity.deadline,now,activity.war?.cutoff===activity.deadline,Math.max(28800000,activity.war?.cd??0));
   }
   async function replanActivityConflict(view,session){
-    if(recoveryBusy||Date.now()<deadlineRetryAt)return;
+    if(trainingRecoveryHeld()||recoveryBusy||Date.now()<deadlineRetryAt)return;
     recoveryBusy=true;const owner=sessionOwner,requested=Date.now();
     recoveryMessage="Activity deadline · verifying completed training before replanning.";
     try{
@@ -1404,7 +1418,7 @@ const tornCrimeGuide = (() => {
     const drugLeft=cooldownKnown&&drug!==null?Math.max(0,drug-elapsed):null;
     const boosterLeft=cooldownKnown&&booster!==null?Math.max(0,booster-elapsed):null;
     const marijuana=count("Cannabis","Drug");
-    if(crimeActivity&&nerveRoom&&iconFresh&&!highAddiction&&!blockDrugs&&prefs.odRisk!=="low"&&drugLeft===0&&marijuana>0&&(crimePriority||knownPlan&&!usesDrugs)){
+    if(!trainingRecoveryHeld()&&crimeActivity&&nerveRoom&&iconFresh&&!highAddiction&&!blockDrugs&&prefs.odRisk!=="low"&&drugLeft===0&&marijuana>0&&(crimePriority||knownPlan&&!usesDrugs)){
       add("consume","Cannabis · 1 ("+number(marijuana)+" held)",crimePriority&&usesDrugs?"Completion priority: Cannabis may delay training drugs. The locked plan will wait for the drug cooldown.":"No remaining training drug steps. Use for Nerve; normal drug cooldown is 60–90 minutes.","#crime");
     }
     const alcohol=tornGuideApi.state.inventory.Alcohol;
@@ -1811,7 +1825,7 @@ const tornCrimeGuide = (() => {
       if(gear){e.preventDefault();e.stopPropagation();growthSettingsOpen=!growthSettingsOpen;recExpanded.add("growth");try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}refreshRecommendations(view);return;}
       if(e.target.closest("[data-growth-budget]")){if(!tornRoadmap.activitiesOpen())tornRoadmap.toggleActivities();document.querySelector('#home-activities [data-home-pref="weeklyBudget"]')?.focus();return;}
       const sessionButton=e.target.closest("[data-growth-session]");
-      if(sessionButton&&!sessionButton.disabled){const action=sessionButton.dataset.growthSession,session=loadTrainingSession();
+      if(sessionButton&&!sessionButton.disabled){if(trainingRecoveryHeld()){refreshRecommendations(view);return;}const action=sessionButton.dataset.growthSession,session=loadTrainingSession();
       if(action==="war-refresh"&&!recoveryBusy){
         recoveryBusy=true;recoveryMessage="Refreshing war and Energy data…";
         refreshRecommendations(view);

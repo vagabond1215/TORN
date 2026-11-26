@@ -53,3 +53,26 @@ for(let i=0;i<all.length;i++){
 }
 assert.equal(paid,5);assert.equal(refillSeen,true);
 console.log("All seven simulator-generated templates, premium action separation, refill rows and stale/future watch evidence checks passed.");
+
+// The simulator fixture has a fixed clock; inject the same clock into the
+// registry and stage adapter rather than relaxing observed-time validation.
+const fixedDate=class extends Date{static now(){return now+1000;}};
+const stagedAPI=new Function("Date",read("training-recovery.js")+"\n"+read("account-storage.js")+"\nreturn {registry:tornAccountStorage,recovery:tornTrainingRecovery};")(fixedDate);
+const registry=stagedAPI.registry,stageAPI=stagedAPI.recovery;
+function memory(entries={}){const m=new Map(Object.entries(entries));return {get length(){return m.size},key:i=>[...m.keys()][i]??null,getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)};}
+const key="torn-city-guide:training-session:1",historyKey="torn-city-guide:activity-training-history:1";
+const source=memory({[key]:JSON.stringify(session),[historyKey]:JSON.stringify([archive]),"torn-city-guide:training-session:2":JSON.stringify(session)});
+const snap=registry.snapshot(source,1);assert.deepEqual(snap.records.map(x=>x.section),["training-cycle-history","training-session-review"]);
+const target=memory();assert.equal(registry.restoreEmpty(target,1,snap.records,()=>true,{createdAt:now}),2);
+assert.equal(target.getItem(key),null);assert.equal(stageAPI.held(target,1),true);assert.equal(stageAPI.held(target,2),false);
+const stage=stageAPI.readStage(target,1);assert.deepEqual(stage.session,session);assert.equal(stage.backupCreatedAt,now);
+assert.deepEqual(JSON.parse(target.getItem(historyKey)),[archive]);assert.deepEqual(registry.snapshot(target,1).records,snap.records);
+assert.throws(()=>registry.restoreEmpty(target,1,snap.records),/already/);
+assert.throws(()=>stageAPI.discardStage(target,1,stage.raw,()=>false),/changed/);
+assert.equal(stageAPI.held(target,1),true);
+stageAPI.discardStage(target,1,stage.raw,()=>true);assert.equal(stageAPI.held(target,1),false);assert.equal(target.getItem(key),null);
+const conflict=memory({[key]:JSON.stringify(session),[stageAPI.reviewKey(1)]:stage.raw});
+assert.deepEqual(registry.snapshot(conflict,1).omitted,["training-session-review"]);
+const damaged=memory({[stageAPI.reviewKey(1)]:"bad"});assert.equal(stageAPI.held(damaged,1),true);assert.ok(stageAPI.readStage(damaged,1).error);
+assert.ok(crime.includes("skipPrograms:recoveryHeld||")&&crime.includes("if(trainingRecoveryHeld())return recoveryHoldPanel()"));
+console.log("Portable training/history round trip, staged-only restore, account isolation, hold, re-export, conflicting records and explicit discard passed.");

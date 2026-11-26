@@ -69,6 +69,7 @@ const tornAccountStorage=(()=>{
     ["calendar-events",id=>prefix+"activity-events:"+id,json(events)],
     ["training-spend-estimates",id=>prefix+"training-spend:"+id,json(trainingSpend)],
     ["activity-spend",id=>prefix+"activity-spend-ledger:"+id,json(activitySpend)],
+    ["training-cycle-history",id=>prefix+"activity-training-history:"+id,json(v=>tornTrainingRecovery.validHistory(v))],
     ["restock",id=>prefix+"restock-settings:"+id,json(restock)],
     ["oc-bands",id=>prefix+"oc-bands:"+id,json(v=>list(v,x=>int(x,1,10),10))],
     ["war-settings",id=>prefix+"energy-war:"+id,json(v=>shape(v,["mode","adjustment","lead","version"])&&one(v.mode,["off","scheduled","faction"])&&int(v.adjustment,-120,120)&&int(v.lead,0,120)&&opt(v.version,x=>int(x,1,2)))],
@@ -81,6 +82,7 @@ const tornAccountStorage=(()=>{
   ];
   const fixed=new Map(definitions.map(d=>[d[0],d]));
   function descriptor(id,section){
+    if(section==="training-session-review")return {key:tornTrainingRecovery.reviewKey(id),valid:json(v=>tornTrainingRecovery.validSession(v))};
     const d=fixed.get(section);if(d)return {key:d[1](id),valid:d[2]};
     const m=/^(task|quickstart|notes):([a-z0-9][a-z0-9-]{0,99})$/.exec(section);
     if(!m)return null;
@@ -107,20 +109,35 @@ const tornAccountStorage=(()=>{
   function snapshot(store,playerId){
     const id=owner(playerId),records=[],omitted=[];
     for(const [section,k] of keys(store,id)){const value=store.getItem(k);if(value===null)continue;const d=descriptor(id,section);if(str(value,maxValue)&&d.valid(value))records.push({section,value});else omitted.push(section);}
+    const live=store.getItem(prefix+"training-session:"+id),stage=store.getItem(tornTrainingRecovery.reviewKey(id));
+    if(live!==null||stage!==null){
+      try{
+        if(live!==null&&stage!==null)throw Error("Conflicting session records");
+        const value=live??JSON.stringify(tornTrainingRecovery.parseStage(stage,id).session);
+        if(!str(value,maxValue)||!descriptor(id,"training-session-review").valid(value))throw Error("Invalid session");
+        records.push({section:"training-session-review",value});
+      }catch{omitted.push("training-session-review");}
+    }
     records.sort((a,b)=>a.section.localeCompare(b.section));validRecords(records,id);
     return {records,omitted};
   }
-  function restoreEmpty(store,playerId,records,assertCurrent=()=>true){
+  function restoreEmpty(store,playerId,records,assertCurrent=()=>true,{createdAt=Date.now()}={}){
     const id=owner(playerId);validRecords(records,id);
     // Reject a non-empty account, even if its sections are not in this file.
     // No additive merge: missing rows may represent intentional deletions.
     const existing=snapshot(store,id);
     if(existing.records.length||existing.omitted.length)throw Error("Account already has supported local data; merge is not available yet");
     // Also protect excluded durable session/history data from partial restore.
-    for(const k of ["training-session","activity-training-history"]){if(store.getItem(prefix+k+":"+id)!==null)throw Error("Existing training or expenditure history; merge is not available yet");}
+    if(store.getItem(prefix+"training-session:"+id)!==null||store.getItem(tornTrainingRecovery.reviewKey(id))!==null)throw Error("Existing training session or recovery hold; merge is not available yet");
     if(!assertCurrent())throw Error("Account changed before restore");
     const added=[];
-    try{for(const row of records){const d=descriptor(id,row.section),value=restoredValue(row);if(!d.valid(value)||!assertCurrent()||store.getItem(d.key)!==null)throw Error("Account changed or record invalid during restore");store.setItem(d.key,value);added.push([d.key,value]);}}
+    const ordered=[...records].sort((a,b)=>Number(b.section==="training-session-review")-Number(a.section==="training-session-review"));
+    try{for(const row of ordered){
+      const d=descriptor(id,row.section),isSession=row.section==="training-session-review";
+      const value=isSession?tornTrainingRecovery.stageValue(id,JSON.parse(row.value),createdAt):restoredValue(row);
+      if(!assertCurrent()||store.getItem(d.key)!==null||store.getItem(prefix+"training-session:"+id)!==null||(!isSession&&!d.valid(value)))throw Error("Account changed or record invalid during restore");
+      store.setItem(d.key,value);added.push([d.key,value]);
+    }}
     catch(error){let rollbackFailed=false;for(const [k,value] of added.reverse())try{if(store.getItem(k)===value)store.removeItem(k);else rollbackFailed=true;}catch{rollbackFailed=true;}if(rollbackFailed)throw Error("Restore incomplete; rollback failed or a concurrent edit was detected. Keep the backup and inspect local storage.");throw error;}
     return records.length;
   }
