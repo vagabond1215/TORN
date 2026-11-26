@@ -818,14 +818,16 @@ const tornTrainSequence=(()=>{
     });
     const v=engine.state;
     let completed=0;
+    const segments=[];
     while(list.length&&completed<cycles&&v.time<=engine.limit){
-      const before=v.time;
+      const before=v.time,statBefore=v.stat;
       if(completed>0){
         const delay=startingEnergy[id]==="full"?engine.fullEnergyDelay():0;
         if(delay&&!engine.waitFor(delay,"Full Energy",false))break;
       }
       if(!engine.run(list))break;
       completed++;
+      segments.push({id,at:offset+v.time,gain:v.stat-statBefore});
       if(continuous&&v.time===before){
         // Instant actions still move forward in real time between repetitions.
         const delay=engine.fullEnergyDelay()||energyRules().minutes*60;
@@ -836,7 +838,7 @@ const tornTrainSequence=(()=>{
       }
     }
     const data=engine.finish(list,{tail:false});
-    return {...data,elapsed:v.time,completed,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
+    return {...data,elapsed:v.time,completed,segments,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
   function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false}={}){
     const first=sequence[0],offset=respectOffset?Math.min(end,startingTime[first]??0):0;
@@ -919,6 +921,31 @@ const tornTrainSequence=(()=>{
     if(!continuous)best=frontier[0]??null;
     return best;
   }
+  function optimizeChart(results,slots,end){
+    const overrides=cycleOverrides.slice(0,slots);
+    const lastOverride=overrides.findLastIndex(Boolean);
+    const actionsFor=id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id];
+    const ids=[...new Set(["natural",...results.map(({id})=>id)])].filter(id=>actionsFor(id).length);
+    const maxDepth=Math.max(lastOverride+1, ...results.map(({data})=>data.completed+1),1)+4;
+    let best=null,frontier=[{sequence:[]}];
+    const consider=data=>{
+      if(!best||data.gain>best.data.gain)best={data};
+    };
+    if(lastOverride<0)for(const {data} of results)consider(data);
+    for(let index=0;index<maxDepth&&frontier.length;index++){
+      const next=[];
+      const choices=overrides[index]?[overrides[index]]:ids;
+      for(const parent of frontier)for(const id of choices){
+        const sequence=[...parent.sequence,id],data=mixedProjection(sequence,end,{actionsFor});
+        if(index>=lastOverride&&data.segments.length>lastOverride&&!data.errors.length)consider(data);
+        if(data.complete&&data.elapsed<end&&(!parent.data||data.elapsed>parent.data.elapsed||
+          data.gain>parent.data.gain))next.push({sequence,data});
+      }
+      next.sort((a,b)=>b.data.gain-a.data.gain||a.data.elapsed-b.data.elapsed);
+      frontier=next.slice(0,4);
+    }
+    return best;
+  }
   function cycleOverrideControls(slots,mixed){
     return '<details class="ts-cycle-overrides" '+(overridesOpen?"open":"")+'><summary>Cycle overrides</summary>'+
       '<div class="ts-cycle-choices">'+Array.from({length:slots},(_,i)=>{
@@ -936,7 +963,7 @@ const tornTrainSequence=(()=>{
       (chartMode==="cycles"?'<label>Cycles <input type="number" min="1" max="28" step="1" data-ts-chart-cycles value="'+chartCycles+'"></label>':
       '<label>Days <input type="number" min="1" max="28" step="1" data-ts-chart-days value="'+continuousDays+'"></label>')+
       '<span class="fine-print" title="Each plan repeats within the same comparison window">'+fmt(hours,2)+'h shown</span>'+
-      '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+
+      '<div class="ts-cycle-actions"><button type="button" class="tc-stat-tab '+(showOptimal?"is-selected":"")+'" title="Maximize projected stat gain without a cash budget" data-ts-optimal aria-pressed="'+showOptimal+'">Optimal</button>'+
       cycleOverrideControls(slots,mixed)+'</div></div>';
   }
   function render(context){
@@ -963,8 +990,8 @@ const tornTrainSequence=(()=>{
       end=Math.max(end,forced.elapsed);
     }
     const results=active.map(([id,,label])=>({id,label,data:projectCycles(id,Infinity,{end,continuous:true})}));
-    const mixed=((showOptimal&&results.length)||hasOverrides)?optimizeCycles([...new Set(["natural",...active.map(([id])=>id)])],slots,end,continuous):null;
-    if(mixed)results.push({id:"mixed",label:hasOverrides?"Mixed plan":"Optimized plan",data:mixed.data});
+    const mixed=((showOptimal&&results.length)||hasOverrides)?optimizeChart(results,slots,end):null;
+    if(mixed)results.push({id:"mixed",label:hasOverrides?"Mixed plan":"Optimal sequence",data:mixed.data});
     const chartHours=end/3600;
     return controls()+(results.length||hasOverrides?'<div class="ts-layout" data-template-count="'+oneCycle.length+'">'+oneCycle.map(x=>section(x.id,x.data)).join("")+'</div>'+
       '<div class="ts-outcomes">'+comparisonControls(chartHours,slots,mixed)+(mixed||(!showOptimal&&!hasOverrides)?"" : '<p class="fine-print">No complete mixed sequence fits these settings.</p>')+
