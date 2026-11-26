@@ -238,7 +238,7 @@ const tornToolsGuide=(()=>{
    return quickStatusModel(tornGuideApi.state,health,now,decayAt,connected);
  }
  function statusMarkup(){
-   return '<div class="quick-status-strip" aria-label="Account status">'+statusRows().map(x=>'<a class="quick-status" data-quick-status="'+x.id+'" data-status-icon="'+(x.icon??x.id)+'" data-tone="'+x.tone+'" href="'+x.href+'" title="'+esc(x.tip)+'" aria-label="'+esc(x.label+": "+x.value+" · "+x.tip)+'">'+statusIcon(x.icon??x.id)+'<span>'+esc(x.value)+'</span></a>').join("")+'</div><button type="button" class="rail-visibility-toggle quick-status-refresh" data-quick-status-refresh title="Refresh addiction, travel, racing and cooldowns" aria-label="Refresh account status" '+(!tornGuideApi.isConnected()||tornGuideApi.state.loading?"disabled":"")+'>'+statusIcon("refresh")+'</button>';
+   return '<div class="quick-status-strip" aria-label="Account status">'+statusRows().map(x=>'<a class="quick-status" data-quick-status="'+x.id+'" data-status-icon="'+(x.icon??x.id)+'" data-tone="'+x.tone+'" href="'+x.href+'" title="'+esc(x.tip)+'" aria-label="'+esc(x.label+": "+x.value+" · "+x.tip)+'">'+statusIcon(x.icon??x.id)+'<span>'+esc(x.value)+'</span></a>').join("")+'</div>';
  }
  function tickStatus(){
    const host=document.getElementById("tool-quickbar");if(!host)return;
@@ -253,7 +253,6 @@ const tornToolsGuide=(()=>{
      if(node.title!==x.tip)node.title=x.tip;
      const label=x.label+": "+x.value+" · "+x.tip;if(node.getAttribute("aria-label")!==label)node.setAttribute("aria-label",label);
    }
-   const refresh=host.querySelector("[data-quick-status-refresh]");if(refresh)refresh.disabled=!tornGuideApi.isConnected()||tornGuideApi.state.loading;
  }
  let toolsOpen=false,toolsMenuBound=false;
  function setToolsOpen(open,focus=false){
@@ -292,10 +291,6 @@ const tornToolsGuide=(()=>{
     host.innerHTML=quickLinks(currentBarRoute);
     host.querySelector("[data-tools-toggle]")?.addEventListener("click",()=>setToolsOpen(!toolsOpen));
     host.querySelector("#quick-tools-menu")?.addEventListener("click",event=>{if(event.target.closest("a"))setToolsOpen(false);});
-    host.querySelector("[data-quick-status-refresh]")?.addEventListener("click",async()=>{
-      if(!tornGuideApi.isConnected()||tornGuideApi.state.loading)return;
-      try{await tornGuideApi.loadPage("quickStatus",true);}catch{}finally{tickStatus();}
-    });
     host.querySelector("[data-home-activities-toggle]")?.addEventListener("click",()=>tornRoadmap.toggleActivities());
     host.querySelector("[data-report-toggle]")?.addEventListener("click",()=>{reportOpenFallback=!reportPrefs().open;try{localStorage.setItem("torn-city-guide:reports-open",String(reportOpenFallback));}catch{}updateBar();});
   }
