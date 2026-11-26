@@ -490,13 +490,11 @@ const tornCrimeGuide = (() => {
     return {...limit,war,away,blocked:limit.blocked||away,reason:away?"Player "+status:limit.reason};
   }
   function trainingRecommendationContext(prefs){
-    const iconData=payload("icons","icons");
-    const iconFresh=iconData&&!tornGuideApi.state.errors?.icons&&Date.now()-Number(tornGuideApi.state.fetchedAt?.icons||0)<15*60000;
-    const iconTexts=iconFresh?Object.values(iconData).map(x=>typeof x==="string"?x:[x?.title,x?.name,x?.description,x?.text].filter(Boolean).join(" ")):[];
+
     const now=Date.now(),settings=tornActivityScheduler.settings();
     tornActivityScheduler.reconcileRehab(now);
     const activity=activityLimits(now);
-    const health=tornActivityScheduler.addiction(!!iconFresh,iconTexts,settings,activity.war);
+    const health=tornActivityScheduler.addictionSnapshot(now,settings,activity.war),iconFresh=health.fresh;
     const addictionDebuff=health.penalty==null?[]:[health.penalty],highAddiction=health.blockDrugs;
     const edu=educationModel(),enrolled=Boolean((edu.id!=null&&edu.id!==0&&edu.id!=="0"&&edu.id!=="")||(Number(edu.deadline)>now));
     const perks=payload("perks","perks"),jobPerks=Object.entries(perks||{}).filter(([key])=>/job|company/i.test(key)).flatMap(([,v])=>Array.isArray(v)?v:[]).map(x=>typeof x==="string"?x:[x?.name,x?.description,x?.effect].filter(Boolean).join(" "));
@@ -530,13 +528,14 @@ const tornCrimeGuide = (() => {
     const warning=health.level==="restricted"?"Drug recommendations restricted until refreshed addiction data clears the threshold.":health.level==="unknown"?"Addiction status unavailable; drug recommendations paused until icons refresh.":health.level==="recommended"?"Rehabilitation recommended.":health.level==="preferred"?"Rehabilitation preferred when a suitable gap exists.":"";
     const active=tornActivityScheduler.events().find(e=>e.kind==="rehab"&&!e.completedAt&&e.end>Date.now());
     const confirmed=tornActivityScheduler.events().filter(e=>e.kind==="rehab"&&e.completedAt).sort((a,b)=>b.completedAt-a.completedAt)[0];
-    return '<div class="activity-health"><strong>Addiction penalty: '+(health.penalty==null?"Unknown":esc(health.penalty+"%"))+'</strong>'+(warning?'<small>'+esc(warning)+'</small>':"")+
+    if(!active&&!rehab&&!confirmed&&!reserves.warReserve&&!reserves.rehabReserve&&!["preferred","recommended","restricted"].includes(health.level))return "";
+    return '<div class="activity-health activity-rehab-details"><strong>Rehabilitation &amp; activity reserves</strong>'+(warning&&health.level!=="unknown"?'<small>'+esc(warning)+'</small>':"")+
       (active?'<small>Rehab reserved: '+esc(fmt(active.start))+' to '+esc(fmt(active.end))+'</small>':rehab?'<small>Suggested rehab: '+esc(fmt(rehab.start))+' to '+esc(fmt(rehab.end))+' · estimate $'+number(rehab.cost)+(rehab.overlapsCooldown?" · fits cooldown":"")+(rehab.requiresPause?" · pause training":"")+'</small><button type="button" data-activity-rehab>Reserve rehab window</button>':["preferred","recommended","restricted"].includes(health.level)?'<small>No verified travel window yet; check travel eligibility, live status and upcoming commitments.</small>':"")+
       (confirmed?'<small>Last rehab confirmed '+esc(fmt(confirmed.completedAt))+(confirmed.rehabCost==null?" · cost unknown":" · $"+number(confirmed.rehabCost))+'</small>':"")+
       (reserves.warReserve||reserves.rehabReserve?'<small>Reserved cash: war $'+number(reserves.warReserve)+' · rehab $'+number(reserves.rehabReserve)+(reserves.shortfall?" · exceeds available budget":"")+'</small>':"")+'</div>';
   }
   function calendarCard(training,full=false){
-    return rehabPanel(training)+'<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(calendarEvents(training),{full})+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
+    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(calendarEvents(training),{full})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
   }
   function renderCalendar(){
     loadOcFilters();loadRecFilters();
@@ -1084,7 +1083,7 @@ const tornCrimeGuide = (() => {
   function growthCard(training,prefs){
     const activeSession=loadTrainingSession();
     const p=training.plan;
-    let setup=growthSettings()+rehabPanel(training)+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
+    let setup=growthSettings()+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
     warTraining=training;
     const war=energyWarAdvice(training);
     if(war?.active)return '<div class="growth-card">'+setup+warCounter(war)+(activeSession?'<small>Training session held; reconciling before war preparation.</small>':"")+'</div>';
