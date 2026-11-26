@@ -274,9 +274,10 @@ const tornActivityScheduler=(()=>{
     const spans=[],pins=[],lanes=Array.from({length:maxLanes},()=>[]);
     for(const e of visible.slice().sort((a,b)=>Number(b.blocking===true)-Number(a.blocking===true)||Number(b.cooldown===true)-Number(a.cooldown===true)||a.start-b.start||b.end-a.end||String(a.id).localeCompare(String(b.id)))){
       const left=x(e.start),right=x(e.end),range=e.end>e.start;
-      const lane=range&&right-left>=30?lanes.findIndex(items=>items.every(i=>right+2<=i.left||left>=i.right+2)):-1;
+      const minWidth=e.cooldown?8:30;
+      const lane=range&&right-left>=minWidth?lanes.findIndex(items=>items.every(i=>right+2<=i.left||left>=i.right+2)):-1;
       if(lane>=0){const item={event:e,left,right,lane,clippedStart:e.start<now,clippedEnd:e.end>end};spans.push(item);lanes[lane].push(item);}
-      else pins.push({event:e,x:left,range,overflow:range&&right-left>=30});
+      else pins.push({event:e,x:left,range,overflow:range&&right-left>=minWidth});
     }
     // Nearby marker clusters retain separate exact anchors and full event detail.
     const groups=new Map();

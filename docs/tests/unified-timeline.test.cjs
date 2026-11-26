@@ -43,8 +43,10 @@ const dose=event("dose",4,4,{kind:"training",title:"Xanax",source:"Optimal Budge
 const cd=scheduler.timelineLayout([dose,event("bad-cd",12,12,{drugCooldownSeconds:null}),event("past-dose",-1,-1,{drugCooldownSeconds:3600}),event("stale-dose",15,15,{drugCooldownSeconds:3600,stale:true})],now,7,null,2*3600);
 assert.ok(cd.annotations.flatMap(a=>a.items).some(i=>i.event.id==="dose"&&i.event.start===i.event.end));
 const projected=cd.spans.find(i=>i.event.id==="timeline-drug-dose");assert.equal(projected.left,40);assert.equal(projected.right,120);assert.equal(projected.event.blocking,false);
-const current=cd.annotations.flatMap(a=>a.items).find(i=>i.event.id==="timeline-drug-current");assert.ok(current&&current.range);assert.equal(current.event.start,now);assert.equal(current.event.end,now+2*H);
-assert.equal(cd.spans.filter(i=>i.event.cooldown).length,1);
+const current=cd.spans.find(i=>i.event.id==="timeline-drug-current");assert.ok(current);assert.equal(current.event.start,now);assert.equal(current.event.end,now+2*H);assert.equal(current.left,0);assert.equal(current.right,20);
+assert.equal(cd.spans.filter(i=>i.event.cooldown).length,2);
+const brief=scheduler.timelineLayout([],now,7,null,60);
+assert.ok(brief.annotations.flatMap(a=>a.items).some(i=>i.event.id==="timeline-drug-current"&&i.range));
 const warPlan=scheduler.warWindow({start:now+48*H,end:now+72*H},{mode:"scheduled",adjustment:60,lead:120},now);
 const warRows=scheduler.schedule({now,war:warPlan,manual:[]});
 const warCds=scheduler.timelineLayout(warRows,now,7,warPlan);
