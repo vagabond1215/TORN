@@ -6,7 +6,7 @@ const tornCrimeGuide = (() => {
     ["Graffiti","Low","Very reliable CE/NNB builder. Build reputation and use spray cans."],
     ["Shoplifting","Low–Medium","Choose stores and security windows; higher-risk targets can cause setbacks."],
     ["Card Skimming","Low–Medium","Passive side project. Install skimmers and collect after details accumulate."],
-    ["Pickpocketing","Variable","Target choice matters enormously; begin with safer pedestrians."],
+    ["Pickpocketing","Variable",""],
     ["Hustling","Low–Medium","Strong CE builder if you manage attention and suspicion."],
     ["Disposal","Medium","Daily jobs, with method-specific risks. Build skill on safer jobs."],
     ["Burglary","Medium–High","Scout and case carefully; weak confidence and repeated fails hurt chains."],
@@ -261,34 +261,34 @@ const tornCrimeGuide = (() => {
       '<small>Adjustment applies to a 7-hour Xanax estimate. Default +60 allows 8 hours per dose.</small></div>';
   }
 
-  const recTileStart=(id,label)=>'<details class="rec-tile" data-rec-group="'+esc(id)+'" '+(recExpanded.has(id)?"open":"")+'><summary class="rec-tile-heading"><span>'+esc(label)+'</span>'+(id==="growth"?growthGear:id==="restock"?'<button type="button" class="restock-settings-button" data-restock-settings aria-haspopup="dialog">Minimums</button>':"")+'</summary><div class="rec-tile-body">';
+  const recTileStart=(id,label,crimeRefresh="")=>'<details class="rec-tile" data-rec-group="'+esc(id)+'" '+(recExpanded.has(id)?"open":"")+'><summary class="rec-tile-heading"><span>'+esc(label)+'</span>'+(id==="growth"?growthGear:id==="crime"?crimeRefresh:id==="restock"?'<button type="button" class="restock-settings-button" data-restock-settings aria-haspopup="dialog">Minimums</button>':"")+'</summary><div class="rec-tile-body">';
   const recTileEnd='</div></details>';
   const recItem=(title,detail,link)=>'<li><div><strong>'+esc(title)+'</strong><small>'+esc(detail)+'</small></div>'+(link?'<a href="'+esc(link)+'">View</a>':"")+'</li>';
   // Wiki target groups and unique conditions; recommended skill bands are
   // conservative editorial estimates, not a measured success probability.
   const pickTargets=[
-    ["Drunk Man",0,"Stumbling / distracted","Any",true,1],
-    ["Drunk Woman",0,"Stumbling / distracted","Any",true,1],
-    ["Elderly Man",0,"Walking","Any",true,1],
-    ["Elderly Woman",0,"Walking","Any",false,1],
-    ["Homeless Person",0,"Begging / loitering","Any",false,1],
-    ["Junkie",0,"Stumbling","Stumbling",false,1],
-    ["Young Man",0,"Distracted / on phone / music","Any",false,1],
-    ["Young Woman",0,"Distracted / on phone / music","Any",false,1],
-    ["Businessman",1,"Distracted / on phone","Any",false,1],
-    ["Businesswoman",1,"Distracted / on phone","Any",false,1],
-    ["Jogger",1,"Walking","Walking",true,1],
-    ["Laborer",1,"Walking","Walking",false,1],
-    ["Postal Worker",1,"Distracted","Distracted",false,1],
-    ["Student",1,"Distracted / music","Any",true,1],
-    ["Thug",1,"Loitering","Male, loitering",false,1],
-    ["Classy Lady",2,"On phone","On phone",false,1],
-    ["Cyclist",2,"Cycling","Cycling",true,100],
-    ["Gang Member",2,"Loitering","Loitering",true,1],
-    ["Rich Kid",2,"Listening to music","Listening to music",true,1],
-    ["Sex Worker",2,"Soliciting","Soliciting",false,1],
-    ["Mobster",3,"Walking","Walking",true,100],
-    ["Police Officer",3,"Running","Running",false,1]
+    ["Drunk Man",0,"Stumbling|Distracted","Any","Bottle of Beer × 6",true],
+    ["Drunk Woman",0,"Stumbling|Distracted","Any","Bottle of Pumpkin Brew × 2",true],
+    ["Elderly Man",0,"Walking","Any","Bag of Tootsie Rolls",true],
+    ["Elderly Woman",0,"Walking","Any","Opium"],
+    ["Homeless Person",0,"Begging|Loitering","Any","Morphine × 4, Soap on a Rope, Brick × 3, Toothbrush"],
+    ["Junkie",0,"Stumbling|Loitering","Stumbling","Ecstasy, LSD, PCP, Speed"],
+    ["Young Man",0,"Listening to music|On the phone|Walking","Any","Ketamine"],
+    ["Young Woman",0,"Distracted|Listening to music|On the phone|Walking","Any","Ecstasy"],
+    ["Businessman",1,"Walking|On the phone","Any","Speed × 2"],
+    ["Businesswoman",1,"Walking|On the phone","Any","Glasses"],
+    ["Jogger",1,"Walking|Jogging","Walking","Can of Crocozade",true],
+    ["Laborer",1,"Walking|Distracted|On the phone","Walking","Megaphone"],
+    ["Postal Worker",1,"Distracted|Walking","Distracted","Lottery Voucher"],
+    ["Student",1,"Listening to music|On the phone|Running|Walking","Any","Laptop, Cannabis, Coin Purse, Cell Phone",true],
+    ["Thug",1,"Loitering|Running|Walking","Loitering","PCP, Cut-Throat Razor, Billfold (male target)"],
+    ["Classy Lady",2,"On the phone|Walking","On the phone","Pair of High Heels"],
+    ["Cyclist",2,"Cycling","Cycling","Mountain Bike",true,100],
+    ["Gang Member",2,"Loitering","Loitering","Red, Purple and Blue Spray Cans, Wire Cutters",true],
+    ["Rich Kid",2,"Listening to music|On the phone|Walking","Listening to music","Six Pack of Alcohol",true],
+    ["Sex Worker",2,"Soliciting|Distracted|On the phone","Soliciting","Thong"],
+    ["Mobster",3,"Walking","Walking","Cash reward",true,100],
+    ["Police Officer",3,"Running|Walking","Running","Billfold, Police Badge"]
   ];
   const crimeIds={"Search for Cash":1,"Bootlegging":2,"Graffiti":3,"Shoplifting":4,"Pickpocketing":5,"Card Skimming":6,"Burglary":7,"Hustling":8,"Disposal":9,"Cracking":10,"Forgery":11,"Scamming":12,"Arson":13};
   const crimeAdvice={
@@ -316,7 +316,7 @@ const tornCrimeGuide = (() => {
     if(name==="Thug")return uniques.some(u=>{const r=rewardNames(u);return ["pcp","cutthroatrazor","billfold"].every(x=>r.includes(x));})?true:null;
     return null;
   }
-  function crimeRecommendation(risk,completion){
+  function crimeRecommendation(risk,completion,refreshIds){
     if(tornGuideApi.crimeVersion?.()===1)return '<li><div><strong>Crimes 1.0 detected</strong><small>Use the legacy crime report; Crimes 2.0 skill and unique recommendations do not apply.</small><a href="https://torn.report/crimes" target="_blank" rel="noopener noreferrer">Old Crimes report</a></div></li>';
     const riskRank={"Starter":0,"Low":0,"Low–Medium":1,"Medium":1,"Variable":1,"Medium–High":2,"High":2};
     const maxRisk={low:0,medium:1,high:2}[risk]??0;
@@ -324,10 +324,11 @@ const tornCrimeGuide = (() => {
     if(recUniques){
       const missing=all.filter(x=>x.total>0&&x.uniqueCount!==null&&x.uniqueCount<x.total).sort((a,b)=>a.rank-b.rank||b.cs-a.cs||a.i-b.i);
       const unknown=all.filter(x=>x.total>0&&x.uniqueCount===null);
+      refreshIds.push(...new Set([...missing,...unknown].map(x=>crimeIds[x.name])));
       const summary='<li><div><strong>Unique hunt</strong><small>'+missing.length+' crimes with remaining documented uniques · '+unknown.length+' awaiting collection data. CS 100 crimes are included. Check in-game stars and requirements; counts are not a mapping of individual missing rewards.</small></div></li>';
       const targets=missing.map(x=>{
         const remain=x.total-x.uniqueCount,ref=reference.find(y=>y[0]===x.name);
-        return '<li><div><strong>'+esc(x.name)+(x.cs===null?"":" "+number(x.cs))+'</strong><small>'+remain+' remaining · '+x.uniqueCount+' / '+x.total+' documented uniques'+'</small><p>'+esc(crimeAdvice[x.name]??x.detail)+'</p><div class="rec-crime-actions"><a href="'+wiki(x.name)+'" target="_blank" rel="noopener noreferrer">Unique requirements</a><button type="button" class="rec-oc-toggle" data-rec-crime-load="'+crimeIds[x.name]+'">Refresh progress</button></div></div><a href="#crime">View</a></li>'+(x.name==="Pickpocketing"?pickpocketRows(x.cs,risk,true):"");
+        return '<li><div><strong>'+esc(x.name)+(x.cs===null?"":" "+number(x.cs))+'</strong><small>'+remain+' remaining · '+x.uniqueCount+' / '+x.total+' documented uniques'+'</small>'+(x.name==='Pickpocketing'?'':'<p>'+esc(crimeAdvice[x.name]??x.detail)+'</p>')+'<div class="rec-crime-actions"><a href="'+wiki(x.name)+'" target="_blank" rel="noopener noreferrer">Unique requirements</a></div></div><a href="#crime">View</a></li>'+(x.name==="Pickpocketing"?pickpocketRows(x.cs,risk,true):"");
       }).join("");
       return summary+targets+(unknown.length?'<li><div><strong>Awaiting unique data</strong><small>'+esc(unknown.map(x=>x.name).join(", "))+' · automatic refresh while Home or Crimes is visible.</small></div></li>':"")+(!missing.length&&!unknown.length?'<li><div><strong>All documented unique counts reached</strong><small>Check the latest Torn unique tracker for additions.</small></div></li>':"")+'<li><a href="https://torn.report/uniques" target="_blank" rel="noopener noreferrer">Detailed unique tracker</a></li>';
     }
@@ -336,23 +337,27 @@ const tornCrimeGuide = (() => {
     const pool=eligible.length?eligible:all.filter(x=>x.cs!==null&&completion&&x.total>0&&(x.uniqueCount===null||x.uniqueCount<x.total));
     const rank=(a,b)=>Number(a.rank>maxRisk)-Number(b.rank>maxRisk)||(risk==="low"?a.rank-b.rank:b.cs-a.cs)||a.rank-b.rank||a.i-b.i;
     const chosen=[...pool].sort((a,b)=>completion&&!recIncomplete?Number(a.cs>=100)-Number(b.cs>=100)||rank(a,b):rank(a,b))[0]??[...all].filter(x=>x.cs!==null).sort(rank)[0]??all[0];
+    refreshIds.push(crimeIds[chosen.name]);
     const fallback=!eligible.length||chosen.rank>maxRisk;
     const detail=[chosen.cs===null?"Skill unavailable":"",fallback?"No eligible safer unfinished crime; verify conditions and choose the easiest available action.":""].filter(Boolean).join(" · ");
     const ref=reference.find(x=>x[0]===chosen.name);
     const equipmentText=ref?equipment(ref).filter(x=>!x[3]||chosen.cs!=null&&chosen.cs>=x[3]).map(([name,cat])=>name+": "+({true:"owned",false:"missing",null:"unknown"}[inventoryStatus(name,cat)])).join(" · "):"";
     const uniqueText=chosen.total?chosen.uniqueCount==null?"Unique collection not loaded":chosen.uniqueCount+" / "+chosen.total+" documented unique outcomes collected":"No documented unique outcomes";
-    return '<li><div><strong>'+esc(chosen.name)+(chosen.cs===null?"":" "+number(chosen.cs))+'</strong>'+(detail?'<small>'+esc(detail)+'</small>':"")+'<p>'+esc(crimeAdvice[chosen.name]??chosen.detail)+'</p><small>'+esc(uniqueText)+'</small>'+(equipmentText?'<small>'+esc(equipmentText)+'</small>':"")+'<div class="rec-crime-actions"><button type="button" class="rec-oc-toggle" data-rec-crime-load="'+crimeIds[chosen.name]+'">'+(chosen.progress?"Refresh crime progress":"Load crime progress")+'</button><a href="'+wiki(chosen.name)+'" target="_blank" rel="noopener noreferrer">Unique requirements</a><a href="https://torn.report/uniques" target="_blank" rel="noopener noreferrer">Unique tracker</a></div></div><a href="#crime">View</a></li>'+(chosen.name==="Pickpocketing"?pickpocketRows(chosen.cs,risk):"");
+    return '<li><div><strong>'+esc(chosen.name)+(chosen.cs===null?"":" "+number(chosen.cs))+'</strong>'+(detail?'<small>'+esc(detail)+'</small>':"")+(chosen.name==='Pickpocketing'?'':'<p>'+esc(crimeAdvice[chosen.name]??chosen.detail)+'</p>')+'<small>'+esc(uniqueText)+'</small>'+(equipmentText?'<small>'+esc(equipmentText)+'</small>':"")+'<div class="rec-crime-actions"><a href="'+wiki(chosen.name)+'" target="_blank" rel="noopener noreferrer">Unique requirements</a><a href="https://torn.report/uniques" target="_blank" rel="noopener noreferrer">Unique tracker</a></div></div><a href="#crime">View</a></li>'+(chosen.name==="Pickpocketing"?pickpocketRows(chosen.cs,risk):"");
   }
   function pickpocketRows(cs,risk,uniqueOnly=false){
     const maxTier=Math.min(risk==="low"?1:risk==="medium"?2:3,cs==null||cs<35?0:cs<70?1:cs<100?2:3);
     const razor=inventoryStatus("Cut-Throat Razor","Enhancer");
     const avoided=pickTargets.filter(x=>(uniqueOnly||x[1]>=1)&&pickUniqueState(x[0])===true).map(x=>x[0]);
-    const rows=pickTargets.filter(x=>x[1]<=maxTier&&!avoided.includes(x[0])).map(([name,tier,state,condition,needRazor,min])=>{
+    const riskLabels=["Easy","Moderate","Difficult","Very difficult"];
+    const rows=pickTargets.filter(x=>x[1]<=maxTier&&!avoided.includes(x[0])).map(([name,tier,states,condition,reward,needRazor,min=1])=>{
       const done=pickUniqueState(name);
-      const note=done===true?"Unique collected; ordinary skill growth only":cs!=null&&cs<min?"Unique requires CS "+min:needRazor&&razor!==true?"Unique requires Razor (ownership "+(razor===false?"missing":"unknown")+")":"Unique: "+condition+" · check star";
-      return '<tr><td>'+esc(name)+'</td><td>'+esc(state)+'</td><td>'+esc(note)+'</td></tr>';
+      const qualifier=done===true?"Collected":[cs!=null&&cs<min?"CS "+min:"",needRazor&&razor!==true?"Cut-Throat Razor required":""].filter(Boolean).join(" · ");
+      return '<li><strong class="rec-pick-risk-'+tier+'">'+esc(name)+' <span class="sr-only">('+riskLabels[tier]+' risk)</span></strong><dl>'+
+        states.split("|").map(state=>'<div><dt>'+esc(state)+'</dt><dd>'+((condition==="Any"||state===condition)?esc(reward)+(qualifier?' <small>'+esc(qualifier)+'</small>':""):"—")+'</dd></div>').join("")+
+        '</dl></li>';
     });
-    return '<li class="rec-pickpocket"><div><strong>Recommended targets</strong><small>'+ (maxTier===0?"Easy targets only":maxTier===1?"Easy and moderate targets":maxTier===2?"Up to difficult targets":"All difficulty bands")+'</small><div class="crime-table-scroll"><table class="crime-table"><thead><tr><th>Target</th><th>Preferred state</th><th>Unique condition</th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div><small>'+(avoided.length?"Avoid for unique hunting: "+esc(avoided.join(", "))+". ":"")+'Unmapped unique rewards remain unverified. Check the star and live success conditions in Torn. <a href="https://wiki.torn.com/wiki/Pickpocketing" target="_blank" rel="noopener">Wiki</a></small></div></li>';
+    return '<li class="rec-pickpocket"><div><strong>Recommended targets</strong><ul class="rec-pick-targets">'+rows.join("")+'</ul><small><a href="https://wiki.torn.com/wiki/Pickpocketing" target="_blank" rel="noopener">Pickpocketing reward requirements</a></small></div></li>';
   }
   function trainingRecommendationContext(prefs){
     const iconData=payload("icons","icons");
@@ -764,6 +769,7 @@ const tornCrimeGuide = (() => {
     if(refillIndicator){
       const status=nerveRefillStatus();
       refillIndicator.hidden=!status;
+      refillIndicator.classList.toggle("is-available",status==="Refill Available");
       if(refillIndicator.textContent!==status)refillIndicator.textContent=status;
     }
     if(readinessExpires&&Date.now()>=readinessExpires){
@@ -912,7 +918,9 @@ const tornCrimeGuide = (() => {
       if(amount>0)add("consume","Alcohol · up to "+number(amount),number(held)+" held · "+(nextBooster?"Cooldown clears before the next training booster at "+sessionTime(nextBooster.due):"No remaining candy or DVD steps")+" · Conservative cooldown allowance.","#crime");
     }
     if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
-    rows.crime.push(crimeRecommendation(prefs.jailRisk,completion));
+    const crimeRefreshIds=[];
+    rows.crime.push(crimeRecommendation(prefs.jailRisk,completion,crimeRefreshIds));
+    const crimeRefresh=crimeRefreshIds.length?'<button type="button" class="growth-settings-gear rec-crime-refresh" data-rec-crime-load="'+crimeRefreshIds.join(",")+'" aria-label="Refresh crime progress" title="Refresh crime progress"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.5 8a7 7 0 0 1 11.6-2L20 12M4 12l2.9 6A7 7 0 0 0 18.5 16"/></svg></button>':"";
     loadEducationPreference();
     const m=educationModel();
     if(m.known&&m.courses.length){
@@ -956,7 +964,7 @@ const tornCrimeGuide = (() => {
     if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
     if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
     if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button><a class="rec-nerve-refill" data-nerve-refill-status href="https://www.torn.com/page.php?sid=points" title="Points shop" '+(nerveRefillStatus()?"":"hidden")+'>'+esc(nerveRefillStatus())+'</a></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'))+recTileEnd).join("");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label,crimeRefresh)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button><a class="rec-nerve-refill '+(nerveRefillStatus()==="Refill Available"?"is-available":"")+'" data-nerve-refill-status href="https://www.torn.com/page.php?sid=points" title="Points shop" '+(nerveRefillStatus()?"":"hidden")+'>'+esc(nerveRefillStatus())+'</a></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'))+recTileEnd).join("");
   }
 
   function recommendations(){
@@ -1293,8 +1301,18 @@ const tornCrimeGuide = (() => {
       const btn=e.target.closest("[data-rec-type],[data-rec-incomplete],[data-rec-uniques],[data-rec-history],[data-rec-crime-load]");
       if(!btn||!btn.closest("[data-home-recommendations]"))return;
       if(btn.hasAttribute("data-rec-crime-load")){
-        btn.disabled=true;btn.textContent="Loading…";
-        tornGuideApi.loadCrimeProgress(Number(btn.dataset.recCrimeLoad)).then(()=>refreshRecommendations(view)).catch(error=>{if(btn.isConnected){btn.disabled=false;btn.textContent="Retry crime progress";btn.title=error.message;}});return;
+        e.preventDefault();
+        btn.disabled=true;btn.setAttribute("aria-busy","true");
+        void (async()=>{
+          try{
+            for(const id of btn.dataset.recCrimeLoad.split(","))await tornGuideApi.loadCrimeProgress(Number(id));
+            refreshRecommendations(view);
+            view.querySelector("[data-rec-crime-load]")?.focus();
+          }catch(error){
+            if(btn.isConnected){btn.disabled=false;btn.removeAttribute("aria-busy");btn.title=String(error.message??error);}
+          }
+        })();
+        return;
       }
       if(btn.hasAttribute("data-rec-uniques")){recUniques=!recUniques;try{localStorage.setItem("torn-city-guide:crime-uniques:"+recOwner,String(recUniques));}catch{}refreshRecommendations(view);view.querySelector("[data-rec-uniques]")?.focus();return;}
       if(btn.hasAttribute("data-rec-incomplete")){if(recUniques){recUniques=false;recIncomplete=true;try{localStorage.setItem("torn-city-guide:crime-uniques:"+recOwner,"false");}catch{}}else recIncomplete=!recIncomplete;try{localStorage.setItem("torn-city-guide:crime-incomplete:"+recOwner,String(recIncomplete));}catch{}refreshRecommendations(view);return;}
