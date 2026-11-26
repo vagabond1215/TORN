@@ -514,10 +514,10 @@ const tornGuideApi=(()=>{
     }
     return {list,truncated:Number.isFinite(total)&&total>list.length};
   }
-  async function batch(route,force=false,category=null){
+  async function batch(route,force=false,category=null,includeStatus=false,includeMerits=false){
     if(!secret)throw Error("Connect Torn API first.");
     const currentEpoch=epoch,currentKey=secret;
-    const names=(ROUTES[route]||ROUTES.home).filter(name=>stale(name,force));
+    const names=[...new Set([...(ROUTES[route]||ROUTES.home),...(includeStatus?ROUTES.quickStatus:[]),...(includeMerits?["honors","honorCatalog"]:[])])].filter(name=>stale(name,force));
     const cats=route==="inventory"
       ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))
       :(route==="energy"||route==="calendar")?["Candy","Drug","Booster"]:route==="warPreparation"?["Drug"]:route==="stats"?["Candy","Drug","Booster"]:route==="home"?["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"]:route==="crime"?["Tool","Enhancer","Material"]:[];
@@ -597,10 +597,10 @@ const tornGuideApi=(()=>{
     // Deduplicate request sets. When one is in flight, schedule one follow-up
     // using the new route, rather than aborting the current page load.
     if(inFlight){
-      if(opts.force||opts.category||route!==inFlight.route)queued={route,force:Boolean(opts.force),category:opts.category||null};
+      if(opts.force||opts.category||opts.includeStatus||opts.includeMerits||route!==inFlight.route)queued={route,force:Boolean(opts.force),category:opts.category||null,includeStatus:Boolean(opts.includeStatus),includeMerits:Boolean(opts.includeMerits)};
       return inFlight.promise;
     }
-    const promise=batch(route,Boolean(opts.force),opts.category||null).then(result=>{if(["home","crime"].includes(route))refreshCrimeProgress().catch(()=>{});return result;}).finally(()=>{
+    const promise=batch(route,Boolean(opts.force),opts.category||null,Boolean(opts.includeStatus),Boolean(opts.includeMerits)).then(result=>{if(["home","crime"].includes(route))refreshCrimeProgress().catch(()=>{});return result;}).finally(()=>{
       inFlight=null;
       if(queued){
         const next=queued;queued=null;
