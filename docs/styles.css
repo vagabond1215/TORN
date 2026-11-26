@@ -2202,3 +2202,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rec-pick-target-heading>.rec-pick-reward{flex:1}
 .rec-pick-targets dl>div{grid-template-columns:minmax(0,2fr) minmax(0,3fr)}
 .rec-tile[data-rec-group="crime"] .rec-advice>li{grid-template-columns:minmax(0,1fr)}
+
+/* Home Energy: ordered Optimal Budget forecast, separate from active steps. */
+.growth-optimal-plan{display:grid;gap:.3rem;margin:.2rem 0 .6rem}
+.growth-optimal-plan ol{margin:0;padding-inline-start:1.65rem;max-height:12rem;overflow:auto;font-size:.8rem}
+.growth-optimal-plan li{padding:.12rem 0}
+.growth-cycle-current{color:var(--accent-strong);font-weight:650}
+.growth-optimal-plan small{color:var(--muted)}
