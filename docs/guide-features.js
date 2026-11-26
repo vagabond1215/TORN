@@ -137,7 +137,8 @@ const tornGuideApi=(()=>{
     const controller=new AbortController();
     if(idle)idleAbort=controller;
     activeRequests++;
-    const timeout=setTimeout(()=>controller.abort(),15000);
+    let timedOut=false;
+    const timeout=setTimeout(()=>{timedOut=true;controller.abort();},15000);
     try{
       const response=await fetch("https://api.torn.com/v2/"+path,{
         method:"GET",headers:{Authorization:"ApiKey "+key,Accept:"application/json"},
@@ -154,7 +155,7 @@ const tornGuideApi=(()=>{
     }catch(error){
       if([5,8,9,14].includes(error.tornCode)||error.httpStatus===429)
         idleBlockedUntil=Math.max(idleBlockedUntil,now()+(error.tornCode===14?24*hrs:10*mins));
-      if(error.name==="AbortError"){const failure=Error("Torn API request timed out");failure.interrupted=idle&&controller.signal.aborted;throw failure;}
+      if(error.name==="AbortError"){const failure=Error("Torn API request timed out");failure.interrupted=idle&&!timedOut&&controller.signal.aborted;throw failure;}
       if(error instanceof TypeError)throw Error("Cannot reach Torn API. Check network/CORS.");
       throw error;
     }finally{clearTimeout(timeout);activeRequests--;lastApiEnd=now();if(idleAbort===controller)idleAbort=null;}
@@ -686,7 +687,7 @@ const tornGuideApi=(()=>{
   }
   return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,passiveRwReport,readCrimeProgress,loadCrimeProgress,refreshCrimeProgress,crimeVersion,
     disconnect,restore,setRemember,isRemembering:()=>remember,
-    isConnected:()=>Boolean(secret),verifyBackupOwner,refreshOnResume,idleLogPage,idleEligible,inventoryTypes,routeName,TTL,ROUTES};
+    isConnected:()=>Boolean(secret),verifyBackupOwner,refreshOnResume,idleLogPage,idleEligible,cancelIdleLog:()=>idleAbort?.abort(),inventoryTypes,routeName,TTL,ROUTES};
 })();
 
 const guideSteps = [

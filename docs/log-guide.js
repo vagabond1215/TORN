@@ -110,10 +110,10 @@ const tornLogGuide=(()=>{
      if(sourceButton){sourceMode=sourceButton.dataset.logSource;page=0;paint();return;}
      if(e.target.closest("[data-log-api-toggle]")){
        if(!ensureOwner())return;
-       enabled=!enabled;generation++;sourceMode="api";page=0;nextCheck=0;workerStatus=enabled?"Waiting for an idle API slot":"Paused";paint();if(enabled)tick();return;
+       enabled=!enabled;generation++;if(!enabled)tornGuideApi.cancelIdleLog();sourceMode="api";page=0;nextCheck=0;workerStatus=enabled?"Waiting for an idle API slot":"Paused";paint();if(enabled)tick();return;
      }
      if(e.target.closest("[data-log-api-clear]")){
-       enabled=false;generation++;archive=newArchive();sourceMode="api";page=0;workerStatus="API archive cleared";paint();return;
+       enabled=false;generation++;tornGuideApi.cancelIdleLog();archive=newArchive();sourceMode="api";page=0;workerStatus="API archive cleared";paint();return;
      }
      if(e.target.closest("[data-log-sync]")){request();return;}
      if(e.target.closest("[data-log-reset]")){query="";day="";page=0;view.querySelector("[data-log-query]").value="";view.querySelector("[data-log-date]").value="";paint();return;}
