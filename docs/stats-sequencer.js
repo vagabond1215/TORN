@@ -8,7 +8,7 @@ const tornTrainSequence=(()=>{
   const defaults={
     natural:()=>[],
     maxenergy:()=>[make("xanax"),maxCandyAction(),make("train"),make("refill"),make("train")],
-    mini:()=>[make("xanax"),maxCandyAction(),make("ecstasy"),make("train"),make("refill"),make("train")],
+    mini:()=>[make("xanax"),maxCandyAction(),make("ecstasy"),make("train"),make("refill"),make("train"),make("xanax"),make("train")],
     low:()=>[maxCandyAction(),make("ecstasy"),make("train"),make("refill"),make("train")],
     jump:()=>[...jumpStart(),make("dvd",5),make("ecstasy"),make("train"),make("refill"),make("train")],
     maxhappy:()=>[...jumpStart(),make("externalHappy"),make("ecstasy"),make("train"),make("refill"),make("train")],
