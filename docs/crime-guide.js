@@ -570,10 +570,10 @@ const tornCrimeGuide = (() => {
   }
   function calendarRenderOptions(training){return {now:training.now,war:training.activity.war,liveDrugSeconds:training.inputs?.owner!=null?training.inputs.drug:null};}
   function homeTimeline(training,events){
-    return '<section class="home-activity-timeline" aria-label="Activity timeline"><div class="home-activity-timeline-header"><h3>Activity Timeline</h3><a href="#calendar">Full Calendar</a></div>'+tornActivityScheduler.renderTimeline(events,training.now,7,training.activity.war,calendarRenderOptions(training).liveDrugSeconds,false)+'</section>';
+    return '<section class="home-activity-timeline" aria-label="Activity timeline"><div class="home-activity-timeline-header"><h3>Activity Timeline</h3><a href="#calendar">Full Calendar</a></div>'+tornActivityScheduler.renderModeTimeline(events,training.now,training.activity.war,calendarRenderOptions(training).liveDrugSeconds,"home")+'</section>';
   }
   function calendarCard(training,full=false,events=null){
-    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(events??calendarEvents(training,training.now),{full,homeTile:!full,...calendarRenderOptions(training)})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
+    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(events??calendarEvents(training,training.now),{full,homeTile:!full,timelineScope:full?"calendar":null,...calendarRenderOptions(training)})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
   }
   function renderCalendar(){
     loadOcFilters();loadRecFilters();

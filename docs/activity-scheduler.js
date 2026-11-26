@@ -251,12 +251,21 @@ const tornActivityScheduler=(()=>{
     }
     return intervals;
   }
-  function timelineLayout(list,now,days=7,war=null,liveDrugSeconds=null){
-    const end=now+days*D,width=days*240,bin=48,maxLanes=3;
-    const x=at=>Math.max(0,Math.min(width,(at-now)/(end-now)*width));
+  // View time and source snapshot time are separate: moving the ruler
+  // must not move planned events or extend a remaining cooldown.
+  const timelineModes={today:"Today",twoDays:"2 Days",rolling:"24hrs"};
+  function timelineWindow(at,mode="today"){
+    const minute=Math.floor(at/60000)*60000,day=Math.floor(minute/D)*D;
+    const validMode=Object.hasOwn(timelineModes,mode)?mode:"today",rolling=validMode==="rolling";
+    const start=rolling?minute:day,days=validMode==="twoDays"?2:1;
+    return {mode:validMode,at:minute,start,end:start+days*D,width:days*720,days};
+  }
+  function timelineLayout(list,now,days=7,war=null,liveDrugSeconds=null,window=null){
+    const start=window?.start??now,end=window?.end??now+days*D,width=window?.width??days*240,bin=48,maxLanes=3;
+    const x=at=>Math.max(0,Math.min(width,(at-start)/(end-start)*width));
     const valid=at=>Number.isFinite(at)&&Math.abs(at)<=8640000000000000;
     const rows=list.filter(e=>e&&Object.hasOwn(kinds,e.kind)&&typeof e.title==="string"&&valid(e.start)&&valid(e.end)&&e.end>=e.start).map(e=>({...e}));
-    if(war&&valid(war.cutoff)&&valid(war.start)&&war.cutoff<war.start&&war.start>now&&war.cutoff<end)
+    if(war&&valid(war.cutoff)&&valid(war.start)&&war.cutoff<war.start&&war.start>start&&war.cutoff<end)
       rows.push({id:"timeline-war-prep",kind:"war",title:war.stale?"Last known war preparation":"War preparation",start:war.cutoff,end:war.start,blocking:true,stale:!!war.stale,source:war.stale?"Last known schedule":"Calculated training reservation",detail:"Training cutoff to ranked war start; not a confirmed dose schedule"});
     if(war&&valid(war.start)){
       const row=rows.find(e=>e.id==="war-start");
@@ -270,13 +279,13 @@ const tornActivityScheduler=(()=>{
     }
     for(const e of rows)if(e.kind==="racing"&&e.detail==="End not supplied"){e.originalStart=e.start;e.start=e.end=Math.max(now,e.start);}
     rows.push(...timelineDrugCooldowns(rows,now,liveDrugSeconds));
-    const visible=rows.filter(e=>valid(e.start)&&valid(e.end)&&e.start<end&&e.end>=now&&!(e.end===now&&e.start<now));
+    const visible=rows.filter(e=>valid(e.start)&&valid(e.end)&&e.start<end&&e.end>=start&&!(e.end===start&&e.start<start));
     const spans=[],pins=[],lanes=Array.from({length:maxLanes},()=>[]);
     for(const e of visible.slice().sort((a,b)=>Number(b.blocking===true)-Number(a.blocking===true)||Number(b.cooldown===true)-Number(a.cooldown===true)||a.start-b.start||b.end-a.end||String(a.id).localeCompare(String(b.id)))){
       const left=x(e.start),right=x(e.end),range=e.end>e.start;
       const minWidth=e.cooldown?8:30;
       const lane=range&&right-left>=minWidth?lanes.findIndex(items=>items.every(i=>right+2<=i.left||left>=i.right+2)):-1;
-      if(lane>=0){const item={event:e,left,right,lane,clippedStart:e.start<now,clippedEnd:e.end>end};spans.push(item);lanes[lane].push(item);}
+      if(lane>=0){const item={event:e,left,right,lane,clippedStart:e.start<start,clippedEnd:e.end>end};spans.push(item);lanes[lane].push(item);}
       else pins.push({event:e,x:left,range,overflow:range&&right-left>=minWidth});
     }
     // Nearby marker clusters retain separate exact anchors and full event detail.
@@ -300,24 +309,27 @@ const tornActivityScheduler=(()=>{
       if(g.left<0||g.right>width||annotations.some(b=>b!==a&&b.side===a.side&&g.left<b.right+4&&g.right>b.left-4))continue;
       Object.assign(a,g,{label:true});
     }
-    return {now,end,width,spans,annotations,laneCount:Math.max(1,...spans.map(i=>i.lane+1)),count:visible.length};
+    return {now,start,end,width,spans,annotations,laneCount:Math.max(1,...spans.map(i=>i.lane+1)),count:visible.length};
   }
   function timelineDetail(e){
     const timing=e.originalStart!=null?"Start "+time(e.originalStart)+" · end unknown":e.end>e.start?time(e.start)+" → "+time(e.end):time(e.start);
     return '<div class="activity-timeline-detail-row activity-'+e.kind+'"><strong>'+esc(timelineIcons[e.kind]+" "+e.title)+'</strong><span>'+esc(timing)+'</span><small>'+esc(kinds[e.kind]+" · "+timelineStatus(e)+" · "+(e.source??"Not supplied"))+'</small>'+(e.detail?'<small>'+esc(e.detail)+'</small>':"")+'</div>';
   }
-  function renderTimeline(list,now,days=7,war=null,liveDrugSeconds=null,showAgenda=true){
-    const layout=timelineLayout(list,now,days,war,liveDrugSeconds),{width,end}=layout,pct=v=>(v/width*100).toFixed(5)+"%";
-    const ticks=[];
-    for(let at=Math.ceil(now/(6*H))*6*H;at<end;at+=6*H){
+  function renderTimeline(list,now,days=7,war=null,liveDrugSeconds=null,showAgenda=true,window=null){
+    const layout=timelineLayout(list,now,days,war,liveDrugSeconds,window),{width,start,end}=layout,pct=v=>(v/width*100).toFixed(5)+"%";
+    const ticks=[],step=(window?3:6)*H;
+    const position=at=>Math.max(0,Math.min(100,(at-start)/(end-start)*100));
+    const nowX=position(window?.at??now);
+    for(let at=Math.ceil(start/step)*step;at<end;at+=step){
       const major=at%D===0;
-      ticks.push('<span class="activity-time-tick'+(major?' is-day':'')+'" style="--x:'+pct((at-now)/(end-now)*width)+'" aria-hidden="true"><span>'+(major?'<b>'+esc(dateLabel(at).slice(5))+'</b>':"")+esc(shortTime(at))+'</span></span>');
+      ticks.push('<span class="activity-time-tick'+(major?' is-day':'')+'" style="--x:'+pct((at-start)/(end-start)*width)+'" aria-hidden="true"><span>'+(major?'<b>'+esc(dateLabel(at).slice(5))+'</b>':"")+esc(shortTime(at))+'</span></span>');
     }
     let seq=0;const templates=[];
     const button=(events,body,cls,style)=>{
       const id=String(seq++),e=events[0],label=events.length===1?e.title+" · "+timelineStatus(e)+" · "+time(e.originalStart??e.start)+(e.end>e.start?" to "+time(e.end):"")+(e.originalStart!=null?" · end unknown":""):events.length+" nearby events; activate to review each time";
       templates.push('<template data-activity-timeline-content="'+id+'">'+events.map(timelineDetail).join("")+'</template>');
-      return '<button type="button" class="'+cls+'" style="'+style+'" data-activity-timeline-item="'+id+'" aria-pressed="false" aria-label="'+esc(label)+'">'+body+'</button>';
+      const eventKey=JSON.stringify(events.map(x=>[x.id,x.start,x.end]).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))||a[1]-b[1]||a[2]-b[2]));
+      return '<button type="button" class="'+cls+'" style="'+style+'" data-activity-timeline-item="'+id+'" data-activity-event-key="'+esc(eventKey)+'" aria-pressed="false" aria-label="'+esc(label)+'">'+body+'</button>';
     };
     const spans=layout.spans.slice().sort((a,b)=>a.event.start-b.event.start||a.lane-b.lane).map(i=>{
       const e=i.event,cls="activity-time-span activity-"+e.kind+(e.blocking?" is-blocking":" is-advisory")+(e.cooldown?" is-cooldown":"")+(e.stale||e.recoveryReview?" is-review":"")+(i.clippedStart?" continues-left":"")+(i.clippedEnd?" continues-right":"");
@@ -330,12 +342,91 @@ const tornActivityScheduler=(()=>{
       const body='<span class="activity-time-pin-icon" aria-hidden="true">'+(cluster?String(events.length):a.items[0].range?"↔":timelineIcons[e.kind])+'</span>'+(a.label?'<span class="activity-time-pin-label">'+esc(label)+'</span>':"");
       return anchors+button(events,body,cls,"--x:"+pct(a.x)+";--flag-width:"+a.labelWidth+"px");
     }).join("");
-    return '<div class="activity-unified-timeline" data-activity-timeline><div class="activity-timeline-heading"><strong>Next '+days+' days · TCT</strong><small>Scroll to explore · select an event for details</small></div>'+
-      '<div class="activity-timeline-scroll" tabindex="0" role="region" aria-label="Scrollable '+days+' day activity timeline"><div class="activity-time-canvas" style="--canvas-width:'+width+'px;--lanes:'+layout.laneCount+'"><div class="activity-time-ruler">'+ticks.join("")+'</div><div class="activity-time-track"><div class="activity-time-grid" aria-hidden="true">'+ticks.join("")+'</div><div class="activity-time-now" aria-hidden="true"><span>NOW</span></div><div class="activity-time-spans">'+spans+'</div>'+markers+'</div></div></div>'+
+    return '<div class="activity-unified-timeline" data-activity-timeline><div class="activity-timeline-heading"><strong>'+esc(window?dateLabel(start)+" "+shortTime(start)+" → "+dateLabel(end)+" "+shortTime(end)+" TCT":"Next "+days+" days · TCT")+'</strong><small>'+esc(window?"Snapshot "+time(now)+" · forecasts, not confirmed history":"Scroll to explore · select an event for details")+'</small></div>'+
+      '<div class="activity-timeline-scroll" tabindex="0" role="region" aria-label="Scrollable '+days+' day activity timeline"><div class="activity-time-canvas" style="--canvas-width:'+width+'px;--lanes:'+layout.laneCount+'"><div class="activity-time-ruler">'+ticks.join("")+'</div><div class="activity-time-track"><div class="activity-time-grid" aria-hidden="true">'+ticks.join("")+'</div><div class="activity-time-now'+(nowX>90?' is-near-end':'')+'" style="--now-x:'+nowX+'%" aria-hidden="true"><span>NOW</span></div><div class="activity-time-spans">'+spans+'</div>'+markers+'</div></div></div>'+
       '<div class="activity-timeline-legend"><span><i class="activity-legend-block"></i> Training reservation</span><span><i class="activity-legend-advisory"></i> Informational / forecast</span><span><i class="activity-legend-pin"></i> Event flag / compact range</span><span><i class="activity-legend-cooldown"></i> Drug cooldown</span><span><i class="activity-legend-review"></i> Review / stale</span></div>'+
       '<div class="activity-timeline-inspector" data-activity-timeline-inspector aria-live="polite"><small>'+(layout.count?"Select a block or pin to keep its source, TCT timing and status visible. Clustered pins list every included event.":"No scheduled activities in this window.")+'</small></div>'+
       '<div class="activity-timeline-tooltip" data-activity-timeline-tooltip hidden aria-hidden="true"></div>'+templates.join("")+'</div>'+
-      (showAgenda?'<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&e.end>=now))+'</details>':"");
+      (showAgenda?'<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&(e.end>e.start?e.end>start:e.start>=start)))+'</details>':"");
+  }
+  // Session-local display preference and two bounded snapshots, never persisted
+  // in the account journal. Account changes invalidate every cached view.
+  let modeOwner=null,selectedTimelineMode="today",lastModeTick=null;
+  const timelineSnapshots=new Map();
+  function ensureTimelineOwner(){
+    const id=owner();
+    if(id!==modeOwner){modeOwner=id;selectedTimelineMode="today";timelineSnapshots.clear();lastModeTick=null;}
+  }
+  const modeButtons=()=>'<div class="activity-timeline-modes" role="group" aria-label="Timeline time window">'+Object.entries(timelineModes).map(([mode,label])=>'<button type="button" data-activity-timeline-mode="'+mode+'" aria-pressed="'+(mode===selectedTimelineMode)+'">'+label+'</button>').join("")+'</div>';
+  function modeContent(snapshot,window){
+    return renderTimeline(snapshot.list,snapshot.now,window.days,snapshot.war,snapshot.liveDrugSeconds,snapshot.showAgenda,window);
+  }
+  function renderModeTimeline(list,now,war=null,liveDrugSeconds=null,scope="home",clock=Date.now()){
+    ensureTimelineOwner();
+    if(!["home","calendar"].includes(scope))scope="home";
+    const window=timelineWindow(clock,selectedTimelineMode);
+    const snapshot={list,now,war,liveDrugSeconds,showAgenda:scope==="calendar",window};
+    timelineSnapshots.set(scope,snapshot);
+    return '<div class="activity-mode-timeline" data-activity-mode-timeline="'+scope+'">'+modeButtons()+'<div data-activity-mode-content>'+modeContent(snapshot,window)+'</div></div>';
+  }
+  function redrawMode(root,snapshot,window,resetScroll=false){
+    const content=root.querySelector("[data-activity-mode-content]");if(!content)return;
+    const oldScroll=content.querySelector(".activity-timeline-scroll"),scroll=oldScroll?.scrollLeft??0;
+    const open=content.querySelector(".activity-timeline-agenda")?.open;
+    const active=document.activeElement,focusInside=content.contains(active);
+    const focusKey=focusInside?active?.dataset?.activityEventKey:null;
+    const selectedKey=content.querySelector('[data-activity-event-key][aria-pressed="true"]')?.dataset.activityEventKey;
+    content.innerHTML=modeContent(snapshot,window);
+    const nextScroll=content.querySelector(".activity-timeline-scroll");
+    if(nextScroll&&!resetScroll)nextScroll.scrollLeft=scroll;
+    const agenda=content.querySelector(".activity-timeline-agenda");if(agenda&&open)agenda.open=true;
+    const controls=[...content.querySelectorAll("[data-activity-event-key]")];
+    const selected=selectedKey&&controls.find(b=>b.dataset.activityEventKey===selectedKey);
+    if(selected){
+      const template=content.querySelector('template[data-activity-timeline-content="'+selected.dataset.activityTimelineItem+'"]');
+      const inspector=content.querySelector("[data-activity-timeline-inspector]");
+      selected.setAttribute("aria-pressed","true");
+      if(template&&inspector)inspector.replaceChildren(template.content.cloneNode(true));
+    }
+    if(focusInside){
+      const focused=focusKey&&controls.find(b=>b.dataset.activityEventKey===focusKey);
+      (focused??nextScroll)?.focus({preventScroll:true});
+    }
+    snapshot.window=window;
+    for(const b of root.querySelectorAll("[data-activity-timeline-mode]"))b.setAttribute("aria-pressed",String(b.dataset.activityTimelineMode===window.mode));
+  }
+  // Called by the existing local UI tick; no API, planner, or storage calls.
+  function tickTimeline(at=Date.now()){
+    ensureTimelineOwner();
+    if(typeof document==="undefined"||document.visibilityState==="hidden")return;
+    const minute=Math.floor(at/60000);
+    if(minute===lastModeTick)return;
+    lastModeTick=minute;
+    for(const root of document.querySelectorAll("[data-activity-mode-timeline]")){
+      const snapshot=timelineSnapshots.get(root.dataset.activityModeTimeline);
+      if(!snapshot)continue;
+      const window=timelineWindow(at,selectedTimelineMode),previous=snapshot.window;
+      if(window.mode!==previous.mode||window.start!==previous.start){
+        redrawMode(root,snapshot,window,window.mode!==previous.mode||window.mode!=="rolling");continue;
+      }
+      // Calendar-day modes keep their geometry; only NOW moves.
+      const marker=root.querySelector(".activity-time-now");
+      if(marker){
+        const x=Math.max(0,Math.min(100,(window.at-window.start)/(window.end-window.start)*100));
+        marker.style.setProperty("--now-x",x+"%");marker.classList.toggle("is-near-end",x>90);
+      }
+      snapshot.window=window;
+    }
+  }
+  function chooseTimelineMode(button){
+    ensureTimelineOwner();
+    const mode=button.dataset.activityTimelineMode;
+    if(!Object.hasOwn(timelineModes,mode))return;
+    selectedTimelineMode=mode;
+    for(const root of document.querySelectorAll("[data-activity-mode-timeline]")){
+      const snapshot=timelineSnapshots.get(root.dataset.activityModeTimeline);
+      if(snapshot)redrawMode(root,snapshot,timelineWindow(Date.now(),mode),true);
+    }
   }
   function timelineInteraction(view){
     const item=e=>e.target?.closest?.("[data-activity-timeline-item]");
@@ -360,6 +451,8 @@ const tornActivityScheduler=(()=>{
     view.addEventListener("scroll",hide,true);
     view.addEventListener("keydown",e=>{if(e.key==="Escape")hide();});
     view.addEventListener("click",e=>{
+      const mode=e.target?.closest?.("[data-activity-timeline-mode]");
+      if(mode){chooseTimelineMode(mode);return;}
       const b=item(e);if(!b)return;const inspector=get(b,"inspector");if(!inspector)return;
       for(const other of b.closest("[data-activity-timeline]").querySelectorAll("[data-activity-timeline-item]"))other.setAttribute("aria-pressed",String(other===b));
       populate(b,inspector);hide();
@@ -404,12 +497,12 @@ const tornActivityScheduler=(()=>{
     const grid='<div class="activity-grid">'+tiles+'</div>';
     return week?'<div class="activity-week" data-activity-timeline>'+grid+'<div class="activity-timeline-inspector activity-week-inspector" data-activity-timeline-inspector aria-live="polite"><small>Hover or select a package icon for the day’s projected item value.</small></div><div class="activity-timeline-tooltip" data-activity-timeline-tooltip hidden aria-hidden="true"></div>'+templates.join("")+'</div>':grid;
   }
-  function render(list,{full=false,homeTile=false,now=Date.now(),view=settings().view,war=null,liveDrugSeconds=null}={}){
+  function render(list,{full=false,homeTile=false,now=Date.now(),view=settings().view,war=null,liveDrugSeconds=null,timelineScope=null}={}){
     const modes=full?["agenda","timeline","week","month"]:homeTile?["agenda","week"]:["agenda","timeline","week"];
     if(!modes.includes(view))view="agenda";
     const visible=list.filter(e=>e.start<now+(view==="month"?30:7)*D&&e.end>=now);
     return '<div class="activity-calendar"><div class="activity-tabs">'+modes.map(m=>'<button type="button" data-activity-view="'+m+'" aria-pressed="'+(view===m)+'">'+m[0].toUpperCase()+m.slice(1)+'</button>').join("")+'</div>'+
-      (view==="timeline"?renderTimeline(list,now,7,war,liveDrugSeconds):view==="week"?renderGrid(visible,now,7):!visible.length?'<p class="fine-print">No scheduled activities in this window.</p>':view==="agenda"?renderAgenda(visible):renderGrid(visible,now,30))+
+      (view==="timeline"?(timelineScope?renderModeTimeline(list,now,war,liveDrugSeconds,timelineScope):renderTimeline(list,now,7,war,liveDrugSeconds)):view==="week"?renderGrid(visible,now,7):!visible.length?'<p class="fine-print">No scheduled activities in this window.</p>':view==="agenda"?renderAgenda(visible):renderGrid(visible,now,30))+
       '<small>Forecasts are tentative. The Energy tile remains the action and confirmation interface.</small></div>';
   }
   function settingsDialog(onChange,button){
@@ -452,5 +545,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineLayout,renderTimeline,dailyItemValues,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineWindow,timelineLayout,renderTimeline,renderModeTimeline,tickTimeline,dailyItemValues,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
 })();
