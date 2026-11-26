@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn City Guide - Passive Visible Status Bridge
 // @namespace    https://vagabond1215.github.io/TORN/
-// @version      2.5.1
-// @description  Synchronize visible status bars and ranked market observations to your local Torn City Guide. Read-only, no API key or network calls.
+// @version      2.6.0
+// @description  Synchronize visible status bars, ranked market observations and opted-in personal activity logs to your local Torn City Guide. Read-only, no API key or network calls.
 // @match        https://www.torn.com/*
 // @match        https://torn.com/*
 // @match        https://vagabond1215.github.io/TORN/*
@@ -26,8 +26,83 @@
   const refreshAge=60*1000;
   const isTorn=location.hostname==="www.torn.com"||location.hostname==="torn.com";
   const isGuide=location.origin===guideOrigin&&location.pathname.startsWith("/TORN/");
+  // BEGIN personal log helpers
+  const logPrefix="torn-city-guide:personal-log:v1:",logSignal=logPrefix+"changed",logLimit=2000;
+  const logOwner=id=>Number.isSafeInteger(Number(id))&&Number(id)>0?Number(id):null;
+  function ownLogRoute(loc){
+    if(!["www.torn.com","torn.com"].includes(loc.hostname)||loc.protocol!=="https:"||loc.pathname!=="/page.php")return false;
+    try{
+      const pairs=loc.search.replace(/^\?/,"").split("&").map(part=>part.split("=").map(decodeURIComponent));
+      return pairs.filter(([k,v])=>k==="sid"&&v==="log").length===1&&pairs.every(([k])=>["sid","cat","log","search","from","to"].includes(k));
+    }catch{return false;}
+  }
+  function logTime(value){
+    const text=String(value??"").trim();
+    let y,m,d,h,min,s;
+    const t=text.match(/^(\d{2}):(\d{2}):(\d{2})\s*[-–]\s*(\d{2})\/(\d{2})\/(\d{2}|\d{4})(?:\s*TCT)?$/i);
+    const iso=text.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:Z| UTC| TCT)?$/i);
+    if(t){[,h,min,s,d,m,y]=t.map(Number);if(y<100)y+=2000;}else if(iso){[,y,m,d,h,min,s]=iso.map(Number);}else return null;
+    const at=Date.UTC(y,m-1,d,h,min,s),date=new Date(at);
+    return y>=2004&&date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d&&date.getUTCHours()===h&&date.getUTCMinutes()===min&&date.getUTCSeconds()===s?at:null;
+  }
+  const cleanLogText=value=>String(value??"").replace(/\s+/g," ").trim().replace(/\b((?:api[ _-]?key|access[ _-]?token|password|session[ _-]?token)\s*[:=]\s*)\S+/gi,"$1[redacted]").slice(0,1200);
+  function logRow(at,description,now=Date.now()){
+    const text=cleanLogText(description);
+    return Number.isSafeInteger(at)&&at>=Date.UTC(2004,0,1)&&at<=now+300000&&text?{at,text}:null;
+  }
+  function mergeLogRows(prior,observed,now=Date.now()){
+    const grouped=new Map();
+    for(const set of [prior,observed]){
+      const counts=new Map();
+      for(const raw of Array.isArray(set)?set:[]){
+        const row=logRow(raw?.at,raw?.text,now);if(!row)continue;
+        const k=JSON.stringify([row.at,row.text]),n=(counts.get(k)??0)+1;counts.set(k,n);
+        if(n>(grouped.get(k)?.count??0))grouped.set(k,{...row,count:n});
+      }
+    }
+    const result=[];
+    for(const {at,text,count} of [...grouped.values()].sort((a,b)=>b.at-a.at||a.text.localeCompare(b.text))){
+      for(let i=0;i<count&&result.length<logLimit;i++)result.push({at,text});
+      if(result.length>=logLimit)break;
+    }
+    return result;
+  }
+  function readVisibleLogRows(doc,visible,now=Date.now()){
+    const rows=[],seen=new Set();let skipped=0,matched=0;
+    for(const el of doc.querySelectorAll('tr .log-text, tr span[class*="text___"]')){
+      const tr=el.closest("tr");if(!tr||seen.has(tr)||!visible(tr)||!visible(el))continue;
+      const cell=tr.querySelector('time,[class*="timeValue"],[class*="time-value"]')??tr.querySelector("td");
+      if(!cell||!visible(cell))continue;
+      const at=[cell.getAttribute("datetime"),cell.getAttribute("title"),cell.innerText,tr.querySelector("td")?.innerText].map(logTime).find(v=>v!==null);
+      if(at==null){if(el.matches(".log-text")){seen.add(tr);matched++;skipped++;}continue;}
+      seen.add(tr);matched++;
+      const row=logRow(at,el.innerText,now);if(row)rows.push(row);else skipped++;
+      if(matched>=logLimit)break;
+    }
+    return {rows,matched,skipped};
+  }
+  // END personal log helpers
   if(window.top!==window)return;
   if(isGuide){
+    let requestedLogOwner=null;
+    function shareLog(){
+      if(location.hash!=="#log"||document.visibilityState!=="visible"||!requestedLogOwner)return;
+      const stored=GM_getValue(logPrefix+"rows:"+requestedLogOwner,null);
+      const packet=stored?.playerId===requestedLogOwner?stored:null;
+      window.dispatchEvent(new CustomEvent("torn-guide-log-snapshot",{detail:JSON.stringify({
+        version:1,playerId:requestedLogOwner,companionVersion:"2.6.0",capturedAt:packet?.capturedAt??null,
+        matched:packet?.matched??0,skipped:packet?.skipped??0,rows:Array.isArray(packet?.rows)?packet.rows.slice(0,logLimit):[]
+      })}));
+    }
+    window.addEventListener("torn-guide-request-log",e=>{
+      if(location.hash!=="#log")return;
+      requestedLogOwner=logOwner(e.detail?.playerId);shareLog();
+    });
+    GM_addValueChangeListener(logSignal,()=>shareLog());
+    window.addEventListener("focus",shareLog);
+    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")shareLog();});
+    window.addEventListener("hashchange",()=>{if(location.hash!=="#log")requestedLogOwner=null;});
+    window.addEventListener("torn-guide-stop-log",()=>{requestedLogOwner=null;});
     const share=()=>{
       const packet=GM_getValue(key,null);
       if(!packet||packet.version!==2||!Number.isInteger(packet.playerId)||
@@ -44,10 +119,10 @@
       const meta=GM_getValue(archiveMeta,null);
       if(!meta?.buckets){
         const packet=GM_getValue(marketKey,null);
-        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.5.1",bridgeAt:Date.now()})}));
+        window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({...((packet?.version===1&&Array.isArray(packet.rows))?packet:{version:1,rows:[]}),companionVersion:"2.6.0",bridgeAt:Date.now()})}));
         return;
       }
-      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.5.1",bridgeAt:Date.now(),buckets:meta.buckets})}));
+      window.dispatchEvent(new CustomEvent("torn-guide-rw-snapshot",{detail:JSON.stringify({version:2,kind:"meta",diagnostic:meta.diagnostic,companionVersion:"2.6.0",bridgeAt:Date.now(),buckets:meta.buckets})}));
       if(transferTimer!==null)clearTimeout(transferTimer);
       const pending=Object.entries(meta.buckets).filter(([id,rev])=>force||sent.get(id)!==rev);
       const next=()=>{
@@ -370,6 +445,69 @@
   document.addEventListener("visibilitychange",()=>{if(active())resetMarket();else if(dirty)flush();});
   window.addEventListener("pagehide",()=>{if(dirty)flush();});
   resetMarket();
+  // Personal log capture: own focused log page only, no requests or clicks.
+  let logTimer=null;
+  const logPanelId="torn-guide-log-capture";
+  function logActive(){return ownLogRoute(location)&&active();}
+  function publishLog(manual=false){
+    if(!logActive())return;
+    const id=extractOwnId(),panel=document.getElementById(logPanelId),status=panel?.querySelector("[data-log-status]");
+    if(!id){if(status)status.textContent="Cannot verify your player ID; nothing captured.";return;}
+    if(!manual&&GM_getValue(logPrefix+"auto:"+id,false)!==true)return;
+    const obs=readVisibleLogRows(document,rendered),storageKey=logPrefix+"rows:"+id,old=GM_getValue(storageKey,null);
+    const prior=old?.playerId===id?old.rows:[],rows=mergeLogRows(prior,obs.rows);
+    const changed=JSON.stringify(rows)!==JSON.stringify(prior??[])||old?.matched!==obs.matched||old?.skipped!==obs.skipped;
+    if(manual||changed){
+      try{
+        GM_setValue(storageKey,{version:1,playerId:id,capturedAt:Date.now(),matched:obs.matched,skipped:obs.skipped,rows});
+        GM_setValue(logSignal,{playerId:id,at:Date.now()});
+      }catch{if(status)status.textContent="Could not save the log archive.";return;}
+    }
+    if(status){
+      const message=obs.matched?obs.rows.length+" readable rows · "+rows.length+" archived"+(obs.skipped?" · "+obs.skipped+" unreadable skipped":""):"No recognizable log rows yet. Load entries on this page.";
+      if(status.textContent!==message)status.textContent=message;
+    }
+  }
+  function mountLogCapture(){
+    let panel=document.getElementById(logPanelId);
+    if(!ownLogRoute(location)){panel?.remove();return;}
+    if(!logActive())return;
+    const id=extractOwnId();if(!id){panel?.remove();return;}
+    if(panel&&panel.dataset.player!==String(id)){panel.remove();panel=null;}
+    if(!panel){
+      const first=document.querySelector('tr .log-text,tr span[class*="text___"]'),table=first?.closest("table");
+      if(!table?.parentElement)return;
+      panel=document.createElement("section");panel.id=logPanelId;panel.dataset.player=String(id);
+      panel.style.cssText="display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px;margin:8px 0;border:1px solid #777;border-radius:5px;font-size:12px";
+      panel.innerHTML='<strong>Torn Guide · Log archive</strong><button type="button" data-log-capture>Capture loaded entries</button><label><input type="checkbox" data-log-auto> Auto-capture while focused</label><button type="button" data-log-clear>Clear archive</button><span data-log-status role="status">Only loaded, rendered entries are captured.</span>';
+      const auto=panel.querySelector("[data-log-auto]");auto.checked=GM_getValue(logPrefix+"auto:"+id,false)===true;
+      panel.querySelector("[data-log-capture]").addEventListener("click",()=>publishLog(true));
+      auto.addEventListener("change",()=>{if(!logActive()||extractOwnId()!==id)return;GM_setValue(logPrefix+"auto:"+id,auto.checked);if(auto.checked)publishLog(true);});
+      panel.querySelector("[data-log-clear]").addEventListener("click",()=>{
+        if(!logActive()||extractOwnId()!==id||!window.confirm("Clear your local Torn Guide activity log archive and disable automatic capture?"))return;
+        GM_setValue(logPrefix+"auto:"+id,false);auto.checked=false;
+        GM_setValue(logPrefix+"rows:"+id,{version:1,playerId:id,capturedAt:Date.now(),matched:0,skipped:0,rows:[]});
+        GM_setValue(logSignal,{playerId:id,at:Date.now()});panel.querySelector("[data-log-status]").textContent="Archive cleared.";
+      });
+      table.parentElement.insertBefore(panel,table);
+    }
+    publishLog(false);
+  }
+  function scheduleLog(){
+    if(!ownLogRoute(location)){document.getElementById(logPanelId)?.remove();return;}
+    if(!logActive()||logTimer!==null)return;
+    logTimer=setTimeout(()=>{logTimer=null;mountLogCapture();},1000);
+  }
+  const logObserver=new MutationObserver(records=>{
+    if(!logActive())return;
+    if(records.some(rec=>!((rec.target.nodeType===1?rec.target:rec.target.parentElement)?.closest("#"+logPanelId))))scheduleLog();
+  });
+  if(ownLogRoute(location)&&document.body)logObserver.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:["class","style","hidden","title","datetime"]});
+  window.addEventListener("focus",scheduleLog);
+  window.addEventListener("hashchange",scheduleLog);
+  window.addEventListener("pageshow",scheduleLog);
+  document.addEventListener("visibilitychange",scheduleLog);
+  scheduleLog();
   // Observe already loaded pages. Never open tabs, refresh Torn, click controls,
   // issue requests, collect credentials, chat, or unrelated page contents.
   let pending=null, lastRead=0;
