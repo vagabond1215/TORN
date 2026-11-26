@@ -189,7 +189,7 @@ const tornToolsGuide=(()=>{
    const items=[];
    if(connected&&health.penalty!=null&&fresh("icons")){
      const p=health.penalty,level=health.level,detail=level==="restricted"?"Drug recommendations restricted":level==="recommended"?"Rehab recommended":level==="preferred"?"Rehab preferred":"Observed battle-stat penalty";
-     items.push(item("addiction","Addiction",p+"%", "Addiction penalty "+p+"% · "+detail+(decayAt?" · Next approximate natural decay in "+duration(decayAt):"")+" · Open Calendar for rehab", "#calendar",level==="restricted"?"danger":["preferred","recommended"].includes(level)?"warning":"ready"));
+     items.push(item("addiction","Addiction",p+"%"+(decayAt&&decayAt>now?" · "+duration(decayAt):""), "Addiction penalty "+p+"% · "+detail+(decayAt?" · Next approximate natural decay in "+duration(decayAt):"")+" · Open Calendar for rehab", "#calendar",level==="restricted"?"danger":["preferred","recommended"].includes(level)?"warning":"ready"));
    }else items.push(unknown("addiction","Addiction","#calendar"));
    const travel=data("travel"),remaining=nonnegative(travel?.time_left??travel?.remaining??travel?.remaining_seconds);
    const arrival=timeValue(travel?.arrival??travel?.arrival_at??travel?.until??travel?.timestamp??travel?.arrives_at)??(remaining!==null?Number(state.fetchedAt?.travel||0)+remaining*1000:null);
