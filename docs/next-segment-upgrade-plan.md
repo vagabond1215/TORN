@@ -18,3 +18,8 @@ Predecessor: activity-scheduler-plan.md. Preserve all active sessions, user pref
 - Exact item+quantity signature matches only when unique within crime; missing quantities, cash/points-only and ambiguous outcomes stay unverified. Preserve existing unique filters, totals, and navigation.
 - Shared stacking schedule tested with 0/250/500/750/1000 E, cooldown delays, low stock, blocked drugs, late start and active war. Calendar uses same result, does not generate impossible milestones.
 - Compile and run reproducible regression fixtures; document unresolved API and browser validation. Refresh asset cache versions after integration. Commit sequentially on main within docs/.
+
+## Implementation record
+- Completed: work packages 1 (source/synthetic tests only), 2 (34 Search for Cash rows, 59 documented Shoplifting rows; manual readings, no automatic hidden state), and 3 (shared war projection, fresh read-only checks during stacking with existing auto-observation toggle). The reference row IDs are local, not confirmed API IDs. Exact quantity signatures are conservative, and cash/ambiguous rows remain unverified.
+- Tests: `node docs/tests/crime-states-and-war.test.cjs`, `node docs/tests/activity-scheduler.test.cjs`, `node docs/tests/live-stack-and-activity.test.cjs`. Synthetic tests passed in JS fixture execution; no authenticated browser session or live key was used. Assets updated.
+- Next gates: package 4 Live optimizer parity and bounded search; package 5 execution/ledger; package 6 remaining crime IDs/data; packages 7–8 calendar, analytics, worker. Do not label these as completed. Confirm deployed layout and API response fields, then proceed in order.
