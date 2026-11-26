@@ -228,12 +228,12 @@ const tornCrimeGuide = (() => {
     dialog.showModal();
   }
   const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Energy"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
-  let recIncomplete=true,recUniques=false,collectView="ready",crimeSettingsOpen=true,crimeOverride="auto";
+  let recIncomplete=true,recUniques=false,collectView="ready",incompleteUniquesOnly=true,crimeOverride="auto";
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id)),recExpanded=new Set();
   function loadRecFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
-    recOwner=owner;collectView="ready";crimeSettingsOpen=true;crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
+    recOwner=owner;collectView="ready";incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
     try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v))recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}
   }
   let growthSettingsOpen=false;
@@ -270,7 +270,7 @@ const tornCrimeGuide = (() => {
   function recTileStart(id,label,crimeRefreshIds=[]){
     const settings=id==="growth"?recIconButton("Energy settings",recGearIcon,"data-growth-settings"):
       id==="restock"?recIconButton("Restock settings (minimums)",recGearIcon,'data-restock-settings aria-haspopup="dialog"'):
-      id==="crime"?recIconButton("Crime settings",recGearIcon,'data-rec-crime-settings aria-expanded="'+crimeSettingsOpen+'" aria-controls="rec-crime-settings"'):
+      id==="crime"?recIconButton("Crime settings",recGearIcon,'data-rec-crime-settings aria-haspopup="dialog"'):
       recIconButton(label+" settings",recGearIcon,"",false);
     const refresh=id==="crime"?recIconButton("Refresh crime progress",recRefreshIcon,'data-rec-crime-load="'+crimeRefreshIds.join(",")+'"',crimeRefreshIds.length>0):
       id==="growth"?recIconButton("Refresh Energy",recRefreshIcon,'data-growth-session="'+(loadTrainingSession()?"refresh":"war-refresh")+'"',!recoveryBusy):
@@ -344,15 +344,16 @@ const tornCrimeGuide = (() => {
       const ref=reference.find(y=>y[0]===x.name);
       const equipmentText=ref?equipment(ref).filter(y=>!y[3]||x.cs!=null&&x.cs>=y[3]).map(([name,cat])=>name+": "+({true:"owned",false:"missing",null:"unknown"}[inventoryStatus(name,cat)])).join(" · "):"";
       const uniqueText=x.total?x.uniqueCount==null?"Unique collection not loaded":x.uniqueCount+" / "+x.total+" Uniques Collected":"No documented unique outcomes";
-      return '<li><div><strong>'+esc(x.name)+(x.cs===null?"":" "+number(x.cs))+'</strong>'+(x.cs===null?'<small>Skill unavailable</small>':"")+(x.name==="Pickpocketing"?"":'<p>'+esc(crimeAdvice[x.name]??x.detail)+'</p>')+'<small>'+esc(uniqueText)+'</small>'+(equipmentText?'<small>'+esc(equipmentText)+'</small>':"")+'</div></li>'+(x.name==="Pickpocketing"?pickpocketRows(x.cs,risk,recUniques):"");
+      return '<li><div><strong>'+esc(x.name)+(x.cs===null?"":" "+number(x.cs))+'</strong>'+(x.cs===null?'<small>Skill unavailable</small>':"")+(x.name==="Pickpocketing"?"":'<p>'+esc(crimeAdvice[x.name]??x.detail)+'</p>')+'<small>'+esc(uniqueText)+'</small>'+(equipmentText?'<small>'+esc(equipmentText)+'</small>':"")+'</div></li>'+(x.name==="Pickpocketing"?pickpocketRows(x.cs,risk,incompleteUniquesOnly,x.uniqueCount!==null&&x.total>0&&x.uniqueCount>=x.total):"");
     };
     if(manual){refreshIds.push(crimeIds[manual.name]);return card(manual);}
     if(recUniques){
       const missing=allowed.filter(x=>x.total>0&&x.uniqueCount!==null&&x.uniqueCount<x.total).sort((a,b)=>a.rank-b.rank||b.cs-a.cs||a.i-b.i);
       const unknown=allowed.filter(x=>x.total>0&&x.uniqueCount===null);
-      refreshIds.push(...new Set([...missing,...unknown].map(x=>crimeIds[x.name])));
+      const shown=incompleteUniquesOnly?missing:allowed.filter(x=>x.total>0&&x.uniqueCount!==null).sort((a,b)=>a.rank-b.rank||b.cs-a.cs||a.i-b.i);
+      refreshIds.push(...new Set([...shown,...unknown].map(x=>crimeIds[x.name])));
       const summary='<li><div><strong>Unique hunt</strong><small>'+missing.length+' crimes with remaining documented uniques · '+unknown.length+' awaiting collection data. CS 100 crimes are included. Check in-game stars and requirements; counts are not a mapping of individual missing rewards.</small></div></li>';
-      return summary+missing.map(card).join("")+(unknown.length?'<li><div><strong>Awaiting unique data</strong><small>'+esc(unknown.map(x=>x.name).join(", "))+'</small></div></li>':"")+(!missing.length&&!unknown.length?'<li><div><strong>All documented unique counts reached for the selected risk.</strong></div></li>':"");
+      return summary+shown.map(card).join("")+(unknown.length?'<li><div><strong>Awaiting unique data</strong><small>'+esc(unknown.map(x=>x.name).join(", "))+'</small></div></li>':"")+(!missing.length&&!unknown.length?'<li><div><strong>All documented unique counts reached for the selected risk.</strong></div></li>':"");
     }
     const eligible=allowed.filter(x=>x.cs!==null&&(!recIncomplete||x.cs<100));
     const rank=(a,b)=>(risk==="low"?a.rank-b.rank:b.cs-a.cs)||a.rank-b.rank||a.i-b.i;
@@ -371,23 +372,52 @@ const tornCrimeGuide = (() => {
       '<a href="https://wiki.torn.com/wiki/Crimes_2.0" target="_blank" rel="noopener noreferrer">Unique requirements</a>';
     return '<footer class="rec-crime-actions rec-crime-footer">'+requirements+'<a href="https://torn.report/uniques" target="_blank" rel="noopener noreferrer">Unique tracker</a></footer>';
   }
-  function crimeFilters(){
-    return '<div class="rec-oc-filters"><div id="rec-crime-settings" class="rec-crime-settings" '+(crimeSettingsOpen?"":"hidden")+'><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button><select data-rec-crime-override aria-label="Manual crime override" title="Manual crime override"><option value="auto" '+(crimeOverride==="auto"?"selected":"")+'>Auto</option>'+crimes.map(([name])=>'<option value="'+esc(name)+'" '+(crimeOverride===name?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></div></div>';
+  function openCrimeSettings(view,button){
+    if(document.querySelector(".crime-settings-dialog[open]"))return;
+    const owner=recOwner;
+    const dialog=document.createElement("dialog");
+    dialog.className="restock-settings-dialog crime-settings-dialog";
+    dialog.setAttribute("aria-labelledby","crime-settings-title");
+    dialog.innerHTML='<form><header><h2 id="crime-settings-title">Crime settings</h2><button type="button" data-crime-settings-close aria-label="Close settings">×</button></header>'+
+      '<div class="crime-settings-content"><label><input type="checkbox" name="incompleteUniques" '+(incompleteUniquesOnly?"checked":"")+'> Incomplete uniques only</label>'+
+      '<small>Hide confirmed collected unique rewards. Unverified rewards remain visible. In Uniques mode, completed crimes are also hidden.</small></div>'+
+      '<footer><small role="status" data-crime-settings-status></small><button type="submit">Save</button></footer></form>';
+    document.body.append(dialog);
+    dialog.addEventListener("click",e=>{if(e.target.closest("[data-crime-settings-close]"))dialog.close();});
+    dialog.addEventListener("close",()=>{
+      dialog.remove();
+      (button.isConnected?button:view.querySelector("[data-rec-crime-settings]"))?.focus();
+    },{once:true});
+    dialog.querySelector("form").addEventListener("submit",e=>{
+      e.preventDefault();
+      if(owner!==String(tornGuideApi.state.identity?.id??"guest")){dialog.close();return;}
+      const value=dialog.querySelector('[name="incompleteUniques"]').checked;
+      try{localStorage.setItem("torn-city-guide:crime-incomplete-uniques:"+owner,String(value));}
+      catch{dialog.querySelector("[data-crime-settings-status]").textContent="Settings could not be saved.";return;}
+      incompleteUniquesOnly=value;
+      dialog.close();
+      refreshRecommendations(view);
+      view.querySelector("[data-rec-crime-settings]")?.focus();
+    });
+    dialog.showModal();
   }
-  function pickpocketRows(cs,risk,uniqueOnly=false){
+  function crimeFilters(){
+    return '<div class="rec-oc-filters"><div class="rec-crime-settings"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button><select data-rec-crime-override aria-label="Manual crime override" title="Manual crime override"><option value="auto" '+(crimeOverride==="auto"?"selected":"")+'>Auto</option>'+crimes.map(([name])=>'<option value="'+esc(name)+'" '+(crimeOverride===name?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></div></div>';
+  }
+  function pickpocketRows(cs,risk,uniqueOnly=false,allCollected=false){
     const maxTier={low:0,medium:1,high:3}[risk]??0;
     const razor=inventoryStatus("Cut-Throat Razor","Enhancer");
     const avoided=uniqueOnly?pickTargets.filter(x=>pickUniqueState(x[0])===true).map(x=>x[0]):[];
     const riskLabels=["Easy","Moderate","Difficult","Very difficult"];
-    const rows=pickTargets.filter(x=>x[1]<=maxTier&&!avoided.includes(x[0])).map(([name,tier,states,condition,reward,needRazor,min=1])=>{
-      const done=pickUniqueState(name);
+    const rows=pickTargets.filter(x=>x[1]<=maxTier&&!(uniqueOnly&&allCollected)&&!avoided.includes(x[0])).map(([name,tier,states,condition,reward,needRazor,min=1])=>{
+      const done=allCollected||pickUniqueState(name)===true;
       const qualifier=done===true?"Collected":[min>1&&(cs==null||cs<min)?"CS "+min+" required":"",needRazor&&razor!==true?"Cut-Throat Razor required":""].filter(Boolean).join(" · ");
       const unique='<span class="rec-pick-reward">'+esc(reward)+(qualifier?' <small>'+esc(qualifier)+'</small>':"")+'</span>';
       const target='<strong class="rec-pick-risk-'+tier+'">'+esc(name)+' <span class="sr-only">('+riskLabels[tier]+' risk)</span></strong>';
       return '<li><div class="rec-pick-target-heading">'+target+(condition==="Any"?unique:"")+'</div>'+
         (condition==="Any"?"":'<dl>'+condition.split("|").map(state=>'<div><dt>'+esc(state)+'</dt><dd>'+unique+'</dd></div>').join("")+'</dl>')+'</li>';
     });
-    return '<li class="rec-pickpocket"><div><strong>Recommended targets</strong><ul class="rec-pick-targets">'+rows.join("")+'</ul></div></li>';
+    return '<li class="rec-pickpocket"><div><strong>Recommended targets</strong>'+(rows.length?'<ul class="rec-pick-targets">'+rows.join("")+'</ul>':'<small>No incomplete unique targets at this risk level.</small>')+'</div></li>';
   }
   function trainingRecommendationContext(prefs){
     const iconData=payload("icons","icons");
@@ -1424,14 +1454,7 @@ const tornCrimeGuide = (() => {
       const headerAction=e.target.closest(".rec-header-actions");
       if(headerAction)e.preventDefault();
       const crimeGear=e.target.closest("[data-rec-crime-settings]");
-      if(crimeGear){
-        const tile=crimeGear.closest(".rec-tile");
-        crimeSettingsOpen=!tile.open||!crimeSettingsOpen;
-        if(crimeSettingsOpen)tile.open=true;
-        crimeGear.setAttribute("aria-expanded",String(crimeSettingsOpen));
-        const settings=tile.querySelector("#rec-crime-settings");if(settings)settings.hidden=!crimeSettingsOpen;
-        return;
-      }
+      if(crimeGear){openCrimeSettings(view,crimeGear);return;}
       const restockChoice=e.target.closest("[data-restock-tab]");
       if(restockChoice){
         restockTab=restockChoice.dataset.restockTab;
