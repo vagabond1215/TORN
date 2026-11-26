@@ -131,12 +131,13 @@ const tornRightRail=(()=>{
     const showSections=connected&&sections.some(([id])=>!hiddenSections.has(id));
     el.hidden=!showFocus&&!showSections;
     let focus=el.querySelector("#home-activities");
-    const owner=String(tornGuideApi.state.identity?.id??"guest");
-    if(focus&&(!showFocus||focus.dataset.focusOwner!==owner)){focus.remove();focus=null;}
+    const owner=tornRoadmap.focusOwner();
+    if(focus&&focus.dataset.focusOwner!==owner){focus.remove();focus=null;}
     if(showFocus&&!focus){
       el.insertAdjacentHTML("afterbegin",tornRoadmap.renderActivities());
       el.querySelector("#home-activities").dataset.focusOwner=owner;
     }
+    if(focus)focus.hidden=!showFocus;
     let content=el.querySelector("[data-rail-content]");
     if(!content){
       content=document.createElement("div");content.dataset.railContent="";

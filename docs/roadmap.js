@@ -141,6 +141,8 @@ const tornRoadmap=(()=>{
  let openFallback=true;
  function activitiesOpen(){try{return localStorage.getItem("torn-city-guide:home-activities-open")!=="false";}catch{return openFallback;}}
  function toggleActivities(){const open=!activitiesOpen();openFallback=open;try{localStorage.setItem("torn-city-guide:home-activities-open",String(open));}catch{}tornRightRail.render(tornGuideApi.routeName());const button=document.querySelector("[data-home-activities-toggle]");if(button){button.setAttribute("aria-pressed",String(open));button.setAttribute("aria-expanded",String(open));}}
+ const focusOwner=()=>activeProfile||"guest";
+ const budgetDraftKey=()=>activeProfile?activeKey("playstyle:budget-draft"):"playstyle:guest:budget-draft";
  const formatWeeklyBudget=value=>value==null?"":value.toLocaleString("en-US",{maximumFractionDigits:20});
  function renderActivities(){
   const p=preferences();
@@ -156,7 +158,7 @@ const tornRoadmap=(()=>{
    '<div class="home-risk-groups">'+riskGroup("risk","Financial Risk","Carried cash, trade settlement, gambling losses and investment volatility.")+
    riskGroup("odRisk","OD Risk","Low avoids drug recommendations for new training plans and independent consumable use. Medium and High allow drugs subject to existing safeguards.")+
    riskGroup("jailRisk","Jail Risk","Changes the range of crime difficulty considered for recommendations.")+'</div>'+
-   '<div class="home-budget"><label for="home-weekly-budget"><strong>Weekly budget</strong> $</label><input id="home-weekly-budget" type="text" inputmode="decimal" data-home-pref="weeklyBudget" value="'+formatWeeklyBudget(p.weeklyBudget)+'" placeholder="Not set"><button type="button" class="button secondary" data-home-budget-set>Set</button></div></div></div></section>';
+   '<div class="home-budget"><label for="home-weekly-budget"><strong>Weekly budget</strong> $</label><input id="home-weekly-budget" type="text" inputmode="decimal" data-home-pref="weeklyBudget" value="'+esc(read(budgetDraftKey())??formatWeeklyBudget(p.weeklyBudget))+'" placeholder="Not set"><button type="button" class="button secondary" data-home-budget-set>Set</button></div></div></div></section>';
  }
  function wireActivities(view){
   if(view.dataset.activitiesBound==="1")return;
@@ -170,6 +172,7 @@ const tornRoadmap=(()=>{
    if(!el.reportValidity())return;
    const p=preferences();p.weeklyBudget=amount;
    write(activeProfile?activeKey("playstyle:preferences"):"playstyle:guest:preferences",JSON.stringify(p));
+   write(budgetDraftKey(),null);
    el.value=formatWeeklyBudget(amount);
    tornCrimeGuide.refreshRecommendations(document.getElementById("topic-view"));
    const planner=document.querySelector('#tc-sequencer:has([data-ts-optimal-budget][aria-pressed="true"])');
@@ -186,7 +189,9 @@ const tornRoadmap=(()=>{
    }
   });
   view.addEventListener("input",event=>{
-   if(event.target.dataset.homePref==="weeklyBudget")event.target.setCustomValidity("");
+   if(event.target.dataset.homePref!=="weeklyBudget")return;
+   event.target.setCustomValidity("");
+   write(budgetDraftKey(),event.target.value);
   });
   view.addEventListener("change",event=>{
    const el=event.target,value=el.dataset.roadmapStyle;
@@ -330,5 +335,5 @@ const tornRoadmap=(()=>{
    }
   });
  }
- return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities,preferences,activitiesOpen,toggleActivities,tickOngoing};
+ return {render,wire,core,branches,selectedStyles,all,styleOptions,renderActivities,wireActivities,preferences,focusOwner,activitiesOpen,toggleActivities,tickOngoing};
 })();
