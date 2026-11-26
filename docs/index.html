@@ -6,11 +6,11 @@
   <meta name="description" content="Torn City interactive guide with API-backed character stats, inventory and a beginner progression checklist.">
   <meta name="theme-color" content="#30363a">
   <title>Torn City Guide</title>
-  <link rel="stylesheet" href="./styles.css?v=20261126-rail-merits1">
+  <link rel="stylesheet" href="./styles.css?v=20261126-rail-settings1">
   <script src="./education-reference.js?v=20261124-edu-wiki1" defer></script>
   <script src="./guide-features.js?v=20261126-live-inputs2" defer></script>
   <script src="./tct-timers.js?v=20261124-rail-toggles1" defer></script>
-  <script src="./local-bridge.js?v=20261125-rw-archive1" defer></script>
+  <script src="./local-bridge.js?v=20261126-rail-settings1" defer></script>
   <script src="./stats-calculator.js?v=20261126-live-inputs2" defer></script>
   <script src="./stats-sequencer.js?v=20261126-live-inputs2" defer></script>
   <script src="./racing-guide.js?v=20261125-focus-restock1" defer></script>
@@ -24,9 +24,9 @@
   <script src="./activity-scheduler.js?v=20261126-merit-calendar1" defer></script>
   <script src="./crime-states.js?v=20261126-crime-states1" defer></script>
   <script src="./crime-guide.js?v=20261126-rail-merits1" defer></script>
-  <script src="./right-rail.js?v=20261126-rail-merits1" defer></script>
+  <script src="./right-rail.js?v=20261126-rail-settings1" defer></script>
   <script src="./log-guide.js?v=20261126-log1" defer></script>
-  <script src="./guide.js?v=20261126-rail-merits1" defer></script>
+  <script src="./guide.js?v=20261126-rail-settings1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -69,8 +69,10 @@
               <span><strong>Contextual Quick Access</strong><small>Only show tool icons relevant to the current page.</small></span>
             </label>
             <div class="settings-field">
-              <a href="./torn-companion.user.js" target="_blank" rel="noopener noreferrer" class="button secondary">Install companion script</a>
-              <p class="settings-hint">Requires Tampermonkey. Automatically synchronizes the four visible status bars from active Torn tabs when they change or need refreshing. No sharing button, API key or session cookie is required.</p>
+              <strong>Companion script</strong>
+              <div class="companion-version-row"><span id="companion-version-status" role="status" data-state="checking">Checking companion…</span><span id="companion-version-detail" class="settings-hint"></span></div>
+              <a id="companion-version-action" href="./torn-companion.user.js" target="_blank" rel="noopener noreferrer" class="button secondary" hidden>Install companion script</a>
+              <p class="settings-hint">Requires Tampermonkey or a compatible userscript manager. Shares visible status bars, market observations and opted-in activity logs locally. After installing or updating, reload the guide and Torn tabs.</p>
             </div>
             <div class="settings-footer">
               <a href="#profile" id="settings-account">Account &amp; API</a>
