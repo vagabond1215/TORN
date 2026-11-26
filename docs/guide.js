@@ -1,6 +1,7 @@
 "use strict";
 
 const topics = {
+  calendar:{title:"Calendar",summary:"Training, rehab and faction schedule",intro:"Shared activity schedule in Torn City Time."},
   checklist: {
     title: "Checklist",
     summary: "Milestones and daily routine",
@@ -221,6 +222,7 @@ function renderTopic(route) {
   const guest = '<p><a href="#profile">Open a local profile</a> to save progress in this browser.</p>';
   const view = byId("topic-view");
   if (route === "checklist") { view.innerHTML = tornRoadmap.render(); tornRoadmap.wire(view); return; }
+  if (route === "calendar") {view.innerHTML=tornCrimeGuide.renderCalendar();tornCrimeGuide.wireCalendar(view);return;}
   if (route === "stats") { view.innerHTML = tornStatPlanner.render()+tornToolsGuide.contextLinks("stats"); tornStatPlanner.wire(view); return; }
   if (route === "racing") { view.innerHTML = tornRacingGuide.render()+tornToolsGuide.contextLinks("racing"); tornRacingGuide.wire(view); return; }
   if (route === "crime") { view.innerHTML = tornCrimeGuide.render()+tornToolsGuide.contextLinks("crime"); if(activeProfile)wireNotes("crime"); return; }
