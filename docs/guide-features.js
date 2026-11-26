@@ -14,14 +14,15 @@ const tornGuideApi=(()=>{
     basic:days, profile:15*mins, bars:2*mins, cooldowns:2*mins, icons:15*mins, money:15*mins, networth:60*mins,
     missions:5*mins, jobpoints:15*mins, skills:15*mins, battlestats:15*mins, gym:30*mins, perks:60*mins,
     education:6*hrs, virus:15*mins, organizedcrime:10*mins, factionWars:5*mins, factionRankedWars:15*mins, merits:6*hrs, job:6*hrs, workstats:6*hrs, property:12*hrs,
-    stocks:60*mins, personalstats:24*hrs, travel:15*mins, racingrecords:6*hrs, races:30*mins,
+    stocks:60*mins, personalstats:24*hrs, rehabStats:15*mins, travel:15*mins, racingrecords:6*hrs, races:30*mins,
     honors:24*hrs,medals:24*hrs,honorCatalog:30*days,medalCatalog:30*days,gymCatalog:90*days, meritCatalog:30*days, stockCatalog:15*mins, educationCatalog:7*days, itemCatalog:15*mins, pointsCatalog:15*mins
   };
   const ROUTES={
     home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog","missions","factionWars"],
     trainingProgress:["bars","cooldowns","battlestats","refills"],
     energy:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel"],
-    calendar:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel","education","organizedcrime","virus"],
+    calendar:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel","education","organizedcrime","virus","rehabStats"],
+    rehabProgress:["profile","icons","rehabStats","travel"],
     stats:["profile","bars","cooldowns","refills","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
@@ -197,6 +198,7 @@ const tornGuideApi=(()=>{
   function endpoint(key){
     if(key==="refills")return "user?selections=refills&legacy=refills";
     if(key==="personalstats")return "user/personalstats?cat=popular";
+    if(key==="rehabStats")return "user/personalstats?stat=rehabs,rehabcost";
     if(key==="factionWars")return "faction/wars";
     if(key==="factionRankedWars")return "faction/rankedwars";
     if(key==="gymCatalog")return "torn/gyms";
@@ -517,8 +519,8 @@ const tornGuideApi=(()=>{
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();
     let succeeded=0,failures=0;
-    const userNames=names.filter(name=>!name.endsWith("Catalog") && !["factionWars","factionRankedWars","personalstats"].includes(name));
-    const otherNames=names.filter(name=>name.endsWith("Catalog") || ["factionWars","factionRankedWars","personalstats"].includes(name));
+    const userNames=names.filter(name=>!name.endsWith("Catalog") && !["factionWars","factionRankedWars","personalstats","rehabStats"].includes(name));
+    const otherNames=names.filter(name=>name.endsWith("Catalog") || ["factionWars","factionRankedWars","personalstats","rehabStats"].includes(name));
     const jobs=[];
     if(userNames.length>=2 && batchMode!=="unsupported"){
       jobs.push({
