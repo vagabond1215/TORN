@@ -27,7 +27,14 @@ assert.ok(cd2.right<cd.right);assert.ok(get(roll2,"timeline-drug-dose").left<get
 const html=sc.renderModeTimeline(rows,now,null,4*3600,"home",now);
 assert.ok(html.includes('data-activity-mode-timeline="home"')&&html.includes('data-activity-timeline-mode="today" aria-pressed="true"'));
 assert.ok(html.includes(">2 Days</button>")&&html.includes(">24hrs</button>"));
-assert.ok(html.includes("2026-11-26 00:00")&&html.includes("2026-11-27 00:00"));
+assert.ok(!html.includes("Snapshot ")&&!html.includes("activity-timeline-heading")&&!html.includes("activity-timeline-legend")&&!html.includes("data-activity-timeline-inspector"));
+assert.ok(html.includes('data-activity-timeline-popup')&&html.includes('aria-haspopup="dialog"'));
+const compact=sc.renderModeTimeline(rows,now,null,4*3600,"home",now,{open:true,actions:'<button data-activity-refresh>Refresh</button>'});
+assert.ok(compact.includes('<details class="rec-tile home-activity-timeline')&&compact.includes('data-rec-group="timeline"')&&compact.includes('data-activity-refresh'));
+const redundant=["api-drug","api-booster","api-medical","war-clear","war-status"].map(id=>event(id,day+16*H));
+const clean=sc.timelineLayout([...rows,...redundant],now,1,null,4*3600,today);
+for(const item of redundant)assert.ok(!get(clean,item.id));
+assert.ok(get(clean,"dose")&&get(clean,"timeline-drug-dose"));
 assert.ok(!html.includes("activity-timeline-agenda"));
 assert.ok(sc.renderModeTimeline(rows,now,null,null,"calendar",now).includes("activity-timeline-agenda"));
 assert.ok(read("guide.js").includes("tornActivityScheduler.tickTimeline()"));

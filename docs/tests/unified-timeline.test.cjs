@@ -46,7 +46,7 @@ const projected=cd.spans.find(i=>i.event.id==="timeline-drug-dose");assert.equal
 const current=cd.spans.find(i=>i.event.id==="timeline-drug-current");assert.ok(current);assert.equal(current.event.start,now);assert.equal(current.event.end,now+2*H);assert.equal(current.left,0);assert.equal(current.right,20);
 assert.equal(cd.spans.filter(i=>i.event.cooldown).length,2);
 const brief=scheduler.timelineLayout([],now,7,null,60);
-assert.ok(brief.annotations.flatMap(a=>a.items).some(i=>i.event.id==="timeline-drug-current"&&i.range));
+assert.ok(brief.spans.some(i=>i.event.id==="timeline-drug-current"));assert.ok(!brief.annotations.flatMap(a=>a.items).some(i=>i.event.cooldown));
 const warPlan=scheduler.warWindow({start:now+48*H,end:now+72*H},{mode:"scheduled",adjustment:60,lead:120},now);
 const warRows=scheduler.schedule({now,war:warPlan,manual:[]});
 const warCds=scheduler.timelineLayout(warRows,now,7,warPlan);

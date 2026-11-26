@@ -264,7 +264,8 @@ const tornActivityScheduler=(()=>{
     const start=window?.start??now,end=window?.end??now+days*D,width=window?.width??days*240,bin=48,maxLanes=3;
     const x=at=>Math.max(0,Math.min(width,(at-start)/(end-start)*width));
     const valid=at=>Number.isFinite(at)&&Math.abs(at)<=8640000000000000;
-    const rows=list.filter(e=>e&&Object.hasOwn(kinds,e.kind)&&typeof e.title==="string"&&valid(e.start)&&valid(e.end)&&e.end>=e.start).map(e=>({...e}));
+    const redundant=new Set(["api-drug","api-booster","api-medical","war-clear","war-status"]);
+    const rows=list.filter(e=>e&&!redundant.has(e.id)&&Object.hasOwn(kinds,e.kind)&&typeof e.title==="string"&&valid(e.start)&&valid(e.end)&&e.end>=e.start).map(e=>({...e}));
     if(war&&valid(war.cutoff)&&valid(war.start)&&war.cutoff<war.start&&war.start>start&&war.cutoff<end)
       rows.push({id:"timeline-war-prep",kind:"war",title:war.stale?"Last known war preparation":"War preparation",start:war.cutoff,end:war.start,blocking:true,stale:!!war.stale,source:war.stale?"Last known schedule":"Calculated training reservation",detail:"Training cutoff to ranked war start; not a confirmed dose schedule"});
     if(war&&valid(war.start)){
@@ -283,8 +284,11 @@ const tornActivityScheduler=(()=>{
     const spans=[],pins=[],lanes=Array.from({length:maxLanes},()=>[]);
     for(const e of visible.slice().sort((a,b)=>Number(b.blocking===true)-Number(a.blocking===true)||Number(b.cooldown===true)-Number(a.cooldown===true)||a.start-b.start||b.end-a.end||String(a.id).localeCompare(String(b.id)))){
       const left=x(e.start),right=x(e.end),range=e.end>e.start;
-      const minWidth=e.cooldown?8:30;
-      const lane=range&&right-left>=minWidth?lanes.findIndex(items=>items.every(i=>right+2<=i.left||left>=i.right+2)):-1;
+      const minWidth=e.cooldown?0:30;
+      let lane=range&&right-left>=minWidth?lanes.findIndex(items=>items.every(i=>right+2<=i.left||left>=i.right+2)):-1;
+      // Cooldowns remain intervals even at sub-label width. Reserve an extra
+      // band for overlapping cooldowns rather than creating a second flag.
+      if(e.cooldown&&range&&lane<0){if(lanes.length===maxLanes)lanes.push([]);lane=maxLanes;}
       if(lane>=0){const item={event:e,left,right,lane,clippedStart:e.start<start,clippedEnd:e.end>end};spans.push(item);lanes[lane].push(item);}
       else pins.push({event:e,x:left,range,overflow:range&&right-left>=minWidth});
     }
@@ -329,11 +333,11 @@ const tornActivityScheduler=(()=>{
       const id=String(seq++),e=events[0],label=events.length===1?e.title+" · "+timelineStatus(e)+" · "+time(e.originalStart??e.start)+(e.end>e.start?" to "+time(e.end):"")+(e.originalStart!=null?" · end unknown":""):events.length+" nearby events; activate to review each time";
       templates.push('<template data-activity-timeline-content="'+id+'">'+events.map(timelineDetail).join("")+'</template>');
       const eventKey=JSON.stringify(events.map(x=>[x.id,x.start,x.end]).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))||a[1]-b[1]||a[2]-b[2]));
-      return '<button type="button" class="'+cls+'" style="'+style+'" data-activity-timeline-item="'+id+'" data-activity-event-key="'+esc(eventKey)+'" aria-pressed="false" aria-label="'+esc(label)+'">'+body+'</button>';
+      return '<button type="button" class="'+cls+'" style="'+style+'" data-activity-timeline-item="'+id+'" data-activity-event-key="'+esc(eventKey)+'" aria-haspopup="dialog" aria-pressed="false" aria-label="'+esc(label)+'">'+body+'</button>';
     };
     const spans=layout.spans.slice().sort((a,b)=>a.event.start-b.event.start||a.lane-b.lane).map(i=>{
       const e=i.event,cls="activity-time-span activity-"+e.kind+(e.blocking?" is-blocking":" is-advisory")+(e.cooldown?" is-cooldown":"")+(e.stale||e.recoveryReview?" is-review":"")+(i.clippedStart?" continues-left":"")+(i.clippedEnd?" continues-right":"");
-      return button([e],'<span aria-hidden="true">'+timelineIcons[e.kind]+'</span><span class="activity-time-span-title">'+esc(e.title)+'</span>',cls,"--x:"+pct(i.left)+";--w:"+pct(i.right-i.left)+";--lane:"+i.lane);
+      return button([e],'<span aria-hidden="true">'+timelineIcons[e.kind]+'</span><span class="activity-time-span-title">'+esc(e.cooldown?"Drug CD":e.title)+'</span>',cls,"--x:"+pct(i.left)+";--w:"+pct(i.right-i.left)+";--lane:"+i.lane);
     }).join("");
     const markers=layout.annotations.map(a=>{
       const events=a.items.map(i=>i.event),e=events[0],cluster=events.length>1,label=cluster?events.length+" events":e.title;
@@ -342,11 +346,10 @@ const tornActivityScheduler=(()=>{
       const body='<span class="activity-time-pin-icon" aria-hidden="true">'+(cluster?String(events.length):a.items[0].range?"↔":timelineIcons[e.kind])+'</span>'+(a.label?'<span class="activity-time-pin-label">'+esc(label)+'</span>':"");
       return anchors+button(events,body,cls,"--x:"+pct(a.x)+";--flag-width:"+a.labelWidth+"px");
     }).join("");
-    return '<div class="activity-unified-timeline" data-activity-timeline><div class="activity-timeline-heading"><strong>'+esc(window?dateLabel(start)+" "+shortTime(start)+" → "+dateLabel(end)+" "+shortTime(end)+" TCT":"Next "+days+" days · TCT")+'</strong><small>'+esc(window?"Snapshot "+time(now)+" · forecasts, not confirmed history":"Scroll to explore · select an event for details")+'</small></div>'+
+    return '<div class="activity-unified-timeline" data-activity-timeline>'+
       '<div class="activity-timeline-scroll" tabindex="0" role="region" aria-label="Scrollable '+days+' day activity timeline"><div class="activity-time-canvas" style="--canvas-width:'+width+'px;--lanes:'+layout.laneCount+'"><div class="activity-time-ruler">'+ticks.join("")+'</div><div class="activity-time-track"><div class="activity-time-grid" aria-hidden="true">'+ticks.join("")+'</div><div class="activity-time-now'+(nowX>90?' is-near-end':'')+'" style="--now-x:'+nowX+'%" aria-hidden="true"><span>NOW</span></div><div class="activity-time-spans">'+spans+'</div>'+markers+'</div></div></div>'+
-      '<div class="activity-timeline-legend"><span><i class="activity-legend-block"></i> Training reservation</span><span><i class="activity-legend-advisory"></i> Informational / forecast</span><span><i class="activity-legend-pin"></i> Event flag / compact range</span><span><i class="activity-legend-cooldown"></i> Drug cooldown</span><span><i class="activity-legend-review"></i> Review / stale</span></div>'+
-      '<div class="activity-timeline-inspector" data-activity-timeline-inspector aria-live="polite"><small>'+(layout.count?"Select a block or pin to keep its source, TCT timing and status visible. Clustered pins list every included event.":"No scheduled activities in this window.")+'</small></div>'+
-      '<div class="activity-timeline-tooltip" data-activity-timeline-tooltip hidden aria-hidden="true"></div>'+templates.join("")+'</div>'+
+      (!layout.count?'<small class="activity-timeline-empty">No scheduled activities in this window.</small>':"")+
+      '<div class="activity-timeline-tooltip activity-event-popup" data-activity-timeline-popup role="dialog" aria-label="Activity details" hidden></div>'+templates.join("")+'</div>'+
       (showAgenda?'<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&(e.end>e.start?e.end>start:e.start>=start)))+'</details>':"");
   }
   // Session-local display preference and two bounded snapshots, never persisted
@@ -361,13 +364,15 @@ const tornActivityScheduler=(()=>{
   function modeContent(snapshot,window){
     return renderTimeline(snapshot.list,snapshot.now,window.days,snapshot.war,snapshot.liveDrugSeconds,snapshot.showAgenda,window);
   }
-  function renderModeTimeline(list,now,war=null,liveDrugSeconds=null,scope="home",clock=Date.now()){
+  function renderModeTimeline(list,now,war=null,liveDrugSeconds=null,scope="home",clock=Date.now(),header=null){
     ensureTimelineOwner();
     if(!["home","calendar"].includes(scope))scope="home";
     const window=timelineWindow(clock,selectedTimelineMode);
     const snapshot={list,now,war,liveDrugSeconds,showAgenda:scope==="calendar",window};
     timelineSnapshots.set(scope,snapshot);
-    return '<div class="activity-mode-timeline" data-activity-mode-timeline="'+scope+'">'+modeButtons()+'<div data-activity-mode-content>'+modeContent(snapshot,window)+'</div></div>';
+    const body='<div data-activity-mode-content>'+modeContent(snapshot,window)+'</div>';
+    if(scope==="home"&&header)return '<details class="rec-tile home-activity-timeline activity-mode-timeline" data-rec-group="timeline" data-activity-mode-timeline="home" '+(header.open?"open":"")+'><summary class="rec-tile-heading activity-mode-titlebar"><span class="activity-mode-title">Timeline</span>'+modeButtons()+'<span class="rec-header-actions">'+header.actions+'</span></summary><div class="rec-tile-body">'+body+'</div></details>';
+    return '<div class="activity-mode-timeline" data-activity-mode-timeline="'+scope+'"><div class="activity-mode-titlebar"><span class="activity-mode-title">Timeline</span>'+modeButtons()+'<span></span></div>'+body+'</div>';
   }
   function redrawMode(root,snapshot,window,resetScroll=false){
     const content=root.querySelector("[data-activity-mode-content]");if(!content)return;
@@ -382,12 +387,7 @@ const tornActivityScheduler=(()=>{
     const agenda=content.querySelector(".activity-timeline-agenda");if(agenda&&open)agenda.open=true;
     const controls=[...content.querySelectorAll("[data-activity-event-key]")];
     const selected=selectedKey&&controls.find(b=>b.dataset.activityEventKey===selectedKey);
-    if(selected){
-      const template=content.querySelector('template[data-activity-timeline-content="'+selected.dataset.activityTimelineItem+'"]');
-      const inspector=content.querySelector("[data-activity-timeline-inspector]");
-      selected.setAttribute("aria-pressed","true");
-      if(template&&inspector)inspector.replaceChildren(template.content.cloneNode(true));
-    }
+    if(selected&&!resetScroll)showEventPopup(selected);
     if(focusInside){
       const focused=focusKey&&controls.find(b=>b.dataset.activityEventKey===focusKey);
       (focused??nextScroll)?.focus({preventScroll:true});
@@ -404,7 +404,7 @@ const tornActivityScheduler=(()=>{
     lastModeTick=minute;
     for(const root of document.querySelectorAll("[data-activity-mode-timeline]")){
       const snapshot=timelineSnapshots.get(root.dataset.activityModeTimeline);
-      if(!snapshot)continue;
+      if(!snapshot||root.matches("details:not([open])"))continue;
       const window=timelineWindow(at,selectedTimelineMode),previous=snapshot.window;
       if(window.mode!==previous.mode||window.start!==previous.start){
         redrawMode(root,snapshot,window,window.mode!==previous.mode||window.mode!=="rolling");continue;
@@ -428,34 +428,53 @@ const tornActivityScheduler=(()=>{
       if(snapshot)redrawMode(root,snapshot,timelineWindow(Date.now(),mode),true);
     }
   }
+  function popupRoot(button){return button?.closest("[data-activity-timeline]");}
+  function populateEvent(button,node){
+    const template=popupRoot(button)?.querySelector('template[data-activity-timeline-content="'+button.dataset.activityTimelineItem+'"]');
+    if(template)node.replaceChildren(template.content.cloneNode(true));
+  }
+  function positionPopup(button,node){
+    const rect=button.getBoundingClientRect(),box=node.getBoundingClientRect(),vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
+    node.style.left=Math.max(8,Math.min(vw-box.width-8,rect.left+rect.width/2-box.width/2))+"px";
+    const y=rect.bottom+8+box.height<=vh?rect.bottom+8:rect.top-box.height-8;
+    node.style.top=Math.max(8,Math.min(vh-box.height-8,y))+"px";
+  }
+  function closeEventPopups(view,restoreFocus=false){
+    for(const popup of view.querySelectorAll("[data-activity-timeline-popup]:not([hidden])")){
+      popup.hidden=true;const button=popupRoot(popup)?.querySelector('[data-activity-event-key][aria-pressed="true"]');
+      if(button){button.setAttribute("aria-pressed","false");if(restoreFocus)button.focus({preventScroll:true});}
+    }
+  }
+  function showEventPopup(button){
+    const popup=popupRoot(button)?.querySelector("[data-activity-timeline-popup]");if(!popup)return;
+    populateEvent(button,popup);popup.hidden=false;button.setAttribute("aria-pressed","true");positionPopup(button,popup);
+  }
   function timelineInteraction(view){
     const item=e=>e.target?.closest?.("[data-activity-timeline-item]");
-    const get=(button,name)=>button?.closest("[data-activity-timeline]")?.querySelector("[data-activity-timeline-"+name+"]");
+    const get=(button,name)=>popupRoot(button)?.querySelector("[data-activity-timeline-"+name+"]");
     const hide=()=>{for(const t of view.querySelectorAll("[data-activity-timeline-tooltip]"))t.hidden=true;};
-    function populate(button,node){
-      const template=button.closest("[data-activity-timeline]").querySelector('template[data-activity-timeline-content="'+button.dataset.activityTimelineItem+'"]');
-      if(template)node.replaceChildren(template.content.cloneNode(true));
-    }
-    function show(button){
-      const tooltip=get(button,"tooltip");if(!tooltip)return;
-      populate(button,tooltip);tooltip.hidden=false;
-      const rect=button.getBoundingClientRect(),box=tooltip.getBoundingClientRect(),vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
-      tooltip.style.left=Math.max(8,Math.min(vw-box.width-8,rect.left+rect.width/2-box.width/2))+"px";
-      const y=rect.bottom+8+box.height<=vh?rect.bottom+8:rect.top-box.height-8;
-      tooltip.style.top=Math.max(8,Math.min(vh-box.height-8,y))+"px";
-    }
+    function show(button){const tooltip=get(button,"tooltip");if(!tooltip)return;populateEvent(button,tooltip);tooltip.hidden=false;positionPopup(button,tooltip);}
     view.addEventListener("pointerover",e=>{const b=item(e);if(b&&e.pointerType!=="touch"&&!b.contains(e.relatedTarget))show(b);});
     view.addEventListener("pointerout",e=>{const b=item(e);if(b&&!b.contains(e.relatedTarget))hide();});
     view.addEventListener("focusin",e=>{const b=item(e);if(b)show(b);});
     view.addEventListener("focusout",e=>{if(item(e))hide();});
-    view.addEventListener("scroll",hide,true);
-    view.addEventListener("keydown",e=>{if(e.key==="Escape")hide();});
+    view.addEventListener("scroll",e=>{hide();if(!e.target?.closest?.("[data-activity-timeline-popup]"))closeEventPopups(view);},true);
+    document.addEventListener("pointerdown",e=>{if(!e.target?.closest?.("[data-activity-timeline-popup],[data-activity-event-key]"))closeEventPopups(view);});
+    document.addEventListener("keydown",e=>{if(e.key==="Escape"){hide();closeEventPopups(view,true);}});
+    view.addEventListener("toggle",e=>{
+      if(e.target.matches?.("details[data-activity-mode-timeline]")){
+        if(!e.target.open)closeEventPopups(e.target);
+        else {const snapshot=timelineSnapshots.get(e.target.dataset.activityModeTimeline);if(snapshot)redrawMode(e.target,snapshot,timelineWindow(Date.now(),selectedTimelineMode),false);}
+      }
+    },true);
     view.addEventListener("click",e=>{
       const mode=e.target?.closest?.("[data-activity-timeline-mode]");
-      if(mode){chooseTimelineMode(mode);return;}
-      const b=item(e);if(!b)return;const inspector=get(b,"inspector");if(!inspector)return;
-      for(const other of b.closest("[data-activity-timeline]").querySelectorAll("[data-activity-timeline-item]"))other.setAttribute("aria-pressed",String(other===b));
-      populate(b,inspector);hide();
+      if(mode){e.preventDefault();closeEventPopups(view);chooseTimelineMode(mode);return;}
+      const b=item(e);if(!b)return;
+      if(get(b,"popup")){const wasOpen=b.getAttribute("aria-pressed")==="true";closeEventPopups(view);if(!wasOpen)showEventPopup(b);return;}
+      const inspector=get(b,"inspector");if(!inspector)return;
+      for(const other of popupRoot(b).querySelectorAll("[data-activity-timeline-item]"))other.setAttribute("aria-pressed",String(other===b));
+      populateEvent(b,inspector);hide();
     });
   }
   // Only action starts within the UTC day contribute to planned item use.
