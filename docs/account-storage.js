@@ -30,13 +30,29 @@ const tornAccountStorage=(()=>{
   const eventsKinds=["training","rehab","travel","war","chain","oc","racing","education","event","personal","health","collection"];
   const date=v=>int(v,0,8640000000000000);
   const nullableMoney=v=>v===null||num(v);
-  const rehabBaseline=v=>v===null||shape(v,["count","cost","at"])&&int(v.count)&&nullableMoney(v.cost)&&date(v.at);
-  const events=v=>list(v,e=>shape(e,["id","kind","title","start","end","blocking","source","rehabBaseline","completedAt","rehabCost"])&&safeKey(e.id)&&one(e.kind,eventsKinds)&&str(e.title,100)&&e.title.trim().length>0&&date(e.start)&&int(e.end,e.start+1,8640000000000000)&&bool(e.blocking)&&e.source==="manual"&&
-    (e.kind==="rehab"?opt(e.rehabBaseline,rehabBaseline)&&opt(e.completedAt,x=>date(x)&&x>=e.start&&!e.blocking)&&opt(e.rehabCost,nullableMoney):e.rehabBaseline===undefined&&e.completedAt===undefined&&e.rehabCost===undefined),300)&&new Set(v.map(e=>e.id)).size===v.length;
+  const observedDate=v=>date(v)&&v<=Date.now()+1000;
+  const rehabBaseline=v=>v===null||shape(v,["count","cost","at"])&&int(v.count)&&nullableMoney(v.cost)&&observedDate(v.at);
+  const event=e=>{
+    if(!shape(e,["id","kind","title","start","end","blocking","source","rehabBaseline","completedAt","rehabCost","recoveryReview"])||!safeKey(e.id)||!one(e.kind,eventsKinds)||!str(e.title,100)||!e.title.trim()||!date(e.start)||!int(e.end,e.start+1,8640000000000000)||!bool(e.blocking)||e.source!=="manual")return false;
+    if(e.kind!=="rehab")return ["rehabBaseline","completedAt","rehabCost","recoveryReview"].every(k=>!own(e,k));
+    if(!opt(e.rehabBaseline,rehabBaseline)||e.rehabBaseline&&e.rehabBaseline.at>e.start+1000)return false;
+    if(own(e,"completedAt"))return observedDate(e.completedAt)&&e.completedAt>=e.start&&e.end===Math.max(e.start+1,e.completedAt)&&e.blocking===false&&e.rehabBaseline!=null&&own(e,"rehabCost")&&nullableMoney(e.rehabCost)&&!own(e,"recoveryReview");
+    return !own(e,"rehabCost")&&(!own(e,"recoveryReview")||e.recoveryReview===true&&e.rehabBaseline!=null);
+  };
+  const events=v=>list(v,event,300)&&new Set(v.map(e=>e.id)).size===v.length;
+  function restoredValue(row){
+    if(row.section!=="calendar-events")return row.value;
+    const values=JSON.parse(row.value);
+    // Old counter snapshots cannot identify actions during disconnected time.
+    // Preserve the reservation and evidence, but require manual review.
+    let held=false;
+    for(const e of values)if(e.kind==="rehab"&&e.rehabBaseline&&!own(e,"completedAt")){e.recoveryReview=true;held=true;}
+    return held?JSON.stringify(values):row.value;
+  }
   // Preserve the current ledger's exact semantics. Training-spend entries are
   // legacy estimated cycle deductions, NOT verified purchase transactions.
-  const trainingSpend=v=>list(v,e=>shape(e,["started","at","cost"])&&date(e.started)&&date(e.at)&&e.at>=e.started&&num(e.cost),2000)&&new Set(v.map(e=>e.started)).size===v.length;
-  const activitySpend=v=>list(v,e=>shape(e,["id","kind","at","cost","source"])&&safeKey(e.id)&&one(e.kind,["war","rehab"])&&date(e.at)&&num(e.cost)&&one(e.source,["Manual confirmation","API counter delta"]),500)&&new Set(v.map(e=>e.id)).size===v.length;
+  const trainingSpend=v=>list(v,e=>shape(e,["started","at","cost"])&&observedDate(e.started)&&observedDate(e.at)&&e.at>=e.started&&num(e.cost),2000)&&new Set(v.map(e=>e.started)).size===v.length;
+  const activitySpend=v=>list(v,e=>shape(e,["id","kind","at","cost","source"])&&safeKey(e.id)&&one(e.kind,["war","rehab"])&&observedDate(e.at)&&num(e.cost)&&((e.source==="Manual confirmation"&&e.id.startsWith("manual-"))||(e.source==="API counter delta"&&e.kind==="rehab"&&e.id.startsWith("rehab-"))),500)&&new Set(v.map(e=>e.id)).size===v.length;
   const fields=["preferred","recommended","restrict","prewar","travel","rehabMinutes","rehabSessions","sharedBudget","warReserve","rehabReserve","view"];
   const settings=v=>shape(v,fields)&&["preferred","recommended","restrict","prewar"].every(k=>opt(v[k],x=>num(x,0,9)))&&opt(v.travel,x=>one(x,["standard","airstrip","wlt","business"]))&&opt(v.rehabMinutes,x=>num(x,15,180))&&opt(v.rehabSessions,x=>int(x,1,100))&&opt(v.sharedBudget,bool)&&["warReserve","rehabReserve"].every(k=>opt(v[k],x=>num(x,0,1e12)))&&opt(v.view,x=>one(x,["agenda","timeline","week","month"]));
   const focus=v=>shape(v,["priority","risk","odRisk","jailRisk","weeklyBudget"])&&opt(v.priority,x=>one(x,["growth","networth","company","education","completion","crime","money"]))&&["risk","odRisk","jailRisk"].every(k=>opt(v[k],x=>one(x,risks)))&&opt(v.weeklyBudget,x=>x===null||num(x));
@@ -104,8 +120,8 @@ const tornAccountStorage=(()=>{
     for(const k of ["training-session","activity-training-history"]){if(store.getItem(prefix+k+":"+id)!==null)throw Error("Existing training or expenditure history; merge is not available yet");}
     if(!assertCurrent())throw Error("Account changed before restore");
     const added=[];
-    try{for(const row of records){const d=descriptor(id,row.section);if(!assertCurrent()||store.getItem(d.key)!==null)throw Error("Account changed during restore");store.setItem(d.key,row.value);added.push(d.key);}}
-    catch(error){let rollbackFailed=false;for(const k of added.reverse())try{store.removeItem(k);}catch{rollbackFailed=true;}if(rollbackFailed)throw Error("Restore incomplete; rollback failed. Keep the backup and inspect local storage.");throw error;}
+    try{for(const row of records){const d=descriptor(id,row.section),value=restoredValue(row);if(!d.valid(value)||!assertCurrent()||store.getItem(d.key)!==null)throw Error("Account changed or record invalid during restore");store.setItem(d.key,value);added.push([d.key,value]);}}
+    catch(error){let rollbackFailed=false;for(const [k,value] of added.reverse())try{if(store.getItem(k)===value)store.removeItem(k);else rollbackFailed=true;}catch{rollbackFailed=true;}if(rollbackFailed)throw Error("Restore incomplete; rollback failed or a concurrent edit was detected. Keep the backup and inspect local storage.");throw error;}
     return records.length;
   }
   return {owner,snapshot,validRecords,restoreEmpty,maxBytes};

@@ -1,6 +1,6 @@
 # Account-bound persistence and recovery design
 
-Status: proposed architecture; implementation and security review required before enabling automatic backup/restore. Scope: `vagabond1215/TORN`, `/docs/` only.
+Status: partial implementation through portable encrypted backup and typed legacy spend/rehab coverage (1P.3a); active sessions, revisioned merge, companion/directory recovery and security/browser gates remain open. Automatic backup/restore is not enabled. Scope: `vagabond1215/TORN`, `/docs/` only.
 
 ## Goals and non-goals
 - Preserve guide-created data across site storage clears, reloads, API key rotation and migration to another browser or device.

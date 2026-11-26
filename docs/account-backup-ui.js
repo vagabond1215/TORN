@@ -41,7 +41,9 @@ const tornBackupUI=(()=>{
         if(!verified.isCurrent())throw Error("Account changed");
         if(mode==="export"){
           const snap=tornAccountStorage.snapshot(localStorage,id);
-          if(!snap.records.length)throw Error("No supported saved settings or notes to export");
+          const critical=snap.omitted.filter(x=>["calendar-events","training-spend-estimates","activity-spend"].includes(x));
+          if(critical.length)throw Error("Cannot safely export: invalid calendar or expenditure records ("+critical.join(", ")+"). Preserve local data for review.");
+          if(!snap.records.length)throw Error("No supported saved account records to export");
           message("Encrypting "+snap.records.length+" supported records…");
           const data=await tornAccountBackup.encrypt(id,snap.records,password);
           if(!verified.isCurrent())throw Error("Account changed before export");
@@ -49,13 +51,13 @@ const tornBackupUI=(()=>{
           const link=document.createElement("a");
           link.href=url;link.download="torn-"+id+"-"+new Date().toISOString().slice(0,10)+".tornbackup";document.body.append(link);
           try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-          message("Download requested for "+snap.records.length+" records. Save the file outside browser storage and retain the passphrase."+ (snap.omitted.length?" Unsupported saved sections skipped: "+snap.omitted.join(", ")+".":"")+" Active sessions, historical cycle archives, personal/market archives and device settings are not included.");
+          message("Download requested for "+snap.records.length+" records. Save the file outside browser storage and retain the passphrase."+ (snap.omitted.length?" Unsupported saved sections skipped: "+snap.omitted.join(", ")+".":"")+" Active sessions, historical cycle archives, personal/market archives and device settings are not included. Restored pending rehab reservations require manual review.");
         }else{
           message("Checking and decrypting selected backup…");
           const data=await tornAccountBackup.decrypt(await chosen.text(),id,password);
           if(!verified.isCurrent())throw Error("Account changed before recovery");
           // Explicit approval, no silent overwrite or partial account merge.
-          if(!window.confirm("Restore "+data.records.length+" supported records for Torn player "+id+"? Existing supported account data or session/history will prevent recovery. The guide will reload; session-only API connections must reconnect.")){message("Recovery cancelled; no changes made.");return;}
+          if(!window.confirm("Restore "+data.records.length+" supported records for Torn player "+id+"? Existing supported account data or session/history will prevent recovery. Restored pending rehab will not auto-confirm; review reservations manually. The guide will reload; session-only API connections must reconnect.")){message("Recovery cancelled; no changes made.");return;}
           const count=tornAccountStorage.restoreEmpty(localStorage,id,data.records,verified.isCurrent);
           message("Restored "+count+" supported records. Reloading guide…");
           location.reload();

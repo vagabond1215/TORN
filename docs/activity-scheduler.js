@@ -143,7 +143,7 @@ const tornActivityScheduler=(()=>{
     const cur=rehabSnapshot(now);if(!cur||!activityFresh("profile",now,15*60000))return null;
     const status=String(tornGuideApi.state.data?.profile?.profile?.status?.state??"").toLowerCase();
     if(!["okay","ok"].includes(status))return null;
-    const list=events(),eligible=list.filter(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&cur.at>=e.start&&Number(tornGuideApi.state.fetchedAt.profile)>=e.start&&cur.at>e.rehabBaseline.at&&cur.count>e.rehabBaseline.count);
+    const list=events(),eligible=list.filter(e=>e.kind==="rehab"&&!e.completedAt&&!e.recoveryReview&&e.rehabBaseline&&e.start<=now&&cur.at>=e.start&&Number(tornGuideApi.state.fetchedAt.profile)>=e.start&&cur.at>e.rehabBaseline.at&&cur.count>e.rehabBaseline.count);
     if(eligible.length!==1)return null;
     const e=eligible[0],base=e.rehabBaseline,cost=cur.cost!=null&&base.cost!=null&&cur.cost>=base.cost?cur.cost-base.cost:null;
     if(cost!=null&&!recordSpend({id:"rehab-"+e.id,kind:"rehab",at:Math.min(now,cur.at),cost,source:"API counter delta"}))return null;
@@ -202,7 +202,7 @@ const tornActivityScheduler=(()=>{
     return tornTctClock.entries().filter(x=>map[x.id]&&Number.isFinite(x.at)&&x.at>=now).map(x=>({id:"api-"+x.id,kind:map[x.id],title:x.title,start:x.at,end:x.at,source:x.note?.includes("API")?"API / cached":"Timer estimate",detail:x.note,blocking:false}));
   }
   function schedule({now=Date.now(),war=null,preparation=null,health=null,rehab=null,training=[],manual=events(),limit=null}={}){
-    const list=[...manual.filter(x=>x.end>=now),...apiEvents(now),...externalEvents(now)];
+    const list=[...manual.filter(x=>x.end>=now).map(x=>x.recoveryReview?{...x,detail:"Restored reservation · review manually; remove and recreate if still needed"}:x),...apiEvents(now),...externalEvents(now)];
     if(war){
       if(war.phase!=="active"){
         if(war.cutoff>=now)list.push({id:"war-cutoff",kind:"war",title:"Training cutoff / stack begins",start:war.cutoff,end:war.cutoff,source:"Calculated deadline"});

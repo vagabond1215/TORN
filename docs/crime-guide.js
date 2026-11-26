@@ -1198,7 +1198,7 @@ const tornCrimeGuide = (() => {
       if(activity.war?.phase==="stacking"&&autoTrainingWatch()&&tornGuideApi.isConnected()&&!recoveryBusy&&!tornGuideApi.state.loading&&now-lastWarCheck>=120000){
         lastWarCheck=now;void tornGuideApi.loadPage("warPreparation",true).catch(()=>{});
       }
-      const pendingRehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&e.end+86400000>now);
+      const pendingRehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&!e.completedAt&&!e.recoveryReview&&e.rehabBaseline&&e.start<=now&&e.end+86400000>now);
       if(pendingRehab&&!recoveryBusy&&!tornGuideApi.state.loading&&now-lastRehabCheck>=300000){lastRehabCheck=now;void tornGuideApi.loadPage("rehabProgress",false).catch(()=>{});}
       const key=[activity.war?.phase??"",activity.deadline??"",activity.blocked,activity.reason??""].join("|");
       // A deadline at 'now' changes each second; compare the reservation
