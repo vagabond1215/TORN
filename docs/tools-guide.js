@@ -163,6 +163,95 @@ const tornToolsGuide=(()=>{
    const buttons=available.filter(([id])=>pins.includes(id)).map(([id,[label,,tip,d]])=>'<button class="report-icon" type="button" data-report="'+esc(id)+'" aria-label="'+esc(label)+'" title="'+esc(tip)+'">'+reportIcon(d)+'</button>').join("");
    return '<section id="torn-reports-strip" class="torn-reports-strip" '+(open?"":"hidden")+' aria-label="Torn Reports"><div class="quick-inner report-inner"><strong>Torn Reports</strong><div class="report-icon-list">'+buttons+'</div><button class="report-icon" type="button" data-report-customize aria-expanded="'+reportEdit+'" title="Customize report buttons" aria-label="Customize report buttons">'+reportIcon("M4 6h16M4 12h16M4 18h16 M8 3v6m8 0v6m-6 0v6")+'</button></div>'+(reportEdit?'<div class="quick-inner report-customize">'+available.map(([id,[label,,,d]])=>'<label title="'+esc(label)+'"><input type="checkbox" data-report-pin="'+esc(id)+'" '+(pins.includes(id)?"checked":"")+'>'+reportIcon(d)+'<span>'+esc(label)+'</span></label>').join("")+'</div>':"")+'</section>';
  }
+ // Global quick bar: cached account status, no additional polling.
+ const statusIcons={
+   addiction:'<path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="7"/><path d="M9 11h.01M15 11h.01M9 15h6"/>',
+   travel:'<path d="m2 12 20-9-6 19-4-8-10-2zM12 14l10-11"/>',
+   racing:'<path d="M4 22V3m0 1c6-5 10 5 16 0v11c-6 5-10-5-16 0"/><path d="M9 4v11m6-9v11M4 9c6-5 10 5 16 0"/>',
+   drug:'<path d="M5 19a5 5 0 0 1 0-7l7-7a5 5 0 0 1 7 7l-7 7a5 5 0 0 1-7 0zM8 9l7 7"/>',
+   booster:'<path d="m13 2-9 12h7l-1 8 10-12h-7l1-8z"/>',
+   medical:'<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
+   refresh:'<path d="M20 7v5h-5M4 17v-5h5M6 8a7 7 0 0 1 12-2l2 6M18 16a7 7 0 0 1-12 2l-2-6"/>',
+   tools:'<path d="M4 6h16M4 12h16M4 18h16"/>'
+ };
+ const timeValue=v=>{if(v==null||v==="")return null;const n=Number(v);return Number.isFinite(n)&&n>=1e9?(n>=1e12?n:n*1000):null;};
+ const nonnegative=v=>v!=null&&v!==""&&Number.isFinite(Number(v))&&Number(v)>=0?Number(v):null;
+ const ttlStatus={icons:900000,travel:900000,races:1800000,cooldowns:120000};
+ function quickStatusModel(state,health,now=Date.now(),decayAt=null,connected=true){
+   const data=key=>state.data?.[key]?.[key]??null;
+   const age=key=>now-Number(state.fetchedAt?.[key]||0);
+   const present=key=>connected&&Number(state.fetchedAt?.[key]||0)>0&&age(key)>=-1000&&!state.errors?.[key]&&data(key)!=null;
+   const fresh=key=>present(key)&&age(key)<ttlStatus[key];
+   const old=key=>fresh(key)?"":" · Cached; refresh to verify";
+   const unknown=(id,label,href)=>({id,label,href,value:"—",tone:"unknown",tip:label+" unavailable; refresh status or check API access"});
+   const item=(id,label,value,tip,href,tone="normal")=>({id,label,value,tip,href,tone});
+   const duration=at=>tornTctClock.formatDuration((at-now)/1000);
+   const items=[];
+   if(connected&&health.penalty!=null&&fresh("icons")){
+     const p=health.penalty,level=health.level,detail=level==="restricted"?"Drug recommendations restricted":level==="recommended"?"Rehab recommended":level==="preferred"?"Rehab preferred":"Observed battle-stat penalty";
+     items.push(item("addiction","Addiction",p+"%", "Addiction penalty "+p+"% · "+detail+(decayAt?" · Next approximate natural decay in "+duration(decayAt):"")+" · Open Calendar for rehab", "#calendar",level==="restricted"?"danger":["preferred","recommended"].includes(level)?"warning":"ready"));
+   }else items.push(unknown("addiction","Addiction","#calendar"));
+   const travel=data("travel"),remaining=nonnegative(travel?.time_left??travel?.remaining??travel?.remaining_seconds);
+   const arrival=timeValue(travel?.arrival??travel?.arrival_at??travel?.until??travel?.timestamp??travel?.arrives_at)??(remaining!==null?Number(state.fetchedAt?.travel||0)+remaining*1000:null);
+   const destination=typeof travel?.destination==="string"?travel.destination:typeof travel?.destination?.name==="string"?travel.destination.name:"destination";
+   if(!present("travel")||!travel)items.push(unknown("travel","Travel","#calendar"));
+   else if(arrival!=null&&arrival>now)items.push(item("travel","Travel",duration(arrival),"Travel to "+destination+" · Arrival countdown from last API snapshot"+old("travel"),"#calendar",fresh("travel")?"normal":"stale"));
+   else if(arrival!=null&&arrival<=now&&remaining!==0&&arrival>Number(state.fetchedAt.travel))items.push(item("travel","Travel","Verify","Estimated arrival passed; refresh to confirm location","#calendar","stale"));
+   else if(fresh("travel")&&(remaining===0||arrival!=null&&arrival<=Number(state.fetchedAt.travel)||destination.toLowerCase()==="torn"))items.push(item("travel","Travel",destination.toLowerCase()==="torn"?"In Torn":"Idle","No active flight reported · "+destination,"#calendar","ready"));
+   else items.push(unknown("travel","Travel","#calendar"));
+   const races=data("races");
+   if(!present("races")||!Array.isArray(races))items.push(unknown("racing","Racing","#racing"));
+   else {
+     const pending=races.filter(x=>["open","in_progress"].includes(x.status)).sort((a,b)=>(a.status==="in_progress"?0:1)-(b.status==="in_progress"?0:1)||(timeValue(a.schedule?.start)??Infinity)-(timeValue(b.schedule?.start)??Infinity));
+     const race=pending[0],start=timeValue(race?.schedule?.start),end=timeValue(race?.schedule?.end);
+     if(!race)items.push(fresh("races")?item("racing","Racing","Idle","No scheduled or active race reported","#racing","ready"):unknown("racing","Racing","#racing"));
+     else if(race.status==="open"&&start!=null&&start>now)items.push(item("racing","Racing",duration(start),(race.title||"Race")+" · Until start"+old("races"),"#racing",fresh("races")?"normal":"stale"));
+     else if(race.status==="in_progress"&&end!=null&&end>now)items.push(item("racing","Racing",duration(end),(race.title||"Race")+" · Until reported finish"+old("races"),"#racing",fresh("races")?"normal":"stale"));
+     else if(race.status==="in_progress"&&end==null&&fresh("races"))items.push(item("racing","Racing","Active",(race.title||"Race")+" · No finish time supplied","#racing"));
+     else items.push(item("racing","Racing","Verify","Race start or finish needs a fresh API snapshot","#racing","stale"));
+   }
+   const cooldowns=data("cooldowns");
+   for(const id of ["drug","booster","medical"]){
+     const label=id[0].toUpperCase()+id.slice(1)+" cooldown",raw=cooldowns?.[id],left=nonnegative(raw&&typeof raw==="object"?raw.remaining??raw.time_left??raw.seconds:raw);
+     if(!present("cooldowns")||left==null){items.push(unknown(id,label,"#calendar"));continue;}
+     const at=Number(state.fetchedAt.cooldowns)+left*1000;
+     items.push(item(id,label,duration(at),label+" · From last API snapshot"+old("cooldowns"),"#calendar",!fresh("cooldowns")?"stale":at<=now?"ready":"normal"));
+   }
+   return items;
+ }
+ function statusRows(now=Date.now()){
+   const connected=tornGuideApi.isConnected(),health=typeof tornActivityScheduler==="undefined"?{penalty:null}:tornActivityScheduler.addictionSnapshot(now);
+   const decayAt=tornTctClock.utcTime(3,31);
+   return quickStatusModel(tornGuideApi.state,health,now,decayAt,connected);
+ }
+ function statusMarkup(){
+   return '<div class="quick-status-strip" aria-label="Account status">'+statusRows().map(x=>'<a class="quick-status" data-quick-status="'+x.id+'" data-tone="'+x.tone+'" href="'+x.href+'" title="'+esc(x.tip)+'" aria-label="'+esc(x.label+": "+x.value+" · "+x.tip)+'">'+reportIcon(statusIcons[x.id])+'<span>'+esc(x.value)+'</span></a>').join("")+'</div><button type="button" class="rail-visibility-toggle quick-status-refresh" data-quick-status-refresh title="Refresh addiction, travel, racing and cooldowns" aria-label="Refresh account status" '+(!tornGuideApi.isConnected()||tornGuideApi.state.loading?"disabled":"")+'>'+reportIcon(statusIcons.refresh)+'</button>';
+ }
+ function tickStatus(){
+   const host=document.getElementById("tool-quickbar");if(!host)return;
+   for(const x of statusRows()){
+     const node=host.querySelector('[data-quick-status="'+x.id+'"]');if(!node)continue;
+     const span=node.querySelector("span");
+     if(span.textContent!==x.value)span.textContent=x.value;
+     if(node.dataset.tone!==x.tone)node.dataset.tone=x.tone;
+     if(node.title!==x.tip)node.title=x.tip;
+     const label=x.label+": "+x.value+" · "+x.tip;if(node.getAttribute("aria-label")!==label)node.setAttribute("aria-label",label);
+   }
+   const refresh=host.querySelector("[data-quick-status-refresh]");if(refresh)refresh.disabled=!tornGuideApi.isConnected()||tornGuideApi.state.loading;
+ }
+ let toolsOpen=false,toolsMenuBound=false;
+ function setToolsOpen(open,focus=false){
+   toolsOpen=!!open;
+   const host=document.getElementById("tool-quickbar"),button=host?.querySelector("[data-tools-toggle]"),panel=host?.querySelector("#quick-tools-menu");
+   if(!button||!panel)return;
+   button.setAttribute("aria-expanded",String(toolsOpen));panel.hidden=!toolsOpen;
+   if(focus)button.focus({preventScroll:true});
+ }
+ function ensureToolsMenu(){
+   if(toolsMenuBound)return;toolsMenuBound=true;
+   document.addEventListener("click",event=>{if(toolsOpen&&!event.target.closest(".quick-tools"))setToolsOpen(false);});
+   document.addEventListener("keydown",event=>{if(event.key==="Escape"&&toolsOpen){event.preventDefault();setToolsOpen(false,true);}});
+ }
  function quickLinks(route){
   const context=route||(typeof location!=="undefined"?(location.hash||"#home").slice(1):"home");
   const contextual=typeof tornGuidePreferences!=="undefined"&&tornGuidePreferences.get("contextualQuickAccess");
@@ -170,21 +259,27 @@ const tornToolsGuide=(()=>{
   const selected=pins().filter(name=>allowed.has(name));
   const links=selected.map(name=>{
     const row=entry(name);if(!row)return "";
-    return '<a class="quick-link" href="'+esc(row[4])+'" target="_blank" rel="noopener noreferrer"'+
-      ' title="'+esc(name)+'" aria-label="Open '+esc(name)+'" data-tooltip="'+esc(name)+'">'+siteIcon(name)+'</a>';
+    return '<a class="quick-tool-bookmark" href="'+esc(row[4])+'" target="_blank" rel="noopener noreferrer"'+
+      ' title="'+esc(name)+'">'+siteIcon(name)+'<span>'+esc(name)+'</span></a>';
   }).join("");
   const rail=tornRightRail.controls();
   const reportToggle=context==="home"?'<button type="button" class="rail-visibility-toggle" data-report-toggle aria-controls="torn-reports-strip" aria-label="Torn Reports" title="Torn Reports" aria-pressed="'+reportPrefs().open+'">'+reportIcon("M4 3h16v18H4z M8 16v-4m4 4V8m4 8v-6")+'</button>':"";
   const open=tornRoadmap.activitiesOpen();
   const gear='<button type="button" class="rail-visibility-toggle" data-home-activities-toggle aria-controls="home-activities" aria-label="Focus" title="Focus" aria-pressed="'+open+'" aria-expanded="'+open+'"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>';
-  return '<div class="quick-inner"><div class="quick-links">'+links+'</div>'+ '<div class="home-settings-toggle-wrap">'+reportToggle+gear+'</div>'+rail+'</div>';
+  return '<div class="quick-inner"><div class="quick-tools"><button class="quick-tools-toggle" type="button" data-tools-toggle aria-controls="quick-tools-menu" aria-expanded="'+toolsOpen+'">'+reportIcon(statusIcons.tools)+'<span>Tools</span><span class="quick-tools-chevron" aria-hidden="true">▾</span></button><div id="quick-tools-menu" class="quick-tools-menu" '+(toolsOpen?"":"hidden")+' aria-label="Quick access bookmarks">'+(links||'<small>No pinned tools for this page.</small>')+'<a class="quick-tools-manage" href="#tools">Manage bookmarks</a></div></div>'+statusMarkup()+'<div class="home-settings-toggle-wrap">'+reportToggle+gear+'</div>'+rail+'</div>';
  }
  function updateBar(route){
-  ensureIconHandler();
-  if(route)currentBarRoute=route;
+  ensureIconHandler();ensureToolsMenu();
+  if(route&&route!==currentBarRoute){toolsOpen=false;currentBarRoute=route;}
   const host=document.getElementById("tool-quickbar"),dock=document.getElementById("reports-dock");
   if(host){
     host.innerHTML=quickLinks(currentBarRoute);
+    host.querySelector("[data-tools-toggle]")?.addEventListener("click",()=>setToolsOpen(!toolsOpen));
+    host.querySelector("#quick-tools-menu")?.addEventListener("click",event=>{if(event.target.closest("a"))setToolsOpen(false);});
+    host.querySelector("[data-quick-status-refresh]")?.addEventListener("click",async()=>{
+      if(!tornGuideApi.isConnected()||tornGuideApi.state.loading)return;
+      try{await tornGuideApi.loadPage("quickStatus",true);}catch{}finally{tickStatus();}
+    });
     host.querySelector("[data-home-activities-toggle]")?.addEventListener("click",()=>tornRoadmap.toggleActivities());
     host.querySelector("[data-report-toggle]")?.addEventListener("click",()=>{reportOpenFallback=!reportPrefs().open;try{localStorage.setItem("torn-city-guide:reports-open",String(reportOpenFallback));}catch{}updateBar();});
   }
@@ -263,5 +358,5 @@ const tornToolsGuide=(()=>{
    if(e.target.id==="tools-search"){query=e.target.value.toLowerCase().trim();const cardsEl=view.querySelector("#tools-cards");if(cardsEl)cardsEl.innerHTML=cards();}
   });
  }
- return {render,wire,list,devices,quickLinks,contextLinks,pins,togglePin,updateBar,clearPins,maxPinned,launcherNames,contexts,siteFavicons};
+ return {render,wire,list,devices,quickLinks,tickStatus,quickStatusModel,contextLinks,pins,togglePin,updateBar,clearPins,maxPinned,launcherNames,contexts,siteFavicons};
 })();
