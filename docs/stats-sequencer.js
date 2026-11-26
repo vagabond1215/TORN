@@ -43,7 +43,8 @@ const tornTrainSequence=(()=>{
   const steps=Object.fromEntries(templates.map(([id])=>[id,defaults[id]()]));
   const selected=new Set(["natural","jump"]),openTimelines=new Set(),editedPlans=new Set();
   let settingsOpen=false,chartMode="cycles",chartCycles=1,continuousDays=7,cycleOverrides=[],overridesOpen=false,showOptimal=true,showOptimalBudget=false,showManual=false;
-  const excludedPlans={optimal:new Set(),budget:new Set()};
+  const defaultExcludedPlans=["custom","maxhappy"];
+  const excludedPlans={optimal:new Set(defaultExcludedPlans),budget:new Set(defaultExcludedPlans)};
   let optimizerSettingsOpen="";
   let planPreferenceOwner;
   function restoreAction(saved){
@@ -69,7 +70,7 @@ const tornTrainSequence=(()=>{
     optimizerSettingsOpen="";
     for(const key of Object.keys(excludedPlans)){
       const stored=saved?.excludedPlans?.[key];
-      excludedPlans[key]=new Set(Array.isArray(stored)?stored.filter(id=>valid.has(id)):[]);
+      excludedPlans[key]=new Set(Array.isArray(stored)?stored.filter(id=>valid.has(id)):defaultExcludedPlans);
     }
     showManual=saved?.showManual??cycleOverrides.some(Boolean);
     showOptimal=saved?.showOptimal!==false;
@@ -225,12 +226,12 @@ const tornTrainSequence=(()=>{
   function createEngine(overrides,planning=false){
     const cfg={...p,...overrides},base=ctx.state.statValues[ctx.state.compareStat];
     const bliss=tornHappinessBook().active; // Shared detection for default action generation and fixed-plan replay.
-    const stock=candyStock(),pool=stock.rows.map(x=>({...x})).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity));
+    const stock=candyStock(),pool=stock.rows.map(x=>({...x,initialQty:x.qty})).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity));
     const dvdInventory=tornGuideApi.state.inventory.Booster;
     const dvdKnown=Array.isArray(dvdInventory)&&!tornGuideApi.state.inventoryErrors?.Booster;
     const dvdHeld=dvdKnown?dvdInventory.filter(x=>keyName(x.name??x.item?.name??itemList().find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id))?.name)===keyName("Erotic DVD")).reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity))),0):null;
     const rowInfo={},notices=[],actionStates={};let rowCandy=null,rowUsed=null;
-    let candyCost=0,candyGain=0,unknownCandyPrice=false;
+    let candyGain=0;
     const gym=ctx.gym,stat=ctx.state.compareStat,limit=cfg.limitSeconds??Math.floor(cfg.hours*3600);
     const rule=energyRules(),eCap=rule.cap;
     const boosterLimit=cfg.boosterCapH*3600;
@@ -300,7 +301,6 @@ const tornTrainSequence=(()=>{
             v.errors.push(stock.loaded?"Insufficient candy in inventory for the selected Max Happy tier.":"Candy inventory not loaded.");return false;
           }
           candy.qty--;candyGain+=candy.happy;rowUsed[candy.name]=(rowUsed[candy.name]||0)+1;
-          if(candy.price===null)unknownCandyPrice=true;else candyCost+=candy.price;
         }
         const secs=type==="dvd"?21600*cfg.dvdCDMultiplier:1800*cfg.candyCDMultiplier;
         v.booster+=Math.round(secs);
@@ -429,10 +429,16 @@ const tornTrainSequence=(()=>{
       }
       point();
       if(cutoff)v.warnings.push("The "+cfg.hours+"-hour window ended before all actions could run.");
-      const prices=[[v.costs.xanax,cfg.xanaxPrice],[v.costs.ecstasy,cfg.ecstasyPrice],[v.costs.dvd,cfg.dvdPrice],[v.costs.refill*30,cfg.pointPrice],[v.costs.externalHappy,externalHappyCost]];
-      const missingPrice=unknownCandyPrice||prices.some(([qty,price])=>qty>0&&price==null);
-      return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,rowInfo,notices,actionStates,initial,
-        money:missingPrice?null:candyCost+prices.reduce((sum,[qty,price])=>sum+qty*(price??0),0)};
+      const consumed=[
+        {name:"Xanax",quantity:v.costs.xanax,price:cfg.xanaxPrice},
+        {name:"Ecstasy",quantity:v.costs.ecstasy,price:cfg.ecstasyPrice},
+        {name:"eDVD",quantity:v.costs.dvd,price:cfg.dvdPrice},
+        {name:"Points",quantity:v.costs.refill*30,price:cfg.pointPrice},
+        {name:"99k happiness boost",quantity:v.costs.externalHappy,price:externalHappyCost},
+        ...pool.map(({name,initialQty,qty,price})=>({name,quantity:initialQty-qty,price}))
+      ].filter(item=>item.quantity>0);
+      return {...v,final:v.stat,gain:v.stat-base,complete:v.errors.length===0,candyGain,rowInfo,notices,actionStates,initial,consumed,
+        money:consumed.some(item=>item.price==null)?null:consumed.reduce((sum,item)=>sum+item.quantity*item.price,0)};
     }
     return {state:v,limit,gymCost,canTrain,fullEnergyDelay,advance,waitFor,execute,run,finish};
   }
@@ -774,11 +780,19 @@ const tornTrainSequence=(()=>{
     return '<div class="ts-log ts-merged"><div class="ts-log-scroller"><table><thead><tr><th>Time</th><th>Action</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th><th>Stat change</th><th>Current stat</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
       '<div class="ts-add"><select data-ts-choice="'+side+'" aria-label="Select action"><option value="" selected>Select action</option>'+actionOptions.map(([id,label])=>'<option value="'+id+'">'+$(label)+'</option>').join("")+'</select><button type="button" class="button secondary" data-ts-op="add" data-ts-side="'+side+'" disabled>Add action</button><button type="button" class="text-button" data-ts-op="preset" data-ts-side="'+side+'">Reset</button></div></div>';
   }
+  function costMetric(id,cost,items,label){
+    const dollars=value=>value==null?"Unavailable":"$"+fmt(value);
+    const tooltipId="ts-cost-"+id;
+    return '<span class="ts-title-metric ts-cost-metric" tabindex="0" aria-describedby="'+tooltipId+'"><small>Cost</small><strong>'+dollars(cost)+'</strong>'+
+      '<span class="ts-cost-receipt" role="tooltip" id="'+tooltipId+'"><b>'+label+'</b>'+
+      (items.length?items.map(({name,quantity,price})=>'<span><span>'+$(name)+' × '+fmt(quantity)+'</span><span>'+dollars(price==null?null:quantity*price)+'</span></span>').join(""):'<span>No items</span>')+
+      '</span></span>';
+  }
   function section(side,data){
     const heading=templates.find(x=>x[0]===side)?.[2]??side;
     const metric=(label,value,extra="")=>'<span class="ts-title-metric '+extra+'"><small>'+label+'</small><strong>'+value+'</strong></span>';
     return '<details class="ts-side ts-template-card" data-ts-timeline="'+side+'" '+(openTimelines.has(side)?"open":"")+'><summary class="ts-template-header"><span class="ts-template-name">'+$(heading)+'</span>'+
-      metric("Cycle",fmt(data.elapsed/3600,2)+"h")+metric("Energy used",fmt(data.used)+" E")+metric("Stat change",data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked","ts-title-gain")+metric("Ending stat",data.complete?fmt(data.final,2):"—")+metric("Cost",data.money==null?"Unavailable":"$"+fmt(data.money))+
+      metric("Cycle",fmt(data.elapsed/3600,2)+"h")+metric("Energy used",fmt(data.used)+" E")+metric("Stat change",data.complete?(data.gain>=0?"+":"")+fmt(data.gain,2):"Blocked","ts-title-gain")+metric("Ending stat",data.complete?fmt(data.final,2):"—")+costMetric(side,data.money,data.consumed,"Consumed items")+
       '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+mergedTimeline(side,data)+
       (side==="maxhappy"?'<p class="fine-print">99,999 Happy target · Peak '+fmt(data.peakHappy??0)+' · '+((data.peakHappy??0)>=99999?"Target reached":"Additional happiness source required")+'</p>':"")+(data.warnings.length?'<p class="fine-print">'+data.warnings.map($).join("; ")+'</p>':"")+(data.errors.length?'<p class="ts-error">'+data.errors.map($).join("; ")+'</p>':"")+
       '</details>';
@@ -802,12 +816,12 @@ const tornTrainSequence=(()=>{
         step.type==="candy"||step.type==="dvd"?(step.type==="candy"?"Candy":"eDVD")+" ×"+step.quantity:names[step.type]??step.type;
       rows+=row(offset+step.end.time,label,step.end,step.start);
     }
-    const cash=chartPurchases()(data.costs).cost,weekly=weeklyPurchaseCost()(data);
+    const purchases=chartPurchases()(data.costs),cash=purchases.cost,weekly=weeklyPurchaseCost()(data);
     return '<details class="ts-side ts-template-card" data-ts-timeline="'+id+'" '+(openTimelines.has(id)?"open":"")+'>'+
       '<summary class="ts-template-header"><span class="ts-template-name">'+title+'</span>'+
       metric("Sequence",fmt(data.time/3600,2)+"h · "+data.segments.length+" cycles")+
       metric("Energy used",fmt(data.used)+" E")+metric("Stat change","+"+fmt(data.gain,2))+
-      metric("Ending stat",fmt(data.final,2))+metric("Cost",dollars(cash))+
+      metric("Ending stat",fmt(data.final,2))+costMetric(id,cash,purchases.items,"Items to purchase")+
       '<span class="ts-template-chevron" aria-hidden="true"></span></summary>'+
       '<p class="fine-print">Purchase cost '+dollars(cash)+' · Peak rolling 7-day spend '+dollars(weekly)+' · Consumed value '+dollars(data.money)+'</p>'+
       '<div class="ts-log"><div class="ts-log-scroller"><table><thead><tr><th>Time</th><th>Action</th><th>Energy</th><th>Happy</th><th>Drug CD</th><th>Booster CD</th><th>Stat change</th><th>Current stat</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'+

@@ -1653,6 +1653,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .ts-template-name{font-weight:750;font-size:.92rem;color:var(--accent-strong)}
 .ts-title-metric{display:flex;flex-direction:column;gap:.1rem;min-width:0;font-variant-numeric:tabular-nums}
 .ts-title-metric small{font-size:.65rem;font-weight:400;color:var(--muted);white-space:nowrap}
+.ts-cost-metric{position:relative;cursor:help}
+.ts-cost-receipt{display:none;position:absolute;top:100%;right:0;z-index:5;width:max-content;max-width:min(17rem,75vw);padding:.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:.75rem}
+.ts-cost-metric:is(:hover,:focus) .ts-cost-receipt{display:grid;gap:.2rem}
+.ts-cost-receipt>span{display:flex;align-items:baseline;justify-content:space-between;gap:.65rem}
 .ts-title-metric strong{font-size:.78rem;font-weight:650;color:var(--text);overflow-wrap:anywhere}
 .ts-title-gain strong{color:var(--accent-strong)}
 .ts-template-chevron{justify-self:end;display:block;width:8px;height:8px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg);margin:-4px 3px 0 0}
