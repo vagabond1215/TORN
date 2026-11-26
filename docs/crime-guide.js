@@ -233,7 +233,7 @@ const tornCrimeGuide = (() => {
   function loadRecFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
-    recOwner=owner;incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
+    recOwner=owner;incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build","collapsed"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
     try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v)){recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));if(!v.includes("calendar")&&localStorage.getItem("torn-city-guide:calendar-introduced:"+owner)!=="true"){recEnabled.add("calendar");localStorage.setItem("torn-city-guide:rec-types:"+owner,JSON.stringify([...recEnabled]));localStorage.setItem("torn-city-guide:calendar-introduced:"+owner,"true");}}}catch{}
   }
   let growthSettingsOpen=false;
@@ -574,6 +574,16 @@ const tornCrimeGuide = (() => {
     });
   }
   let growthTab="summary";
+  const growthTabIds=["summary","steps","build"];
+  function nextGrowthTab(current,id,toggle=false){
+    return growthTabIds.includes(id)?toggle&&current===id?"collapsed":id:current;
+  }
+  function growthDetails(tabs){
+    const focusTab=growthTab==="collapsed"?"summary":growthTab;
+    const tabbar='<div class="growth-tabs" role="tablist" aria-label="Energy details">'+tabs.map(([id,label])=>'<button type="button" role="tab" id="growth-tab-'+id+'" aria-controls="growth-panel-'+id+'" aria-selected="'+(growthTab===id)+'" aria-expanded="'+(growthTab===id)+'" tabindex="'+(focusTab===id?"0":"-1")+'" data-growth-tab="'+id+'">'+label+'</button>').join("")+'</div>';
+    const panels=tabs.map(([id,,body])=>'<div class="growth-tab-panel" role="tabpanel" id="growth-panel-'+id+'" aria-labelledby="growth-tab-'+id+'" '+(growthTab===id?"":"hidden")+'>'+body+'</div>').join("");
+    return tabbar+panels;
+  }
   let sessionOwner=null,trainingSession=null,trainingDraft=null;
   const trainingSpendKey=()=> "torn-city-guide:training-spend:"+sessionOwner;
   function trainingSpend(now=Date.now()){
@@ -794,7 +804,11 @@ const tornCrimeGuide = (() => {
         ["candy","dvd"].includes(step.type)?sample.booster>Math.max(0,before.booster-elapsed)+60:
         step.type==="refill"?before.refillUsed===false&&sample.refillUsed===true:
         step.type==="train"?sample.stat!=null&&before.stat!=null&&sample.stat>before.stat:false;
-      if(!suspect||elapsed>180){session.watch={index:session.index,sample};saveTrainingSession();}
+      if(!suspect||elapsed>180){
+        session.watch={index:session.index,sample,...(watch.issue?{issue:watch.issue}:{})};saveTrainingSession();
+      }else if(!watch.issue){
+        watch.issue="Observed changes do not yet confirm this step. Refresh or verify in Torn, then use Mark done if appropriate.";saveTrainingSession();
+      }
       return false;
     }
     const i=session.index;
@@ -901,6 +915,49 @@ const tornCrimeGuide = (() => {
   function recoveryPanel(){
     return recoveryMessage?'<small role="status" '+(["Readiness updated.","Training progress detected."].includes(recoveryMessage)?'data-readiness-status':"")+'>'+esc(recoveryMessage)+'</small>':"";
   }
+  // The status reports detector readiness, not a guarantee that a game
+  // action has occurred. Disabled/idle and needs-action share the red cross;
+  // the accessible tooltip distinguishes the reason.
+  function classifyWatch({enabled=true,connected=true,session=null,war=null,blocked=false,restricted=false,busy=false,retry=false,sample=null,now=Date.now()}={}){
+    const result=(state,detail)=>({state,label:"API auto-detection: "+(state==="active"?"Active":state==="inactive"?"Inactive":"Requires action")+" · "+detail});
+    if(!enabled)return result("inactive","Disabled in Energy settings.");
+    if(!connected)return result("action","Connect the Torn API.");
+    if(war?.phase==="active")return result("inactive","Active war; training detection paused.");
+    if(war?.phase==="stacking"){
+      if(busy)return result("active","Refreshing war preparation.");
+      if(war.energy==null||war.due==null)return result("action","Refresh Energy, cooldowns or Xanax inventory.");
+      return result("active","Watching war preparation; projections update from account data.");
+    }
+    const step=session?.actions?.[session.index];
+    if(!step)return result("inactive",session?"Cycle complete. Start or review the next cycle.":"Start a training plan to enable monitoring.");
+    if(blocked||restricted)return result("action","Training paused by an activity deadline or drug restriction.");
+    if(busy)return result("active","Refreshing or reconciling account data.");
+    if(retry)return result("action","API check failed. Waiting to retry; use Refresh if needed.");
+    if(!["xanax","ecstasy","candy","dvd","refill","train"].includes(step.type))return result("action","This step requires manual confirmation.");
+    if(!sample)return result("action","Fresh Energy, Happiness and cooldown data needed. Refresh if this persists.");
+    if(step.type==="train"&&sample.stat==null)return result("action","Fresh battle-stat data required to confirm training.");
+    if(step.type==="refill"&&sample.refillUsed==null)return result("action","Current daily refill status required.");
+    if(session.watch?.index!==session.index||!session.watch?.sample)return result("action","Waiting for a fresh pre-action baseline. Refresh before acting.");
+    if(session.watch.issue)return result("action",session.watch.issue);
+    if(now-session.watch.sample.at>180000)return result("action","Observation baseline expired. Refresh before acting.");
+    return result("active","Watching the current step; read-only API checks every 30 seconds when ready, or two minutes while waiting.");
+  }
+  function growthWatchStatus(session,training,war=null,now=Date.now()){
+    return classifyWatch({enabled:autoTrainingWatch(),connected:!!tornGuideApi.state.identity&&tornGuideApi.isConnected(),session,war,
+      blocked:!!training?.activity?.blocked||!!(session&&training?.activity&&sessionDeadlineConflict(session,training.activity,now)),
+      restricted:!!(session?.drugRisk&&training?.blockDrugs),busy:recoveryBusy||watchPending,retry:now<watchRetryAt,sample:war?null:trainingWatchSnapshot(session,now),now});
+  }
+  function growthWatchIndicator(status){
+    return '<span class="growth-watch-status" data-growth-watch-status="'+status.state+'" role="img" tabindex="0" aria-label="'+esc(status.label)+'" data-tooltip="'+esc(status.label)+'"><span aria-hidden="true">'+(status.state==="active"?"✓":"×")+'</span></span>';
+  }
+  function updateGrowthWatchIndicator(view,now=Date.now()){
+    const el=view?.querySelector("[data-growth-watch-status]");
+    if(!el)return;
+    const war=el.closest("[data-war-counter]")&&warTraining?energyWarAdvice(warTraining,now):null;
+    const status=growthWatchStatus(loadTrainingSession(),warTraining,war,now);
+    if(el.dataset.growthWatchStatus!==status.state){el.dataset.growthWatchStatus=status.state;el.firstElementChild.textContent=status.state==="active"?"✓":"×";}
+    if(el.getAttribute("aria-label")!==status.label){el.setAttribute("aria-label",status.label);el.dataset.tooltip=status.label;}
+  }
   function sessionPanel(plan,training,names,fmt){
     const session=loadTrainingSession(),program=plan.program;
     const prep=prepState(plan,training.blockDrugs);
@@ -908,17 +965,16 @@ const tornCrimeGuide = (() => {
     let label,heading,due=null,controls="",boosterWait=false;
     if(session){
       const step=session.actions[session.index];
-      heading="Active plan · "+session.label;
+      heading=session.label+(step?" "+(session.index+1)+" / "+session.actions.length:"");
       if(!step){heading="Training cycle complete";label="All cycle actions confirmed";controls='<button type="button" data-growth-session="review" '+(recoveryBusy?"disabled":"")+'>Plan next cycle</button>';}
       else if(training.blockDrugs&&session.drugRisk){label="Drug restriction active · cancel and replan";}
-      else {const next=sessionSchedule(session)[session.index];due=next?.due??Date.now();boosterWait=Boolean(next?.boosterWait);label=next?.happyWait?"Wait for Happiness Reset":next?.boosterWait?"Wait for Booster Cooldown":(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done">Mark done</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;}
+      else {const next=sessionSchedule(session)[session.index];due=next?.due??Date.now();boosterWait=Boolean(next?.boosterWait);label=next?.happyWait?"Wait for Happiness Reset":next?.boosterWait?"Wait for Booster Cooldown":(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done">Mark done</button>';}
     }else{heading="";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button>';}
     const refreshLabel=recoveryBusy?"Refreshing…":session?"Continue / Refresh":"Refresh training readiness";
-    const cornerControls='<div class="growth-counter-actions">'+
+    const cornerControls='<div class="growth-counter-actions">'+growthWatchIndicator(growthWatchStatus(session,training))+
       '<button type="button" data-growth-session="refresh" aria-label="'+refreshLabel+'" title="'+refreshLabel+'" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button>'+
       '<button type="button" data-growth-session="stop" aria-label="Cancel training program" title="Cancel training program and return to Start" '+(!session||session.index>=session.actions.length?"disabled":"")+'><span aria-hidden="true">×</span></button></div>';
-    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+cornerControls+(heading?'<small>'+esc(heading)+'</small>':'')+'<strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span data-growth-step>'+esc(label)+'</span>'+'<div class="growth-session-controls">'+controls+barWarning("happy")+barWarning("energy")+'</div>'+
-      (session&&session.index<session.actions.length&&autoTrainingWatch()?'<small>Auto-detection active · API checks when ready</small>':"")+
+    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+'<div class="growth-counter-header"><small class="growth-counter-title">'+esc(heading)+'</small>'+cornerControls+'</div><strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span data-growth-step>'+esc(label)+'</span>'+'<div class="growth-session-controls">'+controls+barWarning("happy")+barWarning("energy")+'</div>'+
       (boosterWait?'<small>Already trained? Refresh to check for completed steps.</small>':"")+
       recoveryPanel()+'</div>';
   }
@@ -1018,10 +1074,8 @@ const tornCrimeGuide = (() => {
     return advice.energy==null?"Stack and readiness unverified":number(advice.energy)+" / 1,000 E · "+advice.doses.length+" future doses"+(advice.projectedEnergy==null?"":" · "+number(advice.projectedEnergy)+" E projected");
   }
   function warCounter(advice){
-    return '<div class="growth-next-step" data-war-counter><div class="growth-counter-actions">'+
-      '<button type="button" data-growth-session="war-refresh" aria-label="Refresh war preparation" title="Refresh war preparation" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button></div>'+
-      '<small>Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+
-      (advice.mode?" · "+esc(advice.mode):"")+'</small><strong class="growth-next-clock" data-war-clock>'+
+    return '<div class="growth-next-step" data-war-counter><div class="growth-counter-header"><small class="growth-counter-title">Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(advice.mode?" · "+esc(advice.mode):"")+'</small><div class="growth-counter-actions">'+growthWatchIndicator(growthWatchStatus(null,warTraining,advice))+
+      '<button type="button" data-growth-session="war-refresh" aria-label="Refresh war preparation" title="Refresh war preparation" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button></div></div><strong class="growth-next-clock" data-war-clock>'+
       esc(advice.phase==="active"?"Active":advice.due==null?"Verify":advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
       '</strong><span data-war-step>'+esc(advice.label)+'</span>'+
       (advice.phase==="active"?warAttackPanel(advice.attacks):'<small data-war-progress>'+esc(warProgressText(advice))+'</small>')+recoveryPanel()+'</div>';
@@ -1038,7 +1092,7 @@ const tornCrimeGuide = (() => {
     if(activeSession&&sessionDeadlineConflict(activeSession,training.activity))return '<div class="growth-card">'+setup+'<div class="growth-warning">Current cycle conflicts with '+esc(training.activity.reason??"a scheduled activity")+'. Confirming completed actions and replanning the remainder.</div>'+recoveryPanel()+'</div>';
     if(training.activity.deadline!=null)setup+='<small data-activity-cutoff="'+training.activity.deadline+'">Training cutoff: '+esc(tornActivityScheduler.time(training.activity.deadline))+' · '+esc(training.activity.reason??"activity")+'</small>';
     if(war)setup+='<small data-war-switch="'+war.first+'">Ranked war starts '+esc(new Date(war.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(war.mode?" · "+esc(war.mode):"")+'</small>';
-    if(activeSession&&!p?.stats){const fmt=v=>v==null?"Unavailable":number(Math.round(v));const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",refill:"Points refill"};return '<div class="growth-card">'+setup+sessionPanel(p??{},training,names,fmt)+growthPlanSequence(activeSession)+replayPanel(activeSession,fmt)+growthPeriodSummary(activeSession.periods,fmt,activeSession.actions.slice(0,activeSession.index))+'<div class="growth-execution"><ol>'+sessionSteps(activeSession,names,fmt)+'</ol></div></div>';}
+    if(activeSession&&!p?.stats){const fmt=v=>v==null?"Unavailable":number(Math.round(v));const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",refill:"Points refill"};return '<div class="growth-card">'+setup+sessionPanel(p??{},training,names,fmt)+growthDetails([["summary","Summary",growthPlanSequence(activeSession)+replayPanel(activeSession,fmt)+growthPeriodSummary(activeSession.periods,fmt,activeSession.actions.slice(0,activeSession.index))],["steps","Steps",'<div class="growth-execution"><ol>'+sessionSteps(activeSession,names,fmt)+'</ol></div>'],["build","Build",'<p class="fine-print">Build data unavailable. <a href="#stats">View Stats</a></p>']])+'</div>';}
     if(p?.needsBuild)return setup+'<div class="growth-warning">Choose a stat build before receiving training recommendations. <a href="#stats">Select build</a></div>';
     if(!p?.stats)return setup+'<p class="fine-print">'+esc(p?.detail??"Load battle stats and choose a build in Stats.")+'</p><a href="#stats">View Stats</a>';
     const prog=p.program,fmt=v=>v==null?"Unavailable":number(Math.round(v)),perc=v=>Number.isFinite(v)?v.toFixed(1)+"%":"Unavailable";
@@ -1053,7 +1107,7 @@ const tornCrimeGuide = (() => {
     const statLabel=activeSession?(p.stats.find(s=>s.key===activeSession.statKey)?.label??activeSession.stat):p.stats.find(s=>s.key===p.statKey)?.label??p.stat;
     const gymName=activeSession?.gym?.name??p.gym?.name,article=gymName==="Gun Shop"?"the ":"";
     const instruction='<div class="growth-instruction">Train <strong class="growth-accent">'+esc(statLabel)+'</strong>'+(gymName?' at '+article+'<strong>'+esc(gymName)+'</strong>.':' · Gym unavailable.')+((activeSession?.gym?.energy??p.gym?.energy)!=null?' <strong>'+esc(activeSession?.gym?.energy??p.gym?.energy)+'E</strong>':"")+'</div>';
-    const build='<div class="growth-build-content"><div class="growth-row"><strong>'+esc(p.build)+'</strong><a href="#stats">View</a></div><div class="growth-row"><strong>Current stats / target</strong></div>'+stats+'<small>'+fmt(p.remaining)+' remaining to build target · '+perc(p.modifier)+' modeled gain modifier</small></div>';
+    const build='<div class="growth-build-content"><div class="growth-row"><strong>'+esc(p.build)+'</strong><a href="#stats">View</a></div>'+stats+'<small>'+fmt(p.remaining)+' remaining to build target · '+perc(p.modifier)+' modeled gain modifier</small></div>';
     const perkChips=chips.length?'<div class="growth-perks">'+chips.join("")+'</div>':"";
     const summary=activeSession?growthPlanSequence(activeSession)+replayPanel(activeSession,fmt)+growthPeriodSummary(activeSession.periods,fmt,activeSession.actions.slice(0,activeSession.index)):
       prog?'<div class="growth-plan">'+(prog.source==="optimal-budget"?growthPlanSequence(prog):'<strong class="growth-accent growth-program-title">'+esc(prog.label)+'</strong>')+growthPeriodSummary(prog.periods,fmt)+'</div>':
@@ -1061,9 +1115,7 @@ const tornCrimeGuide = (() => {
     const session=loadTrainingSession();
     const steps=session?'<div class="growth-execution"><small>Confirmed times and adjusted estimates (local time).</small><ol>'+sessionSteps(session,names,fmt)+'</ol></div>':prog?'<div class="growth-execution"><small>Elapsed time from simulation start. Follow live cooldowns; estimates may change.</small><ol>'+execution+'</ol></div>':'<p class="fine-print">No training steps available.</p>';
     const tabs=[["summary","Summary",summary+perkChips],["steps","Steps",steps],["build","Build",build]];
-    const tabbar='<div class="growth-tabs" role="tablist" aria-label="Energy details">'+tabs.map(([id,label])=>'<button type="button" role="tab" id="growth-tab-'+id+'" aria-controls="growth-panel-'+id+'" aria-selected="'+(growthTab===id)+'" tabindex="'+(growthTab===id?"0":"-1")+'" data-growth-tab="'+id+'">'+label+'</button>').join("")+'</div>';
-    const panels=tabs.map(([id,,body])=>'<div class="growth-tab-panel" role="tabpanel" id="growth-panel-'+id+'" aria-labelledby="growth-tab-'+id+'" '+(growthTab===id?"":"hidden")+'>'+body+'</div>').join("");
-    return '<div class="growth-card">'+setup+instruction+timer+tabbar+panels+'</div>';
+    return '<div class="growth-card">'+setup+instruction+timer+growthDetails(tabs)+'</div>';
   }
   function refillStatus(kind,now=Date.now()){
     const state=tornGuideApi.state,stamp=Number(state.fetchedAt?.refills||0);
@@ -1138,6 +1190,7 @@ const tornCrimeGuide = (() => {
       if(sessionDeadlineConflict(session,activity)&&!recoveryBusy&&Date.now()>=deadlineRetryAt){void replanActivityConflict(view,session);return;}
     }else lastActivityState=null;
     watchTraining(view);
+    updateGrowthWatchIndicator(view);
     for(const indicator of document.querySelectorAll("[data-rec-refill]")){
       const status=refillStatus(indicator.dataset.recRefill);
       indicator.hidden=!status;
@@ -1632,11 +1685,14 @@ const tornCrimeGuide = (() => {
       refreshRecommendations(view);
       view.querySelector('[data-energy-war="'+key+'"]')?.focus();
     });
-    function selectGrowthTab(id,focus=false){
-      if(!["summary","steps","build"].includes(id))return;
-      growthTab=id;try{localStorage.setItem("torn-city-guide:growth-tab:"+recOwner,id);}catch{}
-      for(const el of view.querySelectorAll("[data-growth-tab]")){const selected=el.dataset.growthTab===id;el.setAttribute("aria-selected",String(selected));el.tabIndex=selected?0:-1;if(selected&&focus)el.focus();}
-      for(const el of view.querySelectorAll(".growth-tab-panel"))el.hidden=el.id!=="growth-panel-"+id;
+    function selectGrowthTab(id,focus=false,toggle=false){
+      if(!growthTabIds.includes(id))return;
+      growthTab=nextGrowthTab(growthTab,id,toggle);try{localStorage.setItem("torn-city-guide:growth-tab:"+recOwner,growthTab);}catch{}
+      for(const el of view.querySelectorAll("[data-growth-tab]")){
+        const selected=el.dataset.growthTab===growthTab,focused=el.dataset.growthTab===id;
+        el.setAttribute("aria-selected",String(selected));el.setAttribute("aria-expanded",String(selected));el.tabIndex=focused?0:-1;if(focused&&focus)el.focus({preventScroll:true});
+      }
+      for(const el of view.querySelectorAll(".growth-tab-panel"))el.hidden=el.id!=="growth-panel-"+growthTab;
     }
     view.addEventListener("keydown",e=>{const btn=e.target.closest("[data-growth-tab]");if(!btn)return;const ids=["summary","steps","build"],i=ids.indexOf(btn.dataset.growthTab);let next;if(e.key==="ArrowRight")next=ids[(i+1)%3];else if(e.key==="ArrowLeft")next=ids[(i+2)%3];else if(e.key==="Home")next=ids[0];else if(e.key==="End")next=ids[2];else return;e.preventDefault();selectGrowthTab(next,true);});
     view.addEventListener("click",e=>{
@@ -1654,7 +1710,7 @@ const tornCrimeGuide = (() => {
       }
       const restockButton=e.target.closest("[data-restock-settings]");
       if(restockButton){e.preventDefault();openRestockSettings(view,restockButton);return;}
-      const tab=e.target.closest("[data-growth-tab]");if(tab){selectGrowthTab(tab.dataset.growthTab,true);return;}
+      const tab=e.target.closest("[data-growth-tab]");if(tab){selectGrowthTab(tab.dataset.growthTab,true,true);return;}
       const gear=e.target.closest("[data-growth-settings]");
       if(gear){e.preventDefault();e.stopPropagation();growthSettingsOpen=!growthSettingsOpen;recExpanded.add("growth");try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}refreshRecommendations(view);return;}
       if(e.target.closest("[data-growth-budget]")){if(!tornRoadmap.activitiesOpen())tornRoadmap.toggleActivities();document.querySelector('#home-activities [data-home-pref="weeklyBudget"]')?.focus();return;}
