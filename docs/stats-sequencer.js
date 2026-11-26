@@ -18,7 +18,12 @@ const tornTrainSequence=(()=>{
   const templates=[["natural","NAT","Natural training"],["maxenergy","MAX E","Maximum Energy"],["mini","MINI","Mini jump"],["low","LOW#","Low-stat jump"],["jump","HJ","Happy jump"],["maxhappy","99k","99k Happy jump"],["custom","CUSTOM","Custom"]];
   const midnightJumps=new Set(["low","mini","maxenergy","jump","maxhappy"]);
   const midnightWindow=15*60;
+  function happyResetWait(seconds,firstReset=900){
+    const remaining=((firstReset-seconds)%900+900)%900;
+    return remaining>0&&remaining<240?remaining+1:0;
+  }
   function waitTitle(reason=""){
+    if(reason==="Happiness reset")return "Wait for Happiness Reset";
     if(reason.startsWith("Drug cooldown"))return "Wait - Drug Cooldown";
     if(reason.startsWith("Booster cooldown"))return "Wait - Booster Cooldown";
     if(reason==="Full Energy")return "Wait for Energy";
@@ -305,6 +310,11 @@ const tornTrainSequence=(()=>{
       let allowance=v.booster>boosterLimit?0:Math.floor((boosterLimit-v.booster)/itemCD)+1;
       const held=type==="candy"?(stock.loaded?rowCandy.reduce((sum,x)=>sum+x.qty,0):null):dvdKnown?Math.max(0,dvdHeld-v.costs.dvd):null;
       if(isBooster&&allowance===0&&cfg.startBoosterMin*60>v.time&&v.costs.candy+v.costs.dvd===0&&(a.max?held>0:a.qty>0)){const delay=v.booster-boosterLimit;if(!waitFor(delay,"Booster cooldown"))return false;allowance=Math.floor((boosterLimit-v.booster)/itemCD)+1;}
+      if(isBooster&&!bliss&&allowance>0&&(a.max?held>0:a.qty>0)){
+        const delay=happyResetWait(v.time,Math.max(1,Math.round(cfg.resetAfterSec)));
+        if(delay&&!waitFor(delay,"Happiness reset"))return false;
+        allowance=Math.floor((boosterLimit-v.booster)/itemCD)+1;
+      }
       const maximum=held===null?null:Math.min(held,allowance);
       const baselineAllowance=Math.floor(boosterLimit/itemCD)+1;
       if(isBooster&&cfg.startBoosterMin*60>v.time&&v.costs.candy+v.costs.dvd===0&&allowance<baselineAllowance&&(a.max?held!=null&&held>allowance:a.qty>allowance)){
@@ -980,5 +990,5 @@ const tornTrainSequence=(()=>{
       rebuild(el===document.activeElement?focusTarget:null);
     });
   }
-  return {render,wire,simulate,weeklyPrograms,periodPurchases,replayRemaining,waitTitle,energyRefillUsedToday,steps,settings:p,loadLive,templateButtons};
+  return {render,wire,simulate,weeklyPrograms,periodPurchases,replayRemaining,waitTitle,happyResetWait,energyRefillUsedToday,steps,settings:p,loadLive,templateButtons};
 })();
