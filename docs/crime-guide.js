@@ -227,7 +227,7 @@ const tornCrimeGuide = (() => {
     });
     dialog.showModal();
   }
-  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Energy"],["consume","Use & Collect"],["crime","Crimes"],["education","Education"],["money","Money"]];
+  const recommendationTypes=[["restock","Restock"],["merit","Merits"],["growth","Energy"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
   let recIncomplete=true,recUniques=false,collectView="ready";
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id)),recExpanded=new Set();
   function loadRecFilters(){
@@ -327,7 +327,7 @@ const tornCrimeGuide = (() => {
       const summary='<li><div><strong>Unique hunt</strong><small>'+missing.length+' crimes with remaining documented uniques · '+unknown.length+' awaiting collection data. CS 100 crimes are included. Check in-game stars and requirements; counts are not a mapping of individual missing rewards.</small></div></li>';
       const targets=missing.map(x=>{
         const remain=x.total-x.uniqueCount,ref=reference.find(y=>y[0]===x.name);
-        return '<li><div><strong>'+esc(x.name)+' · '+remain+' remaining</strong><small>'+x.uniqueCount+' / '+x.total+' documented uniques · '+(x.cs===null?"CS unavailable":"CS "+number(x.cs))+'</small><p>'+esc(crimeAdvice[x.name]??x.detail)+'</p><div class="rec-crime-actions"><a href="'+wiki(x.name)+'" target="_blank" rel="noopener noreferrer">Unique requirements</a><button type="button" class="rec-oc-toggle" data-rec-crime-load="'+crimeIds[x.name]+'">Refresh progress</button></div></div><a href="#crime">View</a></li>'+(x.name==="Pickpocketing"?pickpocketRows(x.cs,risk,true):"");
+        return '<li><div><strong>'+esc(x.name)+(x.cs===null?"":" "+number(x.cs))+'</strong><small>'+remain+' remaining · '+x.uniqueCount+' / '+x.total+' documented uniques'+'</small><p>'+esc(crimeAdvice[x.name]??x.detail)+'</p><div class="rec-crime-actions"><a href="'+wiki(x.name)+'" target="_blank" rel="noopener noreferrer">Unique requirements</a><button type="button" class="rec-oc-toggle" data-rec-crime-load="'+crimeIds[x.name]+'">Refresh progress</button></div></div><a href="#crime">View</a></li>'+(x.name==="Pickpocketing"?pickpocketRows(x.cs,risk,true):"");
       }).join("");
       return summary+targets+(unknown.length?'<li><div><strong>Awaiting unique data</strong><small>'+esc(unknown.map(x=>x.name).join(", "))+' · automatic refresh while Home or Crimes is visible.</small></div></li>':"")+(!missing.length&&!unknown.length?'<li><div><strong>All documented unique counts reached</strong><small>Check the latest Torn unique tracker for additions.</small></div></li>':"")+'<li><a href="https://torn.report/uniques" target="_blank" rel="noopener noreferrer">Detailed unique tracker</a></li>';
     }
@@ -337,11 +337,11 @@ const tornCrimeGuide = (() => {
     const rank=(a,b)=>Number(a.rank>maxRisk)-Number(b.rank>maxRisk)||(risk==="low"?a.rank-b.rank:b.cs-a.cs)||a.rank-b.rank||a.i-b.i;
     const chosen=[...pool].sort((a,b)=>completion&&!recIncomplete?Number(a.cs>=100)-Number(b.cs>=100)||rank(a,b):rank(a,b))[0]??[...all].filter(x=>x.cs!==null).sort(rank)[0]??all[0];
     const fallback=!eligible.length||chosen.rank>maxRisk;
-    const detail=(chosen.cs===null?"Skill unavailable":chosen.cs<100?number(100-chosen.cs)+" skill levels to 100":"CS 100 · practice / unique review")+(fallback?" · No eligible safer unfinished crime; verify conditions and choose the easiest available action.":"");
+    const detail=[chosen.cs===null?"Skill unavailable":"",fallback?"No eligible safer unfinished crime; verify conditions and choose the easiest available action.":""].filter(Boolean).join(" · ");
     const ref=reference.find(x=>x[0]===chosen.name);
     const equipmentText=ref?equipment(ref).filter(x=>!x[3]||chosen.cs!=null&&chosen.cs>=x[3]).map(([name,cat])=>name+": "+({true:"owned",false:"missing",null:"unknown"}[inventoryStatus(name,cat)])).join(" · "):"";
     const uniqueText=chosen.total?chosen.uniqueCount==null?"Unique collection not loaded":chosen.uniqueCount+" / "+chosen.total+" documented unique outcomes collected":"No documented unique outcomes";
-    return '<li><div><strong>Recommended: '+esc(chosen.name)+(chosen.cs===null?"":" · CS "+number(chosen.cs))+'</strong><small>'+esc(detail)+'</small><p>'+esc(crimeAdvice[chosen.name]??chosen.detail)+'</p><small>'+esc(uniqueText)+'</small>'+(equipmentText?'<small>'+esc(equipmentText)+'</small>':"")+'<div class="rec-crime-actions"><button type="button" class="rec-oc-toggle" data-rec-crime-load="'+crimeIds[chosen.name]+'">'+(chosen.progress?"Refresh crime progress":"Load crime progress")+'</button><a href="'+wiki(chosen.name)+'" target="_blank" rel="noopener noreferrer">Unique requirements</a><a href="https://torn.report/uniques" target="_blank" rel="noopener noreferrer">Unique tracker</a></div></div><a href="#crime">View</a></li>'+(chosen.name==="Pickpocketing"?pickpocketRows(chosen.cs,risk):"");
+    return '<li><div><strong>'+esc(chosen.name)+(chosen.cs===null?"":" "+number(chosen.cs))+'</strong>'+(detail?'<small>'+esc(detail)+'</small>':"")+'<p>'+esc(crimeAdvice[chosen.name]??chosen.detail)+'</p><small>'+esc(uniqueText)+'</small>'+(equipmentText?'<small>'+esc(equipmentText)+'</small>':"")+'<div class="rec-crime-actions"><button type="button" class="rec-oc-toggle" data-rec-crime-load="'+crimeIds[chosen.name]+'">'+(chosen.progress?"Refresh crime progress":"Load crime progress")+'</button><a href="'+wiki(chosen.name)+'" target="_blank" rel="noopener noreferrer">Unique requirements</a><a href="https://torn.report/uniques" target="_blank" rel="noopener noreferrer">Unique tracker</a></div></div><a href="#crime">View</a></li>'+(chosen.name==="Pickpocketing"?pickpocketRows(chosen.cs,risk):"");
   }
   function pickpocketRows(cs,risk,uniqueOnly=false){
     const maxTier=Math.min(risk==="low"?1:risk==="medium"?2:3,cs==null||cs<35?0:cs<70?1:cs<100?2:3);
@@ -749,7 +749,23 @@ const tornCrimeGuide = (() => {
     const panels=tabs.map(([id,,body])=>'<div class="growth-tab-panel" role="tabpanel" id="growth-panel-'+id+'" aria-labelledby="growth-tab-'+id+'" '+(growthTab===id?"":"hidden")+'>'+body+'</div>').join("");
     return '<div class="growth-card">'+setup+instruction+timer+tabbar+panels+'</div>';
   }
+  function nerveRefillStatus(now=Date.now()){
+    const state=tornGuideApi.state,stamp=Number(state.fetchedAt?.refills||0);
+    const refill=payload("refills","refills");
+    const used=refill?.nerve_refill_used??refill?.nerve?.used;
+    if(!stamp||state.errors?.refills||typeof used!=="boolean")return "";
+    const day=Math.floor(now/86400000);
+    return used&&Math.floor(stamp/86400000)===day
+      ?"Refill in "+tornTctClock.formatDuration(Math.ceil(((day+1)*86400000-now)/1000))
+      :"Refill Available";
+  }
   function tickGrowth(){
+    const refillIndicator=document.querySelector("[data-nerve-refill-status]");
+    if(refillIndicator){
+      const status=nerveRefillStatus();
+      refillIndicator.hidden=!status;
+      if(refillIndicator.textContent!==status)refillIndicator.textContent=status;
+    }
     if(readinessExpires&&Date.now()>=readinessExpires){
       readinessExpires=0;
       if(["Readiness updated.","Training progress detected."].includes(recoveryMessage))recoveryMessage="";
@@ -895,15 +911,6 @@ const tornCrimeGuide = (() => {
       const amount=Math.max(0,Math.min(held,Math.floor(room/unit),Math.floor(safeWindow/unit),Math.ceil(n(bars.nerve.maximum)-nerve)));
       if(amount>0)add("consume","Alcohol · up to "+number(amount),number(held)+" held · "+(nextBooster?"Cooldown clears before the next training booster at "+sessionTime(nextBooster.due):"No remaining candy or DVD steps")+" · Conservative cooldown allowance.","#crime");
     }
-    const refill=payload("refills","refills");
-    const refillStamp=Number(tornGuideApi.state.fetchedAt?.refills||0);
-    const pointsBalance=payload("money","money")?.points;
-    const points=n(pointsBalance?.current??pointsBalance);
-    const currentRefillStatus=refillStamp>0&&Math.floor(refillStamp/86400000)===Math.floor(now/86400000)&&!tornGuideApi.state.errors?.refills;
-    if(nerveRoom&&nerve<=Math.floor(n(bars.nerve.maximum)*.2)&&
-      !(currentRefillStatus&&refill?.nerve_refill_used===true)&&(points===null||points>=30)){
-      rows.crime.push('<li><a href="https://www.torn.com/page.php?sid=points">Refill Nerve with Points</a></li>');
-    }
     if(!iconFresh)add("consume","Addiction status unavailable","Current addiction icon data is unavailable; no high-addiction warning has been inferred.","#stats");
     rows.crime.push(crimeRecommendation(prefs.jailRisk,completion));
     loadEducationPreference();
@@ -949,7 +956,7 @@ const tornCrimeGuide = (() => {
     if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
     if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
     if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'))+recTileEnd).join("");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" data-rec-incomplete type="button" aria-pressed="'+(recIncomplete&&!recUniques)+'">&lt;100 only</button><button class="rec-oc-toggle" data-rec-uniques type="button" aria-pressed="'+recUniques+'">Uniques</button><a class="rec-nerve-refill" data-nerve-refill-status href="https://www.torn.com/page.php?sid=points" title="Points shop" '+(nerveRefillStatus()?"":"hidden")+'>'+esc(nerveRefillStatus())+'</a></div>':id==="money"?'<div class="rec-oc-filters"><button class="rec-oc-toggle" type="button" data-rec-history>Refresh price history</button><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'))+recTileEnd).join("");
   }
 
   function recommendations(){
