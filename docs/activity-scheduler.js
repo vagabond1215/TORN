@@ -78,6 +78,51 @@ const tornActivityScheduler=(()=>{
     if(health.level==="restricted"&&fits(now,now+duration))return {start:now,end:now+duration,duration,cost:rehabEstimate(s),type:s.travel,source:"proposal",requiresPause:true};
     return null;
   }
+  // Rehab confirmation uses fresh cumulative counters, never a happiness
+  // change or natural addiction decay. All expenses are locally scoped.
+  function activityFresh(key,now,age){const at=Number(tornGuideApi.state.fetchedAt?.[key]||0);return at>0&&at<=now+1000&&now-at<=age&&!tornGuideApi.state.errors?.[key];}
+  function rehabSnapshot(now=Date.now()){
+    if(!activityFresh("rehabStats",now,30*60000))return null;
+    const root=tornGuideApi.state.data?.rehabStats?.personalstats;
+    let count=null,cost=null;
+    const num=x=>x!=null&&Number.isFinite(Number(x))&&Number(x)>=0?Number(x):null;
+    const visit=(x,depth=0)=>{
+      if(!x||typeof x!=="object"||depth>7)return;
+      if(x.name==="rehabs")count=num(x.value);
+      if(x.name==="rehabcost")cost=num(x.value);
+      if(Object.hasOwn(x,"rehabs"))count=num(x.rehabs);
+      if(Object.hasOwn(x,"rehabcost"))cost=num(x.rehabcost);
+      if(x.rehabilitation&&typeof x.rehabilitation==="object"){
+        count=num(x.rehabilitation.amount??x.rehabilitation.count)??count;
+        cost=num(x.rehabilitation.fees??x.rehabilitation.cost)??cost;
+      }
+      for(const y of Object.values(x))if(typeof y==="object")visit(y,depth+1);
+    };
+    visit(root);
+    return count===null?null:{count,cost,at:Number(tornGuideApi.state.fetchedAt.rehabStats)};
+  }
+  function spendLedger(now=Date.now()){
+    const list=read("spend-ledger",[]);
+    return Array.isArray(list)?list.filter(e=>typeof e.id==="string"&&["war","rehab"].includes(e.kind)&&Number.isFinite(e.at)&&e.at<=now+1000&&e.at>now-90*D&&Number.isFinite(e.cost)&&e.cost>=0):[];
+  }
+  function recordSpend(e){
+    if(!["war","rehab"].includes(e.kind)||!Number.isFinite(e.at)||e.at>Date.now()+1000||!Number.isFinite(e.cost)||e.cost<0)return false;
+    const list=spendLedger();if(list.some(x=>x.id===e.id))return true;
+    return write("spend-ledger",[...list,e].slice(-500));
+  }
+  function weeklySpend(now=Date.now()){return spendLedger(now).filter(e=>e.at>now-W).reduce((a,e)=>a+e.cost,0);}
+  function reconcileRehab(now=Date.now()){
+    const cur=rehabSnapshot(now);if(!cur||!activityFresh("profile",now,15*60000))return null;
+    const status=String(tornGuideApi.state.data?.profile?.profile?.status?.state??"").toLowerCase();
+    if(!["okay","ok"].includes(status))return null;
+    const list=events(),eligible=list.filter(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&cur.at>=e.start&&cur.at>e.rehabBaseline.at&&cur.count>e.rehabBaseline.count);
+    if(eligible.length!==1)return null;
+    const e=eligible[0],base=e.rehabBaseline,cost=cur.cost!=null&&base.cost!=null&&cur.cost>=base.cost?cur.cost-base.cost:null;
+    if(cost!=null&&!recordSpend({id:"rehab-"+e.id,kind:"rehab",at:Math.min(now,cur.at),cost,source:"API counter delta"}))return null;
+    e.completedAt=now;e.blocking=false;e.end=Math.max(e.start+1,now);e.rehabCost=cost;
+    if(!write("events",list))return null;
+    return {event:e,cost,count:cur.count-base.count};
+  }
   function apiEvents(now=Date.now()){
     if(typeof tornTctClock==="undefined")return [];
     const map={point:"collection",addiction:"health",company:"collection",companyStar:"collection",bank:"collection",flight:"travel",education:"education",virus:"event",oc:"oc",drug:"health",booster:"health",medical:"health"};
@@ -154,5 +199,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,schedule,render,settingsDialog,manualForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,schedule,render,settingsDialog,manualForm,wire,time,kinds};
 })();
