@@ -219,7 +219,7 @@ const tornCrimeGuide = (() => {
       }
       const values=new FormData(event.currentTarget);
       const bands=new Set(values.getAll("ocBand").map(Number)),forecastDays=Number(values.get("forecastDays"));
-      try{localStorage.setItem(restockSettingsKey(owner),JSON.stringify({items:[...items.values()],ocBands:[...bands],forecastDays}));}
+      try{writeAccountValue(restockSettingsKey(owner),JSON.stringify({items:[...items.values()],ocBands:[...bands],forecastDays}));}
       catch{dialog.querySelector("[data-restock-status]").textContent="Settings could not be saved.";return;}
       restockRules=items;ocEnabled=bands;restockForecastDays=forecastDays;
       dialog.close();
@@ -234,7 +234,7 @@ const tornCrimeGuide = (() => {
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
     recOwner=owner;incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build","collapsed"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
-    try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v)){recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));if(!v.includes("calendar")&&localStorage.getItem("torn-city-guide:calendar-introduced:"+owner)!=="true"){recEnabled.add("calendar");localStorage.setItem("torn-city-guide:rec-types:"+owner,JSON.stringify([...recEnabled]));localStorage.setItem("torn-city-guide:calendar-introduced:"+owner,"true");}}}catch{}
+    try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v)){recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));if(!v.includes("calendar")&&localStorage.getItem("torn-city-guide:calendar-introduced:"+owner)!=="true"){recEnabled.add("calendar");writeAccountValue("torn-city-guide:rec-types:"+owner,JSON.stringify([...recEnabled]));writeAccountValue("torn-city-guide:calendar-introduced:"+owner,"true");}}}catch{}
   }
   let growthSettingsOpen=false;
   function excludeOwned(){try{return localStorage.getItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"))!=="false";}catch{return true;}}
@@ -449,7 +449,7 @@ const tornCrimeGuide = (() => {
       e.preventDefault();
       if(owner!==String(tornGuideApi.state.identity?.id??"guest")){dialog.close();return;}
       const value=dialog.querySelector('[name="incompleteUniques"]').checked;
-      try{localStorage.setItem("torn-city-guide:crime-incomplete-uniques:"+owner,String(value));}
+      try{writeAccountValue("torn-city-guide:crime-incomplete-uniques:"+owner,String(value));}
       catch{dialog.querySelector("[data-crime-settings-status]").textContent="Settings could not be saved.";return;}
       incompleteUniquesOnly=value;
       dialog.close();
@@ -622,7 +622,7 @@ const tornCrimeGuide = (() => {
     const entries=trainingSpend();
     if(entries.some(entry=>entry.started===session.started))return;
     entries.push({started:session.started,at:Date.now(),cost:session.cycleSpend});
-    localStorage.setItem(trainingSpendKey(),JSON.stringify(entries));
+    writeAccountValue(trainingSpendKey(),JSON.stringify(entries));
   }
   async function reviewNextCycle(view,session){
     if(trainingRecoveryHeld()||recoveryBusy)return;
@@ -642,6 +642,11 @@ const tornCrimeGuide = (() => {
     }catch(error){recoveryMessage="Could not review the next cycle: "+String(error.message??error);}
     finally{recoveryBusy=false;if(view.isConnected)refreshRecommendations(view);}
   }
+  function writeAccountValue(key,value){
+    const owner=String(key).split(":").at(-1);
+    if(typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(localStorage,owner))throw Error("Account restore is pending");
+    localStorage.setItem(key,value);
+  }
   function trainingRecoveryHeld(){
     const id=tornGuideApi.state.identity?.id;
     if(typeof tornTrainingRecovery!=="undefined")return tornTrainingRecovery.held(localStorage,id);
@@ -655,7 +660,7 @@ const tornCrimeGuide = (() => {
     if(sessionOwner!==owner){sessionOwner=owner;trainingSession=null;try{const x=JSON.parse(localStorage.getItem("torn-city-guide:training-session:"+owner));if(x?.version===1&&Array.isArray(x.actions)&&x.actions.length<=2000&&Number.isFinite(x.started)&&Number.isInteger(x.index)&&x.index>=0&&x.index<=x.actions.length)trainingSession=x;}catch{}}
     return trainingSession;
   }
-  function saveTrainingSession(){if(trainingRecoveryHeld()||sessionOwner!==String(tornGuideApi.state.identity?.id??"guest"))return;try{const key="torn-city-guide:training-session:"+sessionOwner;if(trainingSession)localStorage.setItem(key,JSON.stringify(trainingSession));else localStorage.removeItem(key);}catch{}}
+  function saveTrainingSession(){if(trainingRecoveryHeld()||sessionOwner!==String(tornGuideApi.state.identity?.id??"guest"))return;try{const key="torn-city-guide:training-session:"+sessionOwner;if(trainingSession)writeAccountValue(key,JSON.stringify(trainingSession));else localStorage.removeItem(key);}catch{}}
   const actionable=x=>Number.isFinite(x.at)&&x.at>=0&&!["wait","autoWait","happyReset"].includes(x.type)&&(x.type!=="train"||x.energy>0)&&(!["candy","dvd"].includes(x.type)||x.quantity>0);
   // Reconcile only future actions. Confirmed steps are immutable; missing live
   // snapshots never imply that an action happened.
@@ -1269,7 +1274,7 @@ const tornCrimeGuide = (() => {
       let history=[];try{history=JSON.parse(localStorage.getItem(historyKey))||[];}catch{}
       if(!Array.isArray(history))history=[];
       history.push({started:session.started,ended:Date.now(),reason:"activity deadline",label:session.label,confirmed:session.actions.slice(0,session.index),completed:session.completed??{},reservedSpend:session.cycleSpend??null});
-      localStorage.setItem(historyKey,JSON.stringify(history.slice(-30)));
+      writeAccountValue(historyKey,JSON.stringify(history.slice(-30)));
       accountForCycle(session);
       trainingSession=null;saveTrainingSession();
       recoveryMessage="Training reconciled · activity deadline applied.";readinessExpires=Date.now()+3500;
@@ -1775,10 +1780,10 @@ const tornCrimeGuide = (() => {
         const id=e.target.dataset.recGroup;
         if(!recommendationTypes.some(([key])=>key===id))return;
         if(e.target.open)recExpanded.add(id);else recExpanded.delete(id);
-        try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}
+        try{writeAccountValue("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}
       }
     },true);
-    view.addEventListener("change",e=>{if(e.target.matches("[data-growth-exclude-owned]")){try{localStorage.setItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"),String(e.target.checked));}catch{}refreshRecommendations(view);}});
+    view.addEventListener("change",e=>{if(e.target.matches("[data-growth-exclude-owned]")){try{writeAccountValue("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"),String(e.target.checked));}catch{}refreshRecommendations(view);}});
     view.addEventListener("change",event=>{
       if(event.target.matches("[data-crime-observation]")){
         const el=event.target,{crimeName,crimeTarget,crimeField}=el.dataset;
@@ -1795,7 +1800,7 @@ const tornCrimeGuide = (() => {
         return;
       }
       if(event.target.matches("[data-growth-watch]")){
-        try{localStorage.setItem("torn-city-guide:growth-watch:"+String(tornGuideApi.state.identity?.id??"guest"),String(event.target.checked));}catch{}
+        try{writeAccountValue("torn-city-guide:growth-watch:"+String(tornGuideApi.state.identity?.id??"guest"),String(event.target.checked));}catch{}
         const session=loadTrainingSession();if(session){delete session.watch;saveTrainingSession();}
         refreshRecommendations(view);return;
       }
@@ -1804,7 +1809,7 @@ const tornCrimeGuide = (() => {
         if(value!=="auto"&&!crimes.some(([name])=>name===value))return;
         crimeOverride=value;
         recExpanded.add("crime");
-        try{localStorage.setItem("torn-city-guide:crime-override:"+recOwner,value);}catch{}
+        try{writeAccountValue("torn-city-guide:crime-override:"+recOwner,value);}catch{}
         refreshRecommendations(view);
         view.querySelector("[data-rec-crime-override]")?.focus();
         return;
@@ -1815,13 +1820,13 @@ const tornCrimeGuide = (() => {
       if(key==="mode")settings.mode=event.target.value;
       else if(event.target.value!==""&&event.target.validity.valid)settings[key]=Number(event.target.value);
       else {event.target.value=settings[key];return;}
-      try{localStorage.setItem("torn-city-guide:energy-war:"+recOwner,JSON.stringify({...settings,version:2}));}catch{}
+      try{writeAccountValue("torn-city-guide:energy-war:"+recOwner,JSON.stringify({...settings,version:2}));}catch{}
       refreshRecommendations(view);
       view.querySelector('[data-energy-war="'+key+'"]')?.focus();
     });
     function selectGrowthTab(id,focus=false,toggle=false){
       if(!growthTabIds.includes(id))return;
-      growthTab=nextGrowthTab(growthTab,id,toggle);try{localStorage.setItem("torn-city-guide:growth-tab:"+recOwner,growthTab);}catch{}
+      growthTab=nextGrowthTab(growthTab,id,toggle);try{writeAccountValue("torn-city-guide:growth-tab:"+recOwner,growthTab);}catch{}
       for(const el of view.querySelectorAll("[data-growth-tab]")){
         const selected=el.dataset.growthTab===growthTab,focused=el.dataset.growthTab===id;
         el.setAttribute("aria-selected",String(selected));el.setAttribute("aria-expanded",String(selected));el.tabIndex=focused?0:-1;if(focused&&focus)el.focus({preventScroll:true});
@@ -1846,7 +1851,7 @@ const tornCrimeGuide = (() => {
       if(restockButton){e.preventDefault();openRestockSettings(view,restockButton);return;}
       const tab=e.target.closest("[data-growth-tab]");if(tab){selectGrowthTab(tab.dataset.growthTab,true,true);return;}
       const gear=e.target.closest("[data-growth-settings]");
-      if(gear){e.preventDefault();e.stopPropagation();growthSettingsOpen=!growthSettingsOpen;recExpanded.add("growth");try{localStorage.setItem("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}refreshRecommendations(view);return;}
+      if(gear){e.preventDefault();e.stopPropagation();growthSettingsOpen=!growthSettingsOpen;recExpanded.add("growth");try{writeAccountValue("torn-city-guide:rec-expanded:"+recOwner,JSON.stringify([...recExpanded]));}catch{}refreshRecommendations(view);return;}
       if(e.target.closest("[data-growth-budget]")){if(!tornRoadmap.activitiesOpen())tornRoadmap.toggleActivities();document.querySelector('#home-activities [data-home-pref="weeklyBudget"]')?.focus();return;}
       const sessionButton=e.target.closest("[data-growth-session]");
       if(sessionButton&&!sessionButton.disabled){if(trainingRecoveryHeld()){refreshRecommendations(view);return;}const action=sessionButton.dataset.growthSession,session=loadTrainingSession();
@@ -1887,13 +1892,13 @@ const tornCrimeGuide = (() => {
         })();
         return;
       }
-      if(btn.hasAttribute("data-rec-uniques")){recUniques=!recUniques;try{localStorage.setItem("torn-city-guide:crime-uniques:"+recOwner,String(recUniques));}catch{}refreshRecommendations(view);view.querySelector("[data-rec-uniques]")?.focus();return;}
-      if(btn.hasAttribute("data-rec-incomplete")){recIncomplete=!recIncomplete;try{localStorage.setItem("torn-city-guide:crime-incomplete:"+recOwner,String(recIncomplete));}catch{}refreshRecommendations(view);view.querySelector("[data-rec-incomplete]")?.focus();return;}
+      if(btn.hasAttribute("data-rec-uniques")){recUniques=!recUniques;try{writeAccountValue("torn-city-guide:crime-uniques:"+recOwner,String(recUniques));}catch{}refreshRecommendations(view);view.querySelector("[data-rec-uniques]")?.focus();return;}
+      if(btn.hasAttribute("data-rec-incomplete")){recIncomplete=!recIncomplete;try{writeAccountValue("torn-city-guide:crime-incomplete:"+recOwner,String(recIncomplete));}catch{}refreshRecommendations(view);view.querySelector("[data-rec-incomplete]")?.focus();return;}
       if(btn.hasAttribute("data-rec-history")){btn.disabled=true;tornInvestmentHistory.refresh().finally(()=>{if(location.hash==="#home")refreshRecommendations(view);});return;}
       if(btn.dataset.recType){
         const id=btn.dataset.recType;
         if(recEnabled.has(id))recEnabled.delete(id);else recEnabled.add(id);
-        try{localStorage.setItem("torn-city-guide:rec-types:"+recOwner,JSON.stringify([...recEnabled]));}catch{}
+        try{writeAccountValue("torn-city-guide:rec-types:"+recOwner,JSON.stringify([...recEnabled]));}catch{}
         refreshRecommendations(view);
         view.querySelector('[data-rec-type="'+id+'"]')?.focus();return;
       }

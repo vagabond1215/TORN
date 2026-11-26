@@ -91,7 +91,7 @@ const tornTrainSequence=(()=>{
     }
   }
   function savePlanPreferences(){
-    if(planPreferenceOwner===undefined)return;
+    if(planPreferenceOwner===undefined||typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(localStorage,planPreferenceOwner))return;
     const plans=Object.fromEntries(templates.map(([id])=>[id,{
       energy:startingEnergy[id],time:startingTime[id],actions:editedPlans.has(id)?steps[id]:undefined
     }]));
@@ -686,7 +686,7 @@ const tornTrainSequence=(()=>{
       if(options.blockDrugs&&remaining.some(x=>["xanax","ecstasy"].includes(x.type)))return {error:"Drug restriction active"};
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
       const drugMin=live?live.drug/60:Math.max(0,cd.drug-elapsed,((session.drugUntil||0)-now)/60000),boosterMin=live?live.booster/60:Math.max(0,cd.booster-elapsed,((session.boosterUntil||0)-now)/60000);
-      const cfg={hours:Math.min(336,Math.max(24,((remaining.at(-1)?.at??0)-(remaining[0]?.at??0))/3600+48)),startEnergy:"current",autoWait:true,startDrugMin:drugMin,startBoosterMin:boosterMin,boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),refillUsedToday:live?live.refillUsed:session.refillDay===Math.floor(now/86400000)||energyRefillUsedToday(now)};
+      const cfg={hours:Math.min(336,Math.max(24,((remaining.at(-1)?.at??0)-(remaining[0]?.at??0))/3600+48)),startEnergy:"current",autoWait:true,startDrugMin:drugMin,startBoosterMin:boosterMin,boosterCapH:detectedBoosterCap()??(live?24:manualBoosterCap),tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),refillUsedToday:live?live.refillUsed:session.refillDay===Math.floor(now/86400000)||energyRefillUsedToday(now)};
       const engine=createEngine(cfg),v=engine.state,executed=[];
       for(let i=0;i<remaining.length;i++){
         const row=remaining[i],next=remaining[i+1],type=row.type;

@@ -97,6 +97,10 @@ const tornTrainingRecovery=(()=>{
     if(!/^[1-9][0-9]{0,14}$/.test(String(playerId??"")))return null;
     try{const raw=store.getItem(reviewKey(playerId));if(raw===null)return null;try{return {...parseStage(raw,playerId),raw};}catch{return {raw,error:"Recovered training record is invalid. Preserve the backup; do not resume."};}}catch{return {error:"Recovery storage unavailable. Check browser storage before training."};}
   }
+  function journalHeld(store,playerId){
+    if(!/^[1-9][0-9]{0,14}$/.test(String(playerId??"")))return false;
+    try{return store.getItem(prefix+"restore-journal:v1:"+playerId)!==null;}catch{return true;}
+  }
   function held(store,playerId){
     if(!/^[1-9][0-9]{0,14}$/.test(String(playerId??"")))return false;
     try{return store.getItem(reviewKey(playerId))!==null||store.getItem(prefix+"restore-journal:v1:"+playerId)!==null;}catch{return true;}
@@ -145,5 +149,5 @@ const tornTrainingRecovery=(()=>{
     if(!num(result.gain)||!num(result.used))throw Error("Invalid remaining projection");
     return {savedConfirmed:review.savedConfirmed,reviewedConfirmed:review.reviewedConfirmed,remaining:result.actions,generatedAt:result.generatedAt,gain:result.gain,used:result.used,complete:expected.length===0};
   }
-  return {validSession,validHistory,prepareReview,reviewKey,stageValue,parseStage,readStage,held,discardStage,evidenceReport,reviewPrefix,validatePreview};
+  return {validSession,validHistory,prepareReview,reviewKey,stageValue,parseStage,readStage,held,journalHeld,discardStage,evidenceReport,reviewPrefix,validatePreview};
 })();

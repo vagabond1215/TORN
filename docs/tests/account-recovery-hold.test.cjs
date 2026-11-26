@@ -36,3 +36,16 @@ const concurrent=storage();let calls=0;const write=concurrent.setItem;
 concurrent.setItem=(key,value)=>{if(++calls===2){write(p+"activity-spend-ledger:123","concurrent");throw Error("quota");}write(key,value);};
 assert.throws(()=>a.restoreEmpty(concurrent,id,snap.records),/concurrent edit/);assert.equal(concurrent.getItem(p+"activity-spend-ledger:123"),"concurrent");
 console.log("Restored rehab review hold, live reconciliation, expense validation and competing-write rollback passed.");
+
+const recovery=new Function(read("training-recovery.js")+"\nreturn tornTrainingRecovery;")();
+const pendingJournal=storage({[p+"restore-journal:v1:123"]:"pending",[p+"activity-events:123"]:JSON.stringify([pending])});
+const guardedScheduler=new Function("tornGuideApi","localStorage","tornTrainingRecovery",read("activity-scheduler.js")+"\nreturn tornActivityScheduler;")(api,pendingJournal,recovery);
+assert.equal(guardedScheduler.reconcileRehab(now),null);
+assert.equal(guardedScheduler.recordSpend({id:"manual-guard",kind:"war",at:now,cost:500,source:"Manual confirmation"}),false);
+assert.equal(guardedScheduler.removeEvent(pending.id),false);
+assert.equal(guardedScheduler.events().length,1);
+assert.equal(recovery.held(pendingJournal,id),true);
+assert.equal(recovery.journalHeld(pendingJournal,456),false);
+pendingJournal.removeItem(p+"restore-journal:v1:123");
+assert.equal(guardedScheduler.reconcileRehab(now).cost,250000);
+console.log("Pending journal blocks activity writes and automated rehab accounting, with account isolation.");

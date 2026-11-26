@@ -114,3 +114,17 @@ assert.throws(()=>stageAPI.validatePreview(reviewed,projection,{now:current,dead
 assert.throws(()=>stageAPI.validatePreview(reviewed,projection,{now:current+300001}),/stale/);
 assert.ok(stageAPI.validatePreview(completeReview,{...projection,actions:[],used:0,gain:0},{now:current}).complete);
 console.log("Read-only manual prefix review, unchanged suffix, deadline, stale preview and completed-cycle gates passed.");
+
+// Actual replay producer, not only a hand-built projection. The existing
+// simulator fixture supplies live 540-E stack and a generated natural plan.
+const actualReplay=optimizer.replayRemaining(ctx,session,{recoveryPreview:true,liveInputs:live,blockDrugs:true});
+assert.ok(!actualReplay.error,actualReplay.error);
+assert.equal(actualReplay.used,540);
+assert.equal(stageAPI.validatePreview(reviewed,actualReplay,{now:actualReplay.generatedAt}).remaining[0].energy,540);
+assert.ok(optimizer.replayRemaining(ctx,session,{recoveryPreview:true,liveInputs:{...live,owner:2}}).error);
+assert.ok(optimizer.replayRemaining(ctx,session,{recoveryPreview:true,liveInputs:{...live,refillUsed:null}}).error);
+const impossible={...session,actions:[{...session.actions[0],energy:1000}]};
+assert.ok(optimizer.replayRemaining(ctx,impossible,{recoveryPreview:true,liveInputs:live}).error);
+const refillAtCap={...session,actions:[{...session.actions[0],type:"refill",energy:null}]};
+assert.ok(optimizer.replayRemaining(ctx,refillAtCap,{recoveryPreview:true,liveInputs:live}).error);
+console.log("Actual recovery-only simulator replay, account/refill gates and incompatible stack/refill rejection passed.");

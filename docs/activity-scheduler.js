@@ -9,7 +9,8 @@ const tornActivityScheduler=(()=>{
   const owner=()=>String(tornGuideApi.state.identity?.id??"guest");
   const key=(name)=>"torn-city-guide:activity-"+name+":"+owner();
   const read=(name,fallback)=>{try{return JSON.parse(localStorage.getItem(key(name)))??fallback;}catch{return fallback;}};
-  const write=(name,value)=>{try{localStorage.setItem(key(name),JSON.stringify(value));return true;}catch{return false;}};
+  const journalHeld=()=>typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(localStorage,owner());
+  const write=(name,value)=>{if(journalHeld())return false;try{localStorage.setItem(key(name),JSON.stringify(value));return true;}catch{return false;}};
   const bounded=(n,lo,hi,fallback)=>n!=null&&Number.isFinite(Number(n))?Math.max(lo,Math.min(hi,Number(n))):fallback;
   function settings(){
     const s=read("settings",{}),p=bounded(s.preferred,0,9,defaults.preferred),r=bounded(s.recommended,p,9,Math.max(p,defaults.recommended));
@@ -140,6 +141,7 @@ const tornActivityScheduler=(()=>{
   }
   function weeklySpend(now=Date.now()){return spendLedger(now).filter(e=>e.at>now-W).reduce((a,e)=>a+e.cost,0);}
   function reconcileRehab(now=Date.now()){
+    if(journalHeld())return null;
     const cur=rehabSnapshot(now);if(!cur||!activityFresh("profile",now,15*60000))return null;
     const status=String(tornGuideApi.state.data?.profile?.profile?.status?.state??"").toLowerCase();
     if(!["okay","ok"].includes(status))return null;

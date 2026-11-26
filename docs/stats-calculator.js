@@ -392,7 +392,7 @@ const tornStatPlanner = (() => {
     buildOwner=owner;buildChoice="";buildTotal=0;
     try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:build:"+owner));if(buildOptions.some(x=>x[0]===saved?.choice))buildChoice=saved.choice;buildTotal=clamp(saved?.total,0,1e15);}catch{}
   }
-  function saveBuild(){try{localStorage.setItem("torn-city-guide:build:"+buildOwner,JSON.stringify({choice:buildChoice,total:buildTotal}));}catch{}}
+  function saveBuild(){if(typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(localStorage,buildOwner))return;try{localStorage.setItem("torn-city-guide:build:"+buildOwner,JSON.stringify({choice:buildChoice,total:buildTotal}));}catch{}}
   function homeTrainingAdvice(budget,risk,options={}){
     loadBuild();
     if(!buildChoice)return {needsBuild:true,detail:"Select a stat build in Stats → Gym."};
@@ -605,7 +605,7 @@ const tornStatPlanner = (() => {
       if(location.hash!=="#stats") return;
       if(event.target.closest("#tc-sequencer") || Object.keys(event.target.dataset||{}).some(key=>key.startsWith("ts"))) return;
       const comparison=event.target.closest("[data-tc-comparison]");
-      if(comparison){loadComparisonMode();comparisonMode=comparison.dataset.tcComparison==="live"?"live":"theoretical";try{localStorage.setItem("torn-city-guide:comparison-mode:"+comparisonOwner,comparisonMode);}catch{}view.innerHTML=render();view.querySelector('[data-tc-comparison="'+comparisonMode+'"]')?.focus();return;}
+      if(comparison){loadComparisonMode();comparisonMode=comparison.dataset.tcComparison==="live"?"live":"theoretical";try{if(typeof tornTrainingRecovery==="undefined"||!tornTrainingRecovery.journalHeld(localStorage,comparisonOwner))localStorage.setItem("torn-city-guide:comparison-mode:"+comparisonOwner,comparisonMode);}catch{}view.innerHTML=render();view.querySelector('[data-tc-comparison="'+comparisonMode+'"]')?.focus();return;}
       if(event.target.closest("[data-tc-build-reset]")){loadBuild();buildTotal=0;saveBuild();view.innerHTML=render();return;}
       const tab=event.target.closest("[data-tc-view]");
       if(tab){

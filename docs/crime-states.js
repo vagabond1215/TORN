@@ -52,6 +52,7 @@ const tornCrimeStates=(()=>{
   return t[3].includes(field)&&fields[field]?.includes(value);
  }
  function save(owner,store,crime,id,field,raw,now=Date.now()){
+  if(typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(store,owner))return false;
   const t=data[crime]?.find(x=>x[0]===id);
   if(!t||!(field==="meter"&&id!=="cemetery"||t[3].includes(field)))return false;
   const val=field==="meter"&&raw!==""?Number(raw):raw;

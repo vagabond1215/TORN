@@ -120,6 +120,12 @@ function read(key) {
 }
 
 function write(key, value) {
+  const account=/^profile:([1-9][0-9]{0,14}):/.exec(key)?.[1];
+  if(account&&typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(localStorage,account)){
+    const message=byId("storage-message");
+    message.textContent="Account restore is pending. Resolve it in Settings → Data & Backup before changing account data.";
+    message.hidden=false;return;
+  }
   if (value === null) temporaryStorage.delete(key);
   else temporaryStorage.set(key, value);
   if (persistent) {
@@ -344,6 +350,7 @@ window.addEventListener("hashchange", renderRoute);
 window.addEventListener("storage",event=>{
   const id=tornGuideApi.state.identity?.id;
   if(id!=null&&(event.key===null||event.key==="torn-city-guide:training-session-review:v1:"+id||event.key==="torn-city-guide:restore-journal:v1:"+id)){
+    if(event.newValue===null&&event.key!==null){location.reload();return;}
     renderRoute();
   }
 });

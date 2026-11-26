@@ -83,3 +83,5 @@ Staged recovery hardening passed loader/ledger guard and fresh API-only observat
 1P.3b reviewed suffix preview added: manual attestation, read-only live replay, reject changed action sequence or activity deadline, no stored completion/expense or activation. Next: strict replay regression and journal/locking gate, then explicit activation.
 
 1P.3c initial write-ahead restore journal implemented, with explicit matched finalize/rollback, conflict hold, bounded validation and cooperating Web Locks. Nonempty merge and session activation still disabled. Next: ordinary writer isolation, revisions/tombstones and replay integration validation.
+
+Journal current-writer guard coverage and actual strict natural replay fixtures added. Restore remains empty-only. Next 1P.3c: revision manifests and deletion tombstones, tested conflict staging, and explicit activation transaction without estimated spend duplication.

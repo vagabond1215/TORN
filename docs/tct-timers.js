@@ -184,6 +184,7 @@ const tornTctClock=(()=>{
   }
   function saveManual(){
     const field=get("tct-manual-rw"),status=get("tct-load-status"),value=field?.value;
+    if(typeof tornTrainingRecovery!=="undefined"&&tornTrainingRecovery.journalHeld(localStorage,owner())){status.textContent="Resolve the pending account restore before changing this deadline.";return;}
     if(!value){manualRW=null;try{localStorage.removeItem(customKey+owner());}catch{}
       status.textContent="Manual RW deadline cleared.";renderRows();return;}
     // datetime-local is a wall time string; interpret explicitly as UTC/TCT,
