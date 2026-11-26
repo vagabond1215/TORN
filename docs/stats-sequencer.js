@@ -930,8 +930,10 @@ const tornTrainSequence=(()=>{
     const lastOverride=overrides.findLastIndex(Boolean);
     const actionsFor=id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id];
     const ids=[...new Set(["natural",...results.map(({id})=>id)])].filter(id=>actionsFor(id).length);
-    const maxDepth=Math.max(lastOverride+1, ...results.map(({data})=>data.completed+1),1)+4;
-    let best=null,frontier=[{sequence:[]}];
+    const completed=new Map(results.map(({id,data})=>[id,data.completed]));
+    const natural=ids.includes("natural")&&!completed.has("natural")?projectCycles("natural",Infinity,{end,continuous:true}):null;
+    if(natural)completed.set("natural",natural.completed);
+    let best=null;
     const consider=data=>{
       if(!best||data.gain>best.data.gain)best={data};
     };
@@ -942,23 +944,27 @@ const tornTrainSequence=(()=>{
     };
     if(lastOverride<0){
       for(const {data} of results)if(affordable(data))consider(data);
-      if(weeklySpend&&ids.includes("natural")&&!results.some(({id})=>id==="natural")){
-        const natural=projectCycles("natural",Infinity,{end,continuous:true});
-        if(affordable(natural))consider(natural);
-      }
+      if(natural&&affordable(natural))consider(natural);
     }
-    for(let index=0;index<maxDepth&&frontier.length;index++){
-      const next=[];
-      const choices=overrides[index]?[overrides[index]]:ids;
-      for(const parent of frontier)for(const id of choices){
-        const sequence=[...parent.sequence,id],data=mixedProjection(sequence,end,{actionsFor});
-        if(!affordable(data))continue;
-        if(index>=lastOverride&&data.segments.length>lastOverride&&!data.errors.length)consider(data);
-        if(data.complete&&data.elapsed<end&&(!parent.data||data.elapsed>parent.data.elapsed||
-          data.gain>parent.data.gain))next.push({sequence,data});
+    // Search each pair independently so a newly selected plan cannot evict
+    // promising prefixes from a search over plans that were already selected.
+    for(const [i,first] of ids.entries())for(const second of ids.slice(i)){
+      const pair=first===second?[first]:[first,second];
+      const maxDepth=Math.max(lastOverride+1,...pair.map(id=>completed.get(id)??0),1)+5;
+      let frontier=[{sequence:[]}];
+      for(let index=0;index<maxDepth&&frontier.length;index++){
+        const next=[];
+        const choices=overrides[index]?[overrides[index]]:pair;
+        for(const parent of frontier)for(const id of choices){
+          const sequence=[...parent.sequence,id],data=mixedProjection(sequence,end,{actionsFor});
+          if(!affordable(data))continue;
+          if(index>=lastOverride&&data.segments.length>lastOverride&&!data.errors.length)consider(data);
+          if(data.complete&&data.elapsed<end&&(!parent.data||data.elapsed>parent.data.elapsed||
+            data.gain>parent.data.gain))next.push({sequence,data});
+        }
+        next.sort((a,b)=>b.data.gain-a.data.gain||a.data.elapsed-b.data.elapsed);
+        frontier=next.slice(0,2);
       }
-      next.sort((a,b)=>b.data.gain-a.data.gain||a.data.elapsed-b.data.elapsed);
-      frontier=next.slice(0,4);
     }
     return best;
   }
@@ -983,10 +989,10 @@ const tornTrainSequence=(()=>{
       '<button type="button" class="tc-stat-tab '+(showOptimalBudget?"is-selected":"")+'" title="Maximize projected stat gain within your weekly Energy budget" data-ts-optimal-budget aria-pressed="'+showOptimalBudget+'">Optimal Budget</button>'+
       cycleOverrideControls(slots,mixed)+'</div></div>';
   }
-  function render(context){
+  function render(context,{keepClock=false}={}){
     if(context)ctx=context;
     if(!ctx)return "<p>Connect a stats calculator context first.</p>";
-    loadPlanPreferences();loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
+    loadPlanPreferences();if(!keepClock)loadLive();marketInputs();cooldownEffects=applyCooldownPerks();
     const active=activeTemplates();
     for(const [id] of templates)if(!editedPlans.has(id))steps[id]=cycleActions(id);
     const oneCycle=active.map(([id,,label])=>({id,label,data:projectCycles(id,1)}));
@@ -1037,10 +1043,10 @@ const tornTrainSequence=(()=>{
         positionEditor(editor,gear);
       }
     },true);
-    const rebuild=(focusTarget)=>{
+    const rebuild=(focusTarget,options)=>{
       const root=view.querySelector("#tc-sequencer");
       const editorId=root?.querySelector(".ts-row-editor:popover-open")?.id;
-      if(root)root.innerHTML=render();
+      if(root)root.innerHTML=render(undefined,options);
       if(editorId){
         const editor=view.querySelector("#"+editorId),gear=view.querySelector('[data-ts-gear="'+editorId+'"]');
         if(editor&&gear){editor.showPopover();positionEditor(editor,gear);}
@@ -1117,7 +1123,7 @@ const tornTrainSequence=(()=>{
         return;
       }
       const settings=event.target.closest("[data-ts-settings]");if(settings){settingsOpen=!settingsOpen;settings.setAttribute("aria-expanded",String(settingsOpen));settings.classList.toggle("is-selected",settingsOpen);const panel=view.querySelector("#ts-plan-settings");if(panel)panel.hidden=!settingsOpen;return;}
-      const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);savePlanPreferences();rebuild();view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
+      const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);savePlanPreferences();rebuild(undefined,{keepClock:true});view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
       const mode=event.target.closest("[data-ts-cooldown-mode]");
       if(mode){event.preventDefault();if(mode.dataset.tsCooldownMode==="drug")liveDrug=!liveDrug;else liveBooster=!liveBooster;rebuild();return;}
       const cap=event.target.closest("[data-ts-cap]");if(cap){event.preventDefault();if(apiBoosterCap===null)manualBoosterCap=manualBoosterCap===24?48:24;rebuild();return;}
