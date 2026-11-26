@@ -1040,7 +1040,7 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .guide-right-rail .home-battle .panel-heading a,
 .guide-right-rail .home-work .panel-heading a{font-size:.7rem;color:var(--accent-strong)}
 .rail-timer-header{display:flex;align-items:stretch;border-bottom:1px solid var(--border)}
-.rail-timer-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:1;min-width:0}
+.rail-timer-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));flex:1;min-width:0}
 .rail-timer-header button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font:inherit;font-size:.72rem;font-weight:650;padding:.4rem .1rem;cursor:pointer}
 .rail-timer-header button:hover,.rail-timer-header button:focus-visible,.rail-timer-header button[aria-pressed="true"]{color:var(--accent-strong);background:var(--raised)}
 .rail-timer-header button[aria-pressed="true"]{border-bottom-color:var(--accent)}
@@ -2435,3 +2435,13 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rail-merit-list .affronted-chips button{font-size:.7rem;padding:.3rem .1rem}
 .rail-merit-list .affronted-answer{font-size:.72rem}
 .rail-merit-list .affronted-links a{font-size:.7rem}
+
+/* Companion version state and property reference link */
+.companion-version-row{display:flex;flex-wrap:wrap;gap:.3rem .55rem;align-items:baseline}
+.companion-version-row #companion-version-status{font-weight:650}
+.companion-version-row #companion-version-status[data-state="current"]{color:var(--accent-strong)}
+.companion-version-row #companion-version-status[data-state="update"]{color:#e6ad68}
+:root[data-theme="light"] .companion-version-row #companion-version-status[data-state="update"]{color:#85501c}
+.companion-version-row .settings-hint{margin:0}
+#companion-version-action[hidden]{display:none!important}
+.rail-property .rail-upkeep-link{color:var(--accent-strong);font-size:.7rem;white-space:nowrap}
