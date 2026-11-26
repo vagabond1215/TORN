@@ -18,3 +18,16 @@ const broken=storage(),write=broken.setItem;let calls=0;broken.setItem=(k,v)=>{i
 assert.throws(()=>a.restoreEmpty(broken,id,snap.records),/quota/);assert.equal(broken.length,0);
 assert.throws(()=>a.owner("guest"),/player ID/);
 console.log("Account storage allowlist, ownership, validation, empty-account restore and rollback passed.");
+
+const ledger=storage({[p+"training-spend:123"]:'[{"started":100,"at":200,"cost":1000}]',[p+"activity-spend-ledger:123"]:'[{"id":"manual-1","kind":"war","at":200,"cost":123,"source":"Manual confirmation"},{"id":"rehab-x","kind":"rehab","at":300,"cost":456,"source":"API counter delta"}]',[p+"activity-events:123"]:'[{"id":"rehab-x","kind":"rehab","title":"Rehab","start":100,"end":300,"blocking":false,"source":"manual","rehabBaseline":{"count":1,"cost":100,"at":90},"completedAt":300,"rehabCost":456}]'});
+const saved=a.snapshot(ledger,id);
+assert.deepEqual(saved.records.map(x=>x.section),["activity-spend","calendar-events","training-spend-estimates"]);
+const recovered=storage();assert.equal(a.restoreEmpty(recovered,id,saved.records),3);
+assert.equal(recovered.getItem(p+"training-spend:123"),ledger.getItem(p+"training-spend:123"));
+assert.equal(recovered.getItem(p+"activity-spend-ledger:123"),ledger.getItem(p+"activity-spend-ledger:123"));
+assert.equal(recovered.getItem(p+"activity-events:123"),ledger.getItem(p+"activity-events:123"));
+const repeated=JSON.parse(saved.records[0].value);repeated.push(repeated[0]);
+assert.throws(()=>a.validRecords([{section:"activity-spend",value:JSON.stringify(repeated)}],String(id)),/invalid section/);
+assert.throws(()=>a.validRecords([{section:"training-spend-estimates",value:'[{"started":100,"at":200,"cost":1000,"actual":true}]'}],String(id)),/invalid section/);
+assert.throws(()=>a.restoreEmpty(recovered,id,saved.records),/already/);
+console.log("Legacy estimated spend, manual/API activity expenditure, rehab evidence and duplicate rejection passed.");

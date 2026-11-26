@@ -26,9 +26,9 @@
   <script src="./crime-guide.js?v=20261126-live-sources4" defer></script>
   <script src="./right-rail.js?v=20261126-rail-settings1" defer></script>
   <script src="./log-guide.js?v=20261126-log1" defer></script>
-  <script src="./account-storage.js?v=20261126-backup1" defer></script>
+  <script src="./account-storage.js?v=20261126-backup2" defer></script>
   <script src="./account-backup.js?v=20261126-backup1" defer></script>
-  <script src="./account-backup-ui.js?v=20261126-backup1" defer></script>
+  <script src="./account-backup-ui.js?v=20261126-backup2" defer></script>
   <script src="./guide.js?v=20261126-backup1" defer></script>
 </head>
 <body>
@@ -77,7 +77,7 @@
               <a id="companion-version-action" href="./torn-companion.user.js" target="_blank" rel="noopener noreferrer" class="button secondary" hidden>Install companion script</a>
               <p class="settings-hint">Requires Tampermonkey or a compatible userscript manager. Shares visible status bars, market observations and opted-in activity logs locally. After installing or updating, reload the guide and Torn tabs.</p>
             </div>
-            <div class="settings-field"><strong>Data &amp; Backup</strong><button type="button" class="button secondary" id="backup-open" disabled>Encrypted portable backup</button><p class="settings-hint">Export supported account settings and notes. Recovery is currently limited to empty accounts; sessions, financial history and archives are not included.</p></div>
+            <div class="settings-field"><strong>Data &amp; Backup</strong><button type="button" class="button secondary" id="backup-open" disabled>Encrypted portable backup</button><p class="settings-hint">Export supported account settings and notes. Recovery is currently limited to empty accounts. Existing expenditure records are included; active sessions and archives are not.</p></div>
             <div class="settings-footer">
               <a href="#profile" id="settings-account">Account &amp; API</a>
               <button type="button" class="settings-signout" id="settings-signout" disabled>Sign out</button>
@@ -89,7 +89,7 @@
     </div>
   </header>
 
-  <dialog class="restock-settings-dialog" id="backup-dialog" aria-labelledby="backup-title"><form id="backup-form"><header><h2 id="backup-title">Account backup &amp; recovery</h2><button type="button" id="backup-close" aria-label="Close">×</button></header><div class="restock-settings-content"><p class="fine-print">Portable encrypted backup (version 1). Only supported account settings, notes, checklists and simple calendar events. No API credentials. Use an independent passphrase, not your API key. Keep the backup file and passphrase outside this browser.</p><label>Recovery passphrase <input id="backup-passphrase" type="password" autocomplete="off" minlength="12" maxlength="1024"></label><label>Confirm passphrase (export only) <input id="backup-confirm" type="password" autocomplete="off" maxlength="1024"></label><label>Backup file (restore only) <input id="backup-file" type="file" accept=".tornbackup,application/json"></label><p class="fine-print">Restore requires fresh Torn identity verification and an empty supported account state. No merging, automatic backups or companion recovery yet.</p><p id="backup-status" role="status" aria-live="polite"></p></div><footer><button type="button" class="button secondary" id="backup-export">Export encrypted backup</button><button type="button" id="backup-import">Restore selected backup</button></footer></form></dialog>
+  <dialog class="restock-settings-dialog" id="backup-dialog" aria-labelledby="backup-title"><form id="backup-form"><header><h2 id="backup-title">Account backup &amp; recovery</h2><button type="button" id="backup-close" aria-label="Close">×</button></header><div class="restock-settings-content"><p class="fine-print">Portable encrypted backup (version 1). Supported account settings, notes, checklists, calendar events and existing expenditure records. Training cycle deductions remain estimates. Active sessions and archives are excluded. No API credentials. Use an independent passphrase, not your API key. Keep the backup file and passphrase outside this browser.</p><label>Recovery passphrase <input id="backup-passphrase" type="password" autocomplete="off" minlength="12" maxlength="1024"></label><label>Confirm passphrase (export only) <input id="backup-confirm" type="password" autocomplete="off" maxlength="1024"></label><label>Backup file (restore only) <input id="backup-file" type="file" accept=".tornbackup,application/json"></label><p class="fine-print">Restore requires fresh Torn identity verification and an empty supported account state. No merging, automatic backups or companion recovery yet.</p><p id="backup-status" role="status" aria-live="polite"></p></div><footer><button type="button" class="button secondary" id="backup-export">Export encrypted backup</button><button type="button" id="backup-import">Restore selected backup</button></footer></form></dialog>
 
   <nav class="quick-access" id="tool-quickbar" aria-label="Favorite Torn tools and right pane controls"></nav>
 

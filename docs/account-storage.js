@@ -28,7 +28,15 @@ const tornAccountStorage=(()=>{
   const plans=v=>shape(v,["selected","expanded","plans","chartMode","chartCycles","continuousDays","cycleOverrides","showOptimal","showOptimalBudget","showManual","showCycleBoundaries","excludedPlans"])&&
     opt(v.selected,x=>list(x,y=>one(y,ids),7))&&opt(v.expanded,x=>list(x,y=>one(y,[...ids,"optimal","optimal-budget"]),9))&&opt(v.plans,x=>shape(x,ids)&&Object.values(x).every(plan))&&opt(v.chartMode,x=>one(x,["cycles","continuous"]))&&opt(v.chartCycles,x=>int(x,1,28))&&opt(v.continuousDays,x=>int(x,1,28))&&opt(v.cycleOverrides,x=>list(x,y=>one(y,["",...ids]),28))&&["showOptimal","showOptimalBudget","showManual","showCycleBoundaries"].every(k=>opt(v[k],bool))&&opt(v.excludedPlans,x=>shape(x,["optimal","budget"])&&Object.values(x).every(y=>list(y,z=>one(z,ids),7)));
   const eventsKinds=["training","rehab","travel","war","chain","oc","racing","education","event","personal","health","collection"];
-  const events=v=>list(v,e=>shape(e,["id","kind","title","start","end","blocking","source"])&&safeKey(e.id)&&one(e.kind,eventsKinds)&&str(e.title,100)&&e.title.trim().length>0&&int(e.start,0,8640000000000000)&&int(e.end,e.start+1,8640000000000000)&&bool(e.blocking)&&e.source==="manual",300)&&new Set(v.map(e=>e.id)).size===v.length;
+  const date=v=>int(v,0,8640000000000000);
+  const nullableMoney=v=>v===null||num(v);
+  const rehabBaseline=v=>v===null||shape(v,["count","cost","at"])&&int(v.count)&&nullableMoney(v.cost)&&date(v.at);
+  const events=v=>list(v,e=>shape(e,["id","kind","title","start","end","blocking","source","rehabBaseline","completedAt","rehabCost"])&&safeKey(e.id)&&one(e.kind,eventsKinds)&&str(e.title,100)&&e.title.trim().length>0&&date(e.start)&&int(e.end,e.start+1,8640000000000000)&&bool(e.blocking)&&e.source==="manual"&&
+    (e.kind==="rehab"?opt(e.rehabBaseline,rehabBaseline)&&opt(e.completedAt,x=>date(x)&&x>=e.start&&!e.blocking)&&opt(e.rehabCost,nullableMoney):e.rehabBaseline===undefined&&e.completedAt===undefined&&e.rehabCost===undefined),300)&&new Set(v.map(e=>e.id)).size===v.length;
+  // Preserve the current ledger's exact semantics. Training-spend entries are
+  // legacy estimated cycle deductions, NOT verified purchase transactions.
+  const trainingSpend=v=>list(v,e=>shape(e,["started","at","cost"])&&date(e.started)&&date(e.at)&&e.at>=e.started&&num(e.cost),2000)&&new Set(v.map(e=>e.started)).size===v.length;
+  const activitySpend=v=>list(v,e=>shape(e,["id","kind","at","cost","source"])&&safeKey(e.id)&&one(e.kind,["war","rehab"])&&date(e.at)&&num(e.cost)&&one(e.source,["Manual confirmation","API counter delta"]),500)&&new Set(v.map(e=>e.id)).size===v.length;
   const fields=["preferred","recommended","restrict","prewar","travel","rehabMinutes","rehabSessions","sharedBudget","warReserve","rehabReserve","view"];
   const settings=v=>shape(v,fields)&&["preferred","recommended","restrict","prewar"].every(k=>opt(v[k],x=>num(x,0,9)))&&opt(v.travel,x=>one(x,["standard","airstrip","wlt","business"]))&&opt(v.rehabMinutes,x=>num(x,15,180))&&opt(v.rehabSessions,x=>int(x,1,100))&&opt(v.sharedBudget,bool)&&["warReserve","rehabReserve"].every(k=>opt(v[k],x=>num(x,0,1e12)))&&opt(v.view,x=>one(x,["agenda","timeline","week","month"]));
   const focus=v=>shape(v,["priority","risk","odRisk","jailRisk","weeklyBudget"])&&opt(v.priority,x=>one(x,["growth","networth","company","education","completion","crime","money"]))&&["risk","odRisk","jailRisk"].every(k=>opt(v[k],x=>one(x,risks)))&&opt(v.weeklyBudget,x=>x===null||num(x));
@@ -43,6 +51,8 @@ const tornAccountStorage=(()=>{
     ["comparison-mode",id=>prefix+"comparison-mode:"+id,simple(["live","theoretical"])],
     ["calendar-settings",id=>prefix+"activity-settings:"+id,json(settings)],
     ["calendar-events",id=>prefix+"activity-events:"+id,json(events)],
+    ["training-spend-estimates",id=>prefix+"training-spend:"+id,json(trainingSpend)],
+    ["activity-spend",id=>prefix+"activity-spend-ledger:"+id,json(activitySpend)],
     ["restock",id=>prefix+"restock-settings:"+id,json(restock)],
     ["oc-bands",id=>prefix+"oc-bands:"+id,json(v=>list(v,x=>int(x,1,10),10))],
     ["war-settings",id=>prefix+"energy-war:"+id,json(v=>shape(v,["mode","adjustment","lead","version"])&&one(v.mode,["off","scheduled","faction"])&&int(v.adjustment,-120,120)&&int(v.lead,0,120)&&opt(v.version,x=>int(x,1,2)))],
@@ -91,7 +101,7 @@ const tornAccountStorage=(()=>{
     const existing=snapshot(store,id);
     if(existing.records.length||existing.omitted.length)throw Error("Account already has supported local data; merge is not available yet");
     // Also protect excluded durable session/history data from partial restore.
-    for(const k of ["training-session","training-spend","activity-spend-ledger","activity-training-history"]){if(store.getItem(prefix+k+":"+id)!==null)throw Error("Existing training or expenditure history; merge is not available yet");}
+    for(const k of ["training-session","activity-training-history"]){if(store.getItem(prefix+k+":"+id)!==null)throw Error("Existing training or expenditure history; merge is not available yet");}
     if(!assertCurrent())throw Error("Account changed before restore");
     const added=[];
     try{for(const row of records){const d=descriptor(id,row.section);if(!assertCurrent()||store.getItem(d.key)!==null)throw Error("Account changed during restore");store.setItem(d.key,row.value);added.push(d.key);}}

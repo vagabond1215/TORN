@@ -17,7 +17,7 @@ const tornBackupUI=(()=>{
     const clear=()=>{secret.value="";confirmation.value="";file.value="";};
     open.addEventListener("click",()=>{
       if(!tornGuideApi.isConnected()||busy)return;
-      clear();message("Verified account required. Version 1 covers supported settings, notes, checklists and simple calendar events only.");
+      clear();message("Verified account required. Version 1 covers supported settings, notes, checklists, calendar events and existing expenditure records.");
       dialog.showModal();
     });
     close.addEventListener("click",()=>{if(!busy)dialog.close();});
@@ -49,7 +49,7 @@ const tornBackupUI=(()=>{
           const link=document.createElement("a");
           link.href=url;link.download="torn-"+id+"-"+new Date().toISOString().slice(0,10)+".tornbackup";document.body.append(link);
           try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-          message("Download requested for "+snap.records.length+" records. Save the file outside browser storage and retain the passphrase."+ (snap.omitted.length?" Unsupported saved sections skipped: "+snap.omitted.join(", ")+".":"")+" Sessions, expenditure ledgers, archives and device settings are not included.");
+          message("Download requested for "+snap.records.length+" records. Save the file outside browser storage and retain the passphrase."+ (snap.omitted.length?" Unsupported saved sections skipped: "+snap.omitted.join(", ")+".":"")+" Active sessions, historical cycle archives, personal/market archives and device settings are not included.");
         }else{
           message("Checking and decrypting selected backup…");
           const data=await tornAccountBackup.decrypt(await chosen.text(),id,password);
