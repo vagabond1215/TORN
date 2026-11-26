@@ -507,6 +507,7 @@ const tornStatPlanner = (() => {
     const details='<p class="fine-print">Energy: '+(energy?nice(energy.current)+" / "+nice(energy.maximum):"Unavailable")+' · Happy: '+(happy?nice(happy.current)+" / "+nice(happy.maximum):"Unavailable")+' · Available training budget: '+cash(t.budget)+'</p>'+
       '<p class="fine-print">Drug CD: '+(input.drug==null?"Unknown":nice(Math.ceil(input.drug/60))+" min")+' · Booster CD: '+(input.booster==null?"Unknown":nice(Math.ceil(input.booster/60))+" min")+' · Today’s refill: '+(input.refillUsed===null?"Unknown (excluded)":input.refillUsed?"Used":"Available")+'</p>'+
       (t.reserves.warReserve||t.reserves.rehabReserve?'<p class="fine-print">War reserve: '+cash(t.reserves.warReserve)+' · Rehab reserve: '+cash(t.reserves.rehabReserve)+'</p>':"")+
+      '<p class="fine-print">Owned points: '+(input.points==null?"Unknown":nice(input.points))+' · Wallet: '+cash(input.wallet)+' · Regeneration: '+(energy?esc(energy.phaseSource==="API"?"Observed tick phase":"Estimated tick phase"):"Unknown")+'</p>'+
       input.issues.map(x=>'<p class="fine-print">'+esc(x)+'</p>').join("");
     let result;
     if(t.session)result='<p><strong>'+esc(t.session.label)+'</strong> · '+t.session.index+' / '+t.session.actions.length+' actions confirmed. Active cycle is locked; <a href="#home">continue in Home</a>.</p>';

@@ -1037,10 +1037,11 @@ function tornBarProjection(name,bar,at,now=Date.now()){
   // Preserve observed over-cap values until a newer snapshot arrives unless
   // the active book confirms over-cap regeneration.
   const current=bliss?Math.min(ceiling,rawCurrent+ticks*step):rawCurrent>=max?rawCurrent:Math.min(max,rawCurrent+ticks*step);
-  const until=current>=max?0:Math.max(0,first+ticks*interval-elapsed);
+  const nextTick=Math.max(0,first+ticks*interval-elapsed);
+  const until=current>=max?0:nextTick;
   return {current,maximum:max,percentage:Math.max(0,Math.min(100,current/max*100)),
     until,phaseSource,estimated:phaseSource!=="API",
-    snapshotAt:stamp,step,interval};
+    snapshotAt:stamp,step,interval,nextTick};
 }
 function homeCountdown(seconds){
   if(seconds<=0)return "FULL";

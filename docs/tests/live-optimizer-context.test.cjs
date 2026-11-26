@@ -39,3 +39,33 @@ assert.equal(JSON.stringify(a),JSON.stringify(b));
 assert.equal(optimizer.settings.candyHappy,25);assert.equal(optimizer.settings.boosterCapH,48);
 assert.equal(optimizer.weeklyPrograms(ctx,0,"low",{...options,liveInputs:{...live,energy:null}}).length,0);
 console.log("Fixed-clock weekly optimization preserves live stack and isolates hypothetical controls.");
+
+// API tick phase remains available even when the bar is capped. The live
+// engine uses the reported phase and increment rather than a reset clock.
+const barsSrc=read("guide-features.js");
+const projectReal=new Function("tornHappinessBook",barsSrc.slice(barsSrc.indexOf("function tornBarProjection("),barsSrc.indexOf("function homeCountdown("))+"\nreturn tornBarProjection;")(()=>({active:false}));
+const cap=projectReal("energy",{current:150,maximum:150,tick_time:90,interval:600,increment:5},now,now);
+assert.equal(cap.until,0);assert.equal(cap.nextTick,90);
+assert.equal(projectReal("energy",{current:145,maximum:150,tick_time:90,interval:600,increment:5},now,now+100000).nextTick,590);
+liveState.data.money={money:{points:60,wallet:250000}};liveState.fetchedAt.money=now;
+const money=optimizer.liveInputs(liveState,now,project);
+assert.equal(money.points,60);assert.equal(money.wallet,250000);
+liveState.fetchedAt.money=now-900001;
+assert.equal(optimizer.liveInputs(liveState,now,project).points,null);
+liveState.fetchedAt.money=now;
+const phaseCtx={...ctx,state:{...ctx.state,currentEnergy:140,maxEnergy:150}};
+const phased={...live,energy:{current:140,maximum:150,interval:600,step:5,nextTick:90,phaseSource:"API"}};
+const timed=optimizer.weeklyPrograms(phaseCtx,0,"low",{liveInputs:phased,naturalOnly:true,deadline:now+900000})[0];
+assert.ok(timed);assert.equal(timed.execution.find(x=>x.type==="train").at,690);assert.equal(timed.used,150);
+// With 30 owned points, a refill needs no point purchase; a second one needs
+// exactly 30 purchased points. Reserved Xanax stays excluded from owned stock.
+const costsSource=read("stats-sequencer.js").replace("return {render,wire,simulate,weeklyPrograms,","return {trainingPurchases,marketInputs,render,wire,simulate,weeklyPrograms,");
+liveState.data.pointsCatalog={pointsmarket:[{cost:30}]};
+liveState.data.itemCatalog={items:[{name:"Xanax",id:1,market_value:900}]};
+liveState.inventory.Drug=[{name:"Xanax",amount:5}];
+const costSeq=new Function("tornGuideApi","payload",costsSource+"\nreturn tornTrainSequence;")(api,(name,field)=>liveState.data[name]?.[field]??liveState.data[name]);
+costSeq.marketInputs();
+const purchases=costSeq.trainingPurchases(30,{reserveXanax:4});
+assert.equal(purchases({refill:1,xanax:1}).cost,0);
+assert.equal(purchases({refill:2,xanax:2}).cost,1800);
+console.log("Observed regeneration phase, capped tick, verified points/wallet freshness, and reserved inventory pricing passed.");
