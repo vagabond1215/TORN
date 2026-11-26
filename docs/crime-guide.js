@@ -430,9 +430,11 @@ const tornCrimeGuide = (() => {
       let due=Math.max(now,previousDue+(x.midnightRefill?0:Math.max(0,x.at-previousAt)*1000),i===session.index?session.notBefore||0:0);
       if(["xanax","ecstasy"].includes(x.type))due=Math.max(due,drugEnd);
       const isBooster=["candy","dvd"].includes(x.type),unit=x.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600,qty=x.quantity??1;
-      let happyWait=false;
+      let happyWait=false,boosterWait=false;
       if(isBooster){
-        due=Math.max(due,boosterEnd-(timing.boosterCap??86400)*1000+Math.max(0,qty-1)*unit*1000);
+        const boosterReady=boosterEnd-(timing.boosterCap??86400)*1000+Math.max(0,qty-1)*unit*1000;
+        boosterWait=boosterReady>due;
+        due=Math.max(due,boosterReady);
         const next=actions.slice(i+1).find(step=>["xanax","ecstasy","train","refill"].includes(step.type));
         if(next?.type==="ecstasy")due=Math.max(due,drugEnd);
         const delay=tornHappinessBook().active?0:tornTrainSequence.happyResetWait(due/1000);
@@ -449,7 +451,7 @@ const tornCrimeGuide = (() => {
         if(x.type==="xanax")energy=Math.min(1000,energy+250);
         if(x.type==="refill")energy=Math.max(energy,cap);
       }
-      rows.push({step:x,done:false,due,happyWait});
+      rows.push({step:x,done:false,due,happyWait,boosterWait});
       if(x.type==="xanax"||x.type==="ecstasy")drugEnd=due+(x.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;
       if(isBooster)boosterEnd=Math.max(due,boosterEnd)+qty*unit*1000;
       if(x.type==="refill")refillDay=Math.floor(due/86400000);
@@ -539,19 +541,21 @@ const tornCrimeGuide = (() => {
     const session=loadTrainingSession(),program=plan.program;
     const prep=prepState(plan,training.blockDrugs);
     trainingDraft={plan,training,prep,owner:sessionOwner};
-    let label,heading,due=null,controls="";
+    let label,heading,due=null,controls="",boosterWait=false;
     if(session){
       const step=session.actions[session.index];
       heading="Active plan · "+session.label;
       if(!step){heading="Training cycle complete";label="All cycle actions confirmed";controls='<button type="button" data-growth-session="review" '+(recoveryBusy?"disabled":"")+'>Plan next cycle</button>';}
       else if(training.blockDrugs&&session.drugRisk){label="Drug restriction active · cancel and replan";}
-      else {const next=sessionSchedule(session)[session.index];due=next?.due??Date.now();label=next?.happyWait?"Wait for Happiness Reset":(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done" '+(due>Date.now()?"disabled":"")+'>Mark done</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;}
+      else {const next=sessionSchedule(session)[session.index];due=next?.due??Date.now();boosterWait=Boolean(next?.boosterWait);label=next?.happyWait?"Wait for Happiness Reset":next?.boosterWait?"Wait for Booster Cooldown":(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done" '+(due>Date.now()?"disabled":"")+'>Mark done</button>';heading+=" · "+(session.index+1)+"/"+session.actions.length;}
     }else{heading="";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button>';}
     const refreshLabel=recoveryBusy?"Refreshing…":session?"Continue / Refresh":"Refresh training readiness";
     const cornerControls='<div class="growth-counter-actions">'+
       '<button type="button" data-growth-session="refresh" aria-label="'+refreshLabel+'" title="'+refreshLabel+'" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button>'+
       '<button type="button" data-growth-session="stop" aria-label="Cancel training program" title="Cancel training program and return to Start" '+(!session||session.index>=session.actions.length?"disabled":"")+'><span aria-hidden="true">×</span></button></div>';
-    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+cornerControls+(heading?'<small>'+esc(heading)+'</small>':'')+'<strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span data-growth-step>'+esc(label)+'</span>'+'<div class="growth-session-controls">'+controls+barWarning("happy")+barWarning("energy")+'</div>'+recoveryPanel(session,names)+'</div>';
+    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+cornerControls+(heading?'<small>'+esc(heading)+'</small>':'')+'<strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span data-growth-step>'+esc(label)+'</span>'+'<div class="growth-session-controls">'+controls+barWarning("happy")+barWarning("energy")+'</div>'+
+      (boosterWait&&!recovery?'<small>Already used the boosters? Refresh, then choose the next uncompleted step.</small>':"")+
+      recoveryPanel(session,names)+'</div>';
   }
   function replayPanel(session,fmt){
     if(!session)return "";
@@ -733,7 +737,7 @@ const tornCrimeGuide = (() => {
     const session=loadTrainingSession();if(session&&session.index<session.actions.length){const rows=sessionSchedule(session),next=rows[session.index];el.dataset.growthDue=String(next.due);
       if(["candy","dvd"].includes(next.step.type)){
         const step=el.querySelector("[data-growth-step]");
-        const label=next.happyWait?"Wait for Happiness Reset":(next.step.type==="candy"?"Candy":"Erotic DVD")+" × "+number(next.step.quantity??1);
+        const label=next.happyWait?"Wait for Happiness Reset":next.boosterWait?"Wait for Booster Cooldown":(next.step.type==="candy"?"Candy":"Erotic DVD")+" × "+number(next.step.quantity??1);
         if(step&&step.textContent!==label)step.textContent=label;
       }const finish=document.querySelector("[data-growth-finish]");if(finish)finish.textContent=sessionTime(rows.at(-1)?.due);for(const row of document.querySelectorAll("[data-session-row]")){const x=rows[Number(row.dataset.sessionRow)],t=row.querySelector("[data-session-time]");if(x&&t){const value=sessionTime(x.due);if(t.textContent!==value)t.textContent=value;}}}
     if(session&&session.index<session.actions.length){
