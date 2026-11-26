@@ -66,3 +66,6 @@ See [persistence-implementation-plan.md](persistence-implementation-plan.md). 1P
 1P.3a follow-up: pending rehab reservations restored from portable backups require manual review and cannot auto-confirm from historical counter baselines. Invalid calendar/spend records stop export; competing-write rollback is best effort only. Next 1P.3b active session/history recovery; see persistence implementation plan for validation and dependencies.
 
 1P.3b source audit recorded: active-session import requires staged recovery isolated from all runnable session consumers (Energy, Calendar, Restock, watch, deadline replan and expense deduction); see persistence implementation plan for schema map and acceptance matrix. Runtime implementation not yet enabled.
+
+### Energy tile clarity and mobile companion onboarding
+Gym membership and Energy/train replace the stat directive. Primary phase and countdown use the same typography and readiness color; a separate Next line names the action. Confirmed progress remains secondary. Waiting labels derive from schedule constraints; no optimization policy changed. Settings includes desktop and Android/iPhone Torn PDA URL installation and manual remote configuration fallback. PDA cross-origin compatibility and native durable storage remain test gates for 1P.4. Resume 1P.3b typed session validation/staging.

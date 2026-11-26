@@ -6,7 +6,7 @@
   <meta name="description" content="Torn City interactive guide with API-backed character stats, inventory and a beginner progression checklist.">
   <meta name="theme-color" content="#30363a">
   <title>Torn City Guide</title>
-  <link rel="stylesheet" href="./styles.css?v=20261126-rail-settings1">
+  <link rel="stylesheet" href="./styles.css?v=20261126-energy-clarity1">
   <script src="./education-reference.js?v=20261124-edu-wiki1" defer></script>
   <script src="./guide-features.js?v=20261126-backup1" defer></script>
   <script src="./tct-timers.js?v=20261124-rail-toggles1" defer></script>
@@ -23,7 +23,7 @@
   <script src="./investment-history.js?v=20261124-history1" defer></script>
   <script src="./activity-scheduler.js?v=20261126-backup3" defer></script>
   <script src="./crime-states.js?v=20261126-crime-states1" defer></script>
-  <script src="./crime-guide.js?v=20261126-backup3" defer></script>
+  <script src="./crime-guide.js?v=20261126-energy-clarity1" defer></script>
   <script src="./right-rail.js?v=20261126-rail-settings1" defer></script>
   <script src="./log-guide.js?v=20261126-log1" defer></script>
   <script src="./account-storage.js?v=20261126-backup3" defer></script>
@@ -75,7 +75,13 @@
               <strong>Companion script</strong>
               <div class="companion-version-row"><span id="companion-version-status" role="status" data-state="checking">Checking companion…</span><span id="companion-version-detail" class="settings-hint"></span></div>
               <a id="companion-version-action" href="./torn-companion.user.js" target="_blank" rel="noopener noreferrer" class="button secondary" hidden>Install companion script</a>
-              <p class="settings-hint">Requires Tampermonkey or a compatible userscript manager. Shares visible status bars, market observations and opted-in activity logs locally. After installing or updating, reload the guide and Torn tabs.</p>
+              <p class="settings-hint">Optional, read-only companion. Shares visible status bars, market observations and opted-in activity logs within the same userscript manager. No API key or game actions.</p>
+              <details class="companion-install-help"><summary>Desktop, Android &amp; iPhone installation</summary>
+                <p><strong>Desktop:</strong> Install Tampermonkey or a compatible manager, then use Install/Update above.</p>
+                <p><strong>Android / iPhone:</strong> Open this guide in the Torn PDA in-app browser, then <a href="./torn-companion.user.js">install or update from the script URL</a> and approve the installation. If no prompt appears, open Torn PDA Settings → Advanced browser settings → Manage scripts, enable custom scripts and add the URL as a remote script. Use End injection if needed.</p>
+                <label>Script URL (copy if needed)<input type="text" readonly value="https://vagabond1215.github.io/TORN/torn-companion.user.js" aria-label="Companion script installation URL"></label>
+                <p>Reload Torn and this guide in the same browser after installation. Torn PDA compatibility and persistent native storage are still being validated; data does not automatically cross apps or devices. The guide works without the companion.</p>
+              </details>
             </div>
             <div class="settings-field"><strong>Data &amp; Backup</strong><button type="button" class="button secondary" id="backup-open" disabled>Encrypted portable backup</button><p class="settings-hint">Export supported account settings and notes. Recovery is currently limited to empty accounts. Existing expenditure records are included; active sessions and archives are not.</p></div>
             <div class="settings-footer">

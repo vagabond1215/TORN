@@ -647,6 +647,7 @@ const tornCrimeGuide = (() => {
     for(let i=0;i<actions.length;i++){
       const x=actions[i];if(i<session.index){rows.push({step:x,done:true,due:done[i]??null});continue;}
       let due=Math.max(now,previousDue+(x.midnightRefill?0:Math.max(0,x.at-previousAt)*1000),i===session.index?session.notBefore||0:0);
+      let drugWait=["xanax","ecstasy"].includes(x.type)&&drugEnd>now,energyWait=false,refillWait=false;
       if(["xanax","ecstasy"].includes(x.type))due=Math.max(due,drugEnd);
       const isBooster=["candy","dvd"].includes(x.type),unit=x.type==="candy"?timing.candyCD??1800:timing.dvdCD??21600,qty=x.quantity??1;
       let happyWait=false,boosterWait=false;
@@ -655,25 +656,25 @@ const tornCrimeGuide = (() => {
         boosterWait=boosterReady>due;
         due=Math.max(due,boosterReady);
         const next=actions.slice(i+1).find(step=>["xanax","ecstasy","train","refill"].includes(step.type));
-        if(next?.type==="ecstasy")due=Math.max(due,drugEnd);
+        if(next?.type==="ecstasy"){drugWait=drugEnd>now;due=Math.max(due,drugEnd);}
         const delay=tornHappinessBook().active?0:tornTrainSequence.happyResetWait(due/1000);
         happyWait=delay>0;
         due+=delay*1000;
       }
-      if(x.midnightRefill&&refillDay===null)due=Math.max(due,(Math.floor(previousDue/86400000)+1)*86400000);
-      if(x.type==="refill"&&refillDay!==null)due=Math.max(due,(refillDay+1)*86400000);
+      if(x.midnightRefill&&refillDay===null){const reset=(Math.floor(previousDue/86400000)+1)*86400000;refillWait=reset>now;due=Math.max(due,reset);}
+      if(x.type==="refill"&&refillDay!==null){const reset=(refillDay+1)*86400000;refillWait=reset>now;due=Math.max(due,reset);}
       if(energy!==null){
         const regen=t=>{if(energy<cap){const first=energyAt===now?Math.max(0,e.until)*1000:e.interval*1000;const elapsed=t-energyAt;if(elapsed>=first)energy=Math.min(cap,energy+(1+Math.floor((elapsed-first)/(e.interval*1000)))*e.step);}energyAt=t;};
         regen(due);
         if(x.type==="train"){
           const wanted=Math.max(cost,Math.floor((Number(x.energy)||cost)/cost)*cost);
-          if(energy<wanted&&wanted<=cap){const wait=Math.ceil((wanted-energy)/e.step)*e.interval*1000;due+=wait;regen(due);}
+          if(energy<wanted&&wanted<=cap){energyWait=true;const wait=Math.ceil((wanted-energy)/e.step)*e.interval*1000;due+=wait;regen(due);}else if(i===session.index&&due>now&&e.current<wanted&&wanted<=cap)energyWait=true;
           energy=Math.max(0,energy-Math.min(wanted,Math.floor(energy/cost)*cost));
         }
         if(x.type==="xanax")energy=Math.min(1000,energy+250);
         if(x.type==="refill")energy=Math.max(energy,cap);
       }
-      rows.push({step:x,done:false,due,happyWait,boosterWait});
+      rows.push({step:x,done:false,due,happyWait,boosterWait,drugWait,energyWait,refillWait});
       if(x.type==="xanax"||x.type==="ecstasy")drugEnd=due+(x.type==="xanax"?timing.xanaxCD??25200:timing.ecstasyCD??12900)*1000;
       if(isBooster)boosterEnd=Math.max(due,boosterEnd)+qty*unit*1000;
       if(x.type==="refill")refillDay=Math.floor(due/86400000);
@@ -972,23 +973,74 @@ const tornCrimeGuide = (() => {
     if(el.dataset.growthWatchStatus!==status.state){el.dataset.growthWatchStatus=status.state;el.firstElementChild.textContent=status.state==="active"?"✓":"×";}
     if(el.getAttribute("aria-label")!==status.label){el.setAttribute("aria-label",status.label);el.dataset.tooltip=status.label;}
   }
+  // Presentation only: the scheduler owns due times and action selection.
+  function energyAction(step,stat,fmt){
+    if(!step)return "Review the training plan";
+    if(step.type==="train")return "Train "+(stat||"selected stat")+(step.energy>0?" · "+fmt(step.energy)+" E":"");
+    if(step.type==="xanax")return "Take Xanax";
+    if(step.type==="ecstasy")return "Take Ecstasy";
+    if(step.type==="refill")return "Use points Energy refill";
+    if(step.type==="candy")return "Use candy × "+fmt(step.quantity??1);
+    if(step.type==="dvd")return "Use Erotic DVD × "+fmt(step.quantity??1);
+    if(step.type==="externalHappy")return "Arrange external Happiness boost";
+    return "Review "+step.type;
+  }
+  function energySessionStatus(session,row,now=Date.now()){
+    if(!row?.step)return "Training Cycle Complete";
+    const {step,due}=row;
+    if(due>now){
+      if(row.happyWait)return "Waiting for Happiness Reset";
+      if(row.boosterWait)return "Waiting for Booster Cooldown";
+      if(row.drugWait)return "Waiting for Drug Cooldown";
+      if(row.refillWait)return "Waiting for Daily Refill";
+      if(row.energyWait)return "Waiting for Energy";
+      return "Waiting for Scheduled Step";
+    }
+    const kind=String(session.label||"").toLowerCase();
+    if(step.type==="xanax"&&/jump/.test(kind)){
+      if(kind.includes("99k"))return "Stacking for 99k Happy Jump";
+      if(kind.includes("mini"))return "Stacking for Mini Jump";
+      if(kind.includes("low"))return "Stacking for Low-stat Jump";
+      return "Stacking for Happy Jump";
+    }
+    if(step.type==="xanax")return "Preparing Energy";
+    if(["candy","dvd","ecstasy","externalHappy"].includes(step.type))return "Boosting Happiness";
+    if(step.type==="train")return "Ready to Train";
+    if(step.type==="refill")return "Ready for Energy Refill";
+    return "Ready for Next Step";
+  }
+  function energyPrepStatus(prep,program,stat,fmt){
+    if(!program)return {status:"Training Plan Unavailable",next:prep.label};
+    const first=(program.cycleExecution??program.execution??[]).find(actionable);
+    if(prep.ready)return {status:"Ready to Start",next:"Start "+program.label+(first?" · "+energyAction(first,stat,fmt):"")};
+    if(prep.due!=null){
+      if(/regenerate/i.test(prep.label))return {status:"Waiting for Energy",next:prep.label};
+      if(/wait/i.test(prep.label))return {status:"Waiting for Drug Cooldown",next:prep.label.replace(/^Wait, then /i,"").replace(/^Wait for first Xanax$/i,"Take Xanax").replace(/^Wait for Xanax cooldown$/i,"Take Xanax")};
+    }
+    return {status:"Preparation Required",next:prep.label};
+  }
+  function gymMembership(gym){
+    const name=gym?.name;
+    if(!name)return '<div class="growth-instruction">Gym membership unavailable.</div>';
+    return '<div class="growth-instruction">Member at '+(name==="Gun Shop"?"the ":"")+'<strong>'+esc(name)+'</strong>.'+(gym.energy!=null?' <strong>'+esc(gym.energy)+' E/train</strong>':"")+'</div>';
+  }
   function sessionPanel(plan,training,names,fmt){
     const session=loadTrainingSession(),program=plan.program;
     const prep=prepState(plan,training.blockDrugs);
     trainingDraft={plan,training,prep,owner:sessionOwner};
-    let label,heading,due=null,controls="",boosterWait=false;
+    let label,heading="",status,due=null,controls="",boosterWait=false;
     if(session){
       const step=session.actions[session.index];
-      heading=session.label+(step?" "+(session.index+1)+" / "+session.actions.length:"");
-      if(!step){heading="Training cycle complete";label="All cycle actions confirmed";controls='<button type="button" data-growth-session="review" '+(recoveryBusy?"disabled":"")+'>Plan next cycle</button>';}
-      else if(training.blockDrugs&&session.drugRisk){label="Drug restriction active · cancel and replan";}
-      else {const next=sessionSchedule(session)[session.index];due=next?.due??Date.now();boosterWait=Boolean(next?.boosterWait);label=next?.happyWait?"Wait for Happiness Reset":next?.boosterWait?"Wait for Booster Cooldown":(step.type==="train"?"Train "+session.stat:names[step.type]??step.type)+(step.type==="train"?" · "+fmt(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+fmt(step.quantity):"");controls='<button type="button" data-growth-session="done">Mark done</button>';}
-    }else{heading="";label=prep.label;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button>';}
+      heading=step?session.label+" · "+session.index+" / "+session.actions.length+" confirmed":"All cycle actions confirmed";
+      if(!step){status="Training Cycle Complete";label="Review next cycle";controls='<button type="button" data-growth-session="review" '+(recoveryBusy?"disabled":"")+'>Plan next cycle</button>';}
+      else if(training.blockDrugs&&session.drugRisk){status="Drug Restriction Active";label="Cancel and replan";}
+      else {const next=sessionSchedule(session)[session.index];due=next?.due??Date.now();boosterWait=Boolean(next?.boosterWait);status=energySessionStatus(session,next);label=energyAction(step,session.stat,fmt);controls='<button type="button" data-growth-session="done">Mark done</button>';}
+    }else{const display=energyPrepStatus(prep,program,plan.stat,fmt);status=display.status;label=display.next;due=prep.due;controls='<button type="button" data-growth-session="start" '+(!prep.ready?"disabled":"")+'>Start</button>';}
     const refreshLabel=recoveryBusy?"Refreshing…":session?"Continue / Refresh":"Refresh training readiness";
     const cornerControls='<div class="growth-counter-actions">'+growthWatchIndicator(growthWatchStatus(session,training))+
       '<button type="button" data-growth-session="refresh" aria-label="'+refreshLabel+'" title="'+refreshLabel+'" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button>'+
       '<button type="button" data-growth-session="stop" aria-label="Cancel training program" title="Cancel training program and return to Start" '+(!session||session.index>=session.actions.length?"disabled":"")+'><span aria-hidden="true">×</span></button></div>';
-    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+'<div class="growth-counter-header"><small class="growth-counter-title">'+esc(heading)+'</small>'+cornerControls+'</div><strong class="growth-next-clock" data-growth-clock>'+esc(due==null?(session?"—":prep.ready?"Ready":"Prepare"):due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span data-growth-step>'+esc(label)+'</span>'+'<div class="growth-session-controls">'+controls+barWarning("happy")+barWarning("energy")+'</div>'+
+    return '<div class="growth-next-step" '+(due!=null?'data-growth-due="'+due+'"':"")+' data-ready="'+(session?due!=null&&due<=Date.now():prep.ready)+'">'+'<div class="growth-counter-header"><small class="growth-counter-title">'+esc(heading)+'</small>'+cornerControls+'</div><strong class="growth-next-clock growth-stage" data-growth-stage>'+esc(status)+'</strong><strong class="growth-next-clock" data-growth-clock '+(due==null?"hidden":"")+'>'+esc(due==null?"":due<=Date.now()?"Ready":tornTctClock.formatDuration((due-Date.now())/1000))+'</strong><span data-growth-step>Next: '+esc(label)+'</span>'+'<div class="growth-session-controls">'+controls+barWarning("happy")+barWarning("energy")+'</div>'+
       (boosterWait?'<small>Already trained? Refresh to check for completed steps.</small>':"")+
       recoveryPanel()+'</div>';
   }
@@ -1107,7 +1159,7 @@ const tornCrimeGuide = (() => {
     if(activeSession&&sessionDeadlineConflict(activeSession,training.activity))return '<div class="growth-card">'+setup+'<div class="growth-warning">Current cycle conflicts with '+esc(training.activity.reason??"a scheduled activity")+'. Confirming completed actions and replanning the remainder.</div>'+recoveryPanel()+'</div>';
     if(training.activity.deadline!=null)setup+='<small data-activity-cutoff="'+training.activity.deadline+'">Training cutoff: '+esc(tornActivityScheduler.time(training.activity.deadline))+' · '+esc(training.activity.reason??"activity")+'</small>';
     if(war)setup+='<small data-war-switch="'+war.first+'">Ranked war starts '+esc(new Date(war.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(war.mode?" · "+esc(war.mode):"")+'</small>';
-    if(activeSession&&!p?.stats){const fmt=v=>v==null?"Unavailable":number(Math.round(v));const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",refill:"Points refill"};return '<div class="growth-card">'+setup+sessionPanel(p??{},training,names,fmt)+growthDetails([["summary","Summary",growthPlanSequence(activeSession)+replayPanel(activeSession,fmt)+growthPeriodSummary(activeSession.periods,fmt,activeSession.actions.slice(0,activeSession.index))],["steps","Steps",'<div class="growth-execution"><ol>'+sessionSteps(activeSession,names,fmt)+'</ol></div>'],["build","Build",'<p class="fine-print">Build data unavailable. <a href="#stats">View Stats</a></p>']])+'</div>';}
+    if(activeSession&&!p?.stats){const fmt=v=>v==null?"Unavailable":number(Math.round(v));const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",refill:"Points refill"};return '<div class="growth-card">'+setup+gymMembership(activeSession.gym)+sessionPanel(p??{},training,names,fmt)+growthDetails([["summary","Summary",growthPlanSequence(activeSession)+replayPanel(activeSession,fmt)+growthPeriodSummary(activeSession.periods,fmt,activeSession.actions.slice(0,activeSession.index))],["steps","Steps",'<div class="growth-execution"><ol>'+sessionSteps(activeSession,names,fmt)+'</ol></div>'],["build","Build",'<p class="fine-print">Build data unavailable. <a href="#stats">View Stats</a></p>']])+'</div>';}
     if(p?.needsBuild)return setup+'<div class="growth-warning">Choose a stat build before receiving training recommendations. <a href="#stats">Select build</a></div>';
     if(!p?.stats)return setup+'<p class="fine-print">'+esc(p?.detail??"Load battle stats and choose a build in Stats.")+'</p><a href="#stats">View Stats</a>';
     const prog=p.program,fmt=v=>v==null?"Unavailable":number(Math.round(v)),perc=v=>Number.isFinite(v)?v.toFixed(1)+"%":"Unavailable";
@@ -1119,9 +1171,7 @@ const tornCrimeGuide = (() => {
     const names={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",train:"Train "+p.stat,refill:"Points refill",wait:"Wait",autoWait:"Wait",externalHappy:"External happiness"};
     const execution=plannedSteps(prog?.cycleExecution??prog?.execution??[],names,fmt);
     const timer=sessionPanel(p,training,names,fmt);
-    const statLabel=activeSession?(p.stats.find(s=>s.key===activeSession.statKey)?.label??activeSession.stat):p.stats.find(s=>s.key===p.statKey)?.label??p.stat;
-    const gymName=activeSession?.gym?.name??p.gym?.name,article=gymName==="Gun Shop"?"the ":"";
-    const instruction='<div class="growth-instruction">Train <strong class="growth-accent">'+esc(statLabel)+'</strong>'+(gymName?' at '+article+'<strong>'+esc(gymName)+'</strong>.':' · Gym unavailable.')+((activeSession?.gym?.energy??p.gym?.energy)!=null?' <strong>'+esc(activeSession?.gym?.energy??p.gym?.energy)+'E</strong>':"")+'</div>';
+    const instruction=gymMembership(p.gym??activeSession?.gym);
     const build='<div class="growth-build-content"><div class="growth-row"><strong>'+esc(p.build)+'</strong><a href="#stats">View</a></div>'+stats+'<small>'+fmt(p.remaining)+' remaining to build target · '+perc(p.modifier)+' modeled gain modifier</small></div>';
     const perkChips=chips.length?'<div class="growth-perks">'+chips.join("")+'</div>':"";
     const summary=activeSession?growthPlanSequence(activeSession)+replayPanel(activeSession,fmt)+growthPeriodSummary(activeSession.periods,fmt,activeSession.actions.slice(0,activeSession.index)):
@@ -1255,11 +1305,11 @@ const tornCrimeGuide = (() => {
       }
     }
     const session=loadTrainingSession();if(session&&session.index<session.actions.length){const rows=sessionSchedule(session),next=rows[session.index];el.dataset.growthDue=String(next.due);
-      if(["candy","dvd"].includes(next.step.type)){
-        const step=el.querySelector("[data-growth-step]");
-        const label=next.happyWait?"Wait for Happiness Reset":next.boosterWait?"Wait for Booster Cooldown":(next.step.type==="candy"?"Candy":"Erotic DVD")+" × "+number(next.step.quantity??1);
-        if(step&&step.textContent!==label)step.textContent=label;
-      }const finish=document.querySelector("[data-growth-finish]");if(finish)finish.textContent=sessionTime(rows.at(-1)?.due);for(const row of document.querySelectorAll("[data-session-row]")){const x=rows[Number(row.dataset.sessionRow)],t=row.querySelector("[data-session-time]");if(x&&t){const value=sessionTime(x.due);if(t.textContent!==value)t.textContent=value;}}}
+      const stage=el.querySelector("[data-growth-stage]"),step=el.querySelector("[data-growth-step]");
+      const status=energySessionStatus(session,next),label="Next: "+energyAction(next.step,session.stat,number);
+      if(stage&&stage.textContent!==status)stage.textContent=status;
+      if(step&&step.textContent!==label)step.textContent=label;
+      const finish=document.querySelector("[data-growth-finish]");if(finish)finish.textContent=sessionTime(rows.at(-1)?.due);for(const row of document.querySelectorAll("[data-session-row]")){const x=rows[Number(row.dataset.sessionRow)],t=row.querySelector("[data-session-time]");if(x&&t){const value=sessionTime(x.due);if(t.textContent!==value)t.textContent=value;}}}
     if(session&&session.index<session.actions.length){
       const action=session.actions[session.index],due=Number(el.dataset.growthDue);
       for(const span of document.querySelectorAll('[data-session-wait="'+session.index+'"]')){
@@ -1275,6 +1325,7 @@ const tornCrimeGuide = (() => {
     const ready=remaining<=0;el.dataset.ready=String(ready);
     const clock=el.querySelector("[data-growth-clock]"),value=ready?"Ready":tornTctClock.formatDuration(remaining);
     if(clock&&clock.textContent!==value)clock.textContent=value;
+    if(!session&&ready&&trainingDraft){const display=energyPrepStatus(prepState(trainingDraft.plan,trainingDraft.training.blockDrugs),trainingDraft.plan?.program,trainingDraft.plan?.stat,number);const stage=el.querySelector("[data-growth-stage]"),step=el.querySelector("[data-growth-step]");if(stage&&stage.textContent!==display.status)stage.textContent=display.status;if(step&&step.textContent!=="Next: "+display.next)step.textContent="Next: "+display.next;}
   }
   function affordableMissionBooks(missions,now=Date.now()){
     if(!Number.isSafeInteger(missions?.credits)||!Array.isArray(missions?.rewards))return [];

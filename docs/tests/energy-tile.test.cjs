@@ -1,0 +1,17 @@
+"use strict";
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
+const src=read("crime-guide.js");
+const start=src.indexOf("  function energyAction("),end=src.indexOf("  function sessionPanel(",start);
+const api=new Function("esc","actionable",src.slice(start,end)+"\nreturn {energyAction,energySessionStatus,energyPrepStatus,gymMembership};")(x=>String(x).replaceAll("<","&lt;"),x=>x.type!=="wait");
+const now=1000,session={label:"Happy jump"},fmt=String;
+assert.equal(api.energySessionStatus(session,{step:{type:"xanax"},due:now},now),"Stacking for Happy Jump");
+for(const [flag,label,type] of [["drugWait","Drug Cooldown","xanax"],["energyWait","Energy","train"],["boosterWait","Booster Cooldown","dvd"],["happyWait","Happiness Reset","candy"],["refillWait","Daily Refill","refill"]])assert.equal(api.energySessionStatus(session,{step:{type},due:now+1,[flag]:true},now),"Waiting for "+label);
+assert.equal(api.energyAction({type:"train",energy:100},"STR",fmt),"Train STR · 100 E");
+assert.equal(api.energyAction({type:"xanax"},"STR",fmt),"Take Xanax");
+assert.equal(api.energySessionStatus(session,{step:{type:"train"},due:now},now),"Ready to Train");
+assert.equal(api.energySessionStatus(session,null,now),"Training Cycle Complete");
+assert.ok(api.gymMembership({name:"Gun Shop",energy:10}).includes("Member at the <strong>Gun Shop</strong>. <strong>10 E/train</strong>"));
+assert.ok(src.includes('growth-next-clock growth-stage')&&src.includes('Next: '));
+assert.ok(read("index.html").includes("Android / iPhone")&&read("index.html").includes("Manage scripts"));
+console.log("Energy stage, next action, membership, countdown labels and mobile install instructions passed.");

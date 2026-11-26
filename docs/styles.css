@@ -2445,3 +2445,10 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .companion-version-row .settings-hint{margin:0}
 #companion-version-action[hidden]{display:none!important}
 .rail-property .rail-upkeep-link{color:var(--accent-strong);font-size:.7rem;white-space:nowrap}
+
+/* Energy status shares the countdown's exact type and readiness color. */
+.growth-next-step .growth-stage{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
+.growth-next-step .growth-counter-title{font-size:.75rem}
+.growth-next-step [data-growth-step]{overflow-wrap:anywhere}
+.companion-install-help{font-size:.8rem;line-height:1.4;overflow-wrap:anywhere}
+.companion-install-help input{font-size:.75rem}
