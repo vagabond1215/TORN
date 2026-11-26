@@ -535,7 +535,7 @@ const tornCrimeGuide = (() => {
       (reserves.warReserve||reserves.rehabReserve?'<small>Reserved cash: war $'+number(reserves.warReserve)+' · rehab $'+number(reserves.rehabReserve)+(reserves.shortfall?" · exceeds available budget":"")+'</small>':"")+'</div>';
   }
   function calendarCard(training,full=false){
-    return rehabPanel(training)+tornActivityScheduler.render(calendarEvents(training),{full})+(full?tornActivityScheduler.manualForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
+    return rehabPanel(training)+'<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(calendarEvents(training),{full})+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
   }
   function renderCalendar(){
     loadOcFilters();loadRecFilters();
@@ -552,12 +552,19 @@ const tornCrimeGuide = (() => {
   function wireActivity(view){
     tornActivityScheduler.wire(view,()=>refreshActivityView(view));
     if(view.dataset.activityActionsBound==="1")return;view.dataset.activityActionsBound="1";
-    view.addEventListener("click",e=>{
-      const gear=e.target.closest("[data-activity-settings]"),refresh=e.target.closest("[data-activity-refresh]"),rehab=e.target.closest("[data-activity-rehab]");
+    view.addEventListener("click",async e=>{
+      const gear=e.target.closest("[data-activity-settings]"),refresh=e.target.closest("[data-activity-refresh],[data-activity-war-refresh]"),rehab=e.target.closest("[data-activity-rehab]");
       if(gear){e.preventDefault();tornActivityScheduler.settingsDialog(()=>refreshActivityView(view),gear);return;}
       if(refresh&&!recoveryBusy){e.preventDefault();recoveryBusy=true;refresh.disabled=true;
-        Promise.resolve(tornGuideApi.loadPage("calendar",true)).catch(()=>{}).finally(()=>{recoveryBusy=false;refreshActivityView(view);});return;}
-      if(rehab&&activityContext?.rehab){const r=activityContext.rehab,now=Date.now(),start=Math.max(now,r.start),end=start+r.duration;
+        Promise.resolve(tornGuideApi.loadPage(refresh.hasAttribute("data-activity-war-refresh")?"warProgress":"calendar",true)).catch(()=>{}).finally(()=>{recoveryBusy=false;refreshActivityView(view);});return;}
+      if(rehab&&activityContext?.rehab&&!recoveryBusy){
+        const r=activityContext.rehab,owner=recOwner;
+        if(!tornActivityScheduler.rehabSnapshot()){
+          recoveryBusy=true;rehab.disabled=true;
+          try{await tornGuideApi.loadPage("rehabProgress",true);}catch{}finally{recoveryBusy=false;}
+          if(owner!==String(tornGuideApi.state.identity?.id??"guest"))return;
+        }
+        const now=Date.now(),start=Math.max(now,r.start),end=start+r.duration;
         const limit=activityLimits(now),busy=tornActivityScheduler.events().some(x=>x.blocking&&start<x.end&&end>x.start);
         if(limit.blocked||busy||limit.war&&end>limit.war.cutoff){refreshActivityView(view);return;}
         const baseline=tornActivityScheduler.rehabSnapshot(now);
@@ -641,8 +648,11 @@ const tornCrimeGuide = (() => {
       if(energy!==null){
         const regen=t=>{if(energy<cap){const first=energyAt===now?Math.max(0,e.until)*1000:e.interval*1000;const elapsed=t-energyAt;if(elapsed>=first)energy=Math.min(cap,energy+(1+Math.floor((elapsed-first)/(e.interval*1000)))*e.step);}energyAt=t;};
         regen(due);
-        if(x.type==="train"&&energy<cost){const wait=Math.ceil((cost-energy)/e.step)*e.interval*1000;due+=wait;regen(due);}
-        if(x.type==="train")energy=Math.max(0,energy-Math.floor(energy/cost)*cost);
+        if(x.type==="train"){
+          const wanted=Math.max(cost,Math.floor((Number(x.energy)||cost)/cost)*cost);
+          if(energy<wanted&&wanted<=cap){const wait=Math.ceil((wanted-energy)/e.step)*e.interval*1000;due+=wait;regen(due);}
+          energy=Math.max(0,energy-Math.min(wanted,Math.floor(energy/cost)*cost));
+        }
         if(x.type==="xanax")energy=Math.min(1000,energy+250);
         if(x.type==="refill")energy=Math.max(energy,cap);
       }
@@ -1009,7 +1019,10 @@ const tornCrimeGuide = (() => {
         sum+Math.max(0,Number(item.quantity??item.amount)||0):sum;
     },0):null;
     const advice=warStackAdvice(war,settings,recoverySnapshot(),held,training.avoidWarDrugs,now);
-    return {...war,...advice,active:now>=war.cutoff};
+    return {...war,...advice,active:now>=war.cutoff,attacks:tornActivityScheduler.warAttackSummary(war,now)};
+  }
+  function warAttackPanel(summary){
+    return '<small>'+(summary?"Recent outgoing ranked-war attacks: "+number(summary.attacks)+" · respect "+number(summary.respect)+(summary.limited?" · history truncated":""):"Attack data not loaded or unavailable")+'</small><button type="button" data-activity-war-refresh>Refresh war attacks</button>';
   }
   function warCounter(advice){
     return '<div class="growth-next-step" data-war-counter><div class="growth-counter-actions">'+
@@ -1017,7 +1030,8 @@ const tornCrimeGuide = (() => {
       '<small>Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+
       (advice.mode?" · "+esc(advice.mode):"")+'</small><strong class="growth-next-clock" data-war-clock>'+
       esc(advice.phase==="active"?"Active":advice.due&&advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
-      '</strong><span data-war-step>'+esc(advice.label)+'</span>'+recoveryPanel()+'</div>';
+      '</strong><span data-war-step>'+esc(advice.label)+'</span>'+
+      (advice.phase==="active"?warAttackPanel(advice.attacks):"")+recoveryPanel()+'</div>';
   }
   let warTraining=null;
   function growthCard(training,prefs){
