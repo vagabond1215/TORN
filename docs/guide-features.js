@@ -20,7 +20,7 @@ const tornGuideApi=(()=>{
   const ROUTES={
     home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog","missions","factionWars","travel","races"],
     trainingProgress:["bars","cooldowns","battlestats","refills"],
-    energy:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel"],
+    energy:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel","itemCatalog","pointsCatalog","gymCatalog","education"],
     calendar:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel","education","organizedcrime","virus","rehabStats","factionChain","races","calendarCatalog","calendar","itemCatalog","pointsCatalog","gymCatalog"],
     warProgress:["factionWars","factionChain","warAttacks","bars","cooldowns","icons"],
     warPreparation:["bars","cooldowns","icons","factionWars"],

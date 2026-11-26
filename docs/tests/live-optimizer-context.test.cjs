@@ -69,3 +69,36 @@ const purchases=costSeq.trainingPurchases(30,{reserveXanax:4});
 assert.equal(purchases({refill:1,xanax:1}).cost,0);
 assert.equal(purchases({refill:2,xanax:2}).cost,1800);
 console.log("Observed regeneration phase, capped tick, verified points/wallet freshness, and reserved inventory pricing passed.");
+
+// Zero stock is not unknown; stale stock and prices cannot receive credit.
+const sourceState={identity:{id:7},data:{profile:{profile:{status:{state:"Okay"}}},battlestats:{battlestats:{strength:100}},gym:{gym:{id:1}},perks:{perks:{book:[]}},itemCatalog:{items:[{id:1,name:"Xanax",market_value:900}]},pointsCatalog:{pointsmarket:[{cost:30}]}},inventory:{Drug:[{name:"Xanax",amount:4}],Candy:[],Booster:[]},fetchedAt:Object.fromEntries(["profile","battlestats","gym","perks","itemCatalog","pointsCatalog","inventory:Drug","inventory:Candy","inventory:Booster"].map(k=>[k,now])),errors:{},inventoryErrors:{}};
+assert.equal(seq.liveSourceState(sourceState,"inventory:Candy",now).status,"observed");
+sourceState.cached=true;assert.equal(seq.liveSourceState(sourceState,"inventory:Candy",now).status,"cached");sourceState.cached=false;
+assert.equal(seq.liveSourceState(sourceState,"money",now).status,"unknown");
+sourceState.fetchedAt["inventory:Drug"]=now-900001;assert.equal(seq.liveSourceState(sourceState,"inventory:Drug",now).status,"stale");
+sourceState.inventoryErrors.Drug="failed";assert.equal(seq.liveSourceState(sourceState,"inventory:Drug",now).status,"failed");delete sourceState.inventoryErrors.Drug;
+assert.equal(seq.liveAccountStatus(sourceState,now).blocked,false);
+sourceState.data.profile.profile.status.state="Hospital";assert.equal(seq.liveAccountStatus(sourceState,now).blocked,true);
+sourceState.data.profile.profile.status.state="Okay";
+sourceState.fetchedAt.profile=now-900001;assert.equal(seq.liveAccountStatus(sourceState,now).blocked,true);sourceState.fetchedAt.profile=now;
+sourceState.data.travel={travel:{time_left:10,destination:"Torn"}};sourceState.fetchedAt.travel=now;
+assert.equal(seq.liveAccountStatus(sourceState,now+20000).blocked,true);
+sourceState.fetchedAt.profile=now+20000;assert.equal(seq.liveAccountStatus(sourceState,now+20000).blocked,false);delete sourceState.data.travel;
+assert.equal(optimizer.weeklyPrograms(ctx,0,"low",{...options,liveInputs:{...live,owner:999}}).length,0);
+const bridgeState={...liveState,bridge:{playerId:999,timestamp:now+1000,fields:["energy"]}};
+assert.equal(optimizer.liveInputs(bridgeState,now+1000,project).energy,null);
+const strictSrc=read("stats-sequencer.js").replace("return {render,wire,simulate,weeklyPrograms,","return {trainingPurchases,marketInputs,candyStock,setContext:v=>ctx=v,render,wire,simulate,weeklyPrograms,");
+const strict=new Function("tornGuideApi","payload",strictSrc+"\nreturn tornTrainSequence;")({state:sourceState},(name,field)=>sourceState.data[name]?.[field]??sourceState.data[name]);
+function checkStock(){
+  const snapshot=strict.liveInputs(sourceState,now+20000,project);
+  strict.setContext({liveSources:snapshot.sources});strict.marketInputs();
+  return strict.trainingPurchases(0);
+}
+assert.equal(checkStock()({xanax:1}).cost,900);
+sourceState.fetchedAt["inventory:Drug"]=now;assert.equal(checkStock()({xanax:1}).cost,0);
+sourceState.fetchedAt.itemCatalog=now-900001;assert.equal(checkStock()({xanax:5}).cost,null);
+sourceState.fetchedAt["inventory:Candy"]=now-900001;checkStock();assert.equal(strict.candyStock().loaded,false);
+assert.equal(seq.liveInputs(sourceState,now+20000,project).criticalIssues.length,0);
+sourceState.errors.perks="failed";assert.ok(seq.liveInputs(sourceState,now+20000,project).criticalIssues.some(x=>x.includes("Perks")));
+assert.ok(crime.includes("!activity.statusBlocked&&sessionDeadlineConflict"));
+console.log("Source states, stale price/stock exclusion, account isolation, travel/hospital holds and perk gating passed.");

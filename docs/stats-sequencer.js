@@ -116,15 +116,43 @@ const tornTrainSequence=(()=>{
   const candyTiers={"25":["Bag of Bon Bons","Bag of Chocolate Kisses","Box of Bon Bons","Box of Extra Strong Mints","Box of Sweet Hearts","Lollipop","Box of Chocolate Bars"],"35":["Big Box of Chocolate Bars"],"50":["Bag of Candy Kisses","Chocolate Egg"],"75":["Bag of Bloody Eyeballs","Bag of Tootsie Rolls"],"100":["Bag of Chocolate Truffles","Bag of Reindeer Droppings"],"150":["Bag of Humbugs","Bag of Sherbet","Jawbreaker","Pixie Sticks"],"250":["Birthday Cupcake"]};
   const keyName=value=>String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
   const positive=value=>value!=null&&Number.isFinite(Number(value))&&Number(value)>0?Number(value):null;
+  // Match the coordinator's existing selection/cache windows. An empty
+  // verified inventory is distinct from a missing or failed observation.
+  const liveAges={profile:900000,battlestats:900000,gym:1800000,perks:3600000,gymCatalog:7776000000,itemCatalog:900000,pointsCatalog:900000,money:900000,factionWars:300000,travel:900000,education:21600000,"inventory:Drug":900000,"inventory:Booster":900000,"inventory:Candy":900000};
+  function liveSourceState(state,key,now=Date.now()){
+    const inventory=key.startsWith("inventory:"),category=inventory?key.slice(10):null;
+    const raw=inventory?state.inventory?.[category]:state.data?.[key];
+    const error=inventory?state.inventoryErrors?.[category]:state.errors?.[key];
+    const at=Number(state.fetchedAt?.[key])||0,age=at>0&&at<=now?now-at:null;
+    const present=inventory?Array.isArray(raw):raw!==null&&typeof raw==="object";
+    const status=error?"failed":!present||age===null?"unknown":age>(liveAges[key]??900000)?"stale":state.cached?"cached":"observed";
+    return {status,ready:status==="observed"||status==="cached",at:at||null,age};
+  }
+  function liveAccountStatus(state,now=Date.now()){
+    const raw=state.data?.profile,profile=raw?.profile??raw;
+    const status=String(profile?.status?.state??profile?.status?.description??"").trim().toLowerCase();
+    const away=/travel|abroad|hospital|jail/.test(status);
+    const source=liveSourceState(state,"profile",now);
+    const travel=state.data?.travel?.travel??state.data?.travel;
+    const remaining=travel?.time_left??travel?.remaining??travel?.remaining_seconds;
+    const travelAt=Number(state.fetchedAt?.travel)||0;
+    // Countdown expiry is not arrival confirmation. A newer profile can
+    // supersede an older travel snapshot.
+    const flight=liveSourceState(state,"travel",now).ready&&travelAt>=Number(source.at||0)&&remaining!=null&&Number(remaining)>0;
+    const reason=away?"Player "+status:flight?"Verify arrival in Torn":!source.ready||!["okay","ok"].includes(status)?"Verify current player status":null;
+    return {status:status||null,source,away:away||flight,blocked:!!reason,reason};
+  }
+  function sourceReady(key){return !ctx?.liveSources||ctx.liveSources[key]?.ready===true;}
+  function inventoryRows(category){return sourceReady("inventory:"+category)?tornGuideApi.state.inventory?.[category]:null;}
   function itemList(){
     const raw=payload("itemCatalog","items");
     return Array.isArray(raw)?raw:Object.entries(raw||{}).map(([id,x])=>({...x,id:x.id??id}));
   }
   function marketPrice(item){
-    return positive(item?.market_value??item?.value?.market_price??item?.value?.market_value??item?.market_price);
+    return sourceReady("itemCatalog")?positive(item?.market_value??item?.value?.market_price??item?.value?.market_value??item?.market_price):null;
   }
   function candyStock(){
-    const items=itemList(),inventory=tornGuideApi.state.inventory.Candy;
+    const items=itemList(),inventory=inventoryRows("Candy");
     const rows=(Array.isArray(inventory)&&!tornGuideApi.state.inventoryErrors?.Candy?inventory:[]).map(x=>{
       const item=items.find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id)||keyName(i.name)===keyName(x.name??x.item?.name));
       const name=x.name??x.item?.name??item?.name, tier=Object.keys(candyTiers).find(k=>candyTiers[k].some(v=>keyName(v)===keyName(name)));
@@ -142,7 +170,7 @@ const tornTrainSequence=(()=>{
     const stock=candyStock();
     
     p.xanaxPrice=priceFor("Xanax");p.ecstasyPrice=priceFor("Ecstasy");p.dvdPrice=priceFor("Erotic DVD");
-    const points=payload("pointsCatalog","pointsmarket");
+    const points=sourceReady("pointsCatalog")?payload("pointsCatalog","pointsmarket"):null;
     const list=Array.isArray(points)?points:Object.values(points||{});
     const prices=list.map(x=>positive(x?.cost??x?.price??x?.cost_per_point)).filter(x=>x!==null);
     p.pointPrice=prices.length?Math.min(...prices):null;
@@ -162,6 +190,7 @@ const tornTrainSequence=(()=>{
     const fresh=(at,maxAge)=>at>0&&at<=now&&now-at<=maxAge;
     const bar=k=>{
       const bridge=state.bridge?.fields?.includes(k)&&Number(state.bridge.timestamp)>stamp("bars");
+      if(bridge&&state.identity?.id!=null&&String(state.bridge.playerId)!==String(state.identity.id))return null;
       const at=bridge?Number(state.bridge.timestamp):stamp("bars"),raw=bars?.[k];
       if((!bridge&&errors.bars)||!fresh(at,300000)||number(raw?.current)===null||!(number(raw?.maximum)>0))return null;
       const value=project(k,raw,at,now);
@@ -185,7 +214,19 @@ const tornTrainSequence=(()=>{
     const points=moneyFresh?number(money?.points?.current??money?.points):null;
     const wallet=moneyFresh?number(money?.wallet?.current??money?.wallet):null;
     if(points===null)issues.push("Owned points unknown; no points credit assumed");
-    return {now,energy,happy,drug,booster,refillUsed,points:points===null?null:Math.floor(points),wallet,issues};
+    const sources=Object.fromEntries(Object.keys(liveAges).map(key=>[key,liveSourceState(state,key,now)]));
+    const account=liveAccountStatus(state,now),criticalIssues=[];
+    if(state.identity?.id==null)criticalIssues.push("Connect an account");
+    if(account.blocked)criticalIssues.push(account.reason);
+    for(const [key,label] of [["battlestats","Battle stats"],["gym","Active gym"],["perks","Perks"]]){
+      if(!sources[key].ready)criticalIssues.push(label+" "+sources[key].status+"; refresh to verify");
+    }
+    const perks=data.perks?.perks??data.perks;
+    if(sources.perks.ready&&!Object.values(perks||{}).some(Array.isArray))criticalIssues.push("Perk response incomplete; refresh to verify");
+    for(const [key,label] of [["itemCatalog","Item prices"],["pointsCatalog","Point prices"],["inventory:Drug","Drug stock"],["inventory:Booster","Booster stock"],["inventory:Candy","Candy stock"],["factionWars","Ranked war data"]]){
+      if(!sources[key].ready)issues.push(label+" "+sources[key].status+"; not verified");
+    }
+    return {now,owner:state.identity?.id??null,energy,happy,drug,booster,refillUsed,points:points===null?null:Math.floor(points),wallet,issues,criticalIssues,sources,account};
   }
   function readCooldowns(){
     const data=tornGuideApi.state.data.cooldowns;
@@ -270,7 +311,7 @@ const tornTrainSequence=(()=>{
     const cfg={...p,...overrides},base=ctx.state.statValues[ctx.state.compareStat];
     const bliss=tornHappinessBook().active; // Shared detection for default action generation and fixed-plan replay.
     const stock=candyStock(),pool=stock.rows.map(x=>({...x,initialQty:x.qty})).sort((a,b)=>b.happy-a.happy||(a.price??Infinity)-(b.price??Infinity));
-    const dvdInventory=tornGuideApi.state.inventory.Booster;
+    const dvdInventory=inventoryRows("Booster");
     const dvdKnown=Array.isArray(dvdInventory)&&!tornGuideApi.state.inventoryErrors?.Booster;
     const dvdHeld=dvdKnown?dvdInventory.filter(x=>keyName(x.name??x.item?.name??itemList().find(i=>String(i.id)===String(x.id??x.item_id??x.item?.id))?.name)===keyName("Erotic DVD")).reduce((sum,x)=>sum+Math.max(0,Math.floor(n(x.amount??x.quantity))),0):null;
     const rowInfo={},notices=[],actionStates={};let rowCandy=null,rowUsed=null;
@@ -513,7 +554,7 @@ const tornTrainSequence=(()=>{
   function trainingPurchases(pointsHeld=0,{excludeOwned=true,reserveXanax=0}={}){
     const items=itemList();
     const owned=(name,category)=>{
-      const list=tornGuideApi.state.inventory[category];
+      const list=inventoryRows(category);
       if(!excludeOwned)return 0;
       if(!Array.isArray(list)||tornGuideApi.state.inventoryErrors?.[category])return 0;
       return list.reduce((sum,item)=>{
@@ -535,13 +576,14 @@ const tornTrainSequence=(()=>{
       return {items,cost};
     };
   }
-  function periodPurchases(periods,confirmed=[]){
-    const old={...p};
+  function periodPurchases(periods,confirmed=[],{liveInputs:live,reserveXanax=0}={}){
+    const old={...p},previous=ctx;
     try{
+      if(live)ctx={...ctx,liveSources:live.sources,livePoints:live.points,liveReserve:reserveXanax};
       marketInputs();
       const balance=tornGuideApi.state.errors?.money?null:payload("money","money")?.points;
-      const pointsHeld=Math.floor(positive(balance?.current??balance)??0);
-      const purchases=trainingPurchases(pointsHeld);
+      const pointsHeld=live?live.points??0:Math.floor(positive(balance?.current??balance)??0);
+      const purchases=trainingPurchases(pointsHeld,{reserveXanax});
       return periods.map(period=>{
         if(!period.costs)return period;
         const remaining={...period.costs};
@@ -552,7 +594,7 @@ const tornTrainSequence=(()=>{
         }
         return {...period,...purchases(remaining)};
       });
-    }finally{Object.assign(p,old);}
+    }finally{ctx=previous;Object.assign(p,old);}
   }
   // Home recommendations replay the same saved/default Plan templates with
   // one continuous weekly engine; no independent strategy definitions.
@@ -562,10 +604,10 @@ const tornTrainSequence=(()=>{
   function weeklyPrograms(context,budget,risk,options={}){
     const previous=ctx,old={...p};
     try{
-      ctx=context;loadPlanPreferences();marketInputs();applyCooldownPerks();
       const live=options.liveInputs,now=new Date(live?.now??Date.now()),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(now-stamp)/60000):0;
-      if(live&&(!live.energy||!live.happy))return [];
-      if(live)ctx={...context,liveEnergy:live.energy};
+      if(live&&(!live.energy||!live.happy||live.owner!=null&&String(live.owner)!==String(tornGuideApi.state.identity?.id)))return [];
+      ctx=live?{...context,liveEnergy:live.energy,liveSources:live.sources,livePoints:live.points,liveReserve:Math.max(0,Number(options.reserveXanax)||0)}:context;
+      loadPlanPreferences();marketInputs();applyCooldownPerks();
       if(!options.naturalOnly&&(budget==null||(live?(live.drug===null||live.booster===null):(cd?.drug==null||cd?.booster==null||!stamp||tornGuideApi.state.errors?.cooldowns))))return [];
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
       Object.assign(p,{startDrugMin:live?(live.drug??0)/60:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:live?(live.booster??0)/60:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??24,candyHappy:"any",tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
@@ -1157,6 +1199,7 @@ const tornTrainSequence=(()=>{
       elapsed:offset+data.time,offset,segments,partialSegment,firstCycle,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
   function chartPurchases(){
+    if(ctx?.liveSources)return trainingPurchases(ctx.livePoints??0,{reserveXanax:ctx.liveReserve??0});
     const credits=payload("money","money")?.points;
     return trainingPurchases(Math.floor(positive(credits?.current??credits)??0));
   }
@@ -1512,5 +1555,5 @@ const tornTrainSequence=(()=>{
       rebuild(el===document.activeElement?focusTarget:null);
     });
   }
-  return {render,wire,simulate,weeklyPrograms,liveInputs,periodPurchases,replayRemaining,waitTitle,happyResetWait,energyRefillUsedToday,steps,settings:p,loadLive,templateButtons};
+  return {render,wire,simulate,weeklyPrograms,liveInputs,liveSourceState,liveAccountStatus,periodPurchases,replayRemaining,waitTitle,happyResetWait,energyRefillUsedToday,steps,settings:p,loadLive,templateButtons};
 })();

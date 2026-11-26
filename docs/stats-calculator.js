@@ -396,12 +396,14 @@ const tornStatPlanner = (() => {
   function homeTrainingAdvice(budget,risk,options={}){
     loadBuild();
     if(!buildChoice)return {needsBuild:true,detail:"Select a stat build in Stats → Gym."};
+    const inputs=options.liveInputs;
+    if(inputs?.criticalIssues?.length)return {detail:inputs.criticalIssues.join(" · ")};
     const actual=statNames.map(apiStatValue);
-    if(actual.some(x=>x===null))return null;
+    if(actual.some(x=>x===null))return {detail:"Battle stat response incomplete; refresh to verify."};
     const option=buildOptions.find(x=>x[0]===buildChoice)||buildOptions[0],weights=option[2],sum=weights.reduce((a,b)=>a+b,0),shares=weights.map(x=>x/sum);
     const total=Math.max(buildTotal||actual.reduce((a,b)=>a+b,0)*1.1,1,...actual.map((v,i)=>v/shares[i]));
     const rows=statNames.map((stat,i)=>({stat,remaining:Math.max(0,Math.ceil(total*shares[i])-actual[i]),progress:actual[i]/Math.max(1,total*shares[i]),effects:effectsFor(stat,{live:true})}));
-    const active=activeGym(),book=row=>row.effects.groups.find(g=>g.group==="book")?.total||0;
+    const active=inputs&&!inputs.sources?.gymCatalog?.ready?activeGym(fallback):activeGym(),book=row=>row.effects.groups.find(g=>g.group==="book")?.total||0;
     const next=rows.filter(x=>x.remaining>0).sort((a,b)=>a.progress-b.progress||book(b)-book(a)||b.effects.multiplier-a.effects.multiplier)[0];
     if(!next)return {stat:"your selected build",detail:"Current target reached; set the next milestone."};
     const bars=rawBars(),live=tornGuideApi.state;
@@ -413,7 +415,7 @@ const tornStatPlanner = (() => {
     const energy=options.liveInputs?options.liveInputs.energy:project("energy"),happy=options.liveInputs?options.liveInputs.happy:project("happy");
     const programs=!options.skipPrograms&&(budget!=null||options.naturalOnly)&&active&&energy&&happy&&active[next.stat]>0?
       tornTrainSequence.weeklyPrograms({state:{...state,statValues:Object.fromEntries(statNames.map((stat,i)=>[stat,actual[i]])),compareStat:next.stat,currentEnergy:energy.current,maxEnergy:energy.maximum,happy:happy.current,maxHappy:happy.maximum},gym:active,trainBlock,effectsFor:stat=>effectsFor(stat,{live:true})},budget,risk,options):[];
-    return {stat:readable[next.stat],statKey:next.stat,build:option[1],remaining:next.remaining,gym:active?{name:active.name,energy:active.energy}:null,stats:rows.map((row,i)=>({key:row.stat,label:shorthand[row.stat],current:actual[i],target:Math.ceil(total*shares[i]),progress:row.progress})),perks:next.effects.groups.filter(g=>g.total!==0).map(g=>({group:g.group,total:g.total,items:g.items})),modifier:next.effects.sourceAvailable?(next.effects.multiplier-1)*100:null,bliss:tornHappinessBook().active,happy:bars?.happy?.current??null,maxHappy:bars?.happy?.maximum??null,program:programs[0]??null,detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name:"")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")+(tornHappinessBook().active?" · Ignorance Is Bliss active":"")};
+    return {stat:readable[next.stat],statKey:next.stat,build:option[1],remaining:next.remaining,gym:active?{name:active.name,energy:active.energy,estimated:!!active.offline}:null,stats:rows.map((row,i)=>({key:row.stat,label:shorthand[row.stat],current:actual[i],target:Math.ceil(total*shares[i]),progress:row.progress})),perks:next.effects.groups.filter(g=>g.total!==0).map(g=>({group:g.group,total:g.total,items:g.items})),modifier:next.effects.sourceAvailable?(next.effects.multiplier-1)*100:null,bliss:tornHappinessBook().active,happy:bars?.happy?.current??null,maxHappy:bars?.happy?.maximum??null,program:programs[0]??null,detail:option[1]+" · "+nice(next.remaining)+" remaining to target"+(active?" · Current gym "+active.name+(active.offline?" (reference values)":""):" · Active gym unavailable")+(next.effects.sourceAvailable?" · "+nice((next.effects.multiplier-1)*100,1)+"% modeled gain modifier":" · Perks not loaded")+(book(next)>0?" · Active gym-gain book":"")+(tornHappinessBook().active?" · Ignorance Is Bliss active":"")};
   }
   function replayTrainingSession(session,options={}){
     const stat=session.statKey??statNames.find(x=>readable[x]===session.stat),gym=activeGym(),bars=rawBars(),st=tornGuideApi.state;
@@ -508,12 +510,14 @@ const tornStatPlanner = (() => {
       '<p class="fine-print">Drug CD: '+(input.drug==null?"Unknown":nice(Math.ceil(input.drug/60))+" min")+' · Booster CD: '+(input.booster==null?"Unknown":nice(Math.ceil(input.booster/60))+" min")+' · Today’s refill: '+(input.refillUsed===null?"Unknown (excluded)":input.refillUsed?"Used":"Available")+'</p>'+
       (t.reserves.warReserve||t.reserves.rehabReserve?'<p class="fine-print">War reserve: '+cash(t.reserves.warReserve)+' · Rehab reserve: '+cash(t.reserves.rehabReserve)+'</p>':"")+
       '<p class="fine-print">Owned points: '+(input.points==null?"Unknown":nice(input.points))+' · Wallet: '+cash(input.wallet)+' · Regeneration: '+(energy?esc(energy.phaseSource==="API"?"Observed tick phase":"Estimated tick phase"):"Unknown")+'</p>'+
-      input.issues.map(x=>'<p class="fine-print">'+esc(x)+'</p>').join("");
+      input.criticalIssues.map(x=>'<p class="fine-print">'+esc(x)+'</p>').join("")+
+      input.issues.map(x=>'<p class="fine-print">'+esc(x)+'</p>').join("")+
+      '<details class="fine-print"><summary>Input source status</summary><ul>'+Object.entries(input.sources).map(([key,v])=>'<li>'+esc(key.replace("inventory:","Inventory: "))+': '+esc(v.status)+(v.age!=null?' · '+nice(Math.floor(v.age/60000))+' min old':'')+'</li>').join("")+'</ul></details>';
     let result;
     if(t.session)result='<p><strong>'+esc(t.session.label)+'</strong> · '+t.session.index+' / '+t.session.actions.length+' actions confirmed. Active cycle is locked; <a href="#home">continue in Home</a>.</p>';
     else if(t.activity.blocked)result='<p class="tc-notice">'+esc(t.activity.reason||"A scheduled activity blocks training.")+'</p>';
-    else if(!program)result='<p class="tc-notice">'+esc(p?.needsBuild?p.detail:"No live training sequence is currently available. Check build, account data, Focus and available budget.")+'</p>';
-    else result='<h3>'+esc(t.options.naturalOnly?"Natural training":"Optimal Budget")+' · '+esc(p.stat)+'</h3><p><strong>'+esc(program.label)+'</strong> · '+nice(program.horizonSeconds/3600,2)+'h projection · '+esc(p.gym?.name||"Current gym")+'</p>'+
+    else if(!program)result='<p class="tc-notice">'+esc(p?.detail||"No live training sequence is currently available. Check build, account data, Focus and available budget.")+'</p>';
+    else result='<h3>'+esc(t.options.naturalOnly?"Natural training":"Optimal Budget")+' · '+esc(p.stat)+'</h3><p><strong>'+esc(program.label)+'</strong> · '+nice(program.horizonSeconds/3600,2)+'h projection · '+esc(p.gym?.name||"Current gym")+(p.gym?.estimated?" (reference values)":"")+'</p>'+
       '<p>Projected gain: <strong>'+nice(program.gain)+'</strong> · Energy: '+nice(program.used)+' · Estimated cash cost: '+cash(program.cashCost)+'</p>'+
       '<ol aria-label="Live projected training cycles">'+program.sequence.map(x=>'<li>'+esc(({natural:"Natural training",maxenergy:"Maximum Energy",mini:"Mini jump",low:"Low-stat jump",jump:"Happy jump",maxhappy:"99k Happy jump",custom:"Custom"})[x.id]||x.id)+(x.partial?" (partial)":"")+'</li>').join("")+'</ol>';
     return '<div class="tc-live-comparison">'+details+result+'<p class="fine-print">Same rolling seven-day objective and hard deadlines as Home; projections are estimates, not confirmed actions. <a href="#home">Home Energy</a> · <a href="#calendar">Calendar</a></p></div>';

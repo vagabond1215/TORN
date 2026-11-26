@@ -483,11 +483,8 @@ const tornCrimeGuide = (() => {
   }
   function activityLimits(now=Date.now()){
     const war=currentActivityWar(now),limit=tornActivityScheduler.limits({war,now});
-    const profile=payload("profile","profile"),status=String(profile?.status?.state??profile?.status?.description??"").toLowerCase();
-    // A verified unavailable status blocks training even after a reservation
-    // expires. A stale or missing status is not proof that a trip is safe.
-    const away=/travel|abroad|hospital|jail/.test(status);
-    return {...limit,war,away,blocked:limit.blocked||away,reason:away?"Player "+status:limit.reason};
+    const account=tornTrainSequence.liveAccountStatus(tornGuideApi.state,now);
+    return {...limit,war,away:account.away,statusBlocked:account.blocked,blocked:limit.blocked||account.blocked,reason:account.reason??limit.reason};
   }
   function liveOptimizationContext(prefs=tornRoadmap.preferences(),now=Date.now()){
     loadOcFilters();loadRecFilters();
@@ -497,7 +494,8 @@ const tornCrimeGuide = (() => {
     const health=tornActivityScheduler.addictionSnapshot(now,settings,activity.war),iconFresh=health.fresh;
     const addictionDebuff=health.penalty==null?[]:[health.penalty],highAddiction=health.blockDrugs;
     const edu=educationModel(),enrolled=Boolean((edu.id!=null&&edu.id!==0&&edu.id!=="0"&&edu.id!=="")||(Number(edu.deadline)>now));
-    const perks=payload("perks","perks"),jobPerks=Object.entries(perks||{}).filter(([key])=>/job|company/i.test(key)).flatMap(([,v])=>Array.isArray(v)?v:[]).map(x=>typeof x==="string"?x:[x?.name,x?.description,x?.effect].filter(Boolean).join(" "));
+    const inputs=tornTrainSequence.liveInputs(tornGuideApi.state,now,tornBarProjection);
+    const perks=inputs.sources.perks.ready?payload("perks","perks"):null,jobPerks=Object.entries(perks||{}).filter(([key])=>/job|company/i.test(key)).flatMap(([,v])=>Array.isArray(v)?v:[]).map(x=>typeof x==="string"?x:[x?.name,x?.description,x?.effect].filter(Boolean).join(" "));
     const protectedEducation=jobPerks.some(x=>/\bRestraint\b|education is unaffected by drug addiction|education.*immune.*addiction/i.test(x));
     const educationRisk=enrolled&&!protectedEducation&&health.penalty!=null&&health.penalty>=5;
     const blockDrugs=highAddiction||educationRisk||health.penalty===null;
@@ -505,8 +503,10 @@ const tornCrimeGuide = (() => {
     const remaining=prefs.weeklyBudget==null?null:Math.max(0,prefs.weeklyBudget-trainingSpend(now).reduce((sum,entry)=>sum+entry.cost,0)-(settings.sharedBudget?tornActivityScheduler.weeklySpend(now):0));
     const reserves=tornActivityScheduler.budget(remaining,settings,activity.war,health),budget=reserves.training;
     const warDeadline=activity.war?.cutoff??null;
-    const inputs=tornTrainSequence.liveInputs(tornGuideApi.state,now,tornBarProjection);
-    const options={blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session||activity.blocked,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth",
+    const profile=payload("profile","profile"),factionId=Number(profile?.faction_id??profile?.faction?.id);
+    if(energyWarSettings().mode!=="off"&&factionId>0&&!inputs.sources.factionWars.ready)
+      inputs.criticalIssues.push("Faction war schedule "+inputs.sources.factionWars.status+"; refresh before planning");
+    const options={blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:!!session||activity.blocked||inputs.criticalIssues.length>0,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth",
       deadline:activity.deadline,requireDrugClear:warDeadline!==null&&activity.deadline===warDeadline,warXanaxSeconds:activity.war?Math.max(28800,activity.war.cd/1000):28800,reserveXanax:activity.war&&activity.war.cutoff<now+604800000?4:0,liveInputs:inputs};
     return {now,prefs,settings,session,activity,health,iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,budget,reserves,options,inputs};
   }
@@ -514,7 +514,7 @@ const tornCrimeGuide = (() => {
     const context=liveOptimizationContext(prefs,now);
     const {settings,session,activity,health,iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,budget,reserves,options}=context;
     const plan=tornStatPlanner.homeTrainingAdvice(budget,prefs.risk,options);
-    const scheduled=activityEventsForTraining(session,plan?.program,now);
+    const scheduled=activity.statusBlocked?[]:activityEventsForTraining(session,plan?.program,now);
     const live=recoverySnapshot(),profile=payload("profile","profile"),st=tornGuideApi.state;
     const status=String(profile?.status?.state??"").toLowerCase();
     const travelAvailable=Number(st.identity?.level??profile?.level)>=15&&["okay","ok"].includes(status)&&!st.errors?.profile&&now-Number(st.fetchedAt?.profile||0)<15*60000&&!activity.blocked;
@@ -708,10 +708,11 @@ const tornCrimeGuide = (() => {
   }
   function prepState(plan,blockDrugs){
     const program=plan?.program,raw=payload("bars","bars"),st=tornGuideApi.state;
-    const projected=tornBarProjection("energy",raw?.energy,st.fetchedAt?.bars);
+    const inputs=tornTrainSequence.liveInputs(st,Date.now(),tornBarProjection),projected=inputs.energy;
     const cd=payload("cooldowns","cooldowns"),drug=cd?.drug;
     const remaining=drug==null?null:Math.max(0,Number(typeof drug==="object"?drug.remaining??drug.time_left:drug)-(Date.now()-Number(st.fetchedAt?.cooldowns||Date.now()))/1000);
     if(!program||!projected)return {ready:false,label:"Load training and Energy data",due:null};
+    if(inputs.criticalIssues.length||Date.now()-Number(program.generatedAt)>300000)return {ready:false,label:"Refresh live training data before starting",due:null};
     if(activityLimits().blocked||program.deadline&&Date.now()>=program.deadline-60000)return {ready:false,label:"Scheduled activity prevents training",due:null};
     const e=projected.current,cap=projected.maximum,cost=Number(plan.gym?.energy)||10;
     const first=(program.cycleExecution??program.execution).find(actionable),startsZero=program.startEnergy==="zero"&&program.id!=="natural";
@@ -996,7 +997,7 @@ const tornCrimeGuide = (() => {
     return '<div class="growth-optimal-plan"><strong class="growth-accent">Following the Optimal Budget Plan:</strong><ol aria-label="Projected seven-day training cycles">'+program.sequence.map((cycle,i)=>'<li'+(i===0?' class="growth-cycle-current" aria-current="step"':"")+'>'+esc(names[cycle.id]??cycle.id)+(cycle.partial?' <small>(partial)</small>':"")+'</li>').join("")+'</ol><small>'+(program.deadline?esc("Bounded projection until "+tornActivityScheduler.time(program.deadline)):"Seven-day projection")+' · Replanned after each cycle.</small></div>';
   }
   function growthPeriodSummary(periods,fmt,confirmed){
-    const estimates=tornTrainSequence.periodPurchases(periods??[1,7,28].map(days=>({days})),confirmed);
+    const estimates=tornTrainSequence.periodPurchases(periods??[1,7,28].map(days=>({days})),confirmed,{liveInputs:warTraining?.inputs,reserveXanax:warTraining?.options?.reserveXanax??0});
     const money=value=>value==null?"—":"$"+fmt(value);
     return '<div class="growth-metrics" aria-label="Training projections">'+estimates.map(period=>{
       const {days,gain,value,energy,cost,items}=period;
@@ -1052,7 +1053,8 @@ const tornCrimeGuide = (() => {
     const start=Number(war?.start)*1000,end=Number(war?.end)*1000;
     if(!Number.isFinite(start)||start<=0||end>0&&end<=now||Number(war?.winner)>0)return null;
     const mode=typeof war.template?.mode==="string"?war.template.mode:null;
-    return {start,end:end>0?end:null,mode,source:state.errors?.factionWars?"Last known faction API (refresh failed)":"Faction API"};
+    const freshness=tornTrainSequence.liveSourceState(state,"factionWars",now);
+    return {start,end:end>0?end:null,mode,stale:!freshness.ready,source:freshness.ready?"Faction API":"Last known faction API ("+freshness.status+")"};
   }
   function warStackAdvice(war,settings,live,held,avoidDrugs,now){
     return tornActivityScheduler.warPreparation(war,live,held,avoidDrugs,now);
@@ -1070,7 +1072,7 @@ const tornCrimeGuide = (() => {
     },0):null;
     const fresh=key=>Number(state.fetchedAt?.[key]||0)>0&&now-Number(state.fetchedAt[key])<5*60000&&!state.errors?.[key];
     const stockFresh=Number(state.fetchedAt?.["inventory:Drug"]||0)>0&&now-Number(state.fetchedAt["inventory:Drug"])<5*60000;
-    const advice=warStackAdvice(war,settings,fresh("bars")&&fresh("cooldowns")?recoverySnapshot():null,stockFresh?held:null,training.avoidWarDrugs,now);
+    const advice=war.stale||training.activity?.statusBlocked?{phase:war.phase,first:war.cutoff,due:null,doses:[],label:war.stale?"Last known war schedule · refresh to verify":"Training and war stacking paused · verify player status"}:warStackAdvice(war,settings,fresh("bars")&&fresh("cooldowns")?recoverySnapshot():null,stockFresh?held:null,training.avoidWarDrugs,now);
     return {...war,...advice,active:now>=war.cutoff,attacks:tornActivityScheduler.warAttackSummary(war,now)};
   }
   function warAttackPanel(summary){
@@ -1093,8 +1095,8 @@ const tornCrimeGuide = (() => {
     let setup=growthSettings()+(prefs.weeklyBudget==null&&prefs.priority==="growth"?'<div class="growth-warning">Set a weekly training budget in Focus. <button type="button" data-growth-budget>Set budget</button></div>':"");
     warTraining=training;
     const war=energyWarAdvice(training);
-    if(war?.active)return '<div class="growth-card">'+setup+warCounter(war)+(activeSession?'<small>Training session held; reconciling before war preparation.</small>':"")+'</div>';
-    if(training.activity.blocked)return '<div class="growth-card">'+setup+'<div class="growth-warning">Training paused · '+esc(training.activity.reason??"reserved activity")+'</div><a href="#calendar">View calendar</a></div>';
+    if(war?.active&&!training.activity.statusBlocked)return '<div class="growth-card">'+setup+warCounter(war)+(activeSession?'<small>Training session held; reconciling before war preparation.</small>':"")+'</div>';
+    if(training.activity.blocked)return '<div class="growth-card">'+setup+'<div class="growth-warning">Training paused · '+esc(training.activity.reason??"reserved activity")+'</div>'+(activeSession?'<small>Active session retained · '+activeSession.index+' / '+activeSession.actions.length+' steps confirmed.</small>':"")+'<a href="#calendar">View calendar</a></div>';
     if(activeSession&&sessionDeadlineConflict(activeSession,training.activity))return '<div class="growth-card">'+setup+'<div class="growth-warning">Current cycle conflicts with '+esc(training.activity.reason??"a scheduled activity")+'. Confirming completed actions and replanning the remainder.</div>'+recoveryPanel()+'</div>';
     if(training.activity.deadline!=null)setup+='<small data-activity-cutoff="'+training.activity.deadline+'">Training cutoff: '+esc(tornActivityScheduler.time(training.activity.deadline))+' · '+esc(training.activity.reason??"activity")+'</small>';
     if(war)setup+='<small data-war-switch="'+war.first+'">Ranked war starts '+esc(new Date(war.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+(war.mode?" · "+esc(war.mode):"")+'</small>';
@@ -1152,6 +1154,7 @@ const tornCrimeGuide = (() => {
       const st=tornGuideApi.state;
       if(["bars","cooldowns","battlestats"].some(k=>Number(st.fetchedAt?.[k]||0)<requested||st.errors?.[k]))throw Error("Fresh training data unavailable");
       observeTrainingStep(session);reconcileTrainingProgress(session);
+      if(activityLimits().statusBlocked)return;
       if(!sessionDeadlineConflict(session,activityLimits())&&session.index<session.actions.length)return;
       // Preserve the completed prefix; unknown partial-cycle spend is
       // conservatively charged at the old cycle estimate, never refunded.
@@ -1193,7 +1196,7 @@ const tornCrimeGuide = (() => {
       const stableKey=activity.blocked?[activity.war?.phase??"","blocked",activity.reason??""].join("|"):key;
       if(lastActivityState!==null&&lastActivityState!==stableKey&&!recoveryBusy)refreshActivityView(view);
       lastActivityState=stableKey;
-      if(sessionDeadlineConflict(session,activity)&&!recoveryBusy&&Date.now()>=deadlineRetryAt){void replanActivityConflict(view,session);return;}
+      if(!activity.statusBlocked&&sessionDeadlineConflict(session,activity)&&!recoveryBusy&&Date.now()>=deadlineRetryAt){void replanActivityConflict(view,session);return;}
     }else lastActivityState=null;
     watchTraining(view);
     updateGrowthWatchIndicator(view);
@@ -1454,9 +1457,11 @@ const tornCrimeGuide = (() => {
         target=rule?.minimum??settingsCategories.get(cat??"Other")?.get(key)?.target??target;
       }
       if(bucket==="stock"&&restockRules.get(key)?.monitored===false)return;
-      const n=count(item,hint);
+      if(bucket==="training"&&cat&&!trainingRecommendation.inputs.sources["inventory:"+cat]?.ready)return;
+      const observed=count(item,hint);
+      const n=bucket==="training"&&key==="xanax"&&observed!==null?Math.max(0,observed-trainingRecommendation.options.reserveXanax):observed;
       if(n===null||n>=target)return;
-      const marketPrice=market(item);
+      const marketPrice=bucket==="training"&&!trainingRecommendation.inputs.sources.itemCatalog.ready?null:market(item);
       const purchase=bucket==="stock"?reservePurchase(itemsByName.get(key),marketPrice):null;
       if(bucket==="stock"&&!purchase)return;
       const map=buckets[bucket],old=map.get(key);
@@ -1514,7 +1519,7 @@ const tornCrimeGuide = (() => {
         if(rule?.monitored===false)return;
         target=rule?.minimum??target;
       }
-      if(!ready(cat)||!(target>0))return;
+      if(!ready(cat)||!(target>0)||bucket==="training"&&cat==="Candy"&&!trainingRecommendation.inputs.sources["inventory:Candy"].ready)return;
       const owned=st.inventory[cat].reduce((n,x)=>n+qty(x),0);
       if(owned<target)buckets[bucket].set(cat,{item:cat+" (any type)",owned,target,reasons:[reason],price:null,level:99});
     };
@@ -1535,10 +1540,9 @@ const tornCrimeGuide = (() => {
       else add("stock",item.name,item.category,rule?.minimum??(item.target||1),rule?"Custom minimum":"Default reserve",undefined,true);
     }
     if(planCosts.refill>0){
-      const money=payload("money","money"),balance=money?.points?.current??money?.points;
-      const owned=balance==null||st.errors?.money?null:Number(balance),target=planCosts.refill*30;
+      const owned=trainingRecommendation.inputs.points,target=planCosts.refill*30;
       if(Number.isFinite(owned)&&owned>=0&&owned<target){
-        const raw=payload("pointsCatalog","pointsmarket");
+        const raw=trainingRecommendation.inputs.sources.pointsCatalog.ready?payload("pointsCatalog","pointsmarket"):null;
         const prices=Object.values(raw||{}).map(x=>Number(x?.cost??x?.price??x?.cost_per_point)).filter(x=>Number.isFinite(x)&&x>0);
         buckets.training.set("points",{item:"Points",owned,target,price:prices.length?Math.min(...prices):null,reasons:[trainingSource],level:99});
       }
@@ -1574,7 +1578,7 @@ const tornCrimeGuide = (() => {
     }).join("");
     const sorted=group=>[...group.values()].sort((a,b)=>a.level-b.level||a.item.localeCompare(b.item));
     const tabs=[
-      ["urgent","Urgent",sorted(buckets.training),"No training shortages within "+restockForecastDays+" days."],
+      ["urgent","Urgent",sorted(buckets.training),!program&&!session?"No current training forecast.":(!trainingRecommendation.inputs.sources["inventory:Drug"].ready||!trainingRecommendation.inputs.sources["inventory:Booster"].ready||!trainingRecommendation.inputs.sources["inventory:Candy"].ready||trainingRecommendation.inputs.points===null)?"Training stock or points unverified; refresh before estimating shortages.":"No training shortages within "+restockForecastDays+" days."],
       ["crime","Crime",sorted(buckets.crime),"No crime shortages identified."],
       ["oc","OC",[...sorted(buckets.current),...sorted(buckets.oc)],"No OC shortages identified."],
       ["reserves","Reserves",sorted(buckets.stock),"No reserve shortages identified."]
@@ -1584,8 +1588,9 @@ const tornCrimeGuide = (() => {
     const panels=tabs.map(([key,,items,empty])=>'<div class="restock-tab-panel" id="restock-panel-'+key+'" data-restock-panel="'+key+'" '+(restockTab===key?"":"hidden")+'>'+
       (items.length?'<ul class="crime-recommendations">'+rows(items)+'</ul>':'<p class="fine-print">'+esc(empty)+'</p>')+'</div>').join("");
     const pending=tornGuideApi.inventoryTypes.filter(c=>!["Book","Collectible"].includes(c)&&!ready(c));
+    const trainingUnverified=["Drug","Booster","Candy"].filter(c=>!trainingRecommendation.inputs.sources["inventory:"+c].ready);
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
-    const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print restock-inventory-note">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
+    const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print restock-inventory-note">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+(trainingUnverified.length?'<p class="fine-print restock-inventory-note">Training inventory unverified: '+esc(trainingUnverified.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
     const priority=tornRoadmap.preferences().priority,first={growth:["growth","calendar","consume"],completion:["crime"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
     return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
