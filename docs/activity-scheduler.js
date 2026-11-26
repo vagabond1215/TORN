@@ -92,9 +92,10 @@ const tornActivityScheduler=(()=>{
       if(x.name==="rehabcost")cost=num(x.value);
       if(Object.hasOwn(x,"rehabs"))count=num(x.rehabs);
       if(Object.hasOwn(x,"rehabcost"))cost=num(x.rehabcost);
-      if(x.rehabilitation&&typeof x.rehabilitation==="object"){
-        count=num(x.rehabilitation.amount??x.rehabilitation.count)??count;
-        cost=num(x.rehabilitation.fees??x.rehabilitation.cost)??cost;
+      const rehab=x.rehabilitations??x.rehabilitation;
+      if(rehab&&typeof rehab==="object"){
+        count=num(rehab.amount??rehab.count)??count;
+        cost=num(rehab.fees??rehab.cost)??cost;
       }
       for(const y of Object.values(x))if(typeof y==="object")visit(y,depth+1);
     };
@@ -115,7 +116,7 @@ const tornActivityScheduler=(()=>{
     const cur=rehabSnapshot(now);if(!cur||!activityFresh("profile",now,15*60000))return null;
     const status=String(tornGuideApi.state.data?.profile?.profile?.status?.state??"").toLowerCase();
     if(!["okay","ok"].includes(status))return null;
-    const list=events(),eligible=list.filter(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&cur.at>=e.start&&cur.at>e.rehabBaseline.at&&cur.count>e.rehabBaseline.count);
+    const list=events(),eligible=list.filter(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&cur.at>=e.start&&Number(tornGuideApi.state.fetchedAt.profile)>=e.start&&cur.at>e.rehabBaseline.at&&cur.count>e.rehabBaseline.count);
     if(eligible.length!==1)return null;
     const e=eligible[0],base=e.rehabBaseline,cost=cur.cost!=null&&base.cost!=null&&cur.cost>=base.cost?cur.cost-base.cost:null;
     if(cost!=null&&!recordSpend({id:"rehab-"+e.id,kind:"rehab",at:Math.min(now,cur.at),cost,source:"API counter delta"}))return null;
@@ -123,13 +124,58 @@ const tornActivityScheduler=(()=>{
     if(!write("events",list))return null;
     return {event:e,cost,count:cur.count-base.count};
   }
+  // Verified v2 schemas: https://www.torn.com/swagger/openapi.json
+  const absolute=v=>{if(v==null)return null;const n=Number(v);return Number.isFinite(n)&&n>=1e9?(n>=1e12?n:n*1000):null;};
+  function externalEvents(now=Date.now()){
+    const st=tornGuideApi.state,rows=[];
+    const chainKey=activityFresh("factionChain",now,5*60000)?"factionChain":activityFresh("bars",now,5*60000)?"bars":null;
+    if(chainKey){
+      const chain=chainKey==="bars"?st.data?.bars?.bars?.chain:st.data?.factionChain?.chain;
+      const deadline=Number(st.fetchedAt[chainKey])+Number(chain?.timeout)*1000;
+      if(Number(chain?.current)>0&&Number(chain?.timeout)>0&&deadline>now)
+        rows.push({id:"chain-"+(chain.id??"current"),kind:"chain",title:"Active chain · "+chain.current+"/"+chain.max+" hits",start:now,end:deadline,source:"API · next-hit deadline",detail:"Not a predicted chain end",blocking:false});
+    }
+    if(activityFresh("races",now,30*60000)){
+      const races=st.data?.races?.races;
+      if(Array.isArray(races))for(const race of races){
+        const start=absolute(race.schedule?.start),end=absolute(race.schedule?.end);
+        if(start===null||!["open","in_progress"].includes(race.status)||race.status==="open"&&start<now||end!=null&&end<now)continue;
+        rows.push({id:"race-"+race.id,kind:"racing",title:race.title||"Race "+race.id,start,end:end>start?end:Math.max(start,now),source:"API · "+race.status,detail:end?"":"End not supplied",blocking:false});
+      }
+    }
+    if(activityFresh("calendarCatalog",now,24*H)){
+      const calendar=st.data?.calendarCatalog?.calendar,slot=activityFresh("calendar",now,24*H)?st.data?.calendar?.calendar?.start_time:null;
+      const clock=typeof slot==="string"&&slot.match(/^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*TCT)?$/i);
+      const minutes=clock?Number(clock[1])*60+Number(clock[2]):null;
+      const entries=[...(Array.isArray(calendar?.events)?calendar.events:[]),...(Array.isArray(calendar?.competitions)?calendar.competitions:[])];
+      for(const [i,e] of entries.entries()){
+        let start=absolute(e.start),end=absolute(e.end),personal=false;
+        if(start===null||end===null||end<=start||typeof e.title!=="string")continue;
+        const earliest=absolute(e.earliest_start),latest=absolute(e.latest_end);
+        if(e.fixed_start_time===false&&minutes!==null&&minutes>=0&&minutes<1440&&earliest!==null&&latest!==null){
+          const adjusted=Math.floor(earliest/D)*D+minutes*60000,finish=adjusted+(end-start);
+          if(adjusted>=earliest&&finish<=latest){start=adjusted;end=finish;personal=true;}
+        }
+        if(end<now)continue;
+        rows.push({id:"season-"+i+"-"+start,kind:"event",title:e.title,start,end,source:e.fixed_start_time===true?"Torn Calendar API":personal?"Torn Calendar · personal TCT slot":"Torn Calendar · verify personal slot",detail:e.fixed_start_time===true||personal?"":slot?"Personal slot: "+slot:"Personal slot unavailable",blocking:false});
+      }
+    }
+    return rows;
+  }
+  function warAttackSummary(war,now=Date.now()){
+    if(!war||war.phase!=="active"||!activityFresh("warAttacks",now,10*60000))return null;
+    const attacks=tornGuideApi.state.data?.warAttacks?.attacks,ownerId=Number(tornGuideApi.state.identity?.id);
+    if(!Array.isArray(attacks)||!ownerId)return null;
+    const own=attacks.filter(a=>Number(a.attacker?.id)===ownerId&&absolute(a.started)>=war.start&&a.is_ranked_war===true);
+    return {attacks:own.length,respect:own.reduce((n,a)=>n+(Number(a.respect_gain)||0),0),at:Number(tornGuideApi.state.fetchedAt.warAttacks),limited:attacks.length>=100||!!tornGuideApi.state.data.warAttacks?._metadata?.links?.next};
+  }
   function apiEvents(now=Date.now()){
     if(typeof tornTctClock==="undefined")return [];
     const map={point:"collection",addiction:"health",company:"collection",companyStar:"collection",bank:"collection",flight:"travel",education:"education",virus:"event",oc:"oc",drug:"health",booster:"health",medical:"health"};
     return tornTctClock.entries().filter(x=>map[x.id]&&Number.isFinite(x.at)&&x.at>=now).map(x=>({id:"api-"+x.id,kind:map[x.id],title:x.title,start:x.at,end:x.at,source:x.note?.includes("API")?"API / cached":"Timer estimate",detail:x.note,blocking:false}));
   }
   function schedule({now=Date.now(),war=null,health=null,rehab=null,training=[],manual=events(),limit=null}={}){
-    const list=[...manual.filter(x=>x.end>=now),...apiEvents(now)];
+    const list=[...manual.filter(x=>x.end>=now),...apiEvents(now),...externalEvents(now)];
     if(war){
       if(war.phase!=="active"){
         if(war.cutoff>=now)list.push({id:"war-cutoff",kind:"war",title:"Training cutoff / stack begins",start:war.cutoff,end:war.cutoff,source:"Calculated deadline"});
@@ -199,5 +245,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,schedule,render,settingsDialog,manualForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,render,settingsDialog,manualForm,wire,time,kinds};
 })();
