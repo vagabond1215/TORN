@@ -2400,3 +2400,24 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .crime-recommendations .affronted-answer ol>li{display:list-item!important;list-style:decimal;margin:.15rem 0;padding:0;border:0;background:transparent;line-height:1.4}
 .affronted-answer small{display:block;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
 .affronted-links{display:flex;flex-wrap:wrap;gap:.3rem .7rem}
+
+/* Personal log archive */
+.log-guide{display:grid;gap:.75rem}
+.log-guide>small{color:var(--muted);line-height:1.5}
+.log-actions,.log-filters,.log-pagination{display:flex;align-items:center;flex-wrap:wrap;gap:.55rem}
+.log-filters label{display:flex;flex-direction:column;gap:.25rem;font-size:.78rem;min-width:0}
+.log-filters label:first-child{flex:1 1 12rem}
+.log-filters input{min-width:0;max-width:100%;width:100%;box-sizing:border-box}
+.log-actions a,.log-actions button,.log-filters button,.log-pagination button{font:inherit;font-size:.78rem;padding:.4rem .6rem;border:1px solid var(--border);border-radius:4px;background:var(--raised);color:var(--accent-strong);cursor:pointer}
+.log-actions button:disabled,.log-pagination button:disabled{opacity:.5;cursor:default}
+.log-actions :is(a,button):focus-visible,.log-filters button:focus-visible,.log-pagination button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.log-filters button{align-self:flex-end}
+.log-table-scroll{overflow:auto;max-width:100%}
+.log-table{width:100%;border-collapse:collapse;font-size:.78rem;text-align:left}
+.log-table :is(th,td){padding:.45rem .5rem;border-bottom:1px solid var(--border);vertical-align:top}
+.log-table th{color:var(--accent-strong);background:var(--raised)}
+.log-table td:first-child{white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums}
+.log-table td:last-child{overflow-wrap:anywhere}
+.log-pagination{justify-content:space-between;margin-top:.6rem}
+.log-count{font-size:.8rem;color:var(--muted)}
+@media(max-width:540px){.log-table td:first-child{white-space:normal;min-width:5.5rem}}
