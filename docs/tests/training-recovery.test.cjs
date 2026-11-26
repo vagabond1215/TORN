@@ -25,3 +25,31 @@ assert.equal(recovery.validHistory([{...archive,completed:{}}],now+100),false);
 assert.throws(()=>recovery.prepareReview("guest",session,now),/Verified/);
 assert.throws(()=>recovery.prepareReview(1,{...session,index:999},now),/Invalid saved/);
 console.log("Producer-generated training cycle, partial sequence, immutable confirmed prefix, evidence validation and isolated review staging contract passed.");
+
+// Use the actual single-cycle simulator and trainingExecution conversion
+// for all existing templates; no hand-authored action sequences.
+const items=[{id:1,name:"Xanax",market_value:900},{id:2,name:"Ecstasy",market_value:50},{id:3,name:"Erotic DVD",market_value:4000},{id:4,name:"Birthday Cupcake",market_value:20}];
+const data={profile:{donator_status:"Donator"},itemCatalog:{items},pointsCatalog:{pointsmarket:[{cost:30}]}};
+const all=["natural","maxenergy","mini","low","jump","maxhappy","custom"],labels=["Natural training","Maximum Energy","Mini jump","Low-stat jump","Happy jump","99k Happy jump","Custom"];
+const sandbox={state:{data,fetchedAt:{},errors:{},inventoryErrors:{},inventory:{Candy:[{name:"Birthday Cupcake",amount:60}],Booster:[]}}};
+const renderSource=read("stats-sequencer.js").replace("return {render,wire,simulate,weeklyPrograms,","return {projectCycles,trainingExecution,render,wire,simulate,weeklyPrograms,");
+const {plan,trainBlock}=new Function("tornGuideApi","tornHappinessBook","tornBookTileStatus","localStorage","payload",read("stats-calculator.js")+"\n"+renderSource+"\nreturn {plan:tornTrainSequence,trainBlock:tornStatPlanner.internal.trainBlock};")(sandbox,()=>({active:false,known:true}),()=>"",{getItem:()=>JSON.stringify({selected:all,expanded:all,showOptimal:false})},(name,field)=>data[name]?.[field]??data[name]);
+plan.settings.tornClockMin=720;plan.settings.resetAfterSec=900;
+plan.render({state:{statValues:{strength:1000},compareStat:"strength",currentEnergy:150,happy:5000,maxHappy:5000},gym:{energy:10,strength:7.3},effectsFor:()=>({multiplier:1}),trainBlock},{keepClock:true});
+let paid=0,refillSeen=false;
+for(let i=0;i<all.length;i++){
+ const id=all[i],projection=plan.projectCycles(id,1),cycleActions=actions(plan.trainingExecution(projection.log));
+ assert.ok(projection.complete&&cycleActions.length>0,"simulated "+id);
+ const s=JSON.parse(JSON.stringify({...session,label:labels[i],source:id==="natural"?"natural":"optimal-budget",sequence:[{id,start:0,at:projection.elapsed,gain:projection.gain}],deadline:null,periods:[1,7,28].map(days=>({days,gain:projection.gain,value:projection.money,energy:projection.used,costs:projection.costs})),drugRisk:projection.costs.xanax+projection.costs.ecstasy>0,budget:projection.money,cycleSpend:projection.money,actions:cycleActions}));
+ assert.ok(recovery.validSession(s,now),"validator accepts simulator-generated "+id);
+ if(id!=="natural"&&id!=="custom")paid++;
+ if(cycleActions.some(a=>a.type==="refill"))refillSeen=true;
+ if(id==="jump")assert.ok(cycleActions.some(a=>a.type==="dvd"));
+ if(id==="maxhappy")assert.ok(cycleActions.some(a=>a.type==="externalHappy"));
+ const first=cycleActions[0];
+ const observation={at:now,barAt:now,cdAt:now,statAt:now,refillAt:now,energy:first.before.energy,cap:150,happy:first.before.happy,maxHappy:5000,drug:first.before.drug,booster:first.before.booster,stat:first.before.stat,refillUsed:false};
+ assert.ok(recovery.validSession({...s,watch:{index:0,sample:observation}},now),"watch "+id);
+ assert.equal(recovery.validSession({...s,watch:{index:0,sample:{...observation,barAt:now+10000}}},now),false);
+}
+assert.equal(paid,5);assert.equal(refillSeen,true);
+console.log("All seven simulator-generated templates, premium action separation, refill rows and stale/future watch evidence checks passed.");
