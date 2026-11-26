@@ -2231,3 +2231,21 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .crime-settings-content{display:grid;gap:.55rem;padding:1rem}
 .crime-settings-content label{display:flex;align-items:center;gap:.5rem;font-size:.9rem;cursor:pointer}
 .crime-settings-content small{color:var(--muted);line-height:1.4}
+
+/* Compact activity and unique reference groups in the Home Crime tile. */
+.rec-tile .rec-crime-options{display:block!important}
+.rec-crime-options>div{min-width:0}
+.rec-crime-option-group{margin-top:.45rem;border-top:1px solid var(--border)}
+.rec-crime-option-group>summary{display:flex;justify-content:space-between;gap:.4rem;align-items:baseline;cursor:pointer;padding:.35rem 0;color:var(--accent-strong)}
+.rec-crime-option-group>summary::before{content:"▸";font-size:.75rem}
+.rec-crime-option-group[open]>summary::before{content:"▾"}
+.rec-crime-option-group>summary>strong{flex:1}
+.rec-crime-option-group>ul{list-style:none;padding:0;margin:0}
+.rec-crime-option-group .rec-crime-option{display:block!important;padding:.32rem 0;border-top:1px solid var(--border);font-size:.77rem;overflow-wrap:anywhere}
+.rec-crime-option-head{display:flex;align-items:baseline;justify-content:space-between;gap:.25rem .5rem;flex-wrap:wrap}
+.rec-crime-option-head>small{white-space:normal;text-align:right}
+.rec-crime-option-reward{margin:.15rem 0;line-height:1.35}
+.rec-crime-option.is-locked .rec-crime-option-head{opacity:.72}
+.rec-crime-option [data-item-status="owned"]{color:var(--accent-strong)}
+.rec-crime-option [data-item-status="missing"]{color:#ef7777}
+:root[data-theme="light"] .rec-crime-option [data-item-status="missing"]{color:#a52d2d}
