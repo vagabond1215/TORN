@@ -231,6 +231,10 @@ const tornActivityScheduler=(()=>{
     d.querySelector("form").onsubmit=e=>{e.preventDefault();if(id!==owner()){d.close();return;}const f=new FormData(e.currentTarget),v={...s};for(const k of ["preferred","recommended","restrict","prewar","rehabMinutes","rehabSessions","warReserve","rehabReserve"])v[k]=Number(f.get(k));v.travel=f.get("travel");v.sharedBudget=f.has("sharedBudget");if(v.preferred>v.recommended||v.recommended>v.restrict){d.querySelector('[role="status"]').textContent="Use ascending thresholds.";return;}if(!write("settings",v)){d.querySelector('[role="status"]').textContent="Could not save.";return;}d.close();onChange();};
     d.showModal();
   }
+  function expenseForm(){
+    const entries=spendLedger().filter(e=>e.at>Date.now()-W).sort((a,b)=>b.at-a.at);
+    return '<form class="activity-manual-form" data-activity-spend><strong>Record actual war / rehab expense</strong><label>Category <select name="kind"><option value="war">War</option><option value="rehab">Rehab</option></select></label><label>Cash spent ($) <input name="cost" type="number" min="0" step="1" required></label><button type="submit">Record expense</button><small>Do not duplicate rehab fees already confirmed by the API.</small><small role="status"></small></form><div class="activity-agenda">'+entries.map(e=>'<div class="activity-event activity-'+esc(e.kind)+'"><time>'+esc(dateLabel(e.at))+'</time><div><strong>$'+e.cost.toLocaleString("en-US")+'</strong><small>'+esc(kinds[e.kind]+" · "+e.source)+'</small></div></div>').join("")+'</div>';
+  }
   function manualForm(){
     return '<form class="activity-manual-form" data-activity-form><label>Activity <input name="title" maxlength="100" required placeholder="Faction chain"></label><label>Category <select name="kind">'+Object.entries(kinds).map(([id,label])=>'<option value="'+id+'">'+label+'</option>').join("")+'</select></label><label>Start (TCT) <input type="datetime-local" name="start" required></label><label>End (TCT) <input type="datetime-local" name="end" required></label><label><input type="checkbox" name="blocking" checked> Reserve time (pause training)</label><small>Manual War activities also calculate a four-Xanax preparation cutoff when automatic war mode is enabled.</small><button type="submit">Add activity</button><small role="status"></small></form>';
   }
@@ -241,9 +245,15 @@ const tornActivityScheduler=(()=>{
       if(mode){write("settings",{...settings(),view:mode.dataset.activityView});onChange();}
       else if(remove){removeEvent(remove.dataset.activityRemove);onChange();}
     });
-    view.addEventListener("submit",e=>{if(!e.target.matches("[data-activity-form]"))return;e.preventDefault();const f=new FormData(e.target),start=Date.parse(f.get("start")+"Z"),end=Date.parse(f.get("end")+"Z");
+    view.addEventListener("submit",e=>{
+      if(e.target.matches("[data-activity-spend]")){
+        e.preventDefault();const f=new FormData(e.target),cost=Number(f.get("cost"));
+        if(recordSpend({id:"manual-"+Date.now(),kind:f.get("kind"),at:Date.now(),cost,source:"Manual confirmation"}))onChange();else e.target.querySelector('[role="status"]').textContent="Unable to save expense.";
+        return;
+      }
+      if(!e.target.matches("[data-activity-form]"))return;e.preventDefault();const f=new FormData(e.target),start=Date.parse(f.get("start")+"Z"),end=Date.parse(f.get("end")+"Z");
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,render,settingsDialog,manualForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
 })();
