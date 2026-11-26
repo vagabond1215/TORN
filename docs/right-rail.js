@@ -81,8 +81,7 @@ const tornRightRail=(()=>{
     }).join("");
     return '<section class="panel rail-section rail-timers" aria-label="Countdowns"><div class="rail-timer-header">'+
       '<div class="rail-timer-tabs" role="group" aria-label="Countdown views">'+tabs.map(([id,label])=>
-        '<button type="button" data-rail-tab="'+id+'" aria-controls="rail-timer-content" aria-pressed="'+(activeTab===id)+'">'+label+'</button>').join("")+'</div>'+
-      '<button type="button" class="rail-timer-refresh" data-rail-refresh '+(busy?"disabled":"")+' aria-label="Refresh countdown data" title="Refresh countdown data">↻</button></div>'+
+        '<button type="button" data-rail-tab="'+id+'" aria-controls="rail-timer-content" aria-pressed="'+(activeTab===id)+'">'+label+'</button>').join("")+'</div></div>'+
       '<div class="panel-content" id="rail-timer-content">'+(activeTab==="stocks"?stockTimers():'<dl class="rail-timer-list">'+rows+'</dl>')+
       '<span id="rail-refresh-status" class="sr-only" role="status">'+safe(refreshStatus)+'</span></div></section>';
   }
@@ -188,8 +187,6 @@ const tornRightRail=(()=>{
         if(activeTab==="stocks"&&(!tornGuideApi.state.data.stocks||!tornGuideApi.state.data.stockCatalog))void load();
         return;
       }
-      const btn=event.target.closest("[data-rail-refresh]");
-      if(btn){event.preventDefault();void load();}
     });
   }
   return {init,render,tick,order,controls};
