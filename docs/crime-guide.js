@@ -523,7 +523,7 @@ const tornCrimeGuide = (() => {
     return rows.filter(x=>Number.isFinite(x.at)&&labels[x.step.type]).map(({step,at,source},i)=>({id:"training-"+i,kind:"training",title:labels[step.type]+(step.type==="train"?" · "+number(step.energy)+" E":["candy","dvd"].includes(step.type)?" × "+number(step.quantity):""),start:at,end:at,source}));
   }
   function calendarEvents(training,now=Date.now()){
-    return tornActivityScheduler.schedule({now,war:training.activity.war,health:training.health,rehab:training.rehab,training:training.scheduled,limit:training.activity.blocked?now:training.activity.deadline});
+    return tornActivityScheduler.schedule({now,war:training.activity.war,preparation:energyWarAdvice(training,now),health:training.health,rehab:training.rehab,training:training.scheduled,limit:training.activity.blocked?now:training.activity.deadline});
   }
   function rehabPanel(training){
     const {health,rehab,reserves}=training,fmt=tornActivityScheduler.time;
@@ -993,20 +993,7 @@ const tornCrimeGuide = (() => {
     return {start,end:end>0?end:null,mode,source:state.errors?.factionWars?"Last known faction API (refresh failed)":"Faction API"};
   }
   function warStackAdvice(war,settings,live,held,avoidDrugs,now){
-    const interval=war.cd,desiredClear=war.clear,first=war.cutoff;
-    if(now>=war.start)return {first,due:null,label:"War active · reserve Energy for faction combat",phase:"active"};
-    if(!live||live.drug===null)return {first,due:first>now?first:null,label:"Refresh to verify Energy and drug cooldown"};
-    if(now<first)return {first,due:first,label:"Training until stacking deadline"};
-    const stacked=Math.min(4,Math.floor(live.energy/250));
-    if(live.energy>=1000)return {first,due:live.drug>0?now+live.drug*1000:war.start,label:live.drug>0?"Hold 1,000 E · drug cooldown":"Hold 1,000 E for war"};
-    if(avoidDrugs)return {first,due:war.start,label:"Preserve Energy · drug use excluded by Focus or addiction restrictions"};
-    if(held===null)return {first,due:null,label:"Refresh to verify Xanax inventory"};
-    const ready=now+live.drug*1000,remaining=4-stacked;
-    const fit=Math.max(0,Math.floor((war.start-ready)/interval));
-    const doses=Math.min(remaining,held,fit);
-    if(!doses)return {first,due:war.start,label:held===0?"No Xanax on hand · preserve Energy for war":"Preserve Energy · another dose cannot clear before war"};
-    const due=Math.max(ready,desiredClear-doses*interval);
-    return {first,due,label:(due>now?"Wait, then ":"")+"Take Xanax"+(doses<remaining?" · "+doses+" of "+remaining+" remaining doses fit":" · dose "+(stacked+1)+" of 4")+(due+doses*interval>desiredClear?" · clearance buffer reduced":"")};
+    return tornActivityScheduler.warPreparation(war,live,held,avoidDrugs,now);
   }
   function energyWarAdvice(training,now=Date.now()){
     const settings=energyWarSettings(),war=currentActivityWar(now);
@@ -1019,20 +1006,25 @@ const tornCrimeGuide = (() => {
       return normalize(item.name??item.item?.name)==="xanax"||xanax&&id!=null&&String(id)===String(xanax.id)?
         sum+Math.max(0,Number(item.quantity??item.amount)||0):sum;
     },0):null;
-    const advice=warStackAdvice(war,settings,recoverySnapshot(),held,training.avoidWarDrugs,now);
+    const fresh=key=>Number(state.fetchedAt?.[key]||0)>0&&now-Number(state.fetchedAt[key])<5*60000&&!state.errors?.[key];
+    const stockFresh=Number(state.fetchedAt?.["inventory:Drug"]||0)>0&&now-Number(state.fetchedAt["inventory:Drug"])<5*60000;
+    const advice=warStackAdvice(war,settings,fresh("bars")&&fresh("cooldowns")?recoverySnapshot():null,stockFresh?held:null,training.avoidWarDrugs,now);
     return {...war,...advice,active:now>=war.cutoff,attacks:tornActivityScheduler.warAttackSummary(war,now)};
   }
   function warAttackPanel(summary){
     return '<small>'+(summary?"Recent outgoing ranked-war attacks: "+number(summary.attacks)+" · respect "+number(summary.respect)+(summary.limited?" · history truncated":""):"Attack data not loaded or unavailable")+'</small><button type="button" data-activity-war-refresh>Refresh war attacks</button>';
+  }
+  function warProgressText(advice){
+    return advice.energy==null?"Stack and readiness unverified":number(advice.energy)+" / 1,000 E · "+advice.doses.length+" future doses"+(advice.projectedEnergy==null?"":" · "+number(advice.projectedEnergy)+" E projected");
   }
   function warCounter(advice){
     return '<div class="growth-next-step" data-war-counter><div class="growth-counter-actions">'+
       '<button type="button" data-growth-session="war-refresh" aria-label="Refresh war preparation" title="Refresh war preparation" '+(recoveryBusy?"disabled":"")+'><span aria-hidden="true">↻</span></button></div>'+
       '<small>Ranked war · '+esc(new Date(advice.start).toISOString().slice(0,16).replace("T"," ")+" TCT")+
       (advice.mode?" · "+esc(advice.mode):"")+'</small><strong class="growth-next-clock" data-war-clock>'+
-      esc(advice.phase==="active"?"Active":advice.due&&advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
+      esc(advice.phase==="active"?"Active":advice.due==null?"Verify":advice.due>Date.now()?tornTctClock.formatDuration((advice.due-Date.now())/1000):"Ready")+
       '</strong><span data-war-step>'+esc(advice.label)+'</span>'+
-      (advice.phase==="active"?warAttackPanel(advice.attacks):"")+recoveryPanel()+'</div>';
+      (advice.phase==="active"?warAttackPanel(advice.attacks):'<small data-war-progress>'+esc(warProgressText(advice))+'</small>')+recoveryPanel()+'</div>';
   }
   let warTraining=null;
   function growthCard(training,prefs){
@@ -1087,7 +1079,7 @@ const tornCrimeGuide = (() => {
     const status=refillStatus(kind);
     return '<a class="rec-header-refill rec-'+kind+'-refill '+(status==="Refill Available"?"is-available":"")+'" data-rec-refill="'+kind+'" href="https://www.torn.com/page.php?sid=points" title="'+(kind==="energy"?"Energy":"Nerve")+' refill · Points shop" '+(status?"":"hidden")+'>'+esc(status)+'</a>';
   }
-  let deadlineRetryAt=0,lastActivityState=null,lastRehabCheck=0;
+  let deadlineRetryAt=0,lastActivityState=null,lastRehabCheck=0,lastWarCheck=0;
   function sessionDeadlineConflict(session,activity,now=Date.now()){
     if(!session||session.index>=session.actions.length)return false;
     return activity.blocked||tornActivityScheduler.conflicts(sessionSchedule(session,now),activity.deadline,now,activity.war?.cutoff===activity.deadline,Math.max(28800000,activity.war?.cd??0));
@@ -1131,7 +1123,11 @@ const tornCrimeGuide = (() => {
     }
     if(view?.isConnected&&!view.hidden&&(route==="home"||route==="calendar")){
       const activity=activityLimits(),session=loadTrainingSession();
-      const now=Date.now(),pendingRehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&e.end+86400000>now);
+      const now=Date.now();
+      if(activity.war?.phase==="stacking"&&autoTrainingWatch()&&tornGuideApi.isConnected()&&!recoveryBusy&&!tornGuideApi.state.loading&&now-lastWarCheck>=120000){
+        lastWarCheck=now;void tornGuideApi.loadPage("warPreparation",true).catch(()=>{});
+      }
+      const pendingRehab=tornActivityScheduler.events().some(e=>e.kind==="rehab"&&!e.completedAt&&e.rehabBaseline&&e.start<=now&&e.end+86400000>now);
       if(pendingRehab&&!recoveryBusy&&!tornGuideApi.state.loading&&now-lastRehabCheck>=300000){lastRehabCheck=now;void tornGuideApi.loadPage("rehabProgress",false).catch(()=>{});}
       const key=[activity.war?.phase??"",activity.deadline??"",activity.blocked,activity.reason??""].join("|");
       // A deadline at 'now' changes each second; compare the reservation
@@ -1166,9 +1162,10 @@ const tornCrimeGuide = (() => {
       const war=energyWarAdvice(warTraining);
       if(war?.active){
         const clock=warPanel.querySelector("[data-war-clock]"),step=warPanel.querySelector("[data-war-step]");
-        const value=war.phase==="active"?"Active":war.due&&war.due>Date.now()?tornTctClock.formatDuration((war.due-Date.now())/1000):"Ready";
+        const value=war.phase==="active"?"Active":war.due==null?"Verify":war.due>Date.now()?tornTctClock.formatDuration((war.due-Date.now())/1000):"Ready";
         if(clock.textContent!==value)clock.textContent=value;
         if(step.textContent!==war.label)step.textContent=war.label;
+        const progress=warPanel.querySelector("[data-war-progress]");if(progress)progress.textContent=warProgressText(war);
       }else refreshRecommendations(document.getElementById("topic-view"));
     }else if(warSwitch&&Number(warSwitch.dataset.warSwitch)<=Date.now()){
       refreshRecommendations(document.getElementById("topic-view"));
