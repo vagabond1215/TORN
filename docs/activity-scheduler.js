@@ -36,6 +36,27 @@ const tornActivityScheduler=(()=>{
     const buffer=bounded(warSettings.lead,0,120,120)*60000,clear=war.start-buffer,cutoff=clear-4*cd;
     return {...war,cd,buffer,clear,cutoff,phase:now>=war.start?"active":now>=cutoff?"stacking":"upcoming"};
   }
+  // A shared, pure projection for Energy and Calendar. Held Energy is not
+  // evidence of how many Xanax were taken. Only future doses are forecast.
+  function warPreparation(war,live,held,avoidDrugs=false,now=Date.now()){
+    if(!war)return null;
+    const first=war.cutoff,interval=war.cd,desiredClear=war.clear;
+    const base={first,due:null,doses:[],clearAt:null,energy:null,remaining:null,projectedEnergy:null,phase:war.phase,bufferReduced:false};
+    if(now>=war.start)return {...base,phase:"active",label:"War active · reserve Energy for faction combat"};
+    if(now<first)return {...base,due:first,remaining:4,projectedEnergy:1000,clearAt:desiredClear,label:"Training until stacking deadline",tentative:true,doses:Array.from({length:4},(_,i)=>({at:first+i*interval,energy:null}))};
+    if(!live||!Number.isFinite(live.energy)||live.energy<0||!Number.isFinite(live.drug)||live.drug<0)
+      return {...base,phase:"stacking",label:"Refresh to verify Energy and drug cooldown"};
+    const energy=Math.min(1000,live.energy),remaining=Math.ceil((1000-energy)/250),ready=now+live.drug*1000;
+    const known={...base,phase:"stacking",energy,remaining,projectedEnergy:energy,clearAt:ready};
+    if(!remaining)return {...known,due:live.drug>0?ready:war.start,label:ready>war.start?"Hold 1,000 E · cooldown may extend into war":live.drug>0?"Hold 1,000 E · drug cooldown":"Hold 1,000 E for war",bufferReduced:ready>desiredClear};
+    if(avoidDrugs)return {...known,due:war.start,label:"Preserve Energy · drug use excluded by Focus or addiction restrictions"};
+    if(!Number.isFinite(held)||held<0)return {...known,label:"Refresh to verify Xanax inventory"};
+    const fit=Math.max(0,Math.floor((war.start-ready)/interval)),count=Math.min(remaining,Math.floor(held),fit);
+    if(!count)return {...known,due:war.start,label:held===0?"No Xanax on hand · preserve Energy for war":"Preserve Energy · another dose cannot clear before war"};
+    const due=Math.max(ready,desiredClear-count*interval),clearAt=due+count*interval,projectedEnergy=Math.min(1000,energy+count*250),bufferReduced=clearAt>desiredClear;
+    return {...known,due,clearAt,projectedEnergy,bufferReduced,doses:Array.from({length:count},(_,i)=>({at:due+i*interval,energy:Math.min(1000,energy+(i+1)*250)})),
+      label:(due>now+1000?"Wait, then ":"")+"Take Xanax · "+count+" of "+remaining+" remaining doses fit"+(bufferReduced?" · clearance buffer reduced":"")};
+  }
   function addiction(iconFresh,iconTexts,s=settings(),war=null){
     const relevant=iconTexts.filter(x=>/addict/i.test(x));
     const values=relevant.map(x=>x.match(/(?:reduced by|reduction of|[-−])\s*(\d+(?:\.\d+)?)\s*%/i)?.[1]).filter(x=>x!=null).map(Number);
@@ -174,13 +195,18 @@ const tornActivityScheduler=(()=>{
     const map={point:"collection",addiction:"health",company:"collection",companyStar:"collection",bank:"collection",flight:"travel",education:"education",virus:"event",oc:"oc",drug:"health",booster:"health",medical:"health"};
     return tornTctClock.entries().filter(x=>map[x.id]&&Number.isFinite(x.at)&&x.at>=now).map(x=>({id:"api-"+x.id,kind:map[x.id],title:x.title,start:x.at,end:x.at,source:x.note?.includes("API")?"API / cached":"Timer estimate",detail:x.note,blocking:false}));
   }
-  function schedule({now=Date.now(),war=null,health=null,rehab=null,training=[],manual=events(),limit=null}={}){
+  function schedule({now=Date.now(),war=null,preparation=null,health=null,rehab=null,training=[],manual=events(),limit=null}={}){
     const list=[...manual.filter(x=>x.end>=now),...apiEvents(now),...externalEvents(now)];
     if(war){
       if(war.phase!=="active"){
         if(war.cutoff>=now)list.push({id:"war-cutoff",kind:"war",title:"Training cutoff / stack begins",start:war.cutoff,end:war.cutoff,source:"Calculated deadline"});
-        for(let i=0;i<4;i++){const at=war.cutoff+i*war.cd;if(at>=now)list.push({id:"war-dose-"+i,kind:"war",title:"War stack · Xanax "+(i+1)+"/4",start:at,end:at,source:"Tentative; verify live cooldown"});}
-        if(war.clear>=now)list.push({id:"war-clear",kind:"war",title:"Drug cooldown clear",start:war.clear,end:war.clear,source:"Target"});
+        const prep=preparation??warPreparation(war,null,null,false,now);
+        for(const [i,dose] of (prep?.doses??[]).entries()){
+          if(dose.at>=now)list.push({id:"war-dose-"+i,kind:"war",title:"War stack · Xanax "+(i+1)+" of "+prep.doses.length,start:dose.at,end:dose.at,source:prep.tentative?"Tentative; verify live cooldown":"Projected from current account state",detail:dose.energy==null?"":dose.energy+" E projected"});
+        }
+        if(prep?.clearAt!=null&&prep.clearAt>=now&&prep.clearAt<=war.start)
+          list.push({id:"war-clear",kind:"war",title:"Projected drug cooldown clear",start:prep.clearAt,end:prep.clearAt,source:prep.tentative?"Target":prep.bufferReduced?"Estimated · clearance buffer reduced":"Estimated"});
+        if(!prep?.tentative&&!prep?.doses?.length&&prep?.label)list.push({id:"war-status",kind:"war",title:prep.label,start:now,end:now,source:"Current preparation status"});
       }
       if(war.source!=="Manual Calendar war")list.push({id:"war-start",kind:"war",title:war.phase==="active"?"Ranked war active":"Ranked war begins",start:war.start,end:war.end>now?war.end:war.start,source:war.source??"Faction API"});
     }
@@ -255,5 +281,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
 })();
