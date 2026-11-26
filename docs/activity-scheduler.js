@@ -84,14 +84,14 @@ const tornActivityScheduler=(()=>{
     return tornTctClock.entries().filter(x=>map[x.id]&&Number.isFinite(x.at)&&x.at>=now).map(x=>({id:"api-"+x.id,kind:map[x.id],title:x.title,start:x.at,end:x.at,source:x.note?.includes("API")?"API / cached":"Timer estimate",detail:x.note,blocking:false}));
   }
   function schedule({now=Date.now(),war=null,health=null,rehab=null,training=[],manual=events(),limit=null}={}){
-    const list=[...manual.filter(x=>x.end>=now&&!(war?.source==="Manual Calendar war"&&x.kind==="war"&&x.start===war.start)),...apiEvents(now)];
+    const list=[...manual.filter(x=>x.end>=now),...apiEvents(now)];
     if(war){
       if(war.phase!=="active"){
         if(war.cutoff>=now)list.push({id:"war-cutoff",kind:"war",title:"Training cutoff / stack begins",start:war.cutoff,end:war.cutoff,source:"Calculated deadline"});
         for(let i=0;i<4;i++){const at=war.cutoff+i*war.cd;if(at>=now)list.push({id:"war-dose-"+i,kind:"war",title:"War stack · Xanax "+(i+1)+"/4",start:at,end:at,source:"Tentative; verify live cooldown"});}
         if(war.clear>=now)list.push({id:"war-clear",kind:"war",title:"Drug cooldown clear",start:war.clear,end:war.clear,source:"Target"});
       }
-      list.push({id:"war-start",kind:"war",title:war.phase==="active"?"Ranked war active":"Ranked war begins",start:war.start,end:war.end>now?war.end:war.start,source:war.source??"Faction API"});
+      if(war.source!=="Manual Calendar war")list.push({id:"war-start",kind:"war",title:war.phase==="active"?"Ranked war active":"Ranked war begins",start:war.start,end:war.end>now?war.end:war.start,source:war.source??"Faction API"});
     }
     if(rehab)list.push({id:"rehab-proposal",kind:"rehab",title:"Suggested Switzerland rehabilitation",start:rehab.start,end:rehab.end,source:"Proposal · not booked",detail:"Estimated $"+rehab.cost.toLocaleString("en-US")});
     for(const x of training)if(x.start>=now-60000&&(limit==null||x.start<limit))list.push(x);
