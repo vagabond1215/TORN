@@ -2370,11 +2370,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 :root[data-theme="light"] .quick-status[data-tone="warning"]{color:#85501c}
 :root[data-theme="light"] .quick-status[data-tone="danger"]{color:#b42323}
 .quick-status[data-tone="ready"] svg,.quick-status[data-tone="warning"] svg,.quick-status[data-tone="danger"] svg{color:currentColor}
-.quick-status-refresh{flex:0 0 auto}
-.quick-status-refresh:disabled{opacity:.35;cursor:default}
+
+
 .quick-tools-toggle:focus-visible,.quick-tool-bookmark:focus-visible,.quick-tools-manage:focus-visible,.quick-status:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .activity-rehab-details{margin-top:.7rem}
-@media(max-width:650px){.quick-tools-toggle{padding-inline:.4rem}.quick-tools-toggle>svg{display:none}.quick-status{padding-inline:.35rem}.quick-status-refresh{width:28px!important}}
+@media(max-width:650px){.quick-tools-toggle{padding-inline:.4rem}.quick-tools-toggle>svg{display:none}.quick-status{padding-inline:.35rem}}
 
 /* Keep each cooldown icon visible; addiction thresholds retain their color on hover. */
 .quick-status[data-quick-status="addiction"][data-tone="warning"]:hover{color:#e6ad68}
@@ -2421,3 +2421,17 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .log-pagination{justify-content:space-between;margin-top:.6rem}
 .log-count{font-size:.8rem;color:var(--muted)}
 @media(max-width:540px){.log-table td:first-child{white-space:normal;min-width:5.5rem}}
+
+/* Merit recommendations use the same compact right-rail section styling. */
+.rail-merit-list{list-style:none;margin:0;padding:0;display:grid;gap:0;min-width:0}
+.rail-merit-list>li{padding:.4rem 0;border-bottom:1px solid var(--border);min-width:0}
+.rail-merit-list>li:first-child{padding-top:0}
+.rail-merit-list>li:last-child{border-bottom:0;padding-bottom:0}
+.rail-merit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem;align-items:start}
+.rail-merit-row strong{display:block;font-size:.77rem;overflow-wrap:anywhere}
+.rail-merit-row small{display:block;font-size:.7rem;color:var(--muted);line-height:1.35;overflow-wrap:anywhere}
+.rail-merit-row a,.rail-merits>.panel-heading a{font-size:.7rem;color:var(--accent-strong);white-space:nowrap}
+.rail-merit-list .affronted-details{margin-top:.35rem}
+.rail-merit-list .affronted-chips button{font-size:.7rem;padding:.3rem .1rem}
+.rail-merit-list .affronted-answer{font-size:.72rem}
+.rail-merit-list .affronted-links a{font-size:.7rem}
