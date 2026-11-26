@@ -2515,3 +2515,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .activity-timeline-agenda>summary{cursor:pointer;color:var(--accent-strong);font-size:.78rem;margin:.4rem 0}
 :root[data-theme="light"] .activity-racing{--activity-color:#246e63}
 :root[data-theme="light"] .activity-education{--activity-color:#62509b}
+/* Home timeline spans the center workspace, outside the masonry tile grid. */
+.home-recommendations,.home-activity-timeline{min-width:0;max-width:100%;box-sizing:border-box}
+.home-activity-timeline{width:100%;margin-top:.65rem;padding:.65rem;border:1px solid var(--border);border-radius:6px;background:var(--raised);display:grid;grid-template-columns:minmax(0,1fr);gap:.15rem}
+.home-activity-timeline-header{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
+.home-activity-timeline-header h3{font-size:.9rem;color:var(--accent-strong);margin:0}
+.home-activity-timeline-header a{font-size:.72rem;color:var(--accent-strong)}
+.home-activity-timeline .activity-unified-timeline{margin:.25rem 0;grid-template-columns:minmax(0,1fr)}
+.home-activity-timeline .activity-timeline-scroll{width:100%;box-sizing:border-box}

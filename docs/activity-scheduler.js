@@ -306,7 +306,7 @@ const tornActivityScheduler=(()=>{
     const timing=e.originalStart!=null?"Start "+time(e.originalStart)+" · end unknown":e.end>e.start?time(e.start)+" → "+time(e.end):time(e.start);
     return '<div class="activity-timeline-detail-row activity-'+e.kind+'"><strong>'+esc(timelineIcons[e.kind]+" "+e.title)+'</strong><span>'+esc(timing)+'</span><small>'+esc(kinds[e.kind]+" · "+timelineStatus(e)+" · "+(e.source??"Not supplied"))+'</small>'+(e.detail?'<small>'+esc(e.detail)+'</small>':"")+'</div>';
   }
-  function renderTimeline(list,now,days=7,war=null,liveDrugSeconds=null){
+  function renderTimeline(list,now,days=7,war=null,liveDrugSeconds=null,showAgenda=true){
     const layout=timelineLayout(list,now,days,war,liveDrugSeconds),{width,end}=layout,pct=v=>(v/width*100).toFixed(5)+"%";
     const ticks=[];
     for(let at=Math.ceil(now/(6*H))*6*H;at<end;at+=6*H){
@@ -335,7 +335,7 @@ const tornActivityScheduler=(()=>{
       '<div class="activity-timeline-legend"><span><i class="activity-legend-block"></i> Training reservation</span><span><i class="activity-legend-advisory"></i> Informational / forecast</span><span><i class="activity-legend-pin"></i> Event flag / compact range</span><span><i class="activity-legend-cooldown"></i> Drug cooldown</span><span><i class="activity-legend-review"></i> Review / stale</span></div>'+
       '<div class="activity-timeline-inspector" data-activity-timeline-inspector aria-live="polite"><small>'+(layout.count?"Select a block or pin to keep its source, TCT timing and status visible. Clustered pins list every included event.":"No scheduled activities in this window.")+'</small></div>'+
       '<div class="activity-timeline-tooltip" data-activity-timeline-tooltip hidden aria-hidden="true"></div>'+templates.join("")+'</div>'+
-      '<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&e.end>=now))+'</details>';
+      (showAgenda?'<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&e.end>=now))+'</details>':"");
   }
   function timelineInteraction(view){
     const item=e=>e.target?.closest?.("[data-activity-timeline-item]");
@@ -369,8 +369,8 @@ const tornActivityScheduler=(()=>{
     const start=Math.floor(now/D)*D;
     return '<div class="activity-grid">'+Array.from({length:days},(_,i)=>{const at=start+i*D;return '<section><strong>'+dateLabel(at).slice(5)+'</strong>'+list.filter(e=>e.start<at+D&&e.end>=at).slice(0,8).map(e=>'<small class="activity-'+esc(e.kind)+'">'+esc(shortTime(Math.max(e.start,at))+" "+e.title)+'</small>').join("")+'</section>';}).join("")+'</div>';
   }
-  function render(list,{full=false,now=Date.now(),view=settings().view,war=null,liveDrugSeconds=null}={}){
-    const modes=full?["agenda","timeline","week","month"]:["agenda","timeline","week"];
+  function render(list,{full=false,homeTile=false,now=Date.now(),view=settings().view,war=null,liveDrugSeconds=null}={}){
+    const modes=full?["agenda","timeline","week","month"]:homeTile?["agenda","week"]:["agenda","timeline","week"];
     if(!modes.includes(view))view="agenda";
     const visible=list.filter(e=>e.start<now+(view==="month"?30:7)*D&&e.end>=now);
     return '<div class="activity-calendar"><div class="activity-tabs">'+modes.map(m=>'<button type="button" data-activity-view="'+m+'" aria-pressed="'+(view===m)+'">'+m[0].toUpperCase()+m.slice(1)+'</button>').join("")+'</div>'+
@@ -417,5 +417,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineLayout,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineLayout,renderTimeline,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
 })();

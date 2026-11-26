@@ -566,8 +566,12 @@ const tornCrimeGuide = (() => {
       (confirmed?'<small>Last rehab confirmed '+esc(fmt(confirmed.completedAt))+(confirmed.rehabCost==null?" · cost unknown":" · $"+number(confirmed.rehabCost))+'</small>':"")+
       (reserves.warReserve||reserves.rehabReserve?'<small>Reserved cash: war $'+number(reserves.warReserve)+' · rehab $'+number(reserves.rehabReserve)+(reserves.shortfall?" · exceeds available budget":"")+'</small>':"")+'</div>';
   }
-  function calendarCard(training,full=false){
-    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(calendarEvents(training,training.now),{full,now:training.now,war:training.activity.war,liveDrugSeconds:training.inputs?.owner!=null?training.inputs.drug:null})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
+  function calendarRenderOptions(training){return {now:training.now,war:training.activity.war,liveDrugSeconds:training.inputs?.owner!=null?training.inputs.drug:null};}
+  function homeTimeline(training,events){
+    return '<section class="home-activity-timeline" aria-label="Activity timeline"><div class="home-activity-timeline-header"><h3>Activity Timeline</h3><a href="#calendar">Full Calendar</a></div>'+tornActivityScheduler.renderTimeline(events,training.now,7,training.activity.war,calendarRenderOptions(training).liveDrugSeconds,false)+'</section>';
+  }
+  function calendarCard(training,full=false,events=null){
+    return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(events??calendarEvents(training,training.now),{full,homeTile:!full,...calendarRenderOptions(training)})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
   }
   function renderCalendar(){
     loadOcFilters();loadRecFilters();
@@ -1522,7 +1526,7 @@ const tornCrimeGuide = (() => {
     if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
     if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
     if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label,crimeRefreshIds)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="calendar"?calendarCard(trainingRecommendation):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?crimeFilters():id==="money"?'<div class="rec-oc-filters"><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'+(id==="crime"?crimeFooter(crimeRefreshIds):"")))+recTileEnd).join("");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label,crimeRefreshIds)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="calendar"?calendarCard(trainingRecommendation,false,trainingRecommendation.calendarRows):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?crimeFilters():id==="money"?'<div class="rec-oc-filters"><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'+(id==="crime"?crimeFooter(crimeRefreshIds):"")))+recTileEnd).join("");
   }
 
   function recommendations(){
@@ -1730,7 +1734,8 @@ const tornCrimeGuide = (() => {
     const controls='<div class="rec-type-toggles" role="group" aria-label="Recommendation types">'+recommendationTypes.map(([id,label])=>'<button type="button" class="rec-oc-toggle" data-rec-type="'+id+'" aria-pressed="'+recEnabled.has(id)+'">'+esc(label)+'</button>').join("")+'</div>';
     const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print restock-inventory-note">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+(trainingUnverified.length?'<p class="fine-print restock-inventory-note">Training inventory unverified: '+esc(trainingUnverified.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
     const priority=tornRoadmap.preferences().priority,first={growth:["growth","calendar","consume"],completion:["crime"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
-    return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav><div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
+    trainingRecommendation.calendarRows=calendarEvents(trainingRecommendation,trainingRecommendation.now);
+    return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav>'+homeTimeline(trainingRecommendation,trainingRecommendation.calendarRows)+'<div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
 
   // Keep independent tile heights while retaining the existing priority order.

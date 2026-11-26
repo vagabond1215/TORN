@@ -57,3 +57,10 @@ assert.ok(flagHtml.includes("post-left")&&flagHtml.includes("post-right")&&flagH
 assert.ok(flagHtml.includes("Projected cooldown")&&flagHtml.includes("Recent API snapshot"));
 assert.ok(!scheduler.render([dose],{now,view:"agenda",liveDrugSeconds:8*3600}).includes("Drug cooldown · remaining"));
 console.log("Edge-post flags, collision bounds, planned drug windows and observed remaining cooldown passed.");
+const home=sc=>sc.render([],{now,homeTile:true,view:"timeline"});
+assert.ok(!home(scheduler).includes('data-activity-view="timeline"'));
+assert.ok(home(scheduler).includes('data-activity-view="week"'));
+assert.ok(scheduler.render([],{now,full:true,view:"timeline"}).includes('data-activity-view="timeline"'));
+assert.ok(scheduler.renderTimeline([],now,7,null,null,false).includes("activity-time-track"));
+assert.ok(!scheduler.renderTimeline([],now,7,null,null,false).includes("activity-timeline-agenda"));
+console.log("Standalone timeline and Home-only view restriction passed.");
