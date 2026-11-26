@@ -2375,3 +2375,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .quick-tools-toggle:focus-visible,.quick-tool-bookmark:focus-visible,.quick-tools-manage:focus-visible,.quick-status:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .activity-rehab-details{margin-top:.7rem}
 @media(max-width:650px){.quick-tools-toggle{padding-inline:.4rem}.quick-tools-toggle>svg{display:none}.quick-status{padding-inline:.35rem}.quick-status-refresh{width:28px!important}}
+
+/* Keep each cooldown icon visible; addiction thresholds retain their color on hover. */
+.quick-status[data-quick-status="addiction"][data-tone="warning"]:hover{color:#e6ad68}
+.quick-status[data-quick-status="addiction"][data-tone="danger"]:hover{color:#ff7474}
+:root[data-theme="light"] .quick-status[data-quick-status="addiction"][data-tone="warning"]:hover{color:#85501c}
+:root[data-theme="light"] .quick-status[data-quick-status="addiction"][data-tone="danger"]:hover{color:#b42323}
