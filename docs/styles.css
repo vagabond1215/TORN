@@ -1827,11 +1827,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .home-recommendations .rec-type-toggles{margin:0;gap:0;flex-wrap:nowrap;min-width:max-content}
 #topic-view .home-recommendations .rec-type-toggles button{border:0;border-right:1px solid var(--border);border-radius:0;min-height:30px;padding:.4rem .65rem;background:transparent;box-shadow:none}
 #topic-view .home-recommendations .rec-type-toggles button[aria-pressed="true"]{color:var(--accent-strong);box-shadow:inset 0 -2px var(--accent-strong)}
-.rec-tile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:.65rem;align-items:start;margin-top:.65rem}
+.rec-tile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,max(330px,calc((100% - .65rem)/2))),1fr));gap:.65rem;align-items:start;margin-top:.65rem}
 .rec-tile{order:2;border:1px solid var(--border);border-radius:6px;background:var(--raised);padding:.7rem;min-width:0;overflow-wrap:anywhere}
 .rec-tile h3{margin:0 0 .4rem;color:var(--accent-strong);font-size:.9rem}
 .rec-tile-grid[data-rec-priority^="growth"]>[data-rec-group="growth"],.rec-tile-grid[data-rec-priority^="crime"]>[data-rec-group="crime"],.rec-tile-grid[data-rec-priority^="money"]>[data-rec-group="money"],.rec-tile-grid[data-rec-priority^="education"]>[data-rec-group="education"]{order:0}
-.rec-tile-grid[data-rec-priority="growth,consume"]>[data-rec-group="consume"],.rec-tile-grid[data-rec-priority="crime,merit"]>[data-rec-group="merit"],.rec-tile-grid[data-rec-priority="money,education"]>[data-rec-group="education"]{order:1}
+.rec-tile-grid[data-rec-priority^="growth,"]>[data-rec-group="consume"],.rec-tile-grid[data-rec-priority="crime,merit"]>[data-rec-group="merit"],.rec-tile-grid[data-rec-priority="money,education"]>[data-rec-group="education"]{order:1}
 .rec-tile .rec-advice>li{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:start;gap:.4rem;border:1px solid var(--border);border-radius:4px;padding:.45rem;margin:.35rem 0}
 .rec-tile .rec-pickpocket{display:block!important}.rec-tile .rec-pickpocket .crime-table-scroll{margin-top:.4rem}
 .rec-crime-actions{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.4rem}
@@ -2303,3 +2303,27 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .crime-state-matched,.crime-state-collected{color:var(--accent-strong)}
 .crime-state-unmet{color:#e6ad68}
 :root[data-theme="light"] .crime-state-unmet{color:#85501c}
+
+/* Home recommendation layout: keep Energy and Calendar as the first pair.
+   Preserve the remaining Focus ordering and independent masonry heights. */
+.rec-tile-grid[data-rec-priority]>[data-rec-group="growth"]{order:-2}
+.rec-tile-grid[data-rec-priority]>[data-rec-group="calendar"]{order:-1}
+.rec-tile-grid{--rec-header-height:40px}
+.rec-tile-grid>.rec-tile>.rec-tile-heading,
+.rec-tile-grid>.rec-tile[data-rec-group="restock"]>.rec-tile-heading,
+.rec-tile-grid>.rec-tile[data-rec-group="crime"]>.rec-tile-heading,
+.rec-tile-grid>.rec-tile[data-rec-group="growth"]>.rec-tile-heading{
+  box-sizing:border-box;height:var(--rec-header-height);min-height:var(--rec-header-height);max-height:var(--rec-header-height);
+  padding-block:0;line-height:1.15;border-bottom:1px solid transparent
+}
+.rec-tile-grid>.rec-tile[open]>.rec-tile-heading{border-bottom-color:var(--border)}
+.rec-tile-grid>.rec-tile>.rec-tile-heading .rec-tile-link{
+  display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal
+}
+.rec-tile-grid>.rec-tile>.rec-tile-heading .rec-header-refill{
+  min-width:0;max-width:8.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15
+}
+.rec-tile-grid>.rec-tile>.rec-tile-heading .rec-header-actions{flex-shrink:0}
+@media(max-width:380px){
+  .rec-tile-grid>.rec-tile>.rec-tile-heading .rec-header-refill{max-width:6.5rem;font-size:.65rem}
+}
