@@ -446,7 +446,7 @@ async function refreshAccount(){
   feedback.textContent="Refreshing your Torn data…";
   updateRefreshUI();
   try{
-    const result=await tornGuideApi.refresh({route:tornGuideApi.routeName(),force:true});
+    const result=await tornGuideApi.refresh({route:tornGuideApi.routeName(),force:true,includeStatus:true,includeMerits:tornRightRail.meritsVisible()});
     if(!tornGuideApi.isConnected())return;
     if(!result?.failures)lastApiConnectionError="";
     feedback.textContent = result && result.failures
