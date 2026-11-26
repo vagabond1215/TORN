@@ -201,6 +201,7 @@ function renderProfile() {
   byId("profile-link").textContent = activeProfile
     ? activePlayerName+" [#"+activeProfile+"]" : "Connect API";
   byId("settings-signout").disabled=!tornGuideApi.isConnected();
+  tornBackupUI.sync();
   updateApiStatus();
   updateSidebarCharacter();
   byId("profile-summary").textContent = activeProfile
@@ -479,6 +480,7 @@ function syncSettingsControls(){
   byId("setting-links").value=tornGuidePreferences.get("externalMode");
   byId("setting-contextual").checked=tornGuidePreferences.get("contextualQuickAccess");
   byId("settings-signout").disabled=!tornGuideApi.isConnected();
+  tornBackupUI.sync();
 }
 function closeSettings(){
   byId("settings-panel").hidden=true;
@@ -493,6 +495,7 @@ function toggleSettings(){
 byId("setting-timezone").innerHTML=tornGuidePreferences.zones.map(([id,name])=>
   '<option value="'+id+'">'+name+'</option>').join("");
 tornGuidePreferences.init();
+tornBackupUI.wire();
 syncSettingsControls();
 byId("settings-toggle").addEventListener("click",toggleSettings);
 document.addEventListener("click",event=>{

@@ -31,3 +31,6 @@ Repository: `vagabond1215/TORN`, branch main, scope /docs/. Read root AGENTS.md 
 
 ## Checkpoint
 1P.1 registry implemented for bounded subset; 1P.2 depends on fresh own-account check and encrypted file implementation. Existing session/history, spend ledgers, rehab-enriched events and archive data not yet backed up by registry. No automatic restoration, extension or directory mirroring in this commit. 
+
+### 1P.2 implementation checkpoint
+Encrypted portable export/import added for the explicit 1P.1 registry subset. Fresh own-account verification captures connection epoch; file identity and metadata are authenticated with AES-GCM; PBKDF2-SHA256 600,000 iterations, random salt and IV; no credential/passphrase persistence. Settings dialog requires explicit recovery and rejects populated supported account data or existing session/history. Download status is a request, not proof of file persistence. Native Web Crypto regression fixture added; the connector harness lacks Web Crypto, so native execution and browser round-trip remain outstanding. Registry fixture passed. Critical-state coverage, revisioned merge, durable journals and auto recovery remain next; this is not full account backup.

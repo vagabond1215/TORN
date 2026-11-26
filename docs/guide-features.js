@@ -163,6 +163,16 @@ const tornGuideApi=(()=>{
     save();schedule();announce();
     return state.identity;
   }
+  // Backup identity must be verified against the own-account endpoint, not
+  // a restored local identity or a user-provided numeric ID. Never expose key.
+  async function verifyBackupOwner(){
+    const key=secret,connectionEpoch=epoch,id=state.identity?.id;
+    if(!key||!Number.isSafeInteger(id)||id<=0)throw Error("Connect your Torn account first");
+    const isCurrent=()=>epoch===connectionEpoch&&secret===key&&state.identity?.id===id;
+    const result=await request("user/basic",key);
+    if(!isCurrent()||result?.profile?.id!==id)throw Error("Account changed or identity could not be verified");
+    return {playerId:String(id),isCurrent};
+  }
   // Keep the newest observation; older stored packets never overwrite newer API data.
   function bridgeIsFresh(){
     return state.bridge&&state.identity&&Number(state.bridge.playerId)===state.identity.id&&
@@ -624,7 +634,7 @@ const tornGuideApi=(()=>{
   }
   return {state,connect,refresh,loadPage,loadInventory,acceptLocalSnapshot,gearUid,readGear,loadGear,checkGearDaily,readRwMarket,loadRwMarket,readPassiveRwMarket,acceptRwSnapshot,passiveRwReport,readCrimeProgress,loadCrimeProgress,refreshCrimeProgress,crimeVersion,
     disconnect,restore,setRemember,isRemembering:()=>remember,
-    isConnected:()=>Boolean(secret),refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
+    isConnected:()=>Boolean(secret),verifyBackupOwner,refreshOnResume,inventoryTypes,routeName,TTL,ROUTES};
 })();
 
 const guideSteps = [

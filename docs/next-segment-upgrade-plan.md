@@ -58,3 +58,5 @@ Before Phase 1B.3 financial ledger schema is finalized, implement the storage an
 
 ### Persistence implementation sequence
 See [persistence-implementation-plan.md](persistence-implementation-plan.md). 1P.1 registry and audit precede 1P.2 encrypted portable recovery; critical-state merge, companion enrollment, authorized directory sync and ledger follow in dependency order. The initial registry is intentionally incomplete and must not be described as full account backup.
+
+1P.1 and initial 1P.2 implemented: explicit bounded registry and opt-in encrypted portable backup for supported settings, notes, checklists and simple calendar events. No full account restore, automatic mirroring, session/ledger archival or merge yet. Next 1P.3 typed critical-state adapters and safe merge, followed by companion vault and authorized directory recovery. Browser and native encryption test gate remains open.
