@@ -387,7 +387,7 @@ const tornTrainSequence=(()=>{
       point();
       const executed=!v.errors.length&&!cutoff,end=snap();
       actionStates[i]={start,end,executed};
-      if(executed)v.log.push({i:i+1,type,parent:i,editable:!automatic,midnightRefill,start,end,reason:type==="wait"&&a.untilDrug?"Drug cooldown":undefined,quantity:isBooster?(type==="candy"?Object.values(rowUsed).reduce((sum,q)=>sum+q,0):v.costs.dvd-rowInfo[i].dvdBefore):1});
+      if(executed)v.log.push({i:i+1,type,parent:i,editable:!automatic,midnightRefill,start,end,consumedValue:type==="candy"?(Object.entries(rowUsed).some(([name,q])=>q>0&&pool.find(x=>x.name===name)?.price==null)?null:Object.entries(rowUsed).reduce((sum,[name,q])=>sum+q*(pool.find(x=>x.name===name)?.price??0),0)):undefined,reason:type==="wait"&&a.untilDrug?"Drug cooldown":undefined,quantity:isBooster?(type==="candy"?Object.values(rowUsed).reduce((sum,q)=>sum+q,0):v.costs.dvd-rowInfo[i].dvdBefore):1});
       return executed;
     }
     function tornDay(){return Math.floor((cfg.tornClockMin*60+v.time)/86400);}
@@ -460,10 +460,11 @@ const tornTrainSequence=(()=>{
     }
     return {state:v,limit,gymCost,canTrain,fullEnergyDelay,advance,waitFor,execute,run,finish,snapshot,restore,tornDay,untilMidnight,get cutoff(){return cutoff;}};
   }
-  function trainingPurchases(pointsHeld=0){
+  function trainingPurchases(pointsHeld=0,{excludeOwned=true}={}){
     const items=itemList();
     const owned=(name,category)=>{
       const list=tornGuideApi.state.inventory[category];
+      if(!excludeOwned)return 0;
       if(!Array.isArray(list)||tornGuideApi.state.inventoryErrors?.[category])return 0;
       return list.reduce((sum,item)=>{
         const id=item.id??item.item_id??item.item?.id;
@@ -512,138 +513,58 @@ const tornTrainSequence=(()=>{
     const previous=ctx,old={...p};
     try{
       ctx=context;loadPlanPreferences();marketInputs();applyCooldownPerks();
-      const now=new Date(),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(Date.now()-stamp)/60000):0;
+      const now=new Date(),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(now-stamp)/60000):0;
+      if(!options.naturalOnly&&(budget==null||cd?.drug==null||cd?.booster==null||!stamp||tornGuideApi.state.errors?.cooldowns))return [];
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
       Object.assign(p,{startDrugMin:Math.max(0,(cd?.drug??0)-elapsed),startBoosterMin:Math.max(0,(cd?.booster??0)-elapsed),boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),autoWait:true});
-      if(budget==null&&!options.naturalOnly)return [];
       const cash=Math.max(0,Number(budget)||0),excludeOwned=options.excludeOwned!==false;
-      const purchases=chartPurchases();
-      const cashCost=result=>excludeOwned?purchases(result.costs).cost:result.money;
-      const candidates=templates.filter(([id])=>options.naturalOnly?id==="natural":id!=="custom"||editedPlans.has(id));
-      // Match the Plan comparison preparation window, including saved jump actions.
-      let blockHours=24;
-      for(const [id] of candidates.filter(([id])=>id==="jump"||id==="maxhappy")){
-        const engine=createEngine({hours:Infinity,startEnergy:startingEnergy[id],autoWait:true,midnightJump:midnightJumps.has(id),refillUsedToday:energyRefillUsedToday()},true);
-        engine.run(editedPlans.has(id)?steps[id]:defaults[id]());
-        blockHours=Math.max(blockHours,Math.ceil(engine.state.time/36)/100);
-      }
-      if(!Number.isFinite(blockHours)||blockHours>168)blockHours=168;
-      p.hours=blockHours;
-      const cfg={startEnergy:"current",autoWait:true,refillUsedToday:energyRefillUsedToday(now),skipUsedRefill:true},results=[];
-      function naturalUntil(engine,end){
-        const v=engine.state;
-        while(v.time<end&&!v.errors.length){
-          if(v.energy>=energyRules().cap)engine.execute(make("train"),0);
-          const delay=Math.min(end-v.time,engine.fullEnergyDelay()||end-v.time);
-          if(delay<=0)break;
-          engine.waitFor(delay,"Full Energy",false);
-        }
-        if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
-      }
-      function runProgram(id,actions,cycles,hours,captureCycle=false,allowPartialDvd=false){
-        const engine=createEngine({...cfg,hours,allowPartialDvd,midnightJump:midnightJumps.has(id)}),v=engine.state,executed=[];
-        let cycle=null;
-        for(let week=0;week<hours/168&&!v.errors.length;week++){
-          const weekEnd=Math.min(engine.limit,(week+1)*604800);
-          for(let k=0;k<cycles&&!v.errors.length&&v.time<weekEnd;k++){
-            const end=Math.min(weekEnd,week*604800+Math.round((k+1)*blockHours*3600));
-            // No free energy or cooldown reset between repetitions.
-            if(startingEnergy[id]==="zero"&&v.energy>=engine.gymCost){
-              if(actions[0]?.type==="xanax")engine.waitFor(v.drug,"Drug cooldown",false);
-              engine.execute(make("train"),0);
-            }else if(startingEnergy[id]==="full"&&v.energy<energyRules().cap)engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false);
-            if(captureCycle&&id!=="natural"&&!cycle){
-              // Execute only the base cycle before saving the live session.
-              // Recurring filler improves the forecast but should not lock
-              // the player into the rest of the forecast block.
-              const baseLength=editedPlans.has(id)?actions.length:cycleActions(id).length;
-              const base=actions.slice(0,baseLength);
-              if(!engine.run(base))break;
-              const first=engine.finish(base,{tail:false});
-              cycle={length:first.log.filter(step=>step.type!=="happyReset").length,spend:cashCost(first)};
-              if(!engine.run(actions.slice(baseLength)))break;
-            }else if(!engine.run(actions))break;
-            executed.push(...actions);
-            if(v.time<end)naturalUntil(engine,end);
-            else if(v.energy>=engine.gymCost)engine.execute(make("train"),0);
+      const purchases=trainingPurchases(0);
+      const cashCost=(result,engine)=>excludeOwned?purchases(result.costs).cost:engine?engine.finish([],{tail:false}).money:result.money;
+      const actionsFor=id=>id==="natural"?cycleActions("natural"):editedPlans.has(id)?steps[id]:cycleActions(id);
+      const ids=templates.map(([id])=>id).filter(id=>id==="natural"||!options.naturalOnly&&!excludedPlans.budget.has(id)&&(id!=="custom"||editedPlans.has(id))&&actionsFor(id).length&&!actionsFor(id).some(x=>options.blockDrugs&&["xanax","ecstasy"].includes(x.type)||x.type==="dvd"&&id!=="jump"||x.type==="externalHappy"&&id!=="maxhappy"));
+      const projection={actionsFor,respectOffset:false,refillUsedToday:energyRefillUsedToday(now),skipUsedRefill:true,partialBudget:cash,partialOptions:{priceOf:cashCost,blockDrugs:!!options.blockDrugs}};
+      const natural=mixedProjection(["natural"],604800,{...projection,repeatLast:true});
+      const candidates=ids.map(id=>id==="natural"?{id,data:natural}:{id});
+      const proposal=ids.length===1?{data:natural}:optimizeChart(candidates,48,604800,cash,[],{projection,priceOf:cashCost,minDepth:36,finishWindow:true});
+      const data=proposal?.data;
+      if(!data||data.errors.length||cashCost(data)==null||cashCost(data)>cash)return [];
+      const sequence=[...data.segments.map(s=>({id:s.id,start:s.start,at:s.at,gain:s.gain})),...(data.partialSegment?[{...data.partialSegment,partial:true}]:[])];
+      const first=sequence[0],firstData=data.firstCycle;
+      if(!first||!firstData)return [];
+      const cycleExecution=trainingExecution(firstData.log),execution=trainingExecution(data.log);
+      if(!cycleExecution.some(x=>x.type==="train"&&x.energy>0))return [];
+      const id=first.id,label=templates.find(x=>x[0]===id)?.[2]??id;
+      const selected={id,label,source:options.naturalOnly?"natural":"optimal-budget",sequence,gain:data.gain,money:data.money,cashCost:cashCost(data),excludeOwned,used:data.used,costs:data.costs,cycles:data.segments.length,drugRisk:firstData.costs.xanax+firstData.costs.ecstasy>0,startEnergy:"current",generatedAt:now.getTime(),execution,cycleExecution,cycleSpend:cashCost(firstData),timing:{xanaxCD:Math.round(p.xanaxCDMin*60),ecstasyCD:Math.round(p.ecstasyCDMin*60),boosterCap:p.boosterCapH*3600,candyCD:Math.round(1800*p.candyCDMultiplier),dvdCD:Math.round(21600*p.dvdCDMultiplier)}};
+      const forecastDays=options.restockForecastDays;
+      const horizons=[...new Set([1,7,28,...(Number.isInteger(forecastDays)&&forecastDays>=1&&forecastDays<=28?[forecastDays]:[])])];
+      const periodFor=days=>{
+        if(days===7)return {days,gain:data.gain,value:data.money,energy:data.used,costs:data.costs};
+        if(days<7){
+          const events=data.log.filter(e=>e.end.time<=days*86400);
+          const costs={xanax:0,ecstasy:0,dvd:0,candy:0,refill:0,externalHappy:0};let energy=0,value=0,known=true;
+          for(const e of events){
+            if(e.type==="train")energy+=Math.max(0,e.start.energy-e.end.energy);
+            if(Object.hasOwn(costs,e.type)){
+              const qty=e.quantity??1;costs[e.type]+=qty;
+              const unit={xanax:p.xanaxPrice,ecstasy:p.ecstasyPrice,dvd:p.dvdPrice,refill:p.pointPrice==null?null:p.pointPrice*30,externalHappy:externalHappyCost}[e.type];
+              const price=e.type==="candy"?e.consumedValue:unit==null?null:unit*qty;
+              if(qty&&price==null)known=false;else value+=price??0;
+            }
           }
-          if(!v.errors.length)naturalUntil(engine,weekEnd);
+          return {days,gain:(events.at(-1)?.end.stat??data.initial.stat)-data.initial.stat,value:known?value:null,energy,costs};
         }
-        return {result:engine.finish(executed),executed,cycle};
-      }
-      const templatesById=new Map();
-      for(const [id,short,label] of candidates){
-        const actions=(options.naturalOnly?[]:editedPlans.has(id)?steps[id]:defaultActions(id)).map(x=>({...x}));
-        // External happiness has no verified price, so cannot establish affordability.
-        if(actions.some(x=>x.type==="externalHappy"||options.blockDrugs&&["xanax","ecstasy"].includes(x.type)))continue;
-        templatesById.set(id,actions);
-        const maxCycles=id==="natural"?1:Math.max(1,Math.floor(168/blockHours));
-        let best=null;
-        const dvdModes=actions.some(step=>step.type==="dvd"&&!step.max)?[false,true]:[false];
-        for(const allowPartialDvd of dvdModes)for(let cycles=1;cycles<=maxCycles;cycles++){
-          const {result,executed}=runProgram(id,actions,cycles,168,false,allowPartialDvd);
-          const spend=cashCost(result);
-          if(!result.complete||spend==null||spend>cash||executed.length!==actions.length*cycles)continue;
-          if(id!=="natural"&&result.costs.xanax+result.costs.ecstasy+result.costs.dvd+result.costs.candy+result.costs.refill===0)continue;
-          const candidate={id,label:short+" · "+label,gain:result.gain,money:result.money,cashCost:spend,excludeOwned,used:result.used,costs:result.costs,cycles,blockHours,allowPartialDvd,drugRisk:result.costs.xanax+result.costs.ecstasy>0,source:"plan",timing:{xanaxCD:Math.round(p.xanaxCDMin*60),ecstasyCD:Math.round(p.ecstasyCDMin*60),boosterCap:p.boosterCapH*3600,candyCD:Math.round(1800*p.candyCDMultiplier),dvdCD:Math.round(21600*p.dvdCDMultiplier)},startEnergy:startingEnergy[id],generatedAt:now.getTime(),execution:trainingExecution(result.log)};
-          if(!best||candidate.gain>best.gain||candidate.gain===best.gain&&candidate.cashCost<best.cashCost)best=candidate;
-        }
-        if(best)results.push(best);
-      }
-      results.sort((a,b)=>b.gain-a.gain||a.cashCost-b.cashCost);
-      let selected=results[0];
-      let mixed=null;
-      const actionsFor=id=>editedPlans.has(id)?steps[id]:cycleActions(id);
-      if(selected&&!options.naturalOnly){
-        const ids=[...templatesById.keys()];
-        const lead=Math.max(1,Math.ceil(168/blockHours));
-        const projection={actionsFor,respectOffset:false,refillUsedToday:cfg.refillUsedToday,skipUsedRefill:true};
-        const legacy=optimizeCycles(ids,Math.min(14,2*lead),604800,true,{
-          cap:cash,priceOf:cashCost,overrides:[],projection
-        });
-        // Compare densely repeated and mixed cycles against the weekly block
-        // forecast from the same live state and with the same purchase cap.
-        const repeated=optimizeChart(ids.map(id=>({id})),28,604800,cash,[],{
-          projection,priceOf:cashCost,minDepth:28
-        });
-        const proposal=repeated?.data.firstCycle&&repeated.data.gain>(legacy?.data.gain??-Infinity)?repeated:legacy;
-        if(proposal?.data.firstCycle&&proposal.data.gain>selected.gain){
-          mixed=proposal;
-          const id=mixed.sequence[0],first=mixed.data.firstCycle;
-          const [,,label]=templates.find(entry=>entry[0]===id);
-          const data=mixed.data;
-          selected={...selected,id,label:label+" · Mixed weekly plan",source:"mixed",startEnergy:startingEnergy[id],
-            gain:data.gain,money:data.money,used:data.used,costs:data.costs,cashCost:cashCost(data),cycles:mixed.sequence.length,
-            drugRisk:first.costs.xanax+first.costs.ecstasy>0,execution:trainingExecution(data.log),
-            cycleExecution:trainingExecution(first.log),cycleSpend:cashCost(first)};
-          results.unshift(selected);
-        }
-      }
-      if(selected){
-        if(!mixed&&selected.id==="natural"){
-          const train=selected.execution.findIndex(step=>step.type==="train"&&step.energy>0);
-          selected.cycleExecution=train<0?[]:selected.execution.slice(0,train+1);
-          selected.cycleSpend=0;
-        }else if(!mixed){
-          const {cycle}=runProgram(selected.id,templatesById.get(selected.id),selected.cycles,168,true,selected.allowPartialDvd);
-          selected.cycleExecution=cycle?selected.execution.slice(0,cycle.length):selected.execution;
-          selected.cycleSpend=cycle?.spend??null;
-        }
-        const forecastDays=options.restockForecastDays;
-        const horizons=[...new Set([1,7,28,...(Number.isInteger(forecastDays)&&forecastDays>=1&&forecastDays<=28?[forecastDays]:[])])];
-        const periods=horizons.map(days=>{
-          const result=days===7?selected:mixed?
-            mixedProjection(Array.from({length:Math.ceil(days/7)},()=>mixed.sequence).flat(),days*86400,
-              {actionsFor,respectOffset:false,fill:true,refillUsedToday:cfg.refillUsedToday,skipUsedRefill:true}):
-            runProgram(selected.id,templatesById.get(selected.id),selected.cycles,days*24,false,selected.allowPartialDvd).result;
-          if(days===forecastDays)selected.restockCosts=result.costs;
-          const unavailable=result.complete===false&&(!mixed||result.errors?.length);
-          return {days,gain:unavailable?null:result.gain,value:unavailable?null:result.money,
-            energy:unavailable?null:result.used,costs:unavailable?null:result.costs};
-        });
-        selected.periods=periods.filter(period=>[1,7,28].includes(period.days));
-      }
-      return results;
+        // Conditional repeat forecast, with continuous inventory and cooldown
+        // state; do not publish estimates that exceed the rolling budget.
+        const ids=sequence.map(s=>s.id);
+        const result=mixedProjection(Array.from({length:Math.ceil(days/7)},()=>ids).flat(),days*86400,{...projection,repeatLast:true,partialBudget:null});
+        const peak=weeklyPurchaseCost({excludeOwned,pointsHeld:0})(result);
+        if(result.errors.length||peak==null||peak>cash||result.elapsed<days*86400)return {days,gain:null,value:null,energy:null,costs:null};
+        return {days,gain:result.gain,value:result.money,energy:result.used,costs:result.costs};
+      };
+      const periods=horizons.map(periodFor);
+      selected.periods=periods.filter(period=>[1,7,28].includes(period.days));
+      if(forecastDays!=null)selected.restockCosts=periods.find(x=>x.days===forecastDays)?.costs??null;
+      return [selected];
     }finally{ctx=previous;Object.assign(p,old);}
   }
   // Re-simulate the unconfirmed suffix only, using the current account snapshot.
@@ -951,7 +872,7 @@ const tornTrainSequence=(()=>{
   // A terminal partial is a bounded, plan-specific training problem. Try
   // several event-driven policies, retain the best affordable result, and
   // leave the standard template untouched for any future full cycle.
-  function optimizePartialCycle(checkpoint,engine,offset,prefix,budget){
+  function optimizePartialCycle(checkpoint,engine,offset,prefix,budget,{priceOf,blockDrugs=false}={}){
     const v=engine.state,limit=engine.limit,id=checkpoint.id;
     if(!prefix||!engine.cutoff||!Number.isFinite(limit))return unfinishedCycle(checkpoint,engine,offset);
     const baseline=engine.snapshot();
@@ -960,18 +881,20 @@ const tornTrainSequence=(()=>{
     const allowOrdinary=id!=="natural";
     const allowDvd=id==="jump",allowExternal=id==="maxhappy";
     const purchases=chartPurchases(),weekly=weeklyPurchaseCost();
-    const prefixSpend=budget==null?0:weekly(v);
+    const spendOf=()=>priceOf?priceOf(v,engine):weekly(v);
+    const prefixSpend=budget==null?0:spendOf();
     const prefixItems=new Map(purchases(v.costs).items.map(x=>[x.name,x.quantity]));
     const noNewPurchases=()=>purchases(v.costs).items.every(x=>x.quantity<=(prefixItems.get(x.name)??0));
     const affordable=()=>{
       if(!allowDvd&&v.costs.dvd>checkpoint.costs.dvd)return false;
       if(!allowExternal&&v.costs.externalHappy>checkpoint.costs.externalHappy)return false;
+      if(blockDrugs&&(v.costs.xanax>checkpoint.costs.xanax||v.costs.ecstasy>checkpoint.costs.ecstasy))return false;
       if(budget==null)return true;
-      if(prefixSpend==null||prefixSpend>budget)return noNewPurchases();
-      const spend=weekly(v);
+      if(prefixSpend==null||prefixSpend>budget)return priceOf?false:noNewPurchases();
+      const spend=spendOf();
       return spend!=null&&spend<=budget;
     };
-    const score=()=>({gain:v.stat-checkpoint.stat,spend:purchases(v.costs).cost??Infinity,
+    const score=()=>({gain:v.stat-checkpoint.stat,spend:(priceOf?spendOf():purchases(v.costs).cost)??Infinity,
       items:Object.entries(v.costs).reduce((sum,[key,value])=>sum+value-(checkpoint.costs[key]??0),0)});
     const better=(a,b)=>!b||a.gain>b.gain+1e-7||Math.abs(a.gain-b.gain)<=1e-7&&(a.spend<b.spend||a.spend===b.spend&&a.items<b.items);
     let best=null,bestScore=null;
@@ -1004,7 +927,7 @@ const tornTrainSequence=(()=>{
     const policies=["immediate","reserve","ordinary","natural"];
     // A genuinely stacked jump can beat repeated small trains, especially
     // when an existing stack or a premium boost is available.
-    if(allowOrdinary&&limit-prefix.state.time>=p.xanaxCDMin*60)policies.push("stack2","stack3","stack4");
+    if(allowOrdinary&&!blockDrugs&&limit-prefix.state.time>=p.xanaxCDMin*60)policies.push("stack2","stack3","stack4");
     for(const policy of policies){
       engine.restore(prefix);
       const stack=policy.startsWith("stack")?Number(policy.slice(5)):0;
@@ -1024,7 +947,7 @@ const tornTrainSequence=(()=>{
       while(v.time<=limit&&events++<120){
         const base=engine.snapshot(),remaining=limit-v.time,cap=energyRules().cap;
         const refillReady=allowOrdinary&&!v.days.has(engine.tornDay());
-        const drugReady=allowOrdinary&&v.drug===0;
+        const drugReady=allowOrdinary&&!blockDrugs&&v.drug===0;
         const boostReady=allowOrdinary&&v.booster<=p.boosterCapH*3600;
         const enough=v.energy>=cap||remaining<engine.fullEnergyDelay()||remaining===0;
         const canSpend=policy!=="natural"&&allowOrdinary;
@@ -1104,7 +1027,7 @@ const tornTrainSequence=(()=>{
     const data=engine.finish(list,{tail:false});
     return {...data,elapsed:v.time,offset,completed,segments,partialSegment,series:data.series.map(point=>({...point,h:point.h+offset/3600}))};
   }
-  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false,matchTemplateStart=false,repeatLast=false,partialBudget=null}={}){
+  function mixedProjection(sequence,end,{fill=false,actionsFor=id=>steps[id],respectOffset=true,allowPartialDvd=false,refillUsedToday=false,skipUsedRefill=false,matchTemplateStart=false,repeatLast=false,partialBudget=null,partialOptions={}}={}){
     const first=sequence[0],offset=respectOffset?Math.min(end,startingTime[first]??0):0;
     const clockSeconds=Math.round(p.tornClockMin*60)+offset;
     const engine=createEngine({limitSeconds:end-offset,startEnergy:matchTemplateStart?startingEnergy[first]:"current",allowPartialDvd,skipUsedRefill,
@@ -1121,12 +1044,12 @@ const tornTrainSequence=(()=>{
       const prepare=!matchTemplateStart||index>0;
       const switching=index<sequence.length&&sequence[index-1]!==id;
       if(prepare&&(!matchTemplateStart||switching)&&startingEnergy[id]==="zero"&&actions[0]?.type==="xanax"){
-        if(!engine.waitFor(v.drug,"Drug cooldown")){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
-        if(v.energy>=engine.gymCost&&!engine.execute(make("train"),0)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
+        if(!engine.waitFor(v.drug,"Drug cooldown")){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
+        if(v.energy>=engine.gymCost&&!engine.execute(make("train"),0)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
       }
       if(prepare&&startingEnergy[id]==="full"&&v.energy<energyRules().cap&&
-        !engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
-      if(!engine.run(actions,{midnightJump:midnightJumps.has(id)})){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget);break;}
+        !engine.waitFor(engine.fullEnergyDelay(),"Full Energy",false)){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
+      if(!engine.run(actions,{midnightJump:midnightJumps.has(id)})){partialSegment=optimizePartialCycle(checkpoint,engine,offset,prefix,partialBudget,partialOptions);break;}
       segments.push({id,at:offset+v.time,start,logStart,gain:v.stat-before});
       if(matchTemplateStart&&start===offset+v.time){
         const delay=engine.fullEnergyDelay()||energyRules().minutes*60;
@@ -1135,6 +1058,7 @@ const tornTrainSequence=(()=>{
       if(!firstCycle){const snapshot=engine.finish(actions,{tail:false});firstCycle={...snapshot,costs:{...snapshot.costs},log:snapshot.log.slice()};}
     }
     const cycleState=engine.finish(sequence.flatMap(actionsFor),{tail:false});
+    if(!firstCycle&&partialSegment)firstCycle={...cycleState,costs:{...cycleState.costs},log:cycleState.log.slice()};
     if(fill&&(segments.length===sequence.length||engine.state.time===engine.limit)){
       while(engine.canTrain){
         const delay=engine.fullEnergyDelay();
@@ -1150,16 +1074,17 @@ const tornTrainSequence=(()=>{
     const credits=payload("money","money")?.points;
     return trainingPurchases(Math.floor(positive(credits?.current??credits)??0));
   }
-  function weeklyPurchaseCost(){
-    const purchases=chartPurchases();
+  function weeklyPurchaseCost({excludeOwned=true,pointsHeld=null}={}){
+    const purchases=pointsHeld===null&&excludeOwned?chartPurchases():trainingPurchases(pointsHeld??0,{excludeOwned});
     return data=>{
       const costs={};
       const payments=[];
-      let spent=0,previous=0,max=0,first=0;
+      let spent=0,previous=0,max=0,first=0,candyValue=0;
       for(const event of data.log){
-        if(!["xanax","ecstasy","dvd","refill","externalHappy"].includes(event.type))continue;
-        costs[event.type]=(costs[event.type]??0)+(event.quantity??1);
-        const cost=purchases(costs).cost;
+        if(event.type==="candy"&&!excludeOwned){if(event.quantity&&event.consumedValue==null)return null;candyValue+=event.consumedValue??0;}
+        else if(!["xanax","ecstasy","dvd","refill","externalHappy"].includes(event.type))continue;
+        else costs[event.type]=(costs[event.type]??0)+(event.quantity??1);
+        const base=purchases(costs).cost,cost=base==null?null:base+candyValue;
         if(cost===null)return null;
         const at=event.start.time;
         payments.push({at,cost:cost-previous});
@@ -1197,7 +1122,7 @@ const tornTrainSequence=(()=>{
     if(!continuous)best=frontier[0]??null;
     return best;
   }
-  function optimizeChart(results,slots,end,budget=null,overrides=[],{projection={},priceOf,minDepth=0,manualMode=false}={}){
+  function optimizeChart(results,slots,end,budget=null,overrides=[],{projection={},priceOf,minDepth=0,manualMode=false,finishWindow=false}={}){
     const weeklySpend=budget==null?null:priceOf??weeklyPurchaseCost();
     const lastOverride=overrides.findLastIndex(Boolean);
     const actionsFor=projection.actionsFor??(id=>id==="natural"&&!editedPlans.has(id)?cycleActions(id):steps[id]);
@@ -1207,6 +1132,7 @@ const tornTrainSequence=(()=>{
     if(natural)completed.set("natural",natural.completed);
     let best=null;
     const consider=(data,sequence)=>{
+      if(!data||data.errors.length||finishWindow&&(!data.firstCycle||data.elapsed<end-1e-6))return;
       if(!best||data.gain>best.data.gain+1e-7||(manualMode&&Math.abs(data.gain-best.data.gain)<=1e-7&&(sequence?.length??0)>(best.sequence?.length??0)))best={data,sequence};
     };
     const affordable=data=>{
@@ -1224,6 +1150,7 @@ const tornTrainSequence=(()=>{
     for(const [i,first] of ids.entries())for(const second of ids.slice(i)){
       const pair=first===second?[first]:[first,second];
       const maxDepth=manualMode||lastOverride>=0?slots:Math.max(...pair.map(id=>completed.get(id)??0),1,minDepth)+5;
+      let finalists=[];
       let frontier=[{sequence:[]}];
       for(let index=0;index<maxDepth&&frontier.length;index++){
         const next=[];
@@ -1237,12 +1164,24 @@ const tornTrainSequence=(()=>{
           let data=evaluated.get(key);
           if(!data){data=mixedProjection(sequence,end,{partialBudget:budget,...projection,actionsFor,repeatLast});evaluated.set(key,data);}
           if(!affordable(data))continue;
-          if(index>=lastOverride&&data.segments.length>Math.max(-1,lastOverride)&&data.segments.length>0&&!data.errors.length)consider(data,sequence);
+          if(index>=lastOverride&&!data.errors.length&&(data.segments.length>Math.max(-1,lastOverride)&&data.segments.length>0||finishWindow&&data.partialSegment)){
+            consider(data,sequence);
+            if(finishWindow&&data.complete&&data.elapsed<end&&data.firstCycle){
+              finalists.push({data,sequence});
+              finalists.sort((a,b)=>b.data.gain-a.data.gain||a.data.elapsed-b.data.elapsed);
+              finalists=finalists.slice(0,3);
+            }
+          }
           if(data.complete&&data.elapsed<end&&(!parent.data||data.elapsed>parent.data.elapsed||
             data.gain>parent.data.gain))next.push({sequence,data});
         }
         next.sort((a,b)=>b.data.gain-a.data.gain||a.data.elapsed-b.data.elapsed);
         frontier=next.slice(0,2);
+      }
+      if(finishWindow)for(const candidate of finalists){
+        const seq=[...candidate.sequence,"natural"];
+        const filled=mixedProjection(seq,end,{...projection,actionsFor,repeatLast:true});
+        if(affordable(filled))consider(filled,seq);
       }
     }
     return best;
