@@ -20,7 +20,8 @@ const tornGuideApi=(()=>{
   const ROUTES={
     home:["profile","icons","perks","gymCatalog","pointsCatalog","honors","medals","organizedcrime","skills","itemCatalog","bars","cooldowns","refills","money","networth","battlestats","workstats","gym","job","property","education","merits","meritCatalog","stocks","stockCatalog","missions","factionWars"],
     trainingProgress:["bars","cooldowns","battlestats","refills"],
-    energy:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars"],
+    energy:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel"],
+    calendar:["bars","cooldowns","refills","battlestats","gym","perks","icons","money","factionWars","profile","travel","education","organizedcrime","virus"],
     stats:["profile","bars","cooldowns","refills","battlestats","gym","perks","gymCatalog","itemCatalog","pointsCatalog"],
     jobs:["job","workstats","perks","jobpoints"],
     timers:["education","virus","cooldowns","organizedcrime","factionRankedWars"],
@@ -511,7 +512,7 @@ const tornGuideApi=(()=>{
     const names=(ROUTES[route]||ROUTES.home).filter(name=>stale(name,force));
     const cats=route==="inventory"
       ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))
-      :route==="energy"?["Candy","Drug","Booster"]:route==="stats"?["Candy"]:route==="home"?["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"]:route==="crime"?["Tool","Enhancer","Material"]:[];
+      :(route==="energy"||route==="calendar")?["Candy","Drug","Booster"]:route==="stats"?["Candy"]:route==="home"?["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"]:route==="crime"?["Tool","Enhancer","Material"]:[];
     const selectedCats=cats.filter(cat=>inventoryTypes.includes(cat)&&stale("inventory:"+cat,force));
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();
