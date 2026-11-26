@@ -2185,3 +2185,20 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .rec-pick-targets dl{margin:.2rem 0 0 .65rem}
 .rec-pick-targets dl>div{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:.55rem;padding:.15rem 0}
 .rec-pick-targets dd{margin:0;overflow-wrap:anywhere}
+
+/* Standard Home recommendation tile title, settings and refresh controls. */
+.rec-tile>.rec-tile-heading,.rec-tile[data-rec-group="restock"]>.rec-tile-heading{padding:.35rem 4.2rem;min-height:34px}
+.rec-tile-link{color:inherit;text-decoration:none;max-width:100%;overflow-wrap:anywhere}
+.rec-tile-link:hover,.rec-tile-link:focus-visible{color:var(--accent-strong);text-decoration:underline;text-underline-offset:2px}
+.rec-header-actions{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:.15rem}
+.rec-header-button{display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:3px;background:transparent;color:var(--accent-strong);cursor:pointer}
+.rec-header-button:not(:disabled):is(:hover,:focus-visible){background:var(--raised);outline:1px solid var(--accent)}
+.rec-header-button:disabled{opacity:.35;cursor:default}
+.rec-crime-settings:not([hidden]){display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+.rec-pick-targets>li{display:block}
+.rec-pick-target-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:.25rem .65rem}
+.rec-pick-target-heading>strong{flex:0 0 auto}
+.rec-pick-reward{min-width:0;overflow-wrap:anywhere}
+.rec-pick-target-heading>.rec-pick-reward{flex:1}
+.rec-pick-targets dl>div{grid-template-columns:minmax(0,2fr) minmax(0,3fr)}
+.rec-tile[data-rec-group="crime"] .rec-advice>li{grid-template-columns:minmax(0,1fr)}
