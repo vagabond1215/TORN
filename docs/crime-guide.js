@@ -227,14 +227,24 @@ const tornCrimeGuide = (() => {
     });
     dialog.showModal();
   }
-  const recommendationTypes=[["restock","Restock"],["growth","Energy"],["calendar","Calendar"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
+  const recommendationTypes=[["timeline","Timeline"],["restock","Restock"],["growth","Energy"],["calendar","Calendar"],["consume","Use & Collect"],["crime","Crime"],["education","Education"],["money","Money"]];
   let recIncomplete=true,recUniques=false,incompleteUniquesOnly=true,crimeOverride="auto";
   let recOwner=null,recEnabled=new Set(recommendationTypes.map(([id])=>id)),recExpanded=new Set();
   function loadRecFilters(){
     const owner=String(tornGuideApi.state.identity?.id??"guest");
     if(recOwner===owner)return;
-    recOwner=owner;incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build","collapsed"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set();try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
+    recOwner=owner;incompleteUniquesOnly=true;try{incompleteUniquesOnly=localStorage.getItem("torn-city-guide:crime-incomplete-uniques:"+owner)!=="false";}catch{}crimeOverride="auto";try{const saved=localStorage.getItem("torn-city-guide:crime-override:"+owner);if(crimes.some(([name])=>name===saved))crimeOverride=saved;}catch{}growthTab="summary";try{const saved=localStorage.getItem("torn-city-guide:growth-tab:"+owner);if(["summary","steps","build","collapsed"].includes(saved))growthTab=saved;}catch{}recExpanded=new Set(["timeline"]);try{const saved=JSON.parse(localStorage.getItem("torn-city-guide:rec-expanded:"+owner));if(Array.isArray(saved))recExpanded=new Set(saved.filter(id=>recommendationTypes.some(([key])=>key===id)));}catch{}recIncomplete=true;recUniques=false;try{recIncomplete=localStorage.getItem("torn-city-guide:crime-incomplete:"+owner)!=="false";recUniques=localStorage.getItem("torn-city-guide:crime-uniques:"+owner)==="true";}catch{}recEnabled=new Set(recommendationTypes.map(([id])=>id));
     try{const v=JSON.parse(localStorage.getItem("torn-city-guide:rec-types:"+owner));if(Array.isArray(v)){recEnabled=new Set(v.filter(id=>recommendationTypes.some(([key])=>key===id)));if(!v.includes("calendar")&&localStorage.getItem("torn-city-guide:calendar-introduced:"+owner)!=="true"){recEnabled.add("calendar");writeAccountValue("torn-city-guide:rec-types:"+owner,JSON.stringify([...recEnabled]));writeAccountValue("torn-city-guide:calendar-introduced:"+owner,"true");}}}catch{}
+    // Existing accounts previously had an always-visible timeline. Migrate
+    // once, then respect explicit visibility/collapse choices.
+    try{
+      if(localStorage.getItem("torn-city-guide:timeline-introduced:"+owner)!=="true"){
+        recEnabled.add("timeline");recExpanded.add("timeline");
+        writeAccountValue("torn-city-guide:rec-types:"+owner,JSON.stringify([...recEnabled]));
+        writeAccountValue("torn-city-guide:rec-expanded:"+owner,JSON.stringify([...recExpanded]));
+        writeAccountValue("torn-city-guide:timeline-introduced:"+owner,"true");
+      }
+    }catch{}
   }
   let growthSettingsOpen=false;
   function excludeOwned(){try{return localStorage.getItem("torn-city-guide:growth-exclude-owned:"+String(tornGuideApi.state.identity?.id??"guest"))!=="false";}catch{return true;}}
@@ -570,7 +580,8 @@ const tornCrimeGuide = (() => {
   }
   function calendarRenderOptions(training){return {now:training.now,war:training.activity.war,liveDrugSeconds:training.inputs?.owner!=null?training.inputs.drug:null};}
   function homeTimeline(training,events){
-    return '<section class="home-activity-timeline" aria-label="Activity timeline"><div class="home-activity-timeline-header"><h3>Activity Timeline</h3><a href="#calendar">Full Calendar</a></div>'+tornActivityScheduler.renderModeTimeline(events,training.now,training.activity.war,calendarRenderOptions(training).liveDrugSeconds,"home")+'</section>';
+    const actions=recIconButton("Timeline settings",recGearIcon,'data-activity-settings aria-haspopup="dialog"')+recIconButton("Refresh Timeline",recRefreshIcon,"data-activity-refresh",!recoveryBusy);
+    return tornActivityScheduler.renderModeTimeline(events,training.now,training.activity.war,calendarRenderOptions(training).liveDrugSeconds,"home",Date.now(),{open:recExpanded.has("timeline"),actions});
   }
   function calendarCard(training,full=false,events=null){
     return '<small class="fine-print">Recorded activity spending (7 days): $'+number(tornActivityScheduler.weeklySpend())+'</small>'+tornActivityScheduler.render(events??calendarEvents(training,training.now),{full,homeTile:!full,timelineScope:full?"calendar":null,...calendarRenderOptions(training)})+rehabPanel(training)+(full?tornActivityScheduler.manualForm()+tornActivityScheduler.expenseForm():'<a class="fine-print" href="#calendar">Open full Calendar / add commitments</a>');
@@ -1528,7 +1539,7 @@ const tornCrimeGuide = (() => {
     if(bank!==null&&bank<2000000000)add("money","City bank · "+number(2000000000-bank)+" capacity remaining","Compare the available investment term and current rate before depositing.","#money");
     if(cayman>0)add("money","Cayman bank · $"+number(cayman),"Existing deposit; compare withdrawal availability with investment requirements.","#money");
     if(!options.length)add("money","Investment data unavailable","Open Stocks to load prices and holdings.","#stocks");
-    return recommendationTypes.filter(([id])=>id!=="restock"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label,crimeRefreshIds)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="calendar"?calendarCard(trainingRecommendation,false,trainingRecommendation.calendarRows):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?crimeFilters():id==="money"?'<div class="rec-oc-filters"><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'+(id==="crime"?crimeFooter(crimeRefreshIds):"")))+recTileEnd).join("");
+    return recommendationTypes.filter(([id])=>id!=="restock"&&id!=="timeline"&&recEnabled.has(id)).map(([id,label])=>recTileStart(id,label,crimeRefreshIds)+(id==="growth"?growthCard(trainingRecommendation,prefs):id==="calendar"?calendarCard(trainingRecommendation,false,trainingRecommendation.calendarRows):id==="consume"?useAndCollect(rows.consume,collectionStocks):((id==="crime"?crimeFilters():id==="money"?'<div class="rec-oc-filters"><small>Public Tornsy data, no Torn key</small></div>':"")+'<ul class="crime-recommendations rec-advice">'+rows[id].join("")+'</ul>'+(id==="crime"?crimeFooter(crimeRefreshIds):"")))+recTileEnd).join("");
   }
 
   function recommendations(){
@@ -1737,7 +1748,7 @@ const tornCrimeGuide = (() => {
     const restock=recEnabled.has("restock")?recTileStart("restock","Restock")+tabbar+panels+(pending.length?'<p class="fine-print restock-inventory-note">Inventory unavailable: '+esc(pending.join(", "))+'</p>':"")+(trainingUnverified.length?'<p class="fine-print restock-inventory-note">Training inventory unverified: '+esc(trainingUnverified.join(", "))+'</p>':"")+recTileEnd+restockSettings(settingsCategories):"";
     const priority=tornRoadmap.preferences().priority,first={growth:["growth","calendar","consume"],completion:["crime"],crime:["crime","consume"],networth:["money"],company:["money","education"],education:["education"]}[priority]??[];
     trainingRecommendation.calendarRows=calendarEvents(trainingRecommendation,trainingRecommendation.now);
-    return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav>'+homeTimeline(trainingRecommendation,trainingRecommendation.calendarRows)+'<div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
+    return '<section class="home-recommendations" data-home-recommendations><nav class="rec-titlebar" aria-label="Recommendation filters">'+controls+'</nav>'+(recEnabled.has("timeline")?homeTimeline(trainingRecommendation,trainingRecommendation.calendarRows):"")+'<div class="rec-tile-grid" data-rec-priority="'+esc(first.join(","))+'">'+restock+adviceSections(count,trainingRecommendation)+(!recEnabled.size?'<p class="fine-print">Select recommendation types above.</p>':"")+'</div></section>';
   }
 
   // Keep independent tile heights while retaining the existing priority order.

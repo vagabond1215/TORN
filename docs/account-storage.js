@@ -18,7 +18,7 @@ const tornAccountStorage=(()=>{
   const safeKey=v=>str(v,160)&&v.length>0&&!["__proto__","constructor","prototype"].includes(v);
   const ids=["natural","maxenergy","mini","low","jump","maxhappy","custom"];
   const actions=["externalHappy","xanax","ecstasy","candy","dvd","train","refill","wait"];
-  const types=["restock","growth","calendar","consume","crime","education","money"];
+  const types=["timeline","restock","growth","calendar","consume","crime","education","money"];
   const risks=["low","medium","high"];
   const json=fn=>raw=>{try{return fn(JSON.parse(raw));}catch{return false;}};
   const simple=values=>raw=>values.includes(raw);
@@ -78,7 +78,7 @@ const tornAccountStorage=(()=>{
     ["growth-tab",id=>prefix+"growth-tab:"+id,simple(["summary","steps","build","collapsed"])],
     ["manual-war",id=>prefix+"tct:manual-rw:"+id,raw=>/^\d{1,16}$/.test(raw)&&int(Number(raw),0,8640000000000000)],
     ["crime-observations",id=>prefix+"crime-observations:v1:"+id,json(obs)],
-    ...["growth-exclude-owned","growth-watch","crime-incomplete-uniques","crime-incomplete","crime-uniques","calendar-introduced"].map(k=>[k,id=>prefix+k+":"+id,simple(["true","false"])])
+    ...["growth-exclude-owned","growth-watch","crime-incomplete-uniques","crime-incomplete","crime-uniques","calendar-introduced","timeline-introduced"].map(k=>[k,id=>prefix+k+":"+id,simple(["true","false"])])
   ];
   const fixed=new Map(definitions.map(d=>[d[0],d]));
   function descriptor(id,section){

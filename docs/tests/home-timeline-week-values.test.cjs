@@ -35,5 +35,7 @@ assert.equal(val({type:"candy",quantity:3})[0].price,null);
 assert.equal(val({type:"candy",quantity:3},[{name:"Lollipop",quantity:3,price:500}])[0].price,500);
 assert.equal(seq.calendarValuation({sources:{}})({type:"xanax"})[0].price,null);
 assert.equal(val({type:"train"}).length,0);
-const crime=read("crime-guide.js");assert.ok(crime.includes("+'</nav>'+homeTimeline(trainingRecommendation,trainingRecommendation.calendarRows)+'<div class=\"rec-tile-grid\""));
+const crime=read("crime-guide.js");assert.ok(crime.includes('recEnabled.has("timeline")?homeTimeline(trainingRecommendation,trainingRecommendation.calendarRows):""'));
+assert.ok(crime.includes('["timeline","Timeline"]')&&crime.includes('recExpanded.has("timeline"),actions')&&crime.includes('id!=="timeline"'));
+assert.ok(crime.includes('Timeline settings')&&crime.includes('Refresh Timeline'));
 console.log("Standalone Home timeline, Week package values, UTC day boundaries, unknown prices and shared valuation passed.");

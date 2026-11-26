@@ -106,3 +106,5 @@ Home calendar refinement: standalone full-center-width timeline, Agenda/Week-onl
 Idle log collection initial segment: opt-in one-page-per-idle-minute API worker, foreground interruption, account verification, exact pagination, bounded session archive and companion source separation. Next: native authenticated/browser validation, durable opt-in log archive with typed full log records and validated recovery, then transaction/consumption reconciliation; do not treat partial session coverage as a complete ledger.
 
 Timeline mode refinement: Today, 2 Days and rolling 24hrs on both timeline surfaces; local minute updates, UTC midnight rollover, fixed schedule snapshot and no added API calls. See activity-scheduler-plan.md.
+
+Compact Timeline UI: account-scoped visibility/collapse, centered modes, settings/refresh, cooldown duration bands without duplicate flags, dismissible event details. Existing scheduling, Week valuation and persistence roadmap retained.
