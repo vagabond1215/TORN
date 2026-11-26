@@ -79,3 +79,5 @@ Energy clarity follow-up: structured preparation wait reasons, rechecked Start r
 1P.3b staged portable recovery: encrypted backups now include validated training sessions and cycle history; imported sessions are held in a separate account namespace, with Settings inspection/discard and no runnable activation. Next: robust review/reconciliation and serialized revision/merge journal before allowing continuation or companion recovery.
 
 Staged recovery hardening passed loader/ledger guard and fresh API-only observation fixtures. Held sessions retain rolling budget, suppress war dosing and refresh current-version tabs; no resume or confirmed-cost inference. Next: explicit reviewed suffix preview, journal/serialization and conflict detection before activation.
+
+1P.3b reviewed suffix preview added: manual attestation, read-only live replay, reject changed action sequence or activity deadline, no stored completion/expense or activation. Next: strict replay regression and journal/locking gate, then explicit activation.

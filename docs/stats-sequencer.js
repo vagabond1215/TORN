@@ -676,15 +676,17 @@ const tornTrainSequence=(()=>{
   function replayRemaining(context,session,options={}){
     const previous=ctx,old={...p};
     try{
-      ctx=context;loadPlanPreferences();marketInputs();applyCooldownPerks();
+      const live=options.recoveryPreview?options.liveInputs:null;
+      if(options.recoveryPreview&&(!live?.energy||!live?.happy||live.drug===null||live.booster===null||typeof live.refillUsed!=="boolean"||String(live.owner)!==String(tornGuideApi.state.identity?.id)))return {error:"Fresh recovery inputs unavailable"};
+      ctx=live?{...context,liveEnergy:live.energy,liveSources:live.sources,livePoints:live.points,liveReserve:options.reserveXanax??0}:context;loadPlanPreferences();marketInputs();applyCooldownPerks();
       const now=new Date(),cd=readCooldowns(),stamp=Number(tornGuideApi.state.fetchedAt?.cooldowns),elapsed=stamp>0?Math.max(0,(now-stamp)/60000):0;
-      if(cd?.drug==null||cd?.booster==null)return {error:"Cooldown data unavailable"};
+      if(!live&&(cd?.drug==null||cd?.booster==null))return {error:"Cooldown data unavailable"};
       const remaining=session.actions.slice(session.index);
       if(!remaining.length)return {actions:[],gain:0,money:0,cashCost:0,used:0,generatedAt:now.getTime()};
       if(options.blockDrugs&&remaining.some(x=>["xanax","ecstasy"].includes(x.type)))return {error:"Drug restriction active"};
       const clockMin=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
-      const drugMin=Math.max(0,cd.drug-elapsed,((session.drugUntil||0)-now)/60000),boosterMin=Math.max(0,cd.booster-elapsed,((session.boosterUntil||0)-now)/60000);
-      const cfg={hours:Math.min(336,Math.max(24,((remaining.at(-1)?.at??0)-(remaining[0]?.at??0))/3600+48)),startEnergy:"current",autoWait:true,startDrugMin:drugMin,startBoosterMin:boosterMin,boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),refillUsedToday:session.refillDay===Math.floor(now/86400000)||energyRefillUsedToday(now)};
+      const drugMin=live?live.drug/60:Math.max(0,cd.drug-elapsed,((session.drugUntil||0)-now)/60000),boosterMin=live?live.booster/60:Math.max(0,cd.booster-elapsed,((session.boosterUntil||0)-now)/60000);
+      const cfg={hours:Math.min(336,Math.max(24,((remaining.at(-1)?.at??0)-(remaining[0]?.at??0))/3600+48)),startEnergy:"current",autoWait:true,startDrugMin:drugMin,startBoosterMin:boosterMin,boosterCapH:detectedBoosterCap()??manualBoosterCap,tornClockMin:clockMin,resetAfterSec:900-(now.getUTCMinutes()%15*60+now.getUTCSeconds()),refillUsedToday:live?live.refillUsed:session.refillDay===Math.floor(now/86400000)||energyRefillUsedToday(now)};
       const engine=createEngine(cfg),v=engine.state,executed=[];
       for(let i=0;i<remaining.length;i++){
         const row=remaining[i],next=remaining[i+1],type=row.type;
@@ -696,9 +698,9 @@ const tornTrainSequence=(()=>{
           const wanted=Math.max(engine.gymCost,Number(row.energy)||engine.gymCost);
           if(wanted>context.state.maxEnergy&&v.energy<wanted)return {error:"Stacked Energy changed; refresh and replan"};
           if(next?.type==="xanax"&&Number(next.at)===Number(row.at))engine.advance(v.drug);
-          if(v.energy<wanted)engine.advance(Math.max(0,Math.ceil((wanted-v.energy)/5))*energyRules().minutes*60);
+          if(v.energy<wanted){const rule=energyRules();engine.advance(Math.max(0,Math.ceil((wanted-v.energy)/(live?rule.step:5)))*rule.minutes*60);}
         }
-        if(type==="refill"&&v.energy>=context.state.maxEnergy)continue; // no benefit from refilling full energy
+        if(type==="refill"&&v.energy>=context.state.maxEnergy){if(live)return {error:"Saved refill is no longer useful; review required"};continue;} // no benefit from refilling full energy
         const a=make(type,Math.max(1,Math.floor(Number(row.quantity)||1)));
         if(type==="candy")a.candyHappy="any";
         if(type==="train"&&Number(row.energy)>0)a.energyLimit=Number(row.energy);

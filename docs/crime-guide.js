@@ -486,10 +486,10 @@ const tornCrimeGuide = (() => {
     const account=tornTrainSequence.liveAccountStatus(tornGuideApi.state,now);
     return {...limit,war,away:account.away,statusBlocked:account.blocked,blocked:limit.blocked||account.blocked,reason:account.reason??limit.reason};
   }
-  function liveOptimizationContext(prefs=tornRoadmap.preferences(),now=Date.now()){
+  function liveOptimizationContext(prefs=tornRoadmap.preferences(),now=Date.now(),{reviewOnly=false}={}){
     loadOcFilters();loadRecFilters();
     const settings=tornActivityScheduler.settings();
-    tornActivityScheduler.reconcileRehab(now);
+    if(!reviewOnly)tornActivityScheduler.reconcileRehab(now);
     const activity=activityLimits(now);
     const health=tornActivityScheduler.addictionSnapshot(now,settings,activity.war),iconFresh=health.fresh;
     const addictionDebuff=health.penalty==null?[]:[health.penalty],highAddiction=health.blockDrugs;
@@ -511,6 +511,23 @@ const tornCrimeGuide = (() => {
     const options={blockDrugs:blockDrugs||prefs.odRisk==="low",excludeOwned:excludeOwned(),skipPrograms:recoveryHeld||!!session||activity.blocked||inputs.criticalIssues.length>0,restockForecastDays:recEnabled.has("restock")?restockForecastDays:undefined,naturalOnly:prefs.priority!=="growth",
       deadline:activity.deadline,requireDrugClear:warDeadline!==null&&activity.deadline===warDeadline,warXanaxSeconds:activity.war?Math.max(28800,activity.war.cd/1000):28800,reserveXanax:activity.war&&activity.war.cutoff<now+604800000?4:0,liveInputs:inputs};
     return {now,prefs,settings,session,recoveryHeld,activity,health,iconFresh,addictionDebuff,highAddiction,enrolled,protectedEducation,educationRisk,blockDrugs,budget,reserves,options,inputs};
+  }
+  function recoveryPreview(stage,reviewed,attested,report,requested){
+    if(!trainingRecoveryHeld()||String(tornGuideApi.state.identity?.id)!==stage.playerId||tornTrainingRecovery.readStage(localStorage,stage.playerId)?.raw!==stage.raw)throw Error("Account or recovery record changed");
+    const review=tornTrainingRecovery.reviewPrefix(stage,reviewed,attested);
+    const now=Date.now(),state=tornGuideApi.state,context=liveOptimizationContext(tornRoadmap.preferences(),now,{reviewOnly:true});
+    const {activity,options,inputs}=context;
+    const fresh=k=>Number(state.fetchedAt?.[k]||0)>=requested&&!state.cachedSources?.[k]&&!state.errors?.[k]&&now-Number(state.fetchedAt[k])<=300000;
+    if(activity.blocked||activity.war?.stale||report.warVerified===false||!fresh("travel")||!fresh("education")||!fresh("gymCatalog"))throw Error("Current activity, travel, education, gym or war evidence is unavailable or blocks training");
+    if(inputs.criticalIssues.some(x=>x!=="Restored training session held for manual review"))throw Error(inputs.criticalIssues.filter(x=>x!=="Restored training session held for manual review").join(" · "));
+    if(review.remaining.some(a=>["xanax","ecstasy"].includes(a.type))&&options.blockDrugs)throw Error("Drug restriction active");
+    const categories=new Set(review.remaining.flatMap(a=>["xanax","ecstasy"].includes(a.type)?["Drug"]:a.type==="dvd"?["Booster"]:a.type==="candy"?["Candy"]:[]));
+    for(const cat of categories)if(!inputs.sources["inventory:"+cat]?.ready||!fresh("inventory:"+cat)||state.inventoryErrors?.[cat])throw Error("Refresh "+cat+" inventory before previewing");
+    if(review.remaining.some(a=>a.type==="refill")&&(!fresh("money")||inputs.points===null))throw Error("Refresh points before previewing");
+    // No historical cooldown or watch state is used as fresh evidence.
+    const result=tornStatPlanner.replayTrainingSession(review.session,{...options,recoveryPreview:true});
+    const preview=tornTrainingRecovery.validatePreview(review,result,{now:Date.now(),deadline:options.deadline,requireDrugClear:options.requireDrugClear,warXanaxSeconds:options.warXanaxSeconds});
+    return {...preview,inventoryChecked:[...categories],note:"Read-only timing and Energy preview. Supply affordability and actual expenditures are not verified; no actions are activated."};
   }
   function trainingRecommendationContext(prefs=tornRoadmap.preferences(),now=Date.now()){
     const context=liveOptimizationContext(prefs,now);
@@ -1916,5 +1933,5 @@ const tornCrimeGuide = (() => {
     const value=document.querySelector(".crime-nerve strong");
     if(nerve&&value)value.textContent=number(nerve.current)+" / "+number(nerve.maximum);
   }
-  return {render,renderCalendar,wireCalendar:wireActivity,liveOptimizationContext,trainingRecommendationContext,crimes,syncNerve,recommendations,wireRecommendations,refreshRecommendations,tickGrowth};
+  return {render,renderCalendar,wireCalendar:wireActivity,liveOptimizationContext,trainingRecommendationContext,recoveryPreview,crimes,syncNerve,recommendations,wireRecommendations,refreshRecommendations,tickGrowth};
 })();

@@ -122,5 +122,28 @@ const tornTrainingRecovery=(()=>{
     const next=stage.session.actions[stage.session.index],anchor=stage.session.statCheckpoint;
     return {observedAt:Math.min(...required.map(k=>state.fetchedAt[k])),energy:live.energy.current,happy:live.happy.current,drug:live.drug,booster:live.booster,refillUsed:live.refillUsed,stat:Number(actual),savedCheckpoint:anchor?.actual??null,modeledNextStat:next?.before?.stat??null,confirmed:stage.session.index,total:stage.session.actions.length,warVerified};
   }
-  return {validSession,validHistory,prepareReview,reviewKey,stageValue,parseStage,readStage,held,discardStage,evidenceReport};
+  // A review is a temporary, explicitly attested prefix choice. It is
+  // not persisted, and no timestamps or recovered evidence are fabricated.
+  function reviewPrefix(stage,confirmed,attested){
+    if(!stage?.session||!validSession(stage.session)||!int(confirmed,stage.session.index,stage.session.actions.length)||attested!==true)throw Error("Review the consecutive completed actions before previewing");
+    const original=stage.session;
+    return {session:{...original,index:confirmed},savedConfirmed:original.index,reviewedConfirmed:confirmed,additional:original.actions.slice(original.index,confirmed),remaining:original.actions.slice(confirmed)};
+  }
+  function validatePreview(review,result,{now=Date.now(),deadline=null,requireDrugClear=false,warXanaxSeconds=28800}={}){
+    if(result?.error)throw Error(result.error);
+    if(!result||!Array.isArray(result.actions)||!observed(result.generatedAt,now)||now-result.generatedAt>300000)throw Error("Remaining-action preview unavailable or stale");
+    const expected=review.remaining;
+    if(result.actions.length!==expected.length)throw Error("Remaining actions changed; review the original plan instead of resuming");
+    let last=0;
+    for(let i=0;i<expected.length;i++){
+      const a=expected[i],b=result.actions[i];
+      if(a.type!==b.type||a.quantity!==b.quantity||a.energy!==b.energy||!seconds(b.at)||b.at<last)throw Error("Remaining action quantity, Energy or order changed; review required");
+      last=b.at;
+      const due=result.generatedAt+b.at*1000;
+      if(deadline!=null&&(due>=deadline||requireDrugClear&&["xanax","ecstasy"].includes(b.type)&&due+(b.type==="xanax"?Math.max(28800,warXanaxSeconds):14400)*1000>deadline))throw Error("Remaining plan conflicts with an activity or war deadline");
+    }
+    if(!num(result.gain)||!num(result.used))throw Error("Invalid remaining projection");
+    return {savedConfirmed:review.savedConfirmed,reviewedConfirmed:review.reviewedConfirmed,remaining:result.actions,generatedAt:result.generatedAt,gain:result.gain,used:result.used,complete:expected.length===0};
+  }
+  return {validSession,validHistory,prepareReview,reviewKey,stageValue,parseStage,readStage,held,discardStage,evidenceReport,reviewPrefix,validatePreview};
 })();

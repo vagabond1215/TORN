@@ -98,3 +98,19 @@ runtime.saveTrainingSession();assert.equal(active.getItem(key),JSON.stringify(se
 stateApi.state.identity.id=2;assert.equal(runtime.trainingRecoveryHeld(),false);assert.equal(runtime.trainingSpend(current).length,0);
 assert.ok(read("guide.js").includes('window.addEventListener("storage"'));
 console.log("Fresh API-only evidence, stale/account mismatch rejection, live-loader hold, preserved ledger identity and blocked spend/write passed.");
+
+const reviewed=stageAPI.reviewPrefix(stage,0,true);
+assert.equal(reviewed.savedConfirmed,0);assert.equal(reviewed.reviewedConfirmed,0);assert.deepEqual(reviewed.remaining,session.actions);
+assert.throws(()=>stageAPI.reviewPrefix(stage,0,false),/Review/);
+assert.throws(()=>stageAPI.reviewPrefix(stage,session.actions.length+1,true),/Review/);
+const completeReview=stageAPI.reviewPrefix(stage,session.actions.length,true);
+assert.equal(completeReview.remaining.length,0);assert.equal(stage.session.index,0);assert.deepEqual(stage.session.completed,{});
+const expectedActions=reviewed.remaining.map(a=>({type:a.type,quantity:a.quantity,energy:a.energy,at:a.at}));
+const projection={actions:expectedActions,generatedAt:current,gain:100,used:540};
+assert.equal(stageAPI.validatePreview(reviewed,projection,{now:current}).remaining.length,expectedActions.length);
+assert.throws(()=>stageAPI.validatePreview(reviewed,{...projection,actions:[]},{now:current}),/changed/);
+assert.throws(()=>stageAPI.validatePreview(reviewed,{...projection,actions:expectedActions.map(a=>({...a,energy:999}))},{now:current}),/changed/);
+assert.throws(()=>stageAPI.validatePreview(reviewed,projection,{now:current,deadline:current}),/deadline/);
+assert.throws(()=>stageAPI.validatePreview(reviewed,projection,{now:current+300001}),/stale/);
+assert.ok(stageAPI.validatePreview(completeReview,{...projection,actions:[],used:0,gain:0},{now:current}).complete);
+console.log("Read-only manual prefix review, unchanged suffix, deadline, stale preview and completed-cycle gates passed.");

@@ -420,13 +420,13 @@ const tornStatPlanner = (() => {
   function replayTrainingSession(session,options={}){
     const stat=session.statKey??statNames.find(x=>readable[x]===session.stat),gym=activeGym(),bars=rawBars(),st=tornGuideApi.state;
     if(!stat||!gym||!(gym[stat]>0)||!bars?.energy||!bars?.happy)return {error:"Current gym, stat or bars unavailable"};
-    if(session.gym?.name&&session.gym.name!==gym.name)return {error:"Gym changed; stop and select a new plan"};
+    if(session.gym?.name&&session.gym.name!==gym.name||options.recoveryPreview&&session.gym?.energy!==gym.energy)return {error:"Gym changed; stop and select a new plan"};
     const actual=statNames.map(apiStatValue);
     if(actual.some(x=>x===null))return {error:"Battle stats unavailable"};
     const last=session.lastConfirmed??session.started;
     const stamp=k=>st.bridge?.fields?.includes(k)&&st.bridge.timestamp>Number(st.fetchedAt?.bars||0)?st.bridge.timestamp:Number(st.fetchedAt?.bars||0);
     if(stamp("energy")<last||stamp("happy")<last||Number(st.fetchedAt?.cooldowns||0)<last||Number(st.fetchedAt?.battlestats||0)<last)return {error:"Waiting for a fresh post-action Energy, Happy, cooldown and stat snapshot"};
-    const energy=tornBarProjection("energy",bars.energy,stamp("energy")),happy=tornBarProjection("happy",bars.happy,stamp("happy"));
+    const energy=options.recoveryPreview?options.liveInputs?.energy:tornBarProjection("energy",bars.energy,stamp("energy")),happy=options.recoveryPreview?options.liveInputs?.happy:tornBarProjection("happy",bars.happy,stamp("happy"));
     if(!energy||!happy)return {error:"Energy or happiness unavailable"};
     return tornTrainSequence.replayRemaining({state:{...state,statValues:Object.fromEntries(statNames.map((key,i)=>[key,actual[i]])),compareStat:stat,currentEnergy:energy.current,maxEnergy:energy.maximum,happy:happy.current,maxHappy:happy.maximum},gym,trainBlock,effectsFor:stat=>effectsFor(stat,{live:true})},session,options);
   }

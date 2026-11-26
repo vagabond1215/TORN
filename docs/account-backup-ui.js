@@ -13,19 +13,30 @@ const tornBackupUI=(()=>{
     const exportButton=get("backup-export"),importButton=get("backup-import"),close=get("backup-close");
     if(!open||!dialog||!form)return;
     const message=x=>{status.textContent=x;};
-    const controls=()=>{exportButton.disabled=busy;importButton.disabled=busy;close.disabled=busy;inspect.disabled=busy||!presented?.session;discard.disabled=busy||!presented?.session;sync();};
+    const controls=()=>{exportButton.disabled=busy;importButton.disabled=busy;close.disabled=busy;inspect.disabled=busy||!presented?.session;discard.disabled=busy||!presented?.session;preview.disabled=busy||!presented?.session||!attest.checked;count.disabled=busy||!presented?.session;attest.disabled=busy||!presented?.session;sync();};
     const review=get("backup-recovery-review"),summary=get("backup-review-summary"),evidence=get("backup-review-evidence"),inspect=get("backup-review-inspect"),discard=get("backup-review-discard");
+    const count=get("backup-review-count"),attest=get("backup-review-attest"),preview=get("backup-review-preview"),actionList=get("backup-review-action-list"),previewList=get("backup-review-preview-list");
     let presented=null;
+    function clearPreview(){previewList.replaceChildren();evidence.textContent="";}
+    function actionText(x){const name={xanax:"Xanax",ecstasy:"Ecstasy",candy:"Candy",dvd:"Erotic DVD",train:"Train",refill:"Energy refill",externalHappy:"External Happiness boost"}[x.type]??x.type;return name+(x.type==="train"?" "+x.energy+" E":x.quantity>1?" × "+x.quantity:"");}
+    function append(list,text){const li=document.createElement("li");li.textContent=text;list.append(li);}
+    count.addEventListener("input",()=>{attest.checked=false;clearPreview();controls();});
+    attest.addEventListener("change",()=>{clearPreview();controls();});
+    preview.addEventListener("click",()=>void reviewAction("preview"));
     function showReview(){
       presented=tornTrainingRecovery.readStage(localStorage,tornGuideApi.state.identity?.id);
       review.hidden=!presented;evidence.textContent="";
       inspect.disabled=!presented?.session;discard.disabled=!presented?.session;
       const x=presented?.session;
+      count.min=String(x?.index??0);count.max=String(x?.actions.length??0);count.value=String(x?.index??0);attest.checked=false;
+      actionList.replaceChildren();previewList.replaceChildren();
+      for(const [i,a] of (x?.actions??[]).entries())append(actionList,actionText(a)+(i<x.index?" · saved confirmed":" · not confirmed by backup"));
+      controls();
       summary.textContent=x?"Player #"+presented.playerId+" · "+x.label+" · "+x.index+"/"+x.actions.length+" confirmed. Backup "+new Date(presented.backupCreatedAt).toLocaleString()+". Last confirmation "+(x.lastConfirmed==null?"unknown":new Date(x.lastConfirmed).toLocaleString())+". Estimated cycle cost "+(x.cycleSpend==null?"unknown":"$"+x.cycleSpend.toLocaleString())+".":presented?.error??"";
     }
     async function reviewAction(mode){
       if(busy||!presented?.session)return;
-      const stage=presented;busy=true;controls();
+      const stage=presented,reviewed=count.value===""?NaN:Number(count.value),attested=attest.checked;clearPreview();busy=true;controls();
       try{
         const verified=await tornGuideApi.verifyBackupOwner();
         const stillCurrent=()=>verified.isCurrent()&&verified.playerId===stage.playerId&&tornTrainingRecovery.readStage(localStorage,verified.playerId)?.raw===stage.raw;
@@ -39,6 +50,13 @@ const tornBackupUI=(()=>{
         if(!stillCurrent())throw Error("Account or recovery record changed");
         const state=tornGuideApi.state,live=tornTrainSequence.liveInputs(state,Date.now(),tornBarProjection);
         const report=tornTrainingRecovery.evidenceReport(stage,live,state,requested);
+        if(mode==="preview"){
+          const result=tornCrimeGuide.recoveryPreview(stage,reviewed,attested,report,requested);
+          if(!stillCurrent())throw Error("Account or recovery record changed");
+          evidence.textContent=(result.complete?"All actions reviewed as complete; no remaining preview.":"Projected remaining Energy "+result.used.toLocaleString()+" · stat gain "+result.gain.toLocaleString()+".")+" "+result.note+" Original saved prefix "+result.savedConfirmed+"; manually reviewed prefix "+result.reviewedConfirmed+". Nothing has been saved or resumed.";
+          for(const a of result.remaining)append(previewList,new Date(result.generatedAt+a.at*1000).toISOString().slice(0,16).replace("T"," ")+" TCT · "+actionText(a));
+          return;
+        }
         evidence.textContent="Fresh API observations: Energy "+report.energy+", Happiness "+report.happy+", "+stage.session.stat+" "+report.stat.toLocaleString()+", drug cooldown "+Math.ceil(report.drug/60)+" min, booster cooldown "+Math.ceil(report.booster/60)+" min, daily refill "+(report.refillUsed?"used":"available")+". Saved observed stat checkpoint "+(report.savedCheckpoint??"unknown")+"; modeled next-action stat "+(report.modeledNextStat??"unknown")+". "+(report.warVerified===false?"Faction war schedule not verified. ":"")+"These observations do not prove which disconnected actions occurred. Session remains held; continuation requires separate reconciliation.";
       }catch(error){evidence.textContent=String(error?.message??"Recovery review failed");}
       finally{busy=false;controls();}
