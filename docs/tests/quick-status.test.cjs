@@ -25,7 +25,7 @@ state.data.races.races[0].schedule.end=null;rows=t.quickStatusModel(state,health
 state.data.races.races=[];rows=t.quickStatusModel(state,health,now);assert.equal(v("activity").value,"Not Racing");assert.equal(v("activity").tone,"ready");
 state.errors.travel="Unavailable";rows=t.quickStatusModel(state,health,now);assert.equal(v("activity").tone,"unknown");
 delete state.errors.travel;
-const markup=t.quickLinks("home");assert.ok(markup.includes('aria-controls="quick-tools-menu"')&&markup.includes('id="quick-tools-menu"')&&markup.includes("Manage bookmarks")&&markup.includes("Torn Report")&&markup.includes("data-quick-status-refresh"));
+const markup=t.quickLinks("home");assert.ok(markup.includes('aria-controls="quick-tools-menu"')&&markup.includes('id="quick-tools-menu"')&&markup.includes("Manage bookmarks")&&markup.includes("Torn Report")&&!markup.includes("data-quick-status-refresh"));
 assert.equal((markup.match(/data-quick-status="/g)||[]).length,5);assert.ok(markup.includes('data-quick-status="activity" data-status-icon="racing"'));
 assert.ok(markup.includes('aria-expanded="false"'));
 assert.ok(markup.indexOf('data-quick-status="activity"')<markup.indexOf('data-quick-status="addiction"'));
