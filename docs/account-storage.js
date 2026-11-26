@@ -96,6 +96,12 @@ const tornAccountStorage=(()=>{
     if(key.startsWith(base)){const section=key.slice(base.length);if(descriptor(id,section))return section;}
     return null;
   }
+  // First merge tier deliberately excludes financial, schedule, recovery,
+  // safety-restriction and observation sections, even with proven ancestry.
+  function mergePreference(section){
+    return /^(task|quickstart|notes):[a-z0-9][a-z0-9-]{0,99}$/.test(section)||
+      ["focus","activities","build","training-templates","comparison-mode","restock","oc-bands","recommendations","expanded","growth-tab"].includes(section);
+  }
   const deletionPrefix=id=>prefix+"revision-observed-delete:v1:"+owner(id)+":";
   function deletionMarkers(store,playerId){
     const id=owner(playerId),base=deletionPrefix(id),sections=[];
@@ -114,6 +120,10 @@ const tornAccountStorage=(()=>{
       if(value===null)store.removeItem(key);else store.setItem(key,value);return;
     }
     const section=sectionForKey(id,key);
+    if(!section){
+      const other=/^torn-city-guide:v1:profile:([1-9][0-9]{0,14}):/.exec(key)?.[1]??/:([1-9][0-9]{0,14})$/.exec(key)?.[1];
+      if(other&&other!==id&&sectionForKey(other,key))throw Error("Account storage key belongs to another player");
+    }
     if(section&&journalPending(store,id))throw Error("Account restore is pending");
     const before=store.getItem(key);
     if(before===value)return;
@@ -280,5 +290,5 @@ const tornAccountStorage=(()=>{
     const id=owner(playerId);
     return locks?.request?locks.request(prefix+"account-recovery:"+id,{mode:"exclusive"},fn):fn();
   }
-  return {owner,sectionForKey,deletionMarkers,trackedWrite,knownSection:(id,section)=>typeof section==="string"&&section.length<=160&&Boolean(descriptor(owner(id),section)),snapshot,validRecords,restoreEmpty,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
+  return {owner,sectionForKey,deletionMarkers,trackedWrite,mergePreference,knownSection:(id,section)=>typeof section==="string"&&section.length<=160&&Boolean(descriptor(owner(id),section)),snapshot,validRecords,restoreEmpty,maxBytes,journalKey,journalPending,readJournal,restoreJournaled,finishJournal,rollbackJournal,withRecoveryLock};
 })();

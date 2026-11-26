@@ -141,10 +141,12 @@ const tornBackupUI=(()=>{
           if(local.records.length||local.omitted.length||hasManifest){
             if(!data.manifest){message("Version 1 backup has no revision history. Recovery into an existing account is disabled; keep both copies.");return;}
             const current=await tornAccountStorage.withRecoveryLock(id,navigator.locks,()=>tornAccountRevisions.capture(localStorage,id,verified.isCurrent));
-            const rows=tornAccountRevisions.compare(current.manifest,data.manifest,id);
+            const plan=await tornAccountRevisions.planMerge(current,data,id);
+            if(!verified.isCurrent())throw Error("Account changed during comparison");
+            const labels={"keep-local":"Keep local","unchanged":"Identical","eligible":"Eligible preference update","review":"Conflict or untracked; review required","protected-review":"Protected section; specialized review required"};
             comparison.replaceChildren();
-            for(const row of rows)append(comparison,row.section+" · "+row.status+(row.localDeleted?" · local deletion":"")+(row.incomingDeleted?" · backup deletion":""));
-            message("Read-only comparison: "+rows.length+" sections, "+rows.filter(x=>x.status==="conflict").length+" conflicts. No incoming records applied. Merge is not enabled yet.");return;
+            for(const row of plan.rows)append(comparison,row.section+" · "+labels[row.action]+" ("+row.status+")"+(row.localDeleted?" · local deletion":"")+(row.incomingDeleted?" · backup deletion":""));
+            message("Read-only merge preview: "+plan.eligible.length+" eligible preference updates, "+plan.review.length+" sections require review. No incoming records applied. Keep the original encrypted backup.");return;
           }
           // Explicit approval, no silent overwrite or partial account merge.
           if(!window.confirm("Restore "+data.records.length+" supported records for Torn player "+id+"? Existing supported account data or session/history will prevent recovery. Restored training sessions will be held for review and cannot resume yet. Restored pending rehab will not auto-confirm; review reservations manually. The guide will reload; session-only API connections must reconnect.")){message("Recovery cancelled; no changes made.");return;}

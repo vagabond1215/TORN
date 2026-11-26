@@ -80,6 +80,22 @@ const tornAccountRevisions=(()=>{
       return {section,status,localDeleted:left?.digest===null,incomingDeleted:right?.digest===null};
     });
   }
+  // This plan is read-only. Missing ancestry is never an automatic
+  // addition, and protected sections require domain-specific review.
+  async function planMerge(local,incoming,id,{digest=hash}={}){
+    id=owner(id);
+    if(local.omitted?.length||incoming.omitted?.length)throw Error("Cannot merge incomplete or omitted sections");
+    await verify(local.manifest,local.records,id,{digest});
+    await verify(incoming.manifest,incoming.records,id,{digest});
+    const rows=compare(local.manifest,incoming.manifest,id).map(row=>{
+      let action="keep-local";
+      if(row.status==="identical")action="unchanged";
+      else if(row.status==="conflict"||row.status==="untracked-incoming")action="review";
+      else if(row.status==="incoming-descendant")action=tornAccountStorage.mergePreference(row.section)?"eligible":"protected-review";
+      return {...row,action};
+    });
+    return {playerId:id,rows,eligible:rows.filter(x=>x.action==="eligible").map(x=>x.section),review:rows.filter(x=>["review","protected-review"].includes(x.action)).map(x=>x.section)};
+  }
   // Observe with optimistic recheck. Cooperating callers use Web Locks.
   // No manifest is written when the snapshot/owner/journal changes.
   async function capture(store,id,isCurrent,options={}){
@@ -119,5 +135,5 @@ const tornAccountRevisions=(()=>{
     }
     return {request,flush};
   }
-  return {empty,key,read,validate,verify,observe,compare,capture,restore,createCaptureQueue};
+  return {empty,key,read,validate,verify,observe,compare,planMerge,capture,restore,createCaptureQueue};
 })();
