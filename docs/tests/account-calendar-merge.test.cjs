@@ -47,6 +47,10 @@ async function run(){
  await assert.rejects(()=>m.preview(l,q,id,{...options,base:left}),/common calendar ancestor/);
  await assert.rejects(()=>m.preview(l,q,id,{...options,base:{...common,records:rec([event("tampered")])}}),/digest/);
  await assert.rejects(()=>m.prepare(l,q,id,["both"],{...options,base:common}),/eligible/);
+ const tokenReuse={...q,manifest:{...q.manifest,entries:q.manifest.entries.map(x=>({...x,revision:l.manifest.entries[0].revision}))}};
+ await assert.rejects(()=>m.preview(l,tokenReuse,id,{...options,base:common}),/Contradictory/);
+ const cycle=(a,b)=>({...a,manifest:{...a.manifest,entries:a.manifest.entries.map(x=>({...x,ancestors:[b.manifest.entries[0].revision,...x.ancestors]}))}});
+ await assert.rejects(()=>m.preview(cycle(l,q),cycle(q,l),id,{...options,base:common}),/Contradictory/);
  // A deletion on the local branch and unchanged incoming copy cannot
  // resurrect the deleted event, even with common-base evidence.
  const localDeleted=await make(common.manifest,[event("local"),event("remote"),event("both"),event("same")]);

@@ -24,6 +24,10 @@ const tornCalendarMerge=(()=>{
       // A missing/untracked base or truncated ancestry is not proof.
       const sides=await Promise.all([local,incoming].map(side=>tornAccountRevisions.planMerge(common,side,id,verifyOptions)));
       if(sides.some(side=>!["identical","incoming-descendant"].includes(side.rows.find(x=>x.section===section)?.status)))throw Error("Verified common calendar ancestor required");
+      const a=local.manifest.entries.find(e=>e.section===section),b=incoming.manifest.entries.find(e=>e.section===section);
+      // A reused token with different content, or cyclic ancestry, is
+      // contradictory metadata rather than a normal divergent branch.
+      if(relation==="conflict"&&(a.revision===b.revision||a.ancestors.includes(b.revision)&&b.ancestors.includes(a.revision)))throw Error("Contradictory calendar revision ancestry");
       ancestor=eventMap(common);
     }
     const left=eventMap(local),right=eventMap(incoming),rows=[];
