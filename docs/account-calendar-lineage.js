@@ -67,7 +67,7 @@ const tornCalendarLineage=(()=>{
     if(!Array.isArray(ids)||ids.length>300||!ids.every(validId)||new Set(ids).size!==ids.length)throw Error("Invalid explicit calendar deletions");
     const [a,b]=await Promise.all([checkedSnapshot(before,playerId,digest),checkedSnapshot(after,playerId,digest)]);
     const old=verifyLive(l,a),relation=tornAccountRevisions.compare(before.manifest,after.manifest,a.id).find(x=>x.section===section)?.status;
-    if(relation!=="identical"&&relation!=="incoming-descendant")throw Error("Calendar lineage requires a proven descendant");
+    if(relation!=="identical"&&(relation!=="incoming-descendant"||b.entry.ancestors[0]!==a.entry.revision))throw Error("Calendar lineage requires an immediate proven descendant");
     const removed=[...a.live.keys()].filter(id=>!b.live.has(id)).sort();
     if(JSON.stringify(removed)!==JSON.stringify([...ids].sort()))throw Error("Calendar removal lacks exact explicit deletion evidence");
     const out=new Map(old);

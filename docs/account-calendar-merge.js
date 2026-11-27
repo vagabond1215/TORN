@@ -31,6 +31,8 @@ const tornCalendarMerge=(()=>{
       ancestor=eventMap(common);
     }
     const left=eventMap(local),right=eventMap(incoming),rows=[];
+    const revision=s=>s?.manifest.entries.find(e=>e.section===section)?.revision??null;
+    const context=[id,revision(local),revision(incoming),revision(common)];
     for(const key of [...new Set([...left.keys(),...right.keys()])].sort()){
       const before=left.get(key)??null,after=right.get(key)??null;
       const change=canonical(before)===canonical(after)?"unchanged":before===null?"addition":after===null?"removal":"edit";
@@ -50,7 +52,16 @@ const tornCalendarMerge=(()=>{
           else {action="eligible";reason=independent?"Only incoming nonblocking personal/general event changed from verified base; explicit selection required":"Nonblocking personal/general event in a proven incoming section descendant; explicit selection required";}
         }
       }
-      rows.push({id:key,change,action,reason,before,after,...(ancestor!==null?{base:ancestor.get(key)??null}:{})});
+      const prior=ancestor?.get(key)??null;
+      // Both changed existing, ordinary nonblocking events may receive
+      // an explicit decision. Concurrent same-ID creation is not a
+      // verified edit of a common record; do not overwrite either.
+      const resolvable=relation==="conflict"&&ancestor!==null&&change==="edit"&&safe(prior)&&safe(before)&&safe(after)&&canonical(before)!==canonical(prior)&&canonical(after)!==canonical(prior);
+      const choices=action==="eligible"||resolvable?["keep-local","take-incoming"]:[];
+      // In-memory review binding, not an authentication token or a
+      // persisted journal field. Never publish it in telemetry.
+      const reviewKey=choices.length?JSON.stringify([...context,key,canonical(prior),canonical(before),canonical(after)]):null;
+      rows.push({id:key,change,action,reason,before,after,...(ancestor!==null?{base:prior}:{}),choices,reviewKey});
     }
     return {playerId:id,relation,commonBase:ancestor!==null,rows,eligible:rows.filter(x=>x.action==="eligible").map(x=>x.id)};
   }
@@ -69,5 +80,22 @@ const tornCalendarMerge=(()=>{
     // claim incoming ancestry for records that were not selected.
     return {playerId:p.playerId,change:{section,before,value},selected:[...selected].sort(),relation:p.relation,requiresNewLocalRevision:true};
   }
-  return Object.freeze({preview,prepare});
+  // Explicit conflict resolution requires the exact reviewed snapshots.
+  // No deletion, ID recreation, operational records, or untracked imports.
+  // "Keep local" is a no-op, not a fake record/manifest revision.
+  async function resolve(local,incoming,playerId,decisions,options={}){
+    local=copy(local);incoming=copy(incoming);decisions=copy(decisions);
+    if(!Array.isArray(decisions)||!decisions.length||decisions.length>300||decisions.some(d=>!d||typeof d!=="object"||Array.isArray(d)||Object.keys(d).length!==3||typeof d.id!=="string"||typeof d.reviewKey!=="string"||!["keep-local","take-incoming"].includes(d.choice))||new Set(decisions.map(d=>d.id)).size!==decisions.length)throw Error("Invalid calendar conflict decisions");
+    const p=await preview(local,incoming,playerId,options),byId=new Map(p.rows.map(row=>[row.id,row])),values=eventMap(local),selected=[];
+    for(const d of decisions){
+      const row=byId.get(d.id);
+      if(!row||!row.choices.includes(d.choice)||row.reviewKey!==d.reviewKey)throw Error("Calendar review changed or decision is protected");
+      if(d.choice==="take-incoming"){values.set(d.id,row.after);selected.push(d.id);}
+    }
+    if(!selected.length)return {playerId:p.playerId,change:null,selected:[],requiresNewLocalRevision:false};
+    const before=local.records.find(r=>r.section===section)?.value??null,value=JSON.stringify([...values.values()]);
+    tornAccountStorage.validRecords(local.records.filter(r=>r.section!==section).concat({section,value}),p.playerId);
+    return {playerId:p.playerId,change:{section,before,value},selected:selected.sort(),requiresNewLocalRevision:true};
+  }
+  return Object.freeze({preview,prepare,resolve});
 })();

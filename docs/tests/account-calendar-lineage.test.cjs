@@ -22,6 +22,7 @@ async function run(){
  assert.deepEqual(await l.verify(next,second,id,options),next);
  assert.equal(initial.entries.find(x=>x.id==="b").digest!==null,true);
  const third=await make(second.manifest,[event("c","changed")]);
+ await assert.rejects(()=>l.advance(initial,first,third,id,["a","b"],options),/immediate proven descendant/);
  const more=await l.advance(next,second,third,id,["a"],options);
  assert.deepEqual(more.entries.find(x=>x.id==="b"),tomb);
  const reinsert=await make(third.manifest,[event("c","changed"),event("b")]);
