@@ -253,12 +253,14 @@ const tornActivityScheduler=(()=>{
   }
   // View time and source snapshot time are separate: moving the ruler
   // must not move planned events or extend a remaining cooldown.
-  const timelineModes={today:"Today",twoDays:"2 Days",rolling:"24hrs"};
-  function timelineWindow(at,mode="today"){
+  const timelineHours=[12,24,36,48];
+  function timelineWindow(at,hours=24,scroll=false){
     const minute=Math.floor(at/60000)*60000,day=Math.floor(minute/D)*D;
-    const validMode=Object.hasOwn(timelineModes,mode)?mode:"today",rolling=validMode==="rolling";
-    const start=rolling?minute:day,days=validMode==="twoDays"?2:1;
-    return {mode:validMode,at:minute,start,end:start+days*D,width:days*720,days};
+    const duration=timelineHours.includes(hours)?hours:24,rolling=scroll===true;
+    // A fixed 12h window needs a noon boundary as well as midnight to
+    // keep NOW in range. All longer fixed ranges start at TCT midnight.
+    const start=rolling?minute:duration===12?day+Math.floor((minute-day)/(12*H))*12*H:day;
+    return {hours:duration,scroll:rolling,at:minute,start,end:start+duration*H,width:duration*30,days:duration/24};
   }
   function timelineLayout(list,now,days=7,war=null,liveDrugSeconds=null,window=null){
     const start=window?.start??now,end=window?.end??now+days*D,width=window?.width??days*240,bin=48,maxLanes=3;
@@ -321,7 +323,7 @@ const tornActivityScheduler=(()=>{
   }
   function renderTimeline(list,now,days=7,war=null,liveDrugSeconds=null,showAgenda=true,window=null){
     const layout=timelineLayout(list,now,days,war,liveDrugSeconds,window),{width,start,end}=layout,pct=v=>(v/width*100).toFixed(5)+"%";
-    const ticks=[],step=(window?3:6)*H;
+    const ticks=[],step=(window?(window.hours===12?2:3):6)*H;
     const position=at=>Math.max(0,Math.min(100,(at-start)/(end-start)*100));
     const nowX=position(window?.at??now);
     for(let at=Math.ceil(start/step)*step;at<end;at+=step){
@@ -347,27 +349,27 @@ const tornActivityScheduler=(()=>{
       return anchors+button(events,body,cls,"--x:"+pct(a.x)+";--flag-width:"+a.labelWidth+"px");
     }).join("");
     return '<div class="activity-unified-timeline" data-activity-timeline>'+
-      '<div class="activity-timeline-scroll" tabindex="0" role="region" aria-label="Scrollable '+days+' day activity timeline"><div class="activity-time-canvas" style="--canvas-width:'+width+'px;--lanes:'+layout.laneCount+'"><div class="activity-time-ruler">'+ticks.join("")+'</div><div class="activity-time-track"><div class="activity-time-grid" aria-hidden="true">'+ticks.join("")+'</div><div class="activity-time-now'+(nowX>90?' is-near-end':'')+'" style="--now-x:'+nowX+'%" aria-hidden="true"><span>NOW</span></div><div class="activity-time-spans">'+spans+'</div>'+markers+'</div></div></div>'+
+      '<div class="activity-timeline-scroll" tabindex="0" role="region" aria-label="Scrollable '+(window?window.hours+' hour':days+' day')+' activity timeline"><div class="activity-time-canvas" style="--canvas-width:'+width+'px;--lanes:'+layout.laneCount+'"><div class="activity-time-ruler">'+ticks.join("")+'</div><div class="activity-time-track"><div class="activity-time-grid" aria-hidden="true">'+ticks.join("")+'</div><div class="activity-time-now'+(nowX>90?' is-near-end':'')+'" style="--now-x:'+nowX+'%" aria-hidden="true"><span>NOW</span></div><div class="activity-time-spans">'+spans+'</div>'+markers+'</div></div></div>'+
       (!layout.count?'<small class="activity-timeline-empty">No scheduled activities in this window.</small>':"")+
       '<div class="activity-timeline-tooltip activity-event-popup" data-activity-timeline-popup role="dialog" aria-label="Activity details" hidden></div>'+templates.join("")+'</div>'+
       (showAgenda?'<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&(e.end>e.start?e.end>start:e.start>=start)))+'</details>':"");
   }
   // Session-local display preference and two bounded snapshots, never persisted
   // in the account journal. Account changes invalidate every cached view.
-  let modeOwner=null,selectedTimelineMode="today",lastModeTick=null;
+  let modeOwner=null,selectedTimelineHours=24,timelineScroll=false,lastModeTick=null;
   const timelineSnapshots=new Map();
   function ensureTimelineOwner(){
     const id=owner();
-    if(id!==modeOwner){modeOwner=id;selectedTimelineMode="today";timelineSnapshots.clear();lastModeTick=null;}
+    if(id!==modeOwner){modeOwner=id;selectedTimelineHours=24;timelineScroll=false;timelineSnapshots.clear();lastModeTick=null;}
   }
-  const modeButtons=()=>'<div class="activity-timeline-modes" role="group" aria-label="Timeline time window">'+Object.entries(timelineModes).map(([mode,label])=>'<button type="button" data-activity-timeline-mode="'+mode+'" aria-pressed="'+(mode===selectedTimelineMode)+'">'+label+'</button>').join("")+'</div>';
+  const modeButtons=()=>'<div class="activity-timeline-controls"><div class="activity-timeline-modes" role="group" aria-label="Timeline duration">'+timelineHours.map(hours=>'<button type="button" data-activity-timeline-hours="'+hours+'" aria-pressed="'+(hours===selectedTimelineHours)+'">'+hours+'h</button>').join("")+'</div><button type="button" class="activity-scroll-toggle" data-activity-timeline-scroll aria-pressed="'+timelineScroll+'" title="Scroll on: NOW at left edge. Scroll off: fixed TCT window."><svg viewBox="0 0 20 16" width="16" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3v10M17 8H5m4-4L5 8l4 4"/></svg>Scroll</button></div>';
   function modeContent(snapshot,window){
     return renderTimeline(snapshot.list,snapshot.now,window.days,snapshot.war,snapshot.liveDrugSeconds,snapshot.showAgenda,window);
   }
   function renderModeTimeline(list,now,war=null,liveDrugSeconds=null,scope="home",clock=Date.now(),header=null){
     ensureTimelineOwner();
     if(!["home","calendar"].includes(scope))scope="home";
-    const window=timelineWindow(clock,selectedTimelineMode);
+    const window=timelineWindow(clock,selectedTimelineHours,timelineScroll);
     const snapshot={list,now,war,liveDrugSeconds,showAgenda:scope==="calendar",window};
     timelineSnapshots.set(scope,snapshot);
     const body='<div data-activity-mode-content>'+modeContent(snapshot,window)+'</div>';
@@ -383,7 +385,7 @@ const tornActivityScheduler=(()=>{
     const selectedKey=content.querySelector('[data-activity-event-key][aria-pressed="true"]')?.dataset.activityEventKey;
     content.innerHTML=modeContent(snapshot,window);
     const nextScroll=content.querySelector(".activity-timeline-scroll");
-    if(nextScroll&&!resetScroll)nextScroll.scrollLeft=scroll;
+    if(nextScroll)nextScroll.scrollLeft=resetScroll||window.scroll?0:scroll;
     const agenda=content.querySelector(".activity-timeline-agenda");if(agenda&&open)agenda.open=true;
     const controls=[...content.querySelectorAll("[data-activity-event-key]")];
     const selected=selectedKey&&controls.find(b=>b.dataset.activityEventKey===selectedKey);
@@ -393,7 +395,8 @@ const tornActivityScheduler=(()=>{
       (focused??nextScroll)?.focus({preventScroll:true});
     }
     snapshot.window=window;
-    for(const b of root.querySelectorAll("[data-activity-timeline-mode]"))b.setAttribute("aria-pressed",String(b.dataset.activityTimelineMode===window.mode));
+    for(const b of root.querySelectorAll("[data-activity-timeline-hours]"))b.setAttribute("aria-pressed",String(Number(b.dataset.activityTimelineHours)===window.hours));
+    for(const b of root.querySelectorAll("[data-activity-timeline-scroll]"))b.setAttribute("aria-pressed",String(window.scroll));
   }
   // Called by the existing local UI tick; no API, planner, or storage calls.
   function tickTimeline(at=Date.now()){
@@ -405,9 +408,10 @@ const tornActivityScheduler=(()=>{
     for(const root of document.querySelectorAll("[data-activity-mode-timeline]")){
       const snapshot=timelineSnapshots.get(root.dataset.activityModeTimeline);
       if(!snapshot||root.matches("details:not([open])"))continue;
-      const window=timelineWindow(at,selectedTimelineMode),previous=snapshot.window;
-      if(window.mode!==previous.mode||window.start!==previous.start){
-        redrawMode(root,snapshot,window,window.mode!==previous.mode||window.mode!=="rolling");continue;
+      const window=timelineWindow(at,selectedTimelineHours,timelineScroll),previous=snapshot.window;
+      const changed=window.hours!==previous.hours||window.scroll!==previous.scroll;
+      if(changed||window.start!==previous.start){
+        redrawMode(root,snapshot,window,changed||!window.scroll);continue;
       }
       // Calendar-day modes keep their geometry; only NOW moves.
       const marker=root.querySelector(".activity-time-now");
@@ -418,14 +422,17 @@ const tornActivityScheduler=(()=>{
       snapshot.window=window;
     }
   }
-  function chooseTimelineMode(button){
+  function chooseTimelineControl(button){
     ensureTimelineOwner();
-    const mode=button.dataset.activityTimelineMode;
-    if(!Object.hasOwn(timelineModes,mode))return;
-    selectedTimelineMode=mode;
+    if(button.hasAttribute("data-activity-timeline-scroll"))timelineScroll=!timelineScroll;
+    else{
+      const hours=Number(button.dataset.activityTimelineHours);
+      if(!timelineHours.includes(hours))return;
+      selectedTimelineHours=hours;
+    }
     for(const root of document.querySelectorAll("[data-activity-mode-timeline]")){
       const snapshot=timelineSnapshots.get(root.dataset.activityModeTimeline);
-      if(snapshot)redrawMode(root,snapshot,timelineWindow(Date.now(),mode),true);
+      if(snapshot)redrawMode(root,snapshot,timelineWindow(Date.now(),selectedTimelineHours,timelineScroll),true);
     }
   }
   function popupRoot(button){return button?.closest("[data-activity-timeline]");}
@@ -464,12 +471,12 @@ const tornActivityScheduler=(()=>{
     view.addEventListener("toggle",e=>{
       if(e.target.matches?.("details[data-activity-mode-timeline]")){
         if(!e.target.open)closeEventPopups(e.target);
-        else {const snapshot=timelineSnapshots.get(e.target.dataset.activityModeTimeline);if(snapshot)redrawMode(e.target,snapshot,timelineWindow(Date.now(),selectedTimelineMode),false);}
+        else {const snapshot=timelineSnapshots.get(e.target.dataset.activityModeTimeline);if(snapshot)redrawMode(e.target,snapshot,timelineWindow(Date.now(),selectedTimelineHours,timelineScroll),false);}
       }
     },true);
     view.addEventListener("click",e=>{
-      const mode=e.target?.closest?.("[data-activity-timeline-mode]");
-      if(mode){e.preventDefault();closeEventPopups(view);chooseTimelineMode(mode);return;}
+      const control=e.target?.closest?.("[data-activity-timeline-hours],[data-activity-timeline-scroll]");
+      if(control){e.preventDefault();closeEventPopups(view);chooseTimelineControl(control);return;}
       const b=item(e);if(!b)return;
       if(get(b,"popup")){const wasOpen=b.getAttribute("aria-pressed")==="true";closeEventPopups(view);if(!wasOpen)showEventPopup(b);return;}
       const inspector=get(b,"inspector");if(!inspector)return;

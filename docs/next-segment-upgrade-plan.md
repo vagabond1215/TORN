@@ -110,3 +110,5 @@ Timeline mode refinement: Today, 2 Days and rolling 24hrs on both timeline surfa
 Compact Timeline UI: account-scoped visibility/collapse, centered modes, settings/refresh, cooldown duration bands without duplicate flags, dismissible event details. Existing scheduling, Week valuation and persistence roadmap retained.
 
 Header date/clock with independent TCT/Local preference; UTC countdown targets unchanged. No added API requests.
+
+Timeline controls: independent 12/24/36/48-hour selection and muted/green Scroll toggle; rolling minute viewport or fixed TCT range (12h half-day, others midnight). No new API requests.
