@@ -26,3 +26,7 @@ for(const id of [0,"guest","01",null,NaN])assert.throws(()=>r.decodePage(page([]
 const polluted=JSON.parse('{"__proto__":{"secret":"discard-me"},"constructor":1,"quantity":1}');
 assert.deepEqual(r.decodePage(page([row("a",polluted)]),123,now).records[0].fields,{quantity:1});
 console.log("Typed log records, exact IDs/cursor, bounded numeric fields, duplicate/conflict and malformed-page tests passed.");
+assert.equal(r.validRecord(p.records[0],"123"),true);
+for(const bad of [{...p.records[0],extra:"x"},{...p.records[0],playerId:"2"},{...p.records[0],occurredAt:now+1},{...p.records[0],fields:{quantity:"1"}},{...p.records[0],fields:{unknown:1}},{...p.records[0],observedAt:now-600000}])assert.equal(r.validRecord(bad,"123"),false);
+assert.throws(()=>r.decodePage(page([]),1000000000000000,now),/Invalid API log/);
+console.log("Strict persisted record validation and owner bounds passed.");

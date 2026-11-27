@@ -61,6 +61,14 @@
     a=await open();const capped=await a.begin(1,yes,now+240000);
     assert((await a.commit(capped,page([row("g",now-1000)],"89"),yes,now+240000)).status==="limit","retention hold");
     assert((await a.state(1,yes)).checkpoint.older==="90","limit does not advance");
+    // A newer database version closes current connections instead of
+    // silently deleting data or letting stale writers continue.
+    await new Promise((resolve,reject)=>{
+      const q=indexedDB.open(name,2);q.onerror=()=>reject(q.error);q.onblocked=()=>reject(Error("version upgrade blocked"));
+      q.onsuccess=()=>{q.result.close();resolve();};
+    });
+    await rejects(()=>a.state(1,yes),"versionchange closes old connection");
+    await rejects(()=>open(),"future version is not downgraded");
     a.close();a=null;
     status.textContent="PASS: native IndexedDB page/checkpoint transactions, competing connections, reload, account isolation, deduplication, conflict, purge, abort and retention.";
     status.dataset.result="pass";

@@ -21,9 +21,13 @@ const tornLogArchive=(()=>{
   function validCheckpoint(c,player){
     if(!exact(c,cpKeys)||c.version!==1||c.playerId!==player||!int(c.revision)||!anchor(c.head)||!anchor(c.olderTail)||!nullableTime(c.headCheckedAt)||!nullableTime(c.lastPageAt)||!cursorList(c.olderRecent)||!gap(c.gap)||!["unstarted","more","terminal","unknown"].includes(c.olderState))return false;
     if(c.olderState==="more"?(!records.cursor(c.older)||c.olderRecent.at(-1)!==c.older):c.older!==null)return false;
+    if(c.revision===0)return c.head===null&&c.olderState==="unstarted"&&c.olderTail===null&&c.olderRecent.length===0&&c.headCheckedAt===null&&c.lastPageAt===null&&c.pending===null&&c.gap===null;
+    if(c.olderState==="unstarted"||c.headCheckedAt===null||c.lastPageAt===null||c.headCheckedAt>c.lastPageAt)return false;
+    if(c.olderState==="more"&&(!c.head||!c.olderTail))return false;
+    if(c.olderTail&&(!c.head||c.olderTail.at>c.head.at))return false;
     if(c.pending===null)return true;
     const p=c.pending;
-    return exact(p,["target","candidate","tail","cursor","recent","headAt"])&&[p.target,p.candidate,p.tail].every(a=>a!==null&&anchor(a))&&c.head!==null&&p.target.id===c.head.id&&p.target.at===c.head.at&&records.cursor(p.cursor)&&cursorList(p.recent)&&p.recent.at(-1)===p.cursor&&time(p.headAt);
+    return exact(p,["target","candidate","tail","cursor","recent","headAt"])&&[p.target,p.candidate,p.tail].every(a=>a!==null&&anchor(a))&&c.head!==null&&p.target.id===c.head.id&&p.target.at===c.head.at&&p.candidate.at>=p.tail.at&&p.tail.at>=p.target.at&&records.cursor(p.cursor)&&cursorList(p.recent)&&p.recent.at(-1)===p.cursor&&time(p.headAt)&&p.headAt>=c.headCheckedAt&&p.headAt<=c.lastPageAt;
   }
   const fresh=(player,generation=0)=>({playerId:player,source:SOURCE,version:VERSION,generation,count:0,bytes:0,checkpoint:coverage.create(player),blocked:null});
   function checked(value,player){
@@ -64,7 +68,7 @@ const tornLogArchive=(()=>{
         function abort(error){failure=error;try{tx.abort();}catch{}}
         const on=(request,fn=()=>{})=>{request.onsuccess=()=>{try{check();fn(request.result);}catch(error){abort(error);}};return request;};
         const done=value=>{check();result=value;};
-        tx.oncomplete=()=>{pending.delete(tx);resolve(result);};
+        tx.oncomplete=()=>{pending.delete(tx);try{check();resolve(result);}catch(error){reject(error);}};
         tx.onabort=()=>{pending.delete(tx);reject(failure??tx.error??Error("Archive transaction aborted"));};
         try{check();work(tx,on,done);}catch(error){abort(error);}
       });
@@ -75,21 +79,23 @@ const tornLogArchive=(()=>{
       return run(["sync"],"readonly",guard,(tx,on,done)=>on(tx.objectStore("sync").get(key(player)),v=>done(checked(v,player))));
     };
     async function begin(playerId,guard,now=Date.now()){
+      if(!time(now))throw Error("Invalid archive request time");
       const s=await state(playerId,guard);
       if(!authorized(guard))throw Error("Archive authorization changed");
       const task=s.blocked?null:coverage.task(s.checkpoint,now);
       return task?{playerId:s.playerId,generation:s.generation,task}:null;
     }
     function commit(ticket,payload,guard,now=Date.now()){
-      const player=records.owner(ticket?.playerId);
+      if(!exact(ticket,["playerId","generation","task"])||!int(ticket.generation)||!exact(ticket.task,["kind","cursor","revision","requestedAt"])||!["head","older","catchup"].includes(ticket.task.kind)||!int(ticket.task.revision)||!time(ticket.task.requestedAt)||(ticket.task.kind==="head"?ticket.task.cursor!==null:!records.cursor(ticket.task.cursor)))return Promise.reject(Error("Invalid archive ticket"));
+      const player=records.owner(ticket.playerId),generation=ticket.generation,task={...ticket.task};
       if(!authorized(guard))return Promise.reject(Error("Archive account not authorized"));
       const page=records.decodePage(payload,player,now);
       return run(["records","sync"],"readwrite",guard,(tx,on,done)=>{
         const sync=tx.objectStore("sync"),rows=tx.objectStore("records");
         on(sync.get(key(player)),v=>{
           const s=checked(v,player);
-          if(s.generation!==ticket.generation||s.blocked){done({status:"stale"});return;}
-          const proposed=coverage.apply(s.checkpoint,ticket.task,page);
+          if(s.generation!==generation||s.blocked){done({status:"stale"});return;}
+          const proposed=coverage.apply(s.checkpoint,task,page);
           if(!proposed.ok){done({status:"stale",reason:proposed.reason});return;}
           const added=[];let duplicates=0,conflict=false,remaining=page.records.length;
           const finish=()=>{
@@ -108,6 +114,7 @@ const tornLogArchive=(()=>{
           };
           if(!remaining){finish();return;}
           for(const row of page.records)on(rows.get([player,SOURCE,row.sourceId]),existing=>{
+            if(existing!==undefined&&!records.validRecord(existing,player))throw Error("Invalid stored archive record; review required");
             const kind=records.classify(existing,row);
             if(kind==="insert")added.push(row);else if(kind==="duplicate")duplicates++;else conflict=true;
             if(--remaining===0)finish();
@@ -138,6 +145,7 @@ const tornLogArchive=(()=>{
         on(req,c=>{
           if(!c){done({records:out,after:null});return;}
           if(out.length===limit){const last=out.at(-1);done({records:out,after:{at:last.occurredAt,id:last.sourceId}});return;}
+          if(!records.validRecord(c.value,player))throw Error("Invalid stored archive record; review required");
           out.push(c.value);c.continue();
         });
       });
