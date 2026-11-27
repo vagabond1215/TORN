@@ -73,3 +73,6 @@ Continue the TORN Guide project at https://github.com/vagabond1215/TORN on main,
 - New schema/version/asset changes and migration/rollback conditions.
 - Remaining risks, current user decisions and preserved constraints.
 - Exact next 1–3 bounded tasks, prerequisites, blockers and source paths. Re-read main rather than trusting a stale hash.
+
+## R0/L1 checkpoint (2026-11-27)
+Baseline `82561e4`. Native Node v22.16.0 and git available in container; git ls-remote failed DNS resolving github.com. Added docs/run-regression.cjs native discovery runner (not executed on actual checkout); R0 native full suite/browser/crypto/auth remain blocked. Public OpenAPI 6.22.0 log schema audited. Added pure log-records.js and log-coverage.js plus two CJS fixtures; both passed adapted require/assert harness. New code NOT loaded by index.html or used by live collector. L1 foundation implemented; exact type semantics/auth contract still pending. Next L2.1 durable IndexedDB page/checkpoint module and native storage tests, with bounded cursor ledger (current pure planner stops after 128 cursor transitions; no completeness claims). Recheck baseline/actual fixtures and integrate only after verifying browser safety; preserve opt-in existing worker. No runtime change or extra API requests.

@@ -171,3 +171,6 @@ Idle log follow-up: distinguish the 15-second network timeout from a foreground 
 
 ### Next log archive development (2026-11-27)
 The current collector remains session-only. See [log-archive-implementation-plan.md](log-archive-implementation-plan.md) for proposed typed decoder, native API contract validation, exact-cursor coverage, IndexedDB page/checkpoint transaction, opt-in retention/resume, cross-tab/purge guards and typed interpretation gates. No new API selections or durable store implemented by the planning checkpoint.
+
+### L1 public contract audit (2026-11-27)
+OpenAPI 6.22.0 (https://www.torn.com/swagger/openapi.json): /user/log standalone, limit max 100, full access; custom log scope may be restricted (https://www.torn.com/api.html). UserLog uses string UserLogId, integer seconds, numeric details.id (LogId), title/category, dynamic data/params; response log array + metadata links (next/prev nullable), optional string nanostamp for exact older continuation without to. No raw links/params retained in new pure decoder. Dynamic data semantics are unspecified; numeric lexical allowlist remains uninterpreted, exact per-type adapters deferred. No authenticated response test.
