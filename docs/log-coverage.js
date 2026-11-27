@@ -4,15 +4,16 @@
  * No all-time completeness assertion, even at an API-reported terminal link.
  */
 const tornLogCoverage=(()=>{
-  const HEAD_INTERVAL=300000,MAX_CHAIN=128;
+  const HEAD_INTERVAL=300000,MAX_CHAIN=2048;
   const anchor=r=>r?{id:r.sourceId,at:r.occurredAt}:null;
   const cursorOk=c=>typeof c==="string"&&/^\d{1,30}$/.test(c);
   const create=playerId=>({version:1,playerId,revision:0,head:null,older:null,olderState:"unstarted",olderTail:null,olderRecent:[],headCheckedAt:null,lastPageAt:null,pending:null,gap:null});
   function task(s,now){
-    if(s.gap)return null; // explicit review/restart; never retry a broken cursor loop
-    if(s.pending)return {kind:"catchup",cursor:s.pending.cursor,revision:s.revision};
-    if(s.headCheckedAt===null||now-s.headCheckedAt>=HEAD_INTERVAL)return {kind:"head",cursor:null,revision:s.revision};
-    if(s.olderState==="more"&&cursorOk(s.older))return {kind:"older",cursor:s.older,revision:s.revision};
+    if(!Number.isSafeInteger(now)||s.gap)return null;
+    const make=(kind,cursor)=>({kind,cursor,revision:s.revision,requestedAt:now});
+    if(s.pending)return make("catchup",s.pending.cursor);
+    if(s.headCheckedAt===null||now-s.headCheckedAt>=HEAD_INTERVAL)return make("head",null);
+    if(s.olderState==="more"&&cursorOk(s.older))return make("older",s.older);
     return null;
   }
   const reject=reason=>({ok:false,reason});
@@ -29,7 +30,8 @@ const tornLogCoverage=(()=>{
     if(!t||t.revision!==s.revision||page.playerId!==s.playerId||page.source!=="api-log"||page.schemaVersion!==1||!Array.isArray(page.records)||page.records.length>100||!Number.isSafeInteger(page.observedAt))return reject("stale task or foreign page");
     // Validate task against the current committed checkpoint. A head fetch
     // cannot supersede unfinished catchup. Date comes from decoded receipt.
-    const expected=task(s,page.observedAt);
+    if(!Number.isSafeInteger(t.requestedAt)||t.requestedAt>page.observedAt)return reject("invalid request time");
+    const expected=task(s,t.requestedAt);
     if(!expected||expected.kind!==t.kind||expected.cursor!==t.cursor)return reject("task no longer current");
     const rows=page.records,first=anchor(rows[0]),last=anchor(rows.at(-1));
     if(rows.some((r,i)=>r.playerId!==s.playerId||r.source!=="api-log"||typeof r.sourceId!=="string"||!Number.isSafeInteger(r.occurredAt)||i>0&&r.occurredAt>rows[i-1].occurredAt))return reject("invalid decoded page");

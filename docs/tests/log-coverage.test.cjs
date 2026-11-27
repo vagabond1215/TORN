@@ -33,3 +33,8 @@ let bound=accept(c.create("1"),p([r("a")],"10"));
 bound={...bound,olderRecent:Array.from({length:c.MAX_CHAIN},(_,i)=>String(i+100))};
 bound=accept(bound,p([r("b")],"11",now+60000));assert.ok(bound.gap);
 console.log("Exact head-anchor catchup, independent older checkpoint, stale/foreign task rejection, terminal hints, missing/cyclic cursors and bounded chain tests passed.");
+let boundary=accept(c.create("1"),p([r("a")],"10"));
+const beforeHead=c.task(boundary,now+299000);
+assert.equal(beforeHead.kind,"older");
+assert.equal(c.apply(boundary,beforeHead,p([r("b",now-1000)],"9",now+301000)).ok,true);
+console.log("An in-flight older page remains valid across the head refresh deadline.");
