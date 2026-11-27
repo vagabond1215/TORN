@@ -1,0 +1,140 @@
+# TORN Guide — current development pipeline
+
+**Planning checkpoint:** 2026-11-27. **Runtime baseline:** `0d79410ec5cb2505b4c13fc9cc2a7fe204766a05` on `vagabond1215/TORN`, branch main. Scope: `docs/` only. Root AGENTS.md is mandatory. This document records design and planned work, not implementation or test evidence.
+
+Start here for sequencing, then read [development-handoff.md](development-handoff.md) and [log-archive-implementation-plan.md](log-archive-implementation-plan.md). Existing plans remain detailed historical contracts: [next-segment-upgrade-plan.md](next-segment-upgrade-plan.md), [persistence-implementation-plan.md](persistence-implementation-plan.md), [account-persistence-plan.md](account-persistence-plan.md), [activity-scheduler-plan.md](activity-scheduler-plan.md). Their chronological implementation entries supersede older descriptions; this checkpoint consolidates forward priorities rather than discarding prior design. Always verify actual main before changing code.
+
+## 1. Product design intent and non-negotiable boundaries
+
+The Guide is an advisory, read-only, player-specific planning and historical analysis tool. It combines verified own-account data, user preferences, reference data, forecasts, and explicit manual commitments. It is not an automatic player, trading bot, or server-hosted account data service.
+
+- Account identity is the verified Torn player ID, not the API key, display name, companion packet ID, or file name. Same-player key rotation retains durable state; different accounts and guest state never silently merge. Logout disconnects rather than purging history. Clear/purge is a distinct, explicit action.
+- All Torn requests use the shared coordinator, fixed official endpoints and credentials only in the authorization header. Foreground work wins over optional idle reads. Respect permissions, rate/daily limits, freshness, visibility and bounded retries. Never require a higher-access key to use unrelated Guide features. External clients' request usage is not observable.
+- Keep observed/API/cached/manual/derived/projected evidence distinct. Unknown is not zero; a forecast is not an action; item consumption is not proof of purchase. Never invent earlier activities, prices, completion times, exact hidden addiction, race/war end, or unique IDs. Preserve source age, identity, confidence and coverage.
+- Home Energy, Stats Live, Restock and Calendar consume the same optimization/scheduler inputs. Stats Theoretical remains independently editable. Do not weaken premium template restrictions, drug/education/addiction restrictions, reserves or active session locks for better projected gains.
+- Never auto-click, submit Torn actions, buy items, travel, train, attack, scrape unloaded logs, or advance confirmed actions based solely on a projection. Companion captures only authorized visible data; the DOM bridge is untrusted.
+- Static Pages is not a private remote backend. No credentials, real log payloads, user backups, personal data, screenshots containing secrets, passphrases, or raw authorization headers committed or uploaded. New persistence remains local unless the user explicitly authorizes export or another storage destination.
+- UTC millisecond timestamps/TCT calendar boundaries; browser Local clock is presentation only. Existing account and browser preferences, active sessions and archives survive upgrades. Keep all work in docs/; do not touch Faction Ledger, RainMeter or root workflows without a new explicit work order.
+
+## 2. Current status and dependency graph
+
+| Track | Status at baseline | Next gate |
+|---|---|---|
+| Native reliability (R0) | Adapted fixture execution; 19 CJS/MJS test files; latest Pages workflow succeeded | Native Node, Web Crypto, browser/permission tests |
+| Log archive (L1–L4) | Opt-in idle collector; 2,000 newest in memory; companion separate | Typed records, durable transaction/checkpoint, coverage |
+| Account persistence (1P.1–1P.3c) | Registry, encrypted V1/V2, staged session, revision ancestry/tombstones, explicit eligible preference merges | Stable-ID protected merge, conflict staging, safe activation |
+| Companion/portable recovery (1P.4/5) | Install guidance, bounded existing companion captures, portable file exports | Encrypted independent vault, authorized directory/chunked archives |
+| Live optimization (1A, 1B.1/2) | Shared live entrypoint, regeneration/points and source freshness improvements | 1B.3 liquidity/accounting; 1C independent numerical parity |
+| Financial ledger (F1–F3) | Estimates, activity spend and rehab counter delta; no complete actual ledger | Typed log evidence and stable IDs |
+| Execution recovery (E1–E2) | Staged review and strict suffix preview; no activation | Fresh replay and safe transaction |
+| Activity intelligence (A1–A4) | Shared war stacking, some chain/race/calendar sources, addiction thresholds, two detailed crime tables | Dynamic resource constraints, remaining reference/evidence tables |
+| Calendar/Timeline (C1) | Standalone Home tile, Week/Agenda, full Calendar, persistent 12h/Scroll ON defaults | Confirmed history, resource conflict/edit/recurrence |
+| Worker and analytics (O1/H1) | Pending broader search/worker and reliable historical metrics | Native parity, typed ledger and coverage |
+
+Dependency order:
+
+```text
+R0 baseline -> L1 typed archive -> L2 durable pages -> L3 UI/resume/retention
+                  |                    |                |
+                  +---- stable ID/schema contract ------+-> L4 interpreted evidence
+                            |
+R0 -> P1 protected-record merge -> P2 safe session activation
+           |                            |
+           +-> P3 companion/portable archive backup (after L2/L3)
+L4 + P1 -> F1 immutable ledger -> F2 liquidity/budget -> F3 partial-cycle reconciliation
+F2 + E1/P2 -> E2 execution consistency -> O1 parity -> bounded search/worker
+L4 + F1 -> A1–A4 intelligence -> C1 resource calendar -> H1 historical analytics
+```
+
+P1 and L1/L2 may be developed independently after schema alignment; only parallelize disjoint files, or agree on interface contracts and serialize integration. A critical recovery/financial release gate is not waived merely because log collection is useful. Pure archive collection can ship behind opt-in before actual financial inference.
+
+## 3. Recommended implementation sequence and exit criteria
+
+### R0 — Reproducible baseline and integration audit (first)
+
+1. Read latest main, root and applicable nested AGENTS, handoff and relevant plans. List actual tests and scripts. Record baseline SHA, file versions, open risks, Pages status and parallel changes. Do not assume these plans reflect future main.
+2. Native Node: syntax-check changed runtime scripts and run every discovered docs/tests/*.cjs and *.mjs in isolated processes from repository root. Capture exact command, Node version, pass/fail counts and failing assertions. Existing MJS fixtures were refreshed; earlier adapted baseline failures are historical, not current native results. Do not weaken tests to make them pass. Add a small docs-only runner and report if useful; root CI requires separate scope approval.
+3. Browser test gate: serve docs over HTTP(S) (not file://); exercise dark/light, narrow phone and expanded side panes, Home/Calendar modes, minute/midnight/noon rollover, scroll toggle and reload, click/tap dismissal/keyboard, clock local/TCT, account switch and recovery. Use mocked API responses first, no key required. Real authenticated checks only with the user's authorized session/key in the existing app, never in a prompt or fixture. Verify current Pages asset URLs/cache versions.
+4. Review risks listed in handoff against current source. Verify current official API schema/permissions/limits and sample redacted shapes; never use production log data as a fixture. Native crypto, Web Locks, IndexedDB and quota behavior are separate gates. If environment prevents native execution, document precisely, continue only bounded mock/pure work, and do not claim release-grade validation.
+
+**Exit:** native baseline report, regression list resolved or isolated, explicit browser/auth blockers. Commit docs-only test tooling/fixes in small validated commits.
+
+### L1 — Typed log contract and parser (next implementation)
+
+Implement [log-archive-implementation-plan.md](log-archive-implementation-plan.md) L1. Start with pure adapters and synthetic fixtures, not new UI or wider polling. Preserve exact source IDs and nanostamp strings; version normalized fields, minimize sensitive data, validate bounds and fail closed. Keep unknown types searchable without implying interpretation. No historical cost inference yet.
+
+**Exit:** deterministic parser, per-record identity and conflict policy, same-second cursor/duplicate/unknown data tests, documented official schema evidence.
+
+### L2 — Durable IndexedDB store and atomic checkpoints
+
+Build the bounded versioned store, per-owner indexed access, page-level transaction and coverage/checkpoint model. Coordinate tabs and connection epochs at commit boundary, not merely at network request. Catchup/head/backfill states must resume correctly after crashes and reload; imported/migrated rows cannot silently certify coverage. Preserve 2,000-row temporary collector as bounded fallback only with clear status and no extra automatic collection on failure.
+
+**Exit:** native browser tests for transaction atomicity, reload, two tabs, owner switch, same-owner rotation, duplicates, conflicting payload, aborted/late response, quota/versionchange and explicit purge; no additional endpoint or elevated key requirement for general Guide.
+
+### L3 — Opt-in persistent collection, archive browser and retention
+
+Expose count, oldest/newest observed time, known gaps/coverage, last committed page, last verified head check, waiting/backoff/permission/storage states, pause/resume, explicit clear and bounded retention. Separate collector consent from credentials and automatic restore. Make source choices, filters and indexed pagination responsive to large archives; do not load every record on each tick. Durable archive only auto-resumes after valid current-account verification and explicit persisted consent if that option is accepted. Default off for new accounts; preserve current user consent semantics until migration is verified.
+
+**Exit:** users can reload/reconnect and resume without redownloading stored history; 100-row page and one idle request/minute limits preserved; stale/late work cannot resurrect a purged archive. API and companion remain separate with visible provenance. No authoritative history/financial integration until L4.
+
+### P1 — Stable-ID protected record merge (1P.3c continuation)
+
+Extend existing V2 encrypted revision/manifest and journal machinery with record-level merge contracts, not timestamp last-writer-wins. First calendar manual events, then immutable expense/history rows; preserve stable IDs, observed deletions, legacy estimates, pending rehab review and existing sessions. Prepare explicit before/after conflict preview, protect divergent same-ID rows and ambiguous deletions, require verified owner and current manifest/digest recheck under participating lock. Use synthetic stale/descendant/divergent/tombstone/quota/competing tab cases. Keep active-session activation excluded. Preference-only merge remains functional.
+
+**Exit:** protected record-specific merge and review, rollback/finalize tests, independent Web Crypto and browser recovery checks. No blanket enablement of protected sections.
+
+### L4 — Interpretation and history projections
+
+Typed interpreter registry keyed by verified log type ID, source version and validated fields. Build derived consumption, refill, training, travel, rehab, purchase/sale and other financial evidence adapters only when exact documented semantics are established. Unknown and contradictory records remain review-only. Preserve link to source record and parser version; rebuild derived views idempotently after interpreter updates. Companion text evidence has separate identity and confidence; no guessed cross-source merges.
+
+**Exit:** representative fixtures for known types, multiple same-second events, refunds and ambiguous records; actual vs planned calendar item use and historical records read only when supported by evidence. Missing coverage explicitly shown, no complete-ledger claim.
+
+### F1–F3 — Ledger, liquidity and financial reconciliation (1B.3)
+
+- F1: append-only canonical transaction/consumption evidence ledger, stable source-derived IDs and correction/reversal relations. Separate actual cash transactions, actual consumption, observed fee deltas, estimates/reservations. Preserve imported legacy training-spend estimates verbatim and label them. Prevent duplicate counting between manual entry, API log, rehab counter delta and reconciled session.
+- F2: expose replacement value (including owned inventory), purchase requirements, purchase forecast, immediately spendable wallet, reserved cash/items and rolling budget remainder as different quantities. Verified price and quantity only; unknown stays null. Wallet is immediate liquidity, not full-week budget. Do not assume owned stock beyond fresh inventory, or use reserved war Xanax twice. Maintain same normalized inputs across Live/Home/Restock/Calendar.
+- F3: reconcile partial-cycle expense/quantity against immutable confirmed actions and typed evidence. Release only explicitly unconsumed/uncommitted reservations, not inferred cash refunds. Idempotent recomputation, timezone and rolling-window tests, no automatic gameplay. Define accounting policy before migrating existing estimates.
+
+**Exit:** actual-vs-estimate ledger, evidence-linked deduplication, paid/natural/budget/refill/stock/war/rehab tests, no duplicate debit after reload/recovery. Historical incomplete coverage labelled.
+
+### P2/E1 — Safe recovered-session activation
+
+Existing staged backup and strict suffix preview stay non-runnable until review. Preserve confirmed prefix exactly; require fresh identity/bars/cooldowns/refill/stats/gym/perks/inventory/status/travel/education/faction/restrictions and deadline. Reconcile attested additional completions and verified evidence conservatively. Require explicit user approval of unchanged reviewed suffix. Journal atomic promotion/discard with previous generation, participating tab lock, account/connection/manifest recheck and new watch baseline. Never resurrect imported stale observations or add duplicate estimated/actual spend. If incompatible or ambiguous, retain stage, show reasons and allow explicit discard/replan.
+
+**Exit:** all seven template producer/backup/replay cases, paid/natural partial/overdose/missed action/changed deadline, held-session consumer safety, activation interruption/rollback/cross-tab, actual browser recovery. No resume until gate passes.
+
+### P3 — Independent recovery destinations (1P.4 and 1P.5)
+
+Explicit encrypted companion vault enrollment, independent recovery authorization, bounded acknowledged last-good and previous generations; browser-origin DOM not trusted. Native GM/PDA adapters and platform validation. Optional authorized directory picker for recognized encrypted envelopes/chunked archives; normal portable file fallback, no silent discovery. Directory matching by verified account and authenticated content; permissions/revocation, corrupted files, origin clear and device loss test matrix. Preserve chunk manifests/digests/checkpoints and avoid duplicate copy of existing market/companion stores. Define separate device-global preference scope before exporting it.
+
+**Exit:** site-data clear recovery without plaintext bridge or API-key transport; Android/iOS and desktop supported configurations verified individually; durable-write acknowledgements, quota/failure reporting, encrypted archive portability and explicit purge semantics. No remote account service implied.
+
+### E2/O1 — Live execution correctness, parity, bounded optimizer
+
+Independent end-to-end fixtures for Stats Live and Home under identical fixed timestamp/input, not merely same-function assertions: winning plan/sequence/energy/gain/cash/deadline/horizon, natural-only, all paid templates, partial cycle, premium restrictions, owned points/stock, budget exhaustion, stale evidence, changing gym, refill, war and rehab. Theoretical controls cannot influence Live. Reconcile missed/extra/overdose/travel actions without inferred identity or cost. Only after parity, profile expensive search and bound candidate expansion, then evaluate variable/mixed sequences. Move pure optimizer to cancellable Web Worker; main thread owns validated snapshot/epoch/input hash, discard stale results, deterministic tie-breaking and fallback. No extra API calls from render/worker.
+
+**Exit:** numerical parity plus native browser performance measurements before/after; responsive UI and correct latest-result handling.
+
+### A1–A4/C1 — Activity intelligence and scheduling
+
+- A1 faction/chain/war: shared milestones, dynamic chain preparation, fresh verified status and reserves, distinguish actual attacks from estimates; no fabricated end times; late announcement/OD warnings.
+- A2 remaining crime references: sourced target/condition/skill/equipment/quantity rows, exact API IDs only where verified, confidence and collection states; unknown not zero; conservative profit/risk per nerve. Preserve Search for Cash/Shoplifting 93 reference rows and current filters/manual expiry semantics.
+- A3 addiction/rehab: observed penalties, consumption and rehab evidence, estimated ranges/confidence, avoid exact hidden addiction or double-counted rehab fees. Preserve education restrictions and travel/war eligibility.
+- A4 resource compatibility: explicit reservations for Energy, cooldown, time, travel/location, inventory and cash. Separate hard blocking from advisory overlap. Dynamic chain/race/OC/manual commitments; no automatic action.
+- C1 calendar: edit/recurrence/navigation/filtering/conflicts, actual history vs plan with distinct provenance; Week package values actual vs projected, replacement vs purchase. Keep current compact Timeline design unless user requests change.
+
+**Exit:** each segment independently sourced, tested and integrated through shared scheduler; confirmed events/forecasts never conflated.
+
+### H1 — Historical analytics
+
+Use indexed evidence/ledger for stat growth, cost/stat, training efficiency, income/expenses, net worth, crime profitability, consumption/addiction trends, inventory turnover, war results and forecast accuracy. Display date ranges, coverage, data source, estimated/actual and confidence. Missing data is unknown, not zero. Use aggregate queries/worker for large datasets; avoid per-minute full archive scans.
+
+**Exit:** fixed historical fixtures, bounded query performance, reproducible aggregation, no authoritative metrics where coverage or semantics are incomplete.
+
+## 4. Work breakdown and parallel integration policy
+
+Implement ordered small increments, not a giant rewrite. Suggested first batches: R0 baseline and audit; L1 decoder and pure fixtures; L2 storage primitive; L2 worker integration; L3 archive UI and consent/retention; P1 merge design and first manual-calendar adapter; L4 first verified typed interpretation. Record dependencies and acceptance at each checkpoint. P2 activation, F1 ledger and P3 archive recovery require their safety gates; avoid parallel edits to account-storage.js, log-guide.js, crime-guide.js, stats-sequencer.js and index.html without coordination. No broad reset of main, forced pushes, or overwriting concurrent changes.
+
+Each runtime checkpoint: inspect baseline -> design bounded patch -> tests (native if available, clearly identify adapters) -> code review -> cache-bust modified assets in index.html -> update the relevant design plan and handoff -> recheck head and use non-force expected-head commit -> verify compare is docs/ only -> check Pages workflow and distinguish deployment from browser verification. If an unrelated newer commit lands, reconcile or stop on overlap, do not blindly reapply full stale files.
+
+See [development-handoff.md](development-handoff.md) for current exact entrypoint, module map, known limitations and reusable new-thread prompt.

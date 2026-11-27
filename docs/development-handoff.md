@@ -1,0 +1,75 @@
+# TORN Guide — new-thread handoff / execution checkpoint
+
+Updated 2026-11-27. Canonical repo: https://github.com/vagabond1215/TORN ; branch main ; scope docs/ only ; live https://vagabond1215.github.io/TORN/. Runtime baseline `0d79410ec5cb2505b4c13fc9cc2a7fe204766a05` (Timeline 12h/Scroll persisted). Planning-only checkpoint: no runtime changed by this handoff. Root AGENTS.md applies; no nested docs/ AGENTS at baseline. Always recheck latest main and applicable instructions before work. Do not use other repositories' instructions/state; other projects within TORN are outside scope.
+
+## Start here
+
+1. Read root AGENTS.md, then this handoff, [development-roadmap.md](development-roadmap.md), and [log-archive-implementation-plan.md](log-archive-implementation-plan.md). Read the relevant existing detailed plans and source/tests before editing.
+2. Current recommendation: R0 native reliability baseline, then L1 typed personal log decoder/coverage, L2 IndexedDB archive/checkpoints and L3 durable collection UI. P1 protected-record merge can proceed independently after schema agreement; do not activate restored sessions or promote logs to ledger without their gates. This is planned work, not a claim of implementation.
+3. Continue bounded validated segments sequentially; prefer commit to main, no force, preserve concurrent work. Use actual source as truth. If unable to check native browser/Node/API, report that limitation and do not fake results. Update handoff and relevant plan with actual tests, commit and next exact task.
+
+## Current implementation checkpoints
+
+| Area | Present state |
+|---|---|
+| Live inputs / planning | Shared liveOptimizationContext + trainingRecommendationContext; source age/owner/provenance; live regen phase, owned points, reserved Xanax; Stats Live shared with Home, theoretical isolated. Wallet informational, liquidity/actual ledger pending. |
+| Crime / war | 34 Search for Cash and 59 Shoplifting reference rows; manual conditions/expiry, conservative reward signature. Shared four-dose war stacking projections, current status and budget/rehab reservations. Remaining crimes, dynamic chains and detailed constraints pending. |
+| Energy UI | Gym membership and Energy/train, primary phase/countdown same hierarchy, separate Next action, active session locks. Auto observation opt-in settings preserved. |
+| Account backup | Explicit typed allowlist, V1/V2 AES-GCM encrypted portable backup; V2 manifests and causal revisions/tombstones; staged session and cycle history; recovery review/strict suffix preview only; journal finalize/rollback, current-writer holds, explicit selected eligible preference descendants merge. Protected calendar/ledger/history and divergent records review-only. No session activation, automatic sync or companion vault. |
+| Logs | Companion own visible Log capture/view; opt-in API collector up to 100 logs/page, at most one attempt/minute after 15s idle, foreground interruption, separate archive, 2,000 newest rows in memory, no durable checkpoints or structured ledger. |
+| Calendar | Standalone Home Timeline below recommendation toggles, spanning center width without rails; Home Calendar Agenda/Week only, full Calendar Agenda/Timeline/Week/Month. Week package hover/tap planned replacement value and unknown price handling. |
+| Timeline | Collapsible tile, Home toggle, centered 12/24/36/48h controls plus green/muted Scroll, settings/refresh, no range/snapshot heading, legend or persistent inspector. Drug cooldown only as duration; remove redundant ready flags from timeline only. Xanax action flags remain; click/tap popup outside-dismiss/Escape. Scroll ON rolling minute starts NOW, OFF fixed TCT midnight (12h half-day noon/midnight). Default 12h ON; per-account persistence and backup. No new API calls/optimizer run on local minute tick. |
+| Clock | DDMMM HH:MM:SS TCT; popup TCT/Local switch saved browser-local; UTC reset deadlines remain unchanged. |
+| Mobile | Desktop and Android/iOS Torn PDA install guidance, URL/manual fallback; native PDA GM/async storage compatibility not proven. |
+| Analytics | Existing estimated/partial features; durable log/ledger and historical metrics pending. |
+
+Preserve user's design preferences: compact Home layout, separate recommendation tiles and toggle/collapse states, minimal timeline visual clutter, exact timestamp posts and duration blocks, side panes stay independent; do not add duplicate cooldown flags, repeated snapshot/legend/inspector text, or revert clock/range controls. Timeline primarily communicates relative proximity; Energy remains the action interface. Use local UI ticks not API polling for display-only changes.
+
+## Source/module map
+
+- `guide-features.js`: tornGuideApi coordinator/connection epochs, request TTLs, selection provenance, verified identity, idle eligibility and requests. Never add a competing direct Torn fetch loop. Read [API_DATA_SOURCES.md](API_DATA_SOURCES.md) and official API spec before new selections.
+- `log-guide.js`: decoder/temporary archive, worker state, head/catchup/older pagination, log UI; `torn-companion.user.js`, `local-bridge.js`: authorized visible capture and untrusted bridge. New durable archive should be a separate versioned module, bulk data not in account snapshot registry.
+- `account-storage.js`, `account-revisions.js`, `account-backup.js`, `account-backup-ui.js`, `training-recovery.js`: registry, trackedWrite, revision ancestry/deletions, encryption, restore/merge journal, stage/review. Read persistence plans before any writer/schema edits. Avoid disabling holds or overwriting sessions.
+- `crime-guide.js`: Home recommendation cards, training sessions/watch/accounting, liveOptimizationContext, trainingRecommendationContext, activityEventsForTraining, calendarEvents, activity scheduler integration, crime filters. `stats-sequencer.js`: liveInputs, simulator and weeklyPrograms, trainingExecution, calendarValuation, replayRemaining; `stats-calculator.js`: comparisons and shared entrypoint. `crime-states.js`: condition references.
+- `activity-scheduler.js`: war/rehab/commitment sources, reservations, agenda/week, unified timeline layout/mode controls, per-account timeline-controls record; `tct-timers.js`, `preferences.js`: clock and browser-local preferences. `right-rail.js`: timers/overview.
+- `guide.js`: route wiring, local UI timer, account recovery and UI refresh orchestration. `index.html`: script order/asset cache versions. `styles.css`: responsive layouts/theme.
+- `investment-history.js`, market/companion archives: separate existing data domains, inspect actual storage schema before migration. `roadmap.js`: Focus/priority/budget. Other guide tools have their own plans, avoid unrelated changes.
+
+## Outstanding source audit and integration risks
+
+These are targeted review tasks, not confirmed production failures. Reinspect actual main and create reproduction fixtures before patching.
+
+- Log collector: current decoder flattens selected fields; same-ID overwrite in mergeApiRows, any-overlap catchup, missing/repeated cursor exhaustion, 2,000 cap, no durable cross-tab transaction. Upgrade via L1–L3. Verify API cursor/type/permissions/error codes against official current schema; test same-second logs and malformed/missing terminal signals. Scope rate-limit claims to cooperating Guide tabs, not third-party clients. Archive writes must be guarded by account epoch/generation after fetch; same-player key change and late response/purge races need real tests.
+- Timeline integration: at baseline trainingExecution and calendarCandy both filter happyReset; after.drug is present, training.inputs is returned, war-dose-N IDs match and schedule retains items via mapping. These source checks resolve earlier uncertainty but are not integrated runtime tests. Test real simulator output for candy metadata alignment, unit of post-action cooldown, war and training event values, and freshness of calendarValuation. Locked-session unspecified candy price intentionally unknown; earlier past events not supplied by current projection; Week summary is planned remaining replacement value, not confirmed daily total. Verify popup outside/touch/keyboard, minute redraw and narrow rails, overlapping cooldown bands, boundary clipping and status accessibility.
+- Account recovery: current registry and causal ancestry are bounded, not complete durable record-level merge; protected data remains review-only, active/held session guard. Native crypto/locks/cross-tab storage and actual clear/recovery tests open. Old tabs/nonparticipating writers are not guaranteed serialized. No automatic approval by public ID or DOM packet.
+- Shared optimizer: independent numerical end-to-end paid-plan parity and wallet liquidity not verified. No broader search/worker before parity; verify source freshness, absent/permission shapes, active session, reserve and refill handling.
+- Actual cost: existing rolling training estimates and manual/API-counter rehab spend must remain semantically distinct; no promotion to actual transaction. Stable-ID reconciliation and import conflicts need design before posting ledger effects.
+- Companion: PDA install instructions exist, but actual cross-origin bridge, GM sync vs PDA async storage and quota differ by platform; verify before claiming support.
+- Browser/CI: native checkout previously blocked by DNS in connector environment; adapted JS harness has no full Node/Web Crypto/real DOM. Root workflows serve other project concerns; no root CI edit without authorization.
+
+## Validation checkpoint
+
+Latest runtime Pages deployment for baseline succeeded: https://github.com/vagabond1215/TORN/actions/runs/45923129800 . This is workflow evidence, not authenticated deployed interaction validation. Most runtime fixtures have run as adapted JS bodies with mocked filesystem/assert/transport, not native CLI. Prior Stats/Weav3r MJS adapted results after fixture refresh were 14/14 and 5/5; do not assume current native pass. Last Timeline persistence change: six adapted CJS suites passed including controls, account storage, timeline geometry, scheduler, Week values, 25 live Energy cases; native verification outstanding. At baseline 19 test files (17 CJS, 2 MJS). Discover new tests dynamically on each run. Suggested PowerShell from root (user/Codex native checkout):
+
+```powershell
+node --version
+Get-ChildItem docs -File -Filter *.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE) { throw "Syntax failed: $_" } }
+Get-ChildItem docs/tests -File | Where-Object { $_.Extension -in '.cjs','.mjs' } | Sort-Object Name | ForEach-Object { node $_.FullName; if ($LASTEXITCODE) { throw "Test failed: $_" } }
+```
+
+For browser checks use a local HTTP server or deployed Pages; do not send API credentials in scripts/fixtures. Separate native syntax/Node, browser with mocks, native Web Crypto/IndexedDB/Web Locks, authenticated API, mobile and deployment verification. Report failures exactly, no false success. If environment lacks tools, run available bounded fixtures and record missing gates.
+
+## Reusable new-thread prompt
+
+```text
+Continue the TORN Guide project at https://github.com/vagabond1215/TORN on main, scope /docs/ ONLY. Read root AGENTS.md and all applicable nested instructions. Recover state from the latest repository, not from guesses or this prompt's older commit: docs/development-handoff.md, docs/development-roadmap.md, docs/log-archive-implementation-plan.md, docs/next-segment-upgrade-plan.md, docs/persistence-implementation-plan.md, docs/account-persistence-plan.md and docs/activity-scheduler-plan.md, plus relevant source/tests. Inspect latest main and concurrent changes, identify next uncompleted gate, and implement the dependency-ordered sequence in bounded segments. Start with R0 native baseline and L1 log contract if still outstanding. Preserve existing features, settings, sessions and source confidence; no automatic gameplay, credentials in commits, external key sharing or cross-project work. Use verified player ID and existing request coordinator. Do not enable protected record merge, session activation, actual ledger posting, companion sync or archive recovery before their gates. Validate actual tests; clearly distinguish native vs adapted, browser/authenticated and deployment. Use small non-force commits to main only within docs/, recheck expected HEAD, cache-bust runtime assets, update design docs, pipeline and handoff after each segment with exact completed work, SHA, tests, blockers, and next executable task. Continue as far as practical without repeatedly asking for approval. If blocked, complete safe independent work and document the specific blocker; do not promise background work or invent results.
+```
+
+## Checkpoint update template (append after each validated segment)
+
+- Date / baseline HEAD / new commit(s) / repo + scope.
+- Work package IDs: implemented, partial, not started; files touched and design choices.
+- Tests actually run, environment/commands, failures, native/browser/API/deployment status.
+- New schema/version/asset changes and migration/rollback conditions.
+- Remaining risks, current user decisions and preserved constraints.
+- Exact next 1–3 bounded tasks, prerequisites, blockers and source paths. Re-read main rather than trusting a stale hash.

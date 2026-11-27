@@ -114,3 +114,6 @@ Header date/clock with independent TCT/Local preference; UTC countdown targets u
 Timeline controls: independent 12/24/36/48-hour selection and muted/green Scroll toggle; rolling minute viewport or fixed TCT range (12h half-day, others midnight). No new API requests.
 
 Timeline controls now default to 12h/Scroll ON and persist per account through tracked preference storage, validated backup/restore and preference merge classification. Existing scheduling unaffected.
+
+## Forward roadmap consolidation (2026-11-27)
+See [development-roadmap.md](development-roadmap.md) for current dependency-ordered R0/L/P/F/E/A/O/H pipeline, [log-archive-implementation-plan.md](log-archive-implementation-plan.md) for next durable log implementation, and [development-handoff.md](development-handoff.md) for new-thread entrypoint, current source map, preserved UI/design decisions, risks and test gates. Runtime baseline `0d79410`; latest Pages workflow succeeded, native/browser/API gates remain open. Next executable segment: R0 native baseline and L1 typed log decoder/coverage, then L2 durable page/checkpoint store and L3 collection UI, aligned with P1 protected record merge. Preserve earlier persistence/financial/optimizer gates. Planning checkpoint only; no runtime work completed here.

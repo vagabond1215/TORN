@@ -1,0 +1,86 @@
+# Durable personal log archive — implementation specification (proposed)
+
+Date: 2026-11-27. Baseline: `0d79410ec5cb2505b4c13fc9cc2a7fe204766a05`. Scope: vagabond1215/TORN, docs/ only. This is the next recommended implementation, not a description of a completed database. Coordinate with [development-roadmap.md](development-roadmap.md), [account-persistence-plan.md](account-persistence-plan.md) and [persistence-implementation-plan.md](persistence-implementation-plan.md).
+
+## Current runtime and constraints
+
+- `guide-features.js` owns Torn request coordination, `request()`, `idleLogPage(cursor)`, `idleEligible()`, `cancelIdleLog()`. Idle fetches are read-only, fixed v2 user/log endpoint, at most 100 rows, 60-second attempt spacing and 15-second quiet window, foreground cancellation, visible tab, account/connection epoch guard, per-player Web Lock and timestamp, permission stop and transient backoff. Restored key is verified first. Official reference: https://www.torn.com/swagger/openapi.json ; existing repository documentation: [API_DATA_SOURCES.md](API_DATA_SOURCES.md). Revalidate the live contract and permissions before relying on any specific field or cursor behavior. Do not follow arbitrary response links or issue a second independent fetch loop.
+- `log-guide.js` owns opt-in worker, `decodeApiPage`, `mergeApiRows`, `nextApiTask`, `applyApiPage`, `tick`, account-scoped in-memory archive, search/day filters and paged display. Current archive retains 2,000 newest rows and is lost on reload; ID, time and formatted text only. Five-minute newest-page checks, catchup and older pagination. Companion archive remains separate.
+- `guide.js` calls log worker from existing local tick; `torn-companion.user.js` captures visible official own Log page data, bounded 2,000 rows, not authoritative API IDs; `local-bridge.js`/DOM events untrusted. `investment-history.js` and existing market archive(s) must not be overwritten or blindly merged.
+- Current coordinator's lock covers network fetch, not durable page commit (not implemented). Existing head/catchup heuristic terminates on any overlap; current merge overwrites duplicate IDs and missing/repeated cursor can appear exhausted. Treat these as audit/upgrade targets rather than asserting that a real API response has failed. Current in-memory history/coverage does not prove complete activity history.
+
+## Design requirements
+
+A local, versioned, account-bound archive that survives reload and API key rotation. Collection is opt-in; no new background service, endpoint, credentials or gameplay action. Store only bounded validated data relevant to user-approved history/analysis, not entire arbitrary API responses. Do not retain secrets, response links, authorization, cookies, request params, messages or arbitrary free text fields. Do not derive actual cash from an item's market value. Unknown log types remain readable with safe title/category and known bounded fields; unsupported details never become ledger events. In-app archive is local browser storage, not encrypted at rest merely because portable exports are encrypted. Explain this distinction in UI.
+
+### L1 — proposed normalized schema
+
+Finalize names/field types against the official current spec and representative synthetic fixtures. A candidate V1 record:
+
+```text
+playerId       canonical verified player ID (string; partition key)
+source         "api-log" (companion is separate)
+sourceId       exact bounded opaque API record ID, never a generated row index
+schemaVersion  1
+occurredAt     validated UTC milliseconds (convert documented timestamp units)
+typeId         documented stable numeric/string log type identifier or null
+category       bounded validated display category
+title          bounded validated display title
+fields         typed, allowlisted scalar/array/object fields per supported type
+observedAt     successful local receipt time, not occurrence time
+decoderVersion version for reproducible derived views
+```
+
+Do not assume typeId, nested fields or the meaning of a field until verified. Preserve exact source ID/cursor strings (no Number conversion for nanostamps or opaque IDs). Reject out-of-range dates, malformed identities, oversized page/field/record, unsafe prototype keys, ambiguous numeric units and nonfinite numbers; sanitize for HTML on rendering, do not evaluate log content. Allowlist per-type relevant quantities, amounts, item IDs, stat, gym, energy/nerve/happy, points and event relationships only after source validation; store unknowns as null or omit explicitly. Do not put a whole unfiltered x.data object into IndexedDB. If payload cannot be decoded completely, stage a bounded error/unsupported status and stop that page rather than falsely advancing coverage. Unknown but well-formed type with safe summary can be retained as uninterpreted record. Derived display string is not the source of truth.
+
+Exact ID duplicate + same canonical relevant values: idempotent, preserve evidence. Same ID with different canonical values: conflict (retain old, flag bounded disagreement; do not replace silently). Canonical digest optional after checking native crypto; no digest of raw secrets. Companion records use separate namespace and source-local multiplicity, never guessed API IDs; do not dedup two legitimate same-second identical actions. Link cross-source only with explicit high-confidence evidence; otherwise show separately.
+
+### L2 — storage and transaction design
+
+Proposed new docs/log-archive.js module and docs/tests/log-archive*.test.cjs. Prefer an isolated IndexedDB database with explicit version and origin. Candidate object stores:
+- records: compound key [playerId, source, sourceId], index [playerId, source, occurredAt, sourceId] for bounded cursor pagination; optional verified type/date index only if justified by queries.
+- sync: per-player and source checkpoint, generation/revision, consent policy metadata (or separate tracked small preference), last successful/verified head, oldest/newest committed row, older cursor, catchup cursor, target overlap/anchor, complete/gap/unknown/exhausted status, source contract version, retry status (no key).
+- conflicts: bounded source-ID conflict summaries with safe fields or digests and timestamps; no silent unbounded growth.
+- optional derived evidence/indexes in L4, never store forecast as log.
+
+Commit an entire validated API page and corresponding checkpoint/coverage update in a single readwrite transaction. Read expected account archive generation and checkpoint inside transaction. If changed (other tab, purge, reset, import, account switch, connection epoch mismatch), reject/abort/reload; never blindly update checkpoint after records fail. Compare task expected cursor/head generation against latest durable state; duplicate page replay is harmless. Wait for transaction complete before reporting saved or incrementing committed count. No localStorage giant arrays, no async network await inside a transaction; validate/stage before opening it. Never mutate existing stores outside the dedicated archive transaction. Handle blocked upgrades/versionchange, close stale connections, storage unavailable/quota, failed migration and cancellation explicitly; never silently delete data to fix an upgrade. Feature detect IndexedDB and Web Locks; use fail-closed policy for multi-tab background collection and explain fallback. Migrations non-destructive and versioned; schema upgrade fixture with previous records and checkpoints.
+
+Coordinate network slot with the existing lock and archive commit serialization. Recheck verified owner, connection epoch, current consent/generation, task revision and archive identity immediately before committing. A page request completed after pause/purge/disconnect/account rotation must not repopulate an archive or advance its cursor. Same-player rotated key keeps data but requires new verified connection before writing; owner switch invalidates rendered rows and in-flight tasks. For a purge, first stop/abort, increment durable generation/tombstone under lock, then delete only that partition's records/checkpoints/derived rows; preserve new generation so stale requests cannot resurrect it. Clear does not remove API key or unrelated records. Logout hides records and stops collection, does not clear; explicit forget/purge separate. Current archive/checkpoint transactions cannot promise full browser ACID across localStorage and IDB; coordinate any cross-store import using staged journal/acknowledged finalization.
+
+### L2 — pagination and coverage state machine
+
+One worker through the existing idle slot. Every request attempt, including identity verification/failure, respects the shared cap. Request newest page initially, then exact older cursor from committed response; periodic head refresh about every five minutes (not a separate polling timer). If new head does not connect to known previously covered head boundary, continue a catchup chain before older backfill. Head refresh cannot discard an unfinished catchup or overwrite older checkpoint. Never use a numeric timestamp as a substitute for a missing exact cursor when same-second records may be skipped. Use string precision, compare only if official contract defines monotonic order, detect repeated/cyclic/no-progress cursor with bounded history, invalid/missing cursor and unexpected sort/order. Do not follow response URLs. Verify terminal signal from actual API contract; empty page or absent cursor alone must not be presented as all-time complete unless warranted.
+
+Coverage is explicit connected ranges or tracked contiguous segments/anchors, with unknown gaps, truncation, retention and source permission limitations. A single duplicate is not sufficient evidence of contiguous catchup if page boundaries/order or source filters are uncertain. Exact resume should bridge a known checkpoint; treat any unsupported contract/changed filters as new gap. Distinguish oldest record observed from earliest history available; newest check time from newest event time; successful page with no rows from unverified. Import rows do not certify API coverage; mark imported coverage with provenance and verify before resuming. Track last attempt and last successful durable transaction separately. Backoff status, daily-limit stops and permission changes should persist enough to avoid restart hammering; no automatic retry storms. Network abort/foreground cancellation not an error or completed page. Keep normal API responsiveness.
+
+### L3 — UI, retention and consent
+
+- Default collection OFF for new/unknown account. Enabling clearly says what data is collected, local storage/privacy and API requirements. Persist per-account opt-in only after user chooses, with explicit resume policy; freshly verify account and current key permission before reopening collection. Pause is immediate and durable; permission/auth/unsupported storage stops require explicit review/resume or documented bounded retry. Visible tab only; no background task promise when closed.
+- Show source (API vs companion), committed rows, observed oldest/newest, coverage state/gaps, last successful head/page, current idle/backoff/error state, estimated storage and configured retention. Search/day filters use TCT and bounded cursor pagination; debounce search, limit page size, do not full-scan on every tick. Avoid re-rendering active filter input or focus/scroll on each page. Expose clear-confirmation scoped to selected account/source; no automatic eviction of history to make room without opt-in.
+- Define configurable retention by max records and/or byte budget and optional cutoff, conservative safe defaults documented after testing quota/performance. A reached bound pauses older backfill and clearly labels missing coverage; if offering rolling eviction, explicit separate choice and persist removed-range/tombstone semantics so backups/old tabs cannot resurrect deleted history. User-approved export before purge. No arbitrary claim of unlimited browser quota; measure actual usage and test quota failure. Avoid storing history in API cache.
+- If IndexedDB is unavailable, show honest limited memory-only mode only if explicitly enabled, never promise durability; do not automatically switch from durable to volatile and continue silently. Preserve existing companion history and separate source controls. Existing users have no durable API archive to migrate, only current session rows; any one-time migration of live rows must be explicit, validated, partial and non-destructive.
+
+### L4 — interpreters and consumers
+
+Registry of versioned decoders keyed by documented exact log type identifier. Interpretation output contains stable evidence ID derived from player/source/sourceId and effect index, occurredAt, kind, validated fields, provenance, confidence/interpretation status, links to immutable source. Multiple effects from one log are distinct, deterministic IDs; corrections/reversals explicit, not mutation of original source. Known item use can establish quantity but not price absent a reliable price/transaction field. Distinguish observed fee/counter delta and manual records from exact purchase. Handle ambiguous activity, unknown prices/quantity and refunds without coercion. No expense posting, training completion, addiction prediction or authoritative historical calendar until typed adapter tests and appropriate integration gate. Derivations can be recomputed idempotently, bounded and versioned; never replace existing confirmed session prefix automatically.
+
+### Portable archive and recovery interface (coordinate with P1/P3)
+
+Keep bulk log/market records outside small account localStorage snapshot registry. Propose versioned encrypted manifest + bounded chunks, playerId/source/version/count/time range/digest, checkpoint and coverage provenance, explicit selection, authenticated encryption with independent user-held secret per existing backup plan. Verify chunk completeness, exact owner and schema before staging; stream bounded imports, dedup by stable source ID, conflicting rows staged, no overwrite-by-date, no credential export, no automatic key/permission import. Archive retention/purge metadata must prevent resurrection. Store last known good/previous generation and recovery journal acknowledgement; unsupported/partial chunk never claims coverage. No automatic companion vault or directory mirroring in L1–L3.
+
+## Work packages, file touch plan and acceptance
+
+| ID | Primary proposed files | Acceptance gate |
+|---|---|---|
+| L1.1 | API_DATA_SOURCES.md, new typed decoder module/tests | Verify schema; synthetic exact ID/time/category/type data, known/unknown, bounds, redaction, malformed payload, exact cursor |
+| L1.2 | pure pagination/coverage module/tests | same-second records, duplicate/different payload, multi-page catchup, out-of-order/repeated cursor, gap/exhausted, invalid contract, imported partial |
+| L2.1 | log-archive.js, native browser storage fixture | DB open/upgrade, compound indexes, per-owner isolation, atomic page+checkpoint, transaction failure/quota/versionchange |
+| L2.2 | log-guide.js + guide-features.js integration tests | one worker, foreground cancellation, network/commit lock, epoch/generation checks, two-tab races, pause/purge/late result, key rotation |
+| L3.1 | log-guide.js, styles.css, index.html | archive counts/coverage/search/pagination/status, opt-in pause/resume, explicit clear, no whole archive scans on tick |
+| L3.2 | archive module/tests, account preference registry if needed | retention limits, consent persistence/reload, failure UI, isolated fallback, no secret transfer |
+| L4.1 | typed interpreter module/tests | verified types/fixtures, no ambiguous cash inference, stable effect IDs, versioned replay |
+| L4.2 | activity/finance adapters after F1 contract | actual vs planned separate, coverage/provenance, no duplicate consumption/spend |
+
+Test cases: fresh empty archive; repeated page including same-second records; same ID different payload; newest gap bridged and interrupted; terminal vs missing cursor; network timeout vs foreground abort; permission/daily stop; multiple tabs; reload after committed/uncommitted page; wrong account/key rotation; purge with in-flight page; crash/transaction abort; quota/unsupported browser; malformed/encrypted import; keyboard/mobile filters; 10k+ synthetic records query benchmark (not a quota guarantee). Browser-native IndexedDB/Web Locks/crypto and own-account API field verification are required before declaring durable release validated. If unavailable, land pure code and tests separately, keep feature opt-in/disabled, record blockers.
+
+**Next executable task:** R0 baseline plus L1.1 source/schema audit and pure decoder tests. Do not rewrite all storage/optimizer/UI in the first commit. Update this file and development-handoff.md after each completed gate with exact commit and actual tests.
