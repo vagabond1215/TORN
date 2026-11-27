@@ -38,3 +38,6 @@ const beforeHead=c.task(boundary,now+299000);
 assert.equal(beforeHead.kind,"older");
 assert.equal(c.apply(boundary,beforeHead,p([r("b",now-1000)],"9",now+301000)).ok,true);
 console.log("An in-flight older page remains valid across the head refresh deadline.");
+assert.equal(c.task(boundary,now-1),null);
+assert.equal(c.apply(boundary,{...beforeHead,requestedAt:now-1},p([r("b",now-1000)],"9",now+301000)).ok,false);
+console.log("Clock rollback cannot advance a committed checkpoint.");

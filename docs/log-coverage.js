@@ -9,7 +9,7 @@ const tornLogCoverage=(()=>{
   const cursorOk=c=>typeof c==="string"&&/^\d{1,30}$/.test(c);
   const create=playerId=>({version:1,playerId,revision:0,head:null,older:null,olderState:"unstarted",olderTail:null,olderRecent:[],headCheckedAt:null,lastPageAt:null,pending:null,gap:null});
   function task(s,now){
-    if(!Number.isSafeInteger(now)||s.gap)return null;
+    if(!Number.isSafeInteger(now)||s.gap||s.lastPageAt!==null&&now<s.lastPageAt)return null;
     const make=(kind,cursor)=>({kind,cursor,revision:s.revision,requestedAt:now});
     if(s.pending)return make("catchup",s.pending.cursor);
     if(s.headCheckedAt===null||now-s.headCheckedAt>=HEAD_INTERVAL)return make("head",null);

@@ -97,6 +97,7 @@ const tornLogArchive=(()=>{
           if(s.generation!==generation||s.blocked){done({status:"stale"});return;}
           const proposed=coverage.apply(s.checkpoint,task,page);
           if(!proposed.ok){done({status:"stale",reason:proposed.reason});return;}
+          if(!validCheckpoint(proposed.checkpoint,player))throw Error("Invalid proposed archive checkpoint; review required");
           const added=[];let duplicates=0,conflict=false,remaining=page.records.length;
           const finish=()=>{
             if(conflict){
