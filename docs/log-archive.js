@@ -94,10 +94,12 @@ const tornLogArchive=(()=>{
         const sync=tx.objectStore("sync"),rows=tx.objectStore("records");
         on(sync.get(key(player)),v=>{
           const s=checked(v,player);
-          if(s.generation!==generation||s.blocked){done({status:"stale"});return;}
+          if(s.generation!==generation||s.checkpoint.revision!==task.revision){done({status:"stale"});return;}
+          if(s.blocked||s.checkpoint.gap){done({status:"blocked"});return;}
           const proposed=coverage.apply(s.checkpoint,task,page);
-          if(!proposed.ok){done({status:"stale",reason:proposed.reason});return;}
-          if(!validCheckpoint(proposed.checkpoint,player))throw Error("Invalid proposed archive checkpoint; review required");
+          if(!proposed.ok||!validCheckpoint(proposed.checkpoint,player)){
+            on(sync.put({...s,blocked:"Invalid page continuation; review required"}),()=>done({status:"invalid"}));return;
+          }
           const added=[];let duplicates=0,conflict=false,remaining=page.records.length;
           const finish=()=>{
             if(conflict){

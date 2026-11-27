@@ -46,6 +46,7 @@ async function coordinatorRegression(){
     calls.push(url);
     if(url.includes("user/basic"))return {ok:true,json:async()=>({profile:{id:1,name:"Fixture"}})};
     if(fetchMode==="permission")return {ok:true,json:async()=>({error:{code:16,error:"Access denied"}})};
+    if(fetchMode==="http429")return {ok:false,status:429,json:async()=>{throw Error("non-JSON");}};
     if(fetchMode==="pending"){
       return await new Promise((resolve,reject)=>{
         heldRequest=options.signal;options.signal.handler=()=>{const err=Error("aborted");err.name="AbortError";reject(err);};
@@ -57,6 +58,13 @@ async function coordinatorRegression(){
   const create=new Function(...deps,read("guide-features.js").split("\nconst guideSteps")[0]+"\nreturn tornGuideApi;");
   const coordinator=create({...win,dispatchEvent:()=>{}},{...doc,visibilityState:"visible"},{locks:{request:async(name,options,callback)=>callback({})}},storage,{now:()=>clock},fetcher,Controller,(fn,ms)=>{if(ms===15000)timeoutCallback=fn;return 1;},()=>{});
   await coordinator.connect("abcdefghijklmnop");
+  const lease=coordinator.idleLogSession();
+  assert.equal(lease.playerId,"1");assert.equal(lease.isVerified(),true);
+  const beforeVerify=calls.length;
+  assert.equal((await coordinator.idleLogPage(null,{isCurrent:()=>true,verifyOnly:true})).status,"verified");
+  assert.equal(calls.length,beforeVerify);
+  assert.equal((await coordinator.idleLogPage(null,{isCurrent:()=>false,verifyOnly:false})).status,"changed");
+  assert.equal(calls.length,beforeVerify);
   assert.equal((await coordinator.idleLogPage()).status,"busy");
   clock+=60000;
   assert.equal((await coordinator.idleLogPage("1234567890123456789")).status,"ok");
@@ -73,9 +81,15 @@ async function coordinatorRegression(){
   assert.ok(heldRequest&&timeoutCallback);timeoutCallback();
   assert.equal((await timeoutWork).status,"backoff");
   clock+=60000;assert.equal((await coordinator.idleLogPage()).status,"busy");
+  clock+=600000;fetchMode="http429";
+  assert.equal((await coordinator.idleLogPage()).status,"backoff");
+  clock+=60000;assert.equal((await coordinator.idleLogPage()).status,"busy");
   clock+=600000;fetchMode="permission";
   assert.equal((await coordinator.idleLogPage()).status,"stopped");
   coordinator.disconnect();assert.equal((await coordinator.idleLogPage()).status,"disconnected");
+  assert.equal(lease.isCurrent(),false);assert.equal(lease.isVerified(),false);
+  await coordinator.connect("abcdefghijklmnop");
+  assert.equal(lease.isCurrent(),false);assert.equal(coordinator.idleLogSession().isVerified(),true);
   console.log("Mock coordinator foreground interruption, timeout backoff, permission and disconnect passed.");
 }
 if(typeof module!=="undefined")module.exports=coordinatorRegression;
