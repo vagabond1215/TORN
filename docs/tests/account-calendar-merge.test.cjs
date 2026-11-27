@@ -30,6 +30,31 @@ async function run(){
  await assert.rejects(()=>m.preview(left,{...right,records:rec([event("tampered")])},id,options),/digest/);
  await assert.rejects(()=>m.preview(left,right,456,options),/owner/);
  await assert.rejects(()=>m.preview(left,{...right,omitted:["calendar-events"]},id,options),/omitted/);
+ const common=await make(r.empty(id),[event("local"),event("remote"),event("both"),event("deleted"),event("same")]);
+ const l=await make(common.manifest,[event("local",{title:"local edit"}),event("remote"),event("both",{title:"left"}),event("deleted"),event("same"),event("local-new")]);
+ const q=await make(common.manifest,[event("local"),event("remote",{title:"remote edit"}),event("both",{title:"right"}),event("same"),event("remote-new")]);
+ const three=await m.preview(l,q,id,{...options,base:common});
+ assert.equal(three.commonBase,true);assert.equal(three.relation,"conflict");
+ assert.deepEqual(three.eligible,["remote","remote-new"]);
+ for(const key of ["local","local-new"])assert.equal(three.rows.find(x=>x.id===key).action,"keep-local");
+ for(const key of ["both","deleted"])assert.equal(three.rows.find(x=>x.id===key).action,"review");
+ const merged=await m.prepare(l,q,id,["remote","remote-new"],{...options,base:common});
+ const rows=JSON.parse(merged.change.value);
+ assert.equal(rows.find(x=>x.id==="local").title,"local edit");
+ assert.equal(rows.find(x=>x.id==="both").title,"left");
+ assert.equal(rows.find(x=>x.id==="remote").title,"remote edit");
+ assert.ok(rows.some(x=>x.id==="deleted")&&rows.some(x=>x.id==="remote-new"));
+ await assert.rejects(()=>m.preview(l,q,id,{...options,base:left}),/common calendar ancestor/);
+ await assert.rejects(()=>m.preview(l,q,id,{...options,base:{...common,records:rec([event("tampered")])}}),/digest/);
+ await assert.rejects(()=>m.prepare(l,q,id,["both"],{...options,base:common}),/eligible/);
+ // A deletion on the local branch and unchanged incoming copy cannot
+ // resurrect the deleted event, even with common-base evidence.
+ const localDeleted=await make(common.manifest,[event("local"),event("remote"),event("both"),event("same")]);
+ const keep=await m.preview(localDeleted,q,id,{...options,base:common});
+ assert.equal(keep.rows.some(x=>x.id==="deleted"),false);
+ const remoteUnchanged=await make(common.manifest,[event("local"),event("remote",{title:"new"}),event("both"),event("deleted"),event("same")]);
+ const noResurrection=await m.preview(localDeleted,remoteUnchanged,id,{...options,base:common});
+ assert.equal(noResurrection.rows.find(x=>x.id==="deleted").action,"keep-local");
  const full=await make(r.empty(id),Array.from({length:300},(_,i)=>event("e"+i)));
  const incoming=await make(full.manifest,[event("new")]);
  await assert.rejects(()=>m.prepare(full,incoming,id,["new"],options),/invalid section/);
