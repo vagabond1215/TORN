@@ -66,6 +66,7 @@ const tornAccountStorage=(()=>{
     ["training-templates",id=>prefix+"plan-view:"+id,json(plans)],
     ["comparison-mode",id=>prefix+"comparison-mode:"+id,simple(["live","theoretical"])],
     ["calendar-settings",id=>prefix+"activity-settings:"+id,json(settings)],
+    ["timeline-controls",id=>prefix+"activity-timeline-controls:"+id,json(v=>shape(v,["hours","scroll"])&&one(v.hours,[12,24,36,48])&&bool(v.scroll))],
     ["calendar-events",id=>prefix+"activity-events:"+id,json(events)],
     ["training-spend-estimates",id=>prefix+"training-spend:"+id,json(trainingSpend)],
     ["activity-spend",id=>prefix+"activity-spend-ledger:"+id,json(activitySpend)],
@@ -100,7 +101,7 @@ const tornAccountStorage=(()=>{
   // safety-restriction and observation sections, even with proven ancestry.
   function mergePreference(section){
     return /^(task|quickstart|notes):[a-z0-9][a-z0-9-]{0,99}$/.test(section)||
-      ["focus","activities","build","training-templates","comparison-mode","restock","oc-bands","recommendations","expanded","growth-tab"].includes(section);
+      ["focus","activities","build","training-templates","comparison-mode","restock","oc-bands","recommendations","expanded","growth-tab","timeline-controls"].includes(section);
   }
   const deletionPrefix=id=>prefix+"revision-observed-delete:v1:"+owner(id)+":";
   function deletionMarkers(store,playerId){

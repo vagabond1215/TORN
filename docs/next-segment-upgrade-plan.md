@@ -112,3 +112,5 @@ Compact Timeline UI: account-scoped visibility/collapse, centered modes, setting
 Header date/clock with independent TCT/Local preference; UTC countdown targets unchanged. No added API requests.
 
 Timeline controls: independent 12/24/36/48-hour selection and muted/green Scroll toggle; rolling minute viewport or fixed TCT range (12h half-day, others midnight). No new API requests.
+
+Timeline controls now default to 12h/Scroll ON and persist per account through tracked preference storage, validated backup/restore and preference merge classification. Existing scheduling unaffected.

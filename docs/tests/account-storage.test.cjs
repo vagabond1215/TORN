@@ -60,3 +60,11 @@ assert.deepEqual(timelineRecords.map(x=>x.section),["expanded","recommendations"
 const timelineRestored=storage();assert.equal(a.restoreEmpty(timelineRestored,id,timelineRecords),3);
 assert.equal(timelineRestored.getItem(p+"rec-types:123"),'["timeline","growth"]');
 console.log("Timeline recommendation visibility/collapse and migration marker round-trip passed.");
+const controls=storage({[p+"activity-timeline-controls:123"]:'{"hours":36,"scroll":false}'});
+const controlRecords=a.snapshot(controls,id).records;
+assert.deepEqual(controlRecords,[{section:"timeline-controls",value:'{"hours":36,"scroll":false}'}]);
+const controlRestore=storage();assert.equal(a.restoreEmpty(controlRestore,id,controlRecords),1);
+assert.equal(controlRestore.getItem(p+"activity-timeline-controls:123"),controls.getItem(p+"activity-timeline-controls:123"));
+assert.equal(a.mergePreference("timeline-controls"),true);
+for(const value of ['{"hours":13,"scroll":true}','{"hours":12,"scroll":"true"}','{"hours":12}','{"hours":12,"scroll":false,"extra":1}'])assert.throws(()=>a.validRecords([{section:"timeline-controls",value}],String(id)),/invalid section/);
+console.log("Timeline controls backup allowlist, restore, strict validation and preference merge classification passed.");

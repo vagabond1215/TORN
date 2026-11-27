@@ -253,10 +253,18 @@ const tornActivityScheduler=(()=>{
   }
   // View time and source snapshot time are separate: moving the ruler
   // must not move planned events or extend a remaining cooldown.
-  const timelineHours=[12,24,36,48];
-  function timelineWindow(at,hours=24,scroll=false){
+  const timelineHours=[12,24,36,48],timelineDefaults={hours:12,scroll:true};
+  function timelineControlSettings(){
+    const saved=read("timeline-controls",null);
+    return {hours:timelineHours.includes(saved?.hours)?saved.hours:timelineDefaults.hours,scroll:typeof saved?.scroll==="boolean"?saved.scroll:timelineDefaults.scroll};
+  }
+  function saveTimelineControls(value){
+    if(!timelineHours.includes(value?.hours)||typeof value?.scroll!=="boolean")return false;
+    return write("timeline-controls",{hours:value.hours,scroll:value.scroll});
+  }
+  function timelineWindow(at,hours=timelineDefaults.hours,scroll=timelineDefaults.scroll){
     const minute=Math.floor(at/60000)*60000,day=Math.floor(minute/D)*D;
-    const duration=timelineHours.includes(hours)?hours:24,rolling=scroll===true;
+    const duration=timelineHours.includes(hours)?hours:timelineDefaults.hours,rolling=scroll===true;
     // A fixed 12h window needs a noon boundary as well as midnight to
     // keep NOW in range. All longer fixed ranges start at TCT midnight.
     const start=rolling?minute:duration===12?day+Math.floor((minute-day)/(12*H))*12*H:day;
@@ -354,13 +362,16 @@ const tornActivityScheduler=(()=>{
       '<div class="activity-timeline-tooltip activity-event-popup" data-activity-timeline-popup role="dialog" aria-label="Activity details" hidden></div>'+templates.join("")+'</div>'+
       (showAgenda?'<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&(e.end>e.start?e.end>start:e.start>=start)))+'</details>':"");
   }
-  // Session-local display preference and two bounded snapshots, never persisted
-  // in the account journal. Account changes invalidate every cached view.
-  let modeOwner=null,selectedTimelineHours=24,timelineScroll=false,lastModeTick=null;
+  // Display preferences are account-scoped; only the two schedule snapshots
+  // remain in memory. Account changes invalidate every cached view.
+  let modeOwner=null,selectedTimelineHours=timelineDefaults.hours,timelineScroll=timelineDefaults.scroll,lastModeTick=null;
   const timelineSnapshots=new Map();
   function ensureTimelineOwner(){
     const id=owner();
-    if(id!==modeOwner){modeOwner=id;selectedTimelineHours=24;timelineScroll=false;timelineSnapshots.clear();lastModeTick=null;}
+    if(id!==modeOwner){modeOwner=id;loadTimelineControls();timelineSnapshots.clear();lastModeTick=null;}
+  }
+  function loadTimelineControls(){
+    const saved=timelineControlSettings();selectedTimelineHours=saved.hours;timelineScroll=saved.scroll;
   }
   const modeButtons=()=>'<div class="activity-timeline-controls"><div class="activity-timeline-modes" role="group" aria-label="Timeline duration">'+timelineHours.map(hours=>'<button type="button" data-activity-timeline-hours="'+hours+'" aria-pressed="'+(hours===selectedTimelineHours)+'">'+hours+'h</button>').join("")+'</div><button type="button" class="activity-scroll-toggle" data-activity-timeline-scroll aria-pressed="'+timelineScroll+'" title="Scroll on: NOW at left edge. Scroll off: fixed TCT window."><svg viewBox="0 0 20 16" width="16" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3v10M17 8H5m4-4L5 8l4 4"/></svg>Scroll</button></div>';
   function modeContent(snapshot,window){
@@ -368,6 +379,7 @@ const tornActivityScheduler=(()=>{
   }
   function renderModeTimeline(list,now,war=null,liveDrugSeconds=null,scope="home",clock=Date.now(),header=null){
     ensureTimelineOwner();
+    loadTimelineControls(); // Re-read on render, including after account recovery.
     if(!["home","calendar"].includes(scope))scope="home";
     const window=timelineWindow(clock,selectedTimelineHours,timelineScroll);
     const snapshot={list,now,war,liveDrugSeconds,showAgenda:scope==="calendar",window};
@@ -398,7 +410,7 @@ const tornActivityScheduler=(()=>{
     for(const b of root.querySelectorAll("[data-activity-timeline-hours]"))b.setAttribute("aria-pressed",String(Number(b.dataset.activityTimelineHours)===window.hours));
     for(const b of root.querySelectorAll("[data-activity-timeline-scroll]"))b.setAttribute("aria-pressed",String(window.scroll));
   }
-  // Called by the existing local UI tick; no API, planner, or storage calls.
+  // Existing local UI tick: no API, planner or recurring storage writes.
   function tickTimeline(at=Date.now()){
     ensureTimelineOwner();
     if(typeof document==="undefined"||document.visibilityState==="hidden")return;
@@ -424,12 +436,20 @@ const tornActivityScheduler=(()=>{
   }
   function chooseTimelineControl(button){
     ensureTimelineOwner();
-    if(button.hasAttribute("data-activity-timeline-scroll"))timelineScroll=!timelineScroll;
+    const current=timelineControlSettings(),next={...current};
+    if(button.hasAttribute("data-activity-timeline-scroll"))next.scroll=!current.scroll;
     else{
       const hours=Number(button.dataset.activityTimelineHours);
       if(!timelineHours.includes(hours))return;
-      selectedTimelineHours=hours;
+      next.hours=hours;
     }
+    const controls=button.closest(".activity-timeline-controls");
+    controls?.querySelector("[data-timeline-save-error]")?.remove();
+    if(!saveTimelineControls(next)){
+      const message=document.createElement("small");message.dataset.timelineSaveError="";message.setAttribute("role","status");message.textContent="Could not save timeline settings.";
+      controls?.append(message);return;
+    }
+    selectedTimelineHours=next.hours;timelineScroll=next.scroll;
     for(const root of document.querySelectorAll("[data-activity-mode-timeline]")){
       const snapshot=timelineSnapshots.get(root.dataset.activityModeTimeline);
       if(snapshot)redrawMode(root,snapshot,timelineWindow(Date.now(),selectedTimelineHours,timelineScroll),true);
@@ -571,5 +591,5 @@ const tornActivityScheduler=(()=>{
       if(saveEvent({id:"manual-"+Date.now(),title:String(f.get("title")),kind:f.get("kind"),start,end,blocking:f.has("blocking")}))onChange();else e.target.querySelector('[role="status"]').textContent="Check the times and storage availability.";
     });
   }
-  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineWindow,timelineLayout,renderTimeline,renderModeTimeline,tickTimeline,dailyItemValues,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
+  return {settings,events,saveEvent,removeEvent,warWindow,warPreparation,addiction,addictionSnapshot,budget,rehabEstimate,rehabDuration,limits,conflicts,rehabWindow,rehabSnapshot,reconcileRehab,spendLedger,recordSpend,weeklySpend,activityFresh,externalEvents,warAttackSummary,schedule,timelineControlSettings,saveTimelineControls,timelineWindow,timelineLayout,renderTimeline,renderModeTimeline,tickTimeline,dailyItemValues,render,settingsDialog,manualForm,expenseForm,wire,time,kinds};
 })();
