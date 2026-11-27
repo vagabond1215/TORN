@@ -38,9 +38,9 @@ const tornLogArchive=(()=>{
     return new Promise((resolve,reject)=>{
       let rejected=false;
       const req=indexedDB.open(name,VERSION);
-      req.onupgradeneeded=()=>{
+      req.onupgradeneeded=event=>{
         const db=req.result;
-        if(req.oldVersion!==0){req.transaction.abort();return;}
+        if(event.oldVersion!==0){req.transaction.abort();return;}
         const store=db.createObjectStore("records",{keyPath:["playerId","source","sourceId"]});
         store.createIndex("byTime",["playerId","source","occurredAt","sourceId"],{unique:true});
         db.createObjectStore("sync",{keyPath:["playerId","source"]});
