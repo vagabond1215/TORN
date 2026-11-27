@@ -1,0 +1,40 @@
+"use strict";
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
+const {a,r,m}=new Function(["training-recovery.js","account-storage.js","account-revisions.js","account-calendar-merge.js"].map(read).join("\n")+"\nreturn {a:tornAccountStorage,r:tornAccountRevisions,m:tornCalendarMerge};")();
+const id=123,section="calendar-events",now=Date.UTC(2026,10,27);
+let n=0;const newRevision=()=>String(++n).padStart(32,"0");
+const digests=new Map(),digest=async v=>{if(!digests.has(v))digests.set(v,String(digests.size+1).padStart(64,"0"));return digests.get(v);};
+const options={digest,newRevision},event=(key,extra={})=>({id:key,kind:"personal",title:key,start:now+60000,end:now+120000,blocking:false,source:"manual",...extra});
+const rec=events=>events===null?[]:[{section,value:JSON.stringify(events)}];
+async function make(previous,events){const records=rec(events),omitted=[];return {records,omitted,manifest:await r.observe(previous,{records,omitted},id,options)};}
+async function run(){
+ const left=await make(r.empty(id),[event("a"),event("remove"),event("war",{kind:"war"}),event("rehab",{kind:"rehab"})]);
+ const right=await make(left.manifest,[event("a",{title:"edited"}),event("new",{kind:"event"}),event("war",{kind:"war",title:"changed"}),event("rehab",{kind:"rehab",title:"changed"}),event("blocking",{blocking:true}),event("travel",{kind:"travel"})]);
+ const p=await m.preview(left,right,id,options);
+ assert.equal(p.relation,"incoming-descendant");assert.deepEqual(p.eligible,["a","new"]);
+ for(const key of ["remove","war","rehab","blocking","travel"])assert.equal(p.rows.find(x=>x.id===key).action,"review");
+ const before=JSON.stringify(left),after=JSON.stringify(right),candidate=await m.prepare(left,right,id,["new"],options);
+ assert.equal(candidate.change.before,left.records[0].value);assert.equal(candidate.requiresNewLocalRevision,true);
+ assert.deepEqual(JSON.parse(candidate.change.value),[...JSON.parse(left.records[0].value),event("new",{kind:"event"})]);
+ assert.equal(JSON.stringify(left),before);assert.equal(JSON.stringify(right),after);
+ for(const selection of [[],["remove"],["war"],["rehab"],["blocking"],["travel"],["new","new"],["unknown"]])await assert.rejects(()=>m.prepare(left,right,id,selection,options),/eligible/);
+ const old=await m.preview(right,left,id,options);assert.equal(old.relation,"local-descendant");assert.deepEqual(old.eligible,[]);
+ const branch=await make(left.manifest,[event("a",{title:"other"}),event("branch")]);
+ const conflict=await m.preview(branch,right,id,options);assert.equal(conflict.relation,"conflict");assert.deepEqual(conflict.eligible,[]);
+ const untracked=await m.preview({records:[],omitted:[],manifest:r.empty(id)},right,id,options);assert.equal(untracked.relation,"untracked-incoming");assert.deepEqual(untracked.eligible,[]);
+ const deleted=await make(right.manifest,null);
+ assert.deepEqual((await m.preview(right,deleted,id,options)).eligible,[]);
+ assert.deepEqual((await m.preview(deleted,right,id,options)).eligible,[]);
+ const equal=await m.preview(left,left,id,options);assert.ok(equal.rows.every(x=>x.action==="unchanged"));
+ await assert.rejects(()=>m.preview(left,{...right,records:rec([event("tampered")])},id,options),/digest/);
+ await assert.rejects(()=>m.preview(left,right,456,options),/owner/);
+ await assert.rejects(()=>m.preview(left,{...right,omitted:["calendar-events"]},id,options),/omitted/);
+ const full=await make(r.empty(id),Array.from({length:300},(_,i)=>event("e"+i)));
+ const incoming=await make(full.manifest,[event("new")]);
+ await assert.rejects(()=>m.prepare(full,incoming,id,["new"],options),/invalid section/);
+ assert.equal(a.mergePreference(section),false);
+ console.log("Verified calendar ancestry, stable-ID preview, explicit safe selection, deletion/conflict/operational protection, owner/digest checks and capacity passed.");
+}
+module.exports=run;
+if(require.main===module)run().catch(error=>{console.error(error);process.exitCode=1;});
