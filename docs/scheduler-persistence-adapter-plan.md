@@ -31,4 +31,4 @@ Status: design and audit only. No production writer switched. Applies only to `v
 
 ## Next executable work
 
-Implement the isolated scheduler decision adapter and test its policy/context-reader contract; then add the guarded journal commit-boundary callback and native fixture. Do not wire production mutation paths until native R0/L2/crypto and migration gates pass.
+Implement the isolated scheduler decision adapter and test its policy/context-reader contract. Before wiring a mutation callback, specify and validate the authoritative transactional boundary for reviewed bytes and per-account generation. [Native validation](native-validation-2026-11-27.md) reproduced sibling capture revisions across separate tabs using Web Locks and localStorage. Verify contention, interruptions and recovery under the replacement boundary. Writer activation remains gated on migration, active-session compatibility, recovery UI and V3 routing.

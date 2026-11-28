@@ -2,6 +2,8 @@
 
 Date: 2026-11-27. Baseline: `0d79410ec5cb2505b4c13fc9cc2a7fe204766a05`. Scope: vagabond1215/TORN, docs/ only. This is the next recommended implementation, not a description of a completed database. Coordinate with [development-roadmap.md](development-roadmap.md), [account-persistence-plan.md](account-persistence-plan.md) and [persistence-implementation-plan.md](persistence-implementation-plan.md).
 
+**Current gate.** [Native validation](native-validation-2026-11-27.md) passed both existing Chrome Log fixtures, real two-tab archive version change, and rejection of a late collector response after a purge in the other tab. Real IndexedDB quota and authorized own-account API acceptance remain open. Continue isolated L3 consent and lifecycle work. Keep the durable collector disabled until its remaining gates pass.
+
 ## Current runtime and constraints
 
 - `guide-features.js` owns Torn request coordination, `request()`, `idleLogPage(cursor)`, `idleEligible()`, `cancelIdleLog()`. Idle fetches are read-only, fixed v2 user/log endpoint, at most 100 rows, 60-second attempt spacing and 15-second quiet window, foreground cancellation, visible tab, account/connection epoch guard, per-player Web Lock and timestamp, permission stop and transient backoff. Restored key is verified first. Official reference: https://www.torn.com/swagger/openapi.json ; existing repository documentation: [API_DATA_SOURCES.md](API_DATA_SOURCES.md). Revalidate the live contract and permissions before relying on any specific field or cursor behavior. Do not follow arbitrary response links or issue a second independent fetch loop.

@@ -2,6 +2,8 @@
 
 Repository: `vagabond1215/TORN`, branch main, scope /docs/. Read root AGENTS.md before edits.
 
+**Current gate.** [Native validation](native-validation-2026-11-27.md) passed browser V1–V3 AES-GCM and PBKDF2 round trips, calendar deletion lineage and the existing recovery fixtures. The two-tab probe produced sibling revisions in 11 of 20 trials despite exclusive Web Locks. Before wiring protected capture, V4–V8 writers or recovery, require a cross-tab generation check at an authoritative transactional boundary. Preserve existing journals, lineage, ledgers and held sessions throughout migration. P1.4d.5 isolated policy work can proceed.
+
 ## 1P.1 — registry and storage audit
 - Existing account keys: `torn-city-guide:v1:profile:<id>:` (notes, tasks, quickstart, Focus, selection, draft); `build:<id>`, `plan-view:<id>`, comparison mode, recommendation state, restock settings, OC bands, energy-war, activity settings/events, crime observations, manual RW. These are durable settings. 
 - Critical records: training-session, training-spend, activity-training-history, activity-spend-ledger; must not be blindly copied. Session actions include checkpoints, recovery and projected financial data; rehab events may include baseline/completion evidence. Implement full typed adapters, stable IDs and tombstones before merging. Current first registry supports simple manual events only; unsupported existing records reported, not silently transformed.

@@ -5,7 +5,7 @@ Updated 2026-11-27. Canonical repo: https://github.com/vagabond1215/TORN ; branc
 ## Start here
 
 1. Read root AGENTS.md, then this handoff, [development-roadmap.md](development-roadmap.md), and [log-archive-implementation-plan.md](log-archive-implementation-plan.md). Read the relevant existing detailed plans and source/tests before editing.
-2. Current recommendation: R0 full native baseline remains open; L1 and L2.1 storage implementation exist (see latest checkpoints below). Next validate the native IndexedDB fixture, then L2.2 idle coordinator integration and L3 durable collection UI. P1 protected-record merge can proceed independently after schema agreement; do not activate restored sessions or promote logs to ledger without their gates. This is planned work, not a claim of implementation.
+2. Read the [active native validation checkpoint](native-validation-2026-11-27.md). The full native Node baseline and five existing Chrome fixtures passed. The cross-tab capture probe produced competing sibling revisions in 11 of 20 trials. P1.4d.5 may advance as isolated policy work. Protected writers require a transactional commit boundary before integration. The isolated Log archive and collector passed the exercised browser paths. IndexedDB quota and authorized own-account validation remain open before durable collection is enabled.
 3. Continue bounded validated segments sequentially; prefer commit to main, no force, preserve concurrent work. Use actual source as truth. If unable to check native browser/Node/API, report that limitation and do not fake results. Update handoff and relevant plan with actual tests, commit and next exact task.
 
 ## Current implementation checkpoints
