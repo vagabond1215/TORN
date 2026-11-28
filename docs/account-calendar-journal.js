@@ -5,7 +5,7 @@
  * Local journal is not a cryptographic boundary against origin compromise.
  */
 const tornCalendarJournal=(()=>{
-  const prefix="torn-city-guide:",section="calendar-events",version=3,mutationVersion=4,limit=6*1024*1024;
+  const prefix="torn-city-guide:",section="calendar-events",version=3,mutationVersion=4,operationalVersion=5,limit=6*1024*1024;
   const copy=v=>JSON.parse(JSON.stringify(v));
   const exact=(v,ks)=>v!==null&&typeof v==="object"&&!Array.isArray(v)&&Object.keys(v).length===ks.length&&ks.every(k=>Object.hasOwn(v,k));
   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -35,8 +35,8 @@ const tornCalendarJournal=(()=>{
   function parse(raw,id){
     if(typeof raw!=="string"||raw.length>limit)throw Error("Invalid calendar journal size");
     const j=JSON.parse(raw);
-    const mutation=j?.version===mutationVersion;
-    if(!exact(j,["version","playerId","createdAt","before","after","markers",...(mutation?["mutation"]:[])])||![version,mutationVersion].includes(j.version)||j.playerId!==id||!Number.isSafeInteger(j.createdAt)||j.createdAt<=0||j.createdAt>Date.now()+1000||!Array.isArray(j.markers)||j.markers.length>1500||new Set(j.markers).size!==j.markers.length||j.markers.some(x=>!tornAccountStorage.knownSection(id,x)))throw Error("Invalid calendar journal");
+    const mutation=[mutationVersion,operationalVersion].includes(j?.version);
+    if(!exact(j,["version","playerId","createdAt","before","after","markers",...(mutation?["mutation"]:[])])||![version,mutationVersion,operationalVersion].includes(j.version)||j.playerId!==id||!Number.isSafeInteger(j.createdAt)||j.createdAt<=0||j.createdAt>Date.now()+1000||!Array.isArray(j.markers)||j.markers.length>1500||new Set(j.markers).size!==j.markers.length||j.markers.some(x=>!tornAccountStorage.knownSection(id,x)))throw Error("Invalid calendar journal");
     if(mutation&&(!exact(j.mutation,["id","kind"])||typeof j.mutation.id!=="string"||!j.mutation.id||j.mutation.id.length>160||!["add","edit","remove"].includes(j.mutation.kind)))throw Error("Invalid calendar mutation journal");
     for(const v of [j.before,j.after]){
       if(!exact(v,["calendar","lineage","manifest"])||!(v.calendar===null||typeof v.calendar==="string"&&v.calendar.length<=500000)||!(v.lineage===null||typeof v.lineage==="string"&&v.lineage.length<=1000000)||typeof v.manifest!=="string"||v.manifest.length>2000000)throw Error("Invalid calendar journal values");
@@ -68,18 +68,22 @@ const tornCalendarJournal=(()=>{
   }
   // V4 is a single explicitly observed ordinary mutation. It cannot
   // authorize any backup deletion, operational edit, or bulk replacement.
-  function validateMutation(before,after,mutation){
+  function validateMutation(before,after,mutation,operational=false){
     const a=new Map(JSON.parse(before??"[]").map(x=>[x.id,x])),b=new Map(JSON.parse(after).map(x=>[x.id,x])),id=mutation.id;
     const old=a.get(id),next=b.get(id);
     for(const key of new Set([...a.keys(),...b.keys()]))if(key!==id&&(!a.has(key)||!b.has(key)||canon(a.get(key))!==canon(b.get(key))))throw Error("Unexpected calendar mutation");
-    if(mutation.kind==="add"&&(!old&&safe(next)))return [];
-    if(mutation.kind==="edit"&&safe(old)&&safe(next)&&canon(old)!==canon(next))return [];
-    if(mutation.kind==="remove"&&safe(old)&&!next)return [id];
+    // V5 is an explicit local planning action, NEVER import authority.
+    // Rehab records may carry financial evidence; a distinct operation
+    // is required even for a pending reservation.
+    const allowed=operational?e=>!!e&&e.kind!=="rehab":safe;
+    if(mutation.kind==="add"&&!old&&allowed(next))return [];
+    if(mutation.kind==="edit"&&allowed(old)&&allowed(next)&&old.kind===next.kind&&canon(old)!==canon(next))return [];
+    if(mutation.kind==="remove"&&allowed(old)&&!next)return [id];
     throw Error("Protected or invalid calendar mutation");
   }
   async function validateTransition(j,snap,id,options){
     let removed=[];
-    if(j.version===mutationVersion)removed=validateMutation(j.before.calendar,j.after.calendar,j.mutation);
+    if([mutationVersion,operationalVersion].includes(j.version))removed=validateMutation(j.before.calendar,j.after.calendar,j.mutation,j.version===operationalVersion);
     else validateDelta(j.before.calendar,j.after.calendar);
     const a=bundle(snap,j.before.calendar,j.before.manifest),b=bundle(snap,j.after.calendar,j.after.manifest);
     await tornAccountRevisions.verify(a.manifest,a.records,id,options);
@@ -121,7 +125,7 @@ const tornCalendarJournal=(()=>{
       const next={records,omitted:[],manifest};
       const lineage=await tornCalendarLineage.advance(initial,local,next,id,chosen.removed,verifyOptions);
       const after={calendar:chosen.value,lineage:JSON.stringify(lineage),manifest:JSON.stringify(manifest)};
-      const raw=JSON.stringify({version:chosen.mutation?mutationVersion:version,playerId:id,createdAt:Date.now(),before,after,markers,...(chosen.mutation?{mutation:chosen.mutation}:{})});
+      const raw=JSON.stringify({version:chosen.mutation?(chosen.operational?operationalVersion:mutationVersion):version,playerId:id,createdAt:Date.now(),before,after,markers,...(chosen.mutation?{mutation:chosen.mutation}:{})});
       const j=parse(raw,id);
       await validateTransition(j,snap,id,verifyOptions);
       unchanged();
@@ -152,7 +156,7 @@ const tornCalendarJournal=(()=>{
   // This is an explicit ordinary local edit path, not a merge decision.
   // Only already tracked snapshots may use it. New account bootstrap
   // and all operational calendar writers still require separate design.
-  async function mutate(store,playerId,local,change,isCurrent,locks,options={}){
+  async function mutateLocal(store,playerId,local,change,isCurrent,locks,options,operational){
     const id=tornAccountStorage.owner(playerId);
     local=copy(local);change=copy(change);
     if(!exact(change,["id","kind","before","after"])||typeof change.id!=="string"||!change.id||!["add","edit","remove"].includes(change.kind))throw Error("Invalid explicit calendar mutation");
@@ -164,10 +168,13 @@ const tornCalendarJournal=(()=>{
       if(change.kind==="remove"&&change.after!==null)throw Error("Invalid explicit deletion");
       const value=JSON.stringify(next),mutation={id:change.id,kind:change.kind};
       tornAccountStorage.validRecords(other(local).concat({section,value}),id);
-      const removed=validateMutation(prior,value,mutation);
-      return {value,selected:[change.id],removed,mutation,importedTokens:[]};
+      const removed=validateMutation(prior,value,mutation,operational);
+      return {value,selected:[change.id],removed,mutation,operational,importedTokens:[]};
     });
   }
+  const mutate=(store,id,local,change,isCurrent,locks,options={})=>mutateLocal(store,id,local,change,isCurrent,locks,options,false);
+  // Separate explicit entrypoint. Not callable through the backup merge UI.
+  const mutateOperational=(store,id,local,change,isCurrent,locks,options={})=>mutateLocal(store,id,local,change,isCurrent,locks,options,true);
   async function recover(store,playerId,raw,mode,isCurrent,locks,{digest}={}){
     const id=tornAccountStorage.owner(playerId);
     if(!["finish","rollback"].includes(mode))throw Error("Invalid calendar recovery action");
@@ -195,5 +202,5 @@ const tornCalendarJournal=(()=>{
       return {status:mode==="finish"?"finalized":"rolled-back"};
     });
   }
-  return Object.freeze({version,mutationVersion,lineageKey,read,apply,mutate,recover});
+  return Object.freeze({version,mutationVersion,operationalVersion,lineageKey,read,apply,mutate,mutateOperational,recover});
 })();

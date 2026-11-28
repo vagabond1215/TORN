@@ -79,6 +79,18 @@ async function run(){
  tampered.setItem=tw;const fake=JSON.parse(tampered.getItem(journal));fake.mutation.id="war";tw(journal,JSON.stringify(fake));
  await assert.rejects(()=>j.recover(tampered,id,tampered.getItem(journal),"rollback",yes,locks,options),/Unexpected calendar mutation/);
  assert.ok(tampered.getItem(journal));
+ const ops=store(),op=(s,local,change)=>j.mutateOperational(s,id,local,change,yes,locks,options);
+ const revisedWar={...war,title:"New war timing",blocking:true,start:war.start+1000,end:war.end+1000};
+ assert.equal((await op(ops,left,{id:"war",kind:"edit",before:war,after:revisedWar})).status,"applied");
+ const opSnap={...a.snapshot(ops,id),manifest:r.read(ops,id)};
+ await assert.rejects(()=>op(ops,opSnap,{id:"war",kind:"edit",before:revisedWar,after:{...revisedWar,kind:"personal"}}),/Protected/);
+ const rehab=event("rehab",{kind:"rehab",blocking:true,rehabBaseline:{count:1,cost:100,at:now}});
+ await assert.rejects(()=>op(ops,opSnap,{id:"rehab",kind:"add",before:null,after:rehab}),/Protected/);
+ const interruptedOp=store(),ow=interruptedOp.setItem;interruptedOp.setItem=(k,v)=>{if(k===manifest)throw Error("quota");ow(k,v);};
+ await assert.rejects(()=>op(interruptedOp,left,{id:"war",kind:"remove",before:war,after:null}),/journal retained/);
+ const opJournal=j.read(interruptedOp,id);assert.equal(opJournal.version,5);assert.equal(JSON.parse(interruptedOp.getItem(lineage)).entries.find(x=>x.id==="war").digest,null);
+ interruptedOp.setItem=ow;await j.recover(interruptedOp,id,opJournal.raw,"rollback",yes,locks,options);
+ assert.equal(interruptedOp.getItem(cal),left.records[0].value);assert.equal(interruptedOp.getItem(lineage),JSON.stringify(initial));
  assert.ok(lockCalls>10);
  console.log("Scoped calendar journal, local revision, lineage, quota/interruption rollback, finalization, stale/held/lock guards and conflict retention passed.");
 }
