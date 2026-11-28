@@ -132,26 +132,26 @@ const tornMeritGuide=(()=>{
    if(!current){niceCache=null;return head+rule+'<p class="fine-print">'+safe(live.reason??"Battle stats unavailable.")+'</p>'+tail;}
    let plan=null;
    if(current.met)plan={status:"met"};
-   else if(!live.reason&&live.gym){
-     const fingerprint=JSON.stringify([scope,stats,live.happy,live.gym,live.multipliers]);
-     if(niceCache?.fingerprint!==fingerprint)niceCache={fingerprint,plan:tornNiceMerit.solve({stats,happy:live.happy,gym:live.gym,multipliers:live.multipliers},tornStatPlanner.internal.oneTrain)};
+   else if(!live.reason){
+     const gyms=live.gyms??(live.gym?[live.gym]:[]);
+     const fingerprint=JSON.stringify([scope,stats,live.happy,gyms,live.multipliers]);
+     if(niceCache?.fingerprint!==fingerprint)niceCache={fingerprint,plan:tornNiceMerit.solveAcrossGyms({stats,happy:live.happy,gyms,multipliers:live.multipliers},tornStatPlanner.internal.oneTrain)};
      plan=niceCache.plan;
    }else niceCache=null;
-   const results=plan?.status==="plan"?plan.rows:null;
-   const table='<div class="crime-table-scroll"><table class="crime-table nice-merit-table"><thead><tr><th scope="col">Stat</th><th scope="col">Current</th><th scope="col">Current 69 / 420</th><th scope="col">Trains</th><th scope="col">Energy</th><th scope="col">Predicted stop</th><th scope="col">Stop 69 / 420</th></tr></thead><tbody>'+current.rows.map((r,i)=>{
+   const results=plan?.rows??null;
+   const table='<div class="crime-table-scroll"><table class="crime-table nice-merit-table"><thead><tr><th scope="col">Stat</th><th scope="col">Current</th><th scope="col">Current 69 / 420</th><th scope="col">Gym</th><th scope="col">Trains</th><th scope="col">Energy</th><th scope="col">Predicted stop</th><th scope="col">Stop 69 / 420</th></tr></thead><tbody>'+current.rows.map((r,i)=>{
      const next=results?.[i],m=next?.matches??r.matches;
-     return '<tr><th scope="row">'+niceLabel[r.stat]+'</th><td>'+niceNum(r.value)+'</td><td>'+r.matches.n69+' / '+r.matches.n420+'</td><td>'+ (next?next.trains:current.met?0:"–")+'</td><td>'+(next?next.energy:current.met?0:"–")+'</td><td>'+(next?niceNum(next.after):current.met?niceNum(r.value):"–")+'</td><td>'+(next||current.met?m.n69+" / "+m.n420:"–")+'</td></tr>';
+     return '<tr><th scope="row">'+niceLabel[r.stat]+'</th><td>'+niceNum(r.value)+'</td><td>'+r.matches.n69+' / '+r.matches.n420+'</td><td>'+(next?.trains?safe(next.gymName)+(next.reference?' <small>(reference)</small>':""):next||current.met?"Keep current":"–")+'</td><td>'+ (next?next.trains:current.met?0:"–")+'</td><td>'+(next?next.energy:current.met?0:"–")+'</td><td>'+(next?niceNum(next.after):current.met?niceNum(r.value):"–")+'</td><td>'+(next||current.met?m.n69+" / "+m.n420:"–")+'</td></tr>';
    }).join("")+'</tbody></table></div>';
    let summary='<p><strong>Current: '+current.total+' / 5 occurrences</strong> · 69: '+current.n69+' · 420: '+current.n420+'</p>';
    if(current.met)summary+='<p><strong>Digit requirement met.</strong> Check Torn for the honor; the Guide cannot confirm the award without award data.</p>';
    else if(live.reason)summary+='<p class="fine-print">'+safe(live.reason)+'</p>';
-   else if(plan?.status==="plan"){
-     const remaining=live.energy===null?null:Math.max(0,plan.energy-live.energy);
-     summary+='<p><strong>Suggested route: '+plan.trains+' trains · '+plan.energy.toLocaleString("en-US")+' Energy</strong> · Predicted '+plan.result.total+' occurrences (69: '+plan.result.n69+', 420: '+plan.result.n420+').</p><p class="fine-print">'+(remaining===null?"Current Energy unknown.":remaining>0?"Needs "+remaining.toLocaleString("en-US")+" more Energy than currently available. This is not a multi-session schedule.":"Within current Energy.")+'</p>';
-   }else if(!live.gym)summary+='<p class="fine-print">Active gym not identified; see unlocked-gym alternatives below.</p>';
-   else if(plan?.status==="not-found")summary+='<p>No qualifying route found within '+plan.maxTrains+' trains ('+plan.energyLimit.toLocaleString("en-US")+' Energy) in the current gym and displayed order. This is not proof that the merit is unreachable. Consider another unlocked gym, different Happiness, or refresh after regular training.</p>';
+   else if(plan?.status==="plan"||plan?.status==="partial"){
+     const remaining=Number.isFinite(live.energy)?Math.max(0,plan.energy-live.energy):null;
+     summary+='<p><strong>'+(plan.status==="partial"?"Suggested partial route: ":"Suggested route: ")+plan.trains+' trains · '+plan.energy.toLocaleString("en-US")+' Energy</strong> · Predicted '+plan.result.total+' occurrences (69: '+plan.result.n69+', 420: '+plan.result.n420+'). '+(plan.status==="partial"?"Five occurrences with both patterns not found in the bounded search; this route makes partial progress.":"Both patterns and at least five occurrences predicted.")+'</p><p class="fine-print">'+(remaining===null?"Current Energy unknown.":remaining>0?"Needs "+remaining.toLocaleString("en-US")+" more Energy than currently available. This is not a multi-session schedule.":"Within current Energy.")+'</p>';
+   }else if(plan?.status==="not-found")summary+='<p>No progress-making combined route found within '+plan.maxTrains+' total trains across the searched gyms. Existing stat matches are preserved. This is not proof that the merit is unreachable; see independent opportunities below.</p>';
    else if(plan?.reason)summary+='<p class="fine-print">'+safe(plan.reason)+'</p>';
-   const assumptions=live.gym&&!live.reason?'<p class="fine-print">Gym: '+safe(live.gym.name)+' · '+live.gym.energy+' E/train · Starting Happiness '+niceNum(live.happy)+(live.referenceGym?" · Reference gym values":"")+(live.cached?" · Cached API inputs":"")+'. Train in the displayed order; no time passes in this model. Check the actual stat after each train and refresh before continuing. The shared gain formula is approximate; RNG, rounding, Happiness resets and bonus changes can miss the target.</p>':"";
+   const assumptions=plan?.gyms&&!live.reason?'<p class="fine-print">Combined route: '+plan.gyms+' available gym'+(plan.gyms===1?"":"s")+' searched · '+plan.maxTrains+' total trains maximum · Starting Happiness '+niceNum(live.happy)+(live.unlockListKnown===true?"":" · Unlocked gym list unavailable; active-gym fallback")+(live.cached?" · Cached API inputs":"")+'. Switch to each listed gym and train in the displayed stat order. Happiness loss carries across blocks; no time passes in this model. The bounded search retains a limited set of candidate routes and is not exhaustive. Check actual gains and gym availability after each train and refresh before continuing. RNG, rounding, Happiness resets and bonus changes can miss the predicted target.</p>':"";
    const exact='<details class="nice-merit-exact" data-collapse-key="nice-exact-values"><summary>Use precise values from your training log</summary><p class="fine-print">Optional: enter the exact decimals for all four current stats. Overrides are temporary and reset when the API stat snapshot changes.</p><form data-nice-exact class="stock-controls">'+tornNiceMerit.order.map(stat=>'<label>'+niceLabel[stat]+'<input name="'+stat+'" type="number" min="0" max="9007199254740990" step="any" required value="'+safe(niceExact(stats[stat]))+'"></label>').join("")+'<button type="submit" class="button secondary">Recalculate</button><button type="button" class="button secondary" data-nice-reset>Use API values</button></form></details>';
    return head+rule+summary+table+assumptions+opportunityPanel(niceOpportunities(awards,live))+exact+tail;
  }
