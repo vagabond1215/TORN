@@ -1,0 +1,12 @@
+# Durable Log consent and read-only export: native acceptance
+
+Scope: vagabond1215/TORN main, docs/ only. Implementations 0c55825 and 68dcfbf. This is a native validation work order, not authorization to enable production persistence.
+
+Synchronize latest main, read AGENTS.md, development-handoff.md, log-archive-implementation-plan.md and local-file-backup-plan.md. Run the full native regression suite, then both Log browser fixtures. Test new controller with actual native IndexedDB and separate same-origin tabs, synthetic accounts and synthetic API only. Preserve earlier acceptance tests.
+
+- Verify strict explicit owner-bound consent and start, cached identity verification without archive access, exact reviewed state CAS, competing starts, pause/purge before open and after fetch, account/key epoch change, hidden tab, stale start rejection, reload without automatic collection, no second worker/network slot. Verify pause retains exact archive rows and stops new tickets; purge invalidates late tickets. Missing consent never permits strict controller startup. Test browser versionchange, quota refusal and connection closure. Distinguish persisted opt-in from active session; no automatic retries or fallback to old collector.
+- Native export fixture: generate >2,000 records, preferably also near the 20,000/32 MiB engineering bounds with valid records and checkpoints; verify count, byte estimate, exact identity and same-second ordering across page boundaries, chunk sizes, unchanged source state, and refusal if another tab commits, pauses or purges while reading. Test owner/epoch loss and connection close. Preview is not a saved file or deletion authorization.
+- Existing API schema/permission and authenticated own-account tests remain gated by explicit own-account authorization. Do not request/log/store credentials, run gameplay, activate the durable worker, add polling, write external backup files, or prune existing records.
+- Fix verified defects without weakening assertions. Record commands, native/browser results, exact commits and limitations in native-validation-2026-11-27.md and relevant plans. Commit and push main without force. ChatGPT owns independent companion staging, encrypted file codec and backup architecture; coordinate any overlapping fixes.
+
+The separate V6 completion work order in rehab-transaction-native-acceptance.md remains independent and may be executed as previously assigned.
