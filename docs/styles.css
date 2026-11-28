@@ -2587,3 +2587,11 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .activity-scroll-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .activity-mode-titlebar .activity-timeline-modes{flex-wrap:nowrap}
 @media(max-width:600px){.home-activity-timeline.rec-tile>.rec-tile-heading,.activity-mode-titlebar:not(summary){grid-template-columns:minmax(0,1fr) auto;row-gap:.15rem}.activity-mode-titlebar .activity-timeline-controls{grid-row:2;grid-column:1/-1}.activity-mode-titlebar .rec-header-actions{grid-row:1;grid-column:2}.activity-mode-titlebar .activity-timeline-modes{grid-row:auto;grid-column:auto}}
+
+/* Read-only calendar recovery comparison; independent of preference controls. */
+#backup-calendar-review{border-top:1px solid var(--border);padding-top:.8rem;min-width:0}
+.calendar-review-row{border:1px solid var(--border);border-radius:5px;padding:.5rem;margin:.4rem 0;overflow-wrap:anywhere}
+.calendar-review-row summary{cursor:pointer;color:var(--accent-strong)}
+.calendar-review-versions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:.5rem;margin:.5rem 0}
+.calendar-review-version{background:var(--raised);border:1px solid var(--border);border-radius:4px;padding:.5rem;font-size:.78rem;min-width:0;overflow-wrap:anywhere}
+.calendar-review-version strong{display:block;margin-bottom:.25rem}

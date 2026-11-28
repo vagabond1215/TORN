@@ -10,12 +10,18 @@ const tornBackupUI=(()=>{
   function wire(){
     const open=get("backup-open"),dialog=get("backup-dialog"),form=get("backup-form");
     const comparison=get("backup-comparison"),mergeButton=get("backup-merge");
-    let pendingMerge=null;
+    let pendingMerge=null,pendingCalendar=null,calendarView=null;
+    const calendarPanel=get("backup-calendar-review"),calendarRows=get("backup-calendar-rows"),calendarStatus=get("backup-calendar-status"),baseFile=get("backup-calendar-base-file"),baseSecret=get("backup-calendar-base-secret"),baseButton=get("backup-calendar-base"),calendarPreview=get("backup-calendar-preview");
     const status=get("backup-status"),secret=get("backup-passphrase"),confirmation=get("backup-confirm"),file=get("backup-file");
     const exportButton=get("backup-export"),importButton=get("backup-import"),close=get("backup-close");
     if(!open||!dialog||!form)return;
     const message=x=>{status.textContent=x;};
-    const controls=()=>{const pending=!journalPanel.hidden;mergeButton.hidden=!pendingMerge;mergeButton.disabled=busy||pending||!pendingMerge||!comparison.querySelector("input:checked");for(const input of comparison.querySelectorAll("input"))input.disabled=busy||pending;exportButton.disabled=busy||pending;importButton.disabled=busy||pending;journalFinish.disabled=busy||!journal?.complete||journal.conflict;journalRollback.disabled=busy||!journal||journal.conflict;close.disabled=busy;inspect.disabled=busy||pending||!presented?.session;discard.disabled=busy||pending||!presented?.session;preview.disabled=busy||pending||!presented?.session||!attest.checked;count.disabled=busy||!presented?.session;attest.disabled=busy||!presented?.session;sync();};
+    const controls=()=>{const pending=!journalPanel.hidden;mergeButton.hidden=!pendingMerge;mergeButton.disabled=busy||pending||!pendingMerge||!comparison.querySelector("input:checked");for(const input of comparison.querySelectorAll("input"))input.disabled=busy||pending;exportButton.disabled=busy||pending;importButton.disabled=busy||pending;journalFinish.disabled=busy||!journal?.complete||journal.conflict;journalRollback.disabled=busy||!journal||journal.conflict;close.disabled=busy;inspect.disabled=busy||pending||!presented?.session;discard.disabled=busy||pending||!presented?.session;preview.disabled=busy||pending||!presented?.session||!attest.checked;count.disabled=busy||!presented?.session;attest.disabled=busy||!presented?.session;
+      const calendarDisabled=busy||pending||!pendingCalendar;
+      baseFile.disabled=baseSecret.disabled=baseButton.disabled=calendarDisabled;
+      calendarView?.disable(calendarDisabled);
+      calendarPreview.disabled=calendarDisabled||!calendarView?.decisions().length;
+      sync();};
     const review=get("backup-recovery-review"),summary=get("backup-review-summary"),evidence=get("backup-review-evidence"),inspect=get("backup-review-inspect"),discard=get("backup-review-discard");
     const count=get("backup-review-count"),attest=get("backup-review-attest"),preview=get("backup-review-preview"),actionList=get("backup-review-action-list"),previewList=get("backup-review-preview-list");
     const journalPanel=get("backup-journal"),journalStatus=get("backup-journal-status"),journalFinish=get("backup-journal-finish"),journalRollback=get("backup-journal-rollback");
@@ -94,7 +100,65 @@ const tornBackupUI=(()=>{
     }
     inspect.addEventListener("click",()=>void reviewAction("inspect"));
     discard.addEventListener("click",()=>void reviewAction("discard"));
-    function clearMerge(){pendingMerge=null;comparison.replaceChildren();mergeButton.hidden=true;}
+    function clearCalendar(){
+      pendingCalendar=null;calendarView=null;calendarRows.replaceChildren();calendarPanel.hidden=true;calendarStatus.textContent="";baseFile.value="";baseSecret.value="";
+    }
+    function calendarCurrent(p){
+      if(pendingCalendar!==p||!p.isCurrent()||!dialog.open||tornAccountStorage.journalPending(localStorage,p.id))return false;
+      try{return localStorage.getItem(tornAccountRevisions.key(p.id))===JSON.stringify(p.local.manifest)&&JSON.stringify(tornAccountStorage.snapshot(localStorage,p.id))===JSON.stringify({records:p.local.records,omitted:p.local.omitted??[]})&&JSON.stringify(tornAccountStorage.deletionMarkers(localStorage,p.id))===p.markers;}catch{return false;}
+    }
+    function renderCalendar(p,plan){
+      if(!calendarCurrent(p))throw Error("Account or saved calendar changed; reopen backup comparison");
+      calendarPanel.hidden=false;
+      calendarStatus.textContent=plan.commonBase?"Verified common calendar ancestor. Choices are preview-only.":"Calendar revision relationship: "+plan.relation+". A verified common backup can help distinguish divergent edits.";
+      calendarView=tornCalendarPreviewUI.render(document,calendarRows,plan,()=>{calendarStatus.textContent="Selection changed. Preview the proposed calendar; nothing is saved.";controls();});
+    }
+    async function showCalendar(local,data,verified){
+      if(!local.manifest.entries.some(x=>x.section==="calendar-events")&&!data.manifest.entries.some(x=>x.section==="calendar-events"))return;
+      const p={id:verified.playerId,isCurrent:verified.isCurrent,local,incoming:{records:data.records,manifest:data.manifest,omitted:data.omitted??[]},base:null,markers:JSON.stringify(tornAccountStorage.deletionMarkers(localStorage,verified.playerId))};
+      pendingCalendar=p;
+      try{const plan=await tornCalendarMerge.preview(p.local,p.incoming,p.id);renderCalendar(p,plan);}
+      catch{clearCalendar();calendarPanel.hidden=false;calendarStatus.textContent="Calendar comparison unavailable: account, records or revision history changed or could not be verified. No calendar changes applied.";}
+    }
+    baseButton.addEventListener("click",async()=>{
+      const p=pendingCalendar;if(busy||!p)return;
+      let password=baseSecret.value;const chosen=baseFile.files?.[0];baseSecret.value="";baseFile.value="";
+      if(!chosen||chosen.size>tornAccountBackup.maxFile||password.length<12||password.length>1024){calendarStatus.textContent="Choose an encrypted common backup and enter its recovery passphrase (12–1024 characters).";return;}
+      if(!calendarCurrent(p)){clearCalendar();message("Calendar comparison changed; select the backup again.");controls();return;}
+      busy=true;controls();
+      try{
+        const data=await tornAccountBackup.decrypt(await chosen.text(),p.id,password);
+        if(!data.manifest)throw Error("Version 2 common backup required");
+        const base={records:data.records,manifest:data.manifest,omitted:data.omitted??[]};
+        const plan=await tornCalendarMerge.preview(p.local,p.incoming,p.id,{base});
+        if(!calendarCurrent(p))throw Error("Account changed");
+        p.base=base;renderCalendar(p,plan);
+      }catch{
+        if(!calendarCurrent(p)){clearCalendar();message("Calendar comparison changed; select the backup again.");}
+        else calendarStatus.textContent="Common backup could not be verified as an ancestor of both calendars. Previous comparison is unchanged.";
+      }finally{password="";busy=false;controls();}
+    });
+    calendarPreview.addEventListener("click",async()=>{
+      const p=pendingCalendar,decisions=calendarView?.decisions();if(busy||!p||!decisions?.length)return;
+      if(!calendarCurrent(p)){clearCalendar();message("Calendar comparison changed; select the backup again.");controls();return;}
+      busy=true;controls();
+      try{
+        const result=await tornCalendarMerge.resolve(p.local,p.incoming,p.id,decisions,{base:p.base});
+        if(!calendarCurrent(p))throw Error("Account changed");
+        const total=result.change?JSON.parse(result.change.value).length:JSON.parse(p.local.records.find(x=>x.section==="calendar-events")?.value??"[]").length;
+        calendarStatus.textContent="Preview only: "+result.selected.length+" selected incoming records; "+total+" proposed total calendar records. All unselected records remain local. Nothing saved. Protected merge application is not enabled.";
+      }catch{
+        if(!calendarCurrent(p)){clearCalendar();message("Calendar comparison changed; select the backup again.");}
+        else calendarStatus.textContent="Selection could not be validated. Review records and calendar capacity; nothing saved.";
+      }finally{busy=false;controls();}
+    });
+    function invalidateCalendar(){
+      if(pendingCalendar&&!calendarCurrent(pendingCalendar)){clearCalendar();message("Calendar comparison changed; select the backup again.");controls();}
+    }
+    window.addEventListener("torn-guide-sync",invalidateCalendar);
+    window.addEventListener("torn-account-write",invalidateCalendar);
+    window.addEventListener("storage",invalidateCalendar);
+    function clearMerge(){pendingMerge=null;comparison.replaceChildren();mergeButton.hidden=true;clearCalendar();}
     comparison.addEventListener("change",controls);
     mergeButton.addEventListener("click",async()=>{
       if(busy||!pendingMerge)return;
@@ -174,6 +238,8 @@ const tornBackupUI=(()=>{
               else append(comparison,text);
             }
             if(plan.eligible.length&&!blocked)pendingMerge={id,local:current,incoming:{records:data.records,manifest:data.manifest}};
+            await showCalendar(current,data,verified);
+            if(!verified.isCurrent())throw Error("Account changed during comparison");
             message("Merge preview: "+plan.eligible.length+" eligible preference updates, "+plan.review.length+" sections require review. "+(blocked?"Application blocked by training state or missing Web Locks. ":"Select eligible preferences to apply explicitly. ")+"No incoming records applied yet. Keep the original encrypted backup.");return;
           }
           // Explicit approval, no silent overwrite or partial account merge.

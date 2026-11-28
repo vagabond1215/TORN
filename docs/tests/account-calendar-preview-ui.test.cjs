@@ -1,0 +1,24 @@
+"use strict";
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
+const u=new Function(read("account-calendar-preview-ui.js")+"\nreturn tornCalendarPreviewUI;")();
+function node(tag){return {tag,children:[],textContent:"",value:"",disabled:false,events:{},append(...items){this.children.push(...items);},replaceChildren(){this.children=[];},setAttribute(){},addEventListener(k,fn){this.events[k]=fn;}};}
+const doc={createElement:node},root=node("div"),at=Date.UTC(2026,10,27),event={title:"<img src=x onerror=bad()>",kind:"personal",start:at,end:at+60000,blocking:false};
+const plan={commonBase:true,rows:[{id:"a",before:event,after:{...event,title:"Incoming"},base:event,change:"edit",action:"review",reason:"Both changed",choices:["keep-local","take-incoming"],reviewKey:"private binding"},{id:"b",before:{...event,kind:"war"},after:null,base:event,change:"removal",action:"review",reason:"Protected",choices:[],reviewKey:null},{id:"c",before:event,after:event,base:event,change:"unchanged",action:"unchanged",reason:"Same",choices:[],reviewKey:null}]};
+let changes=0;
+const view=u.render(doc,root,plan,()=>changes++);
+const walk=n=>[n,...n.children.flatMap(walk)];
+const nodes=walk(root),selects=nodes.filter(n=>n.tag==="select");
+assert.equal(selects.length,1);assert.equal(nodes.filter(n=>n.tag==="details").length,2);
+assert.ok(nodes.some(n=>n.textContent===event.title));assert.ok(!JSON.stringify(root).includes("private binding"));
+assert.deepEqual(view.decisions(),[]);
+selects[0].value="take-incoming";selects[0].events.change();
+assert.equal(changes,1);assert.deepEqual(view.decisions(),[{id:"a",choice:"take-incoming",reviewKey:"private binding"}]);
+view.disable(true);assert.equal(selects[0].disabled,true);
+selects[0].value="invalid";selects[0].events.change();assert.deepEqual(view.decisions(),[]);
+assert.ok(u.description(null).includes("Not present in this snapshot"));
+const html=read("index.html"),ui=read("account-backup-ui.js");
+assert.ok(html.includes("account-calendar-preview-ui.js?v="));assert.ok(!html.includes('src="./account-calendar-journal.js'));
+assert.ok(ui.includes('comparison.querySelectorAll("input:checked")'));assert.ok(ui.includes("tornCalendarMerge.resolve"));assert.ok(!ui.includes("tornCalendarJournal.apply"));
+assert.ok(ui.includes('baseSecret.value=""'));assert.ok(ui.includes('window.addEventListener("storage",invalidateCalendar)'));
+console.log("Read-only calendar preview DOM, protected selection, private review binding, text-only rendering and isolated preference application passed.");
