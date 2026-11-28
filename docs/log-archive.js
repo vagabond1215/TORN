@@ -32,7 +32,9 @@ const tornLogArchive=(()=>{
   const fresh=(player,generation=0)=>({playerId:player,source:SOURCE,version:VERSION,generation,count:0,bytes:0,checkpoint:coverage.create(player),blocked:null});
   function checked(value,player){
     if(value===undefined)return fresh(player);
-    if(!exact(value,["playerId","source","version","generation","count","bytes","checkpoint","blocked"])||value.playerId!==player||value.source!==SOURCE||value.version!==VERSION||!int(value.generation)||!int(value.count,0,MAX_RECORDS)||!int(value.bytes,0,MAX_BYTES)||!validCheckpoint(value.checkpoint,player)||!gap(value.blocked))throw Error("Invalid stored archive checkpoint; review required");
+    const keys=["playerId","source","version","generation","count","bytes","checkpoint","blocked"];
+    if(Object.hasOwn(value??{},"consent"))keys.push("consent");
+    if(!exact(value,keys)||Object.hasOwn(value,"consent")&&typeof value.consent!=="boolean"||value.playerId!==player||value.source!==SOURCE||value.version!==VERSION||!int(value.generation)||!int(value.count,0,MAX_RECORDS)||!int(value.bytes,0,MAX_BYTES)||!validCheckpoint(value.checkpoint,player)||!gap(value.blocked))throw Error("Invalid stored archive checkpoint; review required");
     return value;
   }
   const authorized=guard=>typeof guard==="function"&&guard()===true;
@@ -82,7 +84,7 @@ const tornLogArchive=(()=>{
       if(!time(now))throw Error("Invalid archive request time");
       const s=await state(playerId,guard);
       if(!authorized(guard))throw Error("Archive authorization changed");
-      const task=s.blocked?null:coverage.task(s.checkpoint,now);
+      const task=s.blocked||s.consent===false?null:coverage.task(s.checkpoint,now);
       return task?{playerId:s.playerId,generation:s.generation,task}:null;
     }
     function commit(ticket,payload,guard,now=Date.now()){
@@ -95,7 +97,7 @@ const tornLogArchive=(()=>{
         on(sync.get(key(player)),v=>{
           const s=checked(v,player);
           if(s.generation!==generation||s.checkpoint.revision!==task.revision){done({status:"stale"});return;}
-          if(s.blocked||s.checkpoint.gap){done({status:"blocked"});return;}
+          if(s.blocked||s.checkpoint.gap||s.consent===false){done({status:"blocked"});return;}
           const proposed=coverage.apply(s.checkpoint,task,page);
           if(!proposed.ok||!validCheckpoint(proposed.checkpoint,player)){
             on(sync.put({...s,blocked:"Invalid page continuation; review required"}),()=>done({status:"invalid"}));return;
@@ -134,8 +136,28 @@ const tornLogArchive=(()=>{
           const s=checked(v,player);
           if(s.generation===Number.MAX_SAFE_INTEGER)throw Error("Archive generation exhausted");
           const next=purge?fresh(player,s.generation+1):{...s,generation:s.generation+1};
+          if(Object.hasOwn(s,"consent"))next.consent=false;
           if(purge)on(tx.objectStore("records").delete(range.bound([player,SOURCE,""],[player,SOURCE,"\uffff"])));
           on(sync.put(next),()=>done(next));
+        });
+      });
+    }
+    // Consent is account-bound and changes in the same transaction as
+    // generation. Missing consent is legacy/uninitialized, never an opt-in.
+    // Explicit reviewed start also advances generation, fencing older starts.
+    function setConsent(playerId,reviewed,enabled,guard){
+      const player=records.owner(playerId);
+      if(typeof enabled!=="boolean"||!reviewed||!authorized(guard))return Promise.reject(Error("Explicit reviewed consent required"));
+      const before=JSON.parse(JSON.stringify(reviewed));checked(before,player);
+      return run(["sync"],"readwrite",guard,(tx,on,done)=>{
+        const sync=tx.objectStore("sync");
+        on(sync.get(key(player)),v=>{
+          const s=checked(v,player);
+          if(JSON.stringify(s)!==JSON.stringify(before)){done({status:"stale"});return;}
+          if(enabled&&(s.blocked||s.checkpoint.gap)){done({status:"review-required"});return;}
+          if(s.generation===Number.MAX_SAFE_INTEGER)throw Error("Archive generation exhausted");
+          const next={...s,generation:s.generation+1,consent:enabled};
+          on(sync.put(next),()=>done({status:"committed",state:next}));
         });
       });
     }
@@ -153,7 +175,7 @@ const tornLogArchive=(()=>{
         });
       });
     }
-    return Object.freeze({state,begin,commit,readPage,invalidate:(p,g)=>invalidate(p,g),purge:(p,g)=>invalidate(p,g,true),abortPending,close});
+    return Object.freeze({state,begin,commit,readPage,setConsent,invalidate:(p,g)=>invalidate(p,g),purge:(p,g)=>invalidate(p,g,true),abortPending,close});
   }
   return Object.freeze({open,DB_NAME,VERSION,MAX_RECORDS,MAX_BYTES,MAX_READ,validCheckpoint});
 })();

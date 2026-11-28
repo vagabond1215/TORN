@@ -4,7 +4,7 @@
  * Future UI must select exactly one worker and wire lifecycle events.
  */
 const tornLogCollector=(()=>{
-  function create({api,openArchive,visible,clock=Date.now,onStatus=()=>{}}){
+  function create({api,openArchive,visible,clock=Date.now,onStatus=()=>{},requireConsent=false}){
     let session=null,running=null,maintenance=false,sequence=0,nextCheck=0;
     const visibleNow=()=>visible()===true;
     const owns=s=>session===s&&s.lease.isCurrent()===true;
@@ -23,11 +23,12 @@ const tornLogCollector=(()=>{
     }
     // A cached identity may initiate verification only. Even if another
     // request verifies it before the next tick, require a new explicit start.
-    function start(){
+    function start({generation=null}={}){
       if(session||running||maintenance)return {status:"busy"};
       const lease=api.idleLogSession();
       if(!lease?.isCurrent())return {status:"disconnected"};
-      session={lease,verificationOnly:!lease.isVerified(),store:null,generation:null};nextCheck=0;
+      if(requireConsent&&lease.isVerified()&&(!Number.isSafeInteger(generation)||generation<1))return {status:"consent-required"};
+      session={lease,verificationOnly:!lease.isVerified(),store:null,generation:requireConsent?generation:null};nextCheck=0;
       return notify(session,session.verificationOnly?"verification-required":"ready");
     }
     function lifecycle(){
@@ -67,6 +68,7 @@ const tornLogCollector=(()=>{
         if(!guard())return {status:"cancelled"};
         if(s.generation===null)s.generation=state.generation;
         if(state.generation!==s.generation)return finish(s,"archive-changed");
+        if(requireConsent&&state.consent!==true)return finish(s,"consent-required");
         if(state.blocked||state.checkpoint.gap)return finish(s,"review-required");
         const ticket=await s.store.begin(s.lease.playerId,guard,at);
         if(!guard())return {status:"cancelled"};

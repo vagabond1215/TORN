@@ -57,7 +57,22 @@
     assert(!a.active()&&messages.every(x=>!Object.hasOwn(x,"payload")),"fixed status and no raw data");
     const data=await inspector.readPage(1,yes);
     assert(data.records.length===1&&data.records[0].sourceId==="e","bounded archive read");
-    output.textContent="PASS: synthetic API + real IndexedDB/Web Locks, competing collectors, purge, visibility, connection epoch and invalid continuation.";
+    // New consent semantics: blocked archive cannot be enabled, explicit
+    // purge first; exact stale review cannot re-enable after a pause.
+    assert((await inspector.setConsent(1,invalid,true,yes)).status==="review-required","blocked consent refused");
+    const clean=await inspector.purge(1,yes),other=await opened();
+    try{
+      const first=await inspector.setConsent(1,clean,true,yes);
+      assert(first.status==="committed"&&first.state.consent===true,"explicit consent saved");
+      const ticket=await inspector.begin(1,yes,time);
+      const paused=await other.invalidate(1,yes);
+      assert(paused.consent===false&&paused.generation>first.state.generation,"durable pause");
+      assert((await inspector.setConsent(1,first.state,true,yes)).status==="stale","stale consent refused");
+      assert((await inspector.commit(ticket,page([row("late")]),yes,time)).status==="stale","late consent ticket refused");
+      assert(await inspector.begin(1,yes,time)===null,"paused archive not collectable");
+      assert((await other.purge(1,yes)).consent===false,"purge leaves consent off");
+    }finally{other.close();}
+    output.textContent="PASS: synthetic API + real IndexedDB/Web Locks, competing collectors, purge, visibility, connection epoch, invalid continuation and durable consent.";
     output.dataset.result="pass";
   }catch(error){output.textContent="FAIL: "+error.message;output.dataset.result="fail";console.error(error);}
   finally{hold?.resolve();a.stop();b.stop();inspector?.close();indexedDB.deleteDatabase(name);}
