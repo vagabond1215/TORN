@@ -744,12 +744,16 @@ const tornTrainSequence=(()=>{
       return {actions,gain:result.gain,money:result.money,cashCost,used:result.used,costs:result.costs,generatedAt:now.getTime(),finalHappy:v.happy};
     }finally{ctx=previous;Object.assign(p,old);}
   }
-  function simulate(list,overrides={}){
-    const side=Object.keys(steps).find(id=>steps[id]===list);
-    const engine=createEngine({startEnergy:startingEnergy[side],midnightJump:midnightJumps.has(side),...overrides});
-    const prepared=side?cycleStart(side,list,engine,{adaptive:startingEnergy[side]==="current"||overrides.startEnergy==="current",prepare:startingEnergy[side]==="current"||overrides.startEnergy==="current",livePolicy:startingEnergy[side]==="current"||overrides.startEnergy==="current"}):list;
-    if(prepared)engine.run(prepared);
-    return engine.finish(list);
+  function simulate(list,overrides={},context=ctx){
+    const previous=ctx;
+    try{
+      ctx=context;
+      const side=Object.keys(steps).find(id=>steps[id]===list);
+      const engine=createEngine({startEnergy:startingEnergy[side],midnightJump:midnightJumps.has(side),...overrides});
+      const prepared=side?cycleStart(side,list,engine,{adaptive:startingEnergy[side]==="current"||overrides.startEnergy==="current",prepare:startingEnergy[side]==="current"||overrides.startEnergy==="current",livePolicy:startingEnergy[side]==="current"||overrides.startEnergy==="current"}):list;
+      if(prepared)engine.run(prepared);
+      return engine.finish(list);
+    }finally{ctx=previous;}
   }
   function defaultActions(id){
     const list=defaults[id](),recurring=recurringTemplates.has(id);

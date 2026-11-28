@@ -680,6 +680,12 @@ const tornStatPlanner = (() => {
     return {...out,...unlocked,gym,happy,energy:Number.isFinite(energy)?energy:null,multipliers:Object.fromEntries(statNames.map(stat=>[stat,effectsFor(stat,{live:true}).multiplier])),cached:["gym","perks"].some(k=>source(k).status==="cached")||out.statsCached,referenceGym:!!gym?.offline};
   }
   return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,replayTrainingSession,niceLiveInputs,
-    simulate:()=>({natural:tornTrainSequence.simulate(tornTrainSequence.steps.natural),jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump)}),
+    simulate:()=>{
+      const context={state,gym:selectedGym(),trainBlock,effectsFor};
+      return {
+        natural:tornTrainSequence.simulate(tornTrainSequence.steps.natural,{},context),
+        jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump,{},context)
+      };
+    },
     state,internal:{oneTrain,trainBlock,percentage,gainPerks,niceUnlockedGyms}};
 })();

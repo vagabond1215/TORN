@@ -13,7 +13,7 @@ const items = [
   { id: 4, name: "Birthday Cupcake", market_value: 20 }
 ];
 
-function fixture(selected, status = "Standard") {
+function fixture(selected, status = "Standard", renderPlan = true) {
   const storage = JSON.stringify({ selected, expanded: selected, showOptimal: false });
   const data = {
     profile: { donator_status: status },
@@ -28,23 +28,31 @@ function fixture(selected, status = "Standard") {
     localStorage: { getItem: () => storage },
     payload: (name, field) => data[name]?.[field] ?? data[name]
   });
-  const { plan, trainBlock } = vm.runInContext(
-    calculator + "\n" + sequencer + "\n({ plan:tornTrainSequence, trainBlock:tornStatPlanner.internal.trainBlock })", sandbox
+  const { plan, planner } = vm.runInContext(
+    calculator + "\n" + sequencer + "\n({ plan:tornTrainSequence, planner:tornStatPlanner })", sandbox
   );
   const context = {
     state: { statValues: { strength: 1000 }, compareStat: "strength", currentEnergy: 100, happy: 5000, maxHappy: 5000 },
     gym: { energy: 10, strength: 7.3 },
     effectsFor: () => ({ multiplier: 1 }),
-    trainBlock
+    trainBlock: planner.internal.trainBlock
   };
   plan.settings.tornClockMin = 720;
   plan.settings.resetAfterSec = 900;
-  const html = plan.render(context, { keepClock: true });
-  return { plan, html, api };
+  const html = renderPlan ? plan.render(context, { keepClock: true }) : null;
+  return { plan, planner, html, api };
 }
 
 const types = list => Array.from(list, action => action.type);
 const executed = data => data.log.filter(event => event.editable);
+
+test("planner simulations run before the theoretical pane mounts", () => {
+  const { planner } = fixture(["natural", "jump"], "Standard", false);
+  const { natural, jump } = planner.simulate();
+  assert.ok(Number.isFinite(natural.gain) && natural.gain >= 0);
+  assert.ok(Number.isFinite(jump.gain) && jump.gain >= 0);
+  assert.notDeepEqual(types(executed(natural)), types(executed(jump)));
+});
 
 // The current chart is cycle-based; fixed-duration comparisons explicitly
 // specify their horizon instead of assuming every template is a 24h action list.
