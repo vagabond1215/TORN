@@ -2,8 +2,8 @@
 /* Isolated authoritative-generation prototype; NOT loaded by index.html.
  * One IDB record per verified owner, one readwrite transaction for CAS.
  * Explicit reviewed initialization, allowlisted preference edits and
- * isolated V7 reservation/cancellation only. No localStorage mirror,
- * downgrade, automatic migration, completion/expense authority,
+ * isolated V7 planning and V6 completion. No localStorage mirror,
+ * downgrade, automatic migration, general expense authority,
  * deletion/reset, API request or session activation.
  */
 const tornAccountTransactionStore=(()=>{
@@ -171,7 +171,25 @@ const tornAccountTransactionStore=(()=>{
         });
       });
     }
-    return Object.freeze({read,initialize,editPreference,planRehab,abortPending,close});
+    // Narrow V6-style completion: exact calendar and expense evidence
+    // advance together or not at all. Never accept an after bundle.
+    async function completeRehab(playerId,reviewed,decision,approved,readContext,guard,options={}){
+      const id=owner(playerId);checkLive(guard);
+      if(typeof tornRehabTransaction==="undefined")throw Error("Rehab completion adapter unavailable");
+      const candidate=await tornRehabTransaction.prepare(id,reviewed,decision,approved,readContext,guard,options);
+      checkLive(guard);
+      if(candidate.status!=="candidate")return candidate;
+      const before=candidate.before,next=candidate.after;
+      return run(id,"readwrite",guard,(current,store,on,done)=>{
+        if(!current||current.generation!==before.generation||!same(current,before)){done({status:"stale",generation:current?.generation??null});return;}
+        candidate.assertCurrent();
+        on(store.put(next),()=>{
+          candidate.assertCurrent();
+          done({status:"committed",generation:next.generation,eventId:candidate.eventId,cost:candidate.cost,attribution:candidate.attribution});
+        });
+      });
+    }
+    return Object.freeze({read,initialize,editPreference,planRehab,completeRehab,abortPending,close});
   }
   return Object.freeze({open,reviewLegacy,verify,preparePreference,DB_NAME,VERSION});
 })();
