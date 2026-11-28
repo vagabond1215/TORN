@@ -66,6 +66,7 @@ const tornTrainSequence=(()=>{
     continuousDays=Math.floor(clamp(saved?.continuousDays??7,1,28));
     const valid=new Set(templates.map(([id])=>id));
     cycleOverrides=Array.isArray(saved?.cycleOverrides)?saved.cycleOverrides.slice(0,28).map(id=>valid.has(id)?id:""):[];
+    settingsOpen=typeof tornDisclosureState!=="undefined"?tornDisclosureState.get(tornDisclosureState.ownKey("training-settings"),false):false;
     overridesOpen=false;
     optimizerSettingsOpen="";
     for(const key of Object.keys(excludedPlans)){
@@ -1553,7 +1554,7 @@ const tornTrainSequence=(()=>{
         rebuild("[data-ts-optimal]");
         return;
       }
-      const settings=event.target.closest("[data-ts-settings]");if(settings){settingsOpen=!settingsOpen;settings.setAttribute("aria-expanded",String(settingsOpen));settings.classList.toggle("is-selected",settingsOpen);const panel=view.querySelector("#ts-plan-settings");if(panel)panel.hidden=!settingsOpen;return;}
+      const settings=event.target.closest("[data-ts-settings]");if(settings){settingsOpen=!settingsOpen;if(typeof tornDisclosureState!=="undefined")tornDisclosureState.set(tornDisclosureState.ownKey("training-settings"),settingsOpen);settings.setAttribute("aria-expanded",String(settingsOpen));settings.classList.toggle("is-selected",settingsOpen);const panel=view.querySelector("#ts-plan-settings");if(panel)panel.hidden=!settingsOpen;return;}
       const template=event.target.closest("[data-ts-template]");if(template){const id=template.dataset.tsTemplate;if(selected.has(id))selected.delete(id);else selected.add(id);savePlanPreferences();rebuild(undefined,{keepClock:true});view.querySelector('[data-ts-template="'+id+'"]')?.focus();return;}
       const mode=event.target.closest("[data-ts-cooldown-mode]");
       if(mode){event.preventDefault();if(mode.dataset.tsCooldownMode==="drug")liveDrug=!liveDrug;else liveBooster=!liveBooster;rebuild();return;}

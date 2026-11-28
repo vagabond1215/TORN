@@ -19,9 +19,9 @@ const tornDisclosureState=(()=>{
     return result;
   }
   function createStore(storage){
-    let memory=new Map(),dirty=new Map();
+    let memory=new Map(),dirty=new Map(),lastRaw=undefined;
     function read(){
-      try{if(storage){memory=decode(storage.getItem(storageKey));for(const [k,v] of dirty)memory.set(k,v);}}catch{}
+      try{if(storage){const raw=storage.getItem(storageKey);if(raw!==lastRaw){memory=decode(raw);lastRaw=raw;for(const [k,v] of dirty)memory.set(k,v);}}}catch{}
       return memory;
     }
     function get(k,fallback){const v=read().get(k);return typeof v===typeof fallback?v:fallback;}
@@ -32,7 +32,7 @@ const tornDisclosureState=(()=>{
       data.delete(k);data.set(k,v);dirty.delete(k);dirty.set(k,v);
       while(data.size>cap)data.delete(data.keys().next().value);
       while(dirty.size>cap)dirty.delete(dirty.keys().next().value);
-      try{if(storage){const raw=JSON.stringify([...data]);if(raw.length<=maxRaw){storage.setItem(storageKey,raw);dirty.clear();}}}catch{}
+      try{if(storage){const raw=JSON.stringify([...data]);if(raw.length<=maxRaw){storage.setItem(storageKey,raw);lastRaw=raw;dirty.clear();}}}catch{}
     }
     return {get,set};
   }
