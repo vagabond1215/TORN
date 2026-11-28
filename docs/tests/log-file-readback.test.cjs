@@ -1,0 +1,51 @@
+"use strict";
+const assert=require("node:assert/strict"),r=require("../log-records.js"),c=require("../log-coverage.js"),codec=require("../log-file-codec.js"),rb=require("../log-file-readback.js");
+const run=(function suite(assert,r,c,codec,rb,env){
+ return async function run(){
+  const owner="1",at=Date.UTC(2026,10,28),secret="synthetic-recovery-passphrase",yes=()=>true,copy=v=>JSON.parse(JSON.stringify(v)),cost=rows=>rows.reduce((n,v)=>n+2*JSON.stringify(v).length,0);
+  let api=Array.from({length:2001},(_,i)=>({schemaVersion:1,decoderVersion:1,playerId:owner,source:"api-log",sourceId:"row-"+String(2001-i).padStart(5,"0"),occurredAt:at-Math.floor(i/3)*1000,typeId:1,category:"Fixture",title:"Synthetic event",fields:{quantity:i},observedAt:at}));
+  const companion=await r.decodeCompanion({version:1,playerId:1,capturedAt:at,rows:[{at,text:"Repeated event"},{at,text:"Repeated event"}]},owner,at,async()=>"a".repeat(64));
+  const review={api:{playerId:owner,source:"api-log",version:1,generation:3,count:api.length,bytes:cost(api),checkpoint:c.create(owner),blocked:null,consent:true},companion:{playerId:owner,source:r.COMPANION,version:1,revision:2,count:companion.length,bytes:cost(companion)}};
+  let state=copy(review),hook=null,alive=true;
+  const page=rows=>async(p,g,{limit,after})=>{
+   const values=rows(),start=after?values.findIndex(v=>v.sourceId===after.id)+1:0,part=values.slice(start,start+limit),last=part.at(-1);
+   return {records:copy(part),after:start+part.length<values.length?{at:last.occurredAt,id:last.sourceId}:null};
+  };
+  const store={reviewSources:async()=>{if(hook)hook();return copy(state)},readPage:page(()=>api),readCompanionPage:page(()=>companion)};
+  const guard=()=>alive;
+  const staged=await rb.prepare(store,owner,review,true,guard,secret,at);
+  const make=text=>new env.File([text],"backup.json");
+  const file=make(staged.text),verify=(f=file,t=staged.ticket,p=owner,s=secret,g=yes,a=true)=>rb.verify(t,f,p,s,a,g);
+  const result=await verify();
+  assert.equal(result.status,"verified-readback");assert.equal(result.count,2003);assert.equal(result.evictionAllowed,false);assert.deepEqual(result.review,review);assert.deepEqual(state,review);
+  assert.equal(result.fileDigest.length,64);
+  await assert.rejects(()=>verify(file,{}),/Unknown/);
+  await assert.rejects(()=>verify(file,staged.ticket,"2"),/foreign/);
+  await assert.rejects(()=>verify(staged.text),/Reselect/);
+  await assert.rejects(()=>verify(make(staged.text.slice(1))),/size/);
+  const flipped=(staged.text[0]==="a"?"b":"a")+staged.text.slice(1);
+  await assert.rejects(()=>verify(make(flipped)),/differs/);
+  await assert.rejects(()=>verify(file,staged.ticket,owner,"wrong-passphrase-123"),/passphrase|damaged/);
+  await assert.rejects(()=>verify(file,staged.ticket,owner,secret,yes,false),/Explicit/);
+  const other=await rb.prepare(store,owner,review,true,yes,secret,at);
+  await assert.rejects(()=>verify(make(other.text)),/differs|size/);
+  state.companion.revision++;
+  await assert.rejects(()=>verify(),/Archive changed/);
+  state=copy(review);
+  // Simulate corrupted rows despite unchanged metadata and unchanged size.
+  api[0]={...api[0],title:"Synthetic evenu"};
+  await assert.rejects(()=>verify(),/records differ/);
+  api[0]={...api[0],title:"Synthetic event"};
+  hook=()=>{alive=false};await assert.rejects(()=>verify(),/authorization/);
+  hook=null;alive=true;
+  let calls=0;hook=()=>{if(++calls===3)state.api.generation++};
+  await assert.rejects(()=>verify(),/Archive changed/);
+  hook=null;state=copy(review);
+  await verify();
+  rb.cancel(staged.ticket);await assert.rejects(()=>verify(),/Unknown/);
+  assert.deepEqual(state,review);
+  return "2003 records, exact encrypted bytes, current review and content, native File contract, tamper/foreign/stale/guard/cancel rejection; no eviction";
+ };
+})(assert,r,c,codec,rb,globalThis);
+module.exports=run;
+if(require.main===module)run().then(console.log).catch(e=>{console.error(e);process.exitCode=1});
