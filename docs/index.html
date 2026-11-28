@@ -6,7 +6,7 @@
   <meta name="description" content="Torn City interactive guide with API-backed character stats, inventory and a beginner progression checklist.">
   <meta name="theme-color" content="#30363a">
   <title>Torn City Guide</title>
-  <link rel="stylesheet" href="./styles.css?v=20261127-calendar-preview1">
+  <link rel="stylesheet" href="./styles.css?v=20261127-calendar-preview2">
   <script src="./education-reference.js?v=20261124-edu-wiki1" defer></script>
   <script src="./guide-features.js?v=20261127-log-lease1" defer></script>
   <script src="./tct-timers.js?v=20261126-date-clock1" defer></script>
@@ -30,9 +30,9 @@
   <script src="./account-storage.js?v=20261126-timeline-preferences1" defer></script>
   <script src="./account-revisions.js?v=20261126-merge1" defer></script>
   <script src="./account-backup.js?v=20261126-revisions1" defer></script>
-  <script src="./account-calendar-merge.js?v=20261127-calendar-preview1" defer></script>
-  <script src="./account-calendar-preview-ui.js?v=20261127-calendar-preview1" defer></script>
-  <script src="./account-backup-ui.js?v=20261127-calendar-preview1" defer></script>
+  <script src="./account-calendar-merge.js?v=20261127-calendar-preview2" defer></script>
+  <script src="./account-calendar-preview-ui.js?v=20261127-calendar-preview2" defer></script>
+  <script src="./account-backup-ui.js?v=20261127-calendar-preview2" defer></script>
   <script src="./guide.js?v=20261126-timeline-modes1" defer></script>
 </head>
 <body>
@@ -88,7 +88,7 @@
                 <p>Reload Torn and this guide in the same browser after installation. Torn PDA compatibility and persistent native storage are still being validated; data does not automatically cross apps or devices. The guide works without the companion.</p>
               </details>
             </div>
-            <div class="settings-field"><strong>Data &amp; Backup</strong><button type="button" class="button secondary" id="backup-open" disabled>Encrypted portable backup</button><p class="settings-hint">Export supported account settings and notes. Recovery is currently limited to empty accounts. Existing expenditure records, validated training sessions and cycle history are included. Restored sessions stay on hold.</p></div>
+            <div class="settings-field"><strong>Data &amp; Backup</strong><button type="button" class="button secondary" id="backup-open" disabled>Encrypted portable backup</button><p class="settings-hint">Export supported account settings and notes. Full recovery is limited to empty accounts; existing accounts can compare version 2 backups and explicitly merge eligible preferences. Calendar comparison is preview-only. Existing expenditure records, validated training sessions and cycle history are included. Restored sessions stay on hold.</p></div>
             <div class="settings-footer">
               <a href="#profile" id="settings-account">Account &amp; API</a>
               <button type="button" class="settings-signout" id="settings-signout" disabled>Sign out</button>

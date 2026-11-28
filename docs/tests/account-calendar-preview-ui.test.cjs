@@ -17,6 +17,8 @@ assert.equal(changes,1);assert.deepEqual(view.decisions(),[{id:"a",choice:"take-
 view.disable(true);assert.equal(selects[0].disabled,true);
 selects[0].value="invalid";selects[0].events.change();assert.deepEqual(view.decisions(),[]);
 assert.ok(u.description(null).includes("Not present in this snapshot"));
+assert.ok(u.description({...event,start:at+1234}).some(x=>x.includes("00:00:01.234 TCT")));
+assert.ok(nodes.some(n=>n.textContent==="Event ID: a"));
 const html=read("index.html"),ui=read("account-backup-ui.js");
 assert.ok(html.includes("account-calendar-preview-ui.js?v="));assert.ok(!html.includes('src="./account-calendar-journal.js'));
 assert.ok(ui.includes('comparison.querySelectorAll("input:checked")'));assert.ok(ui.includes("tornCalendarMerge.resolve"));assert.ok(!ui.includes("tornCalendarJournal.apply"));

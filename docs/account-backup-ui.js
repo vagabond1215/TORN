@@ -104,8 +104,8 @@ const tornBackupUI=(()=>{
       pendingCalendar=null;calendarView=null;calendarRows.replaceChildren();calendarPanel.hidden=true;calendarStatus.textContent="";baseFile.value="";baseSecret.value="";
     }
     function calendarCurrent(p){
-      if(pendingCalendar!==p||!p.isCurrent()||!dialog.open||tornAccountStorage.journalPending(localStorage,p.id))return false;
-      try{return localStorage.getItem(tornAccountRevisions.key(p.id))===JSON.stringify(p.local.manifest)&&JSON.stringify(tornAccountStorage.snapshot(localStorage,p.id))===JSON.stringify({records:p.local.records,omitted:p.local.omitted??[]})&&JSON.stringify(tornAccountStorage.deletionMarkers(localStorage,p.id))===p.markers;}catch{return false;}
+      if(pendingCalendar!==p||!dialog.open)return false;
+      try{if(!p.isCurrent()||tornAccountStorage.journalPending(localStorage,p.id))return false;return localStorage.getItem(tornAccountRevisions.key(p.id))===JSON.stringify(p.local.manifest)&&JSON.stringify(tornAccountStorage.snapshot(localStorage,p.id))===JSON.stringify({records:p.local.records,omitted:p.local.omitted??[]})&&JSON.stringify(tornAccountStorage.deletionMarkers(localStorage,p.id))===p.markers;}catch{return false;}
     }
     function renderCalendar(p,plan){
       if(!calendarCurrent(p))throw Error("Account or saved calendar changed; reopen backup comparison");
@@ -153,7 +153,7 @@ const tornBackupUI=(()=>{
       }finally{busy=false;controls();}
     });
     function invalidateCalendar(){
-      if(pendingCalendar&&!calendarCurrent(pendingCalendar)){clearCalendar();message("Calendar comparison changed; select the backup again.");controls();}
+      if(pendingCalendar&&!calendarCurrent(pendingCalendar)){clearMerge();message("Account comparison changed; select the backup again.");controls();}
     }
     window.addEventListener("torn-guide-sync",invalidateCalendar);
     window.addEventListener("torn-account-write",invalidateCalendar);

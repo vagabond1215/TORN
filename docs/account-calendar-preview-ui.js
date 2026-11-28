@@ -1,7 +1,7 @@
 "use strict";
 // Read-only calendar comparison presentation. No writers or API calls.
 const tornCalendarPreviewUI=(()=>{
-  const time=at=>new Date(at).toISOString().replace("T"," ").slice(0,16)+" TCT";
+  const time=at=>new Date(at).toISOString().replace("T"," ").replace("Z"," TCT");
   function description(row){
     if(row===null)return ["Not present in this snapshot"];
     const out=[row.title,row.kind+" · "+(row.blocking?"Blocking":"Nonblocking"),time(row.start)+" to "+time(row.end)];
@@ -27,7 +27,7 @@ const tornCalendarPreviewUI=(()=>{
     for(const [i,row] of changed.entries()){
       const details=element("details",undefined,"calendar-review-row");
       const summary=element("summary",(row.before??row.after).title+" · "+row.change+" · "+(row.choices.length?"Reviewable":row.action==="keep-local"?"Keep local":"Protected / review only"));
-      details.append(summary);
+      details.append(summary,element("p","Event ID: "+row.id,"fine-print"));
       const grid=element("div",undefined,"calendar-review-versions");
       if(plan.commonBase)addVersion(grid,"Common backup",row.base);
       addVersion(grid,"Local",row.before);addVersion(grid,"Incoming",row.after);
