@@ -35,7 +35,7 @@ const tornGuideApi=(()=>{
     activity:["virus","travel","racingrecords","races"],
     quickStatus:["icons","travel","races","cooldowns"],
     crime:["bars","skills","itemCatalog"],
-    merits:["honors","medals","honorCatalog","medalCatalog","merits","meritCatalog"],
+    merits:["honors","medals","honorCatalog","medalCatalog","merits","meritCatalog","battlestats","bars","gym","perks","gymCatalog"],
     checklist:["bars","merits","meritCatalog","job","education","educationCatalog","money","icons","profile","organizedcrime","virus"],
     money:["money"],
     stocks:["stocks","stockCatalog","itemCatalog"],

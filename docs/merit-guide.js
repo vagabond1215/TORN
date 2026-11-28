@@ -80,17 +80,66 @@ const tornMeritGuide=(()=>{
      const panel=root.querySelector(".affronted-answer");panel.hidden=!next;panel.innerHTML=affrontedAnswer(next);
    });
  }
- let filter="all",query="";
+ let filter="all",query="",niceManual=null,niceCache=null;
+ const niceLabel={strength:"Strength",defense:"Defense",speed:"Speed",dexterity:"Dexterity"};
+ const niceNum=v=>Number.isFinite(v)?Math.floor(v).toLocaleString("en-US"):"Unavailable";
+ const niceExact=v=>Number.isFinite(v)?v.toLocaleString("en-US",{maximumFractionDigits:2,useGrouping:false}):"";
+ const niceKey=live=>JSON.stringify([live.owner,live.stamp,live.stats]);
+ function nicePanel(awards){
+   const honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice"),done=honor?.done??null;
+   const head='<section class="panel"><div class="panel-heading"><h2>Nice honor planner</h2><small>'+ (done===true?"Earned":done===false?"Not earned":"Award status unverified")+'</small></div><div class="panel-content nice-merit">';
+   const tail='<p class="fine-print"><a href="https://www.torn.com/forums.php?p=threads&amp;t=16195359" target="_blank" rel="noopener noreferrer">Nice honor training guide</a> · <a href="https://www.torn.com/gym.php" target="_blank" rel="noopener noreferrer">Open Torn gym</a></p></div></section>';
+   if(done===true){niceManual=null;niceCache=null;return head+'<p>Nice is already earned. No special training is needed.</p>'+tail;}
+   const live=tornStatPlanner.niceLiveInputs(),scope=niceKey(live);
+   if(niceManual?.scope!==scope)niceManual=null;
+   const stats=niceManual?.stats??live.stats,current=tornNiceMerit.inspect(stats);
+   const rule='<p>Find five or more occurrences of <strong>69</strong> and <strong>420</strong> across the four integer battle stats, including at least one of each. Decimal digits do not count.</p>';
+   if(!current){niceCache=null;return head+rule+'<p class="fine-print">'+safe(live.reason??"Battle stats unavailable.")+'</p>'+tail;}
+   let plan=null;
+   if(current.met)plan={status:"met"};
+   else if(!live.reason){
+     const fingerprint=JSON.stringify([scope,stats,live.happy,live.gym,live.multipliers]);
+     if(niceCache?.fingerprint!==fingerprint)niceCache={fingerprint,plan:tornNiceMerit.solve({stats,happy:live.happy,gym:live.gym,multipliers:live.multipliers},tornStatPlanner.internal.oneTrain)};
+     plan=niceCache.plan;
+   }else niceCache=null;
+   const results=plan?.status==="plan"?plan.rows:null;
+   const table='<div class="crime-table-scroll"><table class="crime-table nice-merit-table"><thead><tr><th scope="col">Stat</th><th scope="col">Current</th><th scope="col">Current 69 / 420</th><th scope="col">Trains</th><th scope="col">Energy</th><th scope="col">Predicted stop</th><th scope="col">Stop 69 / 420</th></tr></thead><tbody>'+current.rows.map((r,i)=>{
+     const next=results?.[i],m=next?.matches??r.matches;
+     return '<tr><th scope="row">'+niceLabel[r.stat]+'</th><td>'+niceNum(r.value)+'</td><td>'+r.matches.n69+' / '+r.matches.n420+'</td><td>'+ (next?next.trains:current.met?0:"–")+'</td><td>'+(next?next.energy:current.met?0:"–")+'</td><td>'+(next?niceNum(next.after):current.met?niceNum(r.value):"–")+'</td><td>'+(next||current.met?m.n69+" / "+m.n420:"–")+'</td></tr>';
+   }).join("")+'</tbody></table></div>';
+   let summary='<p><strong>Current: '+current.total+' / 5 occurrences</strong> · 69: '+current.n69+' · 420: '+current.n420+'</p>';
+   if(current.met)summary+='<p><strong>Digit requirement met.</strong> Check Torn for the honor; the Guide cannot confirm the award without award data.</p>';
+   else if(live.reason)summary+='<p class="fine-print">'+safe(live.reason)+'</p>';
+   else if(plan?.status==="plan"){
+     const remaining=live.energy===null?null:Math.max(0,plan.energy-live.energy);
+     summary+='<p><strong>Suggested route: '+plan.trains+' trains · '+plan.energy.toLocaleString("en-US")+' Energy</strong> · Predicted '+plan.result.total+' occurrences (69: '+plan.result.n69+', 420: '+plan.result.n420+').</p><p class="fine-print">'+(remaining===null?"Current Energy unknown.":remaining>0?"Needs "+remaining.toLocaleString("en-US")+" more Energy than currently available. This is not a multi-session schedule.":"Within current Energy.")+'</p>';
+   }else if(plan?.status==="not-found")summary+='<p>No qualifying route found within '+plan.maxTrains+' trains ('+plan.energyLimit.toLocaleString("en-US")+' Energy) in the current gym and displayed order. This is not proof that the merit is unreachable. Consider another unlocked gym, different Happiness, or refresh after regular training.</p>';
+   else if(plan?.reason)summary+='<p class="fine-print">'+safe(plan.reason)+'</p>';
+   const assumptions=live.gym&&!live.reason?'<p class="fine-print">Gym: '+safe(live.gym.name)+' · '+live.gym.energy+' E/train · Starting Happiness '+niceNum(live.happy)+(live.referenceGym?" · Reference gym values":"")+(live.cached?" · Cached API inputs":"")+'. Train in the displayed order; no time passes in this model. Check the actual stat after each train and refresh before continuing. The shared gain formula is approximate; RNG, rounding, Happiness resets and bonus changes can miss the target.</p>':"";
+   const exact='<details class="nice-merit-exact"><summary>Use precise values from your training log</summary><p class="fine-print">Optional: enter the exact decimals for all four current stats. Overrides are temporary and reset when the API stat snapshot changes.</p><form data-nice-exact class="stock-controls">'+tornNiceMerit.order.map(stat=>'<label>'+niceLabel[stat]+'<input name="'+stat+'" type="number" min="0" max="9007199254740990" step="any" required value="'+safe(niceExact(stats[stat]))+'"></label>').join("")+'<button type="submit" class="button secondary">Recalculate</button><button type="button" class="button secondary" data-nice-reset>Use API values</button></form></details>';
+   return head+rule+summary+table+assumptions+exact+tail;
+ }
+
  function render(){
    const awards=model(),shortlist=candidates(),earned=awards.filter(x=>x.done===true).length;
    const visible=awards.filter(x=>(filter==="all"||filter==="remaining"&&x.done===false||filter==="earned"&&x.done===true||filter===x.type)&&key(x.name+" "+x.description+" "+x.category).includes(key(query)));
    const list=(rows,scope)=>'<ul class="crime-recommendations rec-advice">'+rows.map(x=>'<li><div><strong>'+safe(x.name)+'</strong><small>'+safe(x.detail??x.description)+' · '+safe(x.effort??x.category)+'</small></div><small>'+ (x.done===true?"Earned":x.done===false?"Not earned":"Unverified")+'</small>'+(x.link?'<a href="'+safe(x.link)+'">View</a>':"")+affrontedDetails(x.name,scope)+'</li>').join("")+'</ul>';
    const m=payload("merits","merits");
    return '<header class="panel topic-header"><h1 id="topic-title" tabindex="-1">Merits &amp; awards</h1></header>'+
+    nicePanel(awards)+
     '<section class="panel"><div class="panel-heading"><h2>Easy honors</h2><a href="https://wiki.torn.com/wiki/Award" target="_blank" rel="noopener">Wiki</a></div><div class="panel-content">'+list(shortlist,"shortlist")+'<p class="fine-print">Unverified entries are not confirmed missing. <a href="https://www.torn.com/forums.php?p=threads&t=16394278" target="_blank" rel="noopener">Community easy honor guide</a></p></div></section>'+
     '<section class="panel"><div class="panel-heading"><h2>Honors &amp; medals</h2><small>'+earned+' confirmed earned / '+awards.length+' catalog entries</small></div><div class="panel-content"><div class="stock-controls"><label>Search <input data-award-search value="'+safe(query)+'"></label><label>Show <select data-award-filter>'+[["all","All"],["remaining","Not earned"],["earned","Earned"],["honors","Honors"],["medals","Medals"]].map(([id,label])=>'<option value="'+id+'" '+(filter===id?"selected":"")+'>'+label+'</option>').join("")+'</select></label></div>'+(visible.length?list(visible,"catalog"):'<p class="fine-print">No matching award data loaded.</p>')+'</div></section>'+
     '<section class="panel"><div class="panel-heading"><h2>Merit spending</h2></div><div class="panel-content"><p>Honors and medals generally each award one merit. Upgrades have ten levels; each successive level costs one more merit (55 total for a full upgrade).</p><p>Available merits: '+safe(m?.available??m?.unspent??m?.merits_available??"Unavailable")+'</p><p><a href="https://wiki.torn.com/wiki/Merit" target="_blank" rel="noopener">Merit upgrade reference</a></p></div></section>';
  }
- function wire(view){wireAffronted(view);if(view.dataset.awardsBound)return;view.dataset.awardsBound="1";view.addEventListener("change",e=>{if(location.hash!=="#merits")return;if(e.target.matches("[data-award-filter]"))filter=e.target.value;else if(e.target.matches("[data-award-search]"))query=e.target.value;else return;view.innerHTML=render();});}
+ function wire(view){wireAffronted(view);if(view.dataset.awardsBound)return;view.dataset.awardsBound="1";
+   view.addEventListener("submit",e=>{
+     if(location.hash!=="#merits"||!e.target.matches("[data-nice-exact]"))return;
+     e.preventDefault();const live=tornStatPlanner.niceLiveInputs();if(!live.stats)return;
+     const data=new FormData(e.target),stats=Object.fromEntries(tornNiceMerit.order.map(s=>[s,Number(data.get(s))]));
+     if(!tornNiceMerit.inspect(stats))return;
+     niceManual={scope:niceKey(live),stats};niceCache=null;view.innerHTML=render();
+   });
+   view.addEventListener("click",e=>{if(location.hash==="#merits"&&e.target.closest("[data-nice-reset]")){niceManual=null;niceCache=null;view.innerHTML=render();}});
+   view.addEventListener("change",e=>{if(location.hash!=="#merits")return;if(e.target.matches("[data-award-filter]"))filter=e.target.value;else if(e.target.matches("[data-award-search]"))query=e.target.value;else return;view.innerHTML=render();});}
  return {render,wire,recommendations,model,affrontedDetails,wireAffronted};
 })();

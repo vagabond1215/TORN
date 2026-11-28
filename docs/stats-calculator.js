@@ -630,7 +630,31 @@ const tornStatPlanner = (() => {
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
   }
-  return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,replayTrainingSession,
+  // Read-only live inputs for the digit-sensitive Nice honor planner.
+  // Never hydrate or modify the calculator's theoretical settings.
+  function niceLiveInputs(now=Date.now()){
+    const s=tornGuideApi.state;
+    if(!tornGuideApi.isConnected()||s.identity?.id==null)return {reason:"Connect your Torn account to calculate a training route."};
+    const source=k=>tornTrainSequence.liveSourceState(s,k,now);
+    const stats=rawStats(),values={};
+    if(!source("battlestats").ready||!stats)return {reason:"Battle stats unavailable or stale; refresh the Guide."};
+    for(const stat of statNames){
+      const raw=stats[stat],v=typeof raw==="object"&&raw!==null?raw.value:raw;
+      if(v===null||v===undefined||v===""||!Number.isFinite(Number(v))||Number(v)<0||Number(v)>=Number.MAX_SAFE_INTEGER)return {reason:"Exact numeric values for all four base stats are required."};
+      values[stat]=Number(v);
+    }
+    const out={stats:values,owner:String(s.identity.id),stamp:s.fetchedAt.battlestats,statsCached:source("battlestats").status==="cached"};
+    if(!source("gym").ready||!source("perks").ready)return {...out,reason:"Active gym or training perks unavailable or stale; refresh the Guide."};
+    const perks=api("perks"),perkData=perks?.perks??perks;
+    if(!perkData||!Object.values(perkData).some(Array.isArray))return {...out,reason:"Training perk response incomplete; refresh the Guide."};
+    const gym=source("gymCatalog").ready?activeGym():activeGym(fallback);
+    if(!gym)return {...out,reason:"Active gym could not be identified."};
+    const inputs=tornTrainSequence.liveInputs(s,now,tornBarProjection);
+    const happy=inputs.happy?.current,energy=inputs.energy?.current;
+    if(!Number.isFinite(happy)||happy<0||happy>99999)return {...out,reason:"Happiness unavailable or stale; refresh the Guide."};
+    return {...out,gym,happy,energy:Number.isFinite(energy)?energy:null,multipliers:Object.fromEntries(statNames.map(stat=>[stat,effectsFor(stat,{live:true}).multiplier])),cached:["gym","perks"].some(k=>source(k).status==="cached")||out.statsCached,referenceGym:!!gym.offline};
+  }
+  return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,replayTrainingSession,niceLiveInputs,
     simulate:()=>({natural:tornTrainSequence.simulate(tornTrainSequence.steps.natural),jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump)}),
     state,internal:{oneTrain,trainBlock,percentage,gainPerks}};
 })();

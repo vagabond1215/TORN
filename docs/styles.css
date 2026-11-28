@@ -2595,3 +2595,9 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .calendar-review-versions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:.5rem;margin:.5rem 0}
 .calendar-review-version{background:var(--raised);border:1px solid var(--border);border-radius:4px;padding:.5rem;font-size:.78rem;min-width:0;overflow-wrap:anywhere}
 .calendar-review-version strong{display:block;margin-bottom:.25rem}
+
+/* Nice merit: compact responsive table and precision override. */
+.nice-merit .nice-merit-table{min-width:580px;font-variant-numeric:tabular-nums}
+.nice-merit .nice-merit-table th,.nice-merit .nice-merit-table td{white-space:nowrap;padding:.45rem .5rem}
+.nice-merit-exact{margin-top:.75rem}.nice-merit-exact summary{cursor:pointer;color:var(--accent-strong)}
+.nice-merit-exact input{width:10rem;max-width:100%}
