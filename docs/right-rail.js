@@ -85,12 +85,15 @@ const tornRightRail=(()=>{
       '<div class="panel-content" id="rail-timer-content">'+(activeTab==="stocks"?stockTimers():'<dl class="rail-timer-list">'+rows+'</dl>')+
       '<span id="rail-refresh-status" class="sr-only" role="status">'+safe(refreshStatus)+'</span></div></section>';
   }
-  function merits(){
-    const rows=tornMeritGuide.recommendations(),notice=tornMeritGuide.niceNotice();
+  function niceRailMarkup(notice){
     const alert=notice?'<div class="rail-nice-notice"><strong>'+safe(notice.met?"Nice requirement predicted":notice.improved?"Nice training opportunity":"Nice digit match predicted")+'</strong><small>'+safe(notice.detail)+'</small><small>'+safe((notice.ready?"Within current Energy. ":"More Energy or Energy unverified. ")+(notice.verified?"":"Honor status unverified. ")+(notice.reference?"Reference gym values. ":"")+"Estimate only; check after each train.")+'</small><a href="#merits">See all gym options</a></div>':"";
     const badge=notice?'<span class="rail-nice-badge" title="'+safe(notice.detail)+'" aria-label="'+safe(notice.detail)+'">'+safe(notice.tag)+'</span>':"";
+    return {alert,badge};
+  }
+  function merits(){
+    const rows=tornMeritGuide.recommendations(),{alert,badge}=niceRailMarkup(tornMeritGuide.niceNotice());
     const body=rows.length?'<ul class="rail-merit-list">'+rows.map(x=>'<li><div class="rail-merit-row"><div><strong>'+safe(x.name)+'</strong><small>'+safe(x.detail)+' · '+safe(x.effort)+'</small></div>'+(x.link?'<a href="'+safe(x.link)+'" aria-label="View '+safe(x.name)+'">View</a>':"")+'</div>'+tornMeritGuide.affrontedDetails(x.name,"rail")+'</li>').join("")+'</ul>':'<p class="rail-snapshot-note">No confirmed unearned recommendations loaded. Open Merits or use the main Refresh button.</p>';
-    return '<section class="panel rail-merits"><div class="panel-heading"><h2>Merits</h2>'+badge+'<a href="#merits">View all</a></div><div class="panel-content">'+alert+body+'</div></section>';
+    return '<section class="panel rail-merits"><div class="panel-heading"><h2>Merits</h2><span data-nice-rail-badge '+(badge?"":"hidden")+'>'+badge+'</span><a href="#merits">View all</a></div><div class="panel-content"><div data-nice-rail-alert '+(alert?"":"hidden")+'>'+alert+'</div>'+body+'</div></section>';
   }
   // The documented v2 user/property upkeep object contains daily property
   // and staff charges, not accumulated debt. Never substitute one for the other.
@@ -170,8 +173,23 @@ const tornRightRail=(()=>{
     content.innerHTML=showSections?[["timers",clocks],["networth",networthPanel],["property",property],["merits",merits]]
       .filter(([id])=>!hiddenSections.has(id)).map(([id,fn])=>collapsible(fn(),id)).join(""):"";
   }
+  let lastNiceTick=0;
   function tick(){
     const el=host();if(!el||el.hidden)return;
+    // Local-only recheck at most once per minute, including when timers
+    // are hidden. Expire stale alerts and reflect projected bar changes
+    // without rebuilding (or reopening) any disclosure.
+    const minute=Math.floor(Date.now()/60000);
+    if(minute!==lastNiceTick){
+      lastNiceTick=minute;
+      const badge=el.querySelector("[data-nice-rail-badge]"),alert=el.querySelector("[data-nice-rail-alert]");
+      if(badge&&alert){
+        const next=niceRailMarkup(tornMeritGuide.niceNotice());
+        if(badge.innerHTML!==next.badge)badge.innerHTML=next.badge;
+        if(alert.innerHTML!==next.alert)alert.innerHTML=next.alert;
+        badge.hidden=!next.badge;alert.hidden=!next.alert;
+      }
+    }
     const clocks=el.querySelectorAll("[data-rail-timer]");
     if(!clocks.length)return;
     const entries=timerEntries();
@@ -199,7 +217,7 @@ const tornRightRail=(()=>{
       if(hiddenSections.has(id))hiddenSections.delete(id);else hiddenSections.add(id);
       try{localStorage.setItem(sectionKey,JSON.stringify([...hiddenSections]));}catch{}
       render();
-      if(id==="merits"&&!hiddenSections.has(id)&&tornGuideApi.isConnected()&&!tornGuideApi.state.loading&&(!tornGuideApi.state.data.honors||!tornGuideApi.state.data.honorCatalog))void tornGuideApi.loadPage("merits").catch(()=>{});
+      if(id==="merits"&&!hiddenSections.has(id)&&tornGuideApi.isConnected())void tornGuideApi.refresh({route:tornGuideApi.routeName(),includeMerits:true}).catch(()=>{});
     });
     tornRoadmap.wireActivities(host());
     if(host())tornMeritGuide.wireAffronted(host());

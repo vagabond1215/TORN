@@ -1,0 +1,18 @@
+"use strict";
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
+const data={honors:{honors:[]},honorCatalog:{honors:[{id:888,name:"Nice",description:"Nice",category:"Gym"}]}};
+const payload=(k,v)=>data[k]?.[v]??null;
+const safe=x=>String(x??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const stats={strength:68,defense:419,speed:1,dexterity:1},gym={id:1,name:"Gym <A>",energy:5,strength:2,defense:2,speed:2,dexterity:2},live={stats,owner:"123",stamp:10,gym,gyms:[gym],unlockListKnown:true,happy:100,energy:5,multipliers:{strength:1,defense:1,speed:1,dexterity:1}};
+let input=live;
+const railCode=read("right-rail.js").replace("return {init,render,tick,order,controls,propertyModel,","return {init,render,tick,order,controls,propertyModel,merits,collapsible,");
+const {rail}=new Function("payload","safe","tornStatPlanner",read("nice-merit-planner.js")+"\n"+read("merit-guide.js")+"\n"+railCode+"\nreturn {rail:tornRightRail};")(payload,safe,{niceLiveInputs:()=>input,internal:{oneTrain:()=>1}});
+let html=rail.collapsible(rail.merits(),"merits");
+assert.ok(html.includes('class="rail-nice-badge"')&&html.indexOf('class="rail-nice-badge"')<html.indexOf("</summary>"));
+assert.ok(html.includes("Gym &lt;A&gt;")&&html.includes("Within current Energy"));
+input={...live,energy:0};html=rail.merits();assert.ok(html.includes("Nice · predicted")&&html.includes("More Energy"));
+input={...live,reason:"Stale gym"};assert.ok(!rail.merits().includes('class="rail-nice-badge"'));
+input=live;data.honors.honors=[888];assert.ok(!rail.merits().includes('class="rail-nice-badge"'));
+const api=read("guide-features.js");assert.ok(api.includes("route===routeName()&&!category")&&api.includes("tornRightRail.meritsVisible()")&&api.includes("...meritKeys])].filter(name=>stale(name,force))"));
+console.log("Nice rail: collapsed header badge, escaped detail, current/future Energy, earned/stale suppression and coordinator routing passed.");

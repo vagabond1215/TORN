@@ -106,7 +106,8 @@ const tornMeritGuide=(()=>{
    // the nearest future opportunity. Avoid calling preserved digits new.
    const rows=report.rows,now=rows.filter(r=>r.affordable===true);
    const pool=now.length?now:rows,nearest=[...pool].sort((a,b)=>a.energy-b.energy||a.trains-b.trains||Number(b.improved)-Number(a.improved))[0];
-   const preferred=pool.find(r=>r.met)||pool.find(r=>r.improved)||nearest;
+   const immediate=pool.filter(r=>r.trains===1);
+   const preferred=pool.find(r=>r.met)||immediate.find(r=>r.improved)||immediate[0]||pool.find(r=>r.improved)||nearest;
    const tag=now.length?"Nice · "+preferred.trains+" train"+(preferred.trains===1?"":"s"):"Nice · predicted";
    const detail=niceLabel[preferred.stat]+" · "+preferred.gymName+" · "+preferred.trains+" train"+(preferred.trains===1?"":"s")+" · "+preferred.energy+" E · "+patternText(preferred)+" at "+niceNum(preferred.after);
    return {tag,detail,ready:preferred.affordable===true,met:preferred.met,improved:preferred.improved,verified:report.done===false,reference:preferred.reference};
