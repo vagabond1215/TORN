@@ -104,13 +104,20 @@ const tornMeritGuide=(()=>{
    if(report.done===true||report.status!=="ready"||!report.rows.length)return null;
    // Prefer immediate progress; otherwise any immediate digit hit, then
    // the nearest future opportunity. Avoid calling preserved digits new.
-   const rows=report.rows,now=rows.filter(r=>r.affordable===true);
-   const pool=now.length?now:rows,nearest=[...pool].sort((a,b)=>a.energy-b.energy||a.trains-b.trains||Number(b.improved)-Number(a.improved))[0];
-   const immediate=pool.filter(r=>r.trains===1);
-   const preferred=pool.find(r=>r.met)||immediate.find(r=>r.improved)||immediate[0]||pool.find(r=>r.improved)||nearest;
-   const tag=now.length?"Nice · "+preferred.trains+" train"+(preferred.trains===1?"":"s"):"Nice · predicted";
-   const detail=niceLabel[preferred.stat]+" · "+preferred.gymName+" · "+preferred.trains+" train"+(preferred.trains===1?"":"s")+" · "+preferred.energy+" E · "+patternText(preferred)+" at "+niceNum(preferred.after);
-   return {tag,detail,ready:preferred.affordable===true,met:preferred.met,improved:preferred.improved,verified:report.done===false,reference:preferred.reference};
+   const choose=rows=>{
+     if(!rows.length)return null;
+     const now=rows.filter(r=>r.affordable===true),pool=now.length?now:rows;
+     const immediate=pool.filter(r=>r.trains===1);
+     const nearest=[...pool].sort((a,b)=>a.energy-b.energy||a.trains-b.trains||Number(b.improved)-Number(a.improved))[0];
+     return pool.find(r=>r.met)||immediate.find(r=>r.improved)||immediate[0]||pool.find(r=>r.improved)||nearest;
+   };
+   const preferred=choose(report.rows);
+   const abbreviations={strength:"STR",defense:"DEF",speed:"SPD",dexterity:"DEX"};
+   const describe=r=>niceLabel[r.stat]+" · "+r.gymName+" · "+r.trains+" train"+(r.trains===1?"":"s")+" · "+r.energy+" E · "+patternText(r)+" at "+niceNum(r.after)+" · "+(r.affordable===true?"Within current Energy":r.affordable===false?"More Energy needed":"Energy unverified")+(report.done===false?"":" · Honor status unverified")+(r.reference?" · Reference gym values":"")+" · Estimate; recheck each train.";
+   const rows=tornNiceMerit.order.map(stat=>choose(report.rows.filter(r=>r.stat===stat))).filter(Boolean).map(r=>({stat:abbreviations[r.stat],gym:r.gymName,trains:r.trains,detail:describe(r)}));
+   // The badge reflects current observed digit count, never a prediction.
+   const tag="NICE "+report.current.total+"/5";
+   return {tag,detail:describe(preferred),rows,ready:preferred.affordable===true,met:preferred.met,improved:preferred.improved,verified:report.done===false,reference:preferred.reference};
  }
  let niceRefreshing=false,niceRefreshMessage="",niceRefreshOwner=null;
  // Read-only live header. Keep this separate from the expensive route

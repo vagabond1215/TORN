@@ -10,9 +10,15 @@ const railCode=read("right-rail.js").replace("return {init,render,tick,order,con
 const {rail}=new Function("payload","safe","tornStatPlanner",read("nice-merit-planner.js")+"\n"+read("merit-guide.js")+"\n"+railCode+"\nreturn {rail:tornRightRail};")(payload,safe,{niceLiveInputs:()=>input,internal:{oneTrain:()=>1}});
 let html=rail.collapsible(rail.merits(),"merits");
 assert.ok(html.includes('class="rail-nice-badge"')&&html.indexOf('class="rail-nice-badge"')<html.indexOf("</summary>"));
-assert.ok(html.includes("Gym &lt;A&gt;")&&html.includes("Within current Energy"));
-input={...live,energy:0};html=rail.merits();assert.ok(html.includes("Nice · predicted")&&html.includes("More Energy"));
+assert.ok(html.includes(">NICE 0/5</span>")&&html.includes("Gym &lt;A&gt;")&&html.includes("Within current Energy"));
+assert.ok(html.includes('class="rail-merit-list rail-nice-list"')&&!html.includes('class="rail-nice-notice"'));
+assert.ok(html.includes('<strong>STR</strong><span>Gym &lt;A&gt;</span><small>1 train</small>'));
+assert.ok(html.includes('<strong>DEF</strong><span>Gym &lt;A&gt;</span><small>1 train</small>'));
+assert.equal((html.match(/class="rail-nice-row"/g)||[]).length,4);
+input={...live,energy:0};html=rail.merits();assert.ok(html.includes(">NICE 0/5</span>")&&html.includes("More Energy needed"));
+input={...live,stats:{...stats,speed:69}};html=rail.merits();assert.ok(html.includes(">NICE 1/5</span>"));
+assert.ok(!html.includes("Nice training opportunity")&&!html.includes("Open Nice planner"));
 input={...live,reason:"Stale gym"};assert.ok(!rail.merits().includes('class="rail-nice-badge"'));
 input=live;data.honors.honors=[888];assert.ok(!rail.merits().includes('class="rail-nice-badge"'));
 const api=read("guide-features.js");assert.ok(api.includes("route===routeName()&&!category")&&api.includes("tornRightRail.meritsVisible()")&&api.includes("...meritKeys])].filter(name=>stale(name,force))"));
-console.log("Nice rail: collapsed header badge, escaped detail, current/future Energy, earned/stale suppression and coordinator routing passed.");
+console.log("Nice rail: actual progress badge, four compact stat/gym/train rows, escaped tooltips, affordability, earned/stale suppression and coordinator routing passed.");
