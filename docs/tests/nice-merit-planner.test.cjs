@@ -163,3 +163,25 @@ console.log("Nice unlocked gym availability, individual independent stat hits, a
  const sameOnly=nice.solveAcrossGyms({stats:stats(6900,1,1,1),happy:100,gyms:[holdGym],multipliers,maxTrains:1},gain);
  assert.equal(sameOnly.status,"not-found");assert.equal(sameOnly.rows[0].trains,0);
  console.log("Nice preservation: cheaper missing pattern elsewhere holds; costly alternative selects ten-train matched-stat upgrade; same-pattern churn rejected.");
+
+ // A same-coverage STR endpoint must not be used merely to change the
+ // Happiness phase for the next stat. DEF can reach 1420 in two trains.
+ const churnGym={id:80,name:"Churn fixture",energy:5,...stats(1,1,0,0)};
+ const churnInput={stats:stats(69,419,6969,69),happy:100,gyms:[churnGym],multipliers,maxTrains:2};
+ const churnGain=(s,h,d,c,m,stat)=>stat==="strength"?100:h===97.5?1:1000;
+ const churnPlan=nice.solveAcrossGyms(churnInput,churnGain);
+ assert.equal(churnPlan.rows[0].trains,0);
+ assert.equal(churnPlan.status,"plan");assert.equal(churnPlan.rows[1].trains,2);
+ const currentChurn=nice.inspect(churnInput.stats);
+ assert.equal(nice.usefulEndpoint(nice.count(207669),nice.count(207690),currentChurn),false);
+ assert.equal(nice.usefulEndpoint(nice.count(207669),nice.count(69420),currentChurn),true);
+ assert.equal(nice.usefulEndpoint(nice.count(69),nice.count(420),currentChurn),true);
+ const hasBoth=nice.inspect(stats(69,420,1,1));
+ assert.equal(nice.usefulEndpoint(nice.count(69),nice.count(420),hasBoth),false);
+ assert.equal(nice.usefulEndpoint(nice.count(69),nice.count(6969),hasBoth),true);
+ // A high-cost DEF gym makes burning 5E on STR attractive, but the
+ // redundant STR train is forbidden regardless of that incidental effect.
+ const restricted=[{id:91,name:"STR",energy:5,...stats(1,0,0,0)},{id:92,name:"DEF",energy:25,...stats(0,1,0,0)}];
+ const noBurn=nice.solveAcrossGyms({...churnInput,gyms:restricted},churnGain);
+ assert.equal(noBurn.rows[0].trains,0);assert.equal(noBurn.status,"not-found");
+ console.log("Nice hold: same-coverage matched-stat Happiness manipulation excluded; genuine new occurrences and missing-type upgrades retained.");

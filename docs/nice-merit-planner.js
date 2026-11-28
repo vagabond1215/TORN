@@ -20,6 +20,15 @@ const tornNiceMerit=(()=>{
     const n69=rows.reduce((a,r)=>a+r.matches.n69,0),n420=rows.reduce((a,r)=>a+r.matches.n420,0);
     return {rows,n69,n420,total:n69+n420,met:n69+n420>=5&&n69>0&&n420>0};
   }
+  // A matched stat is not a Happiness-burning lever. Only train it if
+  // its endpoint adds occurrences or supplies an account-wide missing
+  // pattern. Merely replacing a match with an equivalent one is HOLD.
+  function usefulEndpoint(before,after,current){
+    if(!after?.total)return false;
+    if(!before.total)return true;
+    return after.total>before.total||
+      (!current.n69&&after.n69>0)||(!current.n420&&after.n420>0);
+  }
   function solve({stats,happy,gym,multipliers,maxTrains=limit},gain){
     const current=inspect(stats);
     if(!current)return {status:"unavailable",reason:"All four base stats are required at reliable numeric precision."};
@@ -120,7 +129,7 @@ const tornNiceMerit=(()=>{
               if(!valid(delta)||delta<=0||!valid(after)||after<=value)break;
               value=after;h=Math.max(0,h-cost*.5);
               const matches=count(value);
-              if(matches.total)endpoints.push({stat,value:stats[stat],after:value,trains:n,energy:n*cost,matches,gymId:gym.gymId,gymName:String(gym.name??gym.gymId),reference:!!gym.offline,active:!!gym.active});
+              if(usefulEndpoint(zero[i].matches,matches,current))endpoints.push({stat,value:stats[stat],after:value,trains:n,energy:n*cost,matches,gymId:gym.gymId,gymName:String(gym.name??gym.gymId),reference:!!gym.offline,active:!!gym.active});
             }
           }
           cache.set(prev.energy,endpoints);
@@ -205,12 +214,14 @@ const tornNiceMerit=(()=>{
     for(const hit of report.rows){
       const i=order.indexOf(hit.stat);
       if(i<0||!Number.isSafeInteger(hit.trains)||hit.trains<1||hit.trains>(plan?.maxTrains??report.maxTrains)||!valid(hit.after)||hit.after<=zero[i].value||!Number.isSafeInteger(hit.energy)||hit.energy<1)continue;
-      const rows=zero.map((row,j)=>j===i?{...hit,value:row.value,matches:count(hit.after)}:row);
+      const matches=count(hit.after);
+      if(!usefulEndpoint(zero[i].matches,matches,current))continue;
+      const rows=zero.map((row,j)=>j===i?{...hit,value:row.value,matches}:row);
       const result=inspect(Object.fromEntries(rows.map(r=>[r.stat,r.after])));
       const candidate={status:result.met?"plan":"partial",rows,result,trains:hit.trains,energy:hit.energy,gyms:report.gyms,maxTrains:plan?.maxTrains??report.maxTrains,finalHappy:Math.max(0,happy-hit.energy*.5),independent:true};
       if(better(candidate,best)<0)best=candidate;
     }
     return best===unchanged?plan:best;
   }
-  return Object.freeze({order,limit,count,inspect,solve,solveAcrossGyms,opportunities,preferRoute});
+  return Object.freeze({order,limit,count,inspect,solve,solveAcrossGyms,opportunities,preferRoute,usefulEndpoint});
 })();

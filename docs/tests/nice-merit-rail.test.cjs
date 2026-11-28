@@ -55,3 +55,12 @@ console.log("Nice rail: actual progress badge, four compact stat/gym/train rows,
  html=rail.merits();assert.ok(html.includes('aria-label="Seeker"')&&html.includes("Earn 250 awards"));
  data.medals=null;assert.ok(!rail.merits().includes('aria-label="Seeker"'));
  console.log("Merit rail cards, concise action-only copy, milestone gap, seasonal date and missing award data passed.");
+
+ // Screenshot stat values with synthetic unit gains; verify STR 69
+ // is never replaced by an equivalent 69 merely because it is nearby.
+ input={...live,stats:{strength:207669,defense:724268,speed:200065,dexterity:51400}};
+ const report=m.niceNotice();
+ assert.ok(report?.rows.some(r=>r.stat==="STR"&&r.hold));
+ assert.ok(!report.rows.some(r=>r.stat==="STR"&&r.trains>0));
+ html=rail.merits();assert.ok(html.includes('<strong>STR</strong><span><strong class="rail-nice-hold">HOLD</strong></span><small>0 trains</small>'));
+ console.log("Screenshot stat values with synthetic gains: existing STR 69 preserved in rail.");

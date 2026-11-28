@@ -162,11 +162,11 @@ const tornMeritGuide=(()=>{
      const before=current.rows.find(x=>x.stat===r.stat),stat=abbreviations[r.stat];
      if(!r.trains){
        if(!before?.matches.total)return [];
-       return [{stat,hold:true,trains:0,detail:niceLabel[r.stat]+" · HOLD "+niceNum(before.value)+" · "+patternText(before)+" · Preserve existing matches; no training selected in the recommended route."}];
+       return [{stat,hold:true,trains:0,detail:niceLabel[r.stat]+" · HOLD "+niceNum(before.value)+" · "+patternText(before)+" · Preserve existing matches; no beneficial upgrade selected in the recommended route."}];
      }
      spent+=r.energy;
      const affordable=Number.isFinite(live.energy)?spent<=live.energy:null;
-     const detail=niceLabel[r.stat]+" · "+r.gymName+" · "+r.trains+" train"+(r.trains===1?"":"s")+" · "+r.energy+" E · "+patternText(r)+" at "+niceNum(r.after)+(before?.matches.total>0?" · Changes existing matches in the preferred route":"")+" · "+(affordable===true?"Within current Energy":affordable===false?"More Energy needed":"Energy unverified")+(spent>r.energy?" · Train earlier listed rows first":"")+(honor?.done===false?"":" · Honor status unverified")+(r.reference?" · Reference gym values":"")+" · Estimate; recheck each train.";
+     const detail=niceLabel[r.stat]+" · "+r.gymName+" · "+r.trains+" train"+(r.trains===1?"":"s")+" · "+r.energy+" E · "+patternText(r)+" at "+niceNum(r.after)+(before?.matches.total>0?" · Upgrade: "+patternText(before)+" → "+patternText(r)+"; selected for the lower-Energy or higher-coverage route":"")+" · "+(affordable===true?"Within current Energy":affordable===false?"More Energy needed":"Energy unverified")+(spent>r.energy?" · Train earlier listed rows first":"")+(honor?.done===false?"":" · Honor status unverified")+(r.reference?" · Reference gym values":"")+" · Estimate; recheck each train.";
      return [{stat,gym:r.gymName,trains:r.trains,detail,hold:false}];
    });
    if(!rows.length)return null;
