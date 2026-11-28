@@ -3,10 +3,12 @@
 // share the SAME IndexedDB origin. No localStorage source is authoritative
 // after initialization. No API, no production account, no unsafe flags.
 const assert=require("node:assert/strict");
-const {randomUUID}=require("node:crypto");
-const {readFile}=require("node:fs/promises");
+const {randomBytes,randomUUID}=require("node:crypto");
+const {mkdtemp,readFile,rm}=require("node:fs/promises");
 const {createServer}=require("node:http");
+const {tmpdir}=require("node:os");
 const {join}=require("node:path");
+const {setTimeout:delay}=require("node:timers/promises");
 const {chromium}=require("playwright-core");
 const modules=["training-recovery","account-storage","account-revisions","account-calendar-lineage","account-transaction-store"];
 const assets=new Map(modules.map(n=>["/"+n+".js",n+".js"]));
@@ -16,12 +18,15 @@ const server=createServer(async(req,res)=>{
  try{res.writeHead(200,{"Content-Type":"text/javascript"}).end(await readFile(join(__dirname,"../..",asset)));}
  catch{res.writeHead(500).end();}
 });
-async function probe(context,origin){
+async function loadPage(tab,origin){
+ await tab.goto(origin);
+ for(const module of modules)await tab.addScriptTag({url:origin+module+".js"});
+}
+async function probe(context,origin,{lifecycle=false,quota=false}={}){
  const tabs=await Promise.all([context.newPage(),context.newPage()]);
  const name="torn-transaction-fixture:"+randomUUID(),id="999999913";
  await Promise.all(tabs.map(async tab=>{
-  await tab.goto(origin);
-  for(const module of modules)await tab.addScriptTag({url:origin+module+".js"});
+  await loadPage(tab,origin);
   await tab.evaluate(async({name,id})=>{
    const a=tornAccountStorage,r=tornAccountRevisions,l=tornCalendarLineage,g=tornAccountTransactionStore;
    const prefix="torn-city-guide:",note=prefix+"v1:profile:"+id+":notes:gym";
@@ -39,8 +44,9 @@ async function probe(context,origin){
       source.setItem(key,row.value);
     }source.setItem(r.key(id),review.bundle.manifestRaw);source.setItem(prefix+"calendar-lineage:v1:"+id,review.bundle.lineageRaw);},
     initialize:review=>db.initialize(source,id,review,true,guard),
-    read:()=>db.read(id,guard),
+    read:options=>db.read(id,guard,options),
     edit:({before,after})=>db.editPreference(id,before,{section:"notes:gym",before:before.bundle.records.find(r=>r.section==="notes:gym")?.value??null,after},true,guard),
+    rejectProtected:before=>db.editPreference(id,before,{section:"calendar-events",before:"[]",after:"[] "},true,guard),
     mutateOldSource:()=>source.setItem(prefix+"activity-events:"+id,"[] "),
     ownerRead:()=>db.read("999999914",guard),
     rotate:()=>{valid=false;db.abortPending();},
@@ -95,18 +101,125 @@ async function probe(context,origin){
   assert.deepEqual(final.bundle.records.find(r=>r.section===section),before.bundle.records.find(r=>r.section===section));
   assert.deepEqual(JSON.parse(final.bundle.manifestRaw).entries.find(r=>r.section===section),JSON.parse(before.bundle.manifestRaw).entries.find(r=>r.section===section));
  }
+ if(lifecycle)await probeLifecycle(a,b,name,final);
+ if(quota)await probeQuota(context,a,b,origin,final);
  await Promise.all(tabs.map(t=>t.evaluate(()=>fixture.close())));
+ return {name,id,record:final};
+}
+async function probeLifecycle(a,b,name,record){
+ await assert.rejects(()=>a.evaluate(record=>fixture.rejectProtected(record),record),/preference/);
+ // Stop a native IDB transaction after its put request succeeds and before
+ // the transaction commits. The controlled insertion point makes the test deterministic.
+ await assert.rejects(()=>a.evaluate(async record=>{
+  const original=IDBObjectStore.prototype.put;
+  IDBObjectStore.prototype.put=function(...args){
+   const request=original.apply(this,args);
+   request.addEventListener("success",()=>fixture.rotate(),{once:true});
+   return request;
+  };
+  try{return await fixture.edit({before:record,after:"aborted"});}
+  finally{IDBObjectStore.prototype.put=original;fixture.authorize();}
+ },record),/epoch|aborted/i);
+ assert.deepEqual((await b.evaluate(()=>fixture.read())).record,record);
+ console.log("PASS pending epoch rotation aborts a native write and preserves the exact prior generation");
+
+ const completion=await a.evaluate(async record=>{
+  const original=IDBDatabase.prototype.transaction;
+  IDBDatabase.prototype.transaction=function(...args){
+   const tx=original.apply(this,args);
+   if(tx.mode==="readwrite")tx.addEventListener("complete",()=>fixture.rotate(),{once:true});
+   return tx;
+  };
+  try{return await fixture.edit({before:record,after:"committed before rotation"});}
+  finally{IDBDatabase.prototype.transaction=original;fixture.authorize();}
+ },record);
+ assert.deepEqual(completion,{status:"committed",generation:record.generation+1,current:false});
+ const committed=(await b.evaluate(()=>fixture.read())).record;
+ assert.equal(committed.generation,completion.generation);
+ assert.equal(committed.bundle.records.find(x=>x.section==="notes:gym").value,"committed before rotation");
+ console.log("PASS epoch rotation at native completion reports committed and stale, and the other tab reads the commit");
+
+ await a.evaluate(()=>{
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  window.releaseAccountDigest=release;
+  window.pendingAccountRead=fixture.read({digest:async raw=>{
+   window.accountDigestStarted=true;
+   await gate;
+   const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(raw));
+   return Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,"0")).join("");
+  }});
+  window.pendingAccountRead.catch(()=>{});
+ });
+ await a.waitForFunction(()=>window.accountDigestStarted);
+ try{
+  await b.evaluate(name=>new Promise((resolve,reject)=>{
+   const request=indexedDB.open(name,2);
+   request.onerror=()=>reject(request.error);
+   request.onblocked=()=>reject(Error("Version change blocked"));
+   request.onsuccess=()=>{request.result.close();resolve();};
+  }),name);
+ }finally{await a.evaluate(()=>window.releaseAccountDigest());}
+ await assert.rejects(()=>a.evaluate(()=>window.pendingAccountRead),/closed/);
+ await assert.rejects(()=>b.evaluate(()=>fixture.read()),/closed/);
+ await assert.rejects(()=>b.evaluate(()=>fixture.reopen()),/version/i);
+ console.log("PASS native versionchange closes both tabs, invalidates an in-flight verified read and refuses downgrade");
+}
+async function probeQuota(context,a,b,origin,record){
+ const devtools=await context.newCDPSession(a);
+ const securityOrigin=new URL(origin).origin;
+ const note=randomBytes(67500).toString("base64");
+ try{
+  await devtools.send("Storage.overrideQuotaForOrigin",{origin:securityOrigin,quotaSize:4096});
+  const usage=await devtools.send("Storage.getUsageAndQuota",{origin:securityOrigin});
+  assert.equal(usage.overrideActive,true);
+  assert.equal(usage.quota,4096);
+  // Chromium can reuse an earlier IndexedDB quota calculation for 30 seconds.
+  await delay(31000);
+  await assert.rejects(()=>a.evaluate(({record,note})=>fixture.edit({before:record,after:note}),{record,note}),/QuotaExceededError/i);
+  assert.deepEqual((await b.evaluate(()=>fixture.read())).record,record);
+ }finally{
+  try{await devtools.send("Storage.overrideQuotaForOrigin",{origin:securityOrigin});}
+  finally{await devtools.detach();}
+ }
+ assert.equal((await a.evaluate(({record,note})=>fixture.edit({before:record,after:note}),{record,note})).status,"committed");
+ console.log("PASS Chrome-enforced IndexedDB quota abort preserves the exact prior record under a DevTools quota override");
+}
+const chrome={channel:"chrome",ignoreDefaultArgs:["--no-sandbox"]};
+async function probeRestart(origin){
+ const profile=await mkdtemp(join(tmpdir(),"torn-transaction-restart-"));
+ let context;
+ try{
+  context=await chromium.launchPersistentContext(profile,chrome);
+  const {name,id,record}=await probe(context,origin);
+  await context.close();
+  context=await chromium.launchPersistentContext(profile,chrome);
+  const tab=await context.newPage();
+  await loadPage(tab,origin);
+  const recovered=await tab.evaluate(async({name,id})=>{
+   const db=await tornAccountTransactionStore.open({name});
+   try{return (await db.read(id,()=>true)).record;}
+   finally{db.close();}
+  },{name,id});
+  assert.deepEqual(recovered,record);
+  console.log("PASS exact acknowledged generation survives a full Chrome restart using a disposable on-disk profile");
+ }finally{
+  try{await context?.close();}
+  finally{await rm(profile,{recursive:true,force:true,maxRetries:5});}
+ }
 }
 async function main(){
- const trials=Number(process.argv[2]??20);assert.ok(Number.isInteger(trials)&&trials>=1&&trials<=100);
+ const stage=process.argv[2]??"20",lifecycle=stage==="--lifecycle",quota=stage==="--quota",restart=stage==="--restart";
+ const trials=lifecycle||quota||restart?1:Number(stage);assert.ok(Number.isInteger(trials)&&trials>=1&&trials<=100);
  let browser,failures=0;
  try{
   await new Promise((resolve,reject)=>server.listen(0,"127.0.0.1",resolve).once("error",reject));
   const origin="http://127.0.0.1:"+server.address().port+"/";
-  browser=await chromium.launch({channel:"chrome",ignoreDefaultArgs:["--no-sandbox"]});
+  if(restart){await probeRestart(origin);return;}
+  browser=await chromium.launch(chrome);
   for(let i=1;i<=trials;i++){
    const context=await browser.newContext();
-   try{await probe(context,origin);console.log("PASS trial "+i);}
+   try{await probe(context,origin,{lifecycle,quota});console.log("PASS trial "+i);}
    catch(e){failures++;console.error("FAIL trial "+i,e.message);}
    finally{await context.close();}
   }

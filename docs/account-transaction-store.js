@@ -91,34 +91,33 @@ const tornAccountTransactionStore=(()=>{
   }
   function connection(db){
     let closed=false;const pending=new Set();
+    const checkLive=guard=>{if(closed)throw Error("Account database closed");check(guard);};
     const abortPending=()=>{for(const tx of pending)try{tx.abort();}catch{}};
     const close=()=>{closed=true;abortPending();db.close();};
     db.onversionchange=close;
     function run(id,mode,guard,work){
       return new Promise((resolve,reject)=>{
-        if(closed){reject(Error("Account database closed"));return;}
-        let tx;try{check(guard);tx=db.transaction(STORE,mode);}catch(e){reject(e);return;}
+        let tx;try{checkLive(guard);tx=db.transaction(STORE,mode);}catch(e){reject(e);return;}
         pending.add(tx);let result,failure;
-        const checkLive=()=>{if(closed)throw Error("Account database closed");check(guard);};
         const abort=e=>{failure=e;try{tx.abort();}catch{}};
         tx.onabort=()=>{pending.delete(tx);reject(failure??tx.error??Error("Account transaction aborted"));};
         // A completed transaction is committed even if the epoch has just
         // rotated. Report committed vs current separately; never tell the
         // caller to blindly retry an already committed write.
-        tx.oncomplete=()=>{pending.delete(tx);let current=false;try{checkLive();current=true;}catch{}resolve({...result,current});};
-        const on=(request,fn)=>{request.onsuccess=()=>{try{checkLive();fn(request.result);}catch(e){abort(e);}};};
-        const done=v=>{checkLive();result=v;};
+        tx.oncomplete=()=>{pending.delete(tx);let current=false;try{checkLive(guard);current=true;}catch{}resolve({...result,current});};
+        const on=(request,fn)=>{request.onsuccess=()=>{try{checkLive(guard);fn(request.result);}catch(e){abort(e);}};};
+        const done=v=>{checkLive(guard);result=v;};
         try{
-          checkLive();const store=tx.objectStore(STORE);
+          checkLive(guard);const store=tx.objectStore(STORE);
           on(store.get(id),v=>work(checked(v,id),store,on,done));
         }catch(e){abort(e);}
       });
     }
     async function read(playerId,guard,{digest}={}){
       const id=owner(playerId),out=await run(id,"readonly",guard,(value,store,on,done)=>done({status:value?"ready":"absent",record:value}));
-      if(!out.current)throw Error("Verified account epoch changed");
+      if(!out.current)throw Error(closed?"Account database closed":"Verified account epoch changed");
       if(out.record)await verify(out.record.bundle,id,digest?{digest}:{});
-      check(guard);return out;
+      checkLive(guard);return out;
     }
     async function initialize(store,playerId,review,approved,guard,{digest}={}){
       const id=owner(playerId);
