@@ -25,7 +25,7 @@ assert.equal(mod.unifiedRows([],api).length,4);assert.equal(mod.unifiedRows(comp
 assert.equal(mod.unifiedRows(Array.from({length:2000},()=>comp[0]),Array.from({length:2000},()=>api[0])).length,4000);
 const click=selector=>viewListeners.click({target:{closest:k=>k===selector?{}:null}});
 async function run(){
- const initial=mod.render();assert.ok(!initial.includes("data-log-source="));assert.ok(initial.includes("Enable API idle sync"));
+ const initial=mod.render();assert.ok(!initial.includes("data-log-source="));assert.ok(initial.includes("Enable API idle sync"));assert.ok(initial.includes("Both sources appear in one activity history")&&initial.includes("older entries may be discarded")&&initial.includes("external Log backups are not yet enabled"));
  mod.wire(view);mod.request();listeners["torn-guide-log-snapshot"]({detail:{version:1,playerId:1,rows:[{at:now,text:"Companion fixture <script>"}],capturedAt:now,matched:1,skipped:0}});
  assert.ok(results.innerHTML.includes("Companion fixture &lt;script&gt;"));
  click("[data-log-api-toggle]");for(let i=0;i<8;i++)await Promise.resolve();
