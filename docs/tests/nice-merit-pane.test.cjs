@@ -32,3 +32,24 @@ data.honors.honors=[888];assert.ok(m.render().includes("Nice is already earned")
 const index=read("index.html");assert.ok(index.indexOf("./nice-merit-planner.js")<index.indexOf("./merit-guide.js"));
 assert.ok(/guide-features\.js\?v=/.test(index)&&/styles\.css\?v=/.test(index));
 console.log("Nice merit pane: route, energy gap, precision, escaped gym, stale/disconnected/earned states, script order and cache versions passed.");
+
+// The title bar uses a lightweight read-only model, separate from the
+// expensive route solver. Simulate clock, stale data and book effects.
+const quarter=900000,now=10*quarter+120000;
+const account={identity:{id:123},loading:false};
+let connected=true,book={active:false,known:true},barInputs={energy:{current:150,maximum:150},happy:{current:4376,maximum:4500,step:5,nextTick:780,estimated:false,observedAt:now}};
+const modelCode=read("merit-guide.js");
+const h=new Function("payload","safe","tornGuideApi","tornTrainSequence","tornBarProjection","tornHappinessBook","homeCountdown",modelCode+"\nreturn tornMeritGuide;")(payload,safe,{state:account,isConnected:()=>connected},{liveInputs:()=>barInputs},()=>null,()=>book,seconds=>String(Math.ceil(seconds)));
+let header=h.niceHeaderModel(now);
+assert.equal(header.energy,"150 / 150");assert.equal(header.happy,"4,376 / 4,500");assert.equal(header.label,"Next +5 Happy");assert.equal(header.countdown,"780");
+barInputs.happy={...barInputs.happy,current:10000};header=h.niceHeaderModel(now);
+assert.equal(header.label,"Happiness reset");assert.equal(header.countdown,"780");
+assert.equal(h.niceHeaderModel(now+780000).happy,"Refresh needed");
+book={active:true,known:true};header=h.niceHeaderModel(now);assert.equal(header.happy,"10,000 / 99,999");assert.equal(header.label,"Next +5 Happy");
+book={active:false,known:false};assert.equal(h.niceHeaderModel(now).label,"Possible reset");
+book={active:false,known:true};barInputs.happy={...barInputs.happy,current:4500};assert.equal(h.niceHeaderModel(now).countdown,"FULL");
+barInputs.happy=null;assert.equal(h.niceHeaderModel(now).happy,"—");
+account.loading=true;assert.equal(h.niceHeaderModel(now).busy,true);
+connected=false;assert.equal(h.niceHeaderModel(now).connected,false);
+assert.ok(html.includes("data-nice-refresh")&&html.includes("data-nice-energy")&&html.includes("data-nice-countdown"));
+console.log("Nice header: energy, regeneration, over-cap reset, elapsed reset, book exception, stale/guest and busy states passed.");

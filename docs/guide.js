@@ -456,6 +456,7 @@ function updateRefreshUI(){
     ? (updated?"Last Torn refresh "+tornGuidePreferences.formatDate(updated):"Connected; waiting for data")
     : "Torn API disconnected";
   updateSyncCounter();
+  tornMeritGuide.tick();
 }
 async function refreshAccount(){
   if(!tornGuideApi.isConnected() || tornGuideApi.state.loading)return;
@@ -487,7 +488,7 @@ byId("remember-active").addEventListener("change",event=>{
   renderProfile();
 });
 window.addEventListener("torn-guide-sync",updateRefreshUI);
-setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornToolsGuide.tickStatus();tornRightRail.tick();tornRoadmap.tickOngoing();tornCrimeGuide.tickGrowth();tornActivityScheduler.tickTimeline();tornLogGuide.tick();updateInventoryAges();for(const el of document.querySelectorAll("[data-edu-deadline]"))el.textContent=tornTctClock.formatDuration((Number(el.dataset.eduDeadline)-Date.now())/1000);},1000); // local UI ticks; active Energy watcher independently rate-limits read-only API checks
+setInterval(()=>{updateSyncCounter();updateHomeLiveBars();tornToolsGuide.tickStatus();tornRightRail.tick();tornMeritGuide.tick();tornRoadmap.tickOngoing();tornCrimeGuide.tickGrowth();tornActivityScheduler.tickTimeline();tornLogGuide.tick();updateInventoryAges();for(const el of document.querySelectorAll("[data-edu-deadline]"))el.textContent=tornTctClock.formatDuration((Number(el.dataset.eduDeadline)-Date.now())/1000);},1000); // local UI ticks; active Energy watcher independently rate-limits read-only API checks
 
 // The ellipsis is an unframed button; settings remain independent of API login.
 function syncSettingsControls(){

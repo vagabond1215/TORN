@@ -112,9 +112,82 @@ const tornMeritGuide=(()=>{
    const detail=niceLabel[preferred.stat]+" · "+preferred.gymName+" · "+preferred.trains+" train"+(preferred.trains===1?"":"s")+" · "+preferred.energy+" E · "+patternText(preferred)+" at "+niceNum(preferred.after);
    return {tag,detail,ready:preferred.affordable===true,met:preferred.met,improved:preferred.improved,verified:report.done===false,reference:preferred.reference};
  }
+ let niceRefreshing=false,niceRefreshMessage="",niceRefreshOwner=null;
+ // Read-only live header. Keep this separate from the expensive route
+ // solver, and from the calculator's theoretical settings.
+ function niceHeaderModel(now=Date.now()){
+   if(typeof tornGuideApi==="undefined"||!tornGuideApi.isConnected()||tornGuideApi.state.identity?.id==null)return {energy:"—",happy:"—",label:"Happiness tick",countdown:"—",connected:false,busy:false};
+   const state=tornGuideApi.state,owner=String(state.identity.id);
+   const inputs=tornTrainSequence.liveInputs(state,now,tornBarProjection),book=tornHappinessBook();
+   const energy=inputs.energy,happy=inputs.happy;
+   const amount=(bar,cap)=>bar?niceNum(bar.current)+" / "+niceNum(cap??bar.maximum):"—";
+   let label="Happiness tick",countdown="—",tip="Fresh Happiness data required.";
+   let happyText=amount(happy,book.active?99999:undefined);
+   if(happy){
+     const cap=book.active?99999:happy.maximum;
+     const quarter=900000,resetAt=(Math.floor(now/quarter)+1)*quarter;
+     const lastReset=Math.floor(now/quarter)*quarter;
+     const over=happy.current>happy.maximum;
+     // Shared bar projection intentionally retains the observed over-cap
+     // value until verified; do not display it as confirmed after a reset.
+     if(over&&!book.active&&!book.known){
+       label="Possible reset";countdown=homeCountdown((resetAt-now)/1000);tip="Book status unavailable; over-cap Happiness may reset at the next quarter-hour.";
+       if(happy.observedAt<lastReset)happyText="Refresh needed";
+     }else if(over&&!book.active){
+       label="Happiness reset";countdown=homeCountdown((resetAt-now)/1000);tip="Over-cap Happiness resets at the next Torn quarter-hour.";
+       if(happy.observedAt<lastReset){happyText="Refresh needed";label="Reset passed";countdown="Refresh";tip="The quarter-hour reset has passed; refresh to verify current Happiness.";}
+     }else if(happy.current>=cap){
+       label="Happiness";countdown="FULL";tip="Happiness is at its current cap.";
+     }else{
+       label="Next +"+niceNum(Math.min(happy.step,cap-happy.current))+" Happy";
+       countdown=Number.isFinite(happy.nextTick)?homeCountdown(happy.nextTick):"—";
+       tip=(book.active?"Ignorance Is Bliss: Happiness regenerates up to 99,999 without quarter-hour resets. ":"")+(happy.estimated?"Estimated regeneration phase.":"API regeneration phase.");
+     }
+   }
+   return {energy:amount(energy),happy:happyText,label,countdown,tip,connected:true,busy:niceRefreshing||!!state.loading,owner};
+ }
+ function niceHeader(done,model=niceHeaderModel()){
+   const message=niceRefreshOwner===model.owner?niceRefreshMessage:"";
+   return '<div class="panel-heading nice-merit-heading"><h2>Nice honor planner</h2><small class="nice-honor-status">'+(done===true?"Earned":done===false?"Not earned":"Award status unverified")+'</small><div class="nice-header-bars"><span class="nice-header-energy">Energy <strong data-nice-energy>'+safe(model.energy)+'</strong></span><span class="nice-header-happy">Happiness <strong data-nice-happy>'+safe(model.happy)+'</strong></span><span class="nice-header-timer" data-nice-timer title="'+safe(model.tip??"")+'"><span data-nice-timer-label>'+safe(model.label)+'</span> <strong data-nice-countdown>'+safe(model.countdown)+'</strong></span></div><button type="button" class="nice-refresh-button" data-nice-refresh aria-label="Refresh and recalculate Nice honor planner" title="Refresh and recalculate Nice honor planner" aria-busy="'+model.busy+'" '+(!model.connected||model.busy?"disabled":"")+'><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 6"/></svg></button></div><p class="nice-refresh-status fine-print" data-nice-refresh-status role="status" '+(message?"":"hidden")+'>'+safe(message)+'</p>';
+ }
+ function tick(now=Date.now()){
+   if(typeof document==="undefined")return;
+   const head=document.querySelector(".nice-merit-heading");
+   if(!head||location.hash!=="#merits")return;
+   const model=niceHeaderModel(now);
+   for(const [selector,value] of [["[data-nice-energy]",model.energy],["[data-nice-happy]",model.happy],["[data-nice-timer-label]",model.label],["[data-nice-countdown]",model.countdown]]){
+     const el=head.querySelector(selector);if(el&&el.textContent!==value)el.textContent=value;
+   }
+   const timer=head.querySelector("[data-nice-timer]");if(timer)timer.title=model.tip??"";
+   const button=head.querySelector("[data-nice-refresh]");if(button){button.disabled=!model.connected||model.busy;button.setAttribute("aria-busy",String(model.busy));}
+   const status=head.parentElement?.querySelector("[data-nice-refresh-status]");
+   if(status){const message=niceRefreshOwner===model.owner?niceRefreshMessage:"";if(status.textContent!==message)status.textContent=message;status.hidden=!message;}
+ }
+ async function refreshNice(view){
+   if(niceRefreshing||!tornGuideApi.isConnected()||tornGuideApi.state.loading||tornGuideApi.state.identity?.id==null)return;
+   const owner=String(tornGuideApi.state.identity.id);
+   niceRefreshing=true;niceRefreshOwner=owner;niceRefreshMessage="Refreshing Nice planner…";tick();
+   niceCache=null;opportunityCache=null;
+   try{
+     const result=await tornGuideApi.refresh({route:"niceRefresh",force:true});
+     if(!tornGuideApi.isConnected()||String(tornGuideApi.state.identity?.id)!==owner||result?.discarded)return;
+     niceRefreshMessage=result?.failures?"Some Nice inputs could not refresh. Check API diagnostics.":"Nice planner recalculated.";
+   }catch(error){
+     if(tornGuideApi.isConnected()&&String(tornGuideApi.state.identity?.id)===owner)niceRefreshMessage="Refresh failed: "+String(error.message??error);
+   }finally{
+     niceRefreshing=false;
+     if(tornGuideApi.isConnected()&&String(tornGuideApi.state.identity?.id)===owner&&location.hash==="#merits"){
+       // The coordinator normally redraws the route itself; update status
+       // after its redraw and ensure errors also recalculate from valid inputs.
+       view.innerHTML=render();if(typeof tornRightRail!=="undefined")tornRightRail.render();
+       view.querySelector("[data-nice-refresh]")?.focus({preventScroll:true});
+     }
+     tick();
+   }
+ }
  function nicePanel(awards){
    const honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice"),done=honor?.done??null;
-   const head='<section class="panel"><div class="panel-heading"><h2>Nice honor planner</h2><small>'+ (done===true?"Earned":done===false?"Not earned":"Award status unverified")+'</small></div><div class="panel-content nice-merit">';
+   const head='<section class="panel">'+niceHeader(done)+'<div class="panel-content nice-merit">';
    const tail='<p class="fine-print"><a href="https://www.torn.com/forums.php?p=threads&amp;t=16195359" target="_blank" rel="noopener noreferrer">Nice honor training guide</a> · <a href="https://www.torn.com/gym.php" target="_blank" rel="noopener noreferrer">Open Torn gym</a></p></div></section>';
    if(done===true){niceManual=null;niceCache=null;return head+'<p>Nice is already earned. No special training is needed.</p>'+tail;}
    const live=tornStatPlanner.niceLiveInputs(),scope=niceKey(live);
@@ -170,7 +243,7 @@ const tornMeritGuide=(()=>{
      if(!tornNiceMerit.inspect(stats))return;
      niceManual={scope:niceKey(live),stats};niceCache=null;view.innerHTML=render();if(typeof tornRightRail!=="undefined")tornRightRail.render();
    });
-   view.addEventListener("click",e=>{if(location.hash==="#merits"&&e.target.closest("[data-nice-reset]")){niceManual=null;niceCache=null;view.innerHTML=render();if(typeof tornRightRail!=="undefined")tornRightRail.render();}});
+   view.addEventListener("click",e=>{if(location.hash==="#merits"&&e.target.closest("[data-nice-refresh]")){void refreshNice(view);return;}if(location.hash==="#merits"&&e.target.closest("[data-nice-reset]")){niceManual=null;niceCache=null;view.innerHTML=render();if(typeof tornRightRail!=="undefined")tornRightRail.render();}});
    view.addEventListener("change",e=>{if(location.hash!=="#merits")return;if(e.target.matches("[data-award-filter]"))filter=e.target.value;else if(e.target.matches("[data-award-search]"))query=e.target.value;else return;view.innerHTML=render();});}
- return {render,wire,recommendations,model,affrontedDetails,wireAffronted,niceOpportunities,niceNotice};
+ return {render,wire,tick,recommendations,model,affrontedDetails,wireAffronted,niceOpportunities,niceNotice,niceHeaderModel};
 })();
