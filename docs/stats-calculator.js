@@ -677,6 +677,7 @@ const tornStatPlanner = (() => {
     const inputs=tornTrainSequence.liveInputs(s,now,tornBarProjection);
     const happy=inputs.happy?.current,energy=inputs.energy?.current;
     if(!Number.isFinite(happy)||happy<0||happy>99999)return {...out,reason:"Happiness unavailable or stale; refresh the Guide."};
+    if(happy>inputs.happy.maximum&&Number.isFinite(inputs.happy.observedAt)&&inputs.happy.observedAt<Math.floor(now/900000)*900000&&!tornHappinessBook().active)return {...out,energy,reason:"Happiness reset may have occurred; refresh to verify before training."};
     return {...out,...unlocked,gym,happy,energy:Number.isFinite(energy)?energy:null,multipliers:Object.fromEntries(statNames.map(stat=>[stat,effectsFor(stat,{live:true}).multiplier])),cached:["gym","perks"].some(k=>source(k).status==="cached")||out.statsCached,referenceGym:!!gym?.offline};
   }
   return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,replayTrainingSession,niceLiveInputs,

@@ -53,3 +53,22 @@ account.loading=true;assert.equal(h.niceHeaderModel(now).busy,true);
 connected=false;assert.equal(h.niceHeaderModel(now).connected,false);
 assert.ok(html.includes("data-nice-refresh")&&html.includes("data-nice-energy")&&html.includes("data-nice-countdown"));
 console.log("Nice header: energy, regeneration, over-cap reset, elapsed reset, book exception, stale/guest and busy states passed.");
+
+ // Recalculate using the same snapshot for table and notice when a local
+ // Happiness regeneration tick changes the projected amount. The solver
+ // fingerprint changes only on actual input changes, not wall-clock seconds.
+ data.honors.honors=[];
+ let projected={...live,stats:{strength:69,defense:419,speed:6969,dexterity:69},happy:100};
+ let gainCalls=0;
+ const clocked=new Function("payload","safe","tornStatPlanner",read("nice-merit-planner.js")+"\n"+read("merit-guide.js")+"\nreturn tornMeritGuide;")(payload,safe,{niceLiveInputs:now=>({...projected,happy:now>=1000?105:100}),internal:{oneTrain:(s,h,d,c,m,stat)=>{gainCalls++;return stat==="defense"?(h>=105?1:0.05):stat==="strength"?69414:0;}}});
+ const beforeTick=clocked.niceSnapshot(999),beforeHTML=clocked.niceRoute(beforeTick),calls=gainCalls;
+ clocked.niceNotice(beforeTick);assert.equal(gainCalls,calls);
+ const steady=clocked.niceSnapshot(998);assert.equal(steady.fingerprint,beforeTick.fingerprint);
+ const afterTick=clocked.niceSnapshot(1000);assert.ok(afterTick.fingerprint!==beforeTick.fingerprint);
+ const afterHTML=clocked.niceRoute(afterTick);assert.ok(gainCalls>calls);
+ const afterCalls=gainCalls,notice=clocked.niceNotice(afterTick);
+ assert.equal(gainCalls,afterCalls);assert.ok(notice.rows.some(r=>r.stat==="STR"&&r.hold));assert.ok(notice.rows.some(r=>r.stat==="DEF"&&r.trains===1));
+ assert.ok(beforeHTML!==afterHTML&&afterHTML.includes("Happiness 105"));
+ assert.equal(clocked.niceSnapshot(1001).fingerprint,afterTick.fingerprint);
+ assert.ok(read("right-rail.js").includes("function tickNice(snapshot)")&&read("merit-guide.js").includes("tornRightRail.tickNice(snapshot)"));
+ console.log("Nice regeneration tick: changed Happiness invalidates route once; table and rail share the same snapshot and cache.");

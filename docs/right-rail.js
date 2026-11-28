@@ -173,24 +173,24 @@ const tornRightRail=(()=>{
     content.innerHTML=showSections?[["timers",clocks],["networth",networthPanel],["property",property],["merits",merits]]
       .filter(([id])=>!hiddenSections.has(id)).map(([id,fn])=>collapsible(fn(),id)).join(""):"";
   }
-  let lastNiceTick=0;
+  function niceVisible(){
+    const el=host();return !!(el&&!el.hidden&&el.querySelector("[data-nice-rail-badge]")&&el.querySelector("[data-nice-rail-alert]"));
+  }
+  let lastNiceFingerprint=null,lastNiceBadge=null,lastNiceAlert=null;
+  function tickNice(snapshot){
+    const el=host();if(!el||el.hidden)return;
+    const badge=el.querySelector("[data-nice-rail-badge]"),alert=el.querySelector("[data-nice-rail-alert]");
+    if(!badge||!alert)return;
+    if(lastNiceFingerprint===snapshot.fingerprint&&lastNiceBadge===badge&&lastNiceAlert===alert)return;
+    const next=niceRailMarkup(tornMeritGuide.niceNotice(snapshot));
+    if(badge.innerHTML!==next.badge)badge.innerHTML=next.badge;
+    if(alert.innerHTML!==next.alert)alert.innerHTML=next.alert;
+    badge.hidden=!next.badge;alert.hidden=!next.alert;
+    const empty=el.querySelector("[data-nice-empty]");if(empty)empty.hidden=!!next.alert;
+    lastNiceFingerprint=snapshot.fingerprint;lastNiceBadge=badge;lastNiceAlert=alert;
+  }
   function tick(){
     const el=host();if(!el||el.hidden)return;
-    // Local-only recheck at most once per minute, including when timers
-    // are hidden. Expire stale alerts and reflect projected bar changes
-    // without rebuilding (or reopening) any disclosure.
-    const minute=Math.floor(Date.now()/60000);
-    if(minute!==lastNiceTick){
-      lastNiceTick=minute;
-      const badge=el.querySelector("[data-nice-rail-badge]"),alert=el.querySelector("[data-nice-rail-alert]");
-      if(badge&&alert){
-        const next=niceRailMarkup(tornMeritGuide.niceNotice());
-        if(badge.innerHTML!==next.badge)badge.innerHTML=next.badge;
-        if(alert.innerHTML!==next.alert)alert.innerHTML=next.alert;
-        badge.hidden=!next.badge;alert.hidden=!next.alert;
-        const empty=el.querySelector("[data-nice-empty]");if(empty)empty.hidden=!!next.alert;
-      }
-    }
     const clocks=el.querySelectorAll("[data-rail-timer]");
     if(!clocks.length)return;
     const entries=timerEntries();
@@ -234,5 +234,5 @@ const tornRightRail=(()=>{
       }
     });
   }
-  return {init,render,tick,order,controls,propertyModel,meritsVisible:()=>!hiddenSections.has("merits")};
+  return {init,render,tick,order,controls,propertyModel,niceVisible,tickNice,meritsVisible:()=>!hiddenSections.has("merits")};
 })();

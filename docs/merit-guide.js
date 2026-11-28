@@ -142,17 +142,25 @@ const tornMeritGuide=(()=>{
    const gyms=live.gyms??(live.gym?[live.gym]:[]);
    const fingerprint=JSON.stringify([niceKey(live),stats,live.happy,gyms,live.multipliers]);
    if(niceCache?.fingerprint!==fingerprint){
-     const plan=tornNiceMerit.solveAcrossGyms({stats,happy:live.happy,gyms,multipliers:live.multipliers},tornStatPlanner.internal.oneTrain);
-     niceCache={fingerprint,plan:tornNiceMerit.preferRoute(plan,niceOpportunities(awards,live),live.happy)};
+     const report=niceOpportunities(awards,live);
+     const plan=tornNiceMerit.solveAcrossGyms({stats,happy:live.happy,gyms,multipliers:live.multipliers,opportunityReport:report},tornStatPlanner.internal.oneTrain);
+     niceCache={fingerprint,plan:tornNiceMerit.preferRoute(plan,report,live.happy)};
    }
    return niceCache.plan;
  }
- function niceNotice(){
-   const awards=model(),honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice");
-   if(honor?.done===true){niceCache=null;opportunityCache=null;return null;}
-   const live=tornStatPlanner.niceLiveInputs(),scope=niceKey(live);
-   if(niceManual?.scope!==scope)niceManual=null;
+ function niceSnapshot(now=Date.now(),awards=model()){
+   const honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice"),done=honor?.done??null;
+   const live=tornStatPlanner.niceLiveInputs(now),scope=niceKey(live);
+   if(niceManual?.scope!==scope||done===true)niceManual=null;
    const stats=niceManual?.stats??live.stats,current=tornNiceMerit.inspect(stats);
+   // Only value/availability changes invalidate visible results; a clock
+   // countdown alone never reruns the solver. Exact form is separate.
+   const fingerprint=JSON.stringify([done,scope,stats,live.happy,live.energy,live.reason,live.gyms??live.gym,live.multipliers,live.cached,live.unlockListKnown,!!niceManual]);
+   return {awards,honor,done,live,stats,current,fingerprint};
+ }
+ function niceNotice(snapshot=niceSnapshot()){
+   const {awards,honor,done,live,stats,current}=snapshot;
+   if(done===true){niceCache=null;opportunityCache=null;return null;}
    if(!current||live.reason)return null;
    const plan=nicePlan(awards,live,stats,current);
    if(!plan?.rows)return null;
@@ -213,8 +221,20 @@ const tornMeritGuide=(()=>{
  }
  function tick(now=Date.now()){
    if(typeof document==="undefined")return;
-   const head=document.querySelector(".nice-merit-heading");
-   if(!head||location.hash!=="#merits")return;
+   const head=location.hash==="#merits"?document.querySelector(".nice-merit-heading"):null;
+   const rail=typeof tornRightRail!=="undefined"&&tornRightRail.niceVisible();
+   if(!head&&!rail)return;
+   const snapshot=niceSnapshot(now);
+   if(rail)tornRightRail.tickNice(snapshot);
+   if(!head)return;
+   const route=head.parentElement?.querySelector("[data-nice-route]");
+   if(route&&route.dataset.niceFingerprint!==snapshot.fingerprint){
+     route.innerHTML=niceRoute(snapshot);route.dataset.niceFingerprint=snapshot.fingerprint;
+     const exact=head.parentElement?.querySelector("[data-nice-exact-root]");
+     if(exact&&(!exact.firstElementChild||!snapshot.current||snapshot.done===true))exact.innerHTML=niceExactForm(snapshot);
+   }
+   const honorStatus=head.querySelector(".nice-honor-status"),label=snapshot.done===true?"Earned":snapshot.done===false?"Not earned":"Award status unverified";
+   if(honorStatus&&honorStatus.textContent!==label)honorStatus.textContent=label;
    const model=niceHeaderModel(now);
    for(const [selector,value] of [["[data-nice-energy]",model.energy],["[data-nice-happy]",model.happy],["[data-nice-timer-label]",model.label],["[data-nice-countdown]",model.countdown]]){
      const el=head.querySelector(selector);if(el&&el.textContent!==value)el.textContent=value;
@@ -246,16 +266,11 @@ const tornMeritGuide=(()=>{
      tick();
    }
  }
- function nicePanel(awards){
-   const honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice"),done=honor?.done??null;
-   const head='<section class="panel">'+niceHeader(done)+'<div class="panel-content nice-merit">';
-   const tail='<p class="fine-print"><a href="https://www.torn.com/forums.php?p=threads&amp;t=16195359" target="_blank" rel="noopener noreferrer">Nice honor training guide</a> · <a href="https://www.torn.com/gym.php" target="_blank" rel="noopener noreferrer">Open Torn gym</a></p></div></section>';
-   if(done===true){niceManual=null;niceCache=null;return head+'<p>Nice is already earned. No special training is needed.</p>'+tail;}
-   const live=tornStatPlanner.niceLiveInputs(),scope=niceKey(live);
-   if(niceManual?.scope!==scope)niceManual=null;
-   const stats=niceManual?.stats??live.stats,current=tornNiceMerit.inspect(stats);
+ function niceRoute(snapshot){
+   const {awards,done,live,stats,current}=snapshot;
+   if(done===true){niceCache=null;return '<p>Nice is already earned. No special training is needed.</p>';}
    const rule='<p>Collect <strong>5 digit matches</strong> across your four whole-number battle stats, including both <strong>69</strong> and <strong>420</strong>.</p>';
-   if(!current){niceCache=null;return head+rule+'<p class="fine-print">'+safe(live.reason??"Battle stats unavailable.")+'</p>'+tail;}
+   if(!current){niceCache=null;return rule+'<p class="fine-print">'+safe(live.reason??"Battle stats unavailable.")+'</p>';}
    const plan=nicePlan(awards,live,stats,current);
    const results=plan?.rows??null;
    const table='<div class="crime-table-scroll"><table class="crime-table nice-merit-table"><thead><tr><th scope="col">Stat</th><th scope="col">Current</th><th scope="col">69 / 420 now</th><th scope="col">Gym</th><th scope="col">Trains</th><th scope="col">Energy</th><th scope="col">Predicted stop</th><th scope="col">69 / 420 at stop</th></tr></thead><tbody>'+current.rows.map((r,i)=>{
@@ -271,8 +286,16 @@ const tornMeritGuide=(()=>{
    }else if(plan?.status==="not-found")summary+='<p>No progress-making combined route found within '+plan.maxTrains+' total trains across the searched gyms. Existing stat matches are preserved. Refresh after training or when Happiness changes.</p>';
    else if(plan?.reason)summary+='<p class="fine-print">'+safe(plan.reason)+'</p>';
    const assumptions=plan?.gyms&&!live.reason?'<p class="fine-print">'+plan.gyms+' gym'+(plan.gyms===1?"":"s")+' checked · Happiness '+niceNum(live.happy)+(live.unlockListKnown===true?"":" · Unlocked list unavailable; active gym only")+(live.cached?" · Cached inputs":"")+(niceManual?" · Precise stat overrides":"")+'. Train in table order; estimates include Happiness loss. Search limited to '+plan.maxTrains+' trains, not exhaustive. Check actual gains and refresh after each train.</p>':"";
-   const exact='<details class="nice-merit-exact" data-collapse-key="nice-exact-values"><summary>Use precise values from your training log</summary><p class="fine-print">Optional: enter the exact decimals for all four current stats. Overrides are temporary and reset when the API stat snapshot changes.</p><form data-nice-exact class="stock-controls">'+tornNiceMerit.order.map(stat=>'<label>'+niceLabel[stat]+'<input name="'+stat+'" type="number" min="0" max="9007199254740990" step="any" required value="'+safe(niceExact(stats[stat]))+'"></label>').join("")+'<button type="submit" class="button secondary">Recalculate</button><button type="button" class="button secondary" data-nice-reset>Use API values</button></form></details>';
-   return head+rule+summary+table+assumptions+exact+tail;
+   return rule+summary+table+assumptions;
+ }
+ function niceExactForm(snapshot){
+   const {stats,current,done}=snapshot;
+   if(!current||done===true)return "";
+   return '<details class="nice-merit-exact" data-collapse-key="nice-exact-values"><summary>Use precise values from your training log</summary><p class="fine-print">Optional: enter the exact decimals for all four current stats. Overrides are temporary and reset when the API stat snapshot changes.</p><form data-nice-exact class="stock-controls">'+tornNiceMerit.order.map(stat=>'<label>'+niceLabel[stat]+'<input name="'+stat+'" type="number" min="0" max="9007199254740990" step="any" required value="'+safe(niceExact(stats[stat]))+'"></label>').join("")+'<button type="submit" class="button secondary">Recalculate</button><button type="button" class="button secondary" data-nice-reset>Use API values</button></form></details>';
+ }
+ function nicePanel(awards){
+   const snapshot=niceSnapshot(Date.now(),awards),{done}=snapshot;
+   return '<section class="panel">'+niceHeader(done)+'<div class="panel-content nice-merit"><div data-nice-route data-nice-fingerprint="'+safe(snapshot.fingerprint)+'">'+niceRoute(snapshot)+'</div><div data-nice-exact-root>'+niceExactForm(snapshot)+'</div><p class="fine-print"><a href="https://www.torn.com/forums.php?p=threads&amp;t=16195359" target="_blank" rel="noopener noreferrer">Nice honor training guide</a> · <a href="https://www.torn.com/gym.php" target="_blank" rel="noopener noreferrer">Open Torn gym</a></p></div></section>';
  }
 
  function render(){
@@ -298,5 +321,5 @@ const tornMeritGuide=(()=>{
    });
    view.addEventListener("click",e=>{if(location.hash==="#merits"&&e.target.closest("[data-nice-refresh]")){void refreshNice(view);return;}if(location.hash==="#merits"&&e.target.closest("[data-nice-reset]")){niceManual=null;niceCache=null;view.innerHTML=render();if(typeof tornRightRail!=="undefined")tornRightRail.render();}});
    view.addEventListener("change",e=>{if(location.hash!=="#merits")return;if(e.target.matches("[data-award-filter]"))filter=e.target.value;else if(e.target.matches("[data-award-search]"))query=e.target.value;else return;view.innerHTML=render();});}
- return {render,wire,tick,recommendations,model,affrontedDetails,wireAffronted,niceOpportunities,niceNotice,niceHeaderModel,railRecommendations};
+ return {render,wire,tick,recommendations,model,affrontedDetails,wireAffronted,niceOpportunities,niceNotice,niceHeaderModel,railRecommendations,niceSnapshot,niceRoute};
 })();

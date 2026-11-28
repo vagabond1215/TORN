@@ -76,7 +76,27 @@ const tornNiceMerit=(()=>{
   // Retain up to eight distinct cumulative Energy states per count/mask
   // bucket, favoring lower Energy and fewer trains. This is a bounded
   // heuristic, not exhaustive optimization over gym changes or stat orders.
-  function solveAcrossGyms({stats,happy,gyms,multipliers,maxTrains=limit},gain){
+  function swapLimits(report){
+    const current=report?.current;
+    if(!current||current.n69&&current.n420||!current.total)return new Map();
+    const missing=current.n69?"n420":"n69",existing=current.n69?"n69":"n420";
+    const costs=new Map();
+    for(const hit of report.rows??[]){
+      const before=current.rows.find(r=>r.stat===hit.stat)?.matches;
+      if(!before||!hit.matches?.[missing]||hit.matches[existing]<before[existing]||hit.matches.total<=before.total)continue;
+      const previous=costs.get(hit.stat)??Infinity;
+      if(hit.energy<previous)costs.set(hit.stat,hit.energy);
+    }
+    return new Map(order.map(stat=>[stat,Math.min(Infinity,...[...costs].filter(([other])=>other!==stat).map(([,cost])=>cost))]));
+  }
+  function eligibleEndpoint(before,after,current,stat,energy,limits){
+    if(!usefulEndpoint(before,after,current))return false;
+    // A true net addition is still evaluated in the combined route.
+    // A same-count (or worse) pattern swap must beat the cheaper,
+    // non-sacrificing way of obtaining the missing type elsewhere.
+    return !before.total||after.total>before.total||energy<(limits.get(stat)??Infinity);
+  }
+  function solveAcrossGyms({stats,happy,gyms,multipliers,maxTrains=limit,opportunityReport=null},gain){
     const current=inspect(stats);
     if(!current)return {status:"unavailable",reason:"All four base stats are required at reliable numeric precision."};
     const zero=current.rows.map(r=>({...r,after:r.value,trains:0,energy:0,gymId:null,gymName:null}));
@@ -89,6 +109,7 @@ const tornNiceMerit=(()=>{
       seen.add(id);available.push({...gym,gymId:id});
     }
     if(!available.length)return {status:"unavailable",reason:"No available unlocked gym has usable training data."};
+    const limits=current.total&&(!current.n69||!current.n420)?swapLimits(opportunityReport??opportunities({stats,happy,gyms,multipliers,maxTrains},gain)):new Map();
     const width=8,cheaper=(a,b)=>a.energy-b.energy||a.changedMatches-b.changedMatches||a.trains-b.trains;
     let states=[{energy:0,trains:0,n69:0,n420:0,changedMatches:0,rows:[]}];
     for(let i=0;i<order.length;i++){
@@ -129,7 +150,7 @@ const tornNiceMerit=(()=>{
               if(!valid(delta)||delta<=0||!valid(after)||after<=value)break;
               value=after;h=Math.max(0,h-cost*.5);
               const matches=count(value);
-              if(usefulEndpoint(zero[i].matches,matches,current))endpoints.push({stat,value:stats[stat],after:value,trains:n,energy:n*cost,matches,gymId:gym.gymId,gymName:String(gym.name??gym.gymId),reference:!!gym.offline,active:!!gym.active});
+              if(eligibleEndpoint(zero[i].matches,matches,current,stat,n*cost,limits))endpoints.push({stat,value:stats[stat],after:value,trains:n,energy:n*cost,matches,gymId:gym.gymId,gymName:String(gym.name??gym.gymId),reference:!!gym.offline,active:!!gym.active});
             }
           }
           cache.set(prev.energy,endpoints);
@@ -205,6 +226,7 @@ const tornNiceMerit=(()=>{
   function preferRoute(plan,report,happy){
     if(plan?.status==="met"||report?.status!=="ready"||!report.current||!valid(happy))return plan;
     const current=report.current,zero=current.rows.map(r=>({...r,after:r.value,trains:0,energy:0,gymId:null,gymName:null}));
+    const limits=swapLimits(report);
     const coverage=r=>Math.min(5,r.total);
     const types=r=>Number(r.n69>0)+Number(r.n420>0);
     const touched=p=>p.rows?.filter(r=>r.trains>0&&current.rows.find(x=>x.stat===r.stat)?.matches.total>0).length??0;
@@ -215,7 +237,7 @@ const tornNiceMerit=(()=>{
       const i=order.indexOf(hit.stat);
       if(i<0||!Number.isSafeInteger(hit.trains)||hit.trains<1||hit.trains>(plan?.maxTrains??report.maxTrains)||!valid(hit.after)||hit.after<=zero[i].value||!Number.isSafeInteger(hit.energy)||hit.energy<1)continue;
       const matches=count(hit.after);
-      if(!usefulEndpoint(zero[i].matches,matches,current))continue;
+      if(!eligibleEndpoint(zero[i].matches,matches,current,hit.stat,hit.energy,limits))continue;
       const rows=zero.map((row,j)=>j===i?{...hit,value:row.value,matches}:row);
       const result=inspect(Object.fromEntries(rows.map(r=>[r.stat,r.after])));
       const candidate={status:result.met?"plan":"partial",rows,result,trains:hit.trains,energy:hit.energy,gyms:report.gyms,maxTrains:plan?.maxTrains??report.maxTrains,finalHappy:Math.max(0,happy-hit.energy*.5),independent:true};

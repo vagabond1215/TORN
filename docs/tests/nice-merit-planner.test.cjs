@@ -185,3 +185,20 @@ console.log("Nice unlocked gym availability, individual independent stat hits, a
  const noBurn=nice.solveAcrossGyms({...churnInput,gyms:restricted},churnGain);
  assert.equal(noBurn.rows[0].trains,0);assert.equal(noBurn.status,"not-found");
  console.log("Nice hold: same-coverage matched-stat Happiness manipulation excluded; genuine new occurrences and missing-type upgrades retained.");
+
+ // Same-count STR replacement is only eligible if it beats another
+ // stat's non-sacrificing missing-pattern endpoint in Energy.
+ const swapGym={id:93,name:"Swap comparison",energy:5,...stats(1,1,0,0)};
+ const swapInput={stats:stats(69,419,6969,69),happy:1000,gyms:[swapGym],multipliers,maxTrains:30};
+ const expensiveSwap=(s,h,d,c,m,stat)=>stat==="strength"?351/9:stat==="defense"?1:0;
+ const cheapDef=nice.solveAcrossGyms(swapInput,expensiveSwap);
+ assert.equal(cheapDef.rows[0].trains,0);assert.equal(cheapDef.rows[1].trains,1);
+ // Same-pattern swap can be cheaper than obtaining another 420, but
+ // requires the rest of the route to replace the lost occurrence.
+ const separate={stats:stats(69,419,6969,69),happy:1000,gyms:[swapGym],multipliers,maxTrains:10};
+ const report=nice.opportunities(separate,expensiveSwap);
+ const fakeSwap={stat:"strength",after:420,energy:45,trains:9,matches:nice.count(420),gymName:"Swap comparison"};
+ const fakeReport={...report,rows:[fakeSwap,...report.rows]};
+ const baseline={status:"not-found",rows:report.current.rows.map(r=>({...r,after:r.value,trains:0,energy:0})),result:report.current,energy:0,trains:0,maxTrains:10};
+ assert.equal(nice.preferRoute(baseline,fakeReport,1000).rows[0].trains,0);
+ console.log("Nice swap guard: preserve existing pattern when another stat supplies the missing type for less Energy.");
