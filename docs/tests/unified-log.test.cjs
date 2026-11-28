@@ -1,0 +1,42 @@
+"use strict";
+const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
+const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
+const now=Date.UTC(2026,10,27),comp=[{at:now,text:"same"},{at:now,text:"same"},{at:now-1000,text:"companion only"},{at:now-2000,text:"different wording"}],api=[{id:"a",at:now+1000,text:"API only"},{id:"b",at:now,text:"same"},{id:"c",at:now,text:"same"},{id:"d",at:now-2000,text:"other wording"}];
+const listeners={},viewListeners={},results={innerHTML:""},view={dataset:{},querySelector:k=>k==="[data-log-results]"?results:null,addEventListener:(k,fn)=>viewListeners[k]=fn},win={addEventListener:(k,fn)=>listeners[k]=fn,dispatchEvent:()=>{}},doc={visibilityState:"visible",addEventListener:()=>{},getElementById:()=>view},location={hash:"#log"},state={identity:{id:1}};
+const response={status:"ok",payload:{log:[{id:"b",timestamp:now/1000,details:{category:"Drug",title:"API fixture"},data:{}}],_metadata:{nanostamp:"123"}}};let calls=0,cancels=0;
+const service={state,isConnected:()=>!!state.identity,idleLogPage:async()=>{calls++;return response;},cancelIdleLog:()=>{cancels++;}};
+const create=new Function("tornGuideApi","window","document","location","Event","CustomEvent","Date",read("log-guide.js")+"\nreturn tornLogGuide;");
+class Clock extends Date{static now(){return now;}}
+const mod=create(service,win,doc,location,class{},class{},Clock);
+const prior=JSON.stringify([comp,api]),all=mod.unifiedRows(comp,api);
+assert.equal(all.length,8);
+assert.deepEqual(all.map(x=>x.at),[now+1000,now,now,now,now,now-1000,now-2000,now-2000]);
+assert.equal(all.filter(x=>x.possibleOverlap).length,4);
+assert.equal(all.filter(x=>x.source==="api").length,4);
+assert.equal(all.filter(x=>x.source==="companion").length,4);
+assert.equal(all.find(x=>x.text==="different wording").possibleOverlap,false);
+assert.equal(all.find(x=>x.text==="other wording").possibleOverlap,false);
+assert.equal(JSON.stringify([comp,api]),prior);
+assert.equal(mod.filterRows(all,"same","2026-11-27").length,4);
+assert.equal(mod.filterRows(all,"only","2026-11-27").length,1);
+assert.equal(mod.filterRows(all,"only","2026-11-26").length,1);
+assert.equal(mod.filterRows(all,"same","2026-11-26").length,0);
+assert.equal(mod.unifiedRows([],api).length,4);assert.equal(mod.unifiedRows(comp,[]).length,4);
+assert.equal(mod.unifiedRows(Array.from({length:2000},()=>comp[0]),Array.from({length:2000},()=>api[0])).length,4000);
+const click=selector=>viewListeners.click({target:{closest:k=>k===selector?{}:null}});
+async function run(){
+ const initial=mod.render();assert.ok(!initial.includes("data-log-source="));assert.ok(initial.includes("Enable API idle sync"));
+ mod.wire(view);mod.request();listeners["torn-guide-log-snapshot"]({detail:{version:1,playerId:1,rows:[{at:now,text:"Companion fixture <script>"}],capturedAt:now,matched:1,skipped:0}});
+ assert.ok(results.innerHTML.includes("Companion fixture &lt;script&gt;"));
+ click("[data-log-api-toggle]");for(let i=0;i<8;i++)await Promise.resolve();
+ assert.equal(calls,1);assert.ok(results.innerHTML.includes("API fixture")&&results.innerHTML.includes("Companion fixture"));
+ assert.ok(results.innerHTML.includes("2 source records")&&results.innerHTML.includes('scope="col">Source'));
+ click("[data-log-api-toggle]");assert.ok(results.innerHTML.includes("API fixture")&&results.innerHTML.includes("Companion fixture"));
+ click("[data-log-api-clear]");assert.ok(!results.innerHTML.includes("API fixture")&&results.innerHTML.includes("Companion fixture"));assert.ok(cancels>=2);
+ state.identity={id:2};listeners["torn-guide-sync"]();assert.ok(!results.innerHTML.includes("Companion fixture")&&!results.innerHTML.includes("API fixture"));
+ listeners["torn-guide-log-snapshot"]({detail:{version:1,playerId:1,rows:comp}});
+ assert.ok(!results.innerHTML.includes("companion only"));
+ console.log("Combined chronological view, source attribution, overlap multiplicity, shared filters, bounded records, escaping, pause/clear and account switch passed.");
+}
+module.exports=run;
+if(require.main===module)run().catch(error=>{console.error(error);process.exitCode=1;});

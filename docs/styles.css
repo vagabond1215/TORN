@@ -2410,7 +2410,12 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .log-table :is(th,td){padding:.45rem .5rem;border-bottom:1px solid var(--border);vertical-align:top}
 .log-table th{color:var(--accent-strong);background:var(--raised)}
 .log-table td:first-child{white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums}
-.log-table td:last-child{overflow-wrap:anywhere}
+.log-table .log-description{overflow-wrap:anywhere}
+.log-table .log-row-source{white-space:nowrap;font-size:.72rem;color:var(--muted)}
+.log-overlap{display:block;white-space:normal;font-size:.68rem;color:var(--muted);line-height:1.3;margin-top:.15rem}
+.log-source-status{display:grid;gap:.3rem;font-size:.78rem;color:var(--muted)}
+.log-source-status p{margin:0;overflow-wrap:anywhere}
+.log-source-counts{white-space:normal}
 .log-pagination{justify-content:space-between;margin-top:.6rem}
 .log-count{font-size:.8rem;color:var(--muted)}
 @media(max-width:540px){.log-table td:first-child{white-space:normal;min-width:5.5rem}}
