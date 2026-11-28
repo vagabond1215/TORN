@@ -91,6 +91,44 @@ async function run(){
  const opJournal=j.read(interruptedOp,id);assert.equal(opJournal.version,5);assert.equal(JSON.parse(interruptedOp.getItem(lineage)).entries.find(x=>x.id==="war").digest,null);
  interruptedOp.setItem=ow;await j.recover(interruptedOp,id,opJournal.raw,"rollback",yes,locks,options);
  assert.equal(interruptedOp.getItem(cal),left.records[0].value);assert.equal(interruptedOp.getItem(lineage),JSON.stringify(initial));
+ // V7 reservations are separate from generic planning and completion.
+ const clock=Date.now(),baseline={count:5,cost:100,at:clock-1000},reservation=event("rehab-new",{kind:"rehab",start:clock+60000,end:clock+120000,blocking:true,rehabBaseline:baseline});
+ const addRehab={id:reservation.id,kind:"add",before:null,after:reservation},baselineRead=()=>({playerId:String(id),...baseline});
+ const plan=(s,local,change,get=baselineRead,opts=options)=>j.planRehab(s,id,local,change,get,yes,locks,opts);
+ const planned=store();assert.equal((await plan(planned,left,addRehab)).status,"applied");
+ const plannedSnap={...a.snapshot(planned,id),manifest:r.read(planned,id)};
+ assert.equal(JSON.parse(planned.getItem(cal)).find(e=>e.id===reservation.id).rehabBaseline.count,5);
+ const cancel={id:reservation.id,kind:"remove",before:reservation,after:null};
+ assert.equal((await plan(planned,plannedSnap,cancel,null)).status,"applied");
+ const cancelled={...a.snapshot(planned,id),manifest:r.read(planned,id)};
+ assert.equal(JSON.parse(planned.getItem(lineage)).entries.find(e=>e.id===reservation.id).digest,null);
+ await assert.rejects(()=>plan(planned,cancelled,addRehab),/cannot be reused/);
+ await assert.rejects(()=>plan(store(),left,addRehab,()=>({...baselineRead(),playerId:"456"})),/baseline changed/);
+ await assert.rejects(()=>plan(store(),left,addRehab,null),/baseline changed/);
+ const noBaseline=event("manual-review",{kind:"rehab",start:clock+86400000,end:clock+86500000,blocking:true,rehabBaseline:null});
+ assert.equal((await plan(store(),left,{id:noBaseline.id,kind:"add",before:null,after:noBaseline},null)).status,"applied");
+ const staleBaseline={...reservation,rehabBaseline:{...baseline,at:clock-31*60000}};
+ await assert.rejects(()=>plan(store(),left,{...addRehab,after:staleBaseline}),/Stale or invalid/);
+ const elapsed={...reservation,start:clock-60000,end:clock+60000,rehabBaseline:null};
+ await assert.rejects(()=>plan(store(),left,{...addRehab,after:elapsed}),/Invalid rehab reservation/);
+ const withRehab=async e=>{const local=await make(left.manifest,[event("a"),event("war",{kind:"war"}),e]);const initial=await l.initialize(local,id,options);return {local,store:storage({[cal]:local.records[0].value,[note]:"keep",[manifest]:JSON.stringify(local.manifest),[lineage]:JSON.stringify(initial)})};};
+ for(const bad of [elapsed,{...reservation,recoveryReview:true},{...elapsed,completedAt:clock-1000,end:clock-1000,blocking:false,rehabCost:100,rehabBaseline:{...baseline,at:clock-120000}}]){
+   const f=await withRehab(bad);
+   await assert.rejects(()=>plan(f.store,f.local,{id:bad.id,kind:"remove",before:bad,after:null},null),/Protected or invalid/);
+ }
+ const blocked=await withRehab({...reservation,id:"other-rehab"});
+ await assert.rejects(()=>plan(blocked.store,blocked.local,addRehab),/overlaps/);
+ let reads=0;await assert.rejects(()=>plan(store(),left,addRehab,()=>({...baselineRead(),count:++reads===1?5:6})),/baseline changed/);
+ const brokenPlan=store(),bpw=brokenPlan.setItem;brokenPlan.setItem=(k,v)=>{if(k===manifest)throw Error("quota");bpw(k,v);};
+ await assert.rejects(()=>plan(brokenPlan,left,addRehab),/journal retained/);
+ const planJournal=j.read(brokenPlan,id);assert.equal(planJournal.version,7);assert.equal(planJournal.complete,false);
+ brokenPlan.setItem=bpw;await j.recover(brokenPlan,id,planJournal.raw,"rollback",yes,locks,options);
+ assert.equal(brokenPlan.getItem(cal),left.records[0].value);
+ const cancelFault=await withRehab(reservation),cfw=cancelFault.store.setItem;cancelFault.store.setItem=(k,v)=>{if(k===manifest)throw Error("quota");cfw(k,v);};
+ await assert.rejects(()=>plan(cancelFault.store,cancelFault.local,cancel,null),/journal retained/);
+ const cInfo=j.read(cancelFault.store,id);assert.equal(cInfo.version,7);assert.equal(JSON.parse(cancelFault.store.getItem(lineage)).entries.find(e=>e.id===reservation.id).digest,null);
+ cancelFault.store.setItem=cfw;await j.recover(cancelFault.store,id,cInfo.raw,"rollback",yes,locks,options);
+ assert.equal(cancelFault.store.getItem(cal),cancelFault.local.records[0].value);
  assert.ok(lockCalls>10);
  console.log("Scoped calendar journal, local revision, lineage, quota/interruption rollback, finalization, stale/held/lock guards and conflict retention passed.");
 }

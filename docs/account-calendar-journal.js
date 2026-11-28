@@ -5,7 +5,7 @@
  * Local journal is not a cryptographic boundary against origin compromise.
  */
 const tornCalendarJournal=(()=>{
-  const prefix="torn-city-guide:",section="calendar-events",version=3,mutationVersion=4,operationalVersion=5,limit=6*1024*1024;
+  const prefix="torn-city-guide:",section="calendar-events",version=3,mutationVersion=4,operationalVersion=5,rehabPlanningVersion=7,limit=6*1024*1024;
   const copy=v=>JSON.parse(JSON.stringify(v));
   const exact=(v,ks)=>v!==null&&typeof v==="object"&&!Array.isArray(v)&&Object.keys(v).length===ks.length&&ks.every(k=>Object.hasOwn(v,k));
   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -35,8 +35,8 @@ const tornCalendarJournal=(()=>{
   function parse(raw,id){
     if(typeof raw!=="string"||raw.length>limit)throw Error("Invalid calendar journal size");
     const j=JSON.parse(raw);
-    const mutation=[mutationVersion,operationalVersion].includes(j?.version);
-    if(!exact(j,["version","playerId","createdAt","before","after","markers",...(mutation?["mutation"]:[])])||![version,mutationVersion,operationalVersion].includes(j.version)||j.playerId!==id||!Number.isSafeInteger(j.createdAt)||j.createdAt<=0||j.createdAt>Date.now()+1000||!Array.isArray(j.markers)||j.markers.length>1500||new Set(j.markers).size!==j.markers.length||j.markers.some(x=>!tornAccountStorage.knownSection(id,x)))throw Error("Invalid calendar journal");
+    const mutation=[mutationVersion,operationalVersion,rehabPlanningVersion].includes(j?.version);
+    if(!exact(j,["version","playerId","createdAt","before","after","markers",...(mutation?["mutation"]:[])])||![version,mutationVersion,operationalVersion,rehabPlanningVersion].includes(j.version)||j.playerId!==id||!Number.isSafeInteger(j.createdAt)||j.createdAt<=0||j.createdAt>Date.now()+1000||!Array.isArray(j.markers)||j.markers.length>1500||new Set(j.markers).size!==j.markers.length||j.markers.some(x=>!tornAccountStorage.knownSection(id,x)))throw Error("Invalid calendar journal");
     if(mutation&&(!exact(j.mutation,["id","kind"])||typeof j.mutation.id!=="string"||!j.mutation.id||j.mutation.id.length>160||!["add","edit","remove"].includes(j.mutation.kind)))throw Error("Invalid calendar mutation journal");
     for(const v of [j.before,j.after]){
       if(!exact(v,["calendar","lineage","manifest"])||!(v.calendar===null||typeof v.calendar==="string"&&v.calendar.length<=500000)||!(v.lineage===null||typeof v.lineage==="string"&&v.lineage.length<=1000000)||typeof v.manifest!=="string"||v.manifest.length>2000000)throw Error("Invalid calendar journal values");
@@ -81,16 +81,40 @@ const tornCalendarJournal=(()=>{
     if(mutation.kind==="remove"&&allowed(old)&&!next)return [id];
     throw Error("Protected or invalid calendar mutation");
   }
+  // V7 planning is not completion, import or financial authority.
+  // Only create a pending reservation or cancel before departure.
+  // Rescheduling requires explicit cancellation and a new reservation ID.
+  function validateRehabPlanning(before,after,mutation,snap,at){
+    const a=JSON.parse(before??"[]"),b=JSON.parse(after),old=a.find(x=>x.id===mutation.id),next=b.find(x=>x.id===mutation.id);
+    const pending=e=>e?.kind==="rehab"&&e.blocking===true&&!Object.hasOwn(e,"completedAt")&&!Object.hasOwn(e,"rehabCost")&&!Object.hasOwn(e,"recoveryReview");
+    const prior=a.filter(x=>x.id!==mutation.id),later=b.filter(x=>x.id!==mutation.id);
+    if(!same(prior,later))throw Error("Unexpected rehab planning mutation");
+    const spend=JSON.parse(snap.records.find(r=>r.section==="activity-spend")?.value??"[]");
+    if(spend.some(x=>x.id==="rehab-"+mutation.id))throw Error("Existing expenditure evidence blocks rehab planning mutation");
+    if(mutation.kind==="add"&&!old&&pending(next)){
+      if(next.start<at-5000||next.end<=at||!Object.hasOwn(next,"rehabBaseline"))throw Error("Invalid rehab reservation window or baseline");
+      if(next.rehabBaseline!==null){
+        const v=next.rehabBaseline;
+        if(!Number.isSafeInteger(v.at)||v.at<=0||v.at>at||v.at>next.start||at-v.at>30*60000||next.start-v.at>30*60000||!Number.isSafeInteger(v.count)||v.count<0||!(v.cost===null||Number.isSafeInteger(v.cost)&&v.cost>=0))throw Error("Stale or invalid rehab reservation baseline");
+      }
+      if(prior.some(x=>x.blocking&&next.start<x.end&&next.end>x.start))throw Error("Rehab reservation overlaps a blocking activity");
+      return [];
+    }
+    if(mutation.kind==="remove"&&pending(old)&&!next&&at<old.start)return [mutation.id];
+    throw Error("Protected or invalid rehab planning mutation");
+  }
   async function validateTransition(j,snap,id,options){
     let removed=[];
-    if([mutationVersion,operationalVersion].includes(j.version))removed=validateMutation(j.before.calendar,j.after.calendar,j.mutation,j.version===operationalVersion);
+    if(j.version===rehabPlanningVersion)removed=validateRehabPlanning(j.before.calendar,j.after.calendar,j.mutation,snap,j.createdAt);
+    else if([mutationVersion,operationalVersion].includes(j.version))removed=validateMutation(j.before.calendar,j.after.calendar,j.mutation,j.version===operationalVersion);
     else validateDelta(j.before.calendar,j.after.calendar);
     const a=bundle(snap,j.before.calendar,j.before.manifest),b=bundle(snap,j.after.calendar,j.after.manifest);
     await tornAccountRevisions.verify(a.manifest,a.records,id,options);
     await tornAccountRevisions.verify(b.manifest,b.records,id,options);
     const prior=a.manifest.entries.find(x=>x.section===section),next=b.manifest.entries.find(x=>x.section===section);
     const rest=m=>m.entries.filter(x=>x.section!==section);
-    if(!prior||!next||next.revision===prior.revision||!same(next.ancestors,[prior.revision,...prior.ancestors].slice(0,32))||!same(rest(a.manifest),rest(b.manifest)))throw Error("Calendar journal must create only a local descendant");
+    const used=new Set(a.manifest.entries.flatMap(x=>[x.revision,...x.ancestors]));
+    if(!prior||!next||used.has(next.revision)||!same(next.ancestors,[prior.revision,...prior.ancestors].slice(0,32))||!same(rest(a.manifest),rest(b.manifest)))throw Error("Calendar journal must create only a local descendant");
     const initial=j.before.lineage===null?await tornCalendarLineage.initialize(a,id,options):await tornCalendarLineage.verify(JSON.parse(j.before.lineage),a,id,options);
     const advanced=await tornCalendarLineage.advance(initial,a,b,id,removed,options);
     if(!same(advanced,JSON.parse(j.after.lineage)))throw Error("Calendar lineage transition mismatch");
@@ -125,11 +149,13 @@ const tornCalendarJournal=(()=>{
       const next={records,omitted:[],manifest};
       const lineage=await tornCalendarLineage.advance(initial,local,next,id,chosen.removed,verifyOptions);
       const after={calendar:chosen.value,lineage:JSON.stringify(lineage),manifest:JSON.stringify(manifest)};
-      const raw=JSON.stringify({version:chosen.mutation?(chosen.operational?operationalVersion:mutationVersion):version,playerId:id,createdAt:Date.now(),before,after,markers,...(chosen.mutation?{mutation:chosen.mutation}:{})});
+      const raw=JSON.stringify({version:chosen.rehabPlanning?rehabPlanningVersion:chosen.mutation?(chosen.operational?operationalVersion:mutationVersion):version,playerId:id,createdAt:chosen.createdAt??Date.now(),before,after,markers,...(chosen.mutation?{mutation:chosen.mutation}:{})});
       const j=parse(raw,id);
       await validateTransition(j,snap,id,verifyOptions);
       unchanged();
+      if(chosen.recheck)chosen.recheck();
       store.setItem(jk,raw);
+      if(store.getItem(jk)!==raw)throw Error("Could not persist calendar journal");
       try{
         for(let i=0;i<dest.length;i++){
           assertCurrent(store,id,raw,isCurrent,markers);
@@ -175,6 +201,35 @@ const tornCalendarJournal=(()=>{
   const mutate=(store,id,local,change,isCurrent,locks,options={})=>mutateLocal(store,id,local,change,isCurrent,locks,options,false);
   // Separate explicit entrypoint. Not callable through the backup merge UI.
   const mutateOperational=(store,id,local,change,isCurrent,locks,options={})=>mutateLocal(store,id,local,change,isCurrent,locks,options,true);
+  // The caller supplies an explicit change and, for a non-null baseline,
+  // a synchronous owner-bound observation from the verified connection.
+  // It must not fetch, mutate storage or return a credential.
+  async function planRehab(store,playerId,local,change,getBaseline,isCurrent,locks,options={}){
+    const id=tornAccountStorage.owner(playerId);
+    local=copy(local);change=copy(change);
+    if(!exact(change,["id","kind","before","after"])||typeof change.id!=="string"||!change.id||!["add","remove"].includes(change.kind))throw Error("Explicit rehab reservation or cancellation required");
+    return transact(store,id,local,isCurrent,locks,options,async verifyOptions=>{
+      await tornAccountRevisions.verify(local.manifest,local.records,id,verifyOptions);
+      const createdAt=Date.now(),prior=sectionValue(local),rows=JSON.parse(prior??"[]"),existing=rows.find(x=>x.id===change.id)??null;
+      if(!same(existing,change.before)||change.kind==="add"&&(existing!==null||change.after?.id!==change.id)||change.kind==="remove"&&(existing===null||change.after!==null))throw Error("Rehab reservation changed; review again");
+      const value=JSON.stringify(change.kind==="add"?[...rows,change.after]:rows.filter(x=>x.id!==change.id)),mutation={id:change.id,kind:change.kind};
+      tornAccountStorage.validRecords(other(local).concat({section,value}),id);
+      const removed=validateRehabPlanning(prior,value,mutation,local,createdAt);
+      const checkBaseline=()=>{
+        if(change.kind==="add"&&change.after.rehabBaseline!==null){
+          const v=typeof getBaseline==="function"?getBaseline():null,b=change.after.rehabBaseline;
+          if(!exact(v,["playerId","count","cost","at"])||v.playerId!==id||v.count!==b.count||v.cost!==b.cost||v.at!==b.at)throw Error("Verified rehab baseline changed or unavailable");
+        }
+      };
+      checkBaseline();
+      const recheck=()=>{
+        const now=Date.now();
+        if(now<createdAt||now-createdAt>5000)throw Error("Rehab planning decision expired; review again");
+        checkBaseline();validateRehabPlanning(prior,value,mutation,local,now);
+      };
+      return {value,selected:[change.id],removed,mutation,rehabPlanning:true,createdAt,recheck,importedTokens:[]};
+    });
+  }
   async function recover(store,playerId,raw,mode,isCurrent,locks,{digest}={}){
     const id=tornAccountStorage.owner(playerId);
     if(!["finish","rollback"].includes(mode))throw Error("Invalid calendar recovery action");
@@ -202,5 +257,5 @@ const tornCalendarJournal=(()=>{
       return {status:mode==="finish"?"finalized":"rolled-back"};
     });
   }
-  return Object.freeze({version,mutationVersion,operationalVersion,lineageKey,read,apply,mutate,mutateOperational,recover});
+  return Object.freeze({version,mutationVersion,operationalVersion,rehabPlanningVersion,lineageKey,read,apply,mutate,mutateOperational,planRehab,recover});
 })();
