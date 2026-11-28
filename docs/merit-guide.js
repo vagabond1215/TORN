@@ -83,7 +83,7 @@ const tornMeritGuide=(()=>{
  let filter="all",query="",niceManual=null,niceCache=null;
  const niceLabel={strength:"Strength",defense:"Defense",speed:"Speed",dexterity:"Dexterity"};
  const niceNum=v=>Number.isFinite(v)?Math.floor(v).toLocaleString("en-US"):"Unavailable";
- const niceExact=v=>Number.isFinite(v)?v.toLocaleString("en-US",{maximumFractionDigits:2,useGrouping:false}):"";
+ const niceExact=v=>Number.isFinite(v)?String(v):"";
  const niceKey=live=>JSON.stringify([live.owner,live.stamp,live.stats]);
  function nicePanel(awards){
    const honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice"),done=honor?.done??null;
@@ -135,7 +135,9 @@ const tornMeritGuide=(()=>{
    view.addEventListener("submit",e=>{
      if(location.hash!=="#merits"||!e.target.matches("[data-nice-exact]"))return;
      e.preventDefault();const live=tornStatPlanner.niceLiveInputs();if(!live.stats)return;
-     const data=new FormData(e.target),stats=Object.fromEntries(tornNiceMerit.order.map(s=>[s,Number(data.get(s))]));
+     const data=new FormData(e.target),values=tornNiceMerit.order.map(s=>[s,data.get(s)]);
+     if(values.some(([,v])=>typeof v!=="string"||!v.trim()))return;
+     const stats=Object.fromEntries(values.map(([s,v])=>[s,Number(v)]));
      if(!tornNiceMerit.inspect(stats))return;
      niceManual={scope:niceKey(live),stats};niceCache=null;view.innerHTML=render();
    });
