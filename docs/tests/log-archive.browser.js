@@ -50,6 +50,9 @@
     await rejects(()=>pending,"explicit abort");
     assert((await a.state(1,yes)).count===0,"explicit abort rollback");
     assert((await a.commit(ticket,page([row("e")],"90"),yes,now+180000)).status==="committed","retry after abort");
+    const reviewed=await a.state(1,yes),exported=await tornLogExportPreview.prepare(a,1,reviewed,true,yes);
+    assert(exported.count===1&&exported.chunks[0].records[0].sourceId==="e"&&!exported.evictionAllowed,"read-only verified archive export preview");
+    assert(JSON.stringify(await b.state(1,yes))===JSON.stringify(reviewed),"export did not mutate archive");
     // Simulate a reached bound with a synthetic checkpoint, not 20k real records.
     a.close();b.close();a=b=null;
     await new Promise((resolve,reject)=>{
