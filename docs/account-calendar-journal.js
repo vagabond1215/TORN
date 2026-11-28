@@ -257,5 +257,5 @@ const tornCalendarJournal=(()=>{
       return {status:mode==="finish"?"finalized":"rolled-back"};
     });
   }
-  return Object.freeze({version,mutationVersion,operationalVersion,rehabPlanningVersion,lineageKey,read,apply,mutate,mutateOperational,planRehab,recover});
+  return Object.freeze({version,mutationVersion,operationalVersion,rehabPlanningVersion,lineageKey,read,apply,mutate,mutateOperational,planRehab,recover,validateRehabPlanning});
 })();
