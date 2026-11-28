@@ -23,6 +23,16 @@ async function run(){
  await assert.rejects(()=>j.apply(store(),id,left,right,decisions,yes,null,options),/Web Locks/);
  const held=store();held.setItem("torn-city-guide:training-session:"+id,"held");await assert.rejects(()=>apply(held),/training state/);
  const stale=store();stale.setItem(note,"changed");await assert.rejects(()=>apply(stale),/changed/);
+ const noop=store();assert.equal((await j.apply(noop,id,left,right,[{...decisions[0],choice:"keep-local"}],yes,locks,options)).status,"unchanged");assert.equal(noop.getItem(manifest),JSON.stringify(left.manifest));assert.equal(noop.getItem(journal),null);
+ const reused=store();await assert.rejects(()=>apply(reused,{...options,newRevision:()=>right.manifest.entries.find(x=>x.section===section).revision}),/collision/);assert.equal(reused.getItem(journal),null);
+ const denied=store();await assert.rejects(()=>j.apply(denied,id,left,right,decisions,()=>false,locks,options),/training state/);assert.equal(denied.getItem(journal),null);
+ // Existing local tombstones remain authoritative for rejecting reuse.
+ const tombStore=store(),oldLineage=JSON.parse(tombStore.getItem(lineage));
+ oldLineage.entries.push({id:"new",digest:null,deletedFrom:"a".repeat(64),deletedAtRevision:left.manifest.entries.find(x=>x.section===section).revision});
+ tombStore.setItem(lineage,JSON.stringify(oldLineage));
+ const newRow=p.rows.find(x=>x.id==="new");
+ await assert.rejects(()=>j.apply(tombStore,id,left,right,[{id:newRow.id,choice:"take-incoming",reviewKey:newRow.reviewKey}],yes,locks,options),/cannot be reused/);
+ assert.equal(tombStore.getItem(journal),null);
  const quota=store(),w=quota.setItem;quota.setItem=(k,v)=>{if(k===journal)throw Error("quota");w(k,v);};await assert.rejects(()=>apply(quota),/quota/);assert.equal(quota.getItem(cal),left.records[0].value);
  for(const dest of [cal,lineage,manifest]){
    const s=store(),write=s.setItem;s.setItem=(k,v)=>{if(k===dest)throw Error("quota");write(k,v);};

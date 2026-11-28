@@ -31,7 +31,7 @@ const tornCalendarMerge=(()=>{
       ancestor=eventMap(common);
     }
     const left=eventMap(local),right=eventMap(incoming),rows=[];
-    const revision=s=>s?.manifest.entries.find(e=>e.section===section)?.revision??null;
+    const revision=s=>{const e=s?.manifest.entries.find(e=>e.section===section);return e?[e.revision,e.digest,e.ancestors]:null;};
     const context=[id,revision(local),revision(incoming),revision(common)];
     for(const key of [...new Set([...left.keys(),...right.keys()])].sort()){
       const before=left.get(key)??null,after=right.get(key)??null;

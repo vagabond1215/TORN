@@ -59,6 +59,11 @@ async function run(){
  await assert.rejects(()=>m.resolve(l,q,id,[choice(both,"take-incoming"),choice(both,"keep-local")],{...options,base:common}),/Invalid/);
  const changed=await make(q.manifest,JSON.parse(q.records[0].value).map(x=>x.id==="both"?{...x,title:"another edit"}:x));
  await assert.rejects(()=>m.resolve(l,changed,id,[choice(both,"take-incoming")],{...options,base:common}),/review changed/);
+ // Same revision token but different digest/other calendar bytes cannot
+ // reuse an earlier decision, even if the selected record is unchanged.
+ const otherEdit=await make(q.manifest,JSON.parse(q.records[0].value).map(x=>x.id==="remote"?{...x,title:"changed elsewhere"}:x));
+ const reusedToken={...otherEdit,manifest:{...otherEdit.manifest,entries:otherEdit.manifest.entries.map(x=>({...x,revision:q.manifest.entries[0].revision,ancestors:q.manifest.entries[0].ancestors}))}};
+ await assert.rejects(()=>m.resolve(l,reusedToken,id,[choice(both,"take-incoming")],{...options,base:common}),/review changed/);
  const collisionLeft=await make(common.manifest,[...JSON.parse(common.records[0].value),event("collision",{title:"left create"})]);
  const collisionRight=await make(common.manifest,[...JSON.parse(common.records[0].value),event("collision",{title:"right create"})]);
  const collision=await m.preview(collisionLeft,collisionRight,id,{...options,base:common});

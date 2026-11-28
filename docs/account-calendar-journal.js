@@ -103,6 +103,9 @@ const tornCalendarJournal=(()=>{
       const initial=before.lineage===null?await tornCalendarLineage.initialize(local,id,verifyOptions):await tornCalendarLineage.verify(JSON.parse(before.lineage),local,id,verifyOptions);
       const records=other(local).concat({section,value:resolved.change.value}).sort((a,b)=>a.section.localeCompare(b.section));
       const manifest=await tornAccountRevisions.observe(local.manifest,{records,omitted:[]},id,verifyOptions);
+      const fresh=manifest.entries.find(x=>x.section===section).revision;
+      const importedTokens=[incoming,common].filter(Boolean).flatMap(s=>s.manifest.entries.flatMap(x=>[x.revision,...x.ancestors]));
+      if(importedTokens.includes(fresh))throw Error("Calendar revision token collision with imported ancestry");
       const next={records,omitted:[],manifest};
       const lineage=await tornCalendarLineage.advance(initial,local,next,id,[],verifyOptions);
       const after={calendar:resolved.change.value,lineage:JSON.stringify(lineage),manifest:JSON.stringify(manifest)};
