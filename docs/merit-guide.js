@@ -21,7 +21,7 @@ const tornMeritGuide=(()=>{
  ["Tornication","Log in on February 14","Seasonal","https://www.torn.com/"],
  ["Trick or Treat","Log in on October 31","Seasonal","https://www.torn.com/"],
  ["Torniversary","Log in on November 15","Seasonal","https://www.torn.com/"],
- ["The Affronted","Irritate every city job interviewer; avoid disrupting a current career","Coordination","#jobs"]
+ ["The Affronted","Irritate every city job interviewer.","Coordination","#jobs"]
  ];
  const key=x=>String(x??"").toLowerCase().replace(/[^a-z0-9]/g,"");
  const arr=x=>Array.isArray(x)?x:x&&typeof x==="object"?Object.entries(x).map(([id,v])=>typeof v==="object"&&v?{id,...v}:id):[];
@@ -46,7 +46,42 @@ const tornMeritGuide=(()=>{
    const awards=model(),byName=new Map(awards.filter(x=>x.type==="honors").map(x=>[key(x.name),x]));
    return easy.map(([name,detail,effort,link])=>({name,detail,effort,link,done:byName.get(key(name))?.done??null})).filter(x=>x.done!==true);
  }
- function recommendations(){return candidates().filter(x=>x.done===false&&["Quick","Coordination","Progress"].includes(x.effort)).sort((a,b)=>["Quick","Coordination","Progress"].indexOf(a.effort)-["Quick","Coordination","Progress"].indexOf(b.effort)).slice(0,8);}
+ // The rail is for actions, not a list of every unfinished checkpoint.
+ // Count only independently available easy honors; do not recursively use
+ // one milestone to justify another. Missing award data cannot establish
+ // proximity. Counting catalog-matched earned IDs excludes default honors
+ // and yields a conservative lower bound if legacy entries are missing.
+ function railRecommendations(awards,shortlist,awardCount,now=Date.now()){
+   const dates={"christmasintorn":"12-25",resolution:"01-01",tornication:"02-14",trickortreat:"10-31",torniversary:"11-15"};
+   const today=new Date(now).toISOString().slice(5,10);
+   const unearned=shortlist.filter(x=>x.done===false);
+   const direct=unearned.filter(x=>["Quick","Coordination"].includes(x.effort)||x.effort==="Seasonal"&&dates[key(x.name)]===today)
+     .sort((a,b)=>["Quick","Coordination","Seasonal"].indexOf(a.effort)-["Quick","Coordination","Seasonal"].indexOf(b.effort)).slice(0,8);
+   const unique=new Set(direct.map(x=>key(x.name))).size;
+   const checkpoints={decorated:100,seeker:250};
+   const close=Number.isSafeInteger(awardCount)&&awardCount>=0?unearned.flatMap(x=>{
+     const target=checkpoints[key(x.name)],gap=target-awardCount;
+     return Number.isSafeInteger(target)&&gap>0&&gap<=unique?[{...x,remaining:gap}]:[];
+   }):[];
+   return [...direct,...close];
+ }
+ function recommendations(){
+   const awards=model(),shortlist=candidates();
+   let count=null;
+   // Both user selections must be present; the complete catalog is used
+   // only to establish known earned non-default awards, never to estimate.
+   const idsFor=type=>{const u=payload(type,type);return Array.isArray(u)?u:u?.[type]??u?.awarded??u?.ids;};
+   const verified=type=>{
+     if(!Array.isArray(idsFor(type)))return false;
+     if(typeof tornGuideApi==="undefined")return true;
+     const s=tornGuideApi.state,at=Number(s.fetchedAt?.[type]);
+     return !s.errors?.[type]&&Number.isFinite(at)&&at>0&&at<=Date.now()&&Date.now()-at<=86400000;
+   };
+   if(verified("honors")&&verified("medals")&&awards.some(x=>x.type==="honors")&&awards.some(x=>x.type==="medals")){
+     count=new Set(awards.filter(x=>x.done===true).map(x=>x.type+":"+x.id)).size;
+   }
+   return railRecommendations(awards,shortlist,count);
+ }
  // In-game dialogue cues, paraphrased from community walkthroughs:
  // https://www.torn.com/forums.php?f=61&p=threads&t=15925001
  // https://www.torn.com/forums.php?f=61&p=threads&t=15928011
@@ -252,5 +287,5 @@ const tornMeritGuide=(()=>{
    });
    view.addEventListener("click",e=>{if(location.hash==="#merits"&&e.target.closest("[data-nice-refresh]")){void refreshNice(view);return;}if(location.hash==="#merits"&&e.target.closest("[data-nice-reset]")){niceManual=null;niceCache=null;view.innerHTML=render();if(typeof tornRightRail!=="undefined")tornRightRail.render();}});
    view.addEventListener("change",e=>{if(location.hash!=="#merits")return;if(e.target.matches("[data-award-filter]"))filter=e.target.value;else if(e.target.matches("[data-award-search]"))query=e.target.value;else return;view.innerHTML=render();});}
- return {render,wire,tick,recommendations,model,affrontedDetails,wireAffronted,niceOpportunities,niceNotice,niceHeaderModel};
+ return {render,wire,tick,recommendations,model,affrontedDetails,wireAffronted,niceOpportunities,niceNotice,niceHeaderModel,railRecommendations};
 })();

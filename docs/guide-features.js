@@ -605,7 +605,7 @@ const tornGuideApi=(()=>{
     // existing coordinator. Do not add these selections to background
     // trainingProgress, inventory-category or other auxiliary requests.
     const visibleMerits=route===routeName()&&!category&&typeof tornRightRail!=="undefined"&&tornRightRail.meritsVisible();
-    const meritKeys=includeMerits||visibleMerits?["honors","honorCatalog","battlestats","bars","gym","perks","gymCatalog"]:[];
+    const meritKeys=includeMerits||visibleMerits?["honors","medals","honorCatalog","medalCatalog","battlestats","bars","gym","perks","gymCatalog"]:[];
     const names=[...new Set([...(ROUTES[route]||ROUTES.home),...(includeStatus?ROUTES.quickStatus:[]),...meritKeys])].filter(name=>stale(name,force));
     const cats=route==="inventory"
       ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))

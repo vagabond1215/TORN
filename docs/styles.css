@@ -2604,7 +2604,19 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 
 /* Nice opportunity notification remains visible in collapsed Merits header. */
 .rail-nice-badge{color:var(--accent-strong);font-size:.68rem;font-weight:700;border:1px solid var(--accent);border-radius:4px;padding:.12rem .3rem;white-space:nowrap}
-.rail-nice-list{margin:0 0 .4rem;padding:0 0 .4rem;border-bottom:1px solid var(--border)}
+.rail-merit-cards{display:grid;gap:.4rem}
+.rail-merit-card{border:1px solid var(--border);border-radius:5px;padding:.4rem .45rem;min-width:0;background:var(--surface)}
+.rail-merit-card-heading{display:flex;align-items:baseline;justify-content:space-between;gap:.35rem;margin:0 0 .15rem}
+.rail-merit-card-heading strong{font-size:.77rem;overflow-wrap:anywhere}
+.rail-merit-card-heading a{font-size:.7rem;color:var(--accent-strong);white-space:nowrap}
+.rail-merit-description{display:block;font-size:.7rem;color:var(--muted);line-height:1.35;overflow-wrap:anywhere}
+.rail-merit-card .affronted-details{margin-top:.3rem}
+.rail-merit-card .affronted-chips button{font-size:.7rem;padding:.3rem .1rem}
+.rail-merit-card .affronted-answer{font-size:.72rem}
+.rail-merit-card .affronted-links a{font-size:.7rem}
+.rail-merit-cards>[hidden]{display:none}
+.rail-nice-list{margin:.25rem 0 0;padding:0}
+.rail-nice-list>li{padding:.25rem 0}
 .rail-nice-row{display:grid;grid-template-columns:2.1rem minmax(0,1fr) auto;align-items:baseline;gap:.35rem;text-decoration:none;font-size:.77rem;color:inherit}
 .rail-nice-row strong{font-size:.77rem}
 .rail-nice-row span{overflow-wrap:anywhere}

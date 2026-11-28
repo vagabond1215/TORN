@@ -86,14 +86,14 @@ const tornRightRail=(()=>{
       '<span id="rail-refresh-status" class="sr-only" role="status">'+safe(refreshStatus)+'</span></div></section>';
   }
   function niceRailMarkup(notice){
-    const alert=notice?.rows?.length?'<ul class="rail-merit-list rail-nice-list" aria-label="Independent Nice training opportunities">'+notice.rows.map(row=>'<li><a class="rail-nice-row" href="#merits" title="'+safe(row.detail)+'" aria-label="'+safe(row.detail)+'"><strong>'+safe(row.stat)+'</strong><span>'+safe(row.gym)+'</span><small>'+row.trains+' train'+(row.trains===1?"":"s")+'</small></a></li>').join("")+'</ul>':"";
+    const alert=notice?.rows?.length?'<section class="rail-merit-card rail-nice-card" aria-label="Nice"><div class="rail-merit-card-heading"><strong>Nice</strong><a href="#merits" aria-label="View Nice">View</a></div><ul class="rail-merit-list rail-nice-list" aria-label="Independent Nice training opportunities">'+notice.rows.map(row=>'<li><a class="rail-nice-row" href="#merits" title="'+safe(row.detail)+'" aria-label="'+safe(row.detail)+'"><strong>'+safe(row.stat)+'</strong><span>'+safe(row.gym)+'</span><small>'+row.trains+' train'+(row.trains===1?"":"s")+'</small></a></li>').join("")+'</ul></section>':"";
     const badge=notice?'<span class="rail-nice-badge" title="'+safe(notice.detail)+'" aria-label="'+safe(notice.tag+" current digit matches. "+notice.detail)+'">'+safe(notice.tag)+'</span>':"";
     return {alert,badge};
   }
   function merits(){
     const rows=tornMeritGuide.recommendations(),{alert,badge}=niceRailMarkup(tornMeritGuide.niceNotice());
-    const body=rows.length?'<ul class="rail-merit-list">'+rows.map(x=>'<li><div class="rail-merit-row"><div><strong>'+safe(x.name)+'</strong><small>'+safe(x.detail)+' · '+safe(x.effort)+'</small></div>'+(x.link?'<a href="'+safe(x.link)+'" aria-label="View '+safe(x.name)+'">View</a>':"")+'</div>'+tornMeritGuide.affrontedDetails(x.name,"rail")+'</li>').join("")+'</ul>':'<p class="rail-snapshot-note">No confirmed unearned recommendations loaded. Open Merits or use the main Refresh button.</p>';
-    return '<section class="panel rail-merits"><div class="panel-heading"><h2>Merits</h2><span data-nice-rail-badge '+(badge?"":"hidden")+'>'+badge+'</span><a href="#merits">View all</a></div><div class="panel-content"><div data-nice-rail-alert '+(alert?"":"hidden")+'>'+alert+'</div>'+body+'</div></section>';
+    const body=rows.map(x=>'<section class="rail-merit-card" aria-label="'+safe(x.name)+'"><div class="rail-merit-card-heading"><strong>'+safe(x.name)+'</strong>'+(x.link?'<a href="'+safe(x.link)+'" aria-label="View '+safe(x.name)+'">View</a>':"")+'</div><small class="rail-merit-description" '+(Number.isSafeInteger(x.remaining)?'title="'+safe(x.remaining+" more awards; listed easy honors may cover this gap.")+'"':"")+'>'+safe(x.detail)+'</small>'+tornMeritGuide.affrontedDetails(x.name,"rail")+'</section>').join("");
+    return '<section class="panel rail-merits"><div class="panel-heading"><h2>Merits</h2><span data-nice-rail-badge '+(badge?"":"hidden")+'>'+badge+'</span><a href="#merits">View all</a></div><div class="panel-content rail-merit-cards"><div data-nice-rail-alert '+(alert?"":"hidden")+'>'+alert+'</div>'+body+(!rows.length?'<p class="rail-snapshot-note" data-nice-empty '+(alert?"hidden":"")+'>No confirmed easy honors available.</p>':'')+'</div></section>';
   }
   // The documented v2 user/property upkeep object contains daily property
   // and staff charges, not accumulated debt. Never substitute one for the other.
@@ -188,6 +188,7 @@ const tornRightRail=(()=>{
         if(badge.innerHTML!==next.badge)badge.innerHTML=next.badge;
         if(alert.innerHTML!==next.alert)alert.innerHTML=next.alert;
         badge.hidden=!next.badge;alert.hidden=!next.alert;
+        const empty=el.querySelector("[data-nice-empty]");if(empty)empty.hidden=!!next.alert;
       }
     }
     const clocks=el.querySelectorAll("[data-rail-timer]");
