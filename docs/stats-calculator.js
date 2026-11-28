@@ -479,7 +479,7 @@ const tornStatPlanner = (() => {
       entries.map(e=>'<tr><td><strong>'+shorthand[e.stat]+'</strong></td><td>'+nice(current[e.i])+' <small>'+nice(sum?current[e.i]/sum*100:0,1)+'%</small></td><td>'+nice(targets[e.i])+' <small>'+nice(shares[e.i]*100,1)+'%</small></td><td class="'+(e.delta?"":"tc-pos")+'">'+nice(e.delta)+'</td><td title="'+esc(e.eff.groups.flatMap(g=>g.items.map(x=>x.text)).join("\n"))+'">'+(e.eff.sourceAvailable?nice((e.eff.multiplier-1)*100,1)+"%":"—")+'</td><td>'+esc(e.best?.name??"Unknown")+'</td><td>'+nice(e.energy??NaN)+'</td></tr>').join("")+'</tbody></table></div>'+
       (uniqueBooks.length?'<div class="tc-build-recommend"><p>Active book: '+esc(reading)+'</p></div>':"")+
       (requirements.length?'<div class="tc-build-gyms ts-perk-tiles" aria-label="Specialty gym requirements">'+requirements.map(([name,met,desc,g])=>'<div class="ts-perk-tile '+(unlocked(g)?"is-owned":"")+'"><strong>'+esc(name)+'</strong><small>'+esc(desc)+'</small><small class="'+(met?"tc-pos":"tc-neg")+'">'+(met?"Ratio met":"Ratio not met")+'</small><small>'+(unlocked(g)?"Access reported":"Access not verified")+'</small></div>').join("")+'</div>':"")+
-      '<details class="tc-build-books"><summary>Books &amp; training priorities</summary><p>'+esc(reading)+'</p><div class="ts-perk-tiles">'+[
+      '<details class="tc-build-books" data-collapse-key="stats-build-books"><summary>Books &amp; training priorities</summary><p>'+esc(reading)+'</p><div class="ts-perk-tiles">'+[
         ...statNames.map(stat=>({name:bookNames[stat],detail:"+30% "+label(stat)+" gym gains for 31 days",active:activeBook.some(x=>x.stat===stat&&x.text.toLowerCase().includes(bookNames[stat].toLowerCase()))})),
         {name:"Get Hard Or Go Home",detail:"+20% all gym gains for 31 days",active:uniqueBooks.some(x=>/get hard or go home/i.test(x))},
         {name:"Higher Daddy, Higher!",detail:"+20% energy regeneration for 31 days",active:(perkCollections()?.find(x=>x.group==="book")?.entries??[]).some(x=>/higher daddy|energy regeneration/i.test(typeof x==="string"?x:[x?.name,x?.effect,x?.description].join(" ")))},
@@ -512,7 +512,7 @@ const tornStatPlanner = (() => {
       '<p class="fine-print">Owned points: '+(input.points==null?"Unknown":nice(input.points))+' · Wallet: '+cash(input.wallet)+' · Regeneration: '+(energy?esc(energy.phaseSource==="API"?"Observed tick phase":"Estimated tick phase"):"Unknown")+'</p>'+
       input.criticalIssues.map(x=>'<p class="fine-print">'+esc(x)+'</p>').join("")+
       input.issues.map(x=>'<p class="fine-print">'+esc(x)+'</p>').join("")+
-      '<details class="fine-print"><summary>Input source status</summary><ul>'+Object.entries(input.sources).map(([key,v])=>'<li>'+esc(key.replace("inventory:","Inventory: "))+': '+esc(v.status)+(v.age!=null?' · '+nice(Math.floor(v.age/60000))+' min old':'')+'</li>').join("")+'</ul></details>';
+      '<details class="fine-print" data-collapse-key="stats-input-sources"><summary>Input source status</summary><ul>'+Object.entries(input.sources).map(([key,v])=>'<li>'+esc(key.replace("inventory:","Inventory: "))+': '+esc(v.status)+(v.age!=null?' · '+nice(Math.floor(v.age/60000))+' min old':'')+'</li>').join("")+'</ul></details>';
     let result;
     if(t.session)result='<p><strong>'+esc(t.session.label)+'</strong> · '+t.session.index+' / '+t.session.actions.length+' actions confirmed. Active cycle is locked; <a href="#home">continue in Home</a>.</p>';
     else if(t.activity.blocked)result='<p class="tc-notice">'+esc(t.activity.reason||"A scheduled activity blocks training.")+'</p>';
@@ -544,7 +544,7 @@ const tornStatPlanner = (() => {
       return '<div class="tc-gym-group" role="group" aria-label="'+label+'"><div class="tc-gym-tiles">'+list.map(g=>
         '<button type="button" class="tc-gym-tile '+(g.name===gym.name?"is-selected":"")+(active&&g.name===active.name?" is-active-gym":"")+'" data-tc-gym="'+esc(g.name)+'" title="'+esc(g.name)+' · '+g.energy+' E/train'+(active&&g.name===active.name?' · Current gym':'')+'" aria-label="'+esc(g.name)+'" aria-pressed="'+(g.name===gym.name)+'">'+gymIcon(g)+'<span>'+esc(g.name)+'</span></button>').join("")+'</div></div>';
     }).join("")+'</div>'+
-      '<details class="tc-gym-info" '+(state.gymInfoOpen?"open":"")+'><summary>'+gymInfoHeading(active||gym)+'</summary><div class="tc-gym-info-body">'+
+      '<details class="tc-gym-info" data-collapse-key="stats-gym-info" '+(state.gymInfoOpen?"open":"")+'><summary>'+gymInfoHeading(active||gym)+'</summary><div class="tc-gym-info-body">'+
       gymDotRow(active||gym)+(active&&active.name!==gym.name?'<div class="tc-gym-alternate"><div class="tc-gym-comparison-heading">'+gymInfoHeading(gym)+'</div>'+gymDotRow(gym,active)+'</div>':'')+'</div></details></div></section>';
     markup+=renderBuild(gym,active);
     }
@@ -616,7 +616,7 @@ const tornStatPlanner = (() => {
         return;
       }
       const gymButton=event.target.closest("[data-tc-gym]");
-      if(gymButton){const active=activeGym();state.selectedGym=active&&active.name===gymButton.dataset.tcGym?null:gymButton.dataset.tcGym;if(state.selectedGym!==null&&active)state.gymInfoOpen=true;view.innerHTML=render();return;}
+      if(gymButton){const active=activeGym();state.selectedGym=active&&active.name===gymButton.dataset.tcGym?null:gymButton.dataset.tcGym;if(state.selectedGym!==null&&active){state.gymInfoOpen=true;if(typeof tornDisclosureState!=="undefined")tornDisclosureState.remember(view.querySelector(".tc-gym-info"),true);}view.innerHTML=render();return;}
       const reset=event.target.closest("[data-tc-reset]");
       if(reset){const stat=reset.dataset.tcReset,value=apiStatValue(stat);if(value!==null){state.statValues[stat]=value;view.innerHTML=render();}return;}
       const pick=event.target.closest("[data-tc-pick]");

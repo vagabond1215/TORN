@@ -77,7 +77,7 @@ const tornCrimeGuide = (() => {
     return '<section class="panel"><div class="panel-heading"><h2>Crime reference</h2></div><div class="panel-content"><p class="fine-print">Expand a crime for activities, equipment, unique counts and source tables. Profit per nerve requires observed cash, loot, costs and failed attempts; no unsupported averages are substituted.</p>'+
       reference.map(ref=>{
         const [name,,uniques,activities]=ref,cs=skill(name);
-        return '<details class="crime-reference"><summary><strong>'+esc(name)+'</strong><small>'+(cs===null?"CS unavailable":"CS "+number(cs))+' · '+uniques+' documented uniques</small></summary><div class="crime-reference-body"><h3>Tools &amp; enhancers</h3><ul class="crime-equipment">'+equipment(ref).map(([item,cat,reason,min])=>{
+        return '<details class="crime-reference" data-collapse-key="crime-reference:'+esc(name)+'"><summary><strong>'+esc(name)+'</strong><small>'+(cs===null?"CS unavailable":"CS "+number(cs))+' · '+uniques+' documented uniques</small></summary><div class="crime-reference-body"><h3>Tools &amp; enhancers</h3><ul class="crime-equipment">'+equipment(ref).map(([item,cat,reason,min])=>{
           const owned=inventoryStatus(item,cat),price=market(item);
           return '<li><strong>'+esc(item)+'</strong><span>'+esc(reason)+'</span><small>'+(owned===null?"Inventory unknown":owned?"Owned":"Not owned")+(price===null?"":" · $"+number(price))+'</small></li>';
         }).join("")+'</ul><h3>Activities &amp; unlocks</h3><div class="crime-table-scroll"><table class="crime-table"><thead><tr><th>Activity / requirement</th><th>Average net $/N</th></tr></thead><tbody>'+activities.map(x=>'<tr><td>'+esc(x)+'</td><td>—</td></tr>').join("")+'</tbody></table></div>'+
@@ -179,7 +179,7 @@ const tornCrimeGuide = (() => {
           '<input type="number" data-restock-minimum min="0" max="'+Number.MAX_SAFE_INTEGER+'" step="1" value="'+(rule?.minimum??"")+
           '" placeholder="'+(item.target||1)+'" aria-label="'+esc("Minimum stock for "+item.name)+'"></div>';
       }).join("");
-      return '<details class="restock-settings-category"><summary>'+esc(category)+' ('+items.size+')</summary>'+
+      return '<details class="restock-settings-category" data-collapse-key="restock-category:'+esc(category)+'"><summary>'+esc(category)+' ('+items.size+')</summary>'+
         '<div class="restock-settings-actions"><button type="button" data-restock-all="true">Select all</button><button type="button" data-restock-all="false">Deselect all</button></div>'+rows+'</details>';
     }).join("");
     return '<template data-restock-dialog><dialog class="restock-settings-dialog" aria-labelledby="restock-settings-title"><form>'+
@@ -387,7 +387,7 @@ const tornCrimeGuide = (() => {
         const lock=!approx&&cs!=null&&cs<level,owned=crimeItemStatus(item);
         return '<li class="rec-crime-option'+(lock?" is-locked":"")+'"><div class="rec-crime-option-head"><strong class="rec-pick-risk-'+tier+'">'+esc(name)+'</strong><small>'+esc("CS "+min+(lock?" · Locked":""))+'</small></div><div class="rec-crime-option-reward">'+esc(reward)+(done?' <small>Collected</small>':"")+'</div><small>Unique requires '+esc(item)+' · <span data-item-status="'+owned+'">'+esc(owned)+'</span></small></li>';
       });
-      return rows.length?'<details class="rec-crime-option-group" open><summary><strong>'+esc(group)+'</strong><small>'+rows.length+' targets</small></summary><ul>'+rows.join("")+'</ul></details>':"";
+      return rows.length?'<details class="rec-crime-option-group" data-collapse-key="crime-option:'+esc(group)+'" open><summary><strong>'+esc(group)+'</strong><small>'+rows.length+' targets</small></summary><ul>'+rows.join("")+'</ul></details>':"";
     }).join("");
     return '<li class="rec-crime-options"><div><strong>Burglary targets</strong><small>District difficulty is an estimate. CS? indicates an unconfirmed unlock. Cash-only and unverified unique matches remain visible.</small>'+(groups||'<small>No incomplete targets at this risk level.</small>')+'</div></li>';
   }
@@ -396,7 +396,7 @@ const tornCrimeGuide = (() => {
     if(tornCrimeStates.data[name])return tornCrimeStates.render(name,{cs,only,allCollected,uniques:crimeProgress(name)?.uniques,catalog:payload("itemCatalog","items"),itemStatus:crimeItemStatus,owner:String(tornGuideApi.state.identity?.id??"guest")});
     const groups=crimeOptions[name];
     if(!groups)return "";
-    return '<li class="rec-crime-options"><div><strong>Available activities &amp; reference options</strong><small>Static in-game reference; check live availability and requirements. Unique examples are not a complete collected-reward list.</small>'+groups.map(([heading,rows])=>'<details class="rec-crime-option-group" open><summary><strong>'+esc(heading)+'</strong></summary><ul>'+rows.map(([label,meta,detail])=>'<li class="rec-crime-option"><div class="rec-crime-option-head"><strong>'+esc(label)+'</strong><small>'+esc(meta)+'</small></div>'+(detail?'<div class="rec-crime-option-reward">'+esc(detail)+'</div>':"")+'</li>').join("")+'</ul></details>').join("")+'</div></li>';
+    return '<li class="rec-crime-options"><div><strong>Available activities &amp; reference options</strong><small>Static in-game reference; check live availability and requirements. Unique examples are not a complete collected-reward list.</small>'+groups.map(([heading,rows])=>'<details class="rec-crime-option-group" data-collapse-key="crime-reference-option:'+esc(heading)+'" open><summary><strong>'+esc(heading)+'</strong></summary><ul>'+rows.map(([label,meta,detail])=>'<li class="rec-crime-option"><div class="rec-crime-option-head"><strong>'+esc(label)+'</strong><small>'+esc(meta)+'</small></div>'+(detail?'<div class="rec-crime-option-reward">'+esc(detail)+'</div>':"")+'</li>').join("")+'</ul></details>').join("")+'</div></li>';
   }
   function crimeRecommendation(risk,completion,refreshIds){
     if(tornGuideApi.crimeVersion?.()===1)return '<li><div><strong>Crimes 1.0 detected</strong><small>Use the legacy crime report; Crimes 2.0 skill and unique recommendations do not apply.</small><a href="https://torn.report/crimes" target="_blank" rel="noopener noreferrer">Old Crimes report</a></div></li>';
@@ -435,7 +435,7 @@ const tornCrimeGuide = (() => {
   function crimeFooter(refreshIds){
     const names=Object.keys(crimeIds).filter(name=>refreshIds.includes(crimeIds[name]));
     const requirements=names.length===1?'<a href="'+wiki(names[0])+'" target="_blank" rel="noopener noreferrer">Unique requirements</a>':
-      names.length?'<details class="rec-unique-links"><summary>Unique requirements</summary>'+names.map(name=>'<a href="'+wiki(name)+'" target="_blank" rel="noopener noreferrer">'+esc(name)+'</a>').join("")+'</details>':
+      names.length?'<details class="rec-unique-links" data-collapse-key="crime-unique-links"><summary>Unique requirements</summary>'+names.map(name=>'<a href="'+wiki(name)+'" target="_blank" rel="noopener noreferrer">'+esc(name)+'</a>').join("")+'</details>':
       '<a href="https://wiki.torn.com/wiki/Crimes_2.0" target="_blank" rel="noopener noreferrer">Unique requirements</a>';
     return '<footer class="rec-crime-actions rec-crime-footer">'+requirements+'<a href="https://torn.report/uniques" target="_blank" rel="noopener noreferrer">Unique tracker</a></footer>';
   }

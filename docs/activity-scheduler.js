@@ -360,7 +360,7 @@ const tornActivityScheduler=(()=>{
       '<div class="activity-timeline-scroll" tabindex="0" role="region" aria-label="Scrollable '+(window?window.hours+' hour':days+' day')+' activity timeline"><div class="activity-time-canvas" style="--canvas-width:'+width+'px;--lanes:'+layout.laneCount+'"><div class="activity-time-ruler">'+ticks.join("")+'</div><div class="activity-time-track"><div class="activity-time-grid" aria-hidden="true">'+ticks.join("")+'</div><div class="activity-time-now'+(nowX>90?' is-near-end':'')+'" style="--now-x:'+nowX+'%" aria-hidden="true"><span>NOW</span></div><div class="activity-time-spans">'+spans+'</div>'+markers+'</div></div></div>'+
       (!layout.count?'<small class="activity-timeline-empty">No scheduled activities in this window.</small>':"")+
       '<div class="activity-timeline-tooltip activity-event-popup" data-activity-timeline-popup role="dialog" aria-label="Activity details" hidden></div>'+templates.join("")+'</div>'+
-      (showAgenda?'<details class="activity-timeline-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&(e.end>e.start?e.end>start:e.start>=start)))+'</details>':"");
+      (showAgenda?'<details class="activity-timeline-agenda" data-collapse-key="calendar-agenda"><summary>Agenda · all scheduled activities</summary>'+renderAgenda(list.filter(e=>e.start<end&&(e.end>e.start?e.end>start:e.start>=start)))+'</details>':"");
   }
   // Display preferences are account-scoped; only the two schedule snapshots
   // remain in memory. Account changes invalidate every cached view.

@@ -190,7 +190,7 @@ const tornJobsGuide=(()=>{
  }
  function details(company){
   const perks=relevant(company);
-  return '<details class="job-company"><summary><span><strong>'+esc(company.name)+'</strong><small>'+esc(company.styles.join(" · "))+'</small></span>'+
+  return '<details class="job-company" data-collapse-key="job-company:'+esc(company.name)+'"><summary><span><strong>'+esc(company.name)+'</strong><small>'+esc(company.styles.join(" · "))+'</small></span>'+
    '<span class="job-topperk">'+esc(perkText(perks[0]))+'</span></summary><div class="job-company-inner">'+
    '<p>'+perks.map(x=>esc(perkText(x))).join(" · ")+'</p>'+
    '<table class="job-special-table"><thead><tr><th>Stars</th><th>Special</th><th>JP cost</th><th>Effect</th></tr></thead><tbody>'+

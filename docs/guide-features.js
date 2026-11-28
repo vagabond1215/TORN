@@ -1229,7 +1229,7 @@ function networthPanel(){
       rows.push('<div class="networth-line"><dt>'+safe(label)+'</dt><dd>'+
         safe(networthAmount(input,negative))+'</dd></div>');
     }
-    out+='<details class="networth-group" open><summary><span>'+safe(name)+'</span>'+
+    out+='<details class="networth-group" data-collapse-key="networth:'+safe(name)+'" open><summary><span>'+safe(name)+'</span>'+
       '<strong>'+safe(networthAmount(sum))+'</strong></summary>'+
       '<dl class="networth-lines">'+(rows.join("")||
         '<div class="networth-empty">No recorded value</div>')+'</dl></details>';
@@ -1254,7 +1254,7 @@ function renderDashboard() {
   const issues=[...Object.entries(st.errors).map(([key,value])=>[key,value]),
     ...Object.entries(st.inventoryErrors).map(([key,value])=>["Inventory: "+key,value])];
   if(issues.length){
-    result+='<details class="home-expand-panel home-errors" open><summary>API issues ('+issues.length+')</summary>'+
+    result+='<details class="home-expand-panel home-errors" data-collapse-key="home-api-issues" open><summary>API issues ('+issues.length+')</summary>'+
       '<div class="home-expand-body"><ul class="api-failure-list">'+issues.map(([name,detail])=>
         '<li><strong>'+safe(name)+'</strong><small>'+safe(detail)+'</small></li>').join("")+
       '</ul></div></details>';
@@ -1323,7 +1323,7 @@ function renderStocksPanel(){
  out+='<div class="stock-table-scroll"><table class="stock-market-table"><thead><tr><th>Stock</th><th>Price</th><th>Owned / value</th><th>Dividend / benefit</th></tr></thead><tbody>';
  for(const r of filtered){
  const status=r.shares==null?"Holdings not loaded":!r.active?"Inactive":r.passive?"Benefit active":r.ready?"Collection ready":r.days!=null?"Ready in "+r.days+" days":"Payout timing unavailable";
- const expanded=stockView.expanded.has(r.ticker),profitClass=r.profit==null||r.profit===0?"stock-neutral":r.profit>0?"stock-positive":"stock-negative";
+ const expanded=typeof tornDisclosureState!=="undefined"?tornDisclosureState.get("stock-row:"+r.ticker,stockView.expanded.has(r.ticker)):stockView.expanded.has(r.ticker),profitClass=r.profit==null||r.profit===0?"stock-neutral":r.profit>0?"stock-positive":"stock-negative";
  const rowId="stock-detail-"+r.ticker;
  const ownedText=r.shares==null?"—":number(r.shares)+" shares"+(r.shares>0?" @ "+money(r.cost):"");
  const field=(label,val,cls="")=>'<div class="stock-detail-pair"><span>'+safe(label)+'</span><strong class="'+cls+'">'+safe(val)+'</strong></div>';
@@ -1342,7 +1342,8 @@ function wireStocksPanel(view){
  if(!row||!view.contains(row))return;
  const ticker=row.dataset.stockRow,button=row.querySelector("[data-stock-expand]"),detail=row.nextElementSibling;
  if(!button||!detail?.classList.contains("stock-detail-row"))return;
- const expanded=!stockView.expanded.has(ticker);
+ const expanded=button.getAttribute("aria-expanded")!=="true";
+ if(typeof tornDisclosureState!=="undefined")tornDisclosureState.set("stock-row:"+ticker,expanded);
  if(expanded)stockView.expanded.add(ticker);else stockView.expanded.delete(ticker);
  button.setAttribute("aria-expanded",String(expanded));
  button.querySelector(".stock-chevron").textContent=expanded?"▾":"▸";
@@ -1504,7 +1505,7 @@ function inventoryBuyerResults(id,qty){
     '<p>Potential stack proceeds <strong>$'+formatNumber(best.price*qty)+'</strong> if the buyer takes all '+formatNumber(qty)+'.</p>':"";
   return timing+'<p><strong>Highest advertised pricelist price</strong></p>'+buyer(best)+proceeds+
     '<p class="fine-print">Requested quantity is unknown. Confirm capacity and any bulk terms on the trader’s pricelist.</p>'+
-    (more.length?'<details><summary>More pricelist buyers ('+more.length+')</summary>'+more.map(buyer).join("")+'</details>':"");
+    (more.length?'<details data-collapse-key="inventory-more-buyers"><summary>More pricelist buyers ('+more.length+')</summary>'+more.map(buyer).join("")+'</details>':"");
 }
 
 const inventoryStatIcons={
@@ -1572,7 +1573,7 @@ function inventoryRwDiagnosticsBody(){
     '<p class="fine-print">Archive shards: '+safe(archive.loaded)+' / '+safe(archive.expected??"—")+(archive.error?' · '+safe(archive.error):"")+'. Local asking-price observations: 24h valuation freshness, 30-day partial and 90-day complete retention, up to 102,400 records across 128 shards (800 each). Older observations are not confirmed sales. No Torn API requests.</p>';
 }
 function inventoryRwDiagnostics(){
-  return '<details class="rw-diagnostic-panel"><summary>Passive RW market diagnostics</summary><div data-rw-diagnostics>'+inventoryRwDiagnosticsBody()+'</div></details>';
+  return '<details class="rw-diagnostic-panel" data-collapse-key="inventory-rw-diagnostics"><summary>Passive RW market diagnostics</summary><div data-rw-diagnostics>'+inventoryRwDiagnosticsBody()+'</div></details>';
 }
 function refreshRwDiagnostics(){
   for(const el of document.querySelectorAll("[data-rw-diagnostics]"))el.innerHTML=inventoryRwDiagnosticsBody();
@@ -1607,7 +1608,7 @@ function inventoryRwMarket(uid,id){
     (data?'<p class="fine-print">Checked '+safe(tornGuidePreferences.formatDate(data.at))+(data.source==="passive"?" · passive observations, not a complete market scan":data.truncated?" · first 500 listings only":"")+'</p>':"")+
     (passive?'<p class="fine-print">Passive market: '+passive.observations+' observations · '+passive.rows.length+' full-detail records</p>':"")+
     (model?.estimate!=null?'<p><strong>'+safe(money(model.estimate))+'</strong> · '+safe(model.confidence)+' · '+model.count+' matches</p><p>Middle asking-price range: '+safe(money(model.low))+' – '+safe(money(model.high))+'</p>':data?'<p>Insufficient exact bonus matches ('+(model?.count??0)+'). No estimated RW value.</p>':"")+
-    (model?.rows.length?'<details><summary>Comparable listings</summary>'+model.rows.map(listing).join("")+'</details>':"")+
+    (model?.rows.length?'<details data-collapse-key="inventory-comparable-listings"><summary>Comparable listings</summary>'+model.rows.map(listing).join("")+'</details>':"")+
     '<small>Active asking prices, not completed sales. Generic MV remains separate.</small><p class="inventory-rw-status" role="status"></p></section>';
 }
 if(typeof document!=="undefined")document.addEventListener("click",async event=>{
@@ -1786,7 +1787,7 @@ function renderInventoryPage(){
 }
 
 const educationView={open:new Set(),selected:null,filter:"all",groupBy:"category",effect:"all",owner:null};
-function loadEducationPreference(){const id=String(tornGuideApi.state.identity?.id??"guest");if(educationView.owner===id)return;educationView.owner=id;educationView.groupBy="category";educationView.effect="all";educationView.selected=null;educationView.open.clear();try{const p=JSON.parse(localStorage.getItem("torn-city-guide:edu-path:"+id));if(p?.groupBy==="effect")educationView.groupBy="effect";if(educationPaths.some(([name])=>name===p?.effect))educationView.effect=p.effect;}catch{}}
+function loadEducationPreference(){const id=String(tornGuideApi.state.identity?.id??"guest");if(educationView.owner===id)return;educationView.owner=id;educationView.groupBy="category";educationView.effect="all";educationView.selected=typeof tornDisclosureState!=="undefined"?tornDisclosureState.get(tornDisclosureState.ownKey("edu-course"),"")||null:null;educationView.open.clear();try{const p=JSON.parse(localStorage.getItem("torn-city-guide:edu-path:"+id));if(p?.groupBy==="effect")educationView.groupBy="effect";if(educationPaths.some(([name])=>name===p?.effect))educationView.effect=p.effect;}catch{}}
 function saveEducationPreference(){try{localStorage.setItem("torn-city-guide:edu-path:"+educationView.owner,JSON.stringify({groupBy:educationView.groupBy,effect:educationView.effect}));}catch{}}
 // Effect paths are editorial groupings, not official degree requirements.
 // A course may contribute to more than one path.
@@ -1912,6 +1913,6 @@ function wireEducationPage(view){
  if(view.dataset.eduBound==="1")return;view.dataset.eduBound="1";
  const rebuild=()=>{if(location.hash==="#education")view.innerHTML=renderEducationPage();};
  view.addEventListener("toggle",e=>{const el=e.target;if(!el.matches?.("[data-edu-group]")||!el.isConnected)return;const g=el.dataset.eduGroup;if(el.open){educationView.open.add(g);educationView.open.delete("closed:"+g);}else{educationView.open.delete(g);educationView.open.add("closed:"+g);}},true);
- view.addEventListener("click",e=>{const el=e.target.closest("[data-edu-course]");if(!el||location.hash!=="#education")return;const group=el.closest("[data-edu-group]");if(group){educationView.open.add(group.dataset.eduGroup);educationView.open.delete("closed:"+group.dataset.eduGroup);}educationView.selected=educationView.selected===el.dataset.eduCourse?null:el.dataset.eduCourse;rebuild();});
- view.addEventListener("change",e=>{if(location.hash!=="#education")return;const el=e.target;if(el.matches("[data-edu-filter]"))educationView.filter=el.value;else if(el.matches("[data-edu-groupby]")){educationView.groupBy=el.value;educationView.selected=null;}else if(el.matches("[data-edu-path]")){educationView.effect=el.value;educationView.open.add(el.value);educationView.open.delete("closed:"+el.value);educationView.selected=null;}else return;saveEducationPreference();rebuild();});
+ view.addEventListener("click",e=>{const el=e.target.closest("[data-edu-course]");if(!el||location.hash!=="#education")return;const group=el.closest("[data-edu-group]");if(group){educationView.open.add(group.dataset.eduGroup);educationView.open.delete("closed:"+group.dataset.eduGroup);}educationView.selected=educationView.selected===el.dataset.eduCourse?null:el.dataset.eduCourse;if(typeof tornDisclosureState!=="undefined")tornDisclosureState.set(tornDisclosureState.ownKey("edu-course"),educationView.selected??"");rebuild();});
+ view.addEventListener("change",e=>{if(location.hash!=="#education")return;const el=e.target;if(el.matches("[data-edu-filter]"))educationView.filter=el.value;else if(el.matches("[data-edu-groupby]")){educationView.groupBy=el.value;educationView.selected=null;}else if(el.matches("[data-edu-path]")){educationView.effect=el.value;educationView.open.add(el.value);educationView.open.delete("closed:"+el.value);educationView.selected=null;}else return;if(typeof tornDisclosureState!=="undefined"){tornDisclosureState.set(tornDisclosureState.ownKey("edu-course"),educationView.selected??"");if(el.matches("[data-edu-path]")){const group=[...view.querySelectorAll("[data-edu-group]")].find(x=>x.dataset.eduGroup===el.value);if(group)tornDisclosureState.remember(group,true);}}saveEducationPreference();rebuild();});
 }

@@ -61,7 +61,7 @@ const tornMeritGuide=(()=>{
  const affrontedOpen=new Map();
  function affrontedDetails(name,scope="catalog"){
    if(key(name)!=="theaffronted")return "";
-   const selected=affrontedOpen.get(scope)??"";
+   const selected=typeof tornDisclosureState!=="undefined"?tornDisclosureState.get("affronted:"+scope,affrontedOpen.get(scope)??""):affrontedOpen.get(scope)??"";
    return '<div class="affronted-details" data-affronted-scope="'+safe(scope)+'"><div class="affronted-chips" role="group" aria-label="City job interview answers">'+affronted.map(([id,label])=>'<button type="button" data-affronted-job="'+id+'" aria-expanded="'+(id===selected)+'">'+safe(label)+'</button>').join("")+'</div><div class="affronted-answer" '+(selected?"":"hidden")+'>'+affrontedAnswer(selected)+'</div></div>';
  }
  function affrontedAnswer(id){
@@ -74,7 +74,8 @@ const tornMeritGuide=(()=>{
    view.addEventListener("click",e=>{
      const button=e.target.closest("[data-affronted-job]"),root=button?.closest("[data-affronted-scope]");if(!root)return;
      const id=button.dataset.affrontedJob;if(!affronted.some(x=>x[0]===id))return;
-     const scope=root.dataset.affrontedScope,next=affrontedOpen.get(scope)===id?"":id;
+     const scope=root.dataset.affrontedScope,next=button.getAttribute("aria-expanded")==="true"?"":id;
+     if(typeof tornDisclosureState!=="undefined")tornDisclosureState.set("affronted:"+scope,next);
      affrontedOpen.set(scope,next);
      for(const b of root.querySelectorAll("[data-affronted-job]"))b.setAttribute("aria-expanded",String(b.dataset.affrontedJob===next));
      const panel=root.querySelector(".affronted-answer");panel.hidden=!next;panel.innerHTML=affrontedAnswer(next);
@@ -116,7 +117,7 @@ const tornMeritGuide=(()=>{
    }else if(plan?.status==="not-found")summary+='<p>No qualifying route found within '+plan.maxTrains+' trains ('+plan.energyLimit.toLocaleString("en-US")+' Energy) in the current gym and displayed order. This is not proof that the merit is unreachable. Consider another unlocked gym, different Happiness, or refresh after regular training.</p>';
    else if(plan?.reason)summary+='<p class="fine-print">'+safe(plan.reason)+'</p>';
    const assumptions=live.gym&&!live.reason?'<p class="fine-print">Gym: '+safe(live.gym.name)+' · '+live.gym.energy+' E/train · Starting Happiness '+niceNum(live.happy)+(live.referenceGym?" · Reference gym values":"")+(live.cached?" · Cached API inputs":"")+'. Train in the displayed order; no time passes in this model. Check the actual stat after each train and refresh before continuing. The shared gain formula is approximate; RNG, rounding, Happiness resets and bonus changes can miss the target.</p>':"";
-   const exact='<details class="nice-merit-exact"><summary>Use precise values from your training log</summary><p class="fine-print">Optional: enter the exact decimals for all four current stats. Overrides are temporary and reset when the API stat snapshot changes.</p><form data-nice-exact class="stock-controls">'+tornNiceMerit.order.map(stat=>'<label>'+niceLabel[stat]+'<input name="'+stat+'" type="number" min="0" max="9007199254740990" step="any" required value="'+safe(niceExact(stats[stat]))+'"></label>').join("")+'<button type="submit" class="button secondary">Recalculate</button><button type="button" class="button secondary" data-nice-reset>Use API values</button></form></details>';
+   const exact='<details class="nice-merit-exact" data-collapse-key="nice-exact-values"><summary>Use precise values from your training log</summary><p class="fine-print">Optional: enter the exact decimals for all four current stats. Overrides are temporary and reset when the API stat snapshot changes.</p><form data-nice-exact class="stock-controls">'+tornNiceMerit.order.map(stat=>'<label>'+niceLabel[stat]+'<input name="'+stat+'" type="number" min="0" max="9007199254740990" step="any" required value="'+safe(niceExact(stats[stat]))+'"></label>').join("")+'<button type="submit" class="button secondary">Recalculate</button><button type="button" class="button secondary" data-nice-reset>Use API values</button></form></details>';
    return head+rule+summary+table+assumptions+exact+tail;
  }
 

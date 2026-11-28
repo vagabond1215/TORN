@@ -328,7 +328,7 @@ const tornToolsGuide=(()=>{
   return '<p class="fine-print">'+selected.length+' tools match this device/filter. '+
    pins().length+' of '+maxPinned+' launchable sites visible. All are shown by default; hide any you do not use.</p>'+
    '<div class="tools-guide-grid">'+main.map(cardMarkup).join("")+'</div>'+
-   (other.length?'<details class="tools-more"><summary>Installers, references and other resources ('+other.length+')</summary>'+
+   (other.length?'<details class="tools-more" data-collapse-key="tools-more"><summary>Installers, references and other resources ('+other.length+')</summary>'+
    '<div class="tools-guide-grid">'+other.map(cardMarkup).join("")+'</div></details>':"");
  }
  function render(){

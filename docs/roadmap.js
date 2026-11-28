@@ -298,7 +298,7 @@ const tornRoadmap=(()=>{
   const stages=[...new Set(entries.map(x=>x.stage))];
   for(const [index,stage] of stages.entries()){
    const items=entries.filter(x=>x.stage===stage),doneHere=items.filter(x=>checked(x.id)).length;
-   out+='<details class="panel roadmap-stage" '+(index<=1?"open":"")+'><summary><strong>'+esc(stage)+'</strong><small>'+doneHere+' / '+items.length+' complete</small></summary><div class="panel-content roadmap-steps">';
+   out+='<details class="panel roadmap-stage" data-collapse-key="roadmap-stage:'+esc(stage)+'" '+(index<=1?"open":"")+'><summary><strong>'+esc(stage)+'</strong><small>'+doneHere+' / '+items.length+' complete</small></summary><div class="panel-content roadmap-steps">';
    for(const step of items){
     const auto=verified(step.id),complete=checked(step.id);
     out+='<div class="roadmap-step"><label><input type="checkbox" data-roadmap-step="'+esc(step.id)+'" '+(complete?"checked":"")+' '+(auto?"disabled":"")+'><span><strong>'+esc(step.title)+'</strong><small>'+esc(step.detail)+'</small></span></label>'+
