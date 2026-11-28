@@ -27,14 +27,14 @@ async function probe(context,origin,{lifecycle=false,quota=false,rehab=false}={}
  const name="torn-transaction-fixture:"+randomUUID(),id="999999913";
  await Promise.all(tabs.map(async tab=>{
   await loadPage(tab,origin);
-  await tab.evaluate(async({name,id})=>{
+  await tab.evaluate(async({name,id,rehab})=>{
    const a=tornAccountStorage,r=tornAccountRevisions,l=tornCalendarLineage,g=tornAccountTransactionStore;
    const prefix="torn-city-guide:",note=prefix+"v1:profile:"+id+":notes:gym";
    const m=new Map(),source={get length(){return m.size},key:i=>[...m.keys()][i]??null,getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)};
    let valid=true,db=await g.open({name});const guard=()=>valid;
    window.fixture={
     review:async()=>{
-     source.setItem(prefix+"activity-events:"+id,"[]");source.setItem(prefix+"activity-spend-ledger:"+id,"[]");source.setItem(note,"before");
+     source.setItem(prefix+"activity-events:"+id,"[]");source.setItem(prefix+"activity-spend-ledger:"+id,rehab?JSON.stringify([{id:"manual-prior",kind:"war",at:1000,cost:5,source:"Manual confirmation"}]):"[]");source.setItem(note,"before");
      const snap=a.snapshot(source,id),manifest=await r.observe(r.empty(id),snap,id);
      source.setItem(r.key(id),JSON.stringify(manifest));source.setItem(prefix+"calendar-lineage:v1:"+id,JSON.stringify(await l.initialize({...snap,manifest},id)));
      return g.reviewLegacy(source,id,guard);
@@ -46,16 +46,22 @@ async function probe(context,origin,{lifecycle=false,quota=false,rehab=false}={}
     initialize:review=>db.initialize(source,id,review,true,guard),
     read:options=>db.read(id,guard,options),
     edit:({before,after})=>db.editPreference(id,before,{section:"notes:gym",before:before.bundle.records.find(r=>r.section==="notes:gym")?.value??null,after},true,guard),
-    rehab:({record,change,at,holdAfterPut=false})=>{
+    rehab:({record,change,at,interrupt=null})=>{
      let policy={playerId:id,record,activeTraining:false,heldTraining:false,journalPending:false,
        profile:{at,status:"okay",level:15},travel:{at,available:true},war:{at,known:true,ranked:null},
        warSettings:{mode:"scheduled",adjustment:60,lead:120},health:{at,level:"recommended"},
        rehabSettings:{travel:"wlt",rehabMinutes:30,rehabSessions:1},actions:[],baseline:null};
      const original=IDBObjectStore.prototype.put;
-     if(holdAfterPut)IDBObjectStore.prototype.put=function(...args){
-       const req=original.apply(this,args);req.addEventListener("success",()=>{policy={...policy,heldTraining:true};},{once:true});return req;
+     if(interrupt)IDBObjectStore.prototype.put=function(...args){
+       const req=original.apply(this,args);
+       req.addEventListener("success",()=>{
+        if(interrupt==="close")db.close();
+        else if(interrupt==="rotate")fixture.rotate();
+        else policy={...policy,heldTraining:true};
+       },{once:true});
+       return req;
      };
-     return db.planRehab(id,policy,change,true,()=>policy,guard).finally(()=>{if(holdAfterPut)IDBObjectStore.prototype.put=original;});
+     return db.planRehab(id,policy,change,true,()=>policy,guard).finally(()=>{if(interrupt)IDBObjectStore.prototype.put=original;});
     },
     rejectProtected:before=>db.editPreference(id,before,{section:"calendar-events",before:"[]",after:"[] "},true,guard),
     mutateOldSource:()=>source.setItem(prefix+"activity-events:"+id,"[] "),
@@ -65,7 +71,7 @@ async function probe(context,origin,{lifecycle=false,quota=false,rehab=false}={}
     close:()=>db.close(),
     reopen:async()=>{db=await g.open({name});}
    };
-  },{name,id});
+  },{name,id,rehab});
  }));
  const [a,b]=tabs;
  const review=await a.evaluate(()=>fixture.review());
@@ -112,34 +118,58 @@ async function probe(context,origin,{lifecycle=false,quota=false,rehab=false}={}
   assert.deepEqual(final.bundle.records.find(r=>r.section===section),before.bundle.records.find(r=>r.section===section));
   assert.deepEqual(JSON.parse(final.bundle.manifestRaw).entries.find(r=>r.section===section),JSON.parse(before.bundle.manifestRaw).entries.find(r=>r.section===section));
  }
- if(rehab)await probeRehab(a,b,final);
+ if(rehab)await probeRehab(context,a,b,origin,final);
  if(lifecycle)await probeLifecycle(a,b,name,final);
  if(quota)await probeQuota(context,a,b,origin,final);
  await Promise.all(tabs.map(t=>t.evaluate(()=>fixture.close())));
  return {name,id,record:final};
 }
-async function probeRehab(a,b,record){
- const at=Date.now(),start=at+60000,duration=(Math.ceil(2*83*1.03)+30)*60000;
- const event={id:"rehab-fixture",kind:"rehab",title:"Rehabilitation",start,end:start+duration,blocking:true,source:"manual",rehabBaseline:null};
- const add={id:event.id,kind:"add",before:null,after:event};
+async function probeRehab(context,a,b,origin,record){
+ const at=Date.now(),start=at+300000,duration=(Math.ceil(2*83*1.03)+30)*60000;
+ const firstEvent={id:"rehab-fixture",kind:"rehab",title:"Rehabilitation",start,end:start+duration,blocking:true,source:"manual",rehabBaseline:null};
+ const add={id:firstEvent.id,kind:"add",before:null,after:firstEvent};
  const args={record,change:add,at};
- const outcomes=await Promise.all([a.evaluate(args=>fixture.rehab(args),args),b.evaluate(args=>fixture.rehab(args),args)]);
+ await withQuota(context,a,origin,1,async()=>{
+  await assert.rejects(()=>a.evaluate(args=>fixture.rehab(args),args),/QuotaExceededError/i);
+ });
+ assert.deepEqual((await b.evaluate(()=>fixture.read())).record,record);
+ const alternate={...firstEvent,id:"rehab-other-tab"};
+ const outcomes=await Promise.all([a.evaluate(args=>fixture.rehab(args),args),b.evaluate(args=>fixture.rehab(args),{...args,change:{...add,id:alternate.id,after:alternate}})]);
+ const event=outcomes[1].status==="committed"?alternate:firstEvent;
  assert.equal(outcomes.filter(x=>x.status==="committed").length,1);
  assert.equal(outcomes.filter(x=>x.status==="stale").length,1);
  const left=(await a.evaluate(()=>fixture.read())).record,right=(await b.evaluate(()=>fixture.read())).record;
  assert.deepEqual(left,right);assert.equal(left.generation,record.generation+1);
- assert.deepEqual(JSON.parse(left.bundle.records.find(x=>x.section==="calendar-events").value),[event]);
+ assert.equal(left.bundle.records.find(x=>x.section==="calendar-events").value,JSON.stringify([event]));
  assert.equal(left.bundle.records.find(x=>x.section==="activity-spend").value,record.bundle.records.find(x=>x.section==="activity-spend").value);
  const cancel={id:event.id,kind:"remove",before:event,after:null};
- await assert.rejects(()=>a.evaluate(args=>fixture.rehab(args),{record:left,change:cancel,at,holdAfterPut:true}),/hold/);
+ for(const [interrupt,reason] of [["hold",/hold/],["rotate",/epoch|aborted/i],["close",/closed|aborted/i]]){
+  await assert.rejects(()=>a.evaluate(args=>fixture.rehab(args),{record:left,change:cancel,at,interrupt}),reason);
+  assert.deepEqual((await b.evaluate(()=>fixture.read())).record,left);
+  if(interrupt==="rotate")await a.evaluate(()=>fixture.authorize());
+  if(interrupt==="close")await a.evaluate(()=>fixture.reopen());
+ }
+ await withQuota(context,a,origin,1,async()=>{
+  await assert.rejects(()=>a.evaluate(args=>fixture.rehab(args),{record:left,change:cancel,at}),/QuotaExceededError/i);
+ });
  assert.deepEqual((await b.evaluate(()=>fixture.read())).record,left);
  const canceled=await b.evaluate(args=>fixture.rehab(args),{record:left,change:cancel,at});
  assert.equal(canceled.status,"committed");
  const final=(await a.evaluate(()=>fixture.read())).record;
  assert.equal(final.generation,left.generation+1);
+ assert.equal(final.bundle.records.find(x=>x.section==="calendar-events").value,"[]");
+ assert.deepEqual(final.bundle.records,record.bundle.records);
+ for(const [before,after,deleted] of [[record,left,[]],[left,final,[event.id]]]){
+  const expected=await a.evaluate(async({before,after,deleted})=>{
+   const snapshot=r=>({records:r.bundle.records,omitted:[],manifest:JSON.parse(r.bundle.manifestRaw)});
+   return JSON.stringify(await tornCalendarLineage.advance(JSON.parse(before.bundle.lineageRaw),snapshot(before),snapshot(after),before.playerId,deleted));
+  },{before,after,deleted});
+  assert.equal(after.bundle.lineageRaw,expected);
+ }
+ assert.deepEqual((await b.evaluate(()=>fixture.read())).record,final);
  assert.equal(JSON.parse(final.bundle.lineageRaw).entries.find(e=>e.id===event.id).digest,null);
- await assert.rejects(()=>a.evaluate(args=>fixture.rehab(args),{record:final,change:add,at}),/Deleted calendar ID/);
- console.log("PASS native V7-style reservation contention, exact ledger preservation, post-put policy abort, cancellation and no ID reuse");
+ await assert.rejects(()=>a.evaluate(args=>fixture.rehab(args),{record:final,change:{...add,id:event.id,after:event},at}),/Deleted calendar ID/);
+ console.log("PASS native V7-style reservation contention, exact ledger preservation, policy/epoch/close aborts, native quota rollback, exact lineage, cancellation and no ID reuse");
 }
 async function probeLifecycle(a,b,name,record){
  await assert.rejects(()=>a.evaluate(record=>fixture.rejectProtected(record),record),/preference/);
@@ -200,23 +230,28 @@ async function probeLifecycle(a,b,name,record){
  await assert.rejects(()=>b.evaluate(()=>fixture.reopen()),/version/i);
  console.log("PASS native versionchange closes both tabs, invalidates an in-flight verified read and refuses downgrade");
 }
-async function probeQuota(context,a,b,origin,record){
+async function withQuota(context,a,origin,quotaSize,work){
  const devtools=await context.newCDPSession(a);
  const securityOrigin=new URL(origin).origin;
- const note=randomBytes(67500).toString("base64");
  try{
-  await devtools.send("Storage.overrideQuotaForOrigin",{origin:securityOrigin,quotaSize:4096});
+  await devtools.send("Storage.overrideQuotaForOrigin",{origin:securityOrigin,quotaSize});
   const usage=await devtools.send("Storage.getUsageAndQuota",{origin:securityOrigin});
   assert.equal(usage.overrideActive,true);
-  assert.equal(usage.quota,4096);
+  assert.equal(usage.quota,quotaSize);
   // Chromium can reuse an earlier IndexedDB quota calculation for 30 seconds.
   await delay(31000);
-  await assert.rejects(()=>a.evaluate(({record,note})=>fixture.edit({before:record,after:note}),{record,note}),/QuotaExceededError/i);
-  assert.deepEqual((await b.evaluate(()=>fixture.read())).record,record);
+  await work();
  }finally{
   try{await devtools.send("Storage.overrideQuotaForOrigin",{origin:securityOrigin});}
   finally{await devtools.detach();}
  }
+}
+async function probeQuota(context,a,b,origin,record){
+ const note=randomBytes(67500).toString("base64");
+ await withQuota(context,a,origin,4096,async()=>{
+  await assert.rejects(()=>a.evaluate(({record,note})=>fixture.edit({before:record,after:note}),{record,note}),/QuotaExceededError/i);
+  assert.deepEqual((await b.evaluate(()=>fixture.read())).record,record);
+ });
  assert.equal((await a.evaluate(({record,note})=>fixture.edit({before:record,after:note}),{record,note})).status,"committed");
  console.log("PASS Chrome-enforced IndexedDB quota abort preserves the exact prior record under a DevTools quota override");
 }

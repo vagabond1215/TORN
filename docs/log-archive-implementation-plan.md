@@ -2,7 +2,7 @@
 
 Date: 2026-11-27. Baseline: `0d79410ec5cb2505b4c13fc9cc2a7fe204766a05`. Scope: vagabond1215/TORN, docs/ only. This is the next recommended implementation, not a description of a completed database. Coordinate with [development-roadmap.md](development-roadmap.md), [account-persistence-plan.md](account-persistence-plan.md) and [persistence-implementation-plan.md](persistence-implementation-plan.md).
 
-**Current gate.** [Native validation](native-validation-2026-11-27.md) passed both existing Chrome Log fixtures, real two-tab archive version change, and rejection of a late collector response after a purge in the other tab. Real IndexedDB quota and authorized own-account API acceptance remain open. Continue isolated L3 consent and lifecycle work. Keep the durable collector disabled until its remaining gates pass.
+**Current gate.** [Native validation](native-validation-2026-11-27.md) passed both existing Chrome Log fixtures, real two-tab archive version change, and rejection of a late collector response after a purge in the other tab. The [rehabilitation planning acceptance](native-validation-2026-11-27.md#transactional-rehabilitation-planning-acceptance) also verified a native archive quota abort, exact checkpoint preservation and a successful 100-record retry after quota restoration. Authorized own-account API acceptance remains open. Continue isolated L3 consent and lifecycle work. Keep the durable collector disabled until its remaining gates pass.
 
 ## Current runtime and constraints
 

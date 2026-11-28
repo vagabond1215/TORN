@@ -41,3 +41,5 @@ Commits `7c2881b` and `ed57abe`. Added isolated `scheduler-persistence-adapter.j
 
 ## Native acceptance handoff to Codex
 Synchronize main, read this plan and the account transaction boundary plan. Run the full native regression suite and the new `--rehab` stage of `docs/tests/manual/account-transaction-tabs.cjs`. Verify separate-tab competing reservations, exactly one generation committed, stale contender rejected, exact calendar/ledger/lineage bytes, policy invalidation after put success, cancellation tombstone and ID reuse rejection. Repeat with native quota and lifecycle interruptions for the new entry point; distinguish native storage failures from controlled fault insertion. Keep activation disabled, fix verified defects, record actual results and commit/push within docs/. Do not modify independent scheduler or persistence implementation work beyond verified acceptance defects.
+
+**Native result, 2026-11-28.** The isolated V7-style reservation and cancellation entry point passed [rehabilitation planning acceptance](native-validation-2026-11-27.md#transactional-rehabilitation-planning-acceptance). The production writer remains disabled.
