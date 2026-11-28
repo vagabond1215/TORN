@@ -3,10 +3,12 @@ const fs=require("node:fs"),path=require("node:path"),assert=require("node:asser
 const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
 const {a,r,l,p,j}=new Function(["training-recovery.js","account-storage.js","account-revisions.js","account-calendar-lineage.js","account-rehab-transition.js","account-rehab-journal.js"].map(read).join("\n")+"\nreturn {a:tornAccountStorage,r:tornAccountRevisions,l:tornCalendarLineage,p:tornRehabTransition,j:tornRehabJournal};")();
 const id="123",base="torn-city-guide:",cal=base+"activity-events:"+id,ledger=base+"activity-spend-ledger:"+id,lineage=base+"calendar-lineage:v1:"+id,manifest=r.key(id),journal=a.journalKey(id),note=base+"v1:profile:"+id+":notes:gym";
-let n=0;const hashes=new Map(),digest=async v=>{if(!hashes.has(v))hashes.set(v,String(hashes.size+1).padStart(64,"0"));return hashes.get(v);},options={digest,newRevision:()=>String(++n).padStart(32,"0")};
+let n=0;const hashes=new Map(),digest=async v=>{if(!hashes.has(v))hashes.set(v,String(hashes.size+1).padStart(64,"0"));return hashes.get(v);},mockOptions={digest,newRevision:()=>String(++n).padStart(32,"0")};
 const yes=()=>true,locks={request:async(name,opt,fn)=>{assert.equal(name,base+"account-recovery:"+id);assert.equal(opt.mode,"exclusive");return fn();}};
 function storage(entries){const m=new Map(Object.entries(entries));return {get length(){return m.size;},key:i=>[...m.keys()][i]??null,getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)};}
-async function run(){
+async function run({native=false}={}){
+  const options=native?{}:mockOptions;
+  if(native&&!globalThis.crypto?.subtle)throw Error("Native Web Crypto required");
   const now=Date.now(),event={id:"a",kind:"rehab",title:"Rehab reservation",start:now-120000,end:now+60000,blocking:true,source:"manual",rehabBaseline:{count:5,cost:100000,at:now-180000}};
   const evidence={playerId:id,count:6,cost:350000,statsAt:now-1000,profileAt:now-1000,profileStatus:"okay"};
   const old={id:"manual-old",kind:"war",at:now-100*86400000,cost:7,source:"Manual confirmation"};
@@ -54,7 +56,14 @@ async function run(){
   const tamper=await interrupt(manifest),fake=JSON.parse(tamper.getItem(journal));fake.evidence.cost++;tamper.setItem(journal,JSON.stringify(fake));await assert.rejects(()=>j.recover(tamper,id,tamper.getItem(journal),"rollback",yes,locks,options),/evidence or paired/);assert.ok(tamper.getItem(journal));
   const changed=await interrupt(manifest);await assert.rejects(()=>j.recover(changed,id,j.read(changed,id).raw,"rollback",()=>false,locks,options),/training state/);assert.ok(changed.getItem(journal));
   const epoch=f.store(),w=epoch.setItem;let active=true;epoch.setItem=(k,v)=>{w(k,v);if(k===cal)active=false;};await assert.rejects(()=>apply(epoch,options,review,()=>evidence,()=>active),/journal retained/);assert.ok(epoch.getItem(journal));assert.equal(epoch.getItem(ledger),f.entries[ledger]);
-  console.log("V6 rehab journal: paired completion, unknown cost, bootstrap, stale evidence, lock/hold, duplicate, journal+4 destination faults, finish/rollback, tamper/conflict and epoch interruption passed.");
+  const foreign=await interrupt(manifest),wrong=JSON.parse(foreign.getItem(journal));wrong.playerId="456";foreign.setItem(journal,JSON.stringify(wrong));await assert.rejects(()=>j.recover(foreign,id,foreign.getItem(journal),"rollback",yes,locks,options),/Invalid rehab journal/);assert.ok(foreign.getItem(journal));
+  const markers=await interrupt(manifest);markers.setItem(base+"revision-observed-delete:v1:"+id+":notes:gym","1");assert.equal(j.read(markers,id).conflict,true);await assert.rejects(()=>j.recover(markers,id,j.read(markers,id).raw,"rollback",yes,locks,options),/markers changed/);
+  const refreshed=f.store(),rw=refreshed.setItem;let currentEvidence=evidence;refreshed.setItem=(k,v)=>{rw(k,v);if(k===cal)currentEvidence={...evidence,count:7};};await assert.rejects(()=>apply(refreshed,options,review,()=>currentEvidence),/journal retained/);assert.ok(refreshed.getItem(journal));assert.equal(refreshed.getItem(ledger),f.entries[ledger]);
+  // Recovery verifies the original decision time, not fresh attribution.
+  const late=await interrupt(manifest),originalNow=Date.now;
+  try{Date.now=()=>now+7*86400000;assert.equal((await j.recover(late,id,j.read(late,id).raw,"rollback",yes,locks,options)).status,"rolled-back");}finally{Date.now=originalNow;}
+  assert.equal(late.getItem(cal),f.entries[cal]);assert.equal(late.getItem(ledger),f.entries[ledger]);
+  console.log((native?"Native Web Crypto ":"Deterministic digest ")+"V6 rehab journal: paired completion, unknown cost, bootstrap, stale evidence, lock/hold, duplicate, journal+4 destination faults, finish/rollback, tamper/conflict and epoch interruption passed.");
 }
 module.exports=run;
-if(require.main===module)run().catch(error=>{console.error(error);process.exitCode=1;});
+if(require.main===module)run().then(()=>run({native:true})).catch(error=>{console.error(error);process.exitCode=1;});
