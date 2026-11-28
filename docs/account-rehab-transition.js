@@ -4,7 +4,7 @@
  * The caller must supply current, verified own-account observations.
  */
 const tornRehabTransition=(()=>{
-  const calendar="calendar-events",ledger="activity-spend",minute=60000;
+  const calendar="calendar-events",ledger="activity-spend",minute=60000,baselineMaxAge=30*minute,reservationGrace=24*60*minute;
   const exact=(v,ks)=>v!==null&&typeof v==="object"&&!Array.isArray(v)&&Object.keys(v).length===ks.length&&ks.every(k=>Object.hasOwn(v,k));
   const integer=v=>Number.isSafeInteger(v)&&v>=0;
   const money=v=>v===null||integer(v);
@@ -23,10 +23,14 @@ const tornRehabTransition=(()=>{
     const pending=rows.filter(x=>x.kind==="rehab"&&!Object.hasOwn(x,"completedAt")&&!x.recoveryReview&&x.rehabBaseline&&x.start<=now&&observation.statsAt>=x.start&&observation.profileAt>=x.start&&observation.statsAt>x.rehabBaseline.at&&observation.count>x.rehabBaseline.count);
     if(pending.length!==1)return review(pending.length?"Multiple reservations match the observed counter increase":"No uniquely supported pending reservation");
     const event=pending[0],base=event.rehabBaseline,delta=observation.count-base.count;
+    // Retrieval time is not action time. Expired reservations and stale
+    // pre-departure baselines cannot authorize attribution.
+    if(now-event.end>reservationGrace||observation.statsAt-event.end>reservationGrace||observation.profileAt-event.end>reservationGrace)return review("Reservation evidence window expired; manual review required");
+    if(!integer(base.at)||base.at<=0||base.at>event.start||event.start-base.at>baselineMaxAge)return review("Reservation baseline is outside the pre-start evidence window");
     // Cumulative totals cannot allocate several sessions to one booking.
     if(delta!==1)return review("Multiple rehabilitation sessions observed; manual allocation required");
     if(!money(base.cost)||!integer(base.count)||base.cost!==null&&observation.cost!==null&&observation.cost<base.cost)return review("Counter rollback or unsupported cost evidence");
-    if(rows.some(x=>x!==event&&x.kind==="rehab"&&x.rehabBaseline&&Object.hasOwn(x,"completedAt")&&x.completedAt>=base.at&&x.rehabBaseline.count>=base.count))return review("Counter interval overlaps previously completed rehabilitation evidence");
+    if(rows.some(x=>x!==event&&x.kind==="rehab"&&x.rehabBaseline&&Object.hasOwn(x,"completedAt")&&x.completedAt>=base.at&&x.rehabBaseline.at<=observation.statsAt))return review("Counter interval overlaps previously completed rehabilitation evidence");
     // Other held reservations are not eligible for automatic confirmation,
     // but overlapping evidence still makes attribution uncertain.
     if(rows.some(x=>x!==event&&x.kind==="rehab"&&!Object.hasOwn(x,"completedAt")&&x.rehabBaseline&&x.start<=observation.statsAt&&x.rehabBaseline.count<observation.count&&x.rehabBaseline.at<observation.statsAt))return review("Another reservation may share this counter evidence");

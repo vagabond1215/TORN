@@ -24,6 +24,20 @@ async function run(){
  const ambiguous=await make([ev,{...ev,id:"b",recoveryReview:true}]);assert.equal((await prep(ambiguous)).status,"review");
  const overlap=await make([ev,{...ev,id:"b",blocking:false,completedAt:now-1000,end:now-1000,rehabCost:1}]);assert.equal((await prep(overlap)).status,"review");
  const cap=await make([ev],Array.from({length:500},(_,i)=>({...spend,id:"manual-"+i})));assert.equal((await prep(cap)).status,"review");
+ // Fresh retrieval cannot tie a new counter increase to an old reservation.
+ const day=86400000;
+ const expired=await make([{...ev,start:now-7*day,end:now-7*day+60000,rehabBaseline:{...ev.rehabBaseline,at:now-7*day-60000}}]);
+ assert.equal((await prep(expired)).status,"review");
+ const oldBaseline=await make([{...ev,rehabBaseline:{...ev.rehabBaseline,at:ev.start-31*60000}}]);
+ assert.equal((await prep(oldBaseline)).status,"review");
+ const lateBaseline=await make([{...ev,rehabBaseline:{...ev.rehabBaseline,at:ev.start+1000}}]);
+ assert.equal((await prep(lateBaseline)).status,"review");
+ const boundary={...ev,start:now-day-60000,end:now-day,rehabBaseline:{...ev.rehabBaseline,at:now-day-60000-30*60000}};
+ assert.equal((await prep(await make([boundary]))).status,"candidate");
+ const over={...boundary,start:boundary.start-1,end:boundary.end-1,rehabBaseline:{...boundary.rehabBaseline,at:boundary.rehabBaseline.at-1}};
+ assert.equal((await prep(await make([over]))).status,"review");
+ const priorLower=await make([ev,{...ev,id:"prior",blocking:false,completedAt:now-2000,end:now-2000,rehabCost:1,rehabBaseline:{...ev.rehabBaseline,count:4,at:ev.rehabBaseline.at-60000}}]);
+ assert.equal((await prep(priorLower)).status,"review");
  const completed=await make([done],JSON.parse(candidate.changes[1].value));assert.equal((await prep(completed)).status,"review");
  await assert.rejects(()=>prep({...local,records:local.records.map(x=>x.section===cal?{...x,value:"[]"}:x)}),/digest/);
  console.log("Rehab candidate calendar/ledger pairing, ambiguous evidence, duplicate and capacity protection, unknown cost, prior history and stale/foreign observations passed.");
