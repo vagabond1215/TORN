@@ -25,22 +25,30 @@ const tornAccountBackup=(()=>{
     return crypto.subtle.deriveKey({name:"PBKDF2",hash:"SHA-256",salt,iterations},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
   }
   function aad(e){return encode(JSON.stringify([e.format,e.version,e.playerId,e.createdAt,e.kdf,e.iterations,e.salt,e.iv]));}
-  function metadata(e,playerId){
-    if(!exact(e,["format","version","playerId","createdAt","kdf","iterations","salt","iv","ciphertext"])||e.format!==format||![1,2].includes(e.version)||e.kdf!=="PBKDF2-SHA256"||e.iterations!==iterations||!validDate(e.createdAt))throw Error("Unsupported or invalid backup format");
+  function metadata(e,playerId,allowLineage=false){
+    if(!exact(e,["format","version","playerId","createdAt","kdf","iterations","salt","iv","ciphertext"])||e.format!==format||!(allowLineage?[1,2,3]:[1,2]).includes(e.version)||e.kdf!=="PBKDF2-SHA256"||e.iterations!==iterations||!validDate(e.createdAt))throw Error("Unsupported or invalid backup format");
     const id=tornAccountStorage.owner(playerId);
     if(typeof e.playerId!=="string"||e.playerId!==id)throw Error("Backup belongs to a different Torn account");
     const salt=from64(e.salt,16),iv=from64(e.iv,12);
     if(salt.length!==16||iv.length!==12)throw Error("Invalid backup encryption parameters");
     return {salt,iv};
   }
-  async function encrypt(playerId,records,secret,now=Date.now(),manifest=null){
-    const id=tornAccountStorage.owner(playerId);tornAccountStorage.validRecords(records,id);
+  async function encodeBackup(playerId,records,secret,now=Date.now(),manifest=null,calendarLineage=null,lineageCodec=null){
+    const id=tornAccountStorage.owner(playerId);
+    // Freeze the reviewed bytes before asynchronous digest/encryption work.
+    records=JSON.parse(JSON.stringify(records));manifest=JSON.parse(JSON.stringify(manifest));
+    calendarLineage=JSON.parse(JSON.stringify(calendarLineage));
+    tornAccountStorage.validRecords(records,id);
     if(manifest)await tornAccountRevisions.verify(manifest,records,id);
-    const version=manifest?2:1;
+    if(calendarLineage!==null){
+      if(!manifest||!lineageCodec)throw Error("Version 3 backup requires verified calendar lineage and revision manifest");
+      await lineageCodec.verify(calendarLineage,{records,manifest,omitted:[]},id);
+    }
+    const version=calendarLineage!==null?3:manifest?2:1;
     if(!validDate(now)||(!records.length&&!manifest?.entries?.length))throw Error("No supported records to back up");
     const crypto=cryptoReady(),salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
     const e={format,version,playerId:id,createdAt:now,kdf:"PBKDF2-SHA256",iterations,salt:b64(salt),iv:b64(iv)};
-    const data=encode(JSON.stringify({playerId:id,createdAt:now,records,...(manifest?{manifest}:{})}));
+    const data=encode(JSON.stringify({playerId:id,createdAt:now,records,...(manifest?{manifest}:{}),...(calendarLineage!==null?{calendarLineage}:{})}));
     if(data.length>maxFile/2)throw Error("Backup exceeds size limit");
     const key=await keyFor(secret,salt);
     const ciphertext=await crypto.subtle.encrypt({name:"AES-GCM",iv,additionalData:aad(e),tagLength:128},key,data);
@@ -48,20 +56,41 @@ const tornAccountBackup=(()=>{
     if(result.length>maxFile)throw Error("Backup exceeds size limit");
     return result;
   }
-  async function decrypt(text,playerId,secret){
+  async function decodeBackup(text,playerId,secret,lineageCodec=null){
     if(typeof text!=="string"||text.length>maxFile)throw Error("Backup exceeds size limit");
     let e;try{e=JSON.parse(text);}catch{throw Error("Invalid backup file");}
-    const {salt,iv}=metadata(e,playerId),ciphertext=from64(e.ciphertext,maxFile/2+16);
+    const {salt,iv}=metadata(e,playerId,!!lineageCodec),ciphertext=from64(e.ciphertext,maxFile/2+16);
     if(ciphertext.length<16)throw Error("Invalid backup ciphertext");
     const key=await keyFor(secret,salt);
     let data;
     try{data=JSON.parse(decode(await cryptoReady().subtle.decrypt({name:"AES-GCM",iv,additionalData:aad(e),tagLength:128},key,ciphertext)));}
     catch{throw Error("Incorrect recovery passphrase or damaged backup");}
-    if(!exact(data,e.version===2?["playerId","createdAt","records","manifest"]:["playerId","createdAt","records"])||data.playerId!==e.playerId||data.createdAt!==e.createdAt)throw Error("Backup identity or metadata mismatch");
+    if(!exact(data,e.version===3?["playerId","createdAt","records","manifest","calendarLineage"]:e.version===2?["playerId","createdAt","records","manifest"]:["playerId","createdAt","records"])||data.playerId!==e.playerId||data.createdAt!==e.createdAt)throw Error("Backup identity or metadata mismatch");
     tornAccountStorage.validRecords(data.records,e.playerId);
-    if(e.version===2)await tornAccountRevisions.verify(data.manifest,data.records,e.playerId);
+    if(e.version>=2)await tornAccountRevisions.verify(data.manifest,data.records,e.playerId);
+    if(e.version===3){
+      if(!data.manifest||!data.calendarLineage)throw Error("Missing authenticated calendar lineage");
+      await lineageCodec.verify(data.calendarLineage,{records:data.records,manifest:data.manifest,omitted:[]},e.playerId);
+    }
     if(!data.records.length&&!data.manifest?.entries?.length)throw Error("Backup contains no supported records");
     return data;
   }
-  return {encrypt,decrypt,maxFile};
+  // Existing public API deliberately cannot export or read V3. A separate
+  // explicit codec is for synthetic tests/future gated recovery only.
+  // No automatic downgrade: callers must preserve authenticated lineage.
+  const encrypt=(playerId,records,secret,now=Date.now(),manifest=null)=>encodeBackup(playerId,records,secret,now,manifest);
+  const decrypt=(text,playerId,secret)=>decodeBackup(text,playerId,secret);
+  function createLineageCodec(lineage){
+    if(!lineage||typeof lineage.verify!=="function")throw Error("Calendar lineage verifier required");
+    const codec={verify:lineage.verify.bind(lineage)};
+    return Object.freeze({
+      encrypt:(playerId,records,secret,now,manifest,calendarLineage)=>{
+        if(!manifest||!calendarLineage)throw Error("Version 3 backup requires calendar lineage");
+        return encodeBackup(playerId,records,secret,now,manifest,calendarLineage,codec);
+      },
+      decrypt:(text,playerId,secret)=>decodeBackup(text,playerId,secret,codec),
+      maxFile
+    });
+  }
+  return {encrypt,decrypt,maxFile,createLineageCodec};
 })();
