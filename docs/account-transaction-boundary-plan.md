@@ -25,10 +25,10 @@ IDB transactions serialize IDB access, not old localStorage writers. The prototy
 2. Run the existing failing localStorage probe for reference, then the candidate probe using the same installed Playwright Core/Chrome setup:
    `node docs/tests/manual/account-transaction-tabs.cjs 20`
    Repeat 100 trials for stress acceptance. Each uses distinct same-origin tabs, simultaneous initialization and competing edits from the same generation, exact-byte stale rejection, old-source divergence, owner separation, stale guard, reopening, deletion markers and protected bytes. Zero duplicate successful generation transitions; both tabs read same acknowledged winner. Probe uses synthetic source snapshots and actual IDB, not a production migration or V6 acceptance test.
-3. Extend with real IDB quota/exhaustion, transaction abort/failure, epoch rotation while pending, versionchange, browser termination/restart and protected writer/recovery tests. Document injected vs actual failures.
+3. Run the optional `--lifecycle`, `--restart` and `--quota` stages. The lifecycle stage controls when epoch rotation occurs during a native IDB transaction and exercises version changes. The restart stage uses a disposable on-disk profile. Extend protected writer and recovery tests once those entry points exist. Document controlled fault conditions and browser behavior separately.
 4. Implement isolated scheduler policy adapter P1.4d.5 independently. Then integrate domain-specific V4–V8 transition builders into the transactional boundary, design durable migration/hold/backup recovery and repeat all native tests. No generic caller-supplied protected state update.
 5. Only after all migration, writer, expense, session, recovery UI and V3 routing gates pass consider controlled activation.
 
 ## Status
 
-Implementation 221957d, adapted pure contract fixture passed, new native two-tab probe syntax checked only. Native browser execution remains outstanding for this candidate. Existing Codex baseline remains valid for its tested commit, not a pass for this new module.
+Implementation `221957d` and probe `6fb0323` passed native Node and Chrome acceptance for the isolated initialization and preference boundary. Both 20 and 100 independent-tab trials passed before and after the version-change read fix. See the [native checkpoint](native-validation-2026-11-27.md#transactional-account-follow-up--2026-11-28) for lifecycle evidence and remaining release gates. Production activation stays disabled.

@@ -20,9 +20,9 @@ The Guide is an advisory, read-only, player-specific planning and historical ana
 
 | Track | Status at baseline | Next gate |
 |---|---|---|
-| Native reliability (R0) | [Native validation](native-validation-2026-11-27.md) passed 41 syntax checks, 39 Node fixtures and five existing Chrome fixtures | Authorized API acceptance, device/browser matrix and remaining storage gates |
+| Native reliability (R0) | [Native validation](native-validation-2026-11-27.md) passed 42 syntax checks and 40 Node fixtures on the transaction candidate. The prior baseline passed all five existing Chrome fixtures | Authorized API acceptance, device/browser matrix and remaining storage gates |
 | Log archive (L1–L4) | Live opt-in collector still holds 2,000 rows in memory. Isolated L2.1 archive and L2.2 collector passed native IndexedDB, purge, Web Locks and version-change tests | IndexedDB quota, authorized API shape/permissions and L3 consent/UI before durable collection |
-| Account persistence (P1) | Native backup crypto and journal fixtures passed. Separate tabs sometimes acknowledged different revisions from the same parent | P1.4d.5 isolated policy work may proceed. A transactional commit boundary and migration-state contract precede writer integration |
+| Account persistence (P1) | The legacy localStorage race persists. The isolated IndexedDB preference boundary passed 20 and 100 independent-tab trials plus abort, epoch, version-change, clean restart and browser-enforced test quota checks | Durable migration and downgrade fencing, then transactional protected writer and recovery acceptance. P1.4d.5 remains independent |
 | Companion/portable recovery (1P.4/5) | Install guidance, bounded existing companion captures, portable file exports | Encrypted independent vault, authorized directory/chunked archives |
 | Live optimization (1A, 1B.1/2) | Shared live entrypoint, regeneration/points and source freshness improvements | 1B.3 liquidity/accounting; 1C independent numerical parity |
 | Financial ledger (F1–F3) | Estimates, activity spend and rehab counter delta; no complete actual ledger | Typed log evidence and stable IDs |
