@@ -35,8 +35,8 @@ const tornGuideApi=(()=>{
     activity:["virus","travel","racingrecords","races"],
     quickStatus:["icons","travel","races","cooldowns"],
     crime:["bars","skills","itemCatalog"],
-    merits:["honors","medals","honorCatalog","medalCatalog","merits","meritCatalog","battlestats","bars","gym","perks","gymCatalog"],
-    niceRefresh:["battlestats","bars","gym","perks","honors","honorCatalog","gymCatalog"],
+    merits:["honors","medals","honorCatalog","medalCatalog","merits","meritCatalog","battlestats","bars","gym","perks","gymCatalog","cooldowns","itemCatalog"],
+    niceRefresh:["battlestats","bars","gym","perks","honors","honorCatalog","gymCatalog","cooldowns","itemCatalog"],
     checklist:["bars","merits","meritCatalog","job","education","educationCatalog","money","icons","profile","organizedcrime","virus"],
     money:["money"],
     stocks:["stocks","stockCatalog","itemCatalog"],
@@ -609,7 +609,7 @@ const tornGuideApi=(()=>{
     const names=[...new Set([...(ROUTES[route]||ROUTES.home),...(includeStatus?ROUTES.quickStatus:[]),...meritKeys])].filter(name=>stale(name,force));
     const cats=route==="inventory"
       ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))
-      :(route==="energy"||route==="calendar")?["Candy","Drug","Booster"]:route==="warPreparation"?["Drug"]:route==="stats"?["Candy","Drug","Booster"]:route==="home"?["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"]:route==="crime"?["Tool","Enhancer","Material"]:[];
+      :(route==="energy"||route==="calendar")?["Candy","Drug","Booster"]:route==="warPreparation"?["Drug"]:(route==="niceRefresh"||route==="merits")?["Candy"]:route==="stats"?["Candy","Drug","Booster"]:route==="home"?["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"]:route==="crime"?["Tool","Enhancer","Material"]:[];
     const selectedCats=cats.filter(cat=>inventoryTypes.includes(cat)&&stale("inventory:"+cat,force));
     if(!names.length&&!selectedCats.length)return {failures:0,requested:0,skipped:true};
     state.loading=true;announce();

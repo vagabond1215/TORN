@@ -133,6 +133,7 @@ const tornMeritGuide=(()=>{
    if(opportunityCache?.fingerprint!==fingerprint)opportunityCache={fingerprint,result:tornNiceMerit.opportunities({stats,happy:live.happy,gyms,multipliers:live.multipliers,energy:live.energy},tornStatPlanner.internal.oneTrain)};
    return {...opportunityCache.result,done,unlockListKnown:live.unlockListKnown===true,unavailable:live.unavailable??0,unresolved:live.unresolved??0,energy:live.energy,manual:!!niceManual,cached:!!live.cached};
  }
+ const candyText=row=>row?.candy?row.candy+" × 25H candy "+(row.candyAfter?"after "+row.candyAfter+" individual train"+(row.candyAfter===1?"":"s"):"before training"):"";
  const patternText=row=>[row.matches.n69?"69 × "+row.matches.n69:"",row.matches.n420?"420 × "+row.matches.n420:""].filter(Boolean).join(" · ");
  // Shared route cache: current Energy affects affordability, not the
  // minimum-energy route or preservation decision.
@@ -140,11 +141,12 @@ const tornMeritGuide=(()=>{
    if(current.met)return {status:"met",rows:current.rows.map(r=>({...r,after:r.value,trains:0,energy:0})),result:current,trains:0,energy:0};
    if(live.reason){niceCache=null;return null;}
    const gyms=live.gyms??(live.gym?[live.gym]:[]);
-   const fingerprint=JSON.stringify([niceKey(live),stats,live.happy,gyms,live.multipliers]);
+   const fingerprint=JSON.stringify([niceKey(live),stats,live.happy,gyms,live.multipliers,live.candy?.limit??0]);
    if(niceCache?.fingerprint!==fingerprint){
      const report=niceOpportunities(awards,live);
      const plan=tornNiceMerit.solveAcrossGyms({stats,happy:live.happy,gyms,multipliers:live.multipliers,opportunityReport:report},tornStatPlanner.internal.oneTrain);
-     niceCache={fingerprint,plan:tornNiceMerit.preferRoute(plan,report,live.happy)};
+     const baseline=tornNiceMerit.preferRoute(plan,report,live.happy);
+     niceCache={fingerprint,plan:tornNiceMerit.closerCheckpoint({stats,happy:live.happy,gyms,multipliers:live.multipliers,candyLimit:live.candy?.limit??0},baseline,report,tornStatPlanner.internal.oneTrain)};
    }
    return niceCache.plan;
  }
@@ -155,7 +157,7 @@ const tornMeritGuide=(()=>{
    const stats=niceManual?.stats??live.stats,current=tornNiceMerit.inspect(stats);
    // Only value/availability changes invalidate visible results; a clock
    // countdown alone never reruns the solver. Exact form is separate.
-   const fingerprint=JSON.stringify([done,scope,stats,live.happy,live.energy,live.reason,live.gyms??live.gym,live.multipliers,live.cached,live.unlockListKnown,!!niceManual]);
+   const fingerprint=JSON.stringify([done,scope,stats,live.happy,live.energy,live.reason,live.gyms??live.gym,live.multipliers,live.cached,live.unlockListKnown,live.candy??null,!!niceManual]);
    return {awards,honor,done,live,stats,current,fingerprint};
  }
  function niceNotice(snapshot=niceSnapshot()){
@@ -174,11 +176,11 @@ const tornMeritGuide=(()=>{
      }
      spent+=r.energy;
      const affordable=Number.isFinite(live.energy)?spent<=live.energy:null;
-     const detail=niceLabel[r.stat]+" · "+r.gymName+" · "+r.trains+" train"+(r.trains===1?"":"s")+" · "+r.energy+" E · "+patternText(r)+" at "+niceNum(r.after)+(before?.matches.total>0?" · Upgrade: "+patternText(before)+" → "+patternText(r)+"; selected for the lower-Energy or higher-coverage route":"")+" · "+(affordable===true?"Within current Energy":affordable===false?"More Energy needed":"Energy unverified")+(spent>r.energy?" · Train earlier listed rows first":"")+(honor?.done===false?"":" · Honor status unverified")+(r.reference?" · Reference gym values":"")+" · Estimate; recheck each train.";
-     return [{stat,gym:r.gymName,trains:r.trains,detail,hold:false}];
+     const detail=niceLabel[r.stat]+" · "+r.gymName+" · "+r.trains+" train"+(r.trains===1?"":"s")+" · "+r.energy+" E · "+patternText(r)+" at "+niceNum(r.after)+(before?.matches.total>0?" · Upgrade: "+patternText(before)+" → "+patternText(r)+"; selected for the lower-Energy or higher-coverage route":"")+" · "+(affordable===true?"Within current Energy":affordable===false?"More Energy needed":"Energy unverified")+(spent>r.energy?" · Train earlier listed rows first":"")+(honor?.done===false?"":" · Honor status unverified")+(r.reference?" · Reference gym values":"")+(r.candy?" · "+candyText(r):"")+" · Estimate; recheck each train.";
+     return [{stat,gym:r.gymName,trains:r.trains,detail,hold:false,candy:r.candy??0,candyAfter:r.candyAfter??0}];
    });
    if(!rows.length)return null;
-   const tag="NICE "+current.total+"/5",detail=(plan.status==="met"?"Digit requirement met; hold matched stats.":(plan.status==="plan"?"Predicted completion":plan.status==="partial"?"Partial route":"Preserve existing matches")+" · "+plan.trains+" trains · "+plan.energy+" E · "+plan.result.total+" matches predicted.")+" Train in listed order and refresh after training.";
+   const tag="NICE "+current.total+"/5",detail=(plan.status==="met"?"Digit requirement met; hold matched stats.":(plan.status==="plan"?"Predicted completion":plan.status==="partial"?"Partial route":"Preserve existing matches")+" · "+plan.trains+" trains · "+plan.energy+" E · "+plan.result.total+" matches predicted.")+(plan.checkpoint?" Nearby checkpoint; recompute after each action.":"")+" Train individually in listed order and refresh after each train.";
    return {tag,detail,rows,ready:Number.isFinite(live.energy)&&plan.energy<=live.energy,met:plan.result.met,improved:plan.status==="plan"||plan.status==="partial",verified:honor?.done===false};
  }
  let niceRefreshing=false,niceRefreshMessage="",niceRefreshOwner=null;
@@ -275,18 +277,19 @@ const tornMeritGuide=(()=>{
    const results=plan?.rows??null;
    const table='<div class="crime-table-scroll"><table class="crime-table nice-merit-table"><thead><tr><th scope="col">Stat</th><th scope="col">Current</th><th scope="col">69 / 420 now</th><th scope="col">Gym</th><th scope="col">Trains</th><th scope="col">Energy</th><th scope="col">Predicted stop</th><th scope="col">69 / 420 at stop</th></tr></thead><tbody>'+current.rows.map((r,i)=>{
      const next=results?.[i],m=next?.matches??r.matches;
-     return '<tr><th scope="row">'+niceLabel[r.stat]+'</th><td>'+niceNum(r.value)+'</td><td>'+r.matches.n69+' / '+r.matches.n420+'</td><td>'+(next?.trains?safe(next.gymName)+(next.reference?' <small>(reference)</small>':""):next||current.met?r.matches.total?"HOLD":"No training":"–")+'</td><td>'+ (next?next.trains:current.met?0:"–")+'</td><td>'+(next?next.energy:current.met?0:"–")+'</td><td>'+(next?niceNum(next.after):current.met?niceNum(r.value):"–")+'</td><td>'+(next||current.met?m.n69+" / "+m.n420:"–")+'</td></tr>';
+     return '<tr><th scope="row">'+niceLabel[r.stat]+'</th><td>'+niceNum(r.value)+'</td><td>'+r.matches.n69+' / '+r.matches.n420+'</td><td>'+(next?.trains?safe(next.gymName)+(next.candy?' <small> · '+safe(candyText(next))+'</small>':"")+(next.reference?' <small>(reference)</small>':""):next||current.met?r.matches.total?"HOLD":"No training":"–")+'</td><td>'+ (next?next.trains:current.met?0:"–")+'</td><td>'+(next?next.energy:current.met?0:"–")+'</td><td>'+(next?niceNum(next.after):current.met?niceNum(r.value):"–")+'</td><td>'+(next||current.met?m.n69+" / "+m.n420:"–")+'</td></tr>';
    }).join("")+'</tbody></table></div>';
    let summary='<p><strong>Current: '+current.total+' / 5 occurrences</strong> · 69: '+current.n69+' · 420: '+current.n420+'</p>';
    if(current.met)summary+='<p><strong>Digit requirement met.</strong> Check Torn for the honor; the Guide cannot confirm the award without award data.</p>';
    else if(live.reason)summary+='<p class="fine-print">'+safe(live.reason)+'</p>';
    else if(plan?.status==="plan"||plan?.status==="partial"){
      const remaining=Number.isFinite(live.energy)?Math.max(0,plan.energy-live.energy):null;
-     summary+='<p><strong>'+(plan.status==="partial"?"Suggested partial route: ":"Suggested route: ")+plan.trains+' trains · '+plan.energy.toLocaleString("en-US")+' Energy</strong> · Predicted '+plan.result.total+' / 5 (69: '+plan.result.n69+', 420: '+plan.result.n420+')'+(plan.status==="partial"?" · More matches needed": " · Requirement met")+(plan.independent?" · Single-stat alternative":"")+'</p><p class="fine-print">'+(remaining===null?"Current Energy unknown.":remaining>0?"Needs "+remaining.toLocaleString("en-US")+" more Energy. Recalculate after each training session.":"Within current Energy.")+'</p>';
+     summary+='<p><strong>'+(plan.checkpoint?"Closer checkpoint: ":plan.status==="partial"?"Suggested partial route: ":"Suggested route: ")+plan.trains+' trains · '+plan.energy.toLocaleString("en-US")+' Energy</strong> · Predicted '+plan.result.total+' / 5 (69: '+plan.result.n69+', 420: '+plan.result.n420+')'+(plan.status==="partial"?" · More matches needed": " · Requirement met")+(plan.independent?" · Single-stat alternative":"")+(plan.checkpoint?" · Recompute from actual gains before continuing":"")+'</p><p class="fine-print">'+(remaining===null?"Current Energy unknown.":remaining>0?"Needs "+remaining.toLocaleString("en-US")+" more Energy. Recalculate after each individual train.":"Within current Energy.")+'</p>';
    }else if(plan?.status==="not-found")summary+='<p>No progress-making combined route found within '+plan.maxTrains+' total trains across the searched gyms. Existing stat matches are preserved. Refresh after training or when Happiness changes.</p>';
    else if(plan?.reason)summary+='<p class="fine-print">'+safe(plan.reason)+'</p>';
    const assumptions=plan?.gyms&&!live.reason?'<p class="fine-print">'+plan.gyms+' gym'+(plan.gyms===1?"":"s")+' checked · Happiness '+niceNum(live.happy)+(live.unlockListKnown===true?"":" · Unlocked list unavailable; active gym only")+(live.cached?" · Cached inputs":"")+(niceManual?" · Precise stat overrides":"")+'. Train in table order; estimates include Happiness loss. Search limited to '+plan.maxTrains+' trains, not exhaustive. Check actual gains and refresh after each train.</p>':"";
-   return rule+summary+table+assumptions;
+   const candyNote=!current.met&&!live.reason?'<p class="fine-print">'+(live.candy?'25H candy: '+live.candy.limit+' usable now ('+live.candy.held+' held; '+live.candy.cap+'h booster cap).':'25H candy search unavailable until fresh Candy inventory and booster cooldown are loaded.')+' Train one at a time and refresh after each action. Nearby search tests a candy batch before or after the first four trains, up to 16 trains; estimates assume no intervening regeneration/reset. Actual Happiness loss varies. Do not consume candy or bulk train blindly.</p>':"";
+   return rule+summary+table+assumptions+candyNote;
  }
  function niceExactForm(snapshot){
    const {stats,current,done}=snapshot;

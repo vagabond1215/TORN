@@ -656,6 +656,13 @@ const tornStatPlanner = (() => {
   }
   // Read-only live inputs for the digit-sensitive Nice honor planner.
   // Never hydrate or modify the calculator's theoretical settings.
+  function niceCandyBudget({happy,booster,stock,cap=24,secondsPerCandy=1800}){
+    if(!Number.isFinite(booster)||booster<0||!Number.isFinite(happy)||!Array.isArray(stock)||!Number.isFinite(cap)||cap<24||cap>48||!Number.isFinite(secondsPerCandy)||secondsPerCandy<675||secondsPerCandy>1800)return null;
+    const held=stock.filter(x=>x.happy===25&&Number.isSafeInteger(x.qty)&&x.qty>0).reduce((n,x)=>n+x.qty,0);
+    // Existing sequencer rule permits a final item at the threshold.
+    const allowance=booster>cap*3600?0:Math.floor((cap*3600-booster)/secondsPerCandy)+1;
+    return {limit:Math.min(257,held,allowance),held,cap,secondsPerCandy};
+  }
   function niceLiveInputs(now=Date.now()){
     const s=tornGuideApi.state;
     if(!tornGuideApi.isConnected()||s.identity?.id==null)return {reason:"Connect your Torn account to calculate a training route."};
@@ -678,7 +685,16 @@ const tornStatPlanner = (() => {
     const happy=inputs.happy?.current,energy=inputs.energy?.current;
     if(!Number.isFinite(happy)||happy<0||happy>99999)return {...out,reason:"Happiness unavailable or stale; refresh the Guide."};
     if(happy>inputs.happy.maximum&&Number.isFinite(inputs.happy.observedAt)&&inputs.happy.observedAt<Math.floor(now/900000)*900000&&!tornHappinessBook().active)return {...out,energy,reason:"Happiness reset may have occurred; refresh to verify before training."};
-    return {...out,...unlocked,gym,happy,energy:Number.isFinite(energy)?energy:null,multipliers:Object.fromEntries(statNames.map(stat=>[stat,effectsFor(stat,{live:true}).multiplier])),cached:["gym","perks"].some(k=>source(k).status==="cached")||out.statsCached,referenceGym:!!gym?.offline};
+    const stock=source("inventory:Candy").ready?calcCandyStock():null;
+    const raw=api("cooldowns"),cd=raw?.cooldowns??raw,capFields=[cd?.booster_max,cd?.max_booster,cd?.max_booster_maximum,cd?.max_booster_cooldown,cd?.booster_maximum];
+    const explicit=capFields.map(Number).find(x=>x>=86400&&x<=172800);
+    const cap=explicit?explicit/3600:candyCooldownAllowance().cap;
+    const lines=group=>Object.entries(perkData).filter(([k])=>group.test(k)).flatMap(([,v])=>Array.isArray(v)?v:[]).map(v=>typeof v==="string"?v:[v?.name,v?.effect,v?.description].filter(Boolean).join(" "));
+    const job=lines(/job|company/i),book=lines(/book/i);
+    const detect=(list,name,pct)=>list.some(t=>name.test(t)||new RegExp("\\b"+pct+"\\s*%","i").test(t)&&/consumable|candy/i.test(t)&&/cooldown/i.test(t)&&!/increase|longer|maximum|capacity/i.test(t));
+    const reduction=(detect(job,/professional metabolism/i,25)?0.75:detect(job,/fast metabolism/i,10)?0.9:1)*(detect(book,/self control is for losers/i,50)?0.5:1);
+    const candy=niceCandyBudget({happy,booster:inputs.booster,stock,cap,secondsPerCandy:Math.round(1800*reduction)});
+    return {...out,...unlocked,gym,happy,candy,energy:Number.isFinite(energy)?energy:null,multipliers:Object.fromEntries(statNames.map(stat=>[stat,effectsFor(stat,{live:true}).multiplier])),cached:["gym","perks"].some(k=>source(k).status==="cached")||out.statsCached,referenceGym:!!gym?.offline};
   }
   return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,replayTrainingSession,niceLiveInputs,
     simulate:()=>{
@@ -688,5 +704,5 @@ const tornStatPlanner = (() => {
         jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump,{},context)
       };
     },
-    state,internal:{oneTrain,trainBlock,percentage,gainPerks,niceUnlockedGyms}};
+    state,internal:{oneTrain,trainBlock,percentage,gainPerks,niceUnlockedGyms,niceCandyBudget}};
 })();

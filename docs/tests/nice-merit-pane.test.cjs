@@ -72,3 +72,14 @@ console.log("Nice header: energy, regeneration, over-cap reset, elapsed reset, b
  assert.equal(clocked.niceSnapshot(1001).fingerprint,afterTick.fingerprint);
  assert.ok(read("right-rail.js").includes("function tickNice(snapshot)")&&read("merit-guide.js").includes("tornRightRail.tickNice(snapshot)"));
  console.log("Nice regeneration tick: changed Happiness invalidates route once; table and rail share the same snapshot and cache.");
+
+ data.honors.honors=[];
+ const candyLive={...live,stats:{strength:60,defense:420,speed:69,dexterity:69},happy:100,energy:5,candy:{limit:3,held:3,cap:24},gym:{...live.gym,defense:0,speed:0,dexterity:0}};
+ const candyPane=new Function("payload","safe","tornStatPlanner",read("nice-merit-planner.js")+"\n"+read("merit-guide.js")+"\nreturn tornMeritGuide;")(payload,safe,{niceLiveInputs:()=>candyLive,internal:{oneTrain:(s,h)=>h>=125?9:1}});
+ const candyHTML=candyPane.render(),candyNotice=candyPane.niceNotice();
+ assert.ok(candyHTML.includes("Closer checkpoint: 1 trains")&&candyHTML.includes("1 × 25H candy before training"));
+ assert.ok(candyNotice.rows.some(r=>r.stat==="STR"&&r.candy===1&&r.trains===1));
+ assert.ok(candyNotice.rows.some(r=>r.stat==="DEF"&&r.hold));
+ candyLive.candy={limit:0,held:3,cap:24};
+ assert.ok(!candyPane.niceNotice().rows.some(r=>r.candy>0));
+ console.log("Nice pane and rail notice share candy timing and recalculate on allowance changes.");

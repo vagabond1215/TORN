@@ -245,5 +245,62 @@ const tornNiceMerit=(()=>{
     }
     return best===unchanged?plan:best;
   }
-  return Object.freeze({order,limit,count,inspect,solve,solveAcrossGyms,opportunities,preferRoute,usefulEndpoint});
+  // A nearby checkpoint is one coherent stat/gym route, with one
+  // optional 25H candy batch before or between individual trains.
+  // The full combined route remains the fallback. Bounded to 16
+  // trains, candy before or after the first four trains, all legal
+  // quantities. No time, regeneration, Energy or inventory invented.
+  function closerCheckpoint(input,plan,report,gain){
+    const {stats,happy,gyms,multipliers,candyLimit=0}=input,current=inspect(stats);
+    if(!current||current.met||!valid(happy)||!Array.isArray(gyms)||!plan?.result||!plan.rows||!Number.isSafeInteger(candyLimit)||candyLimit<0||candyLimit>257)return plan;
+    const first=plan.rows.find(r=>r.trains>0),ceiling=first?.energy??Infinity;
+    const maxTrains=Math.min(16,input.maxTrains??limit),limits=swapLimits(report);
+    const zero=current.rows.map(r=>({...r,after:r.value,trains:0,energy:0,gymId:null,gymName:null}));
+    const types=r=>Number(r.n69>0)+Number(r.n420>0);
+    const compare=(a,b)=>Number(b.result.met)-Number(a.result.met)||a.energy-b.energy||Math.min(5,b.result.total)-Math.min(5,a.result.total)||types(b.result)-types(a.result)||a.candy-b.candy||a.trains-b.trains||a.candyAfter-b.candyAfter;
+    let best=null;
+    const consider=(stat,gym,value,n,energy,candy,afterTrains,finalHappy)=>{
+      const i=order.indexOf(stat),before=zero[i].matches,matches=count(value);
+      if(!matches||!eligibleEndpoint(before,matches,current,stat,energy,limits))return;
+      const n69=current.n69-before.n69+matches.n69,n420=current.n420-before.n420+matches.n420,total=n69+n420,met=total>=5&&n69>0&&n420>0;
+      if(!met&&total<=current.total&&!(current.n69===0&&n69>0)&&!(current.n420===0&&n420>0))return;
+      if(current.n69&&!n69||current.n420&&!n420)return;
+      if(!(energy<ceiling||met&&(!plan.result.met||energy<plan.energy)))return;
+      const score={result:{n69,n420,total,met},energy,candy,trains:n,candyAfter:afterTrains};
+      if(best&&compare(score,best)>=0)return;
+      const row={...zero[i],after:value,trains:n,energy,matches,gymId:String(gym.id??gym.name),gymName:String(gym.name??gym.id),reference:!!gym.offline,active:!!gym.active,candy,candyAfter:afterTrains};
+      best={...score,status:met?"plan":"partial",rows:zero.map((r,j)=>i===j?row:r),result:inspect({...stats,[stat]:value}),finalHappy,checkpoint:true,gyms:gyms.length,maxTrains};
+    };
+    // No extra long scan for the zero-candy alternatives.
+    for(const hit of report?.rows??[]){
+      const gym=gyms.find(g=>String(g.id??g.name)===hit.gymId);
+      if(gym&&hit.trains<=maxTrains)consider(hit.stat,gym,hit.after,hit.trains,hit.energy,0,0,Math.max(0,happy-hit.energy*.5));
+    }
+    if(candyLimit>0){
+      for(const stat of order)for(const gym of gyms){
+        const cost=gym?.energy,dots=gym?.[stat],m=multipliers?.[stat];
+        if(!Number.isSafeInteger(cost)||cost<1||cost>1000||!valid(dots)||dots<=0||!valid(m)||m<=0)continue;
+        const bound=Math.min(maxTrains,Number.isFinite(ceiling)?Math.floor(ceiling/cost):maxTrains);
+        let prefixValue=stats[stat],prefixHappy=happy;
+        for(let prefix=0;prefix<=Math.min(4,bound-1);prefix++){
+          for(let candy=1;candy<=candyLimit;candy++){
+            let h=Math.min(99999,prefixHappy+candy*25),value=prefixValue;
+            if(h===prefixHappy)break;
+            for(let n=prefix+1;n<=bound;n++){
+              const delta=gain(value,h,dots,cost,m,stat),after=value+delta;
+              if(!valid(delta)||delta<=0||!valid(after)||after<=value)break;
+              value=after;h=Math.max(0,h-cost*.5);
+              consider(stat,gym,value,n,n*cost,candy,prefix,h);
+            }
+            if(prefixHappy+candy*25>=99999)break;
+          }
+          const delta=gain(prefixValue,prefixHappy,dots,cost,m,stat),next=prefixValue+delta;
+          if(!valid(delta)||delta<=0||!valid(next)||next<=prefixValue)break;
+          prefixValue=next;prefixHappy=Math.max(0,prefixHappy-cost*.5);
+        }
+      }
+    }
+    return best?{...best,fullRouteEnergy:plan.energy,fullRouteComplete:plan.result.met}:plan;
+  }
+  return Object.freeze({order,limit,count,inspect,solve,solveAcrossGyms,opportunities,preferRoute,usefulEndpoint,closerCheckpoint});
 })();

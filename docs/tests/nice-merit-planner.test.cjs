@@ -202,3 +202,23 @@ console.log("Nice unlocked gym availability, individual independent stat hits, a
  const baseline={status:"not-found",rows:report.current.rows.map(r=>({...r,after:r.value,trains:0,energy:0})),result:report.current,energy:0,trains:0,maxTrains:10};
  assert.equal(nice.preferRoute(baseline,fakeReport,1000).rows[0].trains,0);
  console.log("Nice swap guard: preserve existing pattern when another stat supplies the missing type for less Energy.");
+
+ // A 25H adjustment can reach a nearby digit with fewer trains.
+ const candyGym={id:99,name:"Candy fixture",energy:5,...stats(1,0,0,0)};
+ const candyInput={stats:stats(60,420,69,69),happy:100,gyms:[candyGym],multipliers,maxTrains:16,candyLimit:3};
+ const candyGain=(s,h)=>h>=125?9:1;
+ const normalReport=nice.opportunities(candyInput,candyGain),normal=nice.preferRoute(nice.solveAcrossGyms(candyInput,candyGain),normalReport,100);
+ const close=nice.closerCheckpoint(candyInput,normal,normalReport,candyGain);
+ assert.equal(close.trains,1);assert.equal(close.candy,1);assert.equal(close.candyAfter,0);assert.equal(close.rows[0].after,69);
+ assert.equal(nice.closerCheckpoint({...candyInput,candyLimit:0},normal,normalReport,candyGain).candy??0,0);
+ // Boosting before the first train changes that train's gain and cannot
+ // reach the same endpoint as boosting after the first individual train.
+ const betweenGain=(s,h)=>s===60?(h>=125?12:1):s===61&&h===122.5?8:1;
+ const betweenReport=nice.opportunities(candyInput,betweenGain),betweenBase=nice.preferRoute(nice.solveAcrossGyms(candyInput,betweenGain),betweenReport,100);
+ const between=nice.closerCheckpoint(candyInput,betweenBase,betweenReport,betweenGain);
+ assert.equal(between.trains,2);assert.equal(between.candy,1);assert.equal(between.candyAfter,1);assert.equal(between.rows[0].after,69);
+ assert.equal(train.niceCandyBudget({happy:100,booster:24*3600,stock:[{happy:25,qty:5}],cap:24}).limit,1);
+ assert.equal(train.niceCandyBudget({happy:100,booster:24*3600+1,stock:[{happy:25,qty:5}],cap:24}).limit,0);
+ assert.equal(train.niceCandyBudget({happy:100,booster:0,stock:[{happy:25,qty:2},{happy:50,qty:20}],cap:48}).limit,2);
+ assert.equal(train.niceCandyBudget({happy:100,booster:null,stock:[],cap:24}),null);
+ console.log("Nice nearby checkpoint: candy before/between individual trains, exact gain replay and inventory/cooldown allowance passed.");
