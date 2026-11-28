@@ -81,11 +81,45 @@ const tornMeritGuide=(()=>{
      const panel=root.querySelector(".affronted-answer");panel.hidden=!next;panel.innerHTML=affrontedAnswer(next);
    });
  }
- let filter="all",query="",niceManual=null,niceCache=null;
+ let filter="all",query="",niceManual=null,niceCache=null,opportunityCache=null;
  const niceLabel={strength:"Strength",defense:"Defense",speed:"Speed",dexterity:"Dexterity"};
  const niceNum=v=>Number.isFinite(v)?Math.floor(v).toLocaleString("en-US"):"Unavailable";
  const niceExact=v=>Number.isFinite(v)?String(v):"";
  const niceKey=live=>JSON.stringify([live.owner,live.stamp,live.stats]);
+ // Shared by the main pane and rail; cheap cached scan, no API calls.
+ function niceOpportunities(awards=model(),live=tornStatPlanner.niceLiveInputs()){
+   const honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice"),done=honor?.done??null,scope=niceKey(live);
+   if(done===true){opportunityCache=null;return {done,status:"earned",rows:[]};}
+   if(niceManual?.scope!==scope)niceManual=null;
+   const stats=niceManual?.stats??live.stats,current=tornNiceMerit.inspect(stats);
+   if(!current||live.reason){opportunityCache=null;return {done,status:"unavailable",rows:[],reason:live.reason??"Battle stats unavailable."};}
+   const gyms=live.gyms??(live.gym?[live.gym]:[]);
+   const fingerprint=JSON.stringify([scope,stats,live.happy,live.energy,gyms,live.multipliers]);
+   if(opportunityCache?.fingerprint!==fingerprint)opportunityCache={fingerprint,result:tornNiceMerit.opportunities({stats,happy:live.happy,gyms,multipliers:live.multipliers,energy:live.energy},tornStatPlanner.internal.oneTrain)};
+   return {...opportunityCache.result,done,unlockListKnown:live.unlockListKnown===true,unavailable:live.unavailable??0,unresolved:live.unresolved??0,energy:live.energy,manual:!!niceManual,cached:!!live.cached};
+ }
+ const patternText=row=>[row.matches.n69?"69 × "+row.matches.n69:"",row.matches.n420?"420 × "+row.matches.n420:""].filter(Boolean).join(" · ");
+ function niceNotice(){
+   const report=niceOpportunities();
+   if(report.done===true||report.status!=="ready"||!report.rows.length)return null;
+   // Prefer immediate progress; otherwise any immediate digit hit, then
+   // the nearest future opportunity. Avoid calling preserved digits new.
+   const rows=report.rows,now=rows.filter(r=>r.affordable===true);
+   const pool=now.length?now:rows,nearest=[...pool].sort((a,b)=>a.energy-b.energy||a.trains-b.trains||Number(b.improved)-Number(a.improved))[0];
+   const preferred=pool.find(r=>r.met)||pool.find(r=>r.improved)||nearest;
+   const tag=now.length?"Nice · "+preferred.trains+" train"+(preferred.trains===1?"":"s"):"Nice · predicted";
+   const detail=niceLabel[preferred.stat]+" · "+preferred.gymName+" · "+preferred.trains+" train"+(preferred.trains===1?"":"s")+" · "+preferred.energy+" E · "+patternText(preferred)+" at "+niceNum(preferred.after);
+   return {tag,detail,ready:preferred.affordable===true,met:preferred.met,improved:preferred.improved,verified:report.done===false,reference:preferred.reference};
+ }
+ function opportunityPanel(report){
+   const header='<h3>Individual stat opportunities in unlocked gyms</h3>';
+   if(report.status!=="ready")return header+'<p class="fine-print">'+safe(report.reason??"Unlocked gym data unavailable.")+'</p>';
+   const coverage=report.unlockListKnown?report.gyms+" available unlocked gym"+(report.gyms===1?"":"s")+" checked.":"Unlocked gym list unavailable; only reported active gym checked.";
+   const notes='<p class="fine-print">'+safe(coverage)+' '+report.checked+' stat/gym combinations · up to '+report.maxTrains+' trains each. '+(report.unavailable?report.unavailable+' unavailable gyms skipped. ':"")+(report.unresolved?report.unresolved+' reported gyms not identified. ':"")+'Each row starts independently at current Happiness and stat values. Nearest hit per pattern plus nearest progress-making hit if different. These are alternatives, not a combined plan. '+(report.manual?"Using temporary precise stat overrides. ":"")+(report.cached?"Cached API inputs. ":"")+'Recheck actual gains after each train.</p>';
+   if(!report.rows.length)return header+notes+'<p>No predicted 69 or 420 hits in the searched gyms.</p>';
+   const rows=report.rows.map(r=>'<tr><th scope="row">'+niceLabel[r.stat]+'</th><td>'+safe(r.gymName)+(r.active?' <small>(active)</small>':"")+(r.reference?' <small>(reference)</small>':"")+'</td><td>'+r.trains+'</td><td>'+r.energy+'</td><td>'+niceNum(r.after)+'</td><td>'+safe(patternText(r))+'</td><td>'+r.total+' / 5'+(r.met?" · Requirement met":r.improved?" · Progress":" · Existing/no net progress")+'</td><td>'+(r.affordable===true?"Available now":r.affordable===false?"More Energy":"Energy unknown")+'</td></tr>').join("");
+   return header+notes+'<div class="crime-table-scroll"><table class="crime-table nice-opportunity-table"><thead><tr><th>Stat</th><th>Gym</th><th>Trains</th><th>Energy</th><th>Predicted stop</th><th>Digits</th><th>Projected total</th><th>Energy status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+ }
  function nicePanel(awards){
    const honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice"),done=honor?.done??null;
    const head='<section class="panel"><div class="panel-heading"><h2>Nice honor planner</h2><small>'+ (done===true?"Earned":done===false?"Not earned":"Award status unverified")+'</small></div><div class="panel-content nice-merit">';
@@ -98,7 +132,7 @@ const tornMeritGuide=(()=>{
    if(!current){niceCache=null;return head+rule+'<p class="fine-print">'+safe(live.reason??"Battle stats unavailable.")+'</p>'+tail;}
    let plan=null;
    if(current.met)plan={status:"met"};
-   else if(!live.reason){
+   else if(!live.reason&&live.gym){
      const fingerprint=JSON.stringify([scope,stats,live.happy,live.gym,live.multipliers]);
      if(niceCache?.fingerprint!==fingerprint)niceCache={fingerprint,plan:tornNiceMerit.solve({stats,happy:live.happy,gym:live.gym,multipliers:live.multipliers},tornStatPlanner.internal.oneTrain)};
      plan=niceCache.plan;
@@ -114,11 +148,12 @@ const tornMeritGuide=(()=>{
    else if(plan?.status==="plan"){
      const remaining=live.energy===null?null:Math.max(0,plan.energy-live.energy);
      summary+='<p><strong>Suggested route: '+plan.trains+' trains · '+plan.energy.toLocaleString("en-US")+' Energy</strong> · Predicted '+plan.result.total+' occurrences (69: '+plan.result.n69+', 420: '+plan.result.n420+').</p><p class="fine-print">'+(remaining===null?"Current Energy unknown.":remaining>0?"Needs "+remaining.toLocaleString("en-US")+" more Energy than currently available. This is not a multi-session schedule.":"Within current Energy.")+'</p>';
-   }else if(plan?.status==="not-found")summary+='<p>No qualifying route found within '+plan.maxTrains+' trains ('+plan.energyLimit.toLocaleString("en-US")+' Energy) in the current gym and displayed order. This is not proof that the merit is unreachable. Consider another unlocked gym, different Happiness, or refresh after regular training.</p>';
+   }else if(!live.gym)summary+='<p class="fine-print">Active gym not identified; see unlocked-gym alternatives below.</p>';
+   else if(plan?.status==="not-found")summary+='<p>No qualifying route found within '+plan.maxTrains+' trains ('+plan.energyLimit.toLocaleString("en-US")+' Energy) in the current gym and displayed order. This is not proof that the merit is unreachable. Consider another unlocked gym, different Happiness, or refresh after regular training.</p>';
    else if(plan?.reason)summary+='<p class="fine-print">'+safe(plan.reason)+'</p>';
    const assumptions=live.gym&&!live.reason?'<p class="fine-print">Gym: '+safe(live.gym.name)+' · '+live.gym.energy+' E/train · Starting Happiness '+niceNum(live.happy)+(live.referenceGym?" · Reference gym values":"")+(live.cached?" · Cached API inputs":"")+'. Train in the displayed order; no time passes in this model. Check the actual stat after each train and refresh before continuing. The shared gain formula is approximate; RNG, rounding, Happiness resets and bonus changes can miss the target.</p>':"";
    const exact='<details class="nice-merit-exact" data-collapse-key="nice-exact-values"><summary>Use precise values from your training log</summary><p class="fine-print">Optional: enter the exact decimals for all four current stats. Overrides are temporary and reset when the API stat snapshot changes.</p><form data-nice-exact class="stock-controls">'+tornNiceMerit.order.map(stat=>'<label>'+niceLabel[stat]+'<input name="'+stat+'" type="number" min="0" max="9007199254740990" step="any" required value="'+safe(niceExact(stats[stat]))+'"></label>').join("")+'<button type="submit" class="button secondary">Recalculate</button><button type="button" class="button secondary" data-nice-reset>Use API values</button></form></details>';
-   return head+rule+summary+table+assumptions+exact+tail;
+   return head+rule+summary+table+assumptions+opportunityPanel(niceOpportunities(awards,live))+exact+tail;
  }
 
  function render(){
@@ -140,9 +175,9 @@ const tornMeritGuide=(()=>{
      if(values.some(([,v])=>typeof v!=="string"||!v.trim()))return;
      const stats=Object.fromEntries(values.map(([s,v])=>[s,Number(v)]));
      if(!tornNiceMerit.inspect(stats))return;
-     niceManual={scope:niceKey(live),stats};niceCache=null;view.innerHTML=render();
+     niceManual={scope:niceKey(live),stats};niceCache=null;view.innerHTML=render();if(typeof tornRightRail!=="undefined")tornRightRail.render();
    });
-   view.addEventListener("click",e=>{if(location.hash==="#merits"&&e.target.closest("[data-nice-reset]")){niceManual=null;niceCache=null;view.innerHTML=render();}});
+   view.addEventListener("click",e=>{if(location.hash==="#merits"&&e.target.closest("[data-nice-reset]")){niceManual=null;niceCache=null;view.innerHTML=render();if(typeof tornRightRail!=="undefined")tornRightRail.render();}});
    view.addEventListener("change",e=>{if(location.hash!=="#merits")return;if(e.target.matches("[data-award-filter]"))filter=e.target.value;else if(e.target.matches("[data-award-search]"))query=e.target.value;else return;view.innerHTML=render();});}
- return {render,wire,recommendations,model,affrontedDetails,wireAffronted};
+ return {render,wire,recommendations,model,affrontedDetails,wireAffronted,niceOpportunities,niceNotice};
 })();

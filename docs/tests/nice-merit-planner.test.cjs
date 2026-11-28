@@ -45,3 +45,19 @@ for(const values of [stats(42068,68,69,68),stats(420690,69000,6969,420),stats(69
  }
 }
 console.log("Nice honor integer patterns, both types, per-stat boundary, minimum bounded trains, restricted gym, shared Happiness and gain replay passed.");
+
+const unlocked=train.niceUnlockedGyms([
+ {id:1,name:"A",energy:5},{id:2,name:"B",energy:10},{id:3,name:"C",energy:25},{id:4,name:"D",energy:10}
+],{gym:{active_gym:{id:1},unlocked_gyms:[{id:1,available:true},{id:2,available:true},{id:3,available:false},{id:999,available:true}]}},{id:1,name:"A",energy:5});
+assert.deepEqual(unlocked.gyms.map(g=>g.id),[1,2]);assert.equal(unlocked.unavailable,1);assert.equal(unlocked.unresolved,1);
+assert.equal(train.niceUnlockedGyms([{id:1,name:"A"},{id:2,name:"B"}],{gym:{active_gym:1}},{id:1,name:"A"}).unlockListKnown,false);
+const multi=nice.opportunities({stats:stats(68,419,69,0),happy:100,energy:5,gyms:[{id:1,...gym},{id:2,...gym,name:"second",energy:10,strength:0}],multipliers,maxTrains:3},gain);
+assert.equal(multi.checked,7);
+assert.ok(multi.rows.some(r=>r.stat==="strength"&&r.pattern==="69"&&r.trains===1&&r.affordable));
+assert.ok(multi.rows.some(r=>r.stat==="defense"&&r.pattern==="420"&&r.gymId==="2"&&r.trains===1&&!r.affordable));
+assert.ok(!multi.rows.some(r=>r.stat==="strength"&&r.gymId==="2"));
+assert.ok(!multi.rows.some(r=>r.stat==="speed"&&r.trains===0));
+const preserved=nice.opportunities({stats:stats(6900,1,1,1),happy:100,energy:0,gyms:[{id:1,...gym}],multipliers,maxTrains:1},gain);
+assert.ok(preserved.rows.some(r=>r.stat==="strength"&&!r.improved&&r.affordable===false));
+assert.equal(nice.opportunities({stats:base,happy:null,gyms:[gym],multipliers},gain).status,"unavailable");
+console.log("Nice unlocked gym availability, individual independent stat hits, affordability, existing-match distinction and stale input guard passed.");

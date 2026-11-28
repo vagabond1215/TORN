@@ -630,6 +630,30 @@ const tornStatPlanner = (() => {
       if(action&&action.dataset.tcAction==="restore"){hydrateFromApi(true);view.innerHTML=render();}
     });
   }
+  // The Nov 2026 v2 gym selection reports unlocked gyms and their
+  // current availability. Do not infer earlier memberships from rank.
+  function niceUnlockedGyms(all,raw,active){
+    const info=raw?.gym??raw;
+    const list=info?.unlocked_gyms??raw?.unlocked_gyms??info?.available_gyms??raw?.available_gyms;
+    const entries=Array.isArray(list)?list:null,selected=[],seen=new Set();
+    const add=g=>{
+      if(!g||seen.has(String(g.id)))return;
+      seen.add(String(g.id));selected.push({...g,active:String(g.id)===String(active?.id)});
+    };
+    const match=x=>{
+      const id=typeof x==="object"&&x!==null?x.id??x.gym_id:x,name=typeof x==="object"&&x!==null?x.name:x;
+      return all.find(g=>id!=null&&String(g.id)===String(id))??all.find(g=>name!=null&&gymKey(g.name)===gymKey(name));
+    };
+    add(active);
+    let unavailable=0,unresolved=0;
+    for(const entry of entries??[]){
+      const g=match(entry);
+      if(entry&&typeof entry==="object"&&(entry.available===false||entry.unlocked===false)){unavailable++;continue;}
+      if(!g){unresolved++;continue;}
+      add(g);
+    }
+    return {gyms:selected,unlockListKnown:entries!==null,unavailable,unresolved};
+  }
   // Read-only live inputs for the digit-sensitive Nice honor planner.
   // Never hydrate or modify the calculator's theoretical settings.
   function niceLiveInputs(now=Date.now()){
@@ -647,14 +671,15 @@ const tornStatPlanner = (() => {
     if(!source("gym").ready||!source("perks").ready)return {...out,reason:"Active gym or training perks unavailable or stale; refresh the Guide."};
     const perks=api("perks"),perkData=perks?.perks??perks;
     if(!perkData||!Object.values(perkData).some(Array.isArray))return {...out,reason:"Training perk response incomplete; refresh the Guide."};
-    const gym=source("gymCatalog").ready?activeGym():activeGym(fallback);
-    if(!gym)return {...out,reason:"Active gym could not be identified."};
+    const all=source("gymCatalog").ready?gyms():fallback,gym=activeGym(all);
+    const unlocked=niceUnlockedGyms(all,api("gym"),gym);
+    if(!unlocked.gyms.length)return {...out,reason:"No available unlocked gym could be identified."};
     const inputs=tornTrainSequence.liveInputs(s,now,tornBarProjection);
     const happy=inputs.happy?.current,energy=inputs.energy?.current;
     if(!Number.isFinite(happy)||happy<0||happy>99999)return {...out,reason:"Happiness unavailable or stale; refresh the Guide."};
-    return {...out,gym,happy,energy:Number.isFinite(energy)?energy:null,multipliers:Object.fromEntries(statNames.map(stat=>[stat,effectsFor(stat,{live:true}).multiplier])),cached:["gym","perks"].some(k=>source(k).status==="cached")||out.statsCached,referenceGym:!!gym.offline};
+    return {...out,...unlocked,gym,happy,energy:Number.isFinite(energy)?energy:null,multipliers:Object.fromEntries(statNames.map(stat=>[stat,effectsFor(stat,{live:true}).multiplier])),cached:["gym","perks"].some(k=>source(k).status==="cached")||out.statsCached,referenceGym:!!gym?.offline};
   }
   return {render,wire,syncLiveBars,homeTrainingAdvice,homeCandyAdvice,replayTrainingSession,niceLiveInputs,
     simulate:()=>({natural:tornTrainSequence.simulate(tornTrainSequence.steps.natural),jump:tornTrainSequence.simulate(tornTrainSequence.steps.jump)}),
-    state,internal:{oneTrain,trainBlock,percentage,gainPerks}};
+    state,internal:{oneTrain,trainBlock,percentage,gainPerks,niceUnlockedGyms}};
 })();

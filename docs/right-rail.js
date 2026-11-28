@@ -86,9 +86,11 @@ const tornRightRail=(()=>{
       '<span id="rail-refresh-status" class="sr-only" role="status">'+safe(refreshStatus)+'</span></div></section>';
   }
   function merits(){
-    const rows=tornMeritGuide.recommendations();
+    const rows=tornMeritGuide.recommendations(),notice=tornMeritGuide.niceNotice();
+    const alert=notice?'<div class="rail-nice-notice"><strong>'+safe(notice.met?"Nice requirement predicted":notice.improved?"Nice training opportunity":"Nice digit match predicted")+'</strong><small>'+safe(notice.detail)+'</small><small>'+safe((notice.ready?"Within current Energy. ":"More Energy or Energy unverified. ")+(notice.verified?"":"Honor status unverified. ")+(notice.reference?"Reference gym values. ":"")+"Estimate only; check after each train.")+'</small><a href="#merits">See all gym options</a></div>':"";
+    const badge=notice?'<span class="rail-nice-badge" title="'+safe(notice.detail)+'" aria-label="'+safe(notice.detail)+'">'+safe(notice.tag)+'</span>':"";
     const body=rows.length?'<ul class="rail-merit-list">'+rows.map(x=>'<li><div class="rail-merit-row"><div><strong>'+safe(x.name)+'</strong><small>'+safe(x.detail)+' · '+safe(x.effort)+'</small></div>'+(x.link?'<a href="'+safe(x.link)+'" aria-label="View '+safe(x.name)+'">View</a>':"")+'</div>'+tornMeritGuide.affrontedDetails(x.name,"rail")+'</li>').join("")+'</ul>':'<p class="rail-snapshot-note">No confirmed unearned recommendations loaded. Open Merits or use the main Refresh button.</p>';
-    return '<section class="panel rail-merits"><div class="panel-heading"><h2>Merits</h2><a href="#merits">View all</a></div><div class="panel-content">'+body+'</div></section>';
+    return '<section class="panel rail-merits"><div class="panel-heading"><h2>Merits</h2>'+badge+'<a href="#merits">View all</a></div><div class="panel-content">'+alert+body+'</div></section>';
   }
   // The documented v2 user/property upkeep object contains daily property
   // and staff charges, not accumulated debt. Never substitute one for the other.

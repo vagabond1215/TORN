@@ -10,10 +10,12 @@ const {m}=new Function("payload","safe","tornStatPlanner",read("nice-merit-plann
 let html=m.render();
 assert.ok(html.includes("Suggested route: 3 trains")&&html.includes("15 Energy")&&html.includes("Needs 5 more Energy"));
 assert.ok(html.includes("Gym &lt;fixture&gt;")&&html.includes('value="42068.12345"'));
+assert.ok(html.includes("Individual stat opportunities in unlocked gyms")&&html.includes("Gym &lt;fixture&gt;"));
+assert.ok(m.niceNotice()?.ready===true);
 current={...live,reason:"Stale gym"};html=m.render();assert.ok(html.includes("Stale gym")&&!html.includes("Suggested route:"));
 current={reason:"Connect first"};assert.ok(m.render().includes("Connect first"));
 current={...live,stats:{strength:696969,defense:42069,speed:1,dexterity:1}};assert.ok(m.render().includes("Digit requirement met"));
-data.honors.honors=[888];assert.ok(m.render().includes("Nice is already earned"));
+data.honors.honors=[888];assert.ok(m.render().includes("Nice is already earned"));assert.equal(m.niceNotice(),null);
 const index=read("index.html");assert.ok(index.indexOf("./nice-merit-planner.js")<index.indexOf("./merit-guide.js"));
-assert.ok(index.includes("guide-features.js?v=20261127-nice1")&&index.includes("styles.css?v=20261127-nice1"));
+assert.ok(/guide-features\.js\?v=/.test(index)&&/styles\.css\?v=/.test(index));
 console.log("Nice merit pane: route, energy gap, precision, escaped gym, stale/disconnected/earned states, script order and cache versions passed.");

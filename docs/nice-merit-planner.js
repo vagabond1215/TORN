@@ -62,5 +62,47 @@ const tornNiceMerit=(()=>{
     const result=inspect(Object.fromEntries(best.rows.map(r=>[r.stat,r.after])));
     return {status:"plan",rows:best.rows,trains:best.used,energy:best.used*cost,result,maxTrains,finalHappy:Math.max(0,happy-best.used*cost*0.5)};
   }
-  return Object.freeze({order,limit,count,inspect,solve});
+  // Each route starts independently from the same live stat and Happiness.
+  // Retain the nearest hit for each pattern and the nearest net improvement
+  // separately; a preserved existing match is not new merit progress.
+  function opportunities({stats,happy,gyms,multipliers,maxTrains=limit,energy=null},gain){
+    const current=inspect(stats);
+    if(!current||!valid(happy)||happy>99999||!Array.isArray(gyms)||typeof gain!=="function"||!Number.isSafeInteger(maxTrains)||maxTrains<1||maxTrains>limit||order.some(s=>!valid(multipliers?.[s])))return {status:"unavailable",rows:[],checked:0};
+    const rows=[],seen=new Set();let checked=0;
+    for(const gym of gyms){
+      const id=String(gym?.id??gym?.name??""),cost=gym?.energy;
+      if(!id||seen.has(id)||!Number.isSafeInteger(cost)||cost<1||cost>1000)continue;
+      seen.add(id);
+      for(const stat of order){
+        if(!valid(gym[stat])||gym[stat]<=0||multipliers[stat]<=0)continue;
+        checked++;
+        const before=count(stats[stat]),hits=new Map(),improvements=new Map();
+        let value=stats[stat],h=happy;
+        for(let n=1;n<=maxTrains;n++){
+          const delta=gain(value,h,gym[stat],cost,multipliers[stat],stat),after=value+delta;
+          if(!valid(delta)||delta<=0||!valid(after)||after<=value)break;
+          value=after;h=Math.max(0,h-cost*.5);
+          const matches=count(value);
+          const n69=current.n69-before.n69+matches.n69,n420=current.n420-before.n420+matches.n420,total=n69+n420;
+          const met=total>=5&&n69>0&&n420>0;
+          const improved=total>current.total||(current.n69===0&&n69>0)||(current.n420===0&&n420>0);
+          const row={stat,gymId:id,gymName:String(gym.name??id),reference:!!gym.offline,trains:n,energy:n*cost,after:value,matches,n69,n420,total,met,improved,affordable:valid(energy)?n*cost<=energy:null,active:!!gym.active};
+          for(const [pattern,field] of [["69","n69"],["420","n420"]]){
+            if(!matches[field])continue;
+            if(!hits.has(pattern))hits.set(pattern,{...row,pattern});
+            if(improved&&!improvements.has(pattern))improvements.set(pattern,{...row,pattern});
+          }
+          if(hits.size===2&&improvements.size===2)break;
+        }
+        for(const [pattern,hit] of hits){
+          rows.push(hit);
+          const improved=improvements.get(pattern);
+          if(improved&&improved.trains!==hit.trains)rows.push(improved);
+        }
+      }
+    }
+    rows.sort((a,b)=>Number(b.met)-Number(a.met)||Number(b.improved)-Number(a.improved)||a.energy-b.energy||a.trains-b.trains||order.indexOf(a.stat)-order.indexOf(b.stat)||a.gymName.localeCompare(b.gymName)||a.pattern.localeCompare(b.pattern));
+    return {status:"ready",rows,checked,gyms:seen.size,maxTrains,current};
+  }
+  return Object.freeze({order,limit,count,inspect,solve,opportunities});
 })();

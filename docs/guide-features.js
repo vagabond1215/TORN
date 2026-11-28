@@ -600,7 +600,7 @@ const tornGuideApi=(()=>{
   async function batch(route,force=false,category=null,includeStatus=false,includeMerits=false){
     if(!secret)throw Error("Connect Torn API first.");
     const currentEpoch=epoch,currentKey=secret;
-    const names=[...new Set([...(ROUTES[route]||ROUTES.home),...(includeStatus?ROUTES.quickStatus:[]),...(includeMerits?["honors","honorCatalog"]:[])])].filter(name=>stale(name,force));
+    const names=[...new Set([...(ROUTES[route]||ROUTES.home),...(includeStatus?ROUTES.quickStatus:[]),...(includeMerits?["honors","honorCatalog","battlestats","bars","gym","perks","gymCatalog"]:[])])].filter(name=>stale(name,force));
     const cats=route==="inventory"
       ?(category?[category]:Object.keys(state.inventory).filter(c=>inventoryTypes.includes(c)))
       :(route==="energy"||route==="calendar")?["Candy","Drug","Booster"]:route==="warPreparation"?["Drug"]:route==="stats"?["Candy","Drug","Booster"]:route==="home"?["Candy","Drug","Alcohol","Tool","Enhancer","Booster","Energy Drink","Medical","Material","Supply Pack","Clothing","Defensive","Temporary","Other","Special","Flower"]:route==="crime"?["Tool","Enhancer","Material"]:[];
