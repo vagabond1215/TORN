@@ -17,6 +17,8 @@ assert.ok(html.includes('<strong>DEF</strong><span>Gym &lt;A&gt;</span><small>1 
 assert.equal((html.match(/class="rail-nice-row"/g)||[]).length,4);
 input={...live,energy:0};html=rail.merits();assert.ok(html.includes(">NICE 0/5</span>")&&html.includes("More Energy needed"));
 input={...live,stats:{...stats,speed:69}};html=rail.merits();assert.ok(html.includes(">NICE 1/5</span>"));
+assert.ok(html.includes('<strong>SPD</strong><span><strong class="rail-nice-hold">HOLD</strong></span><small>0 trains</small>'));
+assert.ok(!html.includes('<strong>SPD</strong><span>Gym &lt;A&gt;</span>'));
 assert.ok(!html.includes("Nice training opportunity")&&!html.includes("Open Nice planner"));
 input={...live,reason:"Stale gym"};assert.ok(!rail.merits().includes('class="rail-nice-badge"'));
 input=live;data.honors.honors=[888];assert.ok(!rail.merits().includes('class="rail-nice-badge"'));

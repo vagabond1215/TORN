@@ -2637,3 +2637,5 @@ input:not([type="checkbox"]), textarea { width: 100%; min-width: 0; border: 1px 
 .nice-refresh-status[hidden]{display:none}
 @media(max-width:680px){.nice-merit-heading .nice-header-bars{order:3;flex-basis:100%;margin-left:0}.nice-merit-heading .nice-refresh-button{order:2}}
 @media(prefers-reduced-motion:reduce){#topic-view .nice-refresh-button[aria-busy="true"] svg{animation:none}}
+
+.rail-nice-row .rail-nice-hold{color:var(--accent-strong);font-size:.72rem}

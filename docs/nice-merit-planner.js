@@ -80,8 +80,8 @@ const tornNiceMerit=(()=>{
       seen.add(id);available.push({...gym,gymId:id});
     }
     if(!available.length)return {status:"unavailable",reason:"No available unlocked gym has usable training data."};
-    const width=8,cheaper=(a,b)=>a.energy-b.energy||a.trains-b.trains;
-    let states=[{energy:0,trains:0,n69:0,n420:0,rows:[]}];
+    const width=8,cheaper=(a,b)=>a.energy-b.energy||a.changedMatches-b.changedMatches||a.trains-b.trains;
+    let states=[{energy:0,trains:0,n69:0,n420:0,changedMatches:0,rows:[]}];
     for(let i=0;i<order.length;i++){
       const stat=order[i],buckets=new Map();
       // Equivalent processed pattern coverage and same cumulative Energy
@@ -90,12 +90,15 @@ const tornNiceMerit=(()=>{
       const put=(prev,row)=>{
         const n69=prev.n69+row.matches.n69,n420=prev.n420+row.matches.n420,total=Math.min(5,n69+n420),mask=(n69?1:0)|(n420?2:0);
         const key=total*4+mask,energy=prev.energy+row.energy,trains=prev.trains+row.trains;
+        const changedMatches=prev.changedMatches+Number(row.trains>0&&zero[i].matches.total>0);
         let bucket=buckets.get(key);if(!bucket){bucket=[];buckets.set(key,bucket);}
+        // At equal energy retain the lower-train state for the remaining
+        // train budget; prefer preservation when trains tie.
         const same=bucket.findIndex(x=>x.energy===energy);
-        if(same>=0&&bucket[same].trains<=trains)return;
-        if(same<0&&bucket.length>=width&&cheaper({energy,trains},bucket[bucket.length-1])>=0)return;
+        if(same>=0&&(bucket[same].trains<trains||bucket[same].trains===trains&&bucket[same].changedMatches<=changedMatches))return;
+        if(same<0&&bucket.length>=width&&cheaper({energy,trains,changedMatches},bucket[bucket.length-1])>=0)return;
         if(same>=0)bucket.splice(same,1);
-        bucket.push({energy,trains,n69,n420,rows:[...prev.rows,row]});
+        bucket.push({energy,trains,n69,n420,changedMatches,rows:[...prev.rows,row]});
         bucket.sort(cheaper);if(bucket.length>width)bucket.pop();
       };
       // Each offset is replayed from original stat, with no intervening
@@ -191,11 +194,12 @@ const tornNiceMerit=(()=>{
   // misses a better single-stat endpoint, compare independently replayed
   // opportunities against it. Never combine independently projected hits.
   function preferRoute(plan,report,happy){
-    if(plan?.status==="plan"||plan?.status==="met"||report?.status!=="ready"||!report.current||!valid(happy))return plan;
+    if(plan?.status==="met"||report?.status!=="ready"||!report.current||!valid(happy))return plan;
     const current=report.current,zero=current.rows.map(r=>({...r,after:r.value,trains:0,energy:0,gymId:null,gymName:null}));
     const coverage=r=>Math.min(5,r.total);
     const types=r=>Number(r.n69>0)+Number(r.n420>0);
-    const better=(a,b)=>Number(b.result.met)-Number(a.result.met)||coverage(b.result)-coverage(a.result)||types(b.result)-types(a.result)||a.energy-b.energy||a.trains-b.trains;
+    const touched=p=>p.rows?.filter(r=>r.trains>0&&current.rows.find(x=>x.stat===r.stat)?.matches.total>0).length??0;
+    const better=(a,b)=>Number(b.result.met)-Number(a.result.met)||(a.result.met&&b.result.met?0:coverage(b.result)-coverage(a.result)||types(b.result)-types(a.result))||a.energy-b.energy||touched(a)-touched(b)||a.trains-b.trains;
     const unchanged={status:"not-found",rows:zero,result:current,energy:0,trains:0};
     let best=plan?.result&&better(plan,unchanged)<0?plan:unchanged;
     for(const hit of report.rows){

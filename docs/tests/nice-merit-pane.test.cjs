@@ -12,7 +12,7 @@ assert.ok(html.includes("Suggested route: 3 trains")&&html.includes("15 Energy")
 assert.ok(html.includes("1 gym checked"));assert.ok(html.includes("Predicted 5 / 5"));
 assert.ok(html.includes("Gym &lt;fixture&gt;")&&html.includes('value="42068.12345"'));
 assert.ok(!html.includes("Individual stat opportunities in unlocked gyms")&&!html.includes("nice-opportunity-table"));
-assert.ok(m.niceNotice()?.ready===true);
+assert.ok(m.niceNotice()?.rows.some(r=>r.stat==="SPD"&&r.hold));
 const nextTable=html.match(/<table class="crime-table nice-merit-table">[\s\S]*?<\/table>/)?.[0];
 assert.ok(nextTable);
 assert.equal((nextTable.match(/<th scope="row">/g)||[]).length,4);

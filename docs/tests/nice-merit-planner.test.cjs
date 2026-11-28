@@ -147,3 +147,19 @@ console.log("Nice unlocked gym availability, individual independent stat hits, a
  assert.equal(completeFallback.result.n420,1);
  assert.equal(completeFallback.rows.filter(r=>r.trains).length,1);
  console.log("Unified Nice route: independent fallback remains one coherent route, complete/partial preference and both-pattern requirement passed.");
+
+ // Already-matched strength can reach a dual-pattern endpoint in 10
+ // trains, but the other stat is cheaper in the first scenario.
+ const holdGym={id:71,name:"Hold fixture",energy:5,...stats(1,1,0,0)};
+ const holdStats=stats(69,419,6969,69);
+ const holdInput={stats:holdStats,happy:1000,gyms:[holdGym],multipliers,maxTrains:20};
+ const stepToBoth=(s,h,d,c,m,stat)=>stat==="strength"?69414:stat==="defense"?1:0;
+ const holdPlan=nice.solveAcrossGyms(holdInput,stepToBoth);
+ assert.equal(holdPlan.status,"plan");assert.equal(holdPlan.rows[0].trains,0);assert.equal(holdPlan.rows[1].trains,1);assert.equal(holdPlan.energy,5);
+ const expensiveOther=(s,h,d,c,m,stat)=>stat==="strength"?69414:stat==="defense"?.0625:0;
+ const changePlan=nice.solveAcrossGyms(holdInput,expensiveOther);
+ assert.equal(changePlan.status,"plan");assert.equal(changePlan.rows[0].trains,10);assert.equal(changePlan.rows[1].trains,0);assert.equal(changePlan.energy,50);
+ assert.equal(changePlan.result.n69,4);assert.equal(changePlan.result.n420,1);
+ const sameOnly=nice.solveAcrossGyms({stats:stats(6900,1,1,1),happy:100,gyms:[holdGym],multipliers,maxTrains:1},gain);
+ assert.equal(sameOnly.status,"not-found");assert.equal(sameOnly.rows[0].trains,0);
+ console.log("Nice preservation: cheaper missing pattern elsewhere holds; costly alternative selects ten-train matched-stat upgrade; same-pattern churn rejected.");

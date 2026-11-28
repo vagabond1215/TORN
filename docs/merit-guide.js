@@ -134,25 +134,44 @@ const tornMeritGuide=(()=>{
    return {...opportunityCache.result,done,unlockListKnown:live.unlockListKnown===true,unavailable:live.unavailable??0,unresolved:live.unresolved??0,energy:live.energy,manual:!!niceManual,cached:!!live.cached};
  }
  const patternText=row=>[row.matches.n69?"69 × "+row.matches.n69:"",row.matches.n420?"420 × "+row.matches.n420:""].filter(Boolean).join(" · ");
+ // Shared route cache: current Energy affects affordability, not the
+ // minimum-energy route or preservation decision.
+ function nicePlan(awards,live,stats,current){
+   if(current.met)return {status:"met",rows:current.rows.map(r=>({...r,after:r.value,trains:0,energy:0})),result:current,trains:0,energy:0};
+   if(live.reason){niceCache=null;return null;}
+   const gyms=live.gyms??(live.gym?[live.gym]:[]);
+   const fingerprint=JSON.stringify([niceKey(live),stats,live.happy,gyms,live.multipliers]);
+   if(niceCache?.fingerprint!==fingerprint){
+     const plan=tornNiceMerit.solveAcrossGyms({stats,happy:live.happy,gyms,multipliers:live.multipliers},tornStatPlanner.internal.oneTrain);
+     niceCache={fingerprint,plan:tornNiceMerit.preferRoute(plan,niceOpportunities(awards,live),live.happy)};
+   }
+   return niceCache.plan;
+ }
  function niceNotice(){
-   const report=niceOpportunities();
-   if(report.done===true||report.status!=="ready"||!report.rows.length)return null;
-   // Prefer immediate progress; otherwise any immediate digit hit, then
-   // the nearest future opportunity. Avoid calling preserved digits new.
-   const choose=rows=>{
-     if(!rows.length)return null;
-     const now=rows.filter(r=>r.affordable===true),pool=now.length?now:rows;
-     const immediate=pool.filter(r=>r.trains===1);
-     const nearest=[...pool].sort((a,b)=>a.energy-b.energy||a.trains-b.trains||Number(b.improved)-Number(a.improved))[0];
-     return pool.find(r=>r.met)||immediate.find(r=>r.improved)||immediate[0]||pool.find(r=>r.improved)||nearest;
-   };
-   const preferred=choose(report.rows);
+   const awards=model(),honor=awards.find(x=>x.type==="honors"&&key(x.name)==="nice");
+   if(honor?.done===true){niceCache=null;opportunityCache=null;return null;}
+   const live=tornStatPlanner.niceLiveInputs(),scope=niceKey(live);
+   if(niceManual?.scope!==scope)niceManual=null;
+   const stats=niceManual?.stats??live.stats,current=tornNiceMerit.inspect(stats);
+   if(!current||live.reason)return null;
+   const plan=nicePlan(awards,live,stats,current);
+   if(!plan?.rows)return null;
    const abbreviations={strength:"STR",defense:"DEF",speed:"SPD",dexterity:"DEX"};
-   const describe=r=>niceLabel[r.stat]+" · "+r.gymName+" · "+r.trains+" train"+(r.trains===1?"":"s")+" · "+r.energy+" E · "+patternText(r)+" at "+niceNum(r.after)+" · "+(r.affordable===true?"Within current Energy":r.affordable===false?"More Energy needed":"Energy unverified")+(report.done===false?"":" · Honor status unverified")+(r.reference?" · Reference gym values":"")+" · Estimate; recheck each train.";
-   const rows=tornNiceMerit.order.map(stat=>choose(report.rows.filter(r=>r.stat===stat))).filter(Boolean).map(r=>({stat:abbreviations[r.stat],gym:r.gymName,trains:r.trains,detail:describe(r)}));
-   // The badge reflects current observed digit count, never a prediction.
-   const tag="NICE "+report.current.total+"/5";
-   return {tag,detail:describe(preferred),rows,ready:preferred.affordable===true,met:preferred.met,improved:preferred.improved,verified:report.done===false,reference:preferred.reference};
+   let spent=0;
+   const rows=plan.rows.flatMap(r=>{
+     const before=current.rows.find(x=>x.stat===r.stat),stat=abbreviations[r.stat];
+     if(!r.trains){
+       if(!before?.matches.total)return [];
+       return [{stat,hold:true,trains:0,detail:niceLabel[r.stat]+" · HOLD "+niceNum(before.value)+" · "+patternText(before)+" · Preserve existing matches; no training selected in the recommended route."}];
+     }
+     spent+=r.energy;
+     const affordable=Number.isFinite(live.energy)?spent<=live.energy:null;
+     const detail=niceLabel[r.stat]+" · "+r.gymName+" · "+r.trains+" train"+(r.trains===1?"":"s")+" · "+r.energy+" E · "+patternText(r)+" at "+niceNum(r.after)+(before?.matches.total>0?" · Changes existing matches in the preferred route":"")+" · "+(affordable===true?"Within current Energy":affordable===false?"More Energy needed":"Energy unverified")+(spent>r.energy?" · Train earlier listed rows first":"")+(honor?.done===false?"":" · Honor status unverified")+(r.reference?" · Reference gym values":"")+" · Estimate; recheck each train.";
+     return [{stat,gym:r.gymName,trains:r.trains,detail,hold:false}];
+   });
+   if(!rows.length)return null;
+   const tag="NICE "+current.total+"/5",detail=(plan.status==="met"?"Digit requirement met; hold matched stats.":(plan.status==="plan"?"Predicted completion":plan.status==="partial"?"Partial route":"Preserve existing matches")+" · "+plan.trains+" trains · "+plan.energy+" E · "+plan.result.total+" matches predicted.")+" Train in listed order and refresh after training.";
+   return {tag,detail,rows,ready:Number.isFinite(live.energy)&&plan.energy<=live.energy,met:plan.result.met,improved:plan.status==="plan"||plan.status==="partial",verified:honor?.done===false};
  }
  let niceRefreshing=false,niceRefreshMessage="",niceRefreshOwner=null;
  // Read-only live header. Keep this separate from the expensive route
@@ -237,19 +256,11 @@ const tornMeritGuide=(()=>{
    const stats=niceManual?.stats??live.stats,current=tornNiceMerit.inspect(stats);
    const rule='<p>Collect <strong>5 digit matches</strong> across your four whole-number battle stats, including both <strong>69</strong> and <strong>420</strong>.</p>';
    if(!current){niceCache=null;return head+rule+'<p class="fine-print">'+safe(live.reason??"Battle stats unavailable.")+'</p>'+tail;}
-   let plan=null;
-   if(current.met)plan={status:"met"};
-   else if(!live.reason){
-     const gyms=live.gyms??(live.gym?[live.gym]:[]);
-     const fingerprint=JSON.stringify([scope,stats,live.happy,gyms,live.multipliers]);
-     if(niceCache?.fingerprint!==fingerprint)niceCache={fingerprint,plan:tornNiceMerit.solveAcrossGyms({stats,happy:live.happy,gyms,multipliers:live.multipliers},tornStatPlanner.internal.oneTrain)};
-     plan=niceCache.plan;
-     if(plan.status!=="plan"&&plan.status!=="met")plan=tornNiceMerit.preferRoute(plan,niceOpportunities(awards,live),live.happy);
-   }else niceCache=null;
+   const plan=nicePlan(awards,live,stats,current);
    const results=plan?.rows??null;
    const table='<div class="crime-table-scroll"><table class="crime-table nice-merit-table"><thead><tr><th scope="col">Stat</th><th scope="col">Current</th><th scope="col">69 / 420 now</th><th scope="col">Gym</th><th scope="col">Trains</th><th scope="col">Energy</th><th scope="col">Predicted stop</th><th scope="col">69 / 420 at stop</th></tr></thead><tbody>'+current.rows.map((r,i)=>{
      const next=results?.[i],m=next?.matches??r.matches;
-     return '<tr><th scope="row">'+niceLabel[r.stat]+'</th><td>'+niceNum(r.value)+'</td><td>'+r.matches.n69+' / '+r.matches.n420+'</td><td>'+(next?.trains?safe(next.gymName)+(next.reference?' <small>(reference)</small>':""):next||current.met?"Keep current":"–")+'</td><td>'+ (next?next.trains:current.met?0:"–")+'</td><td>'+(next?next.energy:current.met?0:"–")+'</td><td>'+(next?niceNum(next.after):current.met?niceNum(r.value):"–")+'</td><td>'+(next||current.met?m.n69+" / "+m.n420:"–")+'</td></tr>';
+     return '<tr><th scope="row">'+niceLabel[r.stat]+'</th><td>'+niceNum(r.value)+'</td><td>'+r.matches.n69+' / '+r.matches.n420+'</td><td>'+(next?.trains?safe(next.gymName)+(next.reference?' <small>(reference)</small>':""):next||current.met?r.matches.total?"HOLD":"No training":"–")+'</td><td>'+ (next?next.trains:current.met?0:"–")+'</td><td>'+(next?next.energy:current.met?0:"–")+'</td><td>'+(next?niceNum(next.after):current.met?niceNum(r.value):"–")+'</td><td>'+(next||current.met?m.n69+" / "+m.n420:"–")+'</td></tr>';
    }).join("")+'</tbody></table></div>';
    let summary='<p><strong>Current: '+current.total+' / 5 occurrences</strong> · 69: '+current.n69+' · 420: '+current.n420+'</p>';
    if(current.met)summary+='<p><strong>Digit requirement met.</strong> Check Torn for the honor; the Guide cannot confirm the award without award data.</p>';
