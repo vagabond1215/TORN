@@ -32,7 +32,24 @@ async function run(){
  await assert.rejects(()=>x.prepare(invalid.store,id,invalid.state,true,yes),/cursor/);
  const stale=fixture(100);let valid=true;stale.setHook(page=>{valid=false;return page;});
  await assert.rejects(()=>x.prepare(stale.store,id,stale.state,true,()=>valid),/authorization/);
- console.log("Log export preview: 2,101 exact rows, bounded chunks, no eviction, owner/approval, concurrent generation, duplicate, missing rows, cursor and authorization passed.");
+ // Combined preview retains identical-looking observations as separate
+ // source identities and checks both source revisions throughout export.
+ const apiFixture=fixture(2001),companionRows=await r.decodeCompanion({version:1,playerId:1,capturedAt:at,rows:Array.from({length:101},()=>({at,text:"Synthetic event"}))},id,at,async()=>"a".repeat(64));
+ let companion={playerId:id,source:r.COMPANION,version:1,revision:1,count:companionRows.length,bytes:companionRows.reduce((n,v)=>n+2*JSON.stringify(v).length,0)};
+ const combined={reviewSources:async()=>({api:apiFixture.state,companion:copy(companion)}),readPage:apiFixture.store.readPage,
+  readCompanionPage:async(p,g,{limit,after})=>{
+   const start=after?companionRows.findIndex(v=>v.sourceId===after.id)+1:0,part=companionRows.slice(start,start+limit),last=part.at(-1);
+   return {records:copy(part),after:start+part.length<companionRows.length?{at:last.occurredAt,id:last.sourceId}:null};
+  }};
+ const review=await combined.reviewSources(),all=await x.prepareUnified(combined,id,review,true,yes);
+ assert.equal(all.count,2102);assert.deepEqual(all.sourceCounts,{api:2001,companion:101});
+ assert.deepEqual(all.chunks.filter(v=>v.source==="api-log").flatMap(v=>v.records),apiFixture.data);
+ assert.deepEqual(all.chunks.filter(v=>v.source===r.COMPANION).flatMap(v=>v.records),companionRows);
+ assert.equal(all.evictionAllowed,false);
+ assert.ok(all.chunks.every((v,i)=>v.index===i&&v.records.every(row=>row.source===v.source)));
+ const original=combined.readCompanionPage;combined.readCompanionPage=async(...args)=>{const result=await original(...args);apiFixture.setState({generation:4});return result;};
+ await assert.rejects(()=>x.prepareUnified(combined,id,review,true,yes),/Archive changed/);
+ console.log("Log export preview: 2,101 API and 2,102 combined exact rows, source identity, bounded chunks, no eviction, owner/approval, concurrent generation, duplicate, missing rows, cursor and authorization passed.");
 }
 module.exports=run;
 if(require.main===module)run().catch(e=>{console.error(e);process.exitCode=1});

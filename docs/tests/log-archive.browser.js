@@ -65,6 +65,9 @@
     assert((await b.readCompanionPage(1,yes,{limit:2})).records.length===2,"bounded companion page");
     assert((await a.reviewSources(2,yes)).companion.count===0,"companion owner isolation");
     assert((await a.readPage(1,yes)).records[0].sourceId==="e","API identity preserved");
+    const combined=await tornLogExportPreview.prepareUnified(a,1,sourceState,true,yes);
+    assert(combined.count===4&&combined.sourceCounts.api===1&&combined.sourceCounts.companion===3&&!combined.evictionAllowed,"combined backup preview");
+    assert(JSON.stringify(await b.reviewSources(1,yes))===JSON.stringify(sourceState),"combined export did not mutate either source");
     // Simulate a reached bound with a synthetic checkpoint, not 20k real records.
     a.close();b.close();a=b=null;
     await new Promise((resolve,reject)=>{
