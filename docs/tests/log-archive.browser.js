@@ -53,6 +53,18 @@
     const reviewed=await a.state(1,yes),exported=await tornLogExportPreview.prepare(a,1,reviewed,true,yes);
     assert(exported.count===1&&exported.chunks[0].records[0].sourceId==="e"&&!exported.evictionAllowed,"read-only verified archive export preview");
     assert(JSON.stringify(await b.state(1,yes))===JSON.stringify(reviewed),"export did not mutate archive");
+    // Both sources share an account DB and quota, not identities. Keep
+    // previously imported occurrences when a later snapshot is smaller.
+    const companionPacket={version:1,playerId:1,capturedAt:now,rows:[{at:now,text:"same"},{at:now,text:"same"},{at:now,text:"other"}]};
+    const sourceReview=await a.reviewSources(1,yes);
+    const results=await Promise.all([a.importCompanion(1,sourceReview,companionPacket,true,yes,{now}),b.importCompanion(1,sourceReview,companionPacket,true,yes,{now})]);
+    assert(results.filter(x=>x.status==="committed").length===1&&results.filter(x=>x.status==="stale").length===1,"competing companion imports");
+    const sourceState=await b.reviewSources(1,yes);
+    assert(sourceState.api.count===1&&sourceState.companion.count===3,"source attribution");
+    assert((await b.importCompanion(1,sourceState,{...companionPacket,rows:[companionPacket.rows[0]]},true,yes,{now})).status==="unchanged","smaller snapshot does not prune");
+    assert((await b.readCompanionPage(1,yes,{limit:2})).records.length===2,"bounded companion page");
+    assert((await a.reviewSources(2,yes)).companion.count===0,"companion owner isolation");
+    assert((await a.readPage(1,yes)).records[0].sourceId==="e","API identity preserved");
     // Simulate a reached bound with a synthetic checkpoint, not 20k real records.
     a.close();b.close();a=b=null;
     await new Promise((resolve,reject)=>{

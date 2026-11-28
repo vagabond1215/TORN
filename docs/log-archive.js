@@ -37,6 +37,14 @@ const tornLogArchive=(()=>{
     if(!exact(value,keys)||Object.hasOwn(value,"consent")&&typeof value.consent!=="boolean"||value.playerId!==player||value.source!==SOURCE||value.version!==VERSION||!int(value.generation)||!int(value.count,0,MAX_RECORDS)||!int(value.bytes,0,MAX_BYTES)||!validCheckpoint(value.checkpoint,player)||!gap(value.blocked))throw Error("Invalid stored archive checkpoint; review required");
     return value;
   }
+  const COMPANION="companion-log";
+  const companionFresh=player=>({playerId:player,source:COMPANION,version:VERSION,revision:0,count:0,bytes:0});
+  function checkedCompanion(value,player){
+    if(value===undefined)return companionFresh(player);
+    if(!exact(value,["playerId","source","version","revision","count","bytes"])||value.playerId!==player||value.source!==COMPANION||value.version!==VERSION||!int(value.revision)||!int(value.count,0,MAX_RECORDS)||!int(value.bytes,0,MAX_BYTES))throw Error("Invalid companion archive state; review required");
+    return value;
+  }
+  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
   const authorized=guard=>typeof guard==="function"&&guard()===true;
   const cost=row=>2*JSON.stringify(row).length; // bounded estimate, not actual browser quota
   function open({indexedDB=globalThis.indexedDB,IDBKeyRange=globalThis.IDBKeyRange,name=DB_NAME}={}){
@@ -110,12 +118,15 @@ const tornLogArchive=(()=>{
               on(sync.put({...s,blocked:"Conflicting API log identity; review required"}),()=>done({status:"conflict"}));return;
             }
             const bytes=added.reduce((n,row)=>n+cost(row),0);
-            if(s.count+added.length>MAX_RECORDS||s.bytes+bytes>MAX_BYTES){
-              on(sync.put({...s,blocked:"Archive retention limit reached; review required"}),()=>done({status:"limit"}));return;
-            }
-            const next={...s,count:s.count+added.length,bytes:s.bytes+bytes,checkpoint:proposed.checkpoint};
-            for(const row of added)on(rows.add(row));
-            on(sync.put(next),()=>done({status:"committed",inserted:added.length,duplicates,state:next}));
+            on(sync.get([player,COMPANION]),v=>{
+              const companion=checkedCompanion(v,player);
+              if(s.count+companion.count+added.length>MAX_RECORDS||s.bytes+companion.bytes+bytes>MAX_BYTES){
+                on(sync.put({...s,blocked:"Archive retention limit reached; review required"}),()=>done({status:"limit"}));return;
+              }
+              const next={...s,count:s.count+added.length,bytes:s.bytes+bytes,checkpoint:proposed.checkpoint};
+              for(const row of added)on(rows.add(row));
+              on(sync.put(next),()=>done({status:"committed",inserted:added.length,duplicates,state:next}));
+            });
           };
           if(!remaining){finish();return;}
           for(const row of page.records)on(rows.get([player,SOURCE,row.sourceId]),existing=>{
@@ -161,21 +172,69 @@ const tornLogArchive=(()=>{
         });
       });
     }
-    function readPage(playerId,guard,{limit=50,after=null}={}){
+    // Both source states are reviewed in one read transaction. Import
+    // uses an exact CAS of both states and adds only normalized rows.
+    function reviewSources(playerId,guard){
+      const player=records.owner(playerId);
+      return run(["sync"],"readonly",guard,(tx,on,done)=>{
+        const sync=tx.objectStore("sync");
+        on(sync.get(key(player)),v=>{
+          const api=checked(v,player);
+          on(sync.get([player,COMPANION]),v=>done({api,companion:checkedCompanion(v,player)}));
+        });
+      });
+    }
+    async function importCompanion(playerId,reviewed,packet,approved,guard,{now=Date.now(),digest}={}){
+      const player=records.owner(playerId);
+      if(approved!==true||!authorized(guard)||!exact(reviewed,["api","companion"]))throw Error("Explicit reviewed companion import required");
+      const before=JSON.parse(JSON.stringify(reviewed));
+      checked(before.api,player);checkedCompanion(before.companion,player);
+      const incoming=await records.decodeCompanion(packet,player,now,digest);
+      if(!authorized(guard))throw Error("Archive authorization changed");
+      return run(["sync","records"],"readwrite",guard,(tx,on,done)=>{
+        const sync=tx.objectStore("sync"),rows=tx.objectStore("records");
+        on(sync.get(key(player)),v=>{
+          const api=checked(v,player);
+          on(sync.get([player,COMPANION]),v=>{
+            const companion=checkedCompanion(v,player);
+            if(!same({api,companion},before)){done({status:"stale"});return;}
+            const added=[];let duplicates=0,conflict=false,left=incoming.length;
+            const finish=()=>{
+              if(conflict){done({status:"conflict"});return;}
+              const bytes=added.reduce((n,r)=>n+cost(r),0);
+              if(api.count+companion.count+added.length>MAX_RECORDS||api.bytes+companion.bytes+bytes>MAX_BYTES){done({status:"limit"});return;}
+              if(!added.length){done({status:"unchanged",inserted:0,duplicates,state:{api,companion}});return;}
+              if(companion.revision===Number.MAX_SAFE_INTEGER)throw Error("Companion revision exhausted");
+              const next={...companion,revision:companion.revision+1,count:companion.count+added.length,bytes:companion.bytes+bytes};
+              for(const row of added)on(rows.add(row));
+              on(sync.put(next),()=>done({status:"committed",inserted:added.length,duplicates,state:{api,companion:next}}));
+            };
+            if(!left){finish();return;}
+            for(const row of incoming)on(rows.get([player,COMPANION,row.sourceId]),existing=>{
+              if(existing!==undefined&&!records.validCompanion(existing,player))throw Error("Invalid stored companion record");
+              const kind=records.classifyCompanion(existing,row);
+              if(kind==="insert")added.push(row);else if(kind==="duplicate")duplicates++;else conflict=true;
+              if(--left===0)finish();
+            });
+          });
+        });
+      });
+    }
+    function readSourcePage(playerId,guard,source,{limit=50,after=null}={}){
       const player=records.owner(playerId);
       if(!int(limit,1,MAX_READ)||after!==null&&(!exact(after,["at","id"])||!time(after.at)||!id(after.id)))return Promise.reject(Error("Invalid archive page request"));
       return run(["records"],"readonly",guard,(tx,on,done)=>{
-        const min=[player,SOURCE,MIN_AT,""],max=after?[player,SOURCE,after.at,after.id]:[player,SOURCE,MAX_AT,"\uffff"];
+        const min=[player,source,MIN_AT,""],max=after?[player,source,after.at,after.id]:[player,source,MAX_AT,"\uffff"];
         const out=[],req=tx.objectStore("records").index("byTime").openCursor(range.bound(min,max,false,after!==null),"prev");
         on(req,c=>{
           if(!c){done({records:out,after:null});return;}
           if(out.length===limit){const last=out.at(-1);done({records:out,after:{at:last.occurredAt,id:last.sourceId}});return;}
-          if(!records.validRecord(c.value,player))throw Error("Invalid stored archive record; review required");
+          if(!(source===COMPANION?records.validCompanion(c.value,player):records.validRecord(c.value,player)))throw Error("Invalid stored archive record; review required");
           out.push(c.value);c.continue();
         });
       });
     }
-    return Object.freeze({state,begin,commit,readPage,setConsent,invalidate:(p,g)=>invalidate(p,g),purge:(p,g)=>invalidate(p,g,true),abortPending,close});
+    return Object.freeze({state,begin,commit,readPage:(p,g,o)=>readSourcePage(p,g,SOURCE,o),readCompanionPage:(p,g,o)=>readSourcePage(p,g,COMPANION,o),reviewSources,importCompanion,setConsent,invalidate:(p,g)=>invalidate(p,g),purge:(p,g)=>invalidate(p,g,true),abortPending,close});
   }
   return Object.freeze({open,DB_NAME,VERSION,MAX_RECORDS,MAX_BYTES,MAX_READ,validCheckpoint});
 })();
