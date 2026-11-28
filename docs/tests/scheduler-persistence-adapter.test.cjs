@@ -1,7 +1,7 @@
 "use strict";
 const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
 const read=p=>fs.readFileSync(path.join(__dirname,"..",p),"utf8");
-const {a,r,l,g,s}=new Function(["training-recovery.js","account-storage.js","account-revisions.js","account-calendar-merge.js","account-calendar-lineage.js","account-calendar-journal.js","account-transaction-store.js","activity-scheduler.js","scheduler-persistence-adapter.js"].map(read).join("\n")+"\nreturn {a:tornAccountStorage,r:tornAccountRevisions,l:tornCalendarLineage,g:tornSchedulerPersistence,s:tornActivityScheduler};")();
+const {a,r,l,g,s,tx}=new Function(["training-recovery.js","account-storage.js","account-revisions.js","account-calendar-merge.js","account-calendar-lineage.js","account-calendar-journal.js","account-transaction-store.js","activity-scheduler.js","scheduler-persistence-adapter.js"].map(read).join("\n")+"\nreturn {a:tornAccountStorage,r:tornAccountRevisions,l:tornCalendarLineage,g:tornSchedulerPersistence,s:tornActivityScheduler,tx:tornAccountTransactionStore};")();
 const id="123",at=Date.now(),minute=60000,copy=x=>JSON.parse(JSON.stringify(x)),yes=()=>true;
 let n=0;const hashes=new Map(),digest=async v=>{if(!hashes.has(v))hashes.set(v,String(hashes.size+1).padStart(64,"0"));return hashes.get(v);};
 const options={digest,newRevision:()=>String(++n).padStart(32,"0"),now:()=>at};
@@ -14,6 +14,30 @@ async function fixture(events=[],spend=[]){
  return {playerId:id,record:{version:1,playerId:id,generation:1,bundle:{records,omitted,markers:[],manifestRaw:JSON.stringify(manifest),lineageRaw:JSON.stringify(lineage)}},activeTraining:false,heldTraining:false,journalPending:false,
  profile:{at:at-1000,status:"okay",level:15},travel:{at:at-1000,available:true},war:{at:at-1000,known:true,ranked:null},warSettings:{mode:"scheduled",adjustment:60,lead:120},
  health:{at:at-1000,level:"recommended"},rehabSettings:settings,actions:[],baseline:{playerId:id,...baseline}};
+}
+// Controlled IDB request harness. Not a browser implementation; verifies
+// that the public transaction path checks generation and current policy
+// before put, after request success, and only reports success on complete.
+const microtask=fn=>Promise.resolve().then(fn);
+function fakeDatabase(initial){
+ let current=copy(initial),puts=0,afterPut=null;
+ const db={close(){},transaction(){
+   let staged=current===null?null:copy(current),aborted=false;
+   const finish=()=>microtask(()=>{if(!aborted){current=staged;transaction.oncomplete?.();}});
+   const request=(value,write=false)=>{
+     const req={result:value};microtask(()=>{if(aborted)return;
+       const oldPuts=puts;
+       if(write&&afterPut)afterPut();
+       req.onsuccess?.();
+       if(!aborted&&puts===oldPuts)finish();
+     });return req;
+   };
+   const transaction={objectStore:()=>({get:()=>request(staged??undefined),put:value=>{puts++;staged=copy(value);return request(undefined,true);}}),
+    abort(){if(aborted)return;aborted=true;microtask(()=>transaction.onabort?.());}};
+   return transaction;
+ }};
+ const indexedDB={open(){const request={result:db};microtask(()=>request.onsuccess?.());return request;}};
+ return {indexedDB,get current(){return copy(current)},get puts(){return puts},setAfterPut:fn=>afterPut=fn};
 }
 async function run(){
  let c=await fixture(),readCurrent=()=>c;
@@ -44,7 +68,24 @@ async function run(){
  c=await fixture();await assert.rejects(()=>prepare(change,{...options,digest:async v=>{c={...c,actions:[event.start]};return digest(v)}}),/context changed/);
  c=await fixture();let now=at;const timed=await prepare(change,{...options,now:()=>now});now=at+5001;assert.throws(()=>timed.assertCurrent(),/expired/);
  c=await fixture([event]);c={...c,profile:null,travel:null,health:null,war:null};assert.equal((await prepare(cancellation)).status,"candidate");
- console.log("Scheduler persistence adapter: approval, immutable candidate, shared war cutoff, freshness, holds, overlap, baseline, stale context, cancellation and ID tombstone passed.");
+ // Exercise the isolated transaction entry point with controlled callbacks.
+ c=await fixture();const source=copy(c),fake=fakeDatabase(c.record),db=await tx.open({indexedDB:fake.indexedDB});
+ const committed=await db.planRehab(id,copy(c),change,true,readCurrent,yes,options);
+ assert.deepEqual(committed,{status:"committed",generation:2,current:true});
+ assert.equal(fake.puts,1);assert.equal(fake.current.generation,2);
+ assert.deepEqual(c,source);
+ const stale=await db.planRehab(id,copy(c),change,true,readCurrent,yes,options);
+ assert.equal(stale.status,"stale");assert.equal(fake.puts,1);
+ c={...c,record:fake.current};
+ const prior=copy(c.record);
+ fake.setAfterPut(()=>{c={...c,heldTraining:true};});
+ await assert.rejects(()=>db.planRehab(id,copy(c),cancellation,true,readCurrent,yes,options),/hold/);
+ assert.deepEqual(fake.current,prior);
+ fake.setAfterPut(null);c={...c,heldTraining:false};
+ const canceled=await db.planRehab(id,copy(c),cancellation,true,readCurrent,yes,options);
+ assert.equal(canceled.generation,3);assert.equal(JSON.parse(fake.current.bundle.lineageRaw).entries.find(e=>e.id===event.id).digest,null);
+ db.close();
+ console.log("Scheduler persistence adapter: approval, immutable candidate, shared war cutoff, freshness, holds, overlap, baseline, stale context, cancellation and ID tombstone passed. Controlled transaction callbacks: committed, stale, post-put policy abort, cancellation passed.");
 }
 module.exports=run;
 if(require.main===module)run().catch(e=>{console.error(e);process.exitCode=1});

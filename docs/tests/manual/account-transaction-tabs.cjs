@@ -10,7 +10,7 @@ const {tmpdir}=require("node:os");
 const {join}=require("node:path");
 const {setTimeout:delay}=require("node:timers/promises");
 const {chromium}=require("playwright-core");
-const modules=["training-recovery","account-storage","account-revisions","account-calendar-lineage","account-transaction-store"];
+const modules=["training-recovery","account-storage","account-revisions","account-calendar-lineage","account-transaction-store","account-calendar-merge","account-calendar-journal","activity-scheduler","scheduler-persistence-adapter"];
 const assets=new Map(modules.map(n=>["/"+n+".js",n+".js"]));
 const server=createServer(async(req,res)=>{
  if(req.url==="/"){res.writeHead(200,{"Content-Type":"text/html"}).end("<!doctype html><title>Transactional account test</title>");return;}
@@ -22,7 +22,7 @@ async function loadPage(tab,origin){
  await tab.goto(origin);
  for(const module of modules)await tab.addScriptTag({url:origin+module+".js"});
 }
-async function probe(context,origin,{lifecycle=false,quota=false}={}){
+async function probe(context,origin,{lifecycle=false,quota=false,rehab=false}={}){
  const tabs=await Promise.all([context.newPage(),context.newPage()]);
  const name="torn-transaction-fixture:"+randomUUID(),id="999999913";
  await Promise.all(tabs.map(async tab=>{
@@ -46,6 +46,17 @@ async function probe(context,origin,{lifecycle=false,quota=false}={}){
     initialize:review=>db.initialize(source,id,review,true,guard),
     read:options=>db.read(id,guard,options),
     edit:({before,after})=>db.editPreference(id,before,{section:"notes:gym",before:before.bundle.records.find(r=>r.section==="notes:gym")?.value??null,after},true,guard),
+    rehab:({record,change,at,holdAfterPut=false})=>{
+     let policy={playerId:id,record,activeTraining:false,heldTraining:false,journalPending:false,
+       profile:{at,status:"okay",level:15},travel:{at,available:true},war:{at,known:true,ranked:null},
+       warSettings:{mode:"scheduled",adjustment:60,lead:120},health:{at,level:"recommended"},
+       rehabSettings:{travel:"wlt",rehabMinutes:30,rehabSessions:1},actions:[],baseline:null};
+     const original=IDBObjectStore.prototype.put;
+     if(holdAfterPut)IDBObjectStore.prototype.put=function(...args){
+       const req=original.apply(this,args);req.addEventListener("success",()=>{policy={...policy,heldTraining:true};},{once:true});return req;
+     };
+     return db.planRehab(id,policy,change,true,()=>policy,guard).finally(()=>{if(holdAfterPut)IDBObjectStore.prototype.put=original;});
+    },
     rejectProtected:before=>db.editPreference(id,before,{section:"calendar-events",before:"[]",after:"[] "},true,guard),
     mutateOldSource:()=>source.setItem(prefix+"activity-events:"+id,"[] "),
     ownerRead:()=>db.read("999999914",guard),
@@ -101,10 +112,34 @@ async function probe(context,origin,{lifecycle=false,quota=false}={}){
   assert.deepEqual(final.bundle.records.find(r=>r.section===section),before.bundle.records.find(r=>r.section===section));
   assert.deepEqual(JSON.parse(final.bundle.manifestRaw).entries.find(r=>r.section===section),JSON.parse(before.bundle.manifestRaw).entries.find(r=>r.section===section));
  }
+ if(rehab)await probeRehab(a,b,final);
  if(lifecycle)await probeLifecycle(a,b,name,final);
  if(quota)await probeQuota(context,a,b,origin,final);
  await Promise.all(tabs.map(t=>t.evaluate(()=>fixture.close())));
  return {name,id,record:final};
+}
+async function probeRehab(a,b,record){
+ const at=Date.now(),start=at+60000,duration=(Math.ceil(2*83*1.03)+30)*60000;
+ const event={id:"rehab-fixture",kind:"rehab",title:"Rehabilitation",start,end:start+duration,blocking:true,source:"manual",rehabBaseline:null};
+ const add={id:event.id,kind:"add",before:null,after:event};
+ const args={record,change:add,at};
+ const outcomes=await Promise.all([a.evaluate(args=>fixture.rehab(args),args),b.evaluate(args=>fixture.rehab(args),args)]);
+ assert.equal(outcomes.filter(x=>x.status==="committed").length,1);
+ assert.equal(outcomes.filter(x=>x.status==="stale").length,1);
+ const left=(await a.evaluate(()=>fixture.read())).record,right=(await b.evaluate(()=>fixture.read())).record;
+ assert.deepEqual(left,right);assert.equal(left.generation,record.generation+1);
+ assert.deepEqual(JSON.parse(left.bundle.records.find(x=>x.section==="calendar-events").value),[event]);
+ assert.equal(left.bundle.records.find(x=>x.section==="activity-spend").value,record.bundle.records.find(x=>x.section==="activity-spend").value);
+ const cancel={id:event.id,kind:"remove",before:event,after:null};
+ await assert.rejects(()=>a.evaluate(args=>fixture.rehab(args),{record:left,change:cancel,at,holdAfterPut:true}),/hold/);
+ assert.deepEqual((await b.evaluate(()=>fixture.read())).record,left);
+ const canceled=await b.evaluate(args=>fixture.rehab(args),{record:left,change:cancel,at});
+ assert.equal(canceled.status,"committed");
+ const final=(await a.evaluate(()=>fixture.read())).record;
+ assert.equal(final.generation,left.generation+1);
+ assert.equal(JSON.parse(final.bundle.lineageRaw).entries.find(e=>e.id===event.id).digest,null);
+ await assert.rejects(()=>a.evaluate(args=>fixture.rehab(args),{record:final,change:add,at}),/Deleted calendar ID/);
+ console.log("PASS native V7-style reservation contention, exact ledger preservation, post-put policy abort, cancellation and no ID reuse");
 }
 async function probeLifecycle(a,b,name,record){
  await assert.rejects(()=>a.evaluate(record=>fixture.rejectProtected(record),record),/preference/);
@@ -209,8 +244,8 @@ async function probeRestart(origin){
  }
 }
 async function main(){
- const stage=process.argv[2]??"20",lifecycle=stage==="--lifecycle",quota=stage==="--quota",restart=stage==="--restart";
- const trials=lifecycle||quota||restart?1:Number(stage);assert.ok(Number.isInteger(trials)&&trials>=1&&trials<=100);
+ const stage=process.argv[2]??"20",lifecycle=stage==="--lifecycle",quota=stage==="--quota",restart=stage==="--restart",rehab=stage==="--rehab";
+ const trials=lifecycle||quota||restart||rehab?1:Number(stage);assert.ok(Number.isInteger(trials)&&trials>=1&&trials<=100);
  let browser,failures=0;
  try{
   await new Promise((resolve,reject)=>server.listen(0,"127.0.0.1",resolve).once("error",reject));
@@ -219,7 +254,7 @@ async function main(){
   browser=await chromium.launch(chrome);
   for(let i=1;i<=trials;i++){
    const context=await browser.newContext();
-   try{await probe(context,origin,{lifecycle,quota});console.log("PASS trial "+i);}
+   try{await probe(context,origin,{lifecycle,quota,rehab});console.log("PASS trial "+i);}
    catch(e){failures++;console.error("FAIL trial "+i,e.message);}
    finally{await context.close();}
   }

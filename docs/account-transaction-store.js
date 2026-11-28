@@ -1,9 +1,10 @@
 "use strict";
 /* Isolated authoritative-generation prototype; NOT loaded by index.html.
  * One IDB record per verified owner, one readwrite transaction for CAS.
- * Only explicit reviewed initialization and allowlisted preference edits.
- * No localStorage mirror, downgrade, automatic migration, protected write
- * authority, deletion/reset, API request or session activation.
+ * Explicit reviewed initialization, allowlisted preference edits and
+ * isolated V7 reservation/cancellation only. No localStorage mirror,
+ * downgrade, automatic migration, completion/expense authority,
+ * deletion/reset, API request or session activation.
  */
 const tornAccountTransactionStore=(()=>{
   const DB_NAME="torn-city-guide:account-state",VERSION=1,STORE="accounts";
@@ -149,7 +150,28 @@ const tornAccountTransactionStore=(()=>{
         on(store.put(next),()=>done({status:"committed",generation:next.generation}));
       });
     }
-    return Object.freeze({read,initialize,editPreference,abortPending,close});
+    // Narrow V7 entrypoint. Never accept an arbitrary caller-built
+    // candidate or expose a generic write callback. The scheduler module
+    // generates the candidate internally from explicit reviewed evidence.
+    async function planRehab(playerId,reviewed,change,approved,readContext,guard,options={}){
+      const id=owner(playerId);
+      checkLive(guard);
+      if(typeof tornSchedulerPersistence==="undefined")throw Error("Scheduler policy adapter unavailable");
+      const candidate=await tornSchedulerPersistence.prepare(id,reviewed,change,approved,readContext,guard,options);
+      const before=candidate.before,next=candidate.after;
+      checkLive(guard);
+      return run(id,"readwrite",guard,(current,store,on,done)=>{
+        if(!current||current.generation!==before.generation||!same(current,before)){done({status:"stale",generation:current?.generation??null});return;}
+        candidate.assertCurrent();
+        on(store.put(next),()=>{
+          // The request has succeeded, but the transaction has not
+          // committed yet. Abort if policy or authorization changed.
+          candidate.assertCurrent();
+          done({status:"committed",generation:next.generation});
+        });
+      });
+    }
+    return Object.freeze({read,initialize,editPreference,planRehab,abortPending,close});
   }
   return Object.freeze({open,reviewLegacy,verify,preparePreference,DB_NAME,VERSION});
 })();
