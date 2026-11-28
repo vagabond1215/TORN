@@ -53,6 +53,32 @@ async function run(){
  const unrelated=store(),uw=unrelated.setItem;unrelated.setItem=(k,v)=>{if(k===manifest)throw Error("quota");uw(k,v);};
  await assert.rejects(()=>apply(unrelated),/journal retained/);unrelated.setItem=uw;uw(note,"independent");
  await assert.rejects(()=>j.recover(unrelated,id,j.read(unrelated,id).raw,"rollback",yes,locks,options),/digest/);assert.ok(unrelated.getItem(journal));
+ // V4 explicit ordinary mutations use the same hold and recovery engine.
+ const ordinary=store(),oldEvent=JSON.parse(left.records[0].value)[0],removeA={id:"a",kind:"remove",before:oldEvent,after:null};
+ const mutate=(s,local,change,opts=options)=>j.mutate(s,id,local,change,yes,locks,opts);
+ const removed=await mutate(ordinary,left,removeA);assert.equal(removed.status,"applied");
+ assert.equal(JSON.parse(ordinary.getItem(cal)).length,1);
+ const deleted=JSON.parse(ordinary.getItem(lineage)).entries.find(x=>x.id==="a");
+ assert.equal(deleted.digest,null);assert.ok(deleted.deletedFrom);
+ const current={...a.snapshot(ordinary,id),manifest:r.read(ordinary,id)};
+ await assert.rejects(()=>mutate(ordinary,current,{id:"a",kind:"add",before:null,after:oldEvent}),/cannot be reused/);
+ const newEvent=event("fresh"),added=await mutate(ordinary,current,{id:"fresh",kind:"add",before:null,after:newEvent});assert.equal(added.status,"applied");
+ const newest={...a.snapshot(ordinary,id),manifest:r.read(ordinary,id)};
+ assert.equal((await mutate(ordinary,newest,{id:"fresh",kind:"edit",before:newEvent,after:{...newEvent,title:"edited"}})).status,"applied");
+ const war=JSON.parse(left.records[0].value)[1];
+ await assert.rejects(()=>mutate(store(),left,{id:"war",kind:"remove",before:war,after:null}),/Protected/);
+ await assert.rejects(()=>mutate(store(),left,{...removeA,before:{...oldEvent,title:"stale"}}),/changed/);
+ const interrupted=store(),iw=interrupted.setItem;interrupted.setItem=(k,v)=>{if(k===manifest)throw Error("quota");iw(k,v);};
+ await assert.rejects(()=>mutate(interrupted,left,removeA),/journal retained/);
+ const ji=j.read(interrupted,id);assert.equal(ji.version,4);assert.equal(ji.complete,false);
+ assert.equal(JSON.parse(interrupted.getItem(lineage)).entries.find(x=>x.id==="a").digest,null);
+ interrupted.setItem=iw;await j.recover(interrupted,id,ji.raw,"rollback",yes,locks,options);
+ assert.equal(interrupted.getItem(cal),left.records[0].value);assert.equal(interrupted.getItem(lineage),JSON.stringify(initial));
+ const tampered=store(),tw=tampered.setItem;tampered.setItem=(k,v)=>{if(k===manifest)throw Error("quota");tw(k,v);};
+ await assert.rejects(()=>mutate(tampered,left,removeA),/journal retained/);
+ tampered.setItem=tw;const fake=JSON.parse(tampered.getItem(journal));fake.mutation.id="war";tw(journal,JSON.stringify(fake));
+ await assert.rejects(()=>j.recover(tampered,id,tampered.getItem(journal),"rollback",yes,locks,options),/Unexpected calendar mutation/);
+ assert.ok(tampered.getItem(journal));
  assert.ok(lockCalls>10);
  console.log("Scoped calendar journal, local revision, lineage, quota/interruption rollback, finalization, stale/held/lock guards and conflict retention passed.");
 }

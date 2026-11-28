@@ -78,7 +78,10 @@ const tornAccountBackup=(()=>{
   // Existing public API deliberately cannot export or read V3. A separate
   // explicit codec is for synthetic tests/future gated recovery only.
   // No automatic downgrade: callers must preserve authenticated lineage.
-  const encrypt=(playerId,records,secret,now=Date.now(),manifest=null)=>encodeBackup(playerId,records,secret,now,manifest);
+  function encrypt(playerId,records,secret,now=Date.now(),manifest=null,...extra){
+    if(extra.length)throw Error("Use the explicit lineage codec; legacy export must not discard lineage");
+    return encodeBackup(playerId,records,secret,now,manifest);
+  }
   const decrypt=(text,playerId,secret)=>decodeBackup(text,playerId,secret);
   function createLineageCodec(lineage){
     if(!lineage||typeof lineage.verify!=="function")throw Error("Calendar lineage verifier required");

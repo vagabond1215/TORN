@@ -16,7 +16,7 @@ async function run(){
  const outer=JSON.parse(text);assert.equal(outer.version,3);assert.ok(!text.includes("private event")&&!text.includes("deletedFrom")&&!text.includes(pass));
  const decoded=await codec.decrypt(text,id,pass);assert.deepEqual(decoded.records,next.records);assert.deepEqual(decoded.manifest,next.manifest);assert.deepEqual(decoded.calendarLineage,lineage);
  await assert.rejects(()=>api.decrypt(text,id,pass),/format/);
- assert.equal(JSON.parse(await api.encrypt(id,next.records,pass,now,next.manifest,lineage)).version,2);
+ assert.throws(()=>api.encrypt(id,next.records,pass,now,next.manifest,lineage),/explicit lineage codec/);
  await assert.rejects(()=>codec.decrypt(text,456,pass),/different Torn account/);
  await assert.rejects(()=>codec.decrypt(text,id,"wrong independent passphrase"),/Incorrect/);
  for(const version of [1,2])await assert.rejects(()=>codec.decrypt(JSON.stringify({...outer,version}),id,pass),/Incorrect/);
