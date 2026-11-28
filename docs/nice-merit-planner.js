@@ -68,7 +68,11 @@ const tornNiceMerit=(()=>{
   function opportunities({stats,happy,gyms,multipliers,maxTrains=limit,energy=null},gain){
     const current=inspect(stats);
     if(!current||!valid(happy)||happy>99999||!Array.isArray(gyms)||typeof gain!=="function"||!Number.isSafeInteger(maxTrains)||maxTrains<1||maxTrains>limit||order.some(s=>!valid(multipliers?.[s])))return {status:"unavailable",rows:[],checked:0};
-    const rows=[],seen=new Set();let checked=0;
+    const rows=[],seen=new Set(),next=new Map();let checked=0;
+    // The display is a separate projection, not the alert's priority list.
+    // "Next" means the nearest strictly higher whole-number stat with
+    // either pattern, regardless of which gym, pattern or merit progress.
+    const compareNext=(a,b)=>Math.floor(a.after)-Math.floor(b.after)||a.energy-b.energy||a.trains-b.trains||Number(b.active)-Number(a.active)||a.gymName.localeCompare(b.gymName)||a.gymId.localeCompare(b.gymId);
     for(const gym of gyms){
       const id=String(gym?.id??gym?.name??""),cost=gym?.energy;
       if(!id||seen.has(id)||!Number.isSafeInteger(cost)||cost<1||cost>1000)continue;
@@ -87,6 +91,10 @@ const tornNiceMerit=(()=>{
           const met=total>=5&&n69>0&&n420>0;
           const improved=total>current.total||(current.n69===0&&n69>0)||(current.n420===0&&n420>0);
           const row={stat,gymId:id,gymName:String(gym.name??id),reference:!!gym.offline,trains:n,energy:n*cost,after:value,matches,n69,n420,total,met,improved,affordable:valid(energy)?n*cost<=energy:null,active:!!gym.active};
+          if(matches.total&&Math.floor(after)>Math.floor(stats[stat])){
+            const prior=next.get(stat);
+            if(!prior||compareNext(row,prior)<0)next.set(stat,row);
+          }
           for(const [pattern,field] of [["69","n69"],["420","n420"]]){
             if(!matches[field])continue;
             if(!hits.has(pattern))hits.set(pattern,{...row,pattern});
@@ -102,7 +110,7 @@ const tornNiceMerit=(()=>{
       }
     }
     rows.sort((a,b)=>Number(b.met)-Number(a.met)||Number(b.improved)-Number(a.improved)||a.energy-b.energy||a.trains-b.trains||order.indexOf(a.stat)-order.indexOf(b.stat)||a.gymName.localeCompare(b.gymName)||a.pattern.localeCompare(b.pattern));
-    return {status:"ready",rows,checked,gyms:seen.size,maxTrains,current};
+    return {status:"ready",rows,nextByStat:order.map(stat=>({stat,hit:next.get(stat)??null})),checked,gyms:seen.size,maxTrains,current};
   }
   return Object.freeze({order,limit,count,inspect,solve,opportunities});
 })();

@@ -61,3 +61,24 @@ const preserved=nice.opportunities({stats:stats(6900,1,1,1),happy:100,energy:0,g
 assert.ok(preserved.rows.some(r=>r.stat==="strength"&&!r.improved&&r.affordable===false));
 assert.equal(nice.opportunities({stats:base,happy:null,gyms:[gym],multipliers},gain).status,"unavailable");
 console.log("Nice unlocked gym availability, individual independent stat hits, affordability, existing-match distinction and stale input guard passed.");
+
+ // Display projection selects the nearest HIGHER integer value, not the
+ // first sorted alert (which may prioritize progress/completion or energy).
+ const nearGym={...gym,id:10,name:"Slow gym",energy:10,strength:1,defense:0,speed:0,dexterity:0};
+ const farGym={...gym,id:11,name:"Fast gym",energy:5,strength:2,defense:0,speed:0,dexterity:0};
+ const valueGain=(s,h,d)=>d===1?0.5:351;
+ const next=nice.opportunities({stats:stats(68.1,1,1,1),happy:100,energy:5,gyms:[farGym,nearGym],multipliers,maxTrains:3},valueGain);
+ assert.deepEqual(next.nextByStat.map(x=>x.stat),nice.order);
+ assert.equal(next.nextByStat[0].hit.gymId,"10");
+ assert.equal(Math.floor(next.nextByStat[0].hit.after),69);
+ assert.equal(next.nextByStat[0].hit.trains,2);
+ assert.ok(next.nextByStat.slice(1).every(x=>x.hit===null));
+ // Matching only the original integer is not the next occurrence.
+ const fractional=nice.opportunities({stats:stats(6900.1,1,1,1),happy:100,gyms:[nearGym],multipliers,maxTrains:3},()=>0.5);
+ assert.ok(fractional.rows.some(r=>r.stat==="strength"&&Math.floor(r.after)===6900));
+ assert.equal(Math.floor(fractional.nextByStat[0].hit.after),6901);
+ const tied=nice.opportunities({stats:stats(68,1,1,1),happy:100,gyms:[nearGym,{...nearGym,id:12,name:"Cheaper",energy:5}],multipliers,maxTrains:1},gain);
+ assert.equal(tied.nextByStat[0].hit.gymId,"12");
+ const noNext=nice.opportunities({stats:stats(6900.1,1,1,1),happy:100,gyms:[nearGym],multipliers,maxTrains:1},()=>0.1);
+ assert.equal(noNext.nextByStat[0].hit,null);
+ console.log("Nice display: one nearest higher whole-number endpoint per stat, gym tie-break and no-match rows passed.");

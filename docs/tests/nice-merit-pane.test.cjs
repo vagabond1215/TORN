@@ -12,6 +12,13 @@ assert.ok(html.includes("Suggested route: 3 trains")&&html.includes("15 Energy")
 assert.ok(html.includes("Gym &lt;fixture&gt;")&&html.includes('value="42068.12345"'));
 assert.ok(html.includes("Individual stat opportunities in unlocked gyms")&&html.includes("Gym &lt;fixture&gt;"));
 assert.ok(m.niceNotice()?.ready===true);
+const nextTable=html.match(/<table class="crime-table nice-opportunity-table">[\s\S]*?<\/table>/)?.[0];
+assert.ok(nextTable);
+assert.equal((nextTable.match(/<th scope="row">/g)||[]).length,4);
+for(const name of ["Strength","Defense","Speed","Dexterity"])assert.equal((nextTable.match(new RegExp('<th scope="row">'+name+'</th>','g'))||[]).length,1);
+current={...live,stats:{strength:1,defense:1,speed:1,dexterity:1},gym:{...live.gym,strength:0,defense:0,speed:0,dexterity:0}};
+html=m.render();
+assert.equal((html.match(/No predicted next match within 200 trains per gym\./g)||[]).length,4);
 current={...live,reason:"Stale gym"};html=m.render();assert.ok(html.includes("Stale gym")&&!html.includes("Suggested route:"));
 current={reason:"Connect first"};assert.ok(m.render().includes("Connect first"));
 current={...live,stats:{strength:696969,defense:42069,speed:1,dexterity:1}};assert.ok(m.render().includes("Digit requirement met"));
