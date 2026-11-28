@@ -86,7 +86,7 @@ const tornRightRail=(()=>{
       '<span id="rail-refresh-status" class="sr-only" role="status">'+safe(refreshStatus)+'</span></div></section>';
   }
   function niceRailMarkup(notice){
-    const alert=notice?'<div class="rail-nice-notice"><strong>'+safe(notice.met?"Nice requirement predicted":notice.improved?"Nice training opportunity":"Nice digit match predicted")+'</strong><small>'+safe(notice.detail)+'</small><small>'+safe((notice.ready?"Within current Energy. ":"More Energy or Energy unverified. ")+(notice.verified?"":"Honor status unverified. ")+(notice.reference?"Reference gym values. ":"")+"Estimate only; check after each train.")+'</small><a href="#merits">See all gym options</a></div>':"";
+    const alert=notice?'<div class="rail-nice-notice"><strong>'+safe(notice.met?"Nice requirement predicted":notice.improved?"Nice training opportunity":"Nice digit match predicted")+'</strong><small>'+safe(notice.detail)+'</small><small>'+safe((notice.ready?"Within current Energy. ":"More Energy or Energy unverified. ")+(notice.verified?"":"Honor status unverified. ")+(notice.reference?"Reference gym values. ":"")+"Estimate only; check after each train.")+'</small><a href="#merits">Open Nice planner</a></div>':"";
     const badge=notice?'<span class="rail-nice-badge" title="'+safe(notice.detail)+'" aria-label="'+safe(notice.detail)+'">'+safe(notice.tag)+'</span>':"";
     return {alert,badge};
   }

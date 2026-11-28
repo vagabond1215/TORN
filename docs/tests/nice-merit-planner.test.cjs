@@ -121,3 +121,29 @@ console.log("Nice unlocked gym availability, individual independent stat hits, a
  assert.equal(spent,screenshotPlan.energy);assert.equal(trained,screenshotPlan.trains);assert.equal(h,screenshotPlan.finalHappy);
  assert.equal(nice.inspect(Object.fromEntries(screenshotPlan.rows.map(r=>[r.stat,r.after]))).total,screenshotPlan.result.total);
  console.log("Combined Nice route: mixed gyms, partial and no-progress states, cumulative Happiness and actual shared-model replay passed.");
+
+ // A single-stat alternative is a valid combined route with zero trains
+ // in the other three stats. Never sum independent opportunities.
+ const fallbackInput={stats:stats(68,419,68,68),happy:100,gyms:[strengthGym,otherGym],multipliers,maxTrains:4};
+ const independent=nice.opportunities(fallbackInput,gain);
+ const fallbackCurrent=independent.current;
+ const noRoute={status:"not-found",rows:fallbackCurrent.rows.map(r=>({...r,after:r.value,trains:0,energy:0})),result:fallbackCurrent,trains:0,energy:0,maxTrains:4,gyms:2};
+ const fallback=nice.preferRoute(noRoute,independent,100);
+ assert.equal(fallback.status,"partial");
+ assert.equal(fallback.independent,true);
+ assert.equal(fallback.rows.filter(r=>r.trains>0).length,1);
+ assert.equal(fallback.result.total,1);
+ assert.equal(fallback.energy,5);
+ assert.equal(fallback.finalHappy,97.5);
+ assert.equal(nice.preferRoute(partial,independent,100),partial);
+ assert.equal(nice.preferRoute(combined,independent,100),combined);
+ // Full requirement still requires both types, even if five occurrences
+ // of only one type are possible.
+ const typesInput={stats:stats(696969,6969,419,1),happy:100,gyms:[otherGym],multipliers,maxTrains:1};
+ const typesReport=nice.opportunities(typesInput,gain);
+ const only69={status:"not-found",result:typesReport.current,energy:0,trains:0,maxTrains:1};
+ const completeFallback=nice.preferRoute(only69,typesReport,100);
+ assert.equal(completeFallback.status,"plan");assert.equal(completeFallback.result.met,true);
+ assert.equal(completeFallback.result.n420,1);
+ assert.equal(completeFallback.rows.filter(r=>r.trains).length,1);
+ console.log("Unified Nice route: independent fallback remains one coherent route, complete/partial preference and both-pattern requirement passed.");

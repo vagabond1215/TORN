@@ -187,5 +187,26 @@ const tornNiceMerit=(()=>{
     rows.sort((a,b)=>Number(b.met)-Number(a.met)||Number(b.improved)-Number(a.improved)||a.energy-b.energy||a.trains-b.trains||order.indexOf(a.stat)-order.indexOf(b.stat)||a.gymName.localeCompare(b.gymName)||a.pattern.localeCompare(b.pattern));
     return {status:"ready",rows,nextByStat:order.map(stat=>({stat,hit:next.get(stat)??null})),checked,gyms:seen.size,maxTrains,current};
   }
-  return Object.freeze({order,limit,count,inspect,solve,solveAcrossGyms,opportunities});
+  // Keep one coherent displayed route. If the bounded combined search
+  // misses a better single-stat endpoint, compare independently replayed
+  // opportunities against it. Never combine independently projected hits.
+  function preferRoute(plan,report,happy){
+    if(plan?.status==="plan"||plan?.status==="met"||report?.status!=="ready"||!report.current||!valid(happy))return plan;
+    const current=report.current,zero=current.rows.map(r=>({...r,after:r.value,trains:0,energy:0,gymId:null,gymName:null}));
+    const coverage=r=>Math.min(5,r.total);
+    const types=r=>Number(r.n69>0)+Number(r.n420>0);
+    const better=(a,b)=>Number(b.result.met)-Number(a.result.met)||coverage(b.result)-coverage(a.result)||types(b.result)-types(a.result)||a.energy-b.energy||a.trains-b.trains;
+    const unchanged={status:"not-found",rows:zero,result:current,energy:0,trains:0};
+    let best=plan?.result&&better(plan,unchanged)<0?plan:unchanged;
+    for(const hit of report.rows){
+      const i=order.indexOf(hit.stat);
+      if(i<0||!Number.isSafeInteger(hit.trains)||hit.trains<1||hit.trains>(plan?.maxTrains??report.maxTrains)||!valid(hit.after)||hit.after<=zero[i].value||!Number.isSafeInteger(hit.energy)||hit.energy<1)continue;
+      const rows=zero.map((row,j)=>j===i?{...hit,value:row.value,matches:count(hit.after)}:row);
+      const result=inspect(Object.fromEntries(rows.map(r=>[r.stat,r.after])));
+      const candidate={status:result.met?"plan":"partial",rows,result,trains:hit.trains,energy:hit.energy,gyms:report.gyms,maxTrains:plan?.maxTrains??report.maxTrains,finalHappy:Math.max(0,happy-hit.energy*.5),independent:true};
+      if(better(candidate,best)<0)best=candidate;
+    }
+    return best===unchanged?plan:best;
+  }
+  return Object.freeze({order,limit,count,inspect,solve,solveAcrossGyms,opportunities,preferRoute});
 })();
