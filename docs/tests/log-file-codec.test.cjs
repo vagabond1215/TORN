@@ -32,7 +32,16 @@ const run=(function testSuite(assert,r,c,x,codec){
     state.api.generation++;
     await assert.rejects(()=>codec.encode(store,id,review,true,yes,secret,at));
     state=copy(review);
-    let checks=0;const staleStore={...store,reviewSources:async()=>{checks++;const v=copy(review);if(checks>26)v.api.generation++;return v;}};
+    // Count the preview's exact state reads independently; the next read
+    // is the codec's final post-encryption comparison, not a preview read.
+    let checks=0;const counted={...store,reviewSources:async()=>{checks++;return copy(review);}};
+    await x.prepareUnified(counted,id,review,true,yes);
+    const previewChecks=checks;
+    checks=0;const staleStore={...store,reviewSources:async()=>{checks++;const v=copy(review);if(checks>previewChecks)v.companion.revision++;return v;}};
+    await assert.rejects(()=>codec.encode(staleStore,id,review,true,yes,secret,at),/Archive changed/);
+    assert.equal(checks,previewChecks+1);
+    let decodeChecks=0;
+    await assert.rejects(()=>codec.decode(file,id,secret,true,()=>++decodeChecks<5),/authorization/);
     // Independently exercise authorization loss during asynchronous work.
     let guards=0;await assert.rejects(()=>codec.encode(store,id,review,true,()=>++guards<10,secret,at));
     const other=await codec.encode(store,id,review,true,yes,secret,at);
